@@ -3,7 +3,7 @@
 The canonical current audit is
 [`testdata/native-office-completion/v3/manifest.json`](../testdata/native-office-completion/v3/manifest.json).
 The v1, v2, and v3 matrices are pinned to the `origin/main` snapshot
-`0cdd7e9340e9469326f57e6175ec87e7e1807443`; their fixture digests bind the
+`420424b57f658a034f7d8cdd76aab20f048a32f4`; their fixture digests bind the
 files in that snapshot. This makes the claims reproducible and prevents files
 outside the pinned source tree from satisfying a released gate.
 
@@ -23,7 +23,7 @@ evidence. A later schema version may add multiple promises only with explicit
 per-promise evidence references.
 
 All v1 and v2 capability groups remain `partial`. v3 (baseline
-`0cdd7e9340e9469326f57e6175ec87e7e1807443`) is the canonical matrix: every
+`420424b57f658a034f7d8cdd76aab20f048a32f4`) is the canonical matrix: every
 capability is `complete` only because `npm run check:native-office-completion`
 agrees. Each v3 capability binds a provenance-bound Microsoft `kind:
 office-export` fixture (Macintosh Word numbering, Excel Online `happy-tree.xlsx`,

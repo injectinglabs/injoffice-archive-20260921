@@ -4,7 +4,7 @@
   "baseline": {
     "repository": "injectinglabs/injoffice",
     "ref": "origin/main",
-    "commit": "0cdd7e9340e9469326f57e6175ec87e7e1807443"
+    "commit": "420424b57f658a034f7d8cdd76aab20f048a32f4"
   },
   "policies": {
     "completionRequirements": {
@@ -173,7 +173,7 @@
       "format": "docx",
       "kind": "generated-inline",
       "path": "packages/docs/src/nativeTransactionAdapterV1.test.ts",
-      "sha256": "7cec0717ccf780909ec50b6aae79a2fd4a7a9a06e457b72d699b13e5a4600c2a",
+      "sha256": "af8bdcdddb452c6442660c925bcb5fb31c74efa19f167bf82317c736183d8c3b",
       "provenance": {
         "producer": "InjOffice native DOCX transaction adapter tests",
         "source": "Deterministic exact ProseMirror projection, refusal, envelope, and host-isolation vectors",
@@ -329,7 +329,7 @@
       "format": "shared",
       "kind": "generated-inline",
       "path": "scripts/smoke-consumer.mjs",
-      "sha256": "36709b17692163b216130db433c5893d43b6813591d20f8be043e5eecc46271b",
+      "sha256": "e10273e95af05f3e57ac455cadb9b2297e268b32135a1e30053428f3e3331386",
       "provenance": {
         "producer": "InjOffice tarball consumer smoke",
         "source": "Deterministic local package, install, import, and selected functional smoke program",
@@ -413,7 +413,7 @@
       "format": "shared",
       "kind": "generated-inline",
       "path": "testdata/native-office-production-e2e/v1/manifest.json",
-      "sha256": "112c5dacdca740654fb7270c5e7bca51c068efdb7acb665bb3a00b2d691baebd",
+      "sha256": "c54b7e9de4afb9849e0bd19e68a9d660bdca253f97ec7c8ad1cc10216dcbc6b5",
       "provenance": {
         "producer": "InjOffice native Office production E2E contract",
         "source": "Checked-in host-owned production E2E cases, runners, and canonical semantic projections",
@@ -425,7 +425,7 @@
       "format": "shared",
       "kind": "generated-inline",
       "path": "scripts/verify-native-office-production-e2e.test.mjs",
-      "sha256": "afb4122f4464fef14ee4156c35ca2ab9b1a9a4f8e3c968dcf20bfe3feecf9996",
+      "sha256": "5e930df2769a57927dc811cb3431953fc674b0a08a4730db7b0b52d34a73d377",
       "provenance": {
         "producer": "InjOffice native Office production E2E verifier tests",
         "source": "Deterministic in-process production E2E adapter-request, observation, replay, and refusal vectors",
@@ -1302,7 +1302,7 @@
             },
             {
               "path": "testdata/native-office-production-e2e/v1/manifest.json",
-              "selector": "DocxView.tsx",
+              "selector": "injoffice.docx.page-paint-browser",
               "fixtures": [
                 "shared-production-e2e-manifest"
               ]
@@ -1905,7 +1905,7 @@
             },
             {
               "path": "testdata/native-office-production-e2e/v1/manifest.json",
-              "selector": "PptxSlidesView.tsx",
+              "selector": "paint-replay:browser.canvas2d-command-replay",
               "fixtures": [
                 "pptx-production-e2e-authored-deck",
                 "shared-production-e2e-manifest"
@@ -2391,7 +2391,7 @@
             },
             {
               "path": "testdata/native-office-production-e2e/v1/manifest.json",
-              "selector": "NativeSheetView.tsx",
+              "selector": "injoffice.xlsx.native-browser",
               "fixtures": [
                 "shared-production-e2e-manifest"
               ]

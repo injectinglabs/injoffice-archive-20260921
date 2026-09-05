@@ -7,9 +7,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const PROTOCOL = 'injoffice.native-office-completion/v1'
 export const PROTOCOL_V2 = 'injoffice.native-office-completion/v2'
 export const PROTOCOL_V3 = 'injoffice.native-office-completion/v3'
-export const BASELINE = '0cdd7e9340e9469326f57e6175ec87e7e1807443'
-export const BASELINE_V2 = '0cdd7e9340e9469326f57e6175ec87e7e1807443'
-export const BASELINE_V3 = '0cdd7e9340e9469326f57e6175ec87e7e1807443'
+export const BASELINE = '420424b57f658a034f7d8cdd76aab20f048a32f4'
+export const BASELINE_V2 = '420424b57f658a034f7d8cdd76aab20f048a32f4'
+export const BASELINE_V3 = '420424b57f658a034f7d8cdd76aab20f048a32f4'
 const baselineByVersion = { 1: BASELINE, 2: BASELINE_V2, 3: BASELINE_V3 }
 const protocolByVersion = { 1: PROTOCOL, 2: PROTOCOL_V2, 3: PROTOCOL_V3 }
 let activeBaseline = BASELINE

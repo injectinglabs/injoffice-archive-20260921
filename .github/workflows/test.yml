@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # native-office-completion reads pinned baseline SHA 0cdd7e93 via git show/ls-tree
+          # native-office-completion reads pinned baseline SHA 420424b via git show/ls-tree
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
