@@ -129,10 +129,10 @@ that dependency explicitly so a clean workspace install is reproducible.
 
 The root `NOTICE` records the Microsoft-authored fixture provenance, HarfBuzz,
 bidi-js, require-from-string, Unicode data, pngjs, and the PDF OCR ownership
-statement. `THIRD_PARTY_LICENSES` currently contains the Apache-2.0, harfbuzzjs,
-bidi-js, and require-from-string license texts, while `LICENSE-UNICODE.txt`
-contains the Unicode terms. The published font-metrics and PDF manifests identify
-which of those legal files their tarballs must carry.
+statement. It also consolidates the Go BSD and harfbuzzjs, bidi-js, and
+require-from-string MIT license texts. The root `LICENSE` contains Apache-2.0,
+while `LICENSE-UNICODE.txt` contains the Unicode terms. Published package
+manifests identify which legal files their tarballs must carry.
 
 That is not a complete substitute for the SBOM and must not be described as one.
 In particular, the repository does not currently retain a standalone license copy
@@ -152,6 +152,6 @@ marked `NOASSERTION`. Nothing in this audit authorizes deleting existing notices
   package.
 - Optional platform binaries remain visible; the SBOM marks them optional rather
   than pretending they do not exist on the current platform.
-- `NOTICE`, `LICENSE-UNICODE.txt`, package-specific legal files, and third-party
-  license texts remain authoritative distribution inputs. This gate does not
-  authorize removing any notice.
+- `NOTICE`, `LICENSE`, `LICENSE-UNICODE.txt`, and package-specific legal files
+  remain authoritative distribution inputs. This gate does not authorize
+  removing any notice.

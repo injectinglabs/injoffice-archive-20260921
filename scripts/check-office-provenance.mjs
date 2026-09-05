@@ -39,8 +39,17 @@ const excelBridge = JSON.parse(readFileSync(resolve(root, 'go/xlsxpatch/testdata
 requireValue(excelBridge.source?.package_sha256 === `sha256:${excelFixtureSources['happy-tree.xlsx'][0]}` && excelBridge.revision === `rev:${excelFixtureSources['happy-tree.xlsx'][0]}`, 'Excel-authored Go/TypeScript bridge is not bound to the unchanged package bytes')
 
 const projectLicense = readFileSync(resolve(root, 'LICENSE'))
-const thirdPartyApache = readFileSync(resolve(root, 'THIRD_PARTY_LICENSES/APACHE-2.0.txt'))
-requireValue(digest(projectLicense) === 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4' && projectLicense.equals(thirdPartyApache), 'Apache-2.0 third-party license text is absent, modified, or differs from the project Apache text')
+requireValue(digest(projectLicense) === 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', 'Apache-2.0 project license text is absent or modified')
+
+const notice = readFileSync(resolve(root, 'NOTICE'), 'utf8')
+for (const marker of [
+  'Copyright (c) 2009 The Go Authors. All rights reserved.',
+  'Copyright (c) 2019-2026 The harfbuzzjs project authors',
+  'Copyright (c) 2021 Jason Johnston',
+  'Copyright (c) Vsevolod Strukchinsky <floatdrop@gmail.com>',
+]) {
+  requireValue(notice.includes(marker), `NOTICE is missing required third-party license text: ${marker}`)
+}
 
 if (failures.length > 0) {
   console.error(failures.map((failure) => `- ${failure}`).join('\n'))

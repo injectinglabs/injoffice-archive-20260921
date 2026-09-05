@@ -13,7 +13,7 @@ InjOffice is designed as independently consumable TypeScript packages and Go mod
 - Node 24 and all Go modules run in public CI without private secrets.
 - A tag-driven npm release workflow validates versions, license metadata, tests, builds, package contents, and dependency order before handing SHA-512-bound tarballs to a separate stage-only OIDC job.
 - The Sheets playground has a GitHub Pages workflow.
-- Contribution, conduct, security, collaboration-protocol, roadmap, NOTICE, Unicode, and third-party Apache documents exist.
+- Contribution, conduct, security, collaboration-protocol, roadmap, NOTICE, Apache, and Unicode license documents exist.
 - The project license is Apache-2.0 and every package ships its SPDX metadata and license text.
 - XLSX pivot hydration and fail-closed inventory preservation are implemented in the canonical library.
 - Native extract/apply contracts exist for XLSX, DOCX, and PPTX. Native completion remains partial and is not Microsoft Office parity.
@@ -30,7 +30,7 @@ Workspace apps (`apps/playground`, `apps/docx-page-paint-worker`) are private an
 
 ## Required decisions and account setup
 
-1. **Approve third-party attribution.** Review NOTICE and the Unicode/Apache license payloads before distribution.
+1. **Approve third-party attribution.** Review NOTICE, LICENSE, and LICENSE-UNICODE.txt before distribution.
 2. **Confirm ownership.** Create or confirm the injectinglabs/injoffice GitHub repository and reserve/control the @injoffice npm scope. Registry lookup currently shows no published @injoffice/charts package; that does not prove scope ownership.
 3. **Choose initial version policy.** The repository is aligned at 0.1.0. Decide whether all npm packages stay lockstep and create matching Go submodule tags such as go/xlsxpatch/v0.1.0.
 4. **Configure release accounts.** Add required reviewers to the protected `npm` GitHub environment, bootstrap the first package versions interactively with 2FA, configure stage-only trusted publishing for every package, disallow traditional publishing tokens, and configure Pages source, branch protection, and private vulnerability reporting.

@@ -26,7 +26,7 @@
   "injoffice": {
     "assets": ["xlsxnative.worker.js", "xlsxnative.wasm", "wasm_exec.js"],
     "tscOnly": true,
-    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/GO-BSD-3-CLAUSE.txt"]
+    "legalFiles": ["NOTICE"]
   },
   "scripts": {
     "prebuild": "npm run build -w @injoffice/native-runtime -w @injoffice/sheets",

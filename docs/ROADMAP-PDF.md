@@ -14,7 +14,7 @@ The PDF package is a composable byte-editing and viewing library. Browser-safe p
 - Whole-object text, image, annotation, path, form-XObject, and form-field redaction with proof objects.
 - A restricted collaboration-operation codec for review-safe annotation/form operations.
 
-Attribution for third-party dependencies and Unicode-derived data is recorded in the root NOTICE and accompanying third-party license files.
+Attribution and applicable third-party license text are consolidated in the root NOTICE; Unicode-derived data terms remain in LICENSE-UNICODE.txt.
 
 ## Safety model
 

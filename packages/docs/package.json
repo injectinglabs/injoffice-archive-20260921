@@ -26,7 +26,7 @@
   "files": ["dist", "schema", "README.md"],
   "injoffice": {
     "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts" },
-    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/APACHE-2.0.txt"]
+    "legalFiles": ["NOTICE"]
   },
   "publishConfig": { "access": "public" },
   "repository": {

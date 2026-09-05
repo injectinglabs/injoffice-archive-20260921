@@ -6,7 +6,7 @@ This product includes software developed at Injecting Inc.
 `@injoffice/xlsx-wasm`, `@injoffice/docx-wasm`, and `@injoffice/pptx-wasm` contain the Go
 JavaScript/WebAssembly runtime and WebAssembly binaries produced by the Go
 toolchain. Go is copyright The Go Authors and distributed under a BSD-style
-license reproduced in `THIRD_PARTY_LICENSES/GO-BSD-3-CLAUSE.txt`.
+license reproduced below.
 
 The XLSX workbooks in `go/xlsxpatch/testdata/excel-authored` are unmodified
 Microsoft Office Scripts documentation samples from
@@ -28,19 +28,17 @@ not publish a PowerPoint-authored PPTX.
 HarfBuzz WebAssembly text-shaping runtime exposed by the opt-in Node
 `@injoffice/font-metrics/harfbuzz` entry.
 
-The complete harfbuzzjs MIT license is reproduced in
-`THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt`.
+The complete harfbuzzjs MIT license is reproduced below.
 
 `packages/font-metrics` also depends on bidi-js 1.0.3
 (https://github.com/lojjic/bidi-js), MIT License, for its pinned,
 source-digest-verified Unicode Bidirectional Algorithm 13.0.0 implementation.
-The complete bidi-js MIT license is reproduced in
-`THIRD_PARTY_LICENSES/BIDI-JS-MIT.txt`.
+The complete bidi-js MIT license is reproduced below.
 
 bidi-js declares require-from-string 2.0.2
 (https://github.com/floatdrop/require-from-string) as a runtime dependency.
 InjOffice pins that transitive dependency exactly; its MIT license is reproduced
-in `THIRD_PARTY_LICENSES/REQUIRE-FROM-STRING-MIT.txt`.
+below.
 
 `scripts/unicode13/ucd` contains the exact Unicode Character Database 13.0.0
 Scripts, PropList, DerivedCoreProperties, UnicodeData, and DerivedAge sources.
@@ -58,9 +56,8 @@ MIT License, for PNG decode/encode in `image/decodePng.ts` and
 `packages/pdf/src/ocr` (vision-LLM OCR — page rasterization and the
 invisible-text-layer splice) is InjOffice code.
 
-A full copy of the Apache License, Version 2.0 is in
-`THIRD_PARTY_LICENSES/APACHE-2.0.txt`. InjOffice itself is distributed under
-the Apache License, Version 2.0; see `LICENSE`.
+InjOffice and its Apache-licensed components are distributed under the Apache
+License, Version 2.0; see `LICENSE` for the complete terms.
 
 `packages/pdf/src/textEdit/radicals.ts` contains a generated mapping derived
 from Unicode Character Database 17.0.0, EquivalentUnifiedIdeograph.txt
@@ -68,3 +65,105 @@ from Unicode Character Database 17.0.0, EquivalentUnifiedIdeograph.txt
 Copyright © 1991-2026 Unicode, Inc. This data is distributed under Unicode
 License v3. The complete copyright and permission notice is reproduced in
 /LICENSE-UNICODE.txt.
+
+---
+
+Go BSD 3-Clause License
+
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+* Neither the name of Google Inc. nor the names of its contributors may be
+  used to endorse or promote products derived from this software without
+  specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+harfbuzzjs MIT License
+
+Copyright (c) 2019-2026 The harfbuzzjs project authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+bidi-js MIT License
+
+Copyright (c) 2021 Jason Johnston
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+require-from-string MIT License
+
+Copyright (c) Vsevolod Strukchinsky <floatdrop@gmail.com> (github.com/floatdrop)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -56,7 +56,7 @@
     {
       "version": "1.6.0",
       "license": "MIT",
-      "evidence": "The npm registry manifest declares MIT; the complete license is also retained in THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt.",
+      "evidence": "The npm registry manifest declares MIT; the complete license is also retained in the root NOTICE.",
       "artifacts": [
         { "package": "harfbuzzjs", "integrity": "sha512-fNnYg+CX5MBzckYZpqBJKs9qIVMH9vMhFNo9I81wp1QFu7jI3DOvtf1+VDwH4vsfnCylAFBNSX3gio9uNGPk/w==" }
       ]

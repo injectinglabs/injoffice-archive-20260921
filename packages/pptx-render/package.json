@@ -16,7 +16,7 @@
   },
   "files": ["dist", "README.md"],
   "injoffice": {
-    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/APACHE-2.0.txt"]
+    "legalFiles": ["NOTICE"]
   },
   "publishConfig": { "access": "public" },
   "repository": {

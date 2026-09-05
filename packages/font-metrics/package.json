@@ -41,7 +41,7 @@
   "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
   "injoffice": {
     "entries": { "index": "src/index.ts", "layout": "src/layout.ts", "harfbuzz": "src/harfbuzz.ts", "bidi": "src/bidi.ts", "unicode13": "src/unicode13.ts" },
-    "legalFiles": ["NOTICE", "LICENSE-UNICODE.txt", "THIRD_PARTY_LICENSES/APACHE-2.0.txt", "THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt", "THIRD_PARTY_LICENSES/BIDI-JS-MIT.txt", "THIRD_PARTY_LICENSES/REQUIRE-FROM-STRING-MIT.txt"]
+    "legalFiles": ["NOTICE", "LICENSE-UNICODE.txt"]
   },
   "scripts": {
     "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
