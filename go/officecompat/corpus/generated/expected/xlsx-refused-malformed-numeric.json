@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "xlsx-refused-malformed-numeric",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "invalid-native-ooxml",
+    "contains": "numeric lexical"
+  }
+}

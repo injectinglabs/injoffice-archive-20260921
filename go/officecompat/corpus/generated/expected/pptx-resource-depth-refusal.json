@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "pptx-resource-depth-refusal",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "xml-resource-budget",
+    "contains": "resource budget exceeded"
+  }
+}

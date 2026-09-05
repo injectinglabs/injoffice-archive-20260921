@@ -1,0 +1,46 @@
+{
+  "name": "@injoffice/pptx-wasm",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Browser worker distribution of the fail-closed InjOffice PPTX Go engine.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/pptx-wasm"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "assets": ["pptxnative.worker.js", "pptxnative.wasm", "wasm_exec.js"],
+    "tscOnly": true,
+    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/GO-BSD-3-CLAUSE.txt"]
+  },
+  "scripts": {
+    "prebuild": "npm run build -w @injoffice/native-runtime -w @injoffice/pptx-native",
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json && PPTXNATIVE_WASM_OUT=$PWD/dist ../../go/pptxpatch/cmd/pptxnativewasm/build.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@injoffice/native-runtime": "0.1.0",
+    "@injoffice/pptx-native": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

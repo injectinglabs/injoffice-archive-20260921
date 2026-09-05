@@ -1,0 +1,9 @@
+{
+  "contractVersion": "pptx-native/v2",
+  "documentId": "deck-invalid-version",
+  "origin": "authored",
+  "size": { "cx": 1, "cy": 1 },
+  "assets": [],
+  "slides": [],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

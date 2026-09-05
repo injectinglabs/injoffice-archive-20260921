@@ -1,0 +1,28 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-metadata-only-asset",
+  "origin": "parsed",
+  "sourceRevision": "rev-metadata-only-asset",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [{
+    "id": "asset-metadata-only",
+    "provenance": "parsed",
+    "contentType": "image/png",
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "byteLength": 5,
+    "source": {
+      "partName": "ppt/media/image1.png",
+      "objectId": "asset-part",
+      "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "passthrough": []
+  }],
+  "slides": [{
+    "id": "slide-authored",
+    "provenance": "authored",
+    "elements": [],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

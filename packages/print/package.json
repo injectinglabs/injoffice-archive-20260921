@@ -1,0 +1,30 @@
+{
+  "name": "@injoffice/print",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Spreadsheet print configuration, accessible React preview workspace, native hydration, and host-injected output lifecycle APIs.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./browser": { "types": "./dist/browser.d.ts", "import": "./dist/browser.js" },
+    "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/injectinglabs/injoffice.git", "directory": "packages/print" },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": { "@univerjs/core": "^0.25.1", "@univerjs/ui": "^0.25.1", "react": ">=18", "rxjs": ">=7" },
+  "peerDependenciesMeta": { "@univerjs/core": { "optional": true }, "@univerjs/ui": { "optional": true }, "react": { "optional": true }, "rxjs": { "optional": true } },
+  "devDependencies": { "@types/react": "^19.2.14", "@types/react-dom": "^19.2.3", "@univerjs/core": "^0.25.1", "@univerjs/ui": "^0.25.1", "react": "^19.2.4", "react-dom": "^19.2.4", "rxjs": "^7.8.2", "typescript": "7.0.2", "vitest": "^4.1.8" },
+  "injoffice": { "entries": { "index": "src/index.ts", "browser": "src/browser.ts", "react": "src/react.tsx" } }
+}

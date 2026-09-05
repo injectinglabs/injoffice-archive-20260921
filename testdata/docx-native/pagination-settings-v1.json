@@ -1,0 +1,20 @@
+{
+  "protocol": "injoffice.docx.pagination-settings",
+  "version": 1,
+  "document_id": "document:test",
+  "revision": "revision:1",
+  "package_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "main_part": "word/document.xml",
+  "relationships_part": "word/_rels/document.xml.rels",
+  "relationships_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "relationship_id": "rIdSettings",
+  "settings_part": "word/settings.xml",
+  "settings_sha256": "sha256:fba34bb0fc196098ba1b5f56160bf1cc4a3bdc50d94646a21a3448b93bad810e",
+  "profile": "word-modern-default",
+  "default_tab_stop_twips": 720,
+  "mirror_margins": false,
+  "gutter_at_top": false,
+  "even_and_odd_headers": false,
+  "compatibility_mode": 15,
+  "diagnostics": []
+}

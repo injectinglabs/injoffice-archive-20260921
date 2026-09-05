@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "policy": "Entries supplement missing package-lock license fields only. Each assertion is pinned to an exact package name, version, and npm integrity digest.",
+  "reviews": [
+    {
+      "version": "2.15.0",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and upstream packages/pdfium package manifest in embedpdf/embed-pdf-viewer declare MIT.",
+      "artifacts": [
+        { "package": "@embedpdf/pdfium", "integrity": "sha512-KgpRND2MYcdbhzb2EMb4WzWcJYrR0A6JXvhMv4WthEHKt6qmNo2v/MC68bpYvpveYT9GNnUnY/+TG5MpXY3pRw==" }
+      ]
+    },
+    {
+      "version": "1.0.8",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and upstream Brooooooklyn/canvas package manifest declare MIT; platform artifacts are releases of the same package.",
+      "artifacts": [
+        { "package": "@napi-rs/canvas", "integrity": "sha512-/SaLcvlqGWdm0HSCWMgHu7cjJiQXfP8/mOY+6dUyV9flQz7sPBBZ+ed2zYtoukojPmxOaL7bm+d/G4GeWWoN7g==" },
+        { "package": "@napi-rs/canvas-android-arm64", "integrity": "sha512-5+nkh8i3gt6lqS/d2jTZ1xAn6tdgtB4Lf1mW6T0Qm5/rXNwBuV1sAEyLEWan5o9gJPU/GuvHR3rvSeZ+FaGrbw==" },
+        { "package": "@napi-rs/canvas-darwin-arm64", "integrity": "sha512-7jQ47gi+fZ7KJmfc/5rNyy1CYw/cu4kZ0KPIYbo9UUgSdW0bKQJpt+WihEor6s4Lyp7+xc3a+3HeyXmAEbbnPg==" },
+        { "package": "@napi-rs/canvas-darwin-x64", "integrity": "sha512-rRjDMZs9pIRKGxgijwezplKc1RnJsqUokrA9h88bbTkqQ+7ePj0ZN4ZnZDy8Vu0tXs7KRlI2tQLaK4mx9QlxHg==" },
+        { "package": "@napi-rs/canvas-linux-arm-gnueabihf", "integrity": "sha512-jGcCd+8ra6Q61xKqZeiItujTpp9a9eRLcQ0jW6qYNku+WpupqOPFPY0SrsuSnXFviJwkpKYT9p7QrB4lsf3LNQ==" },
+        { "package": "@napi-rs/canvas-linux-arm64-gnu", "integrity": "sha512-od6I2Y7kU7i1SwZYG2EKW8rWz6JiedtPpko4WEe1DDsiikrfaotVBCRaUTM5/yeZKaZ92EatoAS+5xG+6uJlYA==" },
+        { "package": "@napi-rs/canvas-linux-arm64-musl", "integrity": "sha512-yYkPbJDJiWj6N0gASA3CAvRypZmVpJnxU0DQg3aBhneLDQde9TPLKADsQkobNoJUtTT/lj46aWpzT48PDb3Qcg==" },
+        { "package": "@napi-rs/canvas-linux-riscv64-gnu", "integrity": "sha512-PB00MSKAp4VwK/xwe6duKxRKmH8UH4GIl1pqHSbxng0jnU9Dr7FwaDypDiqwNFZ774N+8G7mJLGuLtg9NTcQsg==" },
+        { "package": "@napi-rs/canvas-linux-x64-gnu", "integrity": "sha512-TWM2XWJoitLiIPCvgJh7SriC+L/T9qkYCVzC66AidsZy0QP1hkKzBzVwshCdcA3q6fIn3yE0ISbq4lMJSy8jFw==" },
+        { "package": "@napi-rs/canvas-linux-x64-musl", "integrity": "sha512-hb20MxKXXb5IB7AAwN8UHz9WRsa2HmdZfjsDCzjElwJoeV1aotVEwFU4FrFQcYQVzsJQLeaCc/2Qdt/0Q72mMg==" },
+        { "package": "@napi-rs/canvas-win32-arm64-msvc", "integrity": "sha512-WwPN08IXE4SkL+FhJyPz/iFnycMAUkbphFIT4cmKLlvbSU0Zfn1R7BGJ3Hqky1S89QUYc0Q4IOScXb/42Re9wQ==" },
+        { "package": "@napi-rs/canvas-win32-x64-msvc", "integrity": "sha512-XkrVqKb+pxyba7kjy2LJvABFVBTE0DNpEl7MrG4OYUmaWarrXH+t54z/Czj2YxCKtizYTV4mg6phNm3x24qjhQ==" }
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and Hopding/standard-fonts repository declare MIT.",
+      "artifacts": [
+        { "package": "@pdf-lib/standard-fonts", "integrity": "sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==" }
+      ]
+    },
+    {
+      "version": "1.0.1",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and Hopding/upng repository declare MIT.",
+      "artifacts": [
+        { "package": "@pdf-lib/upng", "integrity": "sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==" }
+      ]
+    },
+    {
+      "version": "2.37.3",
+      "license": "LicenseRef-DejaVu-Fonts",
+      "evidence": "The package manifest directs recipients to its bundled README.md and LICENSE; DejaVu font redistribution is governed by the notices in those files.",
+      "artifacts": [
+        { "package": "dejavu-fonts-ttf", "integrity": "sha512-f1hd7jJbeQa1VWcw+K2KrTXS50zTMaHpVC4XIKJpNcDeYR5ajMtj/iLlQDYNvLOKamUB3ARVVCf79lNwNVztSQ==" }
+      ]
+    },
+    {
+      "version": "1.6.0",
+      "license": "MIT",
+      "evidence": "The npm registry manifest declares MIT; the complete license is also retained in THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt.",
+      "artifacts": [
+        { "package": "harfbuzzjs", "integrity": "sha512-fNnYg+CX5MBzckYZpqBJKs9qIVMH9vMhFNo9I81wp1QFu7jI3DOvtf1+VDwH4vsfnCylAFBNSX3gio9uNGPk/w==" }
+      ]
+    },
+    {
+      "version": "1.0.11",
+      "license": "(MIT AND Zlib)",
+      "evidence": "The npm registry manifest declares the conjunctive MIT and Zlib expression.",
+      "artifacts": [
+        { "package": "pako", "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==" }
+      ]
+    },
+    {
+      "version": "1.17.1",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and Hopding/pdf-lib repository declare MIT.",
+      "artifacts": [
+        { "package": "pdf-lib", "integrity": "sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==" }
+      ]
+    },
+    {
+      "version": "1.14.1",
+      "license": "0BSD",
+      "evidence": "The npm registry manifest for tslib 1.14.1 declares 0BSD.",
+      "artifacts": [
+        { "package": "tslib", "integrity": "sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==" }
+      ]
+    },
+    {
+      "version": "6.2.108",
+      "license": "Apache-2.0",
+      "evidence": "The npm registry manifest and Mozilla pdf.js repository declare Apache-2.0.",
+      "artifacts": [
+        { "package": "pdfjs-dist", "integrity": "sha512-YxFb+SQcodN2rnX9Tn3dHYlqfb7NjlzzfONPpJd+AKoKtUjEdevTfbC07d5TcczzOK6261auRkP/M8OBHs9vFQ==" }
+      ]
+    },
+    {
+      "version": "7.0.0",
+      "license": "MIT",
+      "evidence": "The npm registry manifest and pngjs/pngjs repository declare MIT.",
+      "artifacts": [
+        { "package": "pngjs", "integrity": "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==" }
+      ]
+    },
+    {
+      "version": "0.25.1",
+      "license": "Apache-2.0",
+      "evidence": "The package manifests point to dream-num/univer; the exact v0.25.1 repository tag is distributed under the root Apache-2.0 LICENSE even though these packages' npm metadata omits the field.",
+      "artifacts": [
+        { "package": "@univerjs/find-replace", "integrity": "sha512-Xa+pkCqogQ0AHcIzUGpmqbb6driQJ0i4nqT6XPS/RYh/u0encY9/an7z3ly9b5Z24PChyPGTfrvrbFAnmON3WA==" },
+        { "package": "@univerjs/preset-sheets-conditional-formatting", "integrity": "sha512-MsbzZEw6Z6L7UHpNxF1B1ua/aM0we1u9GRBf7ExZlPAzZbEicd5DM2n0yvO/5a7SmzFuFQZshX1JY5xSNLJvhw==" },
+        { "package": "@univerjs/preset-sheets-data-validation", "integrity": "sha512-9K3XOzmfjxJ39iR9GQCH9FGrLdMqc0FOFv1BLfMyWwwh2N3sWaz+Ae1sKjpKPLDuOn8uYH6QRRAxif8UK1V49A==" },
+        { "package": "@univerjs/preset-sheets-filter", "integrity": "sha512-ox6OAUFetC9Al1XY7eb4JNPvNwto7ZWZBXiD5nNGzeK6R8LKrN31Yhu69RgCTpuymVlv7rNROtDKeXxroJzUbg==" },
+        { "package": "@univerjs/preset-sheets-find-replace", "integrity": "sha512-eao9xoiPsnn3qfk9pRVEip7Yte36RgBWpdZ72xj0WtX7r0pKOsCWHLpluQwO2tR8YR6BBTB009qarxDMTeQw3g==" },
+        { "package": "@univerjs/preset-sheets-hyper-link", "integrity": "sha512-nKROwzxzYadnetwlGVAGtpuMP8Cn2qdiJiWQjXjPI217TUtojYKXIRdOhK909/BFAR/l7oalX4x+fKLWSdU5ag==" },
+        { "package": "@univerjs/preset-sheets-note", "integrity": "sha512-Lo0lhMfHHzSPJaAxUQ5F9TANtXwL7xIjoNdVPLDMz5dumPCPHKH3j7fewI4pOrSVqvcVyWvmDxwUQqMDYSk8SQ==" },
+        { "package": "@univerjs/preset-sheets-sort", "integrity": "sha512-xebD11RrtJ+JY6Tn3pYoQf28jMuLAlOEAoDYqB8Rh4mzKLimBcB/emmXNg+KfNbbXFelFRvjr8uaLL5P41R5WQ==" },
+        { "package": "@univerjs/preset-sheets-table", "integrity": "sha512-ycZlK/ZgyRXgsw0pYulFpUa++mJIGNX4D37M9Vg1pNOmdJWygPF8Q4zEZUK9bARYMalIdUommQ+93rl1jNiXWw==" },
+        { "package": "@univerjs/preset-sheets-thread-comment", "integrity": "sha512-/zlzXHNWVQkp9fr+d6kSeGEwtb5nnGhKbCmF0y+JSHpws6MPWBVjBD1MbzsGvT99P7OhLXtdFrbrQUMBsFduOg==" },
+        { "package": "@univerjs/sheets-conditional-formatting", "integrity": "sha512-+3q3WS6+m3qNDyyv4LuppxqNQdOFT99fQHpkrc2WIi1pSgO/HnCXm348KP1RhpYoVwcHOV8eoFDTqK9Q1DrdOg==" },
+        { "package": "@univerjs/sheets-conditional-formatting-ui", "integrity": "sha512-/DZRAhClo1T9v3S8h6W7shSemckIeLvYYwygl3vlWe1opcUFraUt2A8iS/SToQeIgIstVEGGq3EZh5yeDJDvAQ==" },
+        { "package": "@univerjs/sheets-data-validation-ui", "integrity": "sha512-jg40+G3S0gwtQILvfzB0bFnigLNHxUEcnuAGHwgdS+GRHxGb+GbtY2qy5Fob7tGCMlgIiL4vZBZ5LCRVq2ciLg==" },
+        { "package": "@univerjs/sheets-filter-ui", "integrity": "sha512-VROeSot8Fu/wUqeUuGaCgNHLllzOqrmnyeZO8oARlUZNaNSwZl1LfOxu35xR63HS1HuC7amaFspCdo5u4D1nsg==" },
+        { "package": "@univerjs/sheets-find-replace", "integrity": "sha512-AdpmCl1Y7hqSMgTvCI9NOCjcAS+mutPCkmVyxoNHNtdguob6hbP0FQxcOkHd2feSLptcK/EvRZu3BfquMqAGmw==" },
+        { "package": "@univerjs/sheets-hyper-link-ui", "integrity": "sha512-grb7WsYlbzKOzZeEXKYv1IkrdwXcykpfWYKix6MNdAsg9EIIm2N85JAxdmz/gUO4Skh5YW8sfUiQx/1IKe/W7A==" },
+        { "package": "@univerjs/sheets-note", "integrity": "sha512-mGKYGJwI3HB4ySRlOyqFwZTzYP7IYdedt/rF6OIQCwHSiEqliokRVqSh5zcHw46HhbBc36BqnBLImXGr/ib9pQ==" },
+        { "package": "@univerjs/sheets-note-ui", "integrity": "sha512-TSYVH9WEv+5p9lwwXXWKXJuG2G2Vb9ZcB/ptLUKR48XE3AB4aNUr+Nw01E57aYp0/Q64a5pmYZwlhTWalZQi7Q==" },
+        { "package": "@univerjs/sheets-sort-ui", "integrity": "sha512-KJPaD5Y+WqrlZncJYDggVhBG9T0DwpT00LNESZYdv55lbKUbH2Lc/ilUQ7xpVkkUml4UZtr/s/JB22m5++Gj6g==" },
+        { "package": "@univerjs/sheets-table", "integrity": "sha512-439D8+q1E7EotM2W02yREi67ZK0OBmJwJ0/0LIIn4h1+C2MbJtZfrn1Q9AKE4BCQF8jBTrLuVKiyGjdhtcVQFQ==" },
+        { "package": "@univerjs/sheets-table-ui", "integrity": "sha512-NufPBswZi8TtfxazeY313/MBHBP8sSM1cMD7AFMYeM+1wag6440qj3NRLBes8NmwVuZ1bdiWo1wleiAYjKl42Q==" },
+        { "package": "@univerjs/sheets-thread-comment-ui", "integrity": "sha512-jjyGo7QRY/rLjlvV8wrJyUzH+FjAuO2SJojoRlR8U1zfyQGF7LDhCIkhmf5366hPUqvkzfz2Hkk+CAEp5zeg5g==" },
+        { "package": "@univerjs/thread-comment-ui", "integrity": "sha512-cCTPxMLjSzdLRXmdfFv4LtjBZFDG5VeCnqm6o9+XYPIVbZ7UAYRKGPOzv1204lDJu1XJgYgTnMJr4Ms2Yh2bUg==" }
+      ]
+    },
+    {
+      "version": "0.25.1",
+      "license": "Apache-2.0",
+      "evidence": "The package manifest points to dream-num/univer; the exact v0.25.1 repository tag is distributed under the root Apache-2.0 LICENSE even though this package's npm metadata omits the field.",
+      "artifacts": [
+        { "package": "@univerjs/telemetry", "integrity": "sha512-eAGiFs2OUAIBrC0g3gASRAvr7++KkmnPS49yAoa95gd6TW8R8o0YASOXyrahysMhDriBXmFGN7hHNLXRo9UlGw==" }
+      ]
+    }
+  ]
+}

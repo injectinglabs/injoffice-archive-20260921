@@ -1,0 +1,9 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "same-id",
+  "origin": "authored",
+  "size": { "cx": 1, "cy": 1 },
+  "assets": [],
+  "slides": [{ "id": "same-id", "provenance": "authored", "elements": [], "passthrough": [], "compatibility": { "status": "editable", "diagnostics": [] } }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

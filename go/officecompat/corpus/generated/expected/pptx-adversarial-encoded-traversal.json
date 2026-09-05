@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "pptx-adversarial-encoded-traversal",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "invalid-opc-target",
+    "contains": "encoded traversal or separator"
+  }
+}

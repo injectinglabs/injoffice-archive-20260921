@@ -1,0 +1,826 @@
+{
+  "protocol": "injoffice.native-office-production-e2e/v1",
+  "version": 1,
+  "baseline": {
+    "repository": "injectinglabs/injoffice",
+    "commit": "ddf2e523a9d6422e2dfccd93e263fcbb10322cca",
+    "corpusManifest": {
+      "path": "go/officecompat/corpus/manifest.json",
+      "protocol": "injoffice-office-compat-corpus/v1",
+      "selectedRecordsSha256": "19091a79889e37225de866fe482fe9309aecfacc6cb30a67a4d8a7b90d0e3b8f"
+    },
+    "completionMatrix": {
+      "protocol": "injoffice.native-office-completion/v1",
+      "relationship": "This manifest owns executable production observations only; capability status, evidence selectors, and pending work remain matrix-owned."
+    }
+  },
+  "authority": {
+    "semanticSource": "native-output",
+    "digestProfile": "sha256-canonical-json/v1",
+    "allowedPaintSinks": [
+      "canvas2d-command-replay"
+    ],
+    "forbidden": [
+      "canvas-measurement",
+      "dom",
+      "html",
+      "konva",
+      "legacy-deckview",
+      "mammoth",
+      "screenshot"
+    ],
+    "screenshotPolicy": "diagnostic-only-never-semantic-authority"
+  },
+  "adapter": {
+    "protocol": "injoffice.native-office-production-e2e-adapter/v1",
+    "version": 1,
+    "requestMode": "one-case-one-replay-index",
+    "networkPolicy": "fixture-local-or-intercepted-only",
+    "observationProtocol": "injoffice.native-office-production-e2e-observation/v1"
+  },
+  "contracts": {
+    "docx": {
+      "protocol": "injoffice.docx.native",
+      "version": 1,
+      "schemaPath": "packages/docs/schema/native-docx-v1.schema.json",
+      "schemaSha256": "f8ca593031f1e1d367e339f2751eb763a25f49093e536f492c65abc087c7cedd"
+    },
+    "pptx": {
+      "protocol": "pptx-native/v1",
+      "version": 1,
+      "schemaPath": "schemas/pptx-native-v1.schema.json",
+      "schemaSha256": "09fa7ef6a0c7f05a466bab3071bcaea4f4a48f9d61cb08c068bd6c4ff853102f"
+    },
+    "xlsx": {
+      "protocol": "injoffice.xlsx.native",
+      "version": 1,
+      "schemaPath": "schemas/xlsx-native-v1.schema.json",
+      "schemaSha256": "8017eca7536f5d3d1e943fc04387ebad042c522b825f3b208ad6a5b0b05174ea"
+    }
+  },
+  "resourceProfiles": {
+    "browser-native": {
+      "maxFixtureBytes": 134217728,
+      "maxObservationBytes": 67108864,
+      "maxOutputItems": 100000,
+      "timeoutMs": 120000
+    },
+    "contract-integrity": {
+      "maxFixtureBytes": 8388608,
+      "maxObservationBytes": 65536,
+      "maxOutputItems": 16,
+      "timeoutMs": 5000
+    },
+    "service-page-paint": {
+      "maxFixtureBytes": 134217728,
+      "maxObservationBytes": 67108864,
+      "maxOutputItems": 100000,
+      "timeoutMs": 30000
+    }
+  },
+  "fixtures": [
+    {
+      "id": "docx-adversarial-traversal",
+      "format": "docx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "go/officecompat/corpus/generated/packages/docx-adversarial-traversal.docx",
+      "byteLength": 926,
+      "sha256": "225fc5c10595b2d38e69a462578800626aeba35c3fb348e19fee4a6729bcefc4",
+      "expectedPath": "go/officecompat/corpus/generated/expected/docx-adversarial-traversal.json",
+      "expectedSha256": "29533a506c1d4675fa857332c34f336075b56de7d0e05187fbdaca0281fc06e6",
+      "canonicalExpectedProfile": "officecompat-refusal-canonical-v1",
+      "canonicalExpectedSha256": "f2bca01a7fbf022fa520ee104c1e896cfc055339ab40f7873f2f5f199f61eadc",
+      "corpusId": "docx-adversarial-traversal"
+    },
+    {
+      "id": "docx-inline-png-page-paint",
+      "format": "docx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "go/officecompat/corpus/generated/packages/docx-inline-png-page-paint.docx",
+      "byteLength": 1941,
+      "sha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+      "expectedPath": "go/officecompat/corpus/generated/expected/docx-inline-png-page-paint.json",
+      "expectedSha256": "789015eac4d56b012683988eccde40b55cac46461cb048c66249242238928092",
+      "canonicalExpectedProfile": "docx-native-canonical-v1",
+      "canonicalExpectedSha256": "b0ce1ea47a0055316093f732085bf212e7688192252c5faa2c08b398c4df4251",
+      "corpusId": "docx-inline-png-page-paint"
+    },
+    {
+      "id": "docx-transitional-common",
+      "format": "docx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "go/officecompat/corpus/generated/packages/docx-transitional-common.docx",
+      "byteLength": 1316,
+      "sha256": "47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209",
+      "expectedPath": "go/officecompat/corpus/generated/expected/docx-transitional-common.json",
+      "expectedSha256": "dc8aaf485874d84233aff93fc73ceba7bdeb133a9373b3d6c212f09e72fad64d",
+      "canonicalExpectedProfile": "docx-native-canonical-v1",
+      "canonicalExpectedSha256": "55d3557238f9a1665def9ade45eb11c6d59bc5c066a763a14b83d572dd1392c0",
+      "corpusId": "docx-transitional-common"
+    },
+    {
+      "id": "pptx-authored-deck",
+      "format": "pptx",
+      "mediaType": "application/vnd.injoffice.authored-deck+json",
+      "path": "testdata/native-office-production-e2e/v1/authored-deck.json",
+      "byteLength": 818,
+      "sha256": "7476e3e6142b8ceae47cf03811ac77ca10f3b19d1ae5ce1986f5af8edb195190",
+      "expectedPath": null,
+      "expectedSha256": null,
+      "canonicalExpectedProfile": "pptx-authored-production-projection-v1",
+      "canonicalExpectedSha256": "189b6ac4f52fc0e807a9219e255264c9c1034c93fa52e191597bfc584a76c3bd",
+      "corpusId": null
+    },
+    {
+      "id": "pptx-resource-depth-refusal",
+      "format": "pptx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "path": "go/officecompat/corpus/generated/packages/pptx-resource-depth-refusal.pptx",
+      "byteLength": 941,
+      "sha256": "62ffeabcc39ab623e737aa09bce5ec860e8a1ca129401843320e1da11f5e26e2",
+      "expectedPath": "go/officecompat/corpus/generated/expected/pptx-resource-depth-refusal.json",
+      "expectedSha256": "64ec1b434435a730a81325ddcb3c34447f224589669661bb0b14a846cc75b32a",
+      "canonicalExpectedProfile": "officecompat-refusal-canonical-v1",
+      "canonicalExpectedSha256": "901eeadf796bcdeaaad6bc449b98b473fe361c98957a2a02897b80b62ffd0740",
+      "corpusId": "pptx-resource-depth-refusal"
+    },
+    {
+      "id": "pptx-strict-picture",
+      "format": "pptx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "path": "go/officecompat/corpus/generated/packages/pptx-strict-picture.pptx",
+      "byteLength": 4027,
+      "sha256": "e06e8fdc4fafd755c3a023a1bf26aab36f90a77674faaad5c5e9fbb94b8ff7af",
+      "expectedPath": "go/officecompat/corpus/generated/expected/pptx-strict-picture.json",
+      "expectedSha256": "5d28ff37f3e1c8e20d7b74ed1f0e8da68b89b782bd07b930241ff1cb1f2a556f",
+      "canonicalExpectedProfile": "pptx-native-canonical-v1",
+      "canonicalExpectedSha256": "8b794073933bfa14554e34d528dee342b00fb5e0bffac9e17682a9714b656b4e",
+      "corpusId": "pptx-strict-picture"
+    },
+    {
+      "id": "xlsx-refused-malformed-numeric",
+      "format": "xlsx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "path": "go/officecompat/corpus/generated/packages/xlsx-refused-malformed-numeric.xlsx",
+      "byteLength": 1549,
+      "sha256": "8fb622418b0d8732e512bc40ef6dbb4c7e7a895d8f81f4f40e926ec3a8402ded",
+      "expectedPath": "go/officecompat/corpus/generated/expected/xlsx-refused-malformed-numeric.json",
+      "expectedSha256": "3f37846283fe7fe863cab1da96db51c61769e1835da6e2f0fd9b50ab01b52835",
+      "canonicalExpectedProfile": "officecompat-refusal-canonical-v1",
+      "canonicalExpectedSha256": "06f9f919e52da6282a172798f8edac9b6f4c55f476c7899d6b26b47b3ab0e98f",
+      "corpusId": "xlsx-refused-malformed-numeric"
+    },
+    {
+      "id": "xlsx-transitional-common",
+      "format": "xlsx",
+      "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "path": "go/officecompat/corpus/generated/packages/xlsx-transitional-common.xlsx",
+      "byteLength": 2740,
+      "sha256": "d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+      "expectedPath": "go/officecompat/corpus/generated/expected/xlsx-transitional-common.json",
+      "expectedSha256": "2947a8f439266b8a44088b09faa1cff0d43f0617e5b398f877fce582391027b8",
+      "canonicalExpectedProfile": "xlsx-native-canonical-v1",
+      "canonicalExpectedSha256": "880a6856a8fc2865dbb85c877ef72d0483d76eca16cf6d888c19f21db9aa8859",
+      "corpusId": "xlsx-transitional-common"
+    }
+  ],
+  "cases": [
+    {
+      "id": "docx.atomic-fixture-tamper",
+      "format": "docx",
+      "workflow": "fixture-integrity",
+      "fixtureId": "docx-inline-png-page-paint",
+      "input": {
+        "mode": "tamper-xor",
+        "byteOffset": 1940,
+        "xorMask": 1
+      },
+      "resourceProfile": "contract-integrity",
+      "runners": [
+        {
+          "id": "contract.verifier",
+          "repository": "injectinglabs/injoffice",
+          "entrypoint": "scripts/verify-native-office-production-e2e.mjs",
+          "operation": "verify-fixture-before-run",
+          "engineId": "injoffice.native-office-production-e2e-verifier",
+          "engineRevision": "v1",
+          "componentIds": [
+            "fixture-verifier:injoffice.native-office-production-e2e-verifier"
+          ],
+          "requiredSignals": [
+            "adapter-not-invoked",
+            "fixture-digest-refusal"
+          ],
+          "nativeProtocol": "injoffice.native-office-production-e2e/v1",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "refused",
+        "semantic": {
+          "profile": "production-e2e-refusal-canonical-v1",
+          "value": {
+            "candidateBytesProduced": false,
+            "class": "fixture-digest-mismatch",
+            "fixtureSha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+            "format": "docx",
+            "status": "refused"
+          },
+          "sha256": "f9670e204a3b544ea6f464db5afd41bf77359ee48b5c1006da6c411cb7de811c"
+        },
+        "preservation": [
+          "source-bytes-unchanged"
+        ],
+        "refusal": {
+          "code": "FIXTURE_DIGEST_MISMATCH",
+          "stage": "pre-run",
+          "atomic": true,
+          "candidateBytesProduced": false
+        }
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "docx.image-page-paint",
+      "format": "docx",
+      "workflow": "production-page-paint",
+      "fixtureId": "docx-inline-png-page-paint",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "service-page-paint",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host DOCX page-paint adapter",
+          "engineId": "injoffice.docx.page-paint-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.docx.native",
+            "outline:host.sfnt-outline",
+            "resolver:injoffice.docx.embedded-fonts",
+            "shaper:injoffice.harfbuzzjs"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "injoffice.docx.page-paint-bundle",
+          "nativeVersion": 1
+        },
+        {
+          "id": "browser.production-client",
+          "repository": "example/browser-client",
+          "entrypoint": "browser/native-office-adapter",
+          "operation": "browser GET office=page-paint and native command replay",
+          "engineId": "injoffice.docx.page-paint-browser",
+          "engineRevision": "v1",
+          "componentIds": [
+            "compiler:@injoffice/docs/native-page-paint-compiler",
+            "paint-replay:browser.canvas2d-command-replay"
+          ],
+          "requiredSignals": [
+            "hashed-production-chunk",
+            "native-root-or-refusal",
+            "no-raw-browser-source-read"
+          ],
+          "nativeProtocol": "injoffice.docx.page-paint",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "accepted",
+        "semantic": {
+          "profile": "docx-page-paint-canonical-v1",
+          "value": {
+            "assertions": [
+              "digest-bound-png",
+              "exact-emu-inline-image",
+              "native-command-replay",
+              "provider-identity-attested"
+            ],
+            "fixtureSha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+            "format": "docx",
+            "mediaSha256": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+            "status": "accepted"
+          },
+          "sha256": "912f75f1185284020d93468ca88a722e0917e5d92932ab514814dc93d5eb2674"
+        },
+        "preservation": [
+          "original-download-authority",
+          "source-bytes-unchanged"
+        ],
+        "refusal": null
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "docx.table-font-page-paint",
+      "format": "docx",
+      "workflow": "production-page-paint",
+      "fixtureId": "docx-transitional-common",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "service-page-paint",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host DOCX page-paint adapter",
+          "engineId": "injoffice.docx.page-paint-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.docx.native",
+            "outline:host.sfnt-outline",
+            "resolver:injoffice.docx.embedded-fonts",
+            "shaper:injoffice.harfbuzzjs"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "injoffice.docx.page-paint-bundle",
+          "nativeVersion": 1
+        },
+        {
+          "id": "browser.production-client",
+          "repository": "example/browser-client",
+          "entrypoint": "browser/native-office-adapter",
+          "operation": "browser GET office=page-paint and native command replay",
+          "engineId": "injoffice.docx.page-paint-browser",
+          "engineRevision": "v1",
+          "componentIds": [
+            "compiler:@injoffice/docs/native-page-paint-compiler",
+            "paint-replay:browser.canvas2d-command-replay"
+          ],
+          "requiredSignals": [
+            "hashed-production-chunk",
+            "native-root-or-refusal",
+            "no-raw-browser-source-read"
+          ],
+          "nativeProtocol": "injoffice.docx.page-paint",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "accepted",
+        "semantic": {
+          "profile": "docx-page-paint-canonical-v1",
+          "value": {
+            "assertions": [
+              "font-provider-identity-attested",
+              "native-table",
+              "table-cell-text"
+            ],
+            "fixtureSha256": "47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209",
+            "format": "docx",
+            "status": "accepted",
+            "text": [
+              "Café 👋",
+              "Cell Ω"
+            ]
+          },
+          "sha256": "50ca499f792964fc221ebfda8acb4ff47c00e54d1881074ff4478f592ec789fa"
+        },
+        "preservation": [
+          "original-download-authority",
+          "source-bytes-unchanged"
+        ],
+        "refusal": null
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "docx.unsupported-opc-refusal",
+      "format": "docx",
+      "workflow": "production-open",
+      "fixtureId": "docx-adversarial-traversal",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "service-page-paint",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host native extraction adapter",
+          "engineId": "injoffice.docx.native-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.docx.native"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "injoffice.docx.native",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "refused",
+        "semantic": {
+          "profile": "officecompat-refusal-canonical-v1",
+          "value": {
+            "candidateBytesProduced": false,
+            "class": "invalid-opc-path",
+            "fixtureSha256": "225fc5c10595b2d38e69a462578800626aeba35c3fb348e19fee4a6729bcefc4",
+            "format": "docx",
+            "status": "refused"
+          },
+          "sha256": "8e45d13f19569aae744e8fda9d32e5b20e5d28e44e31c9bf5077441e8e5acbbf"
+        },
+        "preservation": [
+          "source-bytes-unchanged"
+        ],
+        "refusal": {
+          "code": "INVALID_OPC_PATH",
+          "stage": "native-extract",
+          "atomic": true,
+          "candidateBytesProduced": false
+        }
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "pptx.authored-deck",
+      "format": "pptx",
+      "workflow": "production-authored-compile",
+      "fixtureId": "pptx-authored-deck",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "browser-native",
+      "runners": [
+        {
+          "id": "browser.production-client",
+          "repository": "example/browser-client",
+          "entrypoint": "browser/native-office-adapter",
+          "operation": "compile authored deck to native v1 and replay RenderTree commands",
+          "engineId": "injoffice.pptx.authored-browser",
+          "engineRevision": "v1",
+          "componentIds": [
+            "compiler:@injoffice/pptx-authored",
+            "paint-replay:browser.canvas2d-command-replay",
+            "render-tree:@injoffice/pptx-render"
+          ],
+          "requiredSignals": [
+            "hashed-production-chunk",
+            "native-root-or-refusal",
+            "no-raw-browser-source-read"
+          ],
+          "nativeProtocol": "pptx-native/v1",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "accepted",
+        "semantic": {
+          "profile": "pptx-authored-native-canonical-v1",
+          "value": {
+            "assertions": [
+              "explicit-font-authority",
+              "native-authored-origin",
+              "native-command-replay",
+              "stable-shape-keys"
+            ],
+            "format": "pptx",
+            "origin": "authored",
+            "status": "accepted",
+            "text": "Native authored deck"
+          },
+          "sha256": "189b6ac4f52fc0e807a9219e255264c9c1034c93fa52e191597bfc584a76c3bd"
+        },
+        "preservation": [
+          "input-deck-unchanged"
+        ],
+        "refusal": null
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "pptx.picture-native-browser",
+      "format": "pptx",
+      "workflow": "production-open",
+      "fixtureId": "pptx-strict-picture",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "browser-native",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host PPTX native and asset adapter",
+          "engineId": "injoffice.pptx.native-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.pptx.native"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "pptx-native/v1",
+          "nativeVersion": 1
+        },
+        {
+          "id": "browser.production-client",
+          "repository": "example/browser-client",
+          "entrypoint": "browser/native-office-adapter",
+          "operation": "browser GET office=native and capability-bound office=asset",
+          "engineId": "injoffice.pptx.native-browser",
+          "engineRevision": "v1",
+          "componentIds": [
+            "paint-replay:browser.canvas2d-command-replay",
+            "render-tree:@injoffice/pptx-render"
+          ],
+          "requiredSignals": [
+            "hashed-production-chunk",
+            "native-root-or-refusal",
+            "no-raw-browser-source-read"
+          ],
+          "nativeProtocol": "pptx-native/v1",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "accepted",
+        "semantic": {
+          "profile": "pptx-native-canonical-v1",
+          "value": {
+            "assertions": [
+              "capability-bound-picture",
+              "native-json-round-trip",
+              "strict-part-spelling"
+            ],
+            "fixtureSha256": "e06e8fdc4fafd755c3a023a1bf26aab36f90a77674faaad5c5e9fbb94b8ff7af",
+            "format": "pptx",
+            "status": "accepted"
+          },
+          "sha256": "a4877c237d04a2f3da4e22df3257c5d786fa73fff773ddc7979ff7f6121a4e07"
+        },
+        "preservation": [
+          "original-download-authority",
+          "source-bytes-unchanged"
+        ],
+        "refusal": null
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "pptx.unsupported-depth-refusal",
+      "format": "pptx",
+      "workflow": "production-open",
+      "fixtureId": "pptx-resource-depth-refusal",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "browser-native",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host native extraction adapter",
+          "engineId": "injoffice.pptx.native-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.pptx.native"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "pptx-native/v1",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "refused",
+        "semantic": {
+          "profile": "officecompat-refusal-canonical-v1",
+          "value": {
+            "candidateBytesProduced": false,
+            "class": "xml-resource-budget",
+            "fixtureSha256": "62ffeabcc39ab623e737aa09bce5ec860e8a1ca129401843320e1da11f5e26e2",
+            "format": "pptx",
+            "status": "refused"
+          },
+          "sha256": "e01e6e4d3adc09d7bf25d8454b96d4bc998e998ff034a3716b8e3877953539e6"
+        },
+        "preservation": [
+          "source-bytes-unchanged"
+        ],
+        "refusal": {
+          "code": "XML_RESOURCE_BUDGET",
+          "stage": "native-extract",
+          "atomic": true,
+          "candidateBytesProduced": false
+        }
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "xlsx.sheet-native-browser",
+      "format": "xlsx",
+      "workflow": "production-open",
+      "fixtureId": "xlsx-transitional-common",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "browser-native",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host native extraction adapter",
+          "engineId": "injoffice.xlsx.native-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.xlsx.native"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "injoffice.xlsx.native",
+          "nativeVersion": 1
+        },
+        {
+          "id": "browser.production-client",
+          "repository": "example/browser-client",
+          "entrypoint": "browser/native-office-adapter",
+          "operation": "browser GET office=native and renderer-neutral sheet projection",
+          "engineId": "injoffice.xlsx.native-browser",
+          "engineRevision": "v1",
+          "componentIds": [
+            "geometry:@injoffice/sheets/native-sheet-geometry",
+            "render-model:@injoffice/sheets"
+          ],
+          "requiredSignals": [
+            "hashed-production-chunk",
+            "native-root-or-refusal",
+            "no-raw-browser-source-read"
+          ],
+          "nativeProtocol": "injoffice.xlsx.render-model",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "accepted",
+        "semantic": {
+          "profile": "xlsx-native-canonical-v1",
+          "value": {
+            "assertions": [
+              "deterministic-grid-geometry",
+              "exact-cell-lexicals",
+              "native-style-authority",
+              "renderer-neutral-sheet"
+            ],
+            "fixtureSha256": "d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+            "format": "xlsx",
+            "status": "accepted"
+          },
+          "sha256": "b1a247a0127e81cc694d5a9c2e8e84f31fa97d62f414ad3c677bdab2e25031c5"
+        },
+        "preservation": [
+          "original-download-authority",
+          "source-bytes-unchanged"
+        ],
+        "refusal": null
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    },
+    {
+      "id": "xlsx.unsupported-numeric-refusal",
+      "format": "xlsx",
+      "workflow": "production-open",
+      "fixtureId": "xlsx-refused-malformed-numeric",
+      "input": {
+        "mode": "exact"
+      },
+      "resourceProfile": "browser-native",
+      "runners": [
+        {
+          "id": "application.production-service",
+          "repository": "example/host-application",
+          "entrypoint": "host/native-office-adapter",
+          "operation": "host native extraction adapter",
+          "engineId": "injoffice.xlsx.native-production",
+          "engineRevision": "v1",
+          "componentIds": [
+            "extractor:injoffice.xlsx.native"
+          ],
+          "requiredSignals": [
+            "authenticated-production-entrypoint",
+            "native-response",
+            "source-digest-rechecked"
+          ],
+          "nativeProtocol": "injoffice.xlsx.native",
+          "nativeVersion": 1
+        }
+      ],
+      "expect": {
+        "outcome": "refused",
+        "semantic": {
+          "profile": "officecompat-refusal-canonical-v1",
+          "value": {
+            "candidateBytesProduced": false,
+            "class": "invalid-native-ooxml",
+            "fixtureSha256": "8fb622418b0d8732e512bc40ef6dbb4c7e7a895d8f81f4f40e926ec3a8402ded",
+            "format": "xlsx",
+            "status": "refused"
+          },
+          "sha256": "6379aafa984f9d0685fd6bf156f26d2131fccb35974f6c210a3c94f09765b851"
+        },
+        "preservation": [
+          "source-bytes-unchanged"
+        ],
+        "refusal": {
+          "code": "INVALID_NATIVE_OOXML",
+          "stage": "native-extract",
+          "atomic": true,
+          "candidateBytesProduced": false
+        }
+      },
+      "replay": {
+        "runs": 2,
+        "requireIdentical": [
+          "engine",
+          "evidence",
+          "semanticSha256"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# generated_sample.pptx is reproducible (go run ./cmd/sample) and is only
+# produced for the manual python-pptx validation step — not checked in.
+generated_sample.pptx

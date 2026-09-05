@@ -1,0 +1,22 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-negative-zero",
+  "origin": "authored",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-1",
+    "provenance": "authored",
+    "elements": [{
+      "kind": "connector",
+      "id": "connector-1",
+      "provenance": "authored",
+      "transform": { "x": -0, "y": 0, "cx": 100, "cy": 100 },
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

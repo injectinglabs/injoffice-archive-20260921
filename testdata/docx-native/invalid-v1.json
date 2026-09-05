@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "name": "parent traversal part",
+      "pointer": "/body/anchor/part_name",
+      "value": "word/../evil.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/anchor/part_name"
+    },
+    {
+      "name": "empty part segment",
+      "pointer": "/body/part_name",
+      "value": "word//document.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "encoded parent traversal part",
+      "pointer": "/body/part_name",
+      "value": "word/%2E%2E/evil.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "encoded slash in part segment",
+      "pointer": "/body/part_name",
+      "value": "word/a%2Fb.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "encoded backslash in part segment",
+      "pointer": "/body/part_name",
+      "value": "word/a%5Cb.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "part segment cannot end with a literal dot",
+      "pointer": "/body/part_name",
+      "value": "word/trailing./document.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "part segment cannot end with an encoded dot",
+      "pointer": "/body/part_name",
+      "value": "word/trailing%2E/document.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/part_name"
+    },
+    {
+      "name": "section target must be a top-level body block",
+      "pointer": "/sections/0/starts_at_block_id",
+      "value": "run:intro:text",
+      "code": "BROKEN_REFERENCE",
+      "path": "/sections/0/starts_at_block_id"
+    },
+    {
+      "name": "header target must be a header story",
+      "pointer": "/sections/0/header_refs/0/story_id",
+      "value": "story:footer:default",
+      "code": "BROKEN_REFERENCE",
+      "path": "/sections/0/header_refs/0/story_id"
+    },
+    {
+      "name": "comment body target must be a comment story",
+      "pointer": "/comments/0/body_story_id",
+      "value": "story:header:default",
+      "code": "BROKEN_REFERENCE",
+      "path": "/comments/0/body_story_id"
+    },
+    {
+      "name": "footnote target must be a footnote story",
+      "pointer": "/body/blocks/0/paragraph/runs/1/reference/kind",
+      "value": "footnote",
+      "code": "BROKEN_REFERENCE",
+      "path": "/body/blocks/0/paragraph/runs/1/reference/target_id"
+    },
+    {
+      "name": "drawing media target must be a media passthrough part",
+      "pointer": "/body/blocks/0/paragraph/runs/2/drawing/media_part",
+      "value": "word/styles.xml",
+      "code": "BROKEN_REFERENCE",
+      "path": "/body/blocks/0/paragraph/runs/2/drawing/media_part"
+    },
+    {
+      "name": "modeled and passthrough part ownership cannot overlap",
+      "pointer": "/passthrough_parts/1/part_name",
+      "value": "word/header1.xml",
+      "code": "INVALID_VALUE",
+      "path": "/passthrough_parts/1/part_name"
+    },
+    {
+      "name": "descendant anchor must use its story part",
+      "pointer": "/body/blocks/0/paragraph/runs/0/anchor/part_name",
+      "value": "word/header1.xml",
+      "code": "INVALID_VALUE",
+      "path": "/body/blocks/0/paragraph/runs/0/anchor/part_name"
+    },
+    {
+      "name": "descendant anchor must stay inside its parent",
+      "pointer": "/body/blocks/0/paragraph/runs/0/anchor/end_byte",
+      "value": 900,
+      "code": "OUT_OF_RANGE",
+      "path": "/body/blocks/0/paragraph/runs/0/anchor"
+    },
+    {
+      "name": "anchors cannot be empty",
+      "pointer": "/body/blocks/0/paragraph/runs/0/anchor/end_byte",
+      "value": 250,
+      "code": "OUT_OF_RANGE",
+      "path": "/body/blocks/0/paragraph/runs/0/anchor/end_byte"
+    },
+    {
+      "name": "integers must stay in the cross-language safe range",
+      "pointer": "/body/blocks/0/paragraph/runs/2/drawing/width_emu",
+      "value": 9007199254740992,
+      "code": "OUT_OF_RANGE",
+      "path": "/body/blocks/0/paragraph/runs/2/drawing/width_emu"
+    },
+    {
+      "name": "union payloads are exclusive",
+      "pointer": "/body/blocks/0/paragraph/runs/0/control",
+      "value": "tab",
+      "code": "INVALID_UNION",
+      "path": "/body/blocks/0/paragraph/runs/0"
+    },
+    {
+      "name": "edit operation must apply to the owning object type",
+      "pointer": "/body/blocks/0/paragraph/edit_policy/allowed_operations/0",
+      "value": "drawing.replace",
+      "code": "INVALID_VALUE",
+      "path": "/body/blocks/0/paragraph/edit_policy/allowed_operations/0"
+    },
+    {
+      "name": "null is rejected globally",
+      "pointer": "/body/blocks/0/paragraph/runs/0/properties/font_family",
+      "value": null,
+      "code": "INVALID_VALUE",
+      "path": "/body/blocks/0/paragraph/runs/0/properties/font_family"
+    },
+    {
+      "name": "present optional strings cannot be empty",
+      "pointer": "/body/blocks/0/paragraph/runs/0/properties/font_family",
+      "value": "",
+      "code": "INVALID_VALUE",
+      "path": "/body/blocks/0/paragraph/runs/0/properties/font_family"
+    },
+    {
+      "name": "capability names must be unique",
+      "pointer": "/capabilities/1/name",
+      "value": "paragraph-text",
+      "code": "INVALID_VALUE",
+      "path": "/capabilities/1/name"
+    },
+    {
+      "name": "comment story must stay inside its comment",
+      "pointer": "/comment_stories/0/anchor/start_byte",
+      "value": 50,
+      "code": "OUT_OF_RANGE",
+      "path": "/comments/0/body_story_id"
+    },
+    {
+      "name": "comment and body story native ids must match",
+      "pointer": "/comment_stories/0/native_story_id",
+      "value": "2",
+      "code": "INVALID_VALUE",
+      "path": "/comments/0/body_story_id"
+    }
+  ]
+}

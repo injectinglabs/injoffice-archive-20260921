@@ -1,0 +1,23 @@
+# Optional injoffice-server. Host publish is localhost-only by default.
+# This binary has no authentication; to listen on all interfaces change the
+# ports mapping to "18765:18765".
+#
+# Two-browser collab demo (same origin, different tabs): keep this server
+# running and, from the repository root:
+#   npm run dev
+# then open http://127.0.0.1:3100/#/collab twice. Vite proxies native Office
+# and collaboration routes to 127.0.0.1:18765. Compose does not run the playground.
+services:
+  injoffice-server:
+    build:
+      context: .
+      dockerfile: go/injoffice-server/Dockerfile
+    ports:
+      - "127.0.0.1:18765:18765"
+    environment:
+      INJOFFICE_ADDR: 0.0.0.0:18765
+      INJOFFICE_ARTIFACTS: /var/lib/injoffice/artifacts
+    volumes:
+      - injoffice-artifacts:/var/lib/injoffice/artifacts
+volumes:
+  injoffice-artifacts:

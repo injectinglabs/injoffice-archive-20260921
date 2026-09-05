@@ -1,0 +1,421 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "xlsx-relational-preservation",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen/v1",
+    "source": "Hand-authored SpreadsheetML workbook and relationship preservation fixture",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "calculation-settings-preservation",
+    "defined-names-preservation",
+    "external-link-preservation",
+    "external-relationship-preservation",
+    "formula-cache-semantics",
+    "hidden-sheet-states",
+    "internal-hyperlink-preservation",
+    "multi-sheet-order",
+    "nested-relationship-graph",
+    "passthrough-provenance"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/input.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/hidden.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/audit.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/externalLinks/externalLink1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml\"/><Override PartName=\"/customXml/itemProps1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.customXmlProperties+xml\"/><Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rWorkbook\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/><Relationship Id=\"rCore\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/></Relationships>"
+    },
+    {
+      "name": "customXml/_rels/item1.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rProps\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps\" Target=\"itemProps1.xml\"/></Relationships>"
+    },
+    {
+      "name": "customXml/item1.xml",
+      "text": "<qualification xmlns=\"urn:injoffice:fixture\" marker=\"preserve-exact\"/>"
+    },
+    {
+      "name": "customXml/itemProps1.xml",
+      "text": "<ds:datastoreItem ds:itemID=\"{00000000-0000-0000-0000-000000000001}\" xmlns:ds=\"http://schemas.openxmlformats.org/officeDocument/2006/customXml\"><ds:schemaRefs/></ds:datastoreItem>"
+    },
+    {
+      "name": "docProps/core.xml",
+      "text": "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>Relational_x0020_Qualification</dc:title></cp:coreProperties>"
+    },
+    {
+      "name": "xl/_rels/workbook.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rInput\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/input.xml\"/><Relationship Id=\"rHidden\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/hidden.xml\" TargetMode=\"Internal\"/><Relationship Id=\"rAudit\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/audit.xml\"/><Relationship Id=\"rExternal\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink\" Target=\"externalLinks/externalLink1.xml\"/><Relationship Id=\"rCustom\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml\" Target=\"../customXml/item1.xml\"/></Relationships>"
+    },
+    {
+      "name": "xl/externalLinks/_rels/externalLink1.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rExternalBook\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath\" Target=\"https://example.invalid/source.xlsx\" TargetMode=\"External\"/></Relationships>"
+    },
+    {
+      "name": "xl/externalLinks/externalLink1.xml",
+      "text": "<externalLink xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><externalBook r:id=\"rExternalBook\"><sheetNames><sheetName val=\"Source\"/></sheetNames></externalBook></externalLink>"
+    },
+    {
+      "name": "xl/workbook.xml",
+      "text": "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Inputs\" sheetId=\"4\" r:id=\"rInput\"/><sheet name=\"Hidden_x0020_Data\" sheetId=\"8\" state=\"hidden\" r:id=\"rHidden\"/><sheet name=\"Audit\" sheetId=\"12\" state=\"veryHidden\" r:id=\"rAudit\"/></sheets><externalReferences><externalReference r:id=\"rExternal\"/></externalReferences><definedNames><definedName name=\"InputRate\">Inputs!$B$1</definedName><definedName name=\"_xlnm.Print_Area\" localSheetId=\"2\">Audit!$A$1:$B$2</definedName></definedNames><calcPr calcId=\"191029\" calcMode=\"auto\" fullCalcOnLoad=\"1\"/></workbook>"
+    },
+    {
+      "name": "xl/worksheets/_rels/input.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rHelp\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.invalid/help\" TargetMode=\"External\"/></Relationships>"
+    },
+    {
+      "name": "xl/worksheets/audit.xml",
+      "text": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Audit_x0020_Log</t></is></c><c r=\"B1\" t=\"b\"><v>0</v></c></row></sheetData></worksheet>"
+    },
+    {
+      "name": "xl/worksheets/hidden.xml",
+      "text": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\"><v>00042</v></c></row></sheetData></worksheet>"
+    },
+    {
+      "name": "xl/worksheets/input.xml",
+      "text": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Rate</t></is></c><c r=\"B1\"><v>0.0750</v></c></row><row r=\"2\"><c r=\"A2\" t=\"str\"><f>'Hidden Data'!A1*B1</f><v>3.1500</v></c></row></sheetData><hyperlinks><hyperlink ref=\"A1\" r:id=\"rHelp\" display=\"Qualification_x0020_Help\"/><hyperlink ref=\"A2\" location=\"'Hidden Data'!A1\" display=\"Hidden_x0020_Source\"/></hyperlinks></worksheet>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "xlsx-relational-preservation",
+    "format": "xlsx",
+    "dialect": "transitional",
+    "outcome": "accepted",
+    "native": {
+      "protocol": "injoffice.xlsx.native",
+      "version": 1,
+      "document_id": "workbook:45b51eb4b54ee0f10408768ae6910419eaae5c938f19d0ecab8d0a706499ae4a",
+      "revision": "rev:6fa5d6029e501d23228ccb1a7e0581c87fa1afebda4ac3445fbfc96e29311617",
+      "source": {
+        "package_sha256": "sha256:6fa5d6029e501d23228ccb1a7e0581c87fa1afebda4ac3445fbfc96e29311617",
+        "workbook_part": "xl/workbook.xml",
+        "dialect": "transitional",
+        "authority": "exact-package-bytes"
+      },
+      "sheets": [
+        {
+          "id": "4",
+          "name": "Inputs",
+          "order": 0,
+          "state": "visible",
+          "part_name": "xl/worksheets/input.xml",
+          "rows": [],
+          "columns": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "ref": "A1",
+              "ooxml_type": "inlineStr",
+              "style_id": 0,
+              "value": {
+                "kind": "string",
+                "storage": "inline",
+                "text": "Rate",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "ref": "B1",
+              "style_id": 0,
+              "value": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "0.0750",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 1,
+              "column": 0,
+              "ref": "A2",
+              "ooxml_type": "str",
+              "style_id": 0,
+              "formula": {
+                "text": "'Hidden Data'!A1*B1",
+                "type": "normal",
+                "cached": {
+                  "kind": "string",
+                  "storage": "formula-string",
+                  "lexical": "3.1500",
+                  "text": "3.1500",
+                  "rich": false
+                }
+              },
+              "editable": true
+            }
+          ],
+          "merged_ranges": [],
+          "editable": true
+        },
+        {
+          "id": "8",
+          "name": "Hidden Data",
+          "order": 1,
+          "state": "hidden",
+          "part_name": "xl/worksheets/hidden.xml",
+          "rows": [],
+          "columns": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "ref": "A1",
+              "style_id": 0,
+              "value": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "00042",
+                "rich": false
+              },
+              "editable": true
+            }
+          ],
+          "merged_ranges": [],
+          "editable": true
+        },
+        {
+          "id": "12",
+          "name": "Audit",
+          "order": 2,
+          "state": "veryHidden",
+          "part_name": "xl/worksheets/audit.xml",
+          "rows": [],
+          "columns": [],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "ref": "A1",
+              "ooxml_type": "inlineStr",
+              "style_id": 0,
+              "value": {
+                "kind": "string",
+                "storage": "inline",
+                "text": "Audit Log",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "ref": "B1",
+              "ooxml_type": "b",
+              "style_id": 0,
+              "value": {
+                "kind": "boolean",
+                "storage": "boolean",
+                "lexical": "0",
+                "rich": false
+              },
+              "editable": true
+            }
+          ],
+          "merged_ranges": [],
+          "editable": true
+        }
+      ],
+      "styles": [
+        {
+          "id": 0,
+          "effective": {
+            "number_format": "General",
+            "bold": false,
+            "italic": false,
+            "fill": {
+              "origin": "implicit-default"
+            },
+            "border": {
+              "origin": "implicit-default"
+            },
+            "horizontal_alignment": "general",
+            "vertical_alignment": "bottom",
+            "wrap_text": false,
+            "projection": "full",
+            "unsupported": []
+          },
+          "raw_projection_sha256": "sha256:6051d1baebfdc63ff53849826c70d3b262d12aa559b85eb75862ca167e2f80b9"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "native-ooxml-parse",
+          "level": "read-only",
+          "detail": "HTML-free SpreadsheetML extraction with lexical values and formula caches"
+        },
+        {
+          "name": "native-v1-mutations",
+          "level": "partial",
+          "detail": "Cells, formulas, row/column dimensions, and the bounded style.patch projection"
+        },
+        {
+          "name": "unsupported-content",
+          "level": "preserve-exact",
+          "detail": "Unmodeled OOXML remains authoritative in the original package"
+        }
+      ],
+      "passthrough_parts": [
+        {
+          "part_name": "customXml/_rels/item1.xml.rels",
+          "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+          "byte_length": 241,
+          "sha256": "sha256:1be267640819e0d6a94ae82ff097d38ddd46d8e91099031a26e6a61a5e3a30b5",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "customXml/item1.xml",
+          "content_type": "application/xml",
+          "byte_length": 70,
+          "sha256": "sha256:46a81999f09e54e6186a7c85d6c267b8c223b504af31fea6e4a87a776a98c8e8",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "customXml/itemProps1.xml",
+          "content_type": "application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+          "byte_length": 179,
+          "sha256": "sha256:88263c96449ecdbc4f084bb28cbb54d56f8c4625f995dddc9958148a786a2485",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "docProps/core.xml",
+          "content_type": "application/vnd.openxmlformats-package.core-properties+xml",
+          "byte_length": 217,
+          "sha256": "sha256:dca2e5c66848528d3da937388fa0de585cda5f7c03533d31ab698cb87ec7487c",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "xl/externalLinks/_rels/externalLink1.xml.rels",
+          "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+          "byte_length": 293,
+          "sha256": "sha256:99cadc293b39846568e4531e1efd4fffa266d211152e15596ae6456284ad0d43",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "xl/externalLinks/externalLink1.xml",
+          "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml",
+          "byte_length": 273,
+          "sha256": "sha256:d735693c69fbdecd399f3915770b35b758adcad0be41be06de13fa9ca8311ee7",
+          "policy": "preserve-exact"
+        },
+        {
+          "part_name": "xl/worksheets/_rels/input.xml.rels",
+          "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+          "byte_length": 271,
+          "sha256": "sha256:7e177be0a1981b098235479b595ffd69c136da8dce6c83fa08570460597a8a02",
+          "policy": "preserve-exact"
+        }
+      ],
+      "unsupported": [
+        {
+          "id": "unsupported:ec111a90b879a820e54fac936034fad82d8b79a0769ee4575c171381aab80bf8",
+          "code": "EXTERNAL_RELATIONSHIP",
+          "capability": "external-links",
+          "scope_id": "workbook",
+          "part_name": "xl/externalLinks/_rels/externalLink1.xml.rels",
+          "preservation": "preserve-exact",
+          "message": "external relationship is preserved but is outside native mutation scope"
+        },
+        {
+          "id": "unsupported:55f94f7a31077a483a359a5e1232a3724c23eab6046cf5801d118aff43bd3e89",
+          "code": "EXTERNAL_RELATIONSHIP",
+          "capability": "external-links",
+          "scope_id": "workbook",
+          "part_name": "xl/worksheets/_rels/input.xml.rels",
+          "preservation": "preserve-exact",
+          "message": "external relationship is preserved but is outside native mutation scope"
+        },
+        {
+          "id": "unsupported:05acf36f3ef359250384b523effa4dea9baec7818adba4707722ec3641689ecd",
+          "code": "UNMODELED_WORKBOOK_FEATURE",
+          "capability": "workbook-features",
+          "scope_id": "workbook",
+          "part_name": "xl/workbook.xml",
+          "preservation": "preserve-exact",
+          "message": "workbook feature is preserved exactly outside the v1 sheet projection"
+        },
+        {
+          "id": "unsupported:effec6a3d3c96b344edb2e6de03324c8021594460f1e4c4c639fc3667c7e4bbb",
+          "code": "HYPERLINKS",
+          "capability": "hyperlinks",
+          "scope_id": "sheet:4",
+          "part_name": "xl/worksheets/input.xml",
+          "preservation": "preserve-exact",
+          "message": "worksheet feature is preserved exactly outside the v1 native projection"
+        },
+        {
+          "id": "unsupported:bd1f040903c08c591581c7ac45fbd5e4b197230e77a47e8a8881f21ba7b6e4dd",
+          "code": "OPAQUE_PACKAGE_PART",
+          "capability": "opaque-parts",
+          "scope_id": "workbook",
+          "part_name": "customXml/_rels/item1.xml.rels",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:5b05292a1d4f623e4bd9df34fb2eddd98ee89686d96211d1c221785b135f7f2e",
+          "code": "OPAQUE_PACKAGE_PART",
+          "capability": "opaque-parts",
+          "scope_id": "workbook",
+          "part_name": "customXml/item1.xml",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:dd20a3269f897623ce84b05c824acc3583d50bf8a4b737cdcf260c68abb91fcb",
+          "code": "OPAQUE_PACKAGE_PART",
+          "capability": "opaque-parts",
+          "scope_id": "workbook",
+          "part_name": "customXml/itemProps1.xml",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:3cee299566a72144784eda74af3442ba90e616d7b8092b6138b96c0cf08b41a2",
+          "code": "OPAQUE_PACKAGE_PART",
+          "capability": "opaque-parts",
+          "scope_id": "workbook",
+          "part_name": "docProps/core.xml",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:89461cbd591c4622a37cced10a6857a27d27fd5d284334181f4948ca2353e1ff",
+          "code": "EXTERNAL_LINK_CONTENT",
+          "capability": "external-links",
+          "scope_id": "workbook",
+          "part_name": "xl/externalLinks/_rels/externalLink1.xml.rels",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:dd6f5fb1b3b64f9bfdbaae97da8a4800e8dc27069340920dd7506e0619d70778",
+          "code": "EXTERNAL_LINK_CONTENT",
+          "capability": "external-links",
+          "scope_id": "workbook",
+          "part_name": "xl/externalLinks/externalLink1.xml",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        },
+        {
+          "id": "unsupported:5df752da2741f374ffd12c4733d57ba4d01853448127bf715491fd186acd219e",
+          "code": "OPAQUE_PACKAGE_PART",
+          "capability": "opaque-parts",
+          "scope_id": "workbook",
+          "part_name": "xl/worksheets/_rels/input.xml.rels",
+          "preservation": "preserve-exact",
+          "message": "part is preserved exactly and is outside the v1 native mutation projection"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "protocol": "injoffice.office.performance-budgets/v1",
+  "baseline": {
+    "source_commit": "b1a3ae2ee4486579c1f3f8bf6da9811688bcbc58",
+    "host": "darwin-arm64 Apple M4 Max",
+    "go": "go1.23.0",
+    "method": "two three-repetition benchmark series at 10 operations after testing.B warmup; maximum observed allocation count rounded upward to a generous regression ceiling",
+    "fixtures": {
+      "docx": {
+        "id": "docx-transitional-common",
+        "sha256": "47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209"
+      },
+      "pptx": {
+        "id": "pptx-transitional-common",
+        "sha256": "09041bde998c7f18db24a7f9c9aae250fce53784265f928fa8c0fcc97b990ff4"
+      },
+      "xlsx": {
+        "id": "xlsx-transitional-common",
+        "sha256": "d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2"
+      },
+      "xlsx_mutation": {
+        "id": "xlsx-relational-preservation",
+        "sha256": "6fa5d6029e501d23228ccb1a7e0581c87fa1afebda4ac3445fbfc96e29311617"
+      }
+    }
+  },
+  "go_observed_maxima": {
+    "docx/extract": { "allocations_per_op": 3666, "bytes_per_op": 229949 },
+    "docx/mutate": { "allocations_per_op": 8420, "bytes_per_op": 888978 },
+    "pptx/extract": { "allocations_per_op": 18053, "bytes_per_op": 893568 },
+    "pptx/mutate": { "allocations_per_op": 60562, "bytes_per_op": 4176998 },
+    "xlsx/extract": { "allocations_per_op": 3329, "bytes_per_op": 2378518 },
+    "xlsx/mutate": { "allocations_per_op": 15851, "bytes_per_op": 27841699 }
+  },
+  "go_allocation_ceilings_per_op": {
+    "docx/extract": 12000,
+    "docx/mutate": 30000,
+    "pptx/extract": 60000,
+    "pptx/mutate": 200000,
+    "xlsx/extract": 12000,
+    "xlsx/mutate": 60000,
+    "opc/inspect": 5000
+  },
+  "node_work_ceilings": {
+    "xlsx_projected_cells": 10,
+    "xlsx_geometry_axis_bands": 1100,
+    "xlsx_geometry_commands": 1104,
+    "xlsx_decoration_fills": 100000,
+    "xlsx_decoration_border_segments": 200000,
+    "xlsx_decoration_commands": 300003,
+    "pptx_recursive_render_nodes": 5,
+    "pptx_paint_commands": 100,
+    "docx_pages": 16,
+    "docx_placed_lines": 64,
+    "docx_paint_pages": 1,
+    "docx_glyph_commands": 2
+  },
+  "gating_policy": {
+    "correctness_before_resource_checks": true,
+    "warmups": 2,
+    "measured_repetitions": 7,
+    "wall_clock_gates": false,
+    "rss_or_heap_gates": false,
+    "timeout": "90s per Go selector and 5m CI job",
+    "memory_envelope": "GOMEMLIMIT=768MiB"
+  },
+  "limitations": [
+    "Timing and heap/RSS samples are observational because shared runners, JIT, GC, and filesystem caches are noisy.",
+    "Allocation ceilings are regression guards for Go 1.23 and may require an explicit rebasing review when the Go compiler/runtime changes.",
+    "The compact CC0 fixtures qualify bounded native paths and algorithmic behavior; they are not throughput claims for large customer documents.",
+    "No Microsoft Office, LibreOffice, browser, Mammoth, third-party office-suite runtime, external renderer, or network service participates in qualification."
+  ]
+}

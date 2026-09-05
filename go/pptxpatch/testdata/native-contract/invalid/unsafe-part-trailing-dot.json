@@ -1,0 +1,9 @@
+{
+  "contractVersion": "pptx-native/v1", "documentId": "deck-trailing-dot", "origin": "parsed", "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 }, "assets": [],
+  "slides": [{ "id": "slide-1", "provenance": "parsed", "elements": [],
+    "source": { "partName": "ppt/slides/slide1.xml", "objectId": "slide-1", "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+    "passthrough": [{ "token": "bad-part", "ownerPart": "ppt/custom./data.xml", "fingerprintSha256": "2222222222222222222222222222222222222222222222222222222222222222", "disposition": "preserve" }],
+    "compatibility": { "status": "editable", "diagnostics": [] } }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

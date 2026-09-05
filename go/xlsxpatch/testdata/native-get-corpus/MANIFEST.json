@@ -1,0 +1,166 @@
+{
+  "cases": [
+    {
+      "id": "pass-agent-dejavu",
+      "file": "pass-agent-dejavu.xlsx",
+      "title": "Agent DejaVu table (no Excel view/xf noise)",
+      "extract": "ok",
+      "required_unsupported": null,
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 200,
+      "charts": 0,
+      "demo": "pass"
+    },
+    {
+      "id": "pass-empty-inline-str",
+      "file": "pass-empty-inline-str.xlsx",
+      "title": "Blank t=inlineStr cell with no \u003cis\u003e (Excel empty cell)",
+      "extract": "ok",
+      "required_unsupported": null,
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 200,
+      "charts": 0,
+      "demo": "pass"
+    },
+    {
+      "id": "pass-excel-defaults",
+      "file": "pass-excel-defaults.xlsx",
+      "title": "Excel-default gridlines-on + xf pivotButton/quotePrefix=0",
+      "extract": "ok",
+      "required_unsupported": null,
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 200,
+      "charts": 0,
+      "demo": "pass"
+    },
+    {
+      "id": "pass-excel-defaults-chart",
+      "file": "pass-excel-defaults-chart.xlsx",
+      "title": "Excel defaults plus a DrawingML column chart (the Injecting GET chain)",
+      "extract": "ok",
+      "required_unsupported": [
+        "DRAWING_REFERENCE"
+      ],
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES"
+      ],
+      "drawing_coverage": "charts",
+      "get_status": 200,
+      "charts": 1,
+      "demo": "pass"
+    },
+    {
+      "id": "refuse-calibri",
+      "file": "refuse-calibri.xlsx",
+      "title": "Calibri Normal (host font-unavailable)",
+      "extract": "ok",
+      "required_unsupported": null,
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 422,
+      "get_refusal": "xlsx.native.font-unavailable",
+      "charts": 0,
+      "demo": "refuse"
+    },
+    {
+      "id": "refuse-apply-flags",
+      "file": "refuse-apply-flags.xlsx",
+      "title": "cellXf ids differ without apply flags",
+      "extract": "error",
+      "extract_error": "apply flag is false or absent",
+      "required_unsupported": null,
+      "forbidden_unsupported": null,
+      "drawing_coverage": "none",
+      "get_status": 422,
+      "get_refusal": "xlsx.native.unsupported",
+      "charts": 0,
+      "demo": "refuse"
+    },
+    {
+      "id": "refuse-gridlines-off",
+      "file": "refuse-gridlines-off.xlsx",
+      "title": "showGridLines=0 remains view geometry",
+      "extract": "ok",
+      "required_unsupported": [
+        "SHEET_VIEW_GEOMETRY"
+      ],
+      "forbidden_unsupported": [
+        "STYLE_RECORD_ATTRIBUTES"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 503,
+      "charts": 0,
+      "demo": "refuse"
+    },
+    {
+      "id": "refuse-freeze-pane",
+      "file": "refuse-freeze-pane.xlsx",
+      "title": "Frozen pane remains view geometry",
+      "extract": "ok",
+      "required_unsupported": [
+        "SHEET_VIEW_GEOMETRY"
+      ],
+      "forbidden_unsupported": [
+        "STYLE_RECORD_ATTRIBUTES"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 503,
+      "charts": 0,
+      "demo": "refuse"
+    },
+    {
+      "id": "refuse-quote-prefix",
+      "file": "refuse-quote-prefix.xlsx",
+      "title": "quotePrefix=1 remains style-record authority",
+      "extract": "ok",
+      "required_unsupported": [
+        "STYLE_RECORD_ATTRIBUTES"
+      ],
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY"
+      ],
+      "drawing_coverage": "none",
+      "get_status": 503,
+      "charts": 0,
+      "demo": "refuse"
+    },
+    {
+      "id": "refuse-shape-drawing",
+      "file": "refuse-shape-drawing.xlsx",
+      "title": "Shape drawing is not a chart-covered GET overlay",
+      "extract": "ok",
+      "required_unsupported": [
+        "DRAWING_REFERENCE"
+      ],
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES"
+      ],
+      "drawing_coverage": "refuse",
+      "get_status": 422,
+      "get_refusal": "xlsx.native.unsupported",
+      "charts": 0,
+      "demo": "refuse"
+    }
+  ]
+}

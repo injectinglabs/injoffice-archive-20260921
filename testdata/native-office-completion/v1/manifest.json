@@ -1,0 +1,2439 @@
+{
+  "protocol": "injoffice.native-office-completion/v1",
+  "version": 1,
+  "baseline": {
+    "repository": "injectinglabs/injoffice",
+    "ref": "origin/main",
+    "commit": "0cdd7e9340e9469326f57e6175ec87e7e1807443"
+  },
+  "policies": {
+    "completionRequirements": {
+      "officeExportFixture": true,
+      "productionE2E": true
+    },
+    "requiredDimensions": [
+      "identity",
+      "native",
+      "package-preservation",
+      "resource",
+      "security",
+      "visual-production"
+    ],
+    "nativeProductionEntrypoints": [
+      "apps/docx-page-paint-worker/src/worker.ts",
+      "go/docxpatch/native_extract.go",
+      "go/docxpatch/native_mutate.go",
+      "go/pptxpatch/native_extract.go",
+      "go/pptxpatch/native_mutate.go",
+      "go/xlsxpatch/native_extract.go",
+      "go/xlsxpatch/native_mutate.go",
+      "packages/docs/src/nativePagePaintCompilerV1.ts",
+      "packages/docs/src/nativeTransactionAdapterV1.ts",
+      "packages/pptx-authored/src/compiler.ts",
+      "packages/pptx-native/src/index.ts",
+      "packages/pptx-render/src/index.ts",
+      "packages/sheets/src/index.ts"
+    ]
+  },
+  "fixtures": [
+    {
+      "id": "docx-extract-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "go/docxpatch/native_extract_test.go",
+      "sha256": "5c54c7633208c2610719372ba2274c0076356520220e37768afe18983dff8a78",
+      "provenance": {
+        "producer": "InjOffice DOCX native extractor tests",
+        "source": "Deterministic in-process OPC/DOCX package builders and extraction vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-font-inventory-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "go/docxpatch/native_font_inventory_test.go",
+      "sha256": "13715abacd704df9983044dbdeb2724898d7bbbee4980d3e6b576d0be3052f40",
+      "provenance": {
+        "producer": "InjOffice DOCX font inventory tests",
+        "source": "Deterministic in-process embedded-font package and preservation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-inline-png-page-paint",
+      "format": "docx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/docx-inline-png-page-paint.docx",
+      "sha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+      "provenance": {
+        "producer": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML inline PNG",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-layout-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "packages/docs/src/nativePagePaintV1.test.ts",
+      "sha256": "69087274861e1b071d6ad3793eb87a69a609fb1636db55cd1c449380dd10a5a7",
+      "provenance": {
+        "producer": "InjOffice native DOCX test builder",
+        "source": "Deterministic in-process native contract, shaping, pagination, and page-paint vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-mutation-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "go/docxpatch/native_mutate_test.go",
+      "sha256": "606e4e5b62719af740507f9eb49ac6d4544be1e53f7bc3f5e495404915f5fcae",
+      "provenance": {
+        "producer": "InjOffice DOCX native mutation tests",
+        "source": "Deterministic in-process DOCX mutation, refusal, and preservation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-page-paint-compiler-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "packages/docs/src/nativePagePaintCompilerV1.test.ts",
+      "sha256": "a7a2ce78f60c04ee498e7cd7daced0935193c1a96f907357211007e043dde5e2",
+      "provenance": {
+        "producer": "InjOffice native DOCX page-paint compiler tests",
+        "source": "Deterministic sections, tables, inline-image media, shaping, pagination, and all-or-nothing paint vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-pagination-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "packages/docs/src/nativePaginationV1.test.ts",
+      "sha256": "b1b6321dee603bd2088f53e51fb51b4235ba86d8b08db86866252fe56dacfe0f",
+      "provenance": {
+        "producer": "InjOffice native DOCX pagination tests",
+        "source": "Deterministic section transition, page parity, exact column geometry, terminal balance, refusal, and resource vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-preserve-refuse",
+      "format": "docx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/docx-preserve-refuse.docx",
+      "sha256": "4804dfeca55c45e6aea689d027208c55ee7d624237e9eb8b0103af96d07109e1",
+      "provenance": {
+        "producer": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML refusal fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-related-stories",
+      "format": "docx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/docx-related-stories.docx",
+      "sha256": "beaaf6c41f62f121ff18c969cd04db7380402062fb2afe9097e38fd16d9fc996",
+      "provenance": {
+        "producer": "officecompat-corpusgen/v1",
+        "source": "CC0 hand-authored minimal WordprocessingML related-story graph",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-resource-compression",
+      "format": "docx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/docx-resource-compression.docx",
+      "sha256": "afa2f0269c0dc64e84e42b63a6f5dc02e480d1c8e67da4d1d3ee99d2a91761fa",
+      "provenance": {
+        "producer": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic bounded compression fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-sections-columns",
+      "format": "docx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/docx-sections-columns.docx",
+      "sha256": "65559c8cf39c2d9c9a2e40b4b53b10ea44875257626bc66b4478f65c15f4882c",
+      "provenance": {
+        "producer": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-transaction-adapter-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "packages/docs/src/nativeTransactionAdapterV1.test.ts",
+      "sha256": "7cec0717ccf780909ec50b6aae79a2fd4a7a9a06e457b72d699b13e5a4600c2a",
+      "provenance": {
+        "producer": "InjOffice native DOCX transaction adapter tests",
+        "source": "Deterministic exact ProseMirror projection, refusal, envelope, and host-isolation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-transaction-envelope",
+      "format": "docx",
+      "kind": "generated-contract",
+      "path": "testdata/docx-native/transaction-adapter-envelope-v1.json",
+      "sha256": "875165d8f02830d809aef8e77a3a1c24f46dc7b143fdb4768e123d2abeb766d5",
+      "provenance": {
+        "producer": "InjOffice native DOCX transaction adapter",
+        "source": "Checked-in canonical TypeScript-to-Go mutation envelope and exact encoded bytes",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-word-mac-list-numbering",
+      "format": "docx",
+      "kind": "office-export",
+      "path": "go/docxpatch/testdata/word-mac-list-numbering.docx.base64",
+      "sha256": "ec7d1631c4a270c714529af50a5f08111f09a0796f17a30bacd6fdfef2b7f1c8",
+      "provenance": {
+        "producer": "Microsoft Macintosh Word 14.0",
+        "source": "Unmodified python-docx Apache-2.0 features/steps/test_files/num-having-numbering-part.docx at commit e45454602b53e8e572b179ccf1c91093ec9f4ed7, saved by Microsoft Macintosh Word 14.0",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "docx-worker-inline",
+      "format": "docx",
+      "kind": "generated-inline",
+      "path": "apps/docx-page-paint-worker/src/protocol.test.ts",
+      "sha256": "79f25276a31fd62fac945db64d6d036b342a85f66e1aa388f6ca07febbde37fb",
+      "provenance": {
+        "producer": "InjOffice DOCX worker protocol tests",
+        "source": "Deterministic in-process worker request and refusal vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-authored-inline",
+      "format": "pptx",
+      "kind": "generated-inline",
+      "path": "packages/pptx-authored/src/compiler.test.ts",
+      "sha256": "0ce239577b6eeff4904b4c354a0b2f9f1b0a42459e313bdc53066466759378d0",
+      "provenance": {
+        "producer": "InjOffice authored-deck compiler tests",
+        "source": "Deterministic in-process authored WireDeck and native v1 vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-extract-inline",
+      "format": "pptx",
+      "kind": "generated-inline",
+      "path": "go/pptxpatch/native_extract_test.go",
+      "sha256": "f2483474273f083b4dc14f329263064113484980c206cb8d1cfba47821165c8d",
+      "provenance": {
+        "producer": "InjOffice PPTX native extractor tests",
+        "source": "Deterministic in-process OPC/PPTX extraction, identity, and refusal vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-mutation-inline",
+      "format": "pptx",
+      "kind": "generated-inline",
+      "path": "go/pptxpatch/native_mutate_test.go",
+      "sha256": "04d5f24aff453ccf4d66efbd6ea2f851537bda7a2268379f427452d7e7b43ac7",
+      "provenance": {
+        "producer": "InjOffice PPTX native mutation tests",
+        "source": "Deterministic in-process PPTX mutation, refusal, and preservation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-production-e2e-authored-deck",
+      "format": "pptx",
+      "kind": "generated-contract",
+      "path": "testdata/native-office-production-e2e/v1/authored-deck.json",
+      "sha256": "7476e3e6142b8ceae47cf03811ac77ca10f3b19d1ae5ce1986f5af8edb195190",
+      "provenance": {
+        "producer": "InjOffice native Office production E2E authored-deck fixture",
+        "source": "Checked-in bounded authored WireDeck used by the host-owned production E2E contract",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-render-inline",
+      "format": "pptx",
+      "kind": "generated-inline",
+      "path": "packages/pptx-render/src/render.test.ts",
+      "sha256": "445c4abc2a97147e2a17107fafc51186ab2706404d7985139b92b200b0f544ec",
+      "provenance": {
+        "producer": "InjOffice native PPTX render tests",
+        "source": "Deterministic in-process native render-tree, shaping, refusal, and paint-command vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-resource-depth-refusal",
+      "format": "pptx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/pptx-resource-depth-refusal.pptx",
+      "sha256": "62ffeabcc39ab623e737aa09bce5ec860e8a1ca129401843320e1da11f5e26e2",
+      "provenance": {
+        "producer": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored bounded XML depth adversary",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-transitional-common",
+      "format": "pptx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/pptx-transitional-common.pptx",
+      "sha256": "09041bde998c7f18db24a7f9c9aae250fce53784265f928fa8c0fcc97b990ff4",
+      "provenance": {
+        "producer": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored Transitional PresentationML with generated text and AutoShapes",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-transitional-fidelity-diagnostics",
+      "format": "pptx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/pptx-transitional-fidelity-diagnostics.pptx",
+      "sha256": "b5deef92481018000ad2ef9699d9f90aab809640cca85d0f438f9105998df0eb",
+      "provenance": {
+        "producer": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored unsupported PresentationML geometry/effects plus a generated 1x1 PNG pixel",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "shared-consumer-smoke",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/smoke-consumer.mjs",
+      "sha256": "36709b17692163b216130db433c5893d43b6813591d20f8be043e5eecc46271b",
+      "provenance": {
+        "producer": "InjOffice tarball consumer smoke",
+        "source": "Deterministic local package, install, import, and selected functional smoke program",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-mutation-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "go/officecompat/mutation_test.go",
+      "sha256": "8c8a2daae97541e781f66994658d3813bda01fd36df6f2bbd6bc625d0facea22",
+      "provenance": {
+        "producer": "InjOffice shared Office mutation policy tests",
+        "source": "Deterministic in-process OPC mutation envelope, CAS, preservation, and reopen vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-office-architecture-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/check-office-architecture.mjs",
+      "sha256": "b97d27c630e16d285d303a525efc6b7fd03fdffc5170c782ef786f6c70b2f2a0",
+      "provenance": {
+        "producer": "InjOffice production architecture audit",
+        "source": "Deterministic local dependency, production-source, DOM, Electron, and Mammoth authority scan",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-office-provenance-check-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/check-office-provenance.mjs",
+      "sha256": "ff7f1a46b9ea8e4708f805a2791b847c20692e53cfe721ed0857b9276d0daeb6",
+      "provenance": {
+        "producer": "InjOffice pinned provenance check",
+        "source": "Deterministic local source/license/notice/adaptation and generated-artifact provenance verification",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-performance-budgets",
+      "format": "shared",
+      "kind": "generated-contract",
+      "path": "docs/qualification/native-office-performance-v1.json",
+      "sha256": "0f1a0ea878d90ad9e900853168065180ab53dd2428222333da8072c2e1b090f7",
+      "provenance": {
+        "producer": "InjOffice native Office performance qualification",
+        "source": "Checked-in Go allocation ceilings, Node deterministic work ceilings, pinned fixture digests, and explicit observational limitations",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-performance-go-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "go/officecompat/performance_qualification_test.go",
+      "sha256": "48b54fbd60de2950bc05d6028a24994ca21ab6f5e017a2f009dcb1aefea2f13b",
+      "provenance": {
+        "producer": "InjOffice Go native Office performance tests",
+        "source": "Deterministic extraction/mutation output, allocation, near-limit, and over-limit vectors for DOCX, PPTX, XLSX, and OPC",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-performance-node-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/qualify-office-performance.mjs",
+      "sha256": "8bc12155c3d6597de0785031db08da115e27f516d93e20310e5f9b83b4aca742",
+      "provenance": {
+        "producer": "InjOffice Node native Office performance harness",
+        "source": "Deterministic render/projection/page-paint work counters, resource refusals, and report-only timing/heap observations",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-production-e2e-manifest",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "testdata/native-office-production-e2e/v1/manifest.json",
+      "sha256": "112c5dacdca740654fb7270c5e7bca51c068efdb7acb665bb3a00b2d691baebd",
+      "provenance": {
+        "producer": "InjOffice native Office production E2E contract",
+        "source": "Checked-in host-owned production E2E cases, runners, and canonical semantic projections",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-production-e2e-test-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/verify-native-office-production-e2e.test.mjs",
+      "sha256": "afb4122f4464fef14ee4156c35ca2ab9b1a9a4f8e3c968dcf20bfe3feecf9996",
+      "provenance": {
+        "producer": "InjOffice native Office production E2E verifier tests",
+        "source": "Deterministic in-process production E2E adapter-request, observation, replay, and refusal vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "shared-production-e2e-verifier-inline",
+      "format": "shared",
+      "kind": "generated-inline",
+      "path": "scripts/verify-native-office-production-e2e.mjs",
+      "sha256": "4b8fad1383fb0eb77f6525a552233ef3c75f56a72476f4771319082d06977738",
+      "provenance": {
+        "producer": "InjOffice native Office production E2E verifier",
+        "source": "Deterministic offline adapter-request producer and observation verification",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-contract-lexical",
+      "format": "xlsx",
+      "kind": "generated-contract",
+      "path": "go/xlsxpatch/testdata/native-xlsx-v1/valid/lexical-render.json",
+      "sha256": "69995f2628057a60c4cc5860216c941a0f0271fdb71058517ea7b294f814a194",
+      "provenance": {
+        "producer": "InjOffice native XLSX contract fixture",
+        "source": "Checked-in canonical Go/TypeScript lexical render contract",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-excel-authored-happy-tree",
+      "format": "xlsx",
+      "kind": "office-export",
+      "path": "go/xlsxpatch/testdata/excel-authored/happy-tree.xlsx",
+      "sha256": "c08f0bb099770a475556af8a78d9d6e46296e9791bf9af56c70571c1fa3cb513",
+      "provenance": {
+        "producer": "Microsoft Excel Online 16.0300",
+        "source": "Unmodified OfficeDev office-scripts-docs happy-tree.xlsx at commit ad12607e3fb4080fc161e72f4d2b93ce86c29e66, Git blob c4b91c1b56212df87ae4fba063ab20a66327a203",
+        "license": "CC-BY-4.0"
+      }
+    },
+    {
+      "id": "xlsx-extract-inline",
+      "format": "xlsx",
+      "kind": "generated-inline",
+      "path": "go/xlsxpatch/native_extract_test.go",
+      "sha256": "9e40af8264ff93d000c94b3dbecbba4840d8e03ec651824c1c8847d24965e937",
+      "provenance": {
+        "producer": "InjOffice XLSX native extractor tests",
+        "source": "Deterministic in-process OPC/XLSX extraction, identity, and refusal vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-geometry-inline",
+      "format": "xlsx",
+      "kind": "generated-inline",
+      "path": "packages/sheets/src/nativeSheetGeometry.test.ts",
+      "sha256": "5255a141ac2b20a2a290887331eba8703b319707dae1354bdd6f85ed09a23ba0",
+      "provenance": {
+        "producer": "InjOffice native XLSX geometry tests",
+        "source": "Deterministic in-process native workbook, geometry, merged-range, and paint-command vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-merged-inline",
+      "format": "xlsx",
+      "kind": "generated-inline",
+      "path": "packages/sheets/src/nativeMergedRanges.test.ts",
+      "sha256": "bb9b38659d2d6068a3f707a531955f452326436a7979c49a51017dd87da80fb1",
+      "provenance": {
+        "producer": "InjOffice XLSX merged-range projection tests",
+        "source": "Deterministic mutations of the canonical lexical workbook fixture",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-mutation-inline",
+      "format": "xlsx",
+      "kind": "generated-inline",
+      "path": "go/xlsxpatch/native_mutate_test.go",
+      "sha256": "c8df5a9d445bfe214e37bbde676ec3c5339221f243c59c33c87e767ca99b0bd2",
+      "provenance": {
+        "producer": "InjOffice XLSX native mutation tests",
+        "source": "Deterministic in-process XLSX mutation, refusal, and preservation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-preservation-inline",
+      "format": "xlsx",
+      "kind": "generated-inline",
+      "path": "go/xlsxpatch/preservation_test.go",
+      "sha256": "0e591d84a31c75ad0b64f65e8b7f9071dfa7500031fedda1c95d38f2a87be049",
+      "provenance": {
+        "producer": "InjOffice XLSX preservation inventory tests",
+        "source": "Deterministic in-process XLSX Office-object and relationship preservation vectors",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-refused-compression-ratio",
+      "format": "xlsx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/xlsx-refused-compression-ratio.xlsx",
+      "sha256": "41c3542ddf689eb13b1c5b21fd07b0cc4d700187946c9bb89db5cceefba5160a",
+      "provenance": {
+        "producer": "officecompat-corpusgen/v1",
+        "source": "Hand-authored bounded adversarial compression-ratio fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-unsupported-preserve",
+      "format": "xlsx",
+      "kind": "generated",
+      "path": "go/officecompat/corpus/generated/packages/xlsx-unsupported-preserve.xlsx",
+      "sha256": "c8de505cf5ac8a53ae7809c3c17550e6d067a7bde3fb6686518649c1cafa7079",
+      "provenance": {
+        "producer": "officecompat-corpusgen/v1",
+        "source": "Hand-authored SpreadsheetML unsupported-content preservation fixture",
+        "license": "CC0-1.0"
+      }
+    }
+  ],
+  "qualifications": {
+    "differential": {
+      "status": "present",
+      "owner": "native-office-differential",
+      "evidence": [
+        {
+          "path": "go/officecompat/docx_corpus_test.go",
+          "selector": "TestDOCXCorpusNativeExpectations",
+          "fixtures": [
+            "docx-inline-png-page-paint"
+          ]
+        },
+        {
+          "path": "go/officecompat/pptx_corpus_test.go",
+          "selector": "TestPPTXCompatibilityCorpus",
+          "fixtures": [
+            "pptx-transitional-common"
+          ]
+        },
+        {
+          "path": "scripts/check-office-architecture.mjs",
+          "selector": "Validated ${files.length} production files",
+          "fixtures": [
+            "shared-office-architecture-inline"
+          ]
+        },
+        {
+          "path": "scripts/check-office-provenance.mjs",
+          "selector": "Excel-authored fixture",
+          "fixtures": [
+            "shared-office-provenance-check-inline"
+          ]
+        }
+      ],
+      "limitations": [
+        "Differential qualification uses InjOffice-owned corpus predicates and does not import a third-party Office runtime.",
+        "The pinned DOCX office-export is Microsoft Macintosh Word numbering evidence. A Microsoft Macintosh PowerPoint 16 CC-BY-4.0 fixture is in-repo but absent from this v1 baseline pin, so it is not a v1 office-export record. No XLSX differential is claimed.",
+        "Corpus cases prove exact native predicates, not screenshot authority."
+      ]
+    },
+    "resource": {
+      "status": "present",
+      "owner": "native-office-performance",
+      "evidence": [
+        {
+          "path": "go/officecompat/performance_qualification_test.go",
+          "selector": "TestNativeOfficePerformanceQualification",
+          "fixtures": [
+            "shared-performance-budgets",
+            "shared-performance-go-inline"
+          ]
+        },
+        {
+          "path": "scripts/qualify-office-performance.mjs",
+          "selector": "native Office performance qualification passed",
+          "fixtures": [
+            "shared-performance-budgets",
+            "shared-performance-node-inline"
+          ]
+        }
+      ],
+      "limitations": [
+        "Go allocation ceilings and deterministic Node work counters are gates; wall-clock, heap, and RSS samples are report-only.",
+        "Compact pinned fixtures qualify bounded native algorithms and are not throughput claims for large customer documents.",
+        "No Microsoft Office, LibreOffice, browser, Mammoth, third-party office-suite runtime, external renderer, network service, or secret participates."
+      ]
+    }
+  },
+  "capabilities": [
+    {
+      "id": "docx.contract-identity-security",
+      "format": "docx",
+      "status": "partial",
+      "summary": "Native DOCX OPC discovery, versioned contract extraction, durable story/object identity, and bounded fail-closed parsing.",
+      "dimensions": [
+        "identity",
+        "native",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/docxpatch/native_contract.go",
+        "go/docxpatch/native_extract.go",
+        "packages/docs/src/nativeContract.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Strict and Transitional body/related-story extraction with exact anchors and durable identities"
+        ],
+        "preserved": [
+          "Unmodeled OPC parts and scoped unsupported story content remain inventory-bound preserve-verbatim data"
+        ],
+        "refused": [
+          "Ambiguous relationships, unsafe aliases, malformed XML, hostile resources, and invalid previous identity maps"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_extract_test.go",
+              "selector": "TestExtractNativeDocumentV1EndToEnd",
+              "fixtures": [
+                "docx-extract-inline"
+              ]
+            },
+            {
+              "path": "go/docxpatch/native_numbering_resolve_test.go",
+              "selector": "TestNativeNumberingGenuineMicrosoftWordFixture",
+              "fixtures": [
+                "docx-word-mac-list-numbering"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/docs",
+          "evidence": [],
+          "reason": "Contract extraction does not claim layout; layout is tracked separately."
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/docxpatch",
+          "evidence": [],
+          "reason": "Extraction and identity are read-only capabilities."
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "Functional consumer coverage is tracked by docx.production-consumer."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_extract_test.go",
+              "selector": "TestExtractNativeDocumentDrawingMLFloatingAndCropRefusal",
+              "fixtures": [
+                "docx-extract-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "docx.table-font-page-paint",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "published manifest binds exact local fixtures, corpus expectations, schemas, and semantic digests",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "docx.unsupported-opc-refusal",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "docx.layout-page-paint",
+      "format": "docx",
+      "status": "partial",
+      "summary": "Renderer-neutral native DOCX style/font resolution, shaping, section/column pagination, headers/footers, tables, inline images, and page-paint commands.",
+      "dimensions": [
+        "native",
+        "resource",
+        "visual-production"
+      ],
+      "authoritativeModules": [
+        "go/docxpatch/native_font_inventory.go",
+        "go/docxpatch/native_style_resolve.go",
+        "packages/docs/src/nativeBidiPlanV1.ts",
+        "packages/docs/src/nativeImagePagePaintV1.ts",
+        "packages/docs/src/nativePagePaintCompilerV1.ts",
+        "packages/docs/src/nativePagePaintV1.ts",
+        "packages/docs/src/nativePaginationV1.ts",
+        "packages/docs/src/nativeSectionColumnsV1.ts",
+        "packages/docs/src/nativeShapingLines.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Explicitly qualified shaped text, exact sections/columns, header/footer placement, fixed tables, digest-bound inline PNGs, and deterministic paint commands"
+        ],
+        "preserved": [
+          "Unqualified source content stays package-bound and never becomes guessed paint geometry"
+        ],
+        "refused": [
+          "Missing fonts, unsupported layout/paint semantics, hostile providers, resource overflow, and partial page output"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_font_inventory_test.go",
+              "selector": "TestNativeDOCXFontInventoryPreservesPackagePartsAcrossMutation",
+              "fixtures": [
+                "docx-font-inventory-inline"
+              ]
+            },
+            {
+              "path": "go/officecompat/docx_corpus_test.go",
+              "selector": "TestDOCXCorpusNativeExpectations",
+              "fixtures": [
+                "docx-inline-png-page-paint",
+                "docx-sections-columns"
+              ]
+            },
+            {
+              "path": "go/docxpatch/native_numbering_resolve_test.go",
+              "selector": "TestNativeNumberingGenuineMicrosoftWordFixture",
+              "fixtures": [
+                "docx-word-mac-list-numbering"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "packages/docs",
+          "evidence": [
+            {
+              "path": "packages/docs/src/nativePagePaintV1.test.ts",
+              "selector": "atomically refuses missing faces, provider mismatch/refusal/failure, and invalid paths",
+              "fixtures": [
+                "docx-layout-inline"
+              ]
+            },
+            {
+              "path": "packages/docs/src/nativePagePaintCompilerV1.test.ts",
+              "selector": "deterministically paints a digest-bound exact-EMU inline PNG and emits canonical request/output hashes",
+              "fixtures": [
+                "docx-page-paint-compiler-inline"
+              ]
+            },
+            {
+              "path": "packages/docs/src/nativePaginationV1.test.ts",
+              "selector": "balances a terminal fragment across exact equal-width columns",
+              "fixtures": [
+                "docx-pagination-inline"
+              ]
+            },
+            {
+              "path": "scripts/check-office-architecture.mjs",
+              "selector": "Validated ${files.length} production files",
+              "fixtures": [
+                "shared-office-architecture-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/docxpatch",
+          "evidence": [],
+          "reason": "This capability is a read-only layout and paint projection."
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "Functional consumer coverage is tracked by docx.production-consumer."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "packages/docs",
+          "evidence": [
+            {
+              "path": "packages/docs/src/nativePagePaintV1.test.ts",
+              "selector": "refuses unsupported paint semantics before calling the outline provider",
+              "fixtures": [
+                "docx-layout-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "docx.image-page-paint",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "observation verifier binds protocol, engine, semantic output, preservation, refusal, and budgets",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "docx.image-page-paint",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "docx.mutation-roundtrip",
+      "format": "docx",
+      "status": "partial",
+      "summary": "CAS-bound native text mutation plus an exact ProseMirror transaction adapter with atomic batches, reopen validation, and untouched-part verification.",
+      "dimensions": [
+        "identity",
+        "mutation",
+        "native",
+        "package-consumer",
+        "package-preservation",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/docxpatch/native_mutate.go",
+        "go/officecompat/mutation.go",
+        "packages/docs/src/nativeTransactionAdapterV1.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Bounded exact ProseMirror text projections compile to same-part native text replacements against exact package revision and anchors"
+        ],
+        "preserved": [
+          "All untouched OPC parts, archive metadata under contract, and unsupported package topology"
+        ],
+        "refused": [
+          "Stale revisions, signatures, overlapping/cross-part edits, unsafe content, semantic no-ops, and verification drift"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativeTextMutationPayloadV1PreservesComplexPackageAcrossStories",
+              "fixtures": [
+                "docx-mutation-inline"
+              ]
+            },
+            {
+              "path": "packages/docs/src/nativeTransactionAdapterV1.test.ts",
+              "selector": "is deterministic, emits the shared exact canonical envelope bytes, and exposes only an optional host projection seam",
+              "fixtures": [
+                "docx-transaction-adapter-inline",
+                "docx-transaction-envelope"
+              ]
+            },
+            {
+              "path": "go/docxpatch/native_numbering_resolve_test.go",
+              "selector": "TestNativeNumberingGenuineMicrosoftWordFixture",
+              "fixtures": [
+                "docx-word-mac-list-numbering"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/docs",
+          "evidence": [],
+          "reason": "Mutation qualification reopens the native contract but does not claim layout."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativeTextMutationsV1ExactRunAndRoundTrip",
+              "fixtures": [
+                "docx-mutation-inline"
+              ]
+            },
+            {
+              "path": "go/officecompat/mutation_test.go",
+              "selector": "TestApplyMutationCanonicalTypeScriptDOCXAdapterEnvelopeAtomically",
+              "fixtures": [
+                "docx-transaction-envelope",
+                "shared-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "package-release",
+          "evidence": [
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "DOCX transaction adapter tarball smoke failed",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/docxpatch/native_mutate_test.go",
+              "selector": "TestNativeDOCXMutationVerifiersRejectInventoryAndTopologyDrift",
+              "fixtures": [
+                "docx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "docx.atomic-fixture-tamper",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "fixture tamper is rejected before an adapter can be invoked",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "docx.atomic-fixture-tamper",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "docx.package-preservation",
+      "format": "docx",
+      "status": "partial",
+      "summary": "Format-neutral OPC inventory plus DOCX corpus qualification protects exact untouched package parts and explicit refusals.",
+      "dimensions": [
+        "package-preservation",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/officecompat/inventory.go",
+        "go/officecompat/opcqual.go"
+      ],
+      "semantics": {
+        "supported": [
+          "Deterministic part inventory, relationship graph qualification, and exact mutable-part allowlists"
+        ],
+        "preserved": [
+          "Unknown content, related stories, relationships, media, and all parts outside the operation allowlist"
+        ],
+        "refused": [
+          "Traversal, aliases, dangling relationships, decompression abuse, malformed packages, and after-only topology"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/officecompat",
+          "evidence": [
+            {
+              "path": "go/officecompat/docx_corpus_test.go",
+              "selector": "TestDOCXCorpusNativeExpectations",
+              "fixtures": [
+                "docx-preserve-refuse",
+                "docx-resource-compression"
+              ]
+            },
+            {
+              "path": "go/docxpatch/native_numbering_resolve_test.go",
+              "selector": "TestNativeNumberingGenuineMicrosoftWordFixture",
+              "fixtures": [
+                "docx-word-mac-list-numbering"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "go/officecompat",
+          "evidence": [],
+          "reason": "OPC preservation is renderer-neutral."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/officecompat",
+          "evidence": [
+            {
+              "path": "go/officecompat/mutation_test.go",
+              "selector": "TestApplyMutationEnforcesExactRevisionPreservationAndReopen",
+              "fixtures": [
+                "shared-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "This is an internal Go qualification boundary."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/officecompat",
+          "evidence": [
+            {
+              "path": "go/officecompat/docx_corpus_test.go",
+              "selector": "TestDOCXCorpusRefusesDanglingRelatedStoryRelationship",
+              "fixtures": [
+                "docx-related-stories"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "verifyFixtureBytes",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "refusal observations cannot expose partial semantic or candidate output",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "INVALID_OPC_PATH",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "docx.production-consumer",
+      "format": "docx",
+      "status": "partial",
+      "summary": "Published DOCX page-paint and transaction APIs plus the private worker have functional local-tarball and protocol coverage, but no production host E2E.",
+      "dimensions": [
+        "mutation",
+        "native",
+        "package-consumer",
+        "visual-production"
+      ],
+      "authoritativeModules": [
+        "apps/docx-page-paint-worker/src/worker.ts",
+        "packages/docs/src/index.ts",
+        "packages/docs/src/nativeTransactionAdapterV1.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Local tarballs functionally execute the exact transaction adapter while public page-paint APIs and bounded worker requests remain deterministic"
+        ],
+        "preserved": [
+          "Source package authority remains outside the worker paint response"
+        ],
+        "refused": [
+          "Malformed worker/transaction envelopes, mapping or source drift, non-canonical assets, unsupported operations, and partial results"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "docx-page-paint-worker",
+          "evidence": [
+            {
+              "path": "apps/docx-page-paint-worker/src/protocol.test.ts",
+              "selector": "refuses malformed envelopes and non-canonical font bytes without partial results",
+              "fixtures": [
+                "docx-worker-inline"
+              ]
+            },
+            {
+              "path": "packages/docs/src/nativeTransactionAdapterV1.test.ts",
+              "selector": "rejects structural documents, tables, drawings, notes, fields, tracked changes, and unsafe whitespace",
+              "fixtures": [
+                "docx-transaction-adapter-inline"
+              ]
+            },
+            {
+              "path": "go/docxpatch/native_numbering_resolve_test.go",
+              "selector": "TestNativeNumberingGenuineMicrosoftWordFixture",
+              "fixtures": [
+                "docx-word-mac-list-numbering"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "docx-page-paint-worker",
+          "evidence": [
+            {
+              "path": "apps/docx-page-paint-worker/src/protocol.test.ts",
+              "selector": "answers deterministic lifecycle probes in a bounded frame",
+              "fixtures": [
+                "docx-worker-inline"
+              ]
+            },
+            {
+              "path": "scripts/check-office-architecture.mjs",
+              "selector": "Validated ${files.length} production files",
+              "fixtures": [
+                "shared-office-architecture-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/docxpatch",
+          "evidence": [
+            {
+              "path": "go/officecompat/mutation_test.go",
+              "selector": "TestApplyMutationCanonicalTypeScriptDOCXAdapterEnvelopeAtomically",
+              "fixtures": [
+                "docx-transaction-envelope",
+                "shared-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "package-release",
+          "evidence": [
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "DOCX native header/footer consumer exports are missing",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            },
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "DOCX transaction adapter tarball smoke failed",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "docx-page-paint-worker",
+          "evidence": [
+            {
+              "path": "apps/docx-page-paint-worker/src/protocol.test.ts",
+              "selector": "without partial results",
+              "fixtures": [
+                "docx-worker-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "createAdapterRequest",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "adapter request is offline, bounded, and carries verifier-owned exact bytes",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "DocxView.tsx",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pptx.authored-compiler",
+      "format": "pptx",
+      "status": "partial",
+      "summary": "DOM-free authored WireDeck/DeckSpec compilation to validated native PPTX v1 with durable identities and atomic refusals.",
+      "dimensions": [
+        "identity",
+        "native",
+        "security"
+      ],
+      "authoritativeModules": [
+        "packages/pptx-authored/src/compiler.ts",
+        "packages/slides/src/authoring.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Bounded authored slides, stable authored IDs, exact supported text/shape fields, animations, and transitions"
+        ],
+        "preserved": [
+          "Authored source order and supported source semantics are carried exactly into native v1"
+        ],
+        "refused": [
+          "Inherited, lossy, malformed, unknown, or unsupported WireDeck semantics before any native deck is returned"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "packages/pptx-authored",
+          "evidence": [
+            {
+              "path": "packages/pptx-authored/src/compiler.test.ts",
+              "selector": "refuses silently dropped authoring fields",
+              "fixtures": [
+                "pptx-authored-inline"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "packages/pptx-authored",
+          "evidence": [
+            {
+              "path": "packages/pptx-authored/src/compiler.test.ts",
+              "selector": "feeds the native RenderTree in authored z-order and paints without a DOM authority",
+              "fixtures": [
+                "pptx-authored-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/pptxpatch",
+          "evidence": [],
+          "reason": "Authored compilation has no source PPTX package to mutate."
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "package-release",
+          "evidence": [
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "native authored compiler consumer smoke failed",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "packages/pptx-authored",
+          "evidence": [
+            {
+              "path": "packages/pptx-authored/src/compiler.test.ts",
+              "selector": "fails atomically for unsupported, inherited, lossy, and malformed WireDeck semantics",
+              "fixtures": [
+                "pptx-authored-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "pptx.authored-deck",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "pptx.authored-deck",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "pptx.authored-deck",
+              "fixtures": [
+                "pptx-production-e2e-authored-deck",
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pptx.contract-extraction",
+      "format": "pptx",
+      "status": "partial",
+      "summary": "Secure native PPTX extraction covers text, AutoShapes, pictures, groups, connectors, and tables with exact source authority.",
+      "dimensions": [
+        "identity",
+        "native",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/pptxpatch/native_extract.go",
+        "go/pptxpatch/native_extract_group.go",
+        "go/pptxpatch/native_extract_picture.go",
+        "go/pptxpatch/native_extract_table.go",
+        "packages/pptx-native/src/validate.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Strict/Transitional text, exact AutoShapes, pictures, affine groups, straight connectors, and bounded tables"
+        ],
+        "preserved": [
+          "Unsupported object subtrees and assets bind to exact source capabilities and passthrough anchors"
+        ],
+        "refused": [
+          "Ambiguous relationships, unsafe geometry/text, hostile packages/resources, and incomplete preserve authority"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/officecompat/pptx_corpus_test.go",
+              "selector": "TestPPTXCompatibilityCorpus",
+              "fixtures": [
+                "pptx-transitional-common",
+                "pptx-transitional-fidelity-diagnostics"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/pptx-render",
+          "evidence": [],
+          "reason": "Extraction does not claim paint; native RenderTree is tracked separately."
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/pptxpatch",
+          "evidence": [],
+          "reason": "Extraction is read-only."
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "No functional parsed-PPTX tarball consumer exists on main."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_extract_test.go",
+              "selector": "TestExtractNativePPTXPreservesUnmodeledCriticalMarkup",
+              "fixtures": [
+                "pptx-extract-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "pptx.picture-native-browser",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "pptx.picture-native-browser",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "pptx.picture-native-browser",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pptx.mutation-roundtrip",
+      "format": "pptx",
+      "status": "partial",
+      "summary": "CAS-bound native text and AutoShape mutation preserves raw package authority and reopens the native contract atomically.",
+      "dimensions": [
+        "identity",
+        "mutation",
+        "native",
+        "package-consumer",
+        "package-preservation",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/officecompat/mutation.go",
+        "go/pptxpatch/native_mutate.go"
+      ],
+      "semantics": {
+        "supported": [
+          "Bounded text and modeled AutoShape edits, including accepted grouped objects"
+        ],
+        "preserved": [
+          "Untouched raw entries, archive comment, source anchors, and unsupported object topology"
+        ],
+        "refused": [
+          "Stale revisions, unsupported text/shape semantics, semantic no-ops, resource overflow, and collateral drift"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativePPTXMutationsRoundTripsGroupedTextAndShapeAtomically",
+              "fixtures": [
+                "pptx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/pptx-render",
+          "evidence": [],
+          "reason": "Mutation qualification reopens the native contract but does not paint."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativePPTXMutationsRoundTripsTextAndAutoShape",
+              "fixtures": [
+                "pptx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativePPTXMutationsRoundTripsTextAndAutoShape",
+              "fixtures": [
+                "pptx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_mutate_test.go",
+              "selector": "TestVerifyNativePPTXContractPreservationRejectsAfterOnlyAndTopologyChanges",
+              "fixtures": [
+                "pptx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "verifyObservationSet",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "complete observation sets require deterministic replay for every case and runner",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "pptx.unsupported-depth-refusal",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pptx.package-preservation",
+      "format": "pptx",
+      "status": "partial",
+      "summary": "OPC graph qualification and capability-backed passthrough prevent silent unsupported PPTX object loss.",
+      "dimensions": [
+        "package-preservation",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/officecompat/inventory.go",
+        "go/officecompat/opcqual.go",
+        "go/pptxpatch/native_extract.go"
+      ],
+      "semantics": {
+        "supported": [
+          "Exact package inventory, graph qualification, and bounded native preservation capabilities"
+        ],
+        "preserved": [
+          "Unknown critical markup, unsupported shapes/groups/pictures/tables, relationships, and assets"
+        ],
+        "refused": [
+          "Missing capability authority, malformed relationship graphs, aliases, unsafe resources, and topology drift"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/officecompat",
+          "evidence": [
+            {
+              "path": "go/officecompat/pptx_corpus_test.go",
+              "selector": "TestPPTXCompatibilityCorpus",
+              "fixtures": [
+                "pptx-transitional-fidelity-diagnostics",
+                "pptx-resource-depth-refusal"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "go/officecompat",
+          "evidence": [],
+          "reason": "Package preservation is renderer-neutral."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/pptxpatch",
+          "evidence": [
+            {
+              "path": "go/pptxpatch/native_mutate_test.go",
+              "selector": "TestVerifyNativePPTXRawEntriesRejectsUntouchedMetadataMutation",
+              "fixtures": [
+                "pptx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "This is an internal Go qualification boundary."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/officecompat",
+          "evidence": [
+            {
+              "path": "go/officecompat/pptx_corpus_test.go",
+              "selector": "TestPPTXCompatibilityCorpus",
+              "fixtures": [
+                "pptx-transitional-fidelity-diagnostics"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "verifyFixtureBytes",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "refusal observations cannot expose partial semantic or candidate output",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "XML_RESOURCE_BUDGET",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pptx.render-production",
+      "format": "pptx",
+      "status": "partial",
+      "summary": "Pure native-v1 RenderTree and renderer-neutral paint commands exist; visual production is gated by those commands and the production architecture/authority probe, not PNG or screenshot comparators.",
+      "dimensions": [
+        "native",
+        "package-consumer",
+        "resource",
+        "visual-production"
+      ],
+      "authoritativeModules": [
+        "packages/pptx-render/src/compile.ts",
+        "packages/pptx-render/src/paint.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Stable z-order, exact group transforms, tables, supported shaped text, paths, assets, and bounded paint command replay"
+        ],
+        "preserved": [
+          "Native diagnostics and capability-backed placeholders remain visible instead of disappearing"
+        ],
+        "refused": [
+          "Unsupported shaping/layout, invalid provider output, excessive resources, incomplete assets, and invalid native input"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "packages/pptx-render",
+          "evidence": [
+            {
+              "path": "packages/pptx-render/src/render.test.ts",
+              "selector": "compiles rich native content in stable z-order",
+              "fixtures": [
+                "pptx-render-inline"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "packages/pptx-render",
+          "evidence": [
+            {
+              "path": "packages/pptx-render/src/render.test.ts",
+              "selector": "records headlessly and replays through a host-owned context adapter",
+              "fixtures": [
+                "pptx-render-inline"
+              ]
+            },
+            {
+              "path": "scripts/check-office-architecture.mjs",
+              "selector": "Validated ${files.length} production files",
+              "fixtures": [
+                "shared-office-architecture-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/pptxpatch",
+          "evidence": [],
+          "reason": "RenderTree is read-only."
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "package-release",
+          "evidence": [
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "...packageNames.map((name)",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "packages/pptx-render",
+          "evidence": [
+            {
+              "path": "packages/pptx-render/src/render.test.ts",
+              "selector": "turns shaping refusals and missing chart previews into visible commands and diagnostics",
+              "fixtures": [
+                "pptx-render-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "pptx.picture-native-browser",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "pptx.authored-deck",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "PptxSlidesView.tsx",
+              "fixtures": [
+                "pptx-production-e2e-authored-deck",
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "xlsx.contract-extraction",
+      "format": "xlsx",
+      "status": "partial",
+      "summary": "Native XLSX contract extraction preserves lexical cells/formulas/styles, durable identities, sheet geometry, and explicit unsupported authority.",
+      "dimensions": [
+        "identity",
+        "native",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/xlsxpatch/native_contract.go",
+        "go/xlsxpatch/native_extract.go",
+        "go/xlsxpatch/native_xml_security.go",
+        "packages/sheets/src/nativeValidation.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Strict/Transitional worksheets, lexical values/formulas, shared styles, views, dimensions, merges, and prior identity continuity"
+        ],
+        "preserved": [
+          "Unsupported parts and unsafe scopes remain capability-bound to exact source package authority"
+        ],
+        "refused": [
+          "Unsafe aliases/XML, invalid numeric lexicals, hostile resources, inconsistent formula groups, and invalid previous identity"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_extract_test.go",
+              "selector": "TestExtractNativeWorkbookV1EndToEndLexicalFidelity",
+              "fixtures": [
+                "xlsx-extract-inline"
+              ]
+            },
+            {
+              "path": "go/xlsxpatch/native_excel_fixture_test.go",
+              "selector": "TestExcelAuthoredNativeFixturesKeepOfficeAuthority",
+              "fixtures": [
+                "xlsx-excel-authored-happy-tree"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/sheets",
+          "evidence": [],
+          "reason": "Extraction does not claim layout; geometry is tracked separately."
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/xlsxpatch",
+          "evidence": [],
+          "reason": "Extraction is read-only."
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "Functional XLSX consumer coverage is tracked by xlsx.production-consumer."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_extract_test.go",
+              "selector": "TestDecodeAndPreviousCrossBindUnsupportedAuthorityAndEditability",
+              "fixtures": [
+                "xlsx-extract-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "xlsx.mutation-roundtrip",
+      "format": "xlsx",
+      "status": "partial",
+      "summary": "Atomic native cell/style/row-height/column-width transactions preserve unsupported inventory and reopen the contract.",
+      "dimensions": [
+        "identity",
+        "mutation",
+        "native",
+        "package-consumer",
+        "package-preservation",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/officecompat/mutation.go",
+        "go/xlsxpatch/native_mutate.go",
+        "packages/sheets/src/mutationProtocol.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Bounded cells, styles, row heights, and column widths with exact revision and operation IDs"
+        ],
+        "preserved": [
+          "Unsupported inventory, untouched parts, worksheet topology, and unrelated native projections"
+        ],
+        "refused": [
+          "Stale/unknown operations, merge targets, semantic no-ops, resource overflow, and collateral projection drift"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativeWorkbookMutationTransactionV1AtomicRoundTrip",
+              "fixtures": [
+                "xlsx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "packages/sheets",
+          "evidence": [],
+          "reason": "Mutation reopens the contract but does not claim render geometry."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativeWorkbookMutationTransactionV1AtomicRoundTrip",
+              "fixtures": [
+                "xlsx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_mutate_test.go",
+              "selector": "TestApplyNativeWorkbookMutationTransactionV1AtomicRoundTrip",
+              "fixtures": [
+                "xlsx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/native_mutate_test.go",
+              "selector": "TestVerifyNativeUnsupportedInventoryRequiresExactIdentitySet",
+              "fixtures": [
+                "xlsx-mutation-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "verifyObservation",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "xlsx.unsupported-numeric-refusal",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "xlsx.unsupported-numeric-refusal",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "xlsx.package-preservation",
+      "format": "xlsx",
+      "status": "partial",
+      "summary": "Native XLSX and shared OPC inventories protect charts, pivots, drawings, media, controls, embeddings, relationships, and unknown objects.",
+      "dimensions": [
+        "package-preservation",
+        "resource",
+        "security"
+      ],
+      "authoritativeModules": [
+        "go/officecompat/inventory.go",
+        "go/xlsxpatch/preservation.go"
+      ],
+      "semantics": {
+        "supported": [
+          "Exact untouched-part and Office-object inventory checks with explicit mutable allowlists"
+        ],
+        "preserved": [
+          "Charts, pivots, drawings, media, controls, embeddings, relationships, references, and unknown objects"
+        ],
+        "refused": [
+          "Object loss/change outside the allowlist, unsafe relationships, aliases, bombs, and topology drift"
+        ],
+        "silentLossPolicy": "preserve-or-refuse"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/preservation_test.go",
+              "selector": "TestPreservationInventoryCoversOfficeObjectsAndRelationships",
+              "fixtures": [
+                "xlsx-preservation-inline"
+              ]
+            },
+            {
+              "path": "go/officecompat/xlsx_corpus_test.go",
+              "selector": "TestRoundTripXLSXNativeCompatibilityCorpus",
+              "fixtures": [
+                "xlsx-refused-compression-ratio",
+                "xlsx-unsupported-preserve"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "not-applicable",
+          "owner": "go/officecompat",
+          "evidence": [],
+          "reason": "Package preservation is renderer-neutral."
+        },
+        "mutationRoundtrip": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/preservation_test.go",
+              "selector": "TestRequirePreservationAllowsCellChangesButRejectsObjectLoss",
+              "fixtures": [
+                "xlsx-preservation-inline"
+              ]
+            }
+          ]
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "This is an internal Go qualification boundary."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "go/xlsxpatch",
+          "evidence": [
+            {
+              "path": "go/xlsxpatch/preservation_test.go",
+              "selector": "TestRequirePreservationDetectsUnknownDrawingChangesAndSupportsExplicitAllowlist",
+              "fixtures": [
+                "xlsx-preservation-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "verifyFixtureBytes",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "refusal observations cannot expose partial semantic or candidate output",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "INVALID_NATIVE_OOXML",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "xlsx.production-consumer",
+      "format": "xlsx",
+      "status": "partial",
+      "summary": "The XLSX package is publishable and importable from a local tarball, but its native workflow has no functional consumer or production E2E.",
+      "dimensions": [
+        "native",
+        "package-consumer",
+        "visual-production"
+      ],
+      "authoritativeModules": [
+        "packages/sheets/src/index.ts",
+        "scripts/smoke-consumer.mjs"
+      ],
+      "semantics": {
+        "supported": [
+          "Local tarball import of @injoffice/sheets and its native contract/projection exports"
+        ],
+        "preserved": [
+          "Import-only smoke makes no workbook transformation or preservation claim"
+        ],
+        "refused": [
+          "Functional native consumer completion remains unclaimed until a package-to-Go workflow and production entrypoint exist"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeWorkbook.test.ts",
+              "selector": "does not leak a partial render model from an invalid authority contract",
+              "fixtures": [
+                "xlsx-contract-lexical"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeSheetGeometry.test.ts",
+              "selector": "renderer-neutral command recording",
+              "fixtures": [
+                "xlsx-geometry-inline"
+              ]
+            },
+            {
+              "path": "scripts/check-office-architecture.mjs",
+              "selector": "Validated ${files.length} production files",
+              "fixtures": [
+                "shared-office-architecture-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/xlsxpatch",
+          "evidence": [],
+          "reason": "This record covers the package consumer, not persistence."
+        },
+        "packageConsumer": {
+          "status": "present",
+          "owner": "package-release",
+          "evidence": [
+            {
+              "path": "scripts/smoke-consumer.mjs",
+              "selector": "await import(${JSON.stringify(name)})",
+              "fixtures": [
+                "shared-consumer-smoke"
+              ]
+            }
+          ]
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeWorkbook.test.ts",
+              "selector": "cross-binds unsupported source authority to capability, location, and editability",
+              "fixtures": [
+                "xlsx-contract-lexical"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "adapter request is offline, bounded, and carries verifier-owned exact bytes",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "NativeSheetView.tsx",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "xlsx.render-geometry",
+      "format": "xlsx",
+      "status": "partial",
+      "summary": "Renderer-neutral native worksheet geometry and sparse merged-range projection are deterministic and fail closed.",
+      "dimensions": [
+        "native",
+        "resource",
+        "visual-production"
+      ],
+      "authoritativeModules": [
+        "packages/sheets/src/nativeRenderModel.ts",
+        "packages/sheets/src/nativeSheetDecorations.ts",
+        "packages/sheets/src/nativeSheetGeometry.ts"
+      ],
+      "semantics": {
+        "supported": [
+          "Exact integer-EMU axes, viewport-local geometry, sparse merges, hidden dimensions, and renderer-neutral commands"
+        ],
+        "preserved": [
+          "Top-left content/style authority and hidden-axis coordinates remain explicit without merge expansion"
+        ],
+        "refused": [
+          "Missing defaults, unbound metrics, ambiguous covered values, clipped merges, zeroHeight, and budget overflow"
+        ],
+        "silentLossPolicy": "refuse-atomically"
+      },
+      "gates": {
+        "structuralPreservation": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeMergedRanges.test.ts",
+              "selector": "top-left content authority and no writer authority",
+              "fixtures": [
+                "xlsx-contract-lexical",
+                "xlsx-merged-inline"
+              ]
+            },
+            {
+              "path": "packages/sheets/src/nativeSheetDecorations.test.ts",
+              "selector": "runs an unmodified Excel-authored Go extraction through project, geometry, decorations, commands, and deterministic replay",
+              "fixtures": [
+                "xlsx-excel-authored-happy-tree"
+              ]
+            }
+          ]
+        },
+        "renderLayout": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeSheetGeometry.test.ts",
+              "selector": "compiles the shared native fixture into exact integer-EMU axis bands",
+              "fixtures": [
+                "xlsx-geometry-inline"
+              ]
+            },
+            {
+              "path": "scripts/check-office-architecture.mjs",
+              "selector": "Validated ${files.length} production files",
+              "fixtures": [
+                "shared-office-architecture-inline"
+              ]
+            }
+          ]
+        },
+        "mutationRoundtrip": {
+          "status": "not-applicable",
+          "owner": "go/xlsxpatch",
+          "evidence": [],
+          "reason": "Geometry projection is read-only and merge mutation is explicitly unsupported."
+        },
+        "packageConsumer": {
+          "status": "not-applicable",
+          "owner": "package-release",
+          "evidence": [],
+          "reason": "Functional consumer coverage is tracked by xlsx.production-consumer."
+        },
+        "unsupportedObjectLoss": {
+          "status": "present",
+          "owner": "packages/sheets",
+          "evidence": [
+            {
+              "path": "packages/sheets/src/nativeMergedRanges.test.ts",
+              "selector": "refuses ambiguous covered values",
+              "fixtures": [
+                "xlsx-contract-lexical",
+                "xlsx-merged-inline"
+              ]
+            }
+          ]
+        },
+        "productionE2E": {
+          "status": "present",
+          "owner": "host-integration",
+          "evidence": [
+            {
+              "path": "scripts/verify-native-office-production-e2e.mjs",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-verifier-inline"
+              ]
+            },
+            {
+              "path": "scripts/verify-native-office-production-e2e.test.mjs",
+              "selector": "xlsx.sheet-native-browser",
+              "fixtures": [
+                "shared-production-e2e-test-inline"
+              ]
+            },
+            {
+              "path": "testdata/native-office-production-e2e/v1/manifest.json",
+              "selector": "deterministic-grid-geometry",
+              "fixtures": [
+                "shared-production-e2e-manifest"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "pendingWork": []
+}

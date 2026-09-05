@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.injoffice.dev/native-office/production-e2e-v1.schema.json",
+  "title": "InjOffice native Office production E2E contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "version",
+    "baseline",
+    "authority",
+    "adapter",
+    "contracts",
+    "resourceProfiles",
+    "fixtures",
+    "cases"
+  ],
+  "properties": {
+    "protocol": { "const": "injoffice.native-office-production-e2e/v1" },
+    "version": { "const": 1 },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "corpusManifest", "completionMatrix"],
+      "properties": {
+        "repository": { "const": "injectinglabs/injoffice" },
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "corpusManifest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "protocol", "selectedRecordsSha256"],
+          "properties": {
+            "path": { "$ref": "#/$defs/path" },
+            "protocol": { "const": "injoffice-office-compat-corpus/v1" },
+            "selectedRecordsSha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "completionMatrix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol", "relationship"],
+          "properties": {
+            "protocol": { "const": "injoffice.native-office-completion/v1" },
+            "relationship": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticSource", "digestProfile", "allowedPaintSinks", "forbidden", "screenshotPolicy"],
+      "properties": {
+        "semanticSource": { "const": "native-output" },
+        "digestProfile": { "const": "sha256-canonical-json/v1" },
+        "allowedPaintSinks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["canvas2d-command-replay"] }
+        },
+        "forbidden": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["canvas-measurement", "dom", "html", "konva", "legacy-deckview", "mammoth", "screenshot"]
+          }
+        },
+        "screenshotPolicy": { "const": "diagnostic-only-never-semantic-authority" }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "version", "requestMode", "networkPolicy", "observationProtocol"],
+      "properties": {
+        "protocol": { "const": "injoffice.native-office-production-e2e-adapter/v1" },
+        "version": { "const": 1 },
+        "requestMode": { "const": "one-case-one-replay-index" },
+        "networkPolicy": { "const": "fixture-local-or-intercepted-only" },
+        "observationProtocol": { "const": "injoffice.native-office-production-e2e-observation/v1" }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["docx", "pptx", "xlsx"],
+      "properties": {
+        "docx": { "$ref": "#/$defs/nativeContract" },
+        "pptx": { "$ref": "#/$defs/nativeContract" },
+        "xlsx": { "$ref": "#/$defs/nativeContract" }
+      }
+    },
+    "resourceProfiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/resourceProfile" }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fixture" }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+    "path": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "format": { "enum": ["docx", "pptx", "xlsx"] },
+    "nativeContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "version", "schemaPath", "schemaSha256"],
+      "properties": {
+        "protocol": { "type": "string", "minLength": 1 },
+        "version": { "const": 1 },
+        "schemaPath": { "$ref": "#/$defs/path" },
+        "schemaSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resourceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxFixtureBytes", "maxObservationBytes", "maxOutputItems", "timeoutMs"],
+      "properties": {
+        "maxFixtureBytes": { "type": "integer", "minimum": 1 },
+        "maxObservationBytes": { "type": "integer", "minimum": 1 },
+        "maxOutputItems": { "type": "integer", "minimum": 1 },
+        "timeoutMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "mediaType", "path", "byteLength", "sha256", "expectedPath", "expectedSha256", "canonicalExpectedProfile", "canonicalExpectedSha256", "corpusId"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "format": { "$ref": "#/$defs/format" },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/path" },
+        "byteLength": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "expectedPath": {
+          "oneOf": [
+            { "$ref": "#/$defs/path" },
+            { "type": "null" }
+          ]
+        },
+        "expectedSha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "canonicalExpectedProfile": { "type": "string", "minLength": 1 },
+        "canonicalExpectedSha256": { "$ref": "#/$defs/sha256" },
+        "corpusId": {
+          "oneOf": [
+            { "$ref": "#/$defs/id" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository", "entrypoint", "operation", "engineId", "engineRevision", "componentIds", "requiredSignals", "nativeProtocol", "nativeVersion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "repository": { "type": "string", "minLength": 1 },
+        "entrypoint": { "$ref": "#/$defs/path" },
+        "operation": { "type": "string", "minLength": 1 },
+        "engineId": { "type": "string", "minLength": 1 },
+        "engineRevision": { "type": "string", "minLength": 1 },
+        "componentIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9-]+:.+" }
+        },
+        "requiredSignals": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "nativeProtocol": { "type": "string", "minLength": 1 },
+        "nativeVersion": { "const": 1 }
+      }
+    },
+    "semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "value", "sha256"],
+      "properties": {
+        "profile": { "type": "string", "minLength": 1 },
+        "value": { "type": "object" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "stage", "atomic", "candidateBytesProduced"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "stage": { "type": "string", "minLength": 1 },
+        "atomic": { "const": true },
+        "candidateBytesProduced": { "const": false }
+      }
+    },
+    "expectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "semantic", "preservation", "refusal"],
+      "properties": {
+        "outcome": { "enum": ["accepted", "refused"] },
+        "semantic": { "$ref": "#/$defs/semantic" },
+        "preservation": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "refusal": {
+          "oneOf": [
+            { "$ref": "#/$defs/refusal" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runs", "requireIdentical"],
+      "properties": {
+        "runs": { "type": "integer", "minimum": 2, "maximum": 8 },
+        "requireIdentical": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["engine", "evidence", "semanticSha256"] }
+        }
+      }
+    },
+    "input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "exact" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "byteOffset", "xorMask"],
+          "properties": {
+            "mode": { "const": "tamper-xor" },
+            "byteOffset": { "type": "integer", "minimum": 0 },
+            "xorMask": { "type": "integer", "minimum": 1, "maximum": 255 }
+          }
+        }
+      ]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "workflow", "fixtureId", "input", "resourceProfile", "runners", "expect", "replay"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(docx|pptx|xlsx)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+        "format": { "$ref": "#/$defs/format" },
+        "workflow": { "type": "string", "minLength": 1 },
+        "fixtureId": { "$ref": "#/$defs/id" },
+        "input": { "$ref": "#/$defs/input" },
+        "resourceProfile": { "$ref": "#/$defs/id" },
+        "runners": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/runner" }
+        },
+        "expect": { "$ref": "#/$defs/expectation" },
+        "replay": { "$ref": "#/$defs/replay" }
+      }
+    }
+  }
+}

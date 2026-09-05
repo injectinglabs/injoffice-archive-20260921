@@ -1,0 +1,250 @@
+name: Test
+
+# Every TypeScript package and Go module, with no private services or secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR runs are wasteful. Main runs are kept so every deployable SHA
+  # receives a complete result for the Pages workflow to consume.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ts-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # native-office-completion reads pinned baseline SHA 0cdd7e93 via git show/ls-tree
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          # Go modules in this repository have no external dependencies, and
+          # there is no root go.mod for setup-go's default cache discovery.
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - name: Installed WASM tarballs in Chrome
+        timeout-minutes: 10
+        run: npm run test:wasm-tarball-browser
+      - name: Browser-local XLSX, DOCX, and PPTX extract/apply smoke
+        run: npm run test:office-browser-smoke:built
+      - run: npm run test
+      - run: npm run check:office-architecture
+      - run: npm run check:office-provenance
+      - run: npm run qualify:office-reproducibility
+      - run: npm run check:native-office-production-e2e
+      - run: npm run test:native-office-production-e2e
+      - run: npm run check:native-office-completion
+      - run: npm run check:packages
+      - run: npm run check:consumer
+      - name: Deterministic native Office performance qualification
+        run: npm run qualify:office-performance -- --output artifacts/native-office-performance-node24.json
+      - name: Upload native Office performance report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-office-performance-node24
+          path: artifacts/native-office-performance-node24.json
+          if-no-files-found: warn
+
+  go-modules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        module: [xlsxpatch, docxpatch, pptxpatch, slidesqc, officecompat, collab, injoffice-server]
+    defaults:
+      run:
+        working-directory: go/${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      # docxpatch's image-insertion tests independently validate the
+      # produced .docx with python-docx (never trust your own reader/writer
+      # roundtripping against itself — same discipline as the openpyxl
+      # validation used elsewhere in this project). They skip gracefully
+      # without this, but install it so CI actually exercises the check.
+      - if: matrix.module == 'docxpatch'
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - if: matrix.module == 'docxpatch'
+        run: pip install python-docx==1.2.0
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - if: matrix.module == 'officecompat'
+        run: go run ./cmd/corpusgen --check
+
+  xlsx-wasm-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Build XLSX WASM
+        run: ./scripts/build-xlsxnative-wasm.sh
+      - name: Enforce XLSX WASM size ceiling
+        run: |
+          wasm=go/xlsxpatch/cmd/xlsxnativewasm/dist/xlsxnative.wasm
+          actual_bytes=$(wc -c < "$wasm" | tr -d ' ')
+          max_bytes=$((7 * 1024 * 1024))
+          echo "xlsxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
+          if (( actual_bytes > max_bytes )); then
+            echo "xlsxnative.wasm exceeds the 7 MiB size ceiling" >&2
+            exit 1
+          fi
+      - name: Run mandatory XLSX WASM contract
+        working-directory: go/xlsxpatch
+        env:
+          XLSXNATIVE_WASM_REQUIRED: '1'
+          XLSXNATIVE_WASM_SKIP_BUILD: '1'
+        run: go test -v -count=1 ./cmd/xlsxnativewasm
+
+  docx-wasm-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Build DOCX WASM
+        run: ./go/docxpatch/cmd/docxnativewasm/build.sh
+      - name: Enforce DOCX WASM size ceiling
+        run: |
+          wasm=go/docxpatch/cmd/docxnativewasm/dist/docxnative.wasm
+          actual_bytes=$(wc -c < "$wasm" | tr -d ' ')
+          max_bytes=$((6 * 1024 * 1024))
+          echo "docxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
+          if (( actual_bytes > max_bytes )); then
+            echo "docxnative.wasm exceeds the 6 MiB size ceiling" >&2
+            exit 1
+          fi
+      - name: Run mandatory DOCX WASM contract
+        working-directory: go/docxpatch
+        env:
+          DOCXNATIVE_WASM_REQUIRED: '1'
+          DOCXNATIVE_WASM_SKIP_BUILD: '1'
+        run: go test -v -count=1 ./cmd/docxnativewasm
+
+  pptx-wasm-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Build PPTX WASM
+        run: ./go/pptxpatch/cmd/pptxnativewasm/build.sh
+      - name: Enforce PPTX WASM size ceiling
+        run: |
+          wasm=go/pptxpatch/cmd/pptxnativewasm/dist/pptxnative.wasm
+          actual_bytes=$(wc -c < "$wasm" | tr -d ' ')
+          max_bytes=$((7 * 1024 * 1024))
+          echo "pptxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
+          if (( actual_bytes > max_bytes )); then
+            echo "pptxnative.wasm exceeds the 7 MiB size ceiling" >&2
+            exit 1
+          fi
+      - name: Run mandatory PPTX WASM contract
+        working-directory: go/pptxpatch
+        env:
+          PPTXNATIVE_WASM_REQUIRED: '1'
+          PPTXNATIVE_WASM_SKIP_BUILD: '1'
+        run: go test -v -count=1 ./cmd/pptxnativewasm
+
+  office-qualification:
+    name: office-qualification (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: fuzz-package
+            command: go test . -run '^$' -fuzz '^FuzzStructuralInspectDeterministic$' -fuzztime=10s -parallel=4 -timeout=60s
+          - shard: fuzz-xml
+            command: go test . -run '^$' -fuzz '^FuzzStructuralXMLDeterministic$' -fuzztime=10s -parallel=4 -timeout=60s
+    defaults:
+      run:
+        working-directory: go/officecompat
+    env:
+      GOMEMLIMIT: 768MiB
+      GOMAXPROCS: 4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - run: ${{ matrix.command }}
+
+  ci-required:
+    name: CI required
+    if: always()
+    needs:
+      - ts-packages
+      - go-modules
+      - xlsx-wasm-contract
+      - docx-wasm-contract
+      - pptx-wasm-contract
+      - office-qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every validation job to pass
+        env:
+          TS_PACKAGES: ${{ needs.ts-packages.result }}
+          GO_MODULES: ${{ needs.go-modules.result }}
+          XLSX_WASM: ${{ needs.xlsx-wasm-contract.result }}
+          DOCX_WASM: ${{ needs.docx-wasm-contract.result }}
+          PPTX_WASM: ${{ needs.pptx-wasm-contract.result }}
+          OFFICE_QUALIFICATION: ${{ needs.office-qualification.result }}
+        run: |
+          for result in \
+            "$TS_PACKAGES" \
+            "$GO_MODULES" \
+            "$XLSX_WASM" \
+            "$DOCX_WASM" \
+            "$PPTX_WASM" \
+            "$OFFICE_QUALIFICATION"
+          do
+            if [ "$result" != 'success' ]; then
+              echo "A required validation job finished with: $result" >&2
+              exit 1
+            fi
+          done

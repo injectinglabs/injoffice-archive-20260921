@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/injectinglabs/injoffice/schemas/native-office-completion-v2.schema.json",
+  "title": "InjOffice native Office completion matrix v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "version", "baseline", "policies", "fixtures", "qualifications", "capabilities", "pendingWork"],
+  "properties": {
+    "protocol": { "const": "injoffice.native-office-completion/v2" },
+    "version": { "type": "integer", "const": 2 },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit"],
+      "properties": {
+        "repository": { "const": "injectinglabs/injoffice" },
+        "ref": { "const": "origin/main" },
+        "commit": { "const": "0cdd7e9340e9469326f57e6175ec87e7e1807443" }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completionRequirements", "requiredDimensions", "nativeProductionEntrypoints"],
+      "properties": {
+        "completionRequirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["officeExportFixture", "productionE2E"],
+          "properties": {
+            "officeExportFixture": { "const": true },
+            "productionE2E": { "const": true }
+          }
+        },
+        "requiredDimensions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["native", "package-preservation", "identity", "security", "resource", "visual-production"] }
+        },
+        "nativeProductionEntrypoints": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fixture" }
+    },
+    "qualifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["differential", "resource"],
+      "properties": {
+        "differential": { "$ref": "#/$defs/qualification" },
+        "resource": { "$ref": "#/$defs/qualification" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "pendingWork": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pending" }
+    }
+  },
+  "$defs": {
+    "path": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "kind", "path", "sha256", "provenance"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+        "format": { "enum": ["docx", "pptx", "xlsx", "shared"] },
+        "kind": { "enum": ["generated", "generated-contract", "generated-inline", "office-export"] },
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["producer", "source", "license"],
+          "properties": {
+            "producer": { "type": "string", "minLength": 1 },
+            "source": { "type": "string", "minLength": 1 },
+            "license": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "selector", "fixtures"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "selector": { "type": "string", "minLength": 3 },
+        "fixtures": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "owner", "evidence"],
+      "properties": {
+        "status": { "enum": ["present", "missing", "not-applicable"] },
+        "owner": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "owner", "evidence", "limitations"],
+      "properties": {
+        "status": { "const": "present" },
+        "owner": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidence" } },
+        "limitations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "status", "summary", "dimensions", "authoritativeModules", "semantics", "gates"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(docx|pptx|xlsx)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+        "format": { "enum": ["docx", "pptx", "xlsx"] },
+        "status": { "enum": ["complete", "partial", "pending"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "dimensions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["identity", "mutation", "native", "package-consumer", "package-preservation", "resource", "security", "visual-production"] } },
+        "authoritativeModules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/path" } },
+        "semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supported", "preserved", "refused", "silentLossPolicy"],
+          "properties": {
+            "supported": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string", "minLength": 1 } },
+            "preserved": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string", "minLength": 1 } },
+            "refused": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string", "minLength": 1 } },
+            "silentLossPolicy": { "enum": ["preserve-verbatim", "refuse-atomically", "preserve-or-refuse"] }
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["structuralPreservation", "renderLayout", "mutationRoundtrip", "packageConsumer", "unsupportedObjectLoss", "productionE2E"],
+          "properties": {
+            "structuralPreservation": { "$ref": "#/$defs/gate" },
+            "renderLayout": { "$ref": "#/$defs/gate" },
+            "mutationRoundtrip": { "$ref": "#/$defs/gate" },
+            "packageConsumer": { "$ref": "#/$defs/gate" },
+            "unsupportedObjectLoss": { "$ref": "#/$defs/gate" },
+            "productionE2E": { "$ref": "#/$defs/gate" }
+          }
+        }
+      }
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "status", "pr", "base", "branch", "head", "targets"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$" },
+        "format": { "enum": ["docx", "pptx", "xlsx", "shared"] },
+        "status": { "const": "pending" },
+        "pr": { "type": "integer", "minimum": 1 },
+        "base": { "type": "string", "pattern": "^main@[a-f0-9]{40}$" },
+        "branch": { "type": "string", "pattern": "^(feat|fix|test|docs|chore)/[a-z0-9]+(?:[./-][a-z0-9]+)*$" },
+        "head": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "targets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

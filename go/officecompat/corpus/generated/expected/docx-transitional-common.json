@@ -1,0 +1,267 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-transitional-common",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "native": {
+    "body": {
+      "anchor": {
+        "end_byte": 586,
+        "part_name": "word/document.xml",
+        "path": "/w:document[1]/w:body[1]",
+        "start_byte": 187,
+        "xml_sha256": "sha256:d74b695c6d9b45b9e320e2f541cf4d5e00c762284c9ed7abb9539ddf18049dfd"
+      },
+      "blocks": [
+        {
+          "id": "paragraph:c02e8470524c1562a3ed3b2b",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 383,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[1]",
+              "start_byte": 198,
+              "xml_sha256": "sha256:9bf7859ba2bf72edc6bb13fa10028d0ab0e8b8f6521ce13d111f22241fc94e74"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:c02e8470524c1562a3ed3b2b",
+            "properties": {
+              "alignment": "center"
+            },
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 363,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:t[1]",
+                  "start_byte": 313,
+                  "xml_sha256": "sha256:d63dd4e337d21cb3c0dec22903c375639e29e8bcb5b8379feecc05c9311edea5"
+                },
+                "id": "run:3e67489e4da2574806945109",
+                "kind": "text",
+                "properties": {
+                  "bold": true,
+                  "color": "00AAFF"
+                },
+                "text": "  Café 👋 "
+              },
+              {
+                "anchor": {
+                  "end_byte": 371,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:tab[1]",
+                  "start_byte": 363,
+                  "xml_sha256": "sha256:fbaba4574487f31defaef0d39ce8e517de96719158fac1d5a4efaf41a7b323b7"
+                },
+                "control": "tab",
+                "id": "run:0bcc815b970378321d3560f8",
+                "kind": "control",
+                "properties": {
+                  "bold": true,
+                  "color": "00AAFF"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "table:773941167551ac0b43c4c3a5",
+          "kind": "table",
+          "table": {
+            "anchor": {
+              "end_byte": 576,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:tbl[1]",
+              "start_byte": 386,
+              "xml_sha256": "sha256:91aa73ececac8c825086d60d3fecc63eae57d3be90d25c2dda04bffa8dd78b8a"
+            },
+            "edit_policy": {
+              "allowed_operations": [],
+              "mode": "read-only",
+              "refusal": {
+                "code": "EXTRACT_ONLY",
+                "message": "Native extraction does not yet expose a guarded contract mutation API",
+                "preservation": "refuse-mutation"
+              }
+            },
+            "id": "table:773941167551ac0b43c4c3a5",
+            "rows": [
+              {
+                "anchor": {
+                  "end_byte": 568,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]",
+                  "start_byte": 443,
+                  "xml_sha256": "sha256:d27bf51e182f1dcf8149c46adc56df6b91f3153f39def38ee38dd8b535f0b6d5"
+                },
+                "cant_split": false,
+                "cells": [
+                  {
+                    "anchor": {
+                      "end_byte": 561,
+                      "part_name": "word/document.xml",
+                      "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]",
+                      "start_byte": 449,
+                      "xml_sha256": "sha256:d22989b581ee34d7e3d57a0be0512cae628627656c1d773ca8aba1153f997afe"
+                    },
+                    "grid_span": 1,
+                    "id": "cell:1922f862b499d67ee9d6b48b",
+                    "paragraphs": [
+                      {
+                        "anchor": {
+                          "end_byte": 554,
+                          "part_name": "word/document.xml",
+                          "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[1]",
+                          "start_byte": 514,
+                          "xml_sha256": "sha256:49913dbdb2a6334e85e75d9cf544ccaed0d125540f91336215482b992d1fff3a"
+                        },
+                        "edit_policy": {
+                          "allowed_operations": [
+                            "text.replace"
+                          ],
+                          "mode": "read-write"
+                        },
+                        "id": "paragraph:58a425f66ecabca1a88f2327",
+                        "properties": {},
+                        "runs": [
+                          {
+                            "anchor": {
+                              "end_byte": 542,
+                              "part_name": "word/document.xml",
+                              "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[1]/w:r[1]/w:t[1]",
+                              "start_byte": 524,
+                              "xml_sha256": "sha256:6e177f5ccbcef6fb167f156cada232c4995ee1e1f4df98c93ffd2515e5e10ec9"
+                            },
+                            "id": "run:e00d09314875dd08bf7a2214",
+                            "kind": "text",
+                            "text": "Cell Ω"
+                          }
+                        ]
+                      }
+                    ],
+                    "vertical_merge": "none",
+                    "width_twips": 2400
+                  }
+                ],
+                "id": "row:4831f27ecdb3ce19f7e1fa7a",
+                "repeat_header": false
+              }
+            ],
+            "table_style_id": "TableGrid"
+          }
+        }
+      ],
+      "id": "story:44eff4b86cd0ff258e6412b6",
+      "kind": "body",
+      "part_name": "word/document.xml"
+    },
+    "capabilities": [
+      {
+        "detail": "HTML-free, part-qualified WordprocessingML extraction",
+        "level": "read-only",
+        "name": "native-ooxml-parse"
+      },
+      {
+        "detail": "Exact XML byte ranges and fingerprints guard atomic native text mutations",
+        "level": "read-write",
+        "name": "surgical-byte-anchors"
+      },
+      {
+        "detail": "Guarded paragraph and text-run replacement with post-write native validation",
+        "level": "read-write",
+        "name": "native-text-mutation"
+      },
+      {
+        "detail": "Unmodeled OOXML is preserved verbatim and must not be flattened",
+        "level": "unsupported",
+        "name": "full-document-regeneration"
+      }
+    ],
+    "comment_stories": [],
+    "comments": [],
+    "document_id": "document:7cacae1b79441435497b529a",
+    "footers": [],
+    "headers": [],
+    "notes": [],
+    "passthrough_parts": [
+      {
+        "byte_length": 280,
+        "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+        "part_name": "_rels/.rels",
+        "policy": "preserve-verbatim",
+        "sha256": "sha256:737f8dfc276e8f3fe5afd5c285ceabd020379fef289d1c001c395bc3b393a513"
+      }
+    ],
+    "protocol": "injoffice.docx.native",
+    "revision": "rev:47eff90d4080fef9dcc39d66b75f11ff",
+    "sections": [
+      {
+        "anchor": {
+          "end_byte": 586,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]",
+          "start_byte": 187,
+          "xml_sha256": "sha256:d74b695c6d9b45b9e320e2f541cf4d5e00c762284c9ed7abb9539ddf18049dfd"
+        },
+        "break_type": "next-page",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:4cb160eb611d77278ea39cd1",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:4cb160eb611d77278ea39cd1:column:0",
+              "ordinal": 0
+            }
+          ],
+          "column_layout": "equal-width",
+          "column_spacing_twips": 720,
+          "columns": 1,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:c02e8470524c1562a3ed3b2b",
+        "title_page": false
+      }
+    ],
+    "source": {
+      "main_part": "word/document.xml",
+      "package_sha256": "sha256:47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209"
+    },
+    "unsupported": [
+      {
+        "anchor": {
+          "end_byte": 586,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]",
+          "start_byte": 187,
+          "xml_sha256": "sha256:d74b695c6d9b45b9e320e2f541cf4d5e00c762284c9ed7abb9539ddf18049dfd"
+        },
+        "capability": "sections",
+        "code": "DEFAULT_SECTION_INFERRED",
+        "id": "unsupported:19f9484084840e78af861c06",
+        "message": "The schema-optional final w:sectPr is absent; Word default page geometry is exposed with the body anchor",
+        "preservation": "refuse-mutation",
+        "scope_id": "section:4cb160eb611d77278ea39cd1"
+      }
+    ],
+    "version": 1
+  }
+}

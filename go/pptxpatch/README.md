@@ -1,0 +1,99 @@
+# pptxpatch
+
+`pptxpatch` reads and writes a bounded, editable PowerPoint OOXML model.
+
+```bash
+go get github.com/injectinglabs/injoffice/go/pptxpatch
+```
+
+```go
+deck := pptxpatch.ExampleDeck()
+bytes, err := pptxpatch.BuildPPTX(deck)
+if err != nil {
+	return err
+}
+```
+
+The model supports text, basic shapes and connectors, tables, pictures, charts, transitions, and a bounded animation set. Unknown PPTX features are not promised to survive a parse-and-rebuild cycle; use surgical archive patching when preservation of unmodeled parts is required.
+
+For the authoritative native Office boundary, use `ExtractNativePPTX` with a
+trusted passthrough capability issuer. Documents containing DrawingML groups
+require the issuer to implement `NativePassthroughTransactionalTokenFactory`, so
+all capabilities publish only after one successful atomic commit:
+
+```go
+native, err := pptxpatch.ExtractNativePPTX(pptxBytes, pptxpatch.NativePPTXExtractOptions{
+	Previous: previousNativeDeck,
+	TokenFactory: tokenIssuer,
+})
+```
+
+This path validates a bounded OPC graph, exact content and relationship types,
+OOXML namespaces, source anchors, resource limits, and the final
+`pptx-native/v1` contract. It never returns raw XML or package paths as
+passthrough tokens. Unsupported fidelity is capability-backed and diagnostic, or
+the extraction fails closed. Parsed picture assets are source-only: their source
+part metadata never authorizes a read, and the trusted host must resolve the
+asset passthrough capability against the source revision, actual media part,
+digest, byte length, and issuance reason before serving bytes. See
+[`docs/PPTX-NATIVE-CONTRACT.md`](../../docs/PPTX-NATIVE-CONTRACT.md) for the
+supported extraction subset and canonical XML declaration rule. The current
+editable AutoShape subset is renderer-free and exact: unadjusted rectangle,
+ellipse, triangle, and diamond presets with explicit sRGB/no fill and explicit
+solid outline metadata. Custom geometry, unresolved theme paint, gradients, patterns,
+effects, unmodeled color transforms, and unsupported transforms become
+capability-backed refused elements; they are not flattened to a nearby shape.
+Untransformed theme scheme colors, documented `schemeClr` tint/shade/lumMod
+transforms, and latin theme-font tokens are materialized into the existing
+color and `fontFamily` fields when the relationship-routed theme and master
+color map supply exact snapshots. Alpha-only and unmodeled color transforms
+remain object-local refusals.
+
+The parsed connector subset projects unrotated `p:cxnSp` straight-line geometry
+with positive X/Y extents and a complete explicit sRGB or documented theme
+solid stroke. Named `headEnd`/`tailEnd` types, including `w`/`sz` values `sm`/`med`/`lg`
+that map onto integer EMU as 2/3/5 × `stroke.widthEmu`, become exact
+`headArrow`/`tailArrow` flags. Horizontal/vertical zero-extent
+lines remain outside the v1 transform contract and fail extraction closed.
+Unknown arrow types or sizes, unresolved theme paint, non-solid
+dash, effects, and bent/custom geometry become exact capability-backed
+refusals. Opaque charts stay preserve-only: an exact PNG/JPEG preview
+relationship is painted at the frame EMU, and a missing preview remains a
+RenderTree refusal rather than an invented chart renderer. Connector flip parity is retained for the straight line geometry
+where endpoint reversal is visually equivalent. Grouped connectors retain
+their authored order and inherit the exact DrawingML group affine without an
+element-bounds clip that would truncate the centered stroke.
+
+The parsed table subset projects only unrotated `p:graphicFrame` / `a:tbl`
+grids whose frame extent exactly matches their positive explicit column and row
+tracks. Every cell must be unmerged and self-contained: explicit sRGB/no fill,
+four explicit no-fill borders, fixed horizontal text direction/top anchor,
+explicit overflow and margins, and exact native paragraphs/runs. Table styles,
+banding, inheritance or theme paint, effects, visible/partial borders, merges,
+charts, and embedded objects remain exact capability-backed passthrough instead
+of being approximated. Grouped tables retain source order and the exact parent
+DrawingML affine.
+
+Exact source-backed text and AutoShape property edits use
+`ApplyNativePPTXMutations`. Every batch must include the `sourceRevision` from
+the matching extraction and every operation must bind the target element's
+source fingerprint. The applier edits only bounded XML spans in the original
+slide part, raw-copies and verifies every untouched OPC entry, then reopens and
+extracts the result to validate the requested values. It refuses structural
+edits, non-self-contained text, inherited or unsupported shape semantics, and
+stale revisions rather than rebuilding a presentation from the render model.
+Exact text and AutoShape descendants of projected DrawingML groups are valid
+targets; their ancestor group transforms, child coordinate spaces, order,
+compatibility, and passthrough inventory remain unchanged. Text replacement
+retains the source `a:bodyPr` layout and refuses literal tabs or line breaks.
+The rewritten ZIP also preserves and verifies the original archive EOCD
+comment in addition to raw-copying every untouched entry.
+
+When the request comes from the shared Office mutation envelope, use
+`ApplyNativePPTXMutationPayload`. It strictly decodes at most 3 MiB of native
+JSON, rejects duplicate or unknown fields and trailing JSON, independently
+checks the envelope's `sha256:<digest>` exact-byte CAS, and requires the native
+payload's `expectedSourceRevision` to be the corresponding `rev-<digest>`.
+Successful edits additionally require an actual semantic OOXML change and
+preserve the presentation/slide/element topology plus the exact bidirectional
+unsupported diagnostic and passthrough inventory.

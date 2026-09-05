@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-resource-compression",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "resource-limit",
+    "contains": "compression-ratio limit"
+  }
+}

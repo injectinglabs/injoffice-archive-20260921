@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+  xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
+  mc:Ignorable="w14 w15">
+  <w:zoom w:percent="100"/>
+  <w:proofState w:spelling="clean" w:grammar="clean"/>
+  <w:defaultTabStop w:val="720"/>
+  <w:characterSpacingControl w:val="doNotCompress"/>
+  <w:savePreviewPicture/>
+  <w:compat>
+    <w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+  </w:compat>
+  <w:rsids><w:rsidRoot w:val="00AA11BB"/><w:rsid w:val="00AA11BB"/></w:rsids>
+  <w:clrSchemeMapping w:bg1="light1" w:t1="dark1"/>
+  <w:doNotAutoCompressPictures/>
+  <w14:docId w14:val="01234567"/>
+  <w15:chartTrackingRefBased/>
+</w:settings>

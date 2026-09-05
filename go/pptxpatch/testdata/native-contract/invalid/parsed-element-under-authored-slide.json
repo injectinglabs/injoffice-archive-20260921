@@ -1,0 +1,28 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-parsed-child-authored-slide",
+  "origin": "parsed",
+  "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-authored",
+    "provenance": "authored",
+    "elements": [{
+      "kind": "connector",
+      "id": "connector-parsed",
+      "provenance": "parsed",
+      "transform": { "x": 0, "y": 0, "cx": 10, "cy": 10 },
+      "source": {
+        "partName": "custom/slides/slide1.xml",
+        "objectId": "cNvPr-2",
+        "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

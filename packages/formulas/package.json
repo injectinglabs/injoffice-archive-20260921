@@ -1,0 +1,37 @@
+{
+  "name": "@injoffice/formulas",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Spreadsheet formula coverage audit and deterministic host-injected calculation job protocol.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/formulas"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@univerjs/core": "^0.25.1",
+    "@univerjs/preset-sheets-node-core": "^0.25.1",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

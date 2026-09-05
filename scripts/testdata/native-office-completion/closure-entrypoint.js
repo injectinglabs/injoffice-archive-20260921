@@ -1,0 +1,1 @@
+import './forbidden-entrypoint.js'

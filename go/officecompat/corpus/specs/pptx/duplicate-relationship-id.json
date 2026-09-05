@@ -1,0 +1,56 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "pptx-duplicate-relationship-id",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen declarative OOXML",
+    "source": "CC0 hand-authored ambiguous PresentationML relationship map",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "ambiguous-relationship-map",
+    "duplicate-relationship-id",
+    "explicit-refusal",
+    "transitional"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/><Override PartName=\"/ppt/slides/slide1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/><Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"ppt/presentation.xml\"/></Relationships>"
+    },
+    {
+      "name": "ppt/presentation.xml",
+      "text": "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:sldIdLst><p:sldId id=\"256\" r:id=\"rId2\"/></p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\"/></p:presentation>"
+    },
+    {
+      "name": "ppt/_rels/presentation.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/></Relationships>"
+    },
+    {
+      "name": "ppt/slides/slide1.xml",
+      "text": "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree/></p:cSld></p:sld>"
+    },
+    {
+      "name": "ppt/theme/theme1.xml",
+      "text": "<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"Ambiguous\"><a:themeElements/></a:theme>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "pptx-duplicate-relationship-id",
+    "format": "pptx",
+    "dialect": "transitional",
+    "outcome": "refused",
+    "refusal": {
+      "class": "ambiguous-relationship-map",
+      "contains": "invalid or duplicate relationship"
+    }
+  }
+}

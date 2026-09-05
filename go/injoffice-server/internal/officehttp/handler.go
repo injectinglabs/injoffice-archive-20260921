@@ -1,0 +1,30 @@
+// Package officehttp is the injoffice-server HTTP surface for native Office
+// extract/apply. XLSX routes are the shared xlsxhttp handlers; DOCX and PPTX
+// reuse that envelope, CAS, and opaque artifact store.
+package officehttp
+
+import (
+	"net/http"
+
+	"github.com/injectinglabs/injoffice/go/xlsxpatch/xlsxhttp"
+)
+
+// NewHandler serves POST /v1/{xlsx,docx,pptx}/{extract,mutations}.
+// store may be nil; artifact_id is then refused.
+func NewHandler(store xlsxhttp.Store) http.Handler {
+	mux := http.NewServeMux()
+	xlsxhttp.Register(mux, store)
+	mux.HandleFunc(DOCXExtractPath, func(w http.ResponseWriter, r *http.Request) {
+		handleDOCXExtract(w, r, store)
+	})
+	mux.HandleFunc(DOCXMutationsPath, func(w http.ResponseWriter, r *http.Request) {
+		handleDOCXMutations(w, r, store)
+	})
+	mux.HandleFunc(PPTXExtractPath, func(w http.ResponseWriter, r *http.Request) {
+		handlePPTXExtract(w, r, store)
+	})
+	mux.HandleFunc(PPTXMutationsPath, func(w http.ResponseWriter, r *http.Request) {
+		handlePPTXMutations(w, r, store)
+	})
+	return xlsxhttp.WithLocalHelperHeaders(mux)
+}

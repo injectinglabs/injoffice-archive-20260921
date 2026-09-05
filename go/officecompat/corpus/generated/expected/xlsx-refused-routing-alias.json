@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "xlsx-refused-routing-alias",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "invalid-package",
+    "contains": "case/escape-equivalent"
+  }
+}

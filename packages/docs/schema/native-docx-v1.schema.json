@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.injoffice.dev/docx/native/v1.json",
+  "title": "InjOffice native DOCX document v1",
+  "$ref": "#/$defs/DocumentV1",
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "PartName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!.*%(?:0[0-9A-F]|1[0-9A-F]|23|25|2E|2F|3F|5C|7F))(?!.*\\.(?:/|$))(?!(?:\\.|\\.\\.)(?:/|$))(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+(?:/(?!(?:\\.|\\.\\.)(?:/|$))(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+)*$"
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SourcePackageV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_sha256", "main_part"],
+      "properties": {
+        "package_sha256": { "$ref": "#/$defs/Sha256" },
+        "main_part": { "$ref": "#/$defs/PartName" }
+      }
+    },
+    "SourceAnchorV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["part_name", "path", "start_byte", "end_byte", "xml_sha256"],
+      "properties": {
+        "part_name": { "$ref": "#/$defs/PartName" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "start_byte": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "end_byte": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "xml_sha256": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "RefusalV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "preservation"],
+      "properties": {
+        "code": { "$ref": "#/$defs/Identifier" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "preservation": { "enum": ["preserve-verbatim", "refuse-mutation"] }
+      }
+    },
+    "EditPolicyV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allowed_operations"],
+      "properties": {
+        "mode": { "enum": ["read-write", "read-only"] },
+        "allowed_operations": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "enum": ["text.replace", "properties.patch", "block.insert_after", "block.delete", "drawing.replace"] }
+        },
+        "refusal": { "$ref": "#/$defs/RefusalV1" }
+      }
+    },
+    "CapabilityV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "level"],
+      "properties": {
+        "name": { "$ref": "#/$defs/Identifier" },
+        "level": { "enum": ["read-write", "read-only", "passthrough", "unsupported"] },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "PassthroughPartV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["part_name", "content_type", "byte_length", "sha256", "policy"],
+      "properties": {
+        "part_name": { "$ref": "#/$defs/PartName" },
+        "content_type": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "byte_length": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "sha256": { "$ref": "#/$defs/Sha256" },
+        "policy": { "const": "preserve-verbatim" }
+      }
+    },
+    "RunPropertiesV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "character_style_id": { "$ref": "#/$defs/Identifier" },
+        "font_family": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "font_size_half_points": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "underline": { "enum": ["none", "single", "double", "words"] },
+        "color": { "type": "string", "pattern": "^(?:auto|[0-9A-F]{6})$" },
+        "highlight": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "language": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "rtl": { "type": "boolean" },
+        "hidden": { "type": "boolean" }
+      }
+    },
+    "DrawingV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "placement", "width_emu", "height_emu", "edit_policy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "relationship_id": { "$ref": "#/$defs/Identifier" },
+        "media_part": { "$ref": "#/$defs/PartName" },
+        "content_type": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "alt_text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "placement": { "enum": ["inline", "floating"] },
+        "width_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "height_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "x_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "y_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "horizontal_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "vertical_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "wrap": { "enum": ["none", "square", "tight", "through", "top-and-bottom"] },
+        "edit_policy": { "$ref": "#/$defs/EditPolicyV1" }
+      }
+    },
+    "ReferenceV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target_id"],
+      "properties": {
+        "kind": { "enum": ["footnote", "endnote", "comment", "comment-range-start", "comment-range-end"] },
+        "target_id": { "$ref": "#/$defs/Identifier" },
+        "role": { "enum": ["anchor", "label"] }
+      }
+    },
+    "RunV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "anchor"],
+      "properties": {
+        "kind": { "enum": ["text", "control", "reference", "drawing"] },
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "properties": { "$ref": "#/$defs/RunPropertiesV1" },
+        "text": { "type": "string", "maxLength": 1048576 },
+        "control": { "enum": ["tab", "line-break", "page-break", "column-break", "soft-hyphen"] },
+        "reference": { "$ref": "#/$defs/ReferenceV1" },
+        "drawing": { "$ref": "#/$defs/DrawingV1" }
+      },
+      "oneOf": [
+        { "properties": { "kind": { "const": "text" } }, "required": ["text"], "not": { "anyOf": [{ "required": ["control"] }, { "required": ["reference"] }, { "required": ["drawing"] }] } },
+        { "properties": { "kind": { "const": "control" } }, "required": ["control"], "not": { "anyOf": [{ "required": ["text"] }, { "required": ["reference"] }, { "required": ["drawing"] }] } },
+        { "properties": { "kind": { "const": "reference" } }, "required": ["reference"], "not": { "anyOf": [{ "required": ["text"] }, { "required": ["control"] }, { "required": ["drawing"] }] } },
+        { "properties": { "kind": { "const": "drawing" } }, "required": ["drawing"], "not": { "anyOf": [{ "required": ["text"] }, { "required": ["control"] }, { "required": ["reference"] }] } }
+      ]
+    },
+    "NumberingReferenceV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_id", "level"],
+      "properties": {
+        "num_id": { "$ref": "#/$defs/Identifier" },
+        "level": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "abstract_num_id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "ParagraphPropertiesV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paragraph_style_id": { "$ref": "#/$defs/Identifier" },
+        "numbering": { "$ref": "#/$defs/NumberingReferenceV1" },
+        "alignment": { "enum": ["left", "center", "right", "both", "distribute"] },
+        "keep_next": { "type": "boolean" },
+        "keep_lines": { "type": "boolean" },
+        "page_break_before": { "type": "boolean" },
+        "widow_control": { "type": "boolean" }
+      }
+    },
+    "ParagraphV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "edit_policy", "properties", "runs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "edit_policy": { "$ref": "#/$defs/EditPolicyV1" },
+        "properties": { "$ref": "#/$defs/ParagraphPropertiesV1" },
+        "runs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/RunV1" } }
+      }
+    },
+    "TableBorderV1": {
+      "type": "object", "additionalProperties": false,
+      "required": ["style", "size_eighth_points"],
+      "properties": {
+        "style": { "enum": ["none", "single"] },
+        "size_eighth_points": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "color_rgb": { "type": "string", "pattern": "^[0-9A-F]{6}$" }
+      }
+    },
+    "TableBordersV1": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "top": { "$ref": "#/$defs/TableBorderV1" }, "right": { "$ref": "#/$defs/TableBorderV1" },
+        "bottom": { "$ref": "#/$defs/TableBorderV1" }, "left": { "$ref": "#/$defs/TableBorderV1" },
+        "inside_horizontal": { "$ref": "#/$defs/TableBorderV1" }, "inside_vertical": { "$ref": "#/$defs/TableBorderV1" }
+      }
+    },
+    "TableCellMarginsV1": {
+      "type": "object", "additionalProperties": false,
+      "required": ["top_twips", "right_twips", "bottom_twips", "left_twips"],
+      "properties": {
+        "top_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "right_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "bottom_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "left_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 }
+      }
+    },
+    "TableCellV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "grid_span", "vertical_merge", "paragraphs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "width_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "grid_span": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "vertical_merge": { "enum": ["none", "restart", "continue"] },
+        "borders": { "$ref": "#/$defs/TableBordersV1" },
+        "shading_rgb": { "type": "string", "pattern": "^[0-9A-F]{6}$" },
+        "paragraphs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/ParagraphV1" } }
+      }
+    },
+    "TableRowV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "repeat_header", "cells"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "height_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "height_rule": { "enum": ["atLeast", "exact"] },
+        "repeat_header": { "type": "boolean" },
+        "cant_split": { "type": "boolean" },
+        "cells": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/TableCellV1" } }
+      }
+    },
+    "TableV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "edit_policy", "rows"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "edit_policy": { "$ref": "#/$defs/EditPolicyV1" },
+        "table_style_id": { "$ref": "#/$defs/Identifier" },
+        "width_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
+        "layout": { "const": "fixed" },
+        "alignment": { "const": "left" },
+        "indent_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "grid_widths_twips": { "type": "array", "maxItems": 10000, "items": { "type": "integer", "minimum": 1, "maximum": 180143985094819 } },
+        "cell_margins": { "$ref": "#/$defs/TableCellMarginsV1" },
+        "borders": { "$ref": "#/$defs/TableBordersV1" },
+        "rows": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/TableRowV1" } }
+      }
+    },
+    "BlockV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["paragraph", "table"] },
+        "id": { "$ref": "#/$defs/Identifier" },
+        "paragraph": { "$ref": "#/$defs/ParagraphV1" },
+        "table": { "$ref": "#/$defs/TableV1" }
+      },
+      "oneOf": [
+        { "properties": { "kind": { "const": "paragraph" } }, "required": ["paragraph"], "not": { "required": ["table"] } },
+        { "properties": { "kind": { "const": "table" } }, "required": ["table"], "not": { "required": ["paragraph"] } }
+      ]
+    },
+    "StoryV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "part_name", "anchor", "blocks"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "enum": ["body", "header", "footer", "footnote", "endnote", "comment"] },
+        "part_name": { "$ref": "#/$defs/PartName" },
+        "native_story_id": { "type": "string", "pattern": "^(?:-1|[A-Za-z0-9][A-Za-z0-9._:-]{0,255})$" },
+        "relationship_id": { "$ref": "#/$defs/Identifier" },
+        "note_role": { "enum": ["content", "separator", "continuation-separator"] },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "blocks": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/BlockV1" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["footnote", "endnote"] } }, "required": ["kind"] },
+          "then": {
+            "required": ["native_story_id", "relationship_id", "note_role"],
+            "oneOf": [
+              { "properties": { "note_role": { "const": "content" }, "native_story_id": { "pattern": "^[1-9][0-9]{0,18}$" } } },
+              { "properties": { "note_role": { "const": "separator" }, "native_story_id": { "const": "-1" } } },
+              { "properties": { "note_role": { "const": "continuation-separator" }, "native_story_id": { "const": "0" } } }
+            ]
+          },
+          "else": {
+            "properties": { "native_story_id": { "$ref": "#/$defs/Identifier" } },
+            "not": { "anyOf": [{ "required": ["relationship_id"] }, { "required": ["note_role"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "comment" } }, "required": ["kind"] },
+          "then": { "required": ["native_story_id"] }
+        }
+      ]
+    },
+    "HeaderFooterReferenceV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "story_id", "relationship_id"],
+      "properties": {
+        "kind": { "enum": ["default", "first", "even"] },
+        "story_id": { "$ref": "#/$defs/Identifier" },
+        "relationship_id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "PageMarginsV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top_twips", "right_twips", "bottom_twips", "left_twips", "header_twips", "footer_twips", "gutter_twips"],
+      "properties": {
+        "top_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "right_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "bottom_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "left_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "header_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "footer_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "gutter_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 }
+      }
+    },
+    "ColumnV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ordinal"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "ordinal": { "type": "integer", "minimum": 0, "maximum": 44 },
+        "width_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
+        "space_after_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 }
+      }
+    },
+    "PageGeometryV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width_twips", "height_twips", "orientation", "margins", "columns", "column_spacing_twips", "column_layout", "column_definitions"],
+      "properties": {
+        "width_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
+        "height_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
+        "orientation": { "enum": ["portrait", "landscape"] },
+        "margins": { "$ref": "#/$defs/PageMarginsV1" },
+        "columns": { "type": "integer", "minimum": 1, "maximum": 45 },
+        "column_spacing_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
+        "column_layout": { "enum": ["equal-width", "explicit"] },
+        "column_definitions": { "type": "array", "minItems": 1, "maxItems": 45, "items": { "$ref": "#/$defs/ColumnV1" } }
+      }
+    },
+    "SectionV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "anchor", "starts_at_block_id", "break_type", "title_page", "page", "header_refs", "footer_refs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "starts_at_block_id": { "$ref": "#/$defs/Identifier" },
+        "break_type": { "enum": ["continuous", "next-page", "even-page", "odd-page", "next-column"] },
+        "title_page": { "type": "boolean" },
+        "page": { "$ref": "#/$defs/PageGeometryV1" },
+        "header_refs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/HeaderFooterReferenceV1" } },
+        "footer_refs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/HeaderFooterReferenceV1" } }
+      }
+    },
+    "CommentV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "native_comment_id", "author", "anchor", "body_story_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "native_comment_id": { "$ref": "#/$defs/Identifier" },
+        "author": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "initials": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "created_at": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "body_story_id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "UnsupportedCapabilityV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "capability", "scope_id", "preservation", "message"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "code": { "$ref": "#/$defs/Identifier" },
+        "capability": { "$ref": "#/$defs/Identifier" },
+        "scope_id": { "$ref": "#/$defs/Identifier" },
+        "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
+        "preservation": { "enum": ["preserve-verbatim", "refuse-mutation"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "DocumentV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "version", "document_id", "revision", "source", "body", "sections", "headers", "footers", "notes", "comment_stories", "comments", "capabilities", "passthrough_parts", "unsupported"],
+      "properties": {
+        "protocol": { "const": "injoffice.docx.native" },
+        "version": { "const": 1 },
+        "document_id": { "$ref": "#/$defs/Identifier" },
+        "revision": { "$ref": "#/$defs/Identifier" },
+        "source": { "$ref": "#/$defs/SourcePackageV1" },
+        "body": { "$ref": "#/$defs/StoryV1" },
+        "sections": { "type": "array", "minItems": 1, "maxItems": 10000, "items": { "$ref": "#/$defs/SectionV1" } },
+        "headers": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/StoryV1" } },
+        "footers": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/StoryV1" } },
+        "notes": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/StoryV1" } },
+        "comment_stories": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/StoryV1" } },
+        "comments": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/CommentV1" } },
+        "capabilities": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/CapabilityV1" } },
+        "passthrough_parts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/PassthroughPartV1" } },
+        "unsupported": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/UnsupportedCapabilityV1" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "pptx-malformed-dialect-mix",
+  "format": "pptx",
+  "dialect": "strict",
+  "outcome": "refused",
+  "refusal": {
+    "class": "mixed-ooxml-dialect",
+    "contains": "officeDocument relationship dialect does not match presentation root"
+  }
+}

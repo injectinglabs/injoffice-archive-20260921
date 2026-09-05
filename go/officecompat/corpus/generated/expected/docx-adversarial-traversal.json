@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-adversarial-traversal",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "invalid-opc-path",
+    "contains": "unsafe percent-encoded"
+  }
+}

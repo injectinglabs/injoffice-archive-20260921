@@ -1,0 +1,40 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-chart-mismatch",
+  "origin": "parsed",
+  "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-1",
+    "provenance": "parsed",
+    "elements": [{
+      "kind": "chart",
+      "id": "chart-1",
+      "provenance": "parsed",
+      "transform": { "x": 0, "y": 0, "cx": 100, "cy": 100 },
+      "chart": {
+        "chartPart": "ppt/charts/chart1.xml",
+        "relationshipId": "rId5",
+        "opaqueRef": {
+          "token": "chart-graph-1",
+          "ownerPart": "ppt/charts/chart2.xml",
+          "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "disposition": "preserve"
+        }
+      },
+      "source": {
+        "partName": "ppt/slides/slide1.xml",
+        "objectId": "cNvPr-2",
+        "relationshipId": "rId4",
+        "fingerprintSha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "passthrough": [],
+      "compatibility": { "status": "preserveOnly", "diagnostics": [{ "severity": "warning", "code": "chart.opaque", "message": "Opaque chart." }] }
+    }],
+    "source": { "partName": "ppt/slides/slide1.xml", "objectId": "slide-1", "fingerprintSha256": "3333333333333333333333333333333333333333333333333333333333333333" },
+    "passthrough": [],
+    "compatibility": { "status": "preserveOnly", "diagnostics": [{ "severity": "warning", "code": "slide.opaque", "message": "Contains an opaque chart." }] }
+  }],
+  "compatibility": { "status": "preserveOnly", "diagnostics": [{ "severity": "warning", "code": "deck.opaque", "message": "Contains an opaque chart." }] }
+}

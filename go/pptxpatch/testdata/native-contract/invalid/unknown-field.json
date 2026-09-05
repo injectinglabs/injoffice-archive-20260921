@@ -1,0 +1,10 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-invalid-unknown",
+  "origin": "authored",
+  "size": { "cx": 1, "cy": 1 },
+  "assets": [],
+  "slides": [],
+  "compatibility": { "status": "editable", "diagnostics": [] },
+  "legacyWireDeck": true
+}

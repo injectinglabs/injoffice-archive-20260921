@@ -1,0 +1,36 @@
+{
+  "charts": [
+    {
+      "part": "xl/charts/chart1.xml",
+      "identity": {
+        "part": "xl/charts/chart1.xml",
+        "drawingPart": "xl/drawings/drawing1.xml",
+        "objectId": 1
+      },
+      "type": "column",
+      "title": "Budget and spend by workstream",
+      "series": [
+        {
+          "name": "Budget",
+          "nameRef": "'Launch Readiness'!$D$1",
+          "categoriesRef": "'Launch Readiness'!$A$2:$A$7",
+          "valuesRef": "'Launch Readiness'!$D$2:$D$7"
+        },
+        {
+          "name": "Spend",
+          "nameRef": "'Launch Readiness'!$E$1",
+          "categoriesRef": "'Launch Readiness'!$A$2:$A$7",
+          "valuesRef": "'Launch Readiness'!$E$2:$E$7"
+        }
+      ]
+    }
+  ],
+  "anchors": {
+    "xl/charts/chart1.xml": {
+      "FromCol": 7,
+      "FromRow": 1,
+      "ToCol": 14,
+      "ToRow": 18
+    }
+  }
+}

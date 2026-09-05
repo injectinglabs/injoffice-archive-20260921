@@ -1,0 +1,25 @@
+{
+  "charts": [
+    {
+      "part": "xl/charts/chart1.xml",
+      "type": "column",
+      "title": "Revenue by Quarter",
+      "series": [
+        {
+          "name": "Revenue",
+          "nameRef": "Data!$B$1",
+          "categoriesRef": "Data!$A$2:$A$5",
+          "valuesRef": "Data!$B$2:$B$5"
+        }
+      ]
+    }
+  ],
+  "anchors": {
+    "xl/charts/chart1.xml": {
+      "FromCol": 4,
+      "FromRow": 1,
+      "ToCol": 10,
+      "ToRow": 16
+    }
+  }
+}

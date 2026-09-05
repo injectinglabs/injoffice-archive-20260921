@@ -1,0 +1,9 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-authored-1",
+  "origin": "authored",
+  "size": { "cx": 12192000, "cy": 6858000 },
+  "assets": [],
+  "slides": [],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

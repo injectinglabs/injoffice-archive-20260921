@@ -1,0 +1,8 @@
+{
+  "contractVersion": "pptx-native/v1", "documentId": "deck-encoded-backslash", "origin": "parsed", "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 }, "assets": [],
+  "slides": [{ "id": "slide-1", "provenance": "parsed", "elements": [],
+    "source": { "partName": "ppt/slides%5Cevil.xml", "objectId": "slide-1", "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+    "passthrough": [], "compatibility": { "status": "editable", "diagnostics": [] } }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

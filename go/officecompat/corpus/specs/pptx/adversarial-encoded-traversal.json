@@ -1,0 +1,52 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "pptx-adversarial-encoded-traversal",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen declarative OOXML",
+    "source": "hand-authored adversarial OPC relationship target",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "adversarial-opc",
+    "encoded-traversal",
+    "explicit-refusal",
+    "transitional"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/relocated/deck.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/><Override PartName=\"/relocated/slides/slide-a.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdRoot\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"relocated/deck.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/deck.xml",
+      "text": "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:sldIdLst><p:sldId id=\"256\" r:id=\"rId7\"/></p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\"/></p:presentation>"
+    },
+    {
+      "name": "relocated/_rels/deck.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId7\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/%2E%2E/slide-a.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/slides/slide-a.xml",
+      "text": "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree/></p:cSld></p:sld>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "pptx-adversarial-encoded-traversal",
+    "format": "pptx",
+    "dialect": "transitional",
+    "outcome": "refused",
+    "refusal": {
+      "class": "invalid-opc-target",
+      "contains": "encoded traversal or separator"
+    }
+  }
+}

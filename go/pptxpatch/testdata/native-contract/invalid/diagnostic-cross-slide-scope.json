@@ -1,0 +1,23 @@
+{
+  "contractVersion": "pptx-native/v1", "documentId": "deck-cross-scope", "origin": "parsed", "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 }, "assets": [],
+  "slides": [{
+    "id": "slide-1", "provenance": "parsed",
+    "elements": [{
+      "kind": "connector", "id": "element-1", "provenance": "parsed",
+      "transform": { "x": 0, "y": 0, "cx": 10, "cy": 10 },
+      "source": { "partName": "ppt/slides/slide1.xml", "objectId": "cNvPr-2", "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+      "passthrough": [], "compatibility": { "status": "editable", "diagnostics": [] }
+    }],
+    "source": { "partName": "ppt/slides/slide1.xml", "objectId": "slide-1", "fingerprintSha256": "2222222222222222222222222222222222222222222222222222222222222222" },
+    "passthrough": [], "compatibility": { "status": "editable", "diagnostics": [] }
+  }, {
+    "id": "slide-2", "provenance": "parsed", "elements": [],
+    "source": { "partName": "ppt/slides/slide2.xml", "objectId": "slide-2", "fingerprintSha256": "3333333333333333333333333333333333333333333333333333333333333333" },
+    "passthrough": [], "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": {
+    "status": "preserveOnly",
+    "diagnostics": [{ "severity": "warning", "code": "scope.cross-slide", "message": "Bad combined scope.", "scope": { "slideId": "slide-2", "elementId": "element-1" } }]
+  }
+}

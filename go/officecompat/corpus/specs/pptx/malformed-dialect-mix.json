@@ -1,0 +1,44 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "pptx-malformed-dialect-mix",
+  "format": "pptx",
+  "dialect": "strict",
+  "outcome": "refused",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen declarative OOXML",
+    "source": "hand-authored mixed Strict and Transitional OOXML relationship types",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "dialect-mix",
+    "explicit-refusal",
+    "malformed-package",
+    "strict"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/relocated/deck.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdRoot\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"relocated/deck.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/deck.xml",
+      "text": "<p:presentation xmlns:p=\"http://purl.oclc.org/ooxml/presentationml/main\" xmlns:r=\"http://purl.oclc.org/ooxml/officeDocument/relationships\"><p:sldIdLst/><p:sldSz cx=\"12192000\" cy=\"6858000\"/></p:presentation>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "pptx-malformed-dialect-mix",
+    "format": "pptx",
+    "dialect": "strict",
+    "outcome": "refused",
+    "refusal": {
+      "class": "mixed-ooxml-dialect",
+      "contains": "officeDocument relationship dialect does not match presentation root"
+    }
+  }
+}

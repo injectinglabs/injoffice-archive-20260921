@@ -1,0 +1,708 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-related-stories",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "native": {
+    "body": {
+      "anchor": {
+        "end_byte": 569,
+        "part_name": "word/document.xml",
+        "path": "/w:document[1]/w:body[1]",
+        "start_byte": 199,
+        "xml_sha256": "sha256:cb4a12743b47eb60aa16d2dda2a7677cff3148ddfaf4d67c55b88dddb82f5c50"
+      },
+      "blocks": [
+        {
+          "id": "paragraph:a3f01c186401b8c209d2452f",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 435,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[1]",
+              "start_byte": 207,
+              "xml_sha256": "sha256:a516fbc3e5800f9302807df097f76d051fe90894e5d4390b26fcd868896f5776"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:a3f01c186401b8c209d2452f",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 243,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:commentRangeStart[1]",
+                  "start_byte": 212,
+                  "xml_sha256": "sha256:8213bcb49c1f3332c915ab0c174734ab2d6a9a3e88e8ff6e0db5667f25fbfb39"
+                },
+                "id": "run:ca66317344f03316f0d60dc5",
+                "kind": "reference",
+                "reference": {
+                  "kind": "comment-range-start",
+                  "target_id": "comment:91f156c587799a118bdbbd3c"
+                }
+              },
+              {
+                "anchor": {
+                  "end_byte": 270,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:t[1]",
+                  "start_byte": 248,
+                  "xml_sha256": "sha256:72253a413446b39e84bc3883c1d1cba5134cf12ca8054c271334d4d495210366"
+                },
+                "id": "run:3e67489e4da2574806945109",
+                "kind": "text",
+                "text": "Body anchor"
+              },
+              {
+                "anchor": {
+                  "end_byte": 312,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:footnoteReference[1]",
+                  "start_byte": 281,
+                  "xml_sha256": "sha256:6edc7900ec127b83cd6ece9f6bfcce7ccaf8f68a43c910c6ca9bc7c7df132c6e"
+                },
+                "id": "run:36caf786c956aa13a6c309a5",
+                "kind": "reference",
+                "reference": {
+                  "kind": "footnote",
+                  "target_id": "story:ce58249b6ef761f90b2080b0"
+                }
+              },
+              {
+                "anchor": {
+                  "end_byte": 353,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:endnoteReference[1]",
+                  "start_byte": 323,
+                  "xml_sha256": "sha256:5f3cd098c9638df4aa16d964301276a6c76d1f7360dc7b9a18e1f2ec90358f16"
+                },
+                "id": "run:dc6a85afa1c67974f92528bd",
+                "kind": "reference",
+                "reference": {
+                  "kind": "endnote",
+                  "target_id": "story:c67755e92ee269ee42b7f34b"
+                }
+              },
+              {
+                "anchor": {
+                  "end_byte": 394,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[4]/w:commentReference[1]",
+                  "start_byte": 364,
+                  "xml_sha256": "sha256:ea44b9516c3ed6d2e3aeece164a0d8baf56a81927d8670d6cf73c9197e5b24b8"
+                },
+                "id": "run:1ce8db8e983624e38544f231",
+                "kind": "reference",
+                "reference": {
+                  "kind": "comment",
+                  "target_id": "comment:91f156c587799a118bdbbd3c"
+                }
+              },
+              {
+                "anchor": {
+                  "end_byte": 429,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:commentRangeEnd[1]",
+                  "start_byte": 400,
+                  "xml_sha256": "sha256:529945542bef413deb77ce7af053a78db5b1f4cee95e4fb5f56c674311ecb1b6"
+                },
+                "id": "run:cb30f1d4a90c19adf3404531",
+                "kind": "reference",
+                "reference": {
+                  "kind": "comment-range-end",
+                  "target_id": "comment:91f156c587799a118bdbbd3c"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "id": "story:6defa30f517fa95a38c3052c",
+      "kind": "body",
+      "part_name": "word/document.xml"
+    },
+    "capabilities": [
+      {
+        "detail": "HTML-free, part-qualified WordprocessingML extraction",
+        "level": "read-only",
+        "name": "native-ooxml-parse"
+      },
+      {
+        "detail": "Exact XML byte ranges and fingerprints guard atomic native text mutations",
+        "level": "read-write",
+        "name": "surgical-byte-anchors"
+      },
+      {
+        "detail": "Guarded paragraph and text-run replacement with post-write native validation",
+        "level": "read-write",
+        "name": "native-text-mutation"
+      },
+      {
+        "detail": "Unmodeled OOXML is preserved verbatim and must not be flattened",
+        "level": "unsupported",
+        "name": "full-document-regeneration"
+      }
+    ],
+    "comment_stories": [
+      {
+        "anchor": {
+          "end_byte": 221,
+          "part_name": "word/notes/comments.xml",
+          "path": "/w:comments[1]/w:comment[1]",
+          "start_byte": 83,
+          "xml_sha256": "sha256:b47f22c1f879560e86e84c0f2296879712214e309525c352ce51cfec8f480469"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:4eb9c365789ed64735ab557e",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 209,
+                "part_name": "word/notes/comments.xml",
+                "path": "/w:comments[1]/w:comment[1]/w:p[1]",
+                "start_byte": 164,
+                "xml_sha256": "sha256:0497844a2061c0d3e44b5261db40271d58bb8606a0c4ec00b3e7c948cfdab807"
+              },
+              "edit_policy": {
+                "allowed_operations": [
+                  "text.replace"
+                ],
+                "mode": "read-write"
+              },
+              "id": "paragraph:4eb9c365789ed64735ab557e",
+              "properties": {},
+              "runs": [
+                {
+                  "anchor": {
+                    "end_byte": 197,
+                    "part_name": "word/notes/comments.xml",
+                    "path": "/w:comments[1]/w:comment[1]/w:p[1]/w:r[1]/w:t[1]",
+                    "start_byte": 174,
+                    "xml_sha256": "sha256:bf206d99b7b1faf0ea11bb2f6c3b9c3cdc587561793d551b956d883b09e7ad1f"
+                  },
+                  "id": "run:4c1a0d93af541f07582e9f70",
+                  "kind": "text",
+                  "text": "Comment body"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "story:329c4c47913085fd83391533",
+        "kind": "comment",
+        "native_story_id": "3",
+        "part_name": "word/notes/comments.xml"
+      }
+    ],
+    "comments": [
+      {
+        "anchor": {
+          "end_byte": 221,
+          "part_name": "word/notes/comments.xml",
+          "path": "/w:comments[1]/w:comment[1]",
+          "start_byte": 83,
+          "xml_sha256": "sha256:b47f22c1f879560e86e84c0f2296879712214e309525c352ce51cfec8f480469"
+        },
+        "author": "Ada",
+        "body_story_id": "story:329c4c47913085fd83391533",
+        "created_at": "2026-08-27T12:00:00Z",
+        "id": "comment:91f156c587799a118bdbbd3c",
+        "initials": "AL",
+        "native_comment_id": "3"
+      }
+    ],
+    "document_id": "document:f3f0a22321f1a18165c33d28",
+    "footers": [
+      {
+        "anchor": {
+          "end_byte": 131,
+          "part_name": "word/stories/footer.xml",
+          "path": "/w:ftr[1]",
+          "start_byte": 0,
+          "xml_sha256": "sha256:d60d87fc5880a289fc3fa161c15c99d5ca00dce8393c23690a8383b1f0a5b0da"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:2094719dba9f1fed85e061d2",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 123,
+                "part_name": "word/stories/footer.xml",
+                "path": "/w:ftr[1]/w:p[1]",
+                "start_byte": 78,
+                "xml_sha256": "sha256:c9a194f5eca2efc5d71f805ccea914c708a5683f62ab5c4375323eb060334e60"
+              },
+              "edit_policy": {
+                "allowed_operations": [
+                  "text.replace"
+                ],
+                "mode": "read-write"
+              },
+              "id": "paragraph:2094719dba9f1fed85e061d2",
+              "properties": {},
+              "runs": [
+                {
+                  "anchor": {
+                    "end_byte": 111,
+                    "part_name": "word/stories/footer.xml",
+                    "path": "/w:ftr[1]/w:p[1]/w:r[1]/w:t[1]",
+                    "start_byte": 88,
+                    "xml_sha256": "sha256:52112900f83ab62d4d11b0d6d724bbc6427a1f19f54cfc3df12382706505feb1"
+                  },
+                  "id": "run:36128960684fe97994e391cb",
+                  "kind": "text",
+                  "text": "Footer story"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "story:1b30e56593152d2a81161035",
+        "kind": "footer",
+        "part_name": "word/stories/footer.xml"
+      }
+    ],
+    "headers": [
+      {
+        "anchor": {
+          "end_byte": 131,
+          "part_name": "word/stories/header.xml",
+          "path": "/w:hdr[1]",
+          "start_byte": 0,
+          "xml_sha256": "sha256:09c7c2ef717b161df1fff77f38ff9740a7450afdec1bc0de10227d627e2c65da"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:a73b5c0b2488502f6f9c11a3",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 123,
+                "part_name": "word/stories/header.xml",
+                "path": "/w:hdr[1]/w:p[1]",
+                "start_byte": 78,
+                "xml_sha256": "sha256:a526207424e33d2eafa4cfdf84992834d27e761d1ba0c14d5076e4cd79dc1956"
+              },
+              "edit_policy": {
+                "allowed_operations": [
+                  "text.replace"
+                ],
+                "mode": "read-write"
+              },
+              "id": "paragraph:a73b5c0b2488502f6f9c11a3",
+              "properties": {},
+              "runs": [
+                {
+                  "anchor": {
+                    "end_byte": 111,
+                    "part_name": "word/stories/header.xml",
+                    "path": "/w:hdr[1]/w:p[1]/w:r[1]/w:t[1]",
+                    "start_byte": 88,
+                    "xml_sha256": "sha256:42b59b7a983369f497f5c3afa19fd88d33ffc69bbf407bdb643bb62b87537efc"
+                  },
+                  "id": "run:80362a128d64d5a157fb9e5f",
+                  "kind": "text",
+                  "text": "Header story"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "story:f7525d33969196594825c2ac",
+        "kind": "header",
+        "part_name": "word/stories/header.xml"
+      }
+    ],
+    "notes": [
+      {
+        "anchor": {
+          "end_byte": 174,
+          "part_name": "word/notes/footnotes.xml",
+          "path": "/w:footnotes[1]/w:footnote[1]",
+          "start_byte": 84,
+          "xml_sha256": "sha256:5dfd50e422f157deaca0a8e6305911909e14814c377adb91ae6095c7478069f0"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:543ef9ea055d05c7ce16ec83",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 161,
+                "part_name": "word/notes/footnotes.xml",
+                "path": "/w:footnotes[1]/w:footnote[1]/w:p[1]",
+                "start_byte": 125,
+                "xml_sha256": "sha256:1b9a5739cf1fdc3123259293e43a97230beee3d6874fc3a167d037facd34fdb1"
+              },
+              "edit_policy": {
+                "allowed_operations": [],
+                "mode": "read-only",
+                "refusal": {
+                  "code": "NO_MUTABLE_TEXT",
+                  "message": "Paragraph does not contain a safely addressable native text node",
+                  "preservation": "refuse-mutation"
+                }
+              },
+              "id": "paragraph:543ef9ea055d05c7ce16ec83",
+              "properties": {},
+              "runs": []
+            }
+          }
+        ],
+        "id": "story:a6e3e90485bce15c98a036dc",
+        "kind": "footnote",
+        "native_story_id": "-1",
+        "note_role": "separator",
+        "part_name": "word/notes/footnotes.xml",
+        "relationship_id": "rFootnotes"
+      },
+      {
+        "anchor": {
+          "end_byte": 287,
+          "part_name": "word/notes/footnotes.xml",
+          "path": "/w:footnotes[1]/w:footnote[2]",
+          "start_byte": 174,
+          "xml_sha256": "sha256:aad0b5fb59a3ce6129c6fe4acf7c6019f2dfb0577e456ca210e7df3bcdeb0d6e"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:8f42fd61b42eff95dfd87a18",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 274,
+                "part_name": "word/notes/footnotes.xml",
+                "path": "/w:footnotes[1]/w:footnote[2]/w:p[1]",
+                "start_byte": 226,
+                "xml_sha256": "sha256:108cddf9138e5b433f4968c2bc41a58a78f41f7685707f97d2e2486e201cbb95"
+              },
+              "edit_policy": {
+                "allowed_operations": [],
+                "mode": "read-only",
+                "refusal": {
+                  "code": "NO_MUTABLE_TEXT",
+                  "message": "Paragraph does not contain a safely addressable native text node",
+                  "preservation": "refuse-mutation"
+                }
+              },
+              "id": "paragraph:8f42fd61b42eff95dfd87a18",
+              "properties": {},
+              "runs": []
+            }
+          }
+        ],
+        "id": "story:39e741bbef4de7184a5b16fb",
+        "kind": "footnote",
+        "native_story_id": "0",
+        "note_role": "continuation-separator",
+        "part_name": "word/notes/footnotes.xml",
+        "relationship_id": "rFootnotes"
+      },
+      {
+        "anchor": {
+          "end_byte": 367,
+          "part_name": "word/notes/footnotes.xml",
+          "path": "/w:footnotes[1]/w:footnote[3]",
+          "start_byte": 287,
+          "xml_sha256": "sha256:5b29152eca052888d4df915d371c9a33ec797ef91fbebd4df898b3a77dae81cc"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:fb17c69aa27a9b6f87b842c0",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 354,
+                "part_name": "word/notes/footnotes.xml",
+                "path": "/w:footnotes[1]/w:footnote[3]/w:p[1]",
+                "start_byte": 308,
+                "xml_sha256": "sha256:097b18a033aa498a7b23be55f9ea20c162c252a129260a3bfcc6c56a68470746"
+              },
+              "edit_policy": {
+                "allowed_operations": [
+                  "text.replace"
+                ],
+                "mode": "read-write"
+              },
+              "id": "paragraph:fb17c69aa27a9b6f87b842c0",
+              "properties": {},
+              "runs": [
+                {
+                  "anchor": {
+                    "end_byte": 342,
+                    "part_name": "word/notes/footnotes.xml",
+                    "path": "/w:footnotes[1]/w:footnote[3]/w:p[1]/w:r[1]/w:t[1]",
+                    "start_byte": 318,
+                    "xml_sha256": "sha256:e7301910f9cccadfab885d14c2f90f56d8b30eb6617d99a2f3901a969d7ae7fb"
+                  },
+                  "id": "run:fca3dff8cbb3a85e37d7a7ac",
+                  "kind": "text",
+                  "text": "Footnote body"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "story:ce58249b6ef761f90b2080b0",
+        "kind": "footnote",
+        "native_story_id": "1",
+        "note_role": "content",
+        "part_name": "word/notes/footnotes.xml",
+        "relationship_id": "rFootnotes"
+      },
+      {
+        "anchor": {
+          "end_byte": 171,
+          "part_name": "word/notes/endnotes.xml",
+          "path": "/w:endnotes[1]/w:endnote[1]",
+          "start_byte": 83,
+          "xml_sha256": "sha256:8c5006d50957377b3fa5a5025e9683b844719a0640812c4c126e883d60bbdafc"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:d0e1f624827fc40500cc5b6c",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 159,
+                "part_name": "word/notes/endnotes.xml",
+                "path": "/w:endnotes[1]/w:endnote[1]/w:p[1]",
+                "start_byte": 123,
+                "xml_sha256": "sha256:1b9a5739cf1fdc3123259293e43a97230beee3d6874fc3a167d037facd34fdb1"
+              },
+              "edit_policy": {
+                "allowed_operations": [],
+                "mode": "read-only",
+                "refusal": {
+                  "code": "NO_MUTABLE_TEXT",
+                  "message": "Paragraph does not contain a safely addressable native text node",
+                  "preservation": "refuse-mutation"
+                }
+              },
+              "id": "paragraph:d0e1f624827fc40500cc5b6c",
+              "properties": {},
+              "runs": []
+            }
+          }
+        ],
+        "id": "story:d12be07959de303531f0806a",
+        "kind": "endnote",
+        "native_story_id": "-1",
+        "note_role": "separator",
+        "part_name": "word/notes/endnotes.xml",
+        "relationship_id": "rEndnotes"
+      },
+      {
+        "anchor": {
+          "end_byte": 282,
+          "part_name": "word/notes/endnotes.xml",
+          "path": "/w:endnotes[1]/w:endnote[2]",
+          "start_byte": 171,
+          "xml_sha256": "sha256:1ad1c45bf6b75f16004f524b5536eea27db520e7cac946c0b2f2b169a514c328"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:afd094ec24c7f83fbdb40dfe",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 270,
+                "part_name": "word/notes/endnotes.xml",
+                "path": "/w:endnotes[1]/w:endnote[2]/w:p[1]",
+                "start_byte": 222,
+                "xml_sha256": "sha256:108cddf9138e5b433f4968c2bc41a58a78f41f7685707f97d2e2486e201cbb95"
+              },
+              "edit_policy": {
+                "allowed_operations": [],
+                "mode": "read-only",
+                "refusal": {
+                  "code": "NO_MUTABLE_TEXT",
+                  "message": "Paragraph does not contain a safely addressable native text node",
+                  "preservation": "refuse-mutation"
+                }
+              },
+              "id": "paragraph:afd094ec24c7f83fbdb40dfe",
+              "properties": {},
+              "runs": []
+            }
+          }
+        ],
+        "id": "story:66bd96609659d0f68a270f88",
+        "kind": "endnote",
+        "native_story_id": "0",
+        "note_role": "continuation-separator",
+        "part_name": "word/notes/endnotes.xml",
+        "relationship_id": "rEndnotes"
+      },
+      {
+        "anchor": {
+          "end_byte": 359,
+          "part_name": "word/notes/endnotes.xml",
+          "path": "/w:endnotes[1]/w:endnote[3]",
+          "start_byte": 282,
+          "xml_sha256": "sha256:3681881bd5226a4b1c77925dc63779f0453dadab09ab4c140638d8ae541f8ba9"
+        },
+        "blocks": [
+          {
+            "id": "paragraph:42c7fdb69c7bf712ffc5790d",
+            "kind": "paragraph",
+            "paragraph": {
+              "anchor": {
+                "end_byte": 347,
+                "part_name": "word/notes/endnotes.xml",
+                "path": "/w:endnotes[1]/w:endnote[3]/w:p[1]",
+                "start_byte": 302,
+                "xml_sha256": "sha256:fc087b79c033350899ec73d99eda8e140e594ebd61c78cba334da7041e20ba8a"
+              },
+              "edit_policy": {
+                "allowed_operations": [
+                  "text.replace"
+                ],
+                "mode": "read-write"
+              },
+              "id": "paragraph:42c7fdb69c7bf712ffc5790d",
+              "properties": {},
+              "runs": [
+                {
+                  "anchor": {
+                    "end_byte": 335,
+                    "part_name": "word/notes/endnotes.xml",
+                    "path": "/w:endnotes[1]/w:endnote[3]/w:p[1]/w:r[1]/w:t[1]",
+                    "start_byte": 312,
+                    "xml_sha256": "sha256:72d813334cd7800ccd25962f5fdabe541a568adf7678979ae1c7821eedf706cd"
+                  },
+                  "id": "run:28ae00487b5dc02221ebacf4",
+                  "kind": "text",
+                  "text": "Endnote body"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "story:c67755e92ee269ee42b7f34b",
+        "kind": "endnote",
+        "native_story_id": "2",
+        "note_role": "content",
+        "part_name": "word/notes/endnotes.xml",
+        "relationship_id": "rEndnotes"
+      }
+    ],
+    "passthrough_parts": [
+      {
+        "byte_length": 244,
+        "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+        "part_name": "_rels/.rels",
+        "policy": "preserve-verbatim",
+        "sha256": "sha256:009eca9aef3772fb5c48a050743ef54d11a9d83059e1d28dcf1e6e2d157f612f"
+      },
+      {
+        "byte_length": 805,
+        "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+        "part_name": "word/_rels/document.xml.rels",
+        "policy": "preserve-verbatim",
+        "sha256": "sha256:02e33cb36f8f3a2a6fbe416fd80e506de1fb9fe96011bb2efcb4b72d6ff0e69b"
+      }
+    ],
+    "protocol": "injoffice.docx.native",
+    "revision": "rev:beaaf6c41f62f121ff18c969cd04db73",
+    "sections": [
+      {
+        "anchor": {
+          "end_byte": 560,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:sectPr[1]",
+          "start_byte": 435,
+          "xml_sha256": "sha256:d00f39944c52cc87058ddc9d16f46a8f017c48ff57ce31ab721bbe4973bae3bf"
+        },
+        "break_type": "next-page",
+        "footer_refs": [
+          {
+            "kind": "default",
+            "relationship_id": "rFooter",
+            "story_id": "story:1b30e56593152d2a81161035"
+          }
+        ],
+        "header_refs": [
+          {
+            "kind": "default",
+            "relationship_id": "rHeader",
+            "story_id": "story:f7525d33969196594825c2ac"
+          }
+        ],
+        "id": "section:02592db3a1be1e94b1dac711",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:02592db3a1be1e94b1dac711:column:0",
+              "ordinal": 0
+            }
+          ],
+          "column_layout": "equal-width",
+          "column_spacing_twips": 720,
+          "columns": 1,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:a3f01c186401b8c209d2452f",
+        "title_page": false
+      }
+    ],
+    "source": {
+      "main_part": "word/document.xml",
+      "package_sha256": "sha256:beaaf6c41f62f121ff18c969cd04db7380402062fb2afe9097e38fd16d9fc996"
+    },
+    "unsupported": [
+      {
+        "anchor": {
+          "end_byte": 560,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:sectPr[1]",
+          "start_byte": 435,
+          "xml_sha256": "sha256:d00f39944c52cc87058ddc9d16f46a8f017c48ff57ce31ab721bbe4973bae3bf"
+        },
+        "capability": "sections",
+        "code": "MISSING_PAGE_SIZE",
+        "id": "unsupported:e7b363ecd835852f7924fb7c",
+        "message": "A present section-properties element requires explicit page size for exact pagination geometry",
+        "preservation": "refuse-mutation",
+        "scope_id": "section:02592db3a1be1e94b1dac711"
+      },
+      {
+        "anchor": {
+          "end_byte": 560,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:sectPr[1]",
+          "start_byte": 435,
+          "xml_sha256": "sha256:d00f39944c52cc87058ddc9d16f46a8f017c48ff57ce31ab721bbe4973bae3bf"
+        },
+        "capability": "sections",
+        "code": "MISSING_PAGE_MARGINS",
+        "id": "unsupported:5ce72f0a5b262881ba929d78",
+        "message": "A present section-properties element requires explicit page margins for exact pagination geometry",
+        "preservation": "refuse-mutation",
+        "scope_id": "section:02592db3a1be1e94b1dac711"
+      }
+    ],
+    "version": 1
+  }
+}

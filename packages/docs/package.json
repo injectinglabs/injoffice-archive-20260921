@@ -1,0 +1,61 @@
+{
+  "name": "@injoffice/docs",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Docs track: pagination, header/footer tokens, and comment-anchor mapping — pure core plus a thin TipTap/ProseMirror shell.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./native-docx": {
+      "types": "./dist/nativeDocx.d.ts",
+      "import": "./dist/nativeDocx.js"
+    },
+    "./native-page-paint-compiler": {
+      "types": "./dist/nativePagePaintCompilerV1.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./native-docx-v1.schema.json": "./schema/native-docx-v1.schema.json"
+  },
+  "files": ["dist", "schema", "README.md"],
+  "injoffice": {
+    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts" },
+    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/APACHE-2.0.txt"]
+  },
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/docs"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "dependencies": {
+    "@injoffice/font-metrics": "0.1.0",
+    "@noble/hashes": "2.2.0"
+  },
+  "scripts": {
+    "prebuild": "npm run build -w @injoffice/font-metrics",
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^3.31.0",
+    "@tiptap/pm": "^3.31.0",
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "dejavu-fonts-ttf": "2.37.3",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

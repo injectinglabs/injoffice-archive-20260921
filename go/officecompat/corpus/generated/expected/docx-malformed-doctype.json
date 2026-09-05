@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-malformed-doctype",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "invalid-xml",
+    "contains": "directives/DOCTYPE are forbidden"
+  }
+}

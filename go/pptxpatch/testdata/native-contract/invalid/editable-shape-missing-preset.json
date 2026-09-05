@@ -1,0 +1,27 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-missing-shape-preset",
+  "origin": "authored",
+  "size": { "cx": 1000000, "cy": 1000000 },
+  "assets": [],
+  "slides": [
+    {
+      "id": "slide-missing-shape-preset",
+      "provenance": "authored",
+      "elements": [
+        {
+          "kind": "shape",
+          "id": "shape-missing-preset",
+          "provenance": "authored",
+          "transform": { "x": 0, "y": 0, "cx": 100000, "cy": 100000 },
+          "paragraphs": [],
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        }
+      ],
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }
+  ],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

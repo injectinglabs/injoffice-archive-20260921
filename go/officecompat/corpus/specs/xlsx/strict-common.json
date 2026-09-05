@@ -1,0 +1,48 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "xlsx-strict-common",
+  "format": "xlsx",
+  "dialect": "strict",
+  "outcome": "accepted",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen/v1",
+    "source": "Hand-authored minimal Strict SpreadsheetML compatibility fixture",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "actual-part-spelling",
+    "common-supported-cells",
+    "strict"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/book/%57ORKBOOK.XML\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/SHEETS/S1.XML\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rOffice\" Type=\"http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument\" Target=\"/BOOK/%57orkbook.xml#package\"/></Relationships>"
+    },
+    {
+      "name": "Book/Workbook.xml",
+      "text": "<workbook xmlns=\"http://purl.oclc.org/ooxml/spreadsheetml/main\" xmlns:r=\"http://purl.oclc.org/ooxml/officeDocument/relationships\"><sheets><sheet name=\"Strict_x0020_Data\" sheetId=\"7\" r:id=\"rSheet\"/></sheets></workbook>"
+    },
+    {
+      "name": "Book/_rels/Workbook.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rSheet\" Type=\"http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet\" Target=\"../SHEETS/S1.XML\"/></Relationships>"
+    },
+    {
+      "name": "Sheets/S1.xml",
+      "text": "<worksheet xmlns=\"http://purl.oclc.org/ooxml/spreadsheetml/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Strict_x0020_Value</t></is></c><c r=\"B1\"><v>1.25E+03</v></c></row></sheetData></worksheet>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "xlsx-strict-common",
+    "format": "xlsx",
+    "dialect": "strict",
+    "outcome": "accepted",
+    "native": {"protocol":"injoffice.xlsx.native","version":1,"document_id":"workbook:11656a5f19ad71d262c0e33a824d98e899635d20aa25a26720437f90e5108086","revision":"rev:9d718af236fec72b0f7c17a33864f78d00acc0906fa6f210ca527ad890efe429","source":{"package_sha256":"sha256:9d718af236fec72b0f7c17a33864f78d00acc0906fa6f210ca527ad890efe429","workbook_part":"Book/Workbook.xml","dialect":"strict","authority":"exact-package-bytes"},"sheets":[{"id":"7","name":"Strict Data","order":0,"state":"visible","part_name":"Sheets/S1.xml","rows":[],"columns":[],"cells":[{"row":0,"column":0,"ref":"A1","ooxml_type":"inlineStr","style_id":0,"value":{"kind":"string","storage":"inline","text":"Strict Value","rich":false},"editable":true},{"row":0,"column":1,"ref":"B1","style_id":0,"value":{"kind":"number","storage":"number","lexical":"1.25E+03","rich":false},"editable":true}],"merged_ranges":[],"editable":true}],"styles":[{"id":0,"effective":{"number_format":"General","bold":false,"italic":false,"fill":{"origin":"implicit-default"},"border":{"origin":"implicit-default"},"horizontal_alignment":"general","vertical_alignment":"bottom","wrap_text":false,"projection":"full","unsupported":[]},"raw_projection_sha256":"sha256:6051d1baebfdc63ff53849826c70d3b262d12aa559b85eb75862ca167e2f80b9"}],"capabilities":[{"name":"native-ooxml-parse","level":"read-only","detail":"HTML-free SpreadsheetML extraction with lexical values and formula caches"},{"name":"native-v1-mutations","level":"partial","detail":"Cells, formulas, row/column dimensions, and the bounded style.patch projection"},{"name":"unsupported-content","level":"preserve-exact","detail":"Unmodeled OOXML remains authoritative in the original package"}],"passthrough_parts":[],"unsupported":[]}
+  }
+}

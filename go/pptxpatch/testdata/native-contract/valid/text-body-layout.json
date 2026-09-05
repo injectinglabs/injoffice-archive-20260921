@@ -1,0 +1,34 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-text-body-v1",
+  "origin": "authored",
+  "size": { "cx": 12192000, "cy": 6858000 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-text-body-v1",
+    "provenance": "authored",
+    "elements": [{
+      "kind": "text",
+      "id": "text-body-v1",
+      "provenance": "authored",
+      "transform": { "x": 0, "y": 0, "cx": 1000000, "cy": 500000 },
+      "textBody": {
+        "leftInsetEmu": 91440,
+        "rightInsetEmu": 91440,
+        "topInsetEmu": 45720,
+        "bottomInsetEmu": 45720,
+        "wrap": "square",
+        "verticalAnchor": "center",
+        "autoFit": "none",
+        "horizontalOverflow": "overflow",
+        "verticalOverflow": "overflow"
+      },
+      "paragraphs": [{ "runs": [{ "text": "Native text body" }] }],
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

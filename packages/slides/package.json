@@ -1,0 +1,54 @@
+{
+  "name": "@injoffice/slides",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "DeckSpec authoring, deterministic wire compilation, and legacy React preview/editor surfaces.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./authoring": {
+      "types": "./dist/authoring.d.ts",
+      "import": "./dist/authoring.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/slides"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "entries": { "index": "src/index.ts", "authoring": "src/authoring.ts" }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "konva": "^9.3.0 || ^10.0.0",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "react-konva": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "canvas": "^3.2.3",
+    "konva": "^10.3.0",
+    "react-dom": "^19.2.4",
+    "react-konva": "^19.0.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

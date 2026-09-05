@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "xlsx-refused-compression-ratio",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "resource-limit",
+    "contains": "compression-ratio limit"
+  }
+}

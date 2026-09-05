@@ -1,0 +1,55 @@
+{
+  "name": "injoffice",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "InjOffice — web-native office-artifact engine for Injecting agents: charts, pivots, and fail-closed xlsx fidelity on top of Univer OSS.",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w apps/playground",
+    "docs": "npm run dev -w apps/playground",
+    "build": "npm run build --workspaces --if-present",
+    "postbuild": "node scripts/fix-declaration-specifiers.mjs",
+    "generate:xlsx-contract": "node scripts/generate-xlsx-native-contract.mjs",
+    "check:xlsx-contract": "node scripts/generate-xlsx-native-contract.mjs --check",
+    "generate:pptx-contract": "node scripts/generate-pptx-native-contract.mjs",
+    "check:pptx-contract": "node scripts/generate-pptx-native-contract.mjs --check",
+    "generate:unicode13": "node scripts/generate-unicode13-tables.mjs",
+    "check:unicode13": "node scripts/generate-unicode13-tables.mjs --check",
+    "check:native-office-production-e2e": "node scripts/verify-native-office-production-e2e.mjs",
+    "record:native-office-production-e2e": "node scripts/record-native-office-production-e2e.mjs --write-requests",
+    "test:native-office-production-e2e": "node --test scripts/verify-native-office-production-e2e.test.mjs",
+    "check:native-office-completion": "node scripts/validate-native-office-completion.mjs",
+    "test:native-office-completion": "node --test scripts/validate-native-office-completion.test.mjs",
+    "test:office-browser-smoke": "npm run build -w apps/playground -- --base=/injoffice-smoke/ && node scripts/smoke-playground-xlsx-wasm-browser.mjs",
+    "test:office-browser-smoke:built": "npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/ && node scripts/smoke-playground-xlsx-wasm-browser.mjs",
+    "test:wasm-tarball-browser": "node scripts/smoke-wasm-tarball-browser.mjs",
+    "test:chrome-cdp-startup": "node --test scripts/chrome-cdp-startup.test.mjs",
+    "check:packages": "node scripts/check-packages.mjs",
+    "check:office-architecture": "node scripts/check-office-architecture.mjs",
+    "check:office-provenance": "node scripts/check-office-provenance.mjs",
+    "check:dependency-integrity": "node scripts/check-dependency-integrity.mjs",
+    "generate:sbom": "node scripts/check-dependency-integrity.mjs --sbom",
+    "test:dependency-integrity": "node --test scripts/check-dependency-integrity.test.mjs",
+    "test:release-packages": "node --test scripts/release-packages.test.mjs",
+    "test:declaration-specifiers": "node --test scripts/fix-declaration-specifiers.test.mjs",
+    "check:typescript-version": "node scripts/check-typescript-version.mjs",
+    "check:consumer": "node scripts/smoke-consumer.mjs",
+    "qualify:office-performance": "node scripts/qualify-office-performance.mjs",
+    "qualify:office-reproducibility": "node scripts/qualify-native-office-repro.mjs",
+    "release:packages": "node scripts/release-packages.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run check:unicode13 && npm run check:typescript-version && npm run test --workspaces --if-present && npm run test:native-office-completion && npm run test:dependency-integrity && npm run test:release-packages && npm run test:declaration-specifiers && npm run test:chrome-cdp-startup"
+  },
+  "overrides": {
+    "@univerjs/core": {
+      "nanoid": "5.1.16"
+    }
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  },
+  "engines": { "node": ">=22" },
+  "packageManager": "npm@10.9.8"
+}

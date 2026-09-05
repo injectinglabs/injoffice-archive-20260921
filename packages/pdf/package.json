@@ -1,0 +1,59 @@
+{
+  "name": "@injoffice/pdf",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "PDF viewing and editing engine: page operations, text/annotation/form editing, and an agent tool surface — built on pdfjs-dist + pdf-lib.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/pdf"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "entries": { "index": "src/index.ts", "browser": "src/browser.ts" },
+    "legalFiles": ["NOTICE", "THIRD_PARTY_LICENSES/APACHE-2.0.txt", "LICENSE-UNICODE.txt"]
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "dependencies": {
+    "@embedpdf/pdfium": "^2.15.0",
+    "@injoffice/font-metrics": "0.1.0",
+    "harfbuzzjs": "^1.6.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.2.108",
+    "pngjs": "^7.0.0",
+    "subset-font": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.2.14",
+    "@types/subset-font": "^2.3.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

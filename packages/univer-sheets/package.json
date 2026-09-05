@@ -1,0 +1,70 @@
+{
+  "name": "@injoffice/univer-sheets",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Configurable Apache-2.0 Univer Sheets composition for InjOffice editors.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "files": ["dist", "README.md", "styles.css"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/univer-sheets"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "entries": {
+      "index": "src/index.ts",
+      "browser": "src/browser.ts"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@univerjs/preset-sheets-conditional-formatting": "^0.25.1",
+    "@univerjs/preset-sheets-core": "^0.25.1",
+    "@univerjs/preset-sheets-data-validation": "^0.25.1",
+    "@univerjs/preset-sheets-drawing": "^0.25.1",
+    "@univerjs/preset-sheets-filter": "^0.25.1",
+    "@univerjs/preset-sheets-find-replace": "^0.25.1",
+    "@univerjs/preset-sheets-hyper-link": "^0.25.1",
+    "@univerjs/preset-sheets-note": "^0.25.1",
+    "@univerjs/preset-sheets-sort": "^0.25.1",
+    "@univerjs/preset-sheets-table": "^0.25.1",
+    "@univerjs/preset-sheets-thread-comment": "^0.25.1",
+    "@univerjs/ui": "^0.25.1"
+  },
+  "peerDependencies": {
+    "@univerjs/core": "^0.25.1",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "rxjs": ">=7"
+  },
+  "devDependencies": {
+    "@univerjs/core": "^0.25.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "rxjs": "^7.8.2",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

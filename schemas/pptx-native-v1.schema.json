@@ -1,0 +1,598 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://injoffice.dev/schemas/pptx-native-v1.schema.json",
+  "title": "InjOffice native PPTX contract v1",
+  "description": "The versioned boundary between the authoritative Go PPTX engine and pure render/edit consumers. Integer geometry is expressed in EMU.",
+  "x-binding-name": "NativePptxDeck",
+  "x-resource-limits": {
+    "maxJsonBytes": 268435456,
+    "maxNodes": 1000000,
+    "maxDepth": 64,
+    "maxAssets": 4096,
+    "maxSlides": 4096,
+    "maxElementsPerContainer": 10000,
+    "maxTotalElements": 100000,
+    "maxParagraphsPerElement": 10000,
+    "maxRunsPerParagraph": 100000,
+    "maxTextCodeUnits": 1048576,
+    "maxTotalTextCodeUnits": 16777216,
+    "maxTableRows": 10000,
+    "maxTableColumns": 16384,
+    "maxTableCells": 1000000,
+    "maxPassthroughPerObject": 10000,
+    "maxDiagnosticsPerScope": 1000,
+    "maxLineWidthEmu": 20116800,
+    "maxDrawingPercentage": 2147483647,
+    "maxAssetBytes": 536870912,
+    "maxInlineAssetBase64CodeUnits": 89478488,
+    "maxTotalInlineAssetBase64CodeUnits": 134217728
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "documentId", "origin", "size", "assets", "slides", "compatibility"],
+  "properties": {
+    "contractVersion": { "const": "pptx-native/v1" },
+    "documentId": { "$ref": "#/$defs/nativeId" },
+    "origin": { "$ref": "#/$defs/origin" },
+    "sourceRevision": { "$ref": "#/$defs/nativeId" },
+    "size": { "$ref": "#/$defs/size" },
+    "assets": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "slides": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/slide" }
+    },
+    "compatibility": { "$ref": "#/$defs/compatibility" }
+  },
+  "$defs": {
+    "nativeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~:/-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{6}$"
+    },
+    "partName": {
+      "type": "string",
+      "maxLength": 1024,
+      "x-native-format": "canonical-opc-part-name",
+      "pattern": "^(?!/)(?!(?:\\.|%2E){1,2}(?:/|$))(?!.*(?:/(?:\\.|%2E){1,2}(?:/|$)|(?:\\.|%2E)(?:/|$)|//|%(?:0[0-9A-F]|1[0-9A-F]|2F|5C|7F)))(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-F]{2})+$"
+    },
+    "origin": {
+      "x-binding-name": "Origin",
+      "type": "string",
+      "enum": ["authored", "parsed"]
+    },
+    "provenance": {
+      "x-binding-name": "Provenance",
+      "type": "string",
+      "enum": ["authored", "parsed"]
+    },
+    "compatibilityStatus": {
+      "x-binding-name": "CompatibilityStatus",
+      "type": "string",
+      "enum": ["editable", "preserveOnly", "refused"]
+    },
+    "diagnosticSeverity": {
+      "x-binding-name": "DiagnosticSeverity",
+      "type": "string",
+      "enum": ["info", "warning", "refusal"]
+    },
+    "passthroughDisposition": {
+      "x-binding-name": "PassthroughDisposition",
+      "type": "string",
+      "enum": ["preserve", "replaceOnEdit"]
+    },
+    "elementKind": {
+      "x-binding-name": "ElementKind",
+      "type": "string",
+      "enum": ["text", "shape", "connector", "picture", "table", "chart", "group"]
+    },
+    "placeholderType": {
+      "x-binding-name": "PlaceholderType",
+      "type": "string",
+      "enum": ["title", "ctrTitle", "subTitle", "body"]
+    },
+    "shapePreset": {
+      "x-binding-name": "ShapePreset",
+      "type": "string",
+      "enum": ["rect", "roundRect", "ellipse", "triangle", "diamond", "rightArrow", "pentagon", "hexagon", "star5"]
+    },
+    "strokeCap": {
+      "x-binding-name": "StrokeCap",
+      "type": "string",
+      "enum": ["flat", "round", "square"]
+    },
+    "strokeJoin": {
+      "x-binding-name": "StrokeJoin",
+      "type": "string",
+      "enum": ["round", "bevel", "miter"]
+    },
+    "strokeDash": {
+      "x-binding-name": "StrokeDash",
+      "type": "string",
+      "enum": ["solid"]
+    },
+    "textAlign": {
+      "x-binding-name": "TextAlign",
+      "type": "string",
+      "enum": ["left", "center", "right"]
+    },
+    "textWrap": {
+      "x-binding-name": "TextWrap",
+      "type": "string",
+      "enum": ["square", "none"]
+    },
+    "textVerticalAnchor": {
+      "x-binding-name": "TextVerticalAnchor",
+      "type": "string",
+      "enum": ["top", "center", "bottom"]
+    },
+    "animationEffect": {
+      "x-binding-name": "AnimationEffect",
+      "type": "string",
+      "enum": ["fade", "flyIn"]
+    },
+    "transitionType": {
+      "x-binding-name": "TransitionType",
+      "type": "string",
+      "enum": ["fade", "push", "wipe"]
+    },
+    "direction": {
+      "x-binding-name": "Direction",
+      "type": "string",
+      "enum": ["left", "right", "up", "down"]
+    },
+    "size": {
+      "x-binding-name": "NativeSize",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cx", "cy"],
+      "properties": {
+        "cx": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "cy": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "transform": {
+      "x-binding-name": "NativeTransform",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "cx", "cy"],
+      "properties": {
+        "x": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "y": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "cx": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "cy": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+      }
+    },
+    "sourceAnchor": {
+      "x-binding-name": "NativeSourceAnchor",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partName", "objectId", "fingerprintSha256"],
+      "properties": {
+        "partName": { "$ref": "#/$defs/partName" },
+        "objectId": { "$ref": "#/$defs/nativeId" },
+        "relationshipId": { "$ref": "#/$defs/nativeId" },
+        "fingerprintSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "passthroughRef": {
+      "x-binding-name": "NativePassthroughRef",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token", "ownerPart", "fingerprintSha256", "disposition"],
+      "properties": {
+        "token": { "$ref": "#/$defs/nativeId" },
+        "ownerPart": { "$ref": "#/$defs/partName" },
+        "fingerprintSha256": { "$ref": "#/$defs/sha256" },
+        "disposition": { "$ref": "#/$defs/passthroughDisposition" }
+      }
+    },
+    "diagnosticScope": {
+      "x-binding-name": "NativeDiagnosticScope",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slideId": { "$ref": "#/$defs/nativeId" },
+        "elementId": { "$ref": "#/$defs/nativeId" },
+        "partName": { "$ref": "#/$defs/partName" }
+      },
+      "minProperties": 1
+    },
+    "diagnostic": {
+      "x-binding-name": "NativeDiagnostic",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "$ref": "#/$defs/diagnosticSeverity" },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "scope": { "$ref": "#/$defs/diagnosticScope" }
+      }
+    },
+    "compatibility": {
+      "x-binding-name": "NativeCompatibility",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "diagnostics"],
+      "properties": {
+        "status": { "$ref": "#/$defs/compatibilityStatus" },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/diagnostic" }
+        }
+      }
+    },
+    "asset": {
+      "x-binding-name": "NativeAsset",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provenance", "contentType", "sha256", "byteLength", "passthrough"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "contentType": { "type": "string", "maxLength": 256, "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 0, "maximum": 536870912 },
+        "dataBase64": { "type": "string", "maxLength": 89478488, "contentEncoding": "base64" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/passthroughRef" }
+        }
+      }
+    },
+    "textRun": {
+      "x-binding-name": "NativeTextRun",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 1048576 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "fontSizeHundredthPt": { "type": "integer", "minimum": 1, "maximum": 400000 },
+        "color": { "$ref": "#/$defs/color" },
+        "fontFamily": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "paragraph": {
+      "x-binding-name": "NativeParagraph",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runs"],
+      "properties": {
+        "runs": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/textRun" }
+        },
+        "align": { "$ref": "#/$defs/textAlign" },
+        "level": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "bullet": { "type": "boolean" }
+      }
+    },
+    "textBodyLayout": {
+      "x-binding-name": "NativeTextBodyLayout",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["leftInsetEmu", "rightInsetEmu", "topInsetEmu", "bottomInsetEmu", "wrap", "verticalAnchor", "autoFit", "horizontalOverflow", "verticalOverflow"],
+      "properties": {
+        "leftInsetEmu": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "rightInsetEmu": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "topInsetEmu": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "bottomInsetEmu": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "wrap": { "$ref": "#/$defs/textWrap" },
+        "verticalAnchor": { "$ref": "#/$defs/textVerticalAnchor" },
+        "autoFit": { "const": "none" },
+        "horizontalOverflow": { "const": "overflow" },
+        "verticalOverflow": { "const": "overflow" }
+      }
+    },
+    "stroke": {
+      "x-binding-name": "NativeStroke",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color", "widthEmu"],
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "widthEmu": { "type": "integer", "minimum": 0, "maximum": 20116800 },
+        "cap": { "$ref": "#/$defs/strokeCap" },
+        "join": { "$ref": "#/$defs/strokeJoin" },
+        "dash": { "$ref": "#/$defs/strokeDash" },
+        "miterLimit": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "animation": {
+      "x-binding-name": "NativeAnimation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect"],
+      "properties": {
+        "effect": { "$ref": "#/$defs/animationEffect" },
+        "direction": { "$ref": "#/$defs/direction" },
+        "delayMs": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+        "durationMs": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "distancePpm": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
+    },
+    "transition": {
+      "x-binding-name": "NativeTransition",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "$ref": "#/$defs/transitionType" },
+        "direction": { "$ref": "#/$defs/direction" }
+      }
+    },
+    "tableBorder": {
+      "x-binding-name": "NativeTableBorder",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color", "widthEmu"],
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "widthEmu": { "type": "integer", "minimum": 0, "maximum": 20116800 }
+      }
+    },
+    "tableCell": {
+      "x-binding-name": "NativeTableCell",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 1048576 },
+        "paragraphs": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/paragraph" }
+        },
+        "textBody": { "$ref": "#/$defs/textBodyLayout" },
+        "fill": { "$ref": "#/$defs/color" },
+        "border": { "$ref": "#/$defs/tableBorder" },
+        "align": { "$ref": "#/$defs/textAlign" }
+      }
+    },
+    "table": {
+      "x-binding-name": "NativeTable",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["columnWidths", "rowHeights", "rows"],
+      "properties": {
+        "columnWidths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16384,
+          "items": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        },
+        "rowHeights": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": {
+            "type": "array",
+            "maxItems": 16384,
+            "items": { "$ref": "#/$defs/tableCell" }
+          }
+        }
+      }
+    },
+    "opaqueChart": {
+      "x-binding-name": "NativeOpaqueChart",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chartPart", "relationshipId", "opaqueRef"],
+      "properties": {
+        "chartPart": { "$ref": "#/$defs/partName" },
+        "relationshipId": { "$ref": "#/$defs/nativeId" },
+        "opaqueRef": { "$ref": "#/$defs/passthroughRef" },
+        "previewAssetId": { "$ref": "#/$defs/nativeId" }
+      }
+    },
+    "textElement": {
+      "x-binding-name": "NativeTextElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "paragraphs", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "text" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "placeholder": { "$ref": "#/$defs/placeholderType" },
+        "paragraphs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/paragraph" } },
+        "textBody": { "$ref": "#/$defs/textBodyLayout" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "shapeElement": {
+      "x-binding-name": "NativeShapeElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "paragraphs", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "shape" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "preset": { "$ref": "#/$defs/shapePreset" },
+        "placeholder": { "$ref": "#/$defs/placeholderType" },
+        "fill": { "$ref": "#/$defs/color" },
+        "stroke": { "$ref": "#/$defs/stroke" },
+        "paragraphs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/paragraph" } },
+        "textBody": { "$ref": "#/$defs/textBodyLayout" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "connectorElement": {
+      "x-binding-name": "NativeConnectorElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "connector" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "stroke": { "$ref": "#/$defs/stroke" },
+        "headArrow": { "type": "boolean" },
+        "tailArrow": { "type": "boolean" },
+        "flipH": { "type": "boolean" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "pictureElement": {
+      "x-binding-name": "NativePictureElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "assetId", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "picture" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "assetId": { "$ref": "#/$defs/nativeId" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "tableElement": {
+      "x-binding-name": "NativeTableElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "table", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "table" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "table": { "$ref": "#/$defs/table" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "chartElement": {
+      "x-binding-name": "NativeChartElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "chart", "source", "passthrough", "compatibility"],
+      "properties": {
+        "kind": { "const": "chart" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "chart": { "$ref": "#/$defs/opaqueChart" },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "groupElement": {
+      "x-binding-name": "NativeGroupElement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "provenance", "transform", "children", "passthrough", "compatibility"],
+      "allOf": [
+        {
+          "if": { "properties": { "provenance": { "const": "parsed" } }, "required": ["provenance"] },
+          "then": { "required": ["childTransform"] }
+        }
+      ],
+      "properties": {
+        "kind": { "const": "group" },
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "transform": { "$ref": "#/$defs/transform" },
+        "childTransform": { "$ref": "#/$defs/transform" },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/element" }
+        },
+        "animation": { "$ref": "#/$defs/animation" },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    },
+    "element": {
+      "oneOf": [
+        { "$ref": "#/$defs/textElement" },
+        { "$ref": "#/$defs/shapeElement" },
+        { "$ref": "#/$defs/connectorElement" },
+        { "$ref": "#/$defs/pictureElement" },
+        { "$ref": "#/$defs/tableElement" },
+        { "$ref": "#/$defs/chartElement" },
+        { "$ref": "#/$defs/groupElement" }
+      ]
+    },
+    "slide": {
+      "x-binding-name": "NativeSlide",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provenance", "elements", "passthrough", "compatibility"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nativeId" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "background": { "$ref": "#/$defs/color" },
+        "transition": { "$ref": "#/$defs/transition" },
+        "elements": {
+          "type": "array",
+          "maxItems": 10000,
+          "description": "Back-to-front z-order. Array order is semantically significant.",
+          "items": { "$ref": "#/$defs/element" }
+        },
+        "source": { "$ref": "#/$defs/sourceAnchor" },
+        "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },
+        "compatibility": { "$ref": "#/$defs/compatibility" }
+      }
+    }
+  }
+}

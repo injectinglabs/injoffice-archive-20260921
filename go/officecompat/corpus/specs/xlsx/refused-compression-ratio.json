@@ -1,0 +1,58 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "xlsx-refused-compression-ratio",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen/v1",
+    "source": "Hand-authored bounded adversarial compression-ratio fixture",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "bounded-adversarial-package",
+    "compression-ratio-limit",
+    "resource-refusal"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"bin\" ContentType=\"application/octet-stream\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rOffice\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>"
+    },
+    {
+      "name": "resource/highly-compressible.bin",
+      "repeat": {
+        "text": "0",
+        "count": 2097152
+      }
+    },
+    {
+      "name": "xl/_rels/workbook.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rSheet\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>"
+    },
+    {
+      "name": "xl/workbook.xml",
+      "text": "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Data\" sheetId=\"1\" r:id=\"rSheet\"/></sheets></workbook>"
+    },
+    {
+      "name": "xl/worksheets/sheet1.xml",
+      "text": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData/></worksheet>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "xlsx-refused-compression-ratio",
+    "format": "xlsx",
+    "dialect": "transitional",
+    "outcome": "refused",
+    "refusal": {
+      "class": "resource-limit",
+      "contains": "compression-ratio limit"
+    }
+  }
+}

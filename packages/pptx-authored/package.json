@@ -1,0 +1,44 @@
+{
+  "name": "@injoffice/pptx-authored",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Deterministic DOM-free compiler from InjOffice authored decks to validated native PPTX v1.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/pptx-authored"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "scripts": {
+    "prebuild": "npm run build -w @injoffice/pptx-native -w @injoffice/slides",
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@injoffice/pptx-native": "0.1.0",
+    "@injoffice/slides": "0.1.0",
+    "@noble/hashes": "2.2.0"
+  },
+  "devDependencies": {
+    "@injoffice/font-metrics": "0.1.0",
+    "@injoffice/pptx-render": "0.1.0",
+    "@types/node": "^26.0.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

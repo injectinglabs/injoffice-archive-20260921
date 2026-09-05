@@ -1,0 +1,40 @@
+{
+  "slides": [
+    {
+      "background": "#FFFFFF",
+      "shapes": [
+        {
+          "kind": "textBox",
+          "key": "title",
+          "x": 914400,
+          "y": 685800,
+          "cx": 7315200,
+          "cy": 914400,
+          "paragraphs": [
+            {
+              "runs": [
+                {
+                  "text": "Native authored deck",
+                  "sizePt": 28,
+                  "color": "#112233",
+                  "font": "Aptos",
+                  "bold": true
+                }
+              ],
+              "align": "ctr"
+            }
+          ]
+        },
+        {
+          "kind": "rect",
+          "key": "accent",
+          "x": 914400,
+          "y": 2057400,
+          "cx": 2743200,
+          "cy": 1371600,
+          "fill": "#3366CC"
+        }
+      ]
+    }
+  ]
+}

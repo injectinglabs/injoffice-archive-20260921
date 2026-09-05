@@ -1,0 +1,29 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-partial-stroke",
+  "origin": "authored",
+  "size": { "cx": 1000000, "cy": 1000000 },
+  "assets": [],
+  "slides": [
+    {
+      "id": "slide-partial-stroke",
+      "provenance": "authored",
+      "elements": [
+        {
+          "kind": "shape",
+          "id": "shape-partial-stroke",
+          "provenance": "authored",
+          "transform": { "x": 0, "y": 0, "cx": 100000, "cy": 100000 },
+          "preset": "rect",
+          "stroke": { "color": "112233", "widthEmu": 12700, "cap": "flat" },
+          "paragraphs": [],
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        }
+      ],
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }
+  ],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

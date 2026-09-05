@@ -1,0 +1,74 @@
+{
+  "protocol": "injoffice.native-office-cross-runtime-repro/v1",
+  "version": 1,
+  "baseline": "2db5d8f1ed241afe302ba77e303e5d86160d9f6b",
+  "environments": [
+    {
+      "id": "utc-c",
+      "env": {
+        "TZ": "UTC",
+        "LANG": "C",
+        "LC_ALL": "C"
+      }
+    },
+    {
+      "id": "kiritimati-swedish",
+      "env": {
+        "TZ": "Pacific/Kiritimati",
+        "LANG": "sv_SE.UTF-8",
+        "LC_ALL": "sv_SE.UTF-8"
+      }
+    },
+    {
+      "id": "new-york-turkish",
+      "env": {
+        "TZ": "America/New_York",
+        "LANG": "tr_TR.UTF-8",
+        "LC_ALL": "tr_TR.UTF-8"
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "docx-inline-png-package",
+      "path": "go/officecompat/corpus/generated/packages/docx-inline-png-page-paint.docx",
+      "sha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+      "provenance": {
+        "producer": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 deterministic WordprocessingML package with an embedded inline PNG",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-native-contract",
+      "path": "testdata/docx-native/document-v1.json",
+      "sha256": "a9ad5e6194e8ef1cb28f4e05f8024f190398a0df505ba1ae889cd1ef0e680a8a",
+      "provenance": {
+        "producer": "InjOffice DOCX native cross-language contract tests",
+        "source": "Hand-built deterministic native DOCX v1 extraction vector introduced by PR 46",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "pptx-native-imported",
+      "path": "go/pptxpatch/testdata/native-contract/valid/parsed-full.json",
+      "sha256": "259053c9711c66f1208261ef561eb4f2bac45e296f524ba62e6fb2b593e10636",
+      "provenance": {
+        "producer": "InjOffice native PPTX Go and TypeScript contract tests",
+        "source": "Hand-built parsed native PPTX v1 vector with text, table, picture, chart, connector, and group",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "id": "xlsx-native-lexical-geometry",
+      "path": "go/xlsxpatch/testdata/native-xlsx-v1/valid/lexical-render.json",
+      "sha256": "69995f2628057a60c4cc5860216c941a0f0271fdb71058517ea7b294f814a194",
+      "provenance": {
+        "producer": "InjOffice native XLSX Go extraction tests",
+        "source": "Deterministic lexical and geometry authority vector for native XLSX v1",
+        "license": "Apache-2.0"
+      }
+    }
+  ],
+  "expected_semantic_sha256": "d4d2592e18b4e86d4183c960478ed88a76dbbb78b82aefbc7c0248756b277a89"
+}

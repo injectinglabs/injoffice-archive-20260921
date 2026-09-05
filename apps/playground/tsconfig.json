@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "paths": {
+      "@injoffice/font-metrics/layout": ["../../packages/font-metrics/src/layout.ts"],
+      "@injoffice/charts": ["../../packages/charts/src/index.ts"],
+      "@injoffice/collab": ["../../packages/collab/src/index.ts"],
+      "@injoffice/connectors": ["../../packages/connectors/src/index.ts"],
+      "@injoffice/formulas": ["../../packages/formulas/src/index.ts"],
+      "@injoffice/history": ["../../packages/history/src/index.ts"],
+      "@injoffice/univer-sheets/browser": ["../../packages/univer-sheets/src/browser.ts"],
+      "@injoffice/pptx-authored": ["../../packages/pptx-authored/src/index.ts"],
+      "@injoffice/pptx-native": ["../../packages/pptx-native/src/index.ts"],
+      "@injoffice/pptx-render": ["../../packages/pptx-render/src/index.ts"],
+      "@injoffice/shapes": ["../../packages/shapes/src/index.ts"],
+      "@injoffice/slides/authoring": ["../../packages/slides/src/authoring.ts"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "vitest.config.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

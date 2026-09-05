@@ -1,0 +1,311 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "xlsx-transitional-common",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen/v1",
+    "source": "Hand-authored minimal SpreadsheetML compatibility fixture",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "common-supported-cells",
+    "contract-round-trip",
+    "deterministic-grid-geometry",
+    "lexical-preservation",
+    "transitional"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rOffice\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>"
+    },
+    {
+      "name": "xl/_rels/workbook.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rSheet\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rStrings\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/><Relationship Id=\"rStyles\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>"
+    },
+    {
+      "name": "xl/sharedStrings.xml",
+      "text": "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"1\" uniqueCount=\"1\"><si><t>Shared_x0020_Text</t></si></sst>"
+    },
+    {
+      "name": "xl/styles.xml",
+      "text": "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"0.0000\"/></numFmts><fonts count=\"2\"><font><name val=\"Calibri\"/><sz val=\"11\"/></font><font><name val=\"Aptos\"/><b/><i/><color rgb=\"FF112233\"/><sz val=\"12.5\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFAABBCC\"/></patternFill></fill></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"164\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\" applyFont=\"1\" applyFill=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf></cellXfs></styleSheet>"
+    },
+    {
+      "name": "xl/workbook.xml",
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Data_x0020_Set\" sheetId=\"1\" r:id=\"rSheet\"/></sheets></workbook>"
+    },
+    {
+      "name": "xl/worksheets/sheet1.xml",
+      "text": "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetFormatPr baseColWidth=\"8\" defaultRowHeight=\"15\" customHeight=\"0\" zeroHeight=\"0\"/><cols><col min=\"1\" max=\"2\" width=\"12.25\" customWidth=\"1\"/></cols><sheetData><row r=\"1\" ht=\"20\" customHeight=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"inlineStr\"><is><t xml:space=\"preserve\"> Inline_x0020_Value </t></is></c><c r=\"C1\" s=\"1\"><v>001.2300</v></c><c r=\"D1\" t=\"b\"><v>1</v></c><c r=\"E1\" t=\"e\"><v>#DIV/0!</v></c><c r=\"F1\" t=\"d\"><v>2026-08-27T12:00:00Z</v></c><c r=\"G1\" t=\"str\"><f>CONCAT(&quot;a&quot;,&quot;b&quot;)</f><v>cached_x0020_text</v></c></row><row r=\"2\"><c r=\"A2\"><f>1+1</f></c><c r=\"B2\" s=\"1\"/><c r=\"C2\" t=\"n\"/></row></sheetData></worksheet>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "xlsx-transitional-common",
+    "format": "xlsx",
+    "dialect": "transitional",
+    "outcome": "accepted",
+    "native": {
+      "protocol": "injoffice.xlsx.native",
+      "version": 1,
+      "document_id": "workbook:8e3291c9f042ca7d677bec80c3fb36a4d3f456da97972a1fa7e4a85890efbfdf",
+      "revision": "rev:d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+      "source": {
+        "package_sha256": "sha256:d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+        "workbook_part": "xl/workbook.xml",
+        "dialect": "transitional",
+        "authority": "exact-package-bytes"
+      },
+      "sheets": [
+        {
+          "id": "1",
+          "name": "Data Set",
+          "order": 0,
+          "state": "visible",
+          "part_name": "xl/worksheets/sheet1.xml",
+          "sheet_format": {
+            "base_column_width": 8,
+            "default_row_height_points": 15,
+            "custom_height": false,
+            "zero_height": false
+          },
+          "rows": [
+            {
+              "row": 0,
+              "height_points": 20,
+              "hidden": false,
+              "custom_height": true
+            }
+          ],
+          "columns": [
+            {
+              "column": 0,
+              "end_column": 1,
+              "width": 12.25,
+              "hidden": false,
+              "custom_width": true,
+              "best_fit": false
+            }
+          ],
+          "cells": [
+            {
+              "row": 0,
+              "column": 0,
+              "ref": "A1",
+              "ooxml_type": "s",
+              "style_id": 0,
+              "value": {
+                "kind": "string",
+                "storage": "shared",
+                "lexical": "0",
+                "text": "Shared Text",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 1,
+              "ref": "B1",
+              "ooxml_type": "inlineStr",
+              "style_id": 0,
+              "value": {
+                "kind": "string",
+                "storage": "inline",
+                "text": " Inline Value ",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 2,
+              "ref": "C1",
+              "style_id": 1,
+              "value": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "001.2300",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 3,
+              "ref": "D1",
+              "ooxml_type": "b",
+              "style_id": 0,
+              "value": {
+                "kind": "boolean",
+                "storage": "boolean",
+                "lexical": "1",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 4,
+              "ref": "E1",
+              "ooxml_type": "e",
+              "style_id": 0,
+              "value": {
+                "kind": "error",
+                "storage": "error",
+                "lexical": "#DIV/0!",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 5,
+              "ref": "F1",
+              "ooxml_type": "d",
+              "style_id": 0,
+              "value": {
+                "kind": "date",
+                "storage": "date",
+                "lexical": "2026-08-27T12:00:00Z",
+                "rich": false
+              },
+              "editable": true
+            },
+            {
+              "row": 0,
+              "column": 6,
+              "ref": "G1",
+              "ooxml_type": "str",
+              "style_id": 0,
+              "formula": {
+                "text": "CONCAT(\"a\",\"b\")",
+                "type": "normal",
+                "cached": {
+                  "kind": "string",
+                  "storage": "formula-string",
+                  "lexical": "cached_x0020_text",
+                  "text": "cached text",
+                  "rich": false
+                }
+              },
+              "editable": true
+            },
+            {
+              "row": 1,
+              "column": 0,
+              "ref": "A2",
+              "style_id": 0,
+              "formula": {
+                "text": "1+1",
+                "type": "normal"
+              },
+              "editable": true
+            },
+            {
+              "row": 1,
+              "column": 1,
+              "ref": "B2",
+              "style_id": 1,
+              "editable": true
+            },
+            {
+              "row": 1,
+              "column": 2,
+              "ref": "C2",
+              "ooxml_type": "n",
+              "style_id": 0,
+              "editable": true
+            }
+          ],
+          "merged_ranges": [],
+          "editable": true
+        }
+      ],
+      "styles": [
+        {
+          "id": 0,
+          "effective": {
+            "number_format": "General",
+            "font_name": "Calibri",
+            "font_size_points": 11,
+            "bold": false,
+            "italic": false,
+            "fill": {
+              "origin": "styles-record",
+              "fill_id": 0,
+              "record_sha256": "sha256:d877ea27a6005ac0092671fa0cbf7b63e3002e004c17f0a9c15b69eb5a37d47a"
+            },
+            "border": {
+              "origin": "styles-record",
+              "border_id": 0,
+              "record_sha256": "sha256:eff01ea31d34d34de10ee1a6a92a5b1bdb43aacdd203cb959c5a2cd319902d2c"
+            },
+            "horizontal_alignment": "general",
+            "vertical_alignment": "bottom",
+            "wrap_text": false,
+            "projection": "full",
+            "unsupported": []
+          },
+          "raw_projection_sha256": "sha256:7ddb1d455a196bc52aaa68bfeecfc2f5759ba58297dce851beba9d854ac4caaf"
+        },
+        {
+          "id": 1,
+          "effective": {
+            "number_format": "0.0000",
+            "font_name": "Aptos",
+            "font_size_points": 12.5,
+            "bold": true,
+            "italic": true,
+            "font_color": "#112233",
+            "fill_color": "#AABBCC",
+            "fill": {
+              "origin": "styles-record",
+              "fill_id": 2,
+              "record_sha256": "sha256:ddf08585518145b40fef313a7ac8b7d915d7223a46e3d12fa4638d0029240528",
+              "color": "#AABBCC"
+            },
+            "border": {
+              "origin": "styles-record",
+              "border_id": 0,
+              "record_sha256": "sha256:eff01ea31d34d34de10ee1a6a92a5b1bdb43aacdd203cb959c5a2cd319902d2c"
+            },
+            "horizontal_alignment": "center",
+            "vertical_alignment": "middle",
+            "wrap_text": true,
+            "projection": "full",
+            "unsupported": []
+          },
+          "raw_projection_sha256": "sha256:f042ae2859342f31fb6b7ac6abc04f2d7e7bdaa912a4ad78b2d150f51ac4680f"
+        }
+      ],
+      "capabilities": [
+        {
+          "name": "native-ooxml-parse",
+          "level": "read-only",
+          "detail": "HTML-free SpreadsheetML extraction with lexical values and formula caches"
+        },
+        {
+          "name": "native-v1-mutations",
+          "level": "partial",
+          "detail": "Cells, formulas, row/column dimensions, and the bounded style.patch projection"
+        },
+        {
+          "name": "unsupported-content",
+          "level": "preserve-exact",
+          "detail": "Unmodeled OOXML remains authoritative in the original package"
+        }
+      ],
+      "passthrough_parts": [],
+      "unsupported": []
+    }
+  }
+}

@@ -1,0 +1,261 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "xlsx-transitional-common",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "native": {
+    "protocol": "injoffice.xlsx.native",
+    "version": 1,
+    "document_id": "workbook:8e3291c9f042ca7d677bec80c3fb36a4d3f456da97972a1fa7e4a85890efbfdf",
+    "revision": "rev:d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+    "source": {
+      "package_sha256": "sha256:d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+      "workbook_part": "xl/workbook.xml",
+      "dialect": "transitional",
+      "authority": "exact-package-bytes"
+    },
+    "sheets": [
+      {
+        "id": "1",
+        "name": "Data Set",
+        "order": 0,
+        "state": "visible",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "sheet_format": {
+          "base_column_width": 8,
+          "default_row_height_points": 15,
+          "custom_height": false,
+          "zero_height": false
+        },
+        "rows": [
+          {
+            "row": 0,
+            "height_points": 20,
+            "hidden": false,
+            "custom_height": true
+          }
+        ],
+        "columns": [
+          {
+            "column": 0,
+            "end_column": 1,
+            "width": 12.25,
+            "hidden": false,
+            "custom_width": true,
+            "best_fit": false
+          }
+        ],
+        "cells": [
+          {
+            "row": 0,
+            "column": 0,
+            "ref": "A1",
+            "ooxml_type": "s",
+            "style_id": 0,
+            "value": {
+              "kind": "string",
+              "storage": "shared",
+              "lexical": "0",
+              "text": "Shared Text",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "ref": "B1",
+            "ooxml_type": "inlineStr",
+            "style_id": 0,
+            "value": {
+              "kind": "string",
+              "storage": "inline",
+              "text": " Inline Value ",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 2,
+            "ref": "C1",
+            "style_id": 1,
+            "value": {
+              "kind": "number",
+              "storage": "number",
+              "lexical": "001.2300",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 3,
+            "ref": "D1",
+            "ooxml_type": "b",
+            "style_id": 0,
+            "value": {
+              "kind": "boolean",
+              "storage": "boolean",
+              "lexical": "1",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 4,
+            "ref": "E1",
+            "ooxml_type": "e",
+            "style_id": 0,
+            "value": {
+              "kind": "error",
+              "storage": "error",
+              "lexical": "#DIV/0!",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 5,
+            "ref": "F1",
+            "ooxml_type": "d",
+            "style_id": 0,
+            "value": {
+              "kind": "date",
+              "storage": "date",
+              "lexical": "2026-08-27T12:00:00Z",
+              "rich": false
+            },
+            "editable": true
+          },
+          {
+            "row": 0,
+            "column": 6,
+            "ref": "G1",
+            "ooxml_type": "str",
+            "style_id": 0,
+            "formula": {
+              "text": "CONCAT(\"a\",\"b\")",
+              "type": "normal",
+              "cached": {
+                "kind": "string",
+                "storage": "formula-string",
+                "lexical": "cached_x0020_text",
+                "text": "cached text",
+                "rich": false
+              }
+            },
+            "editable": true
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "ref": "A2",
+            "style_id": 0,
+            "formula": {
+              "text": "1+1",
+              "type": "normal"
+            },
+            "editable": true
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "ref": "B2",
+            "style_id": 1,
+            "editable": true
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "ref": "C2",
+            "ooxml_type": "n",
+            "style_id": 0,
+            "editable": true
+          }
+        ],
+        "merged_ranges": [],
+        "editable": true
+      }
+    ],
+    "styles": [
+      {
+        "id": 0,
+        "effective": {
+          "number_format": "General",
+          "font_name": "Calibri",
+          "font_size_points": 11,
+          "bold": false,
+          "italic": false,
+          "fill": {
+            "origin": "styles-record",
+            "fill_id": 0,
+            "record_sha256": "sha256:d877ea27a6005ac0092671fa0cbf7b63e3002e004c17f0a9c15b69eb5a37d47a"
+          },
+          "border": {
+            "origin": "styles-record",
+            "border_id": 0,
+            "record_sha256": "sha256:eff01ea31d34d34de10ee1a6a92a5b1bdb43aacdd203cb959c5a2cd319902d2c"
+          },
+          "horizontal_alignment": "general",
+          "vertical_alignment": "bottom",
+          "wrap_text": false,
+          "projection": "full",
+          "unsupported": []
+        },
+        "raw_projection_sha256": "sha256:7ddb1d455a196bc52aaa68bfeecfc2f5759ba58297dce851beba9d854ac4caaf"
+      },
+      {
+        "id": 1,
+        "effective": {
+          "number_format": "0.0000",
+          "font_name": "Aptos",
+          "font_size_points": 12.5,
+          "bold": true,
+          "italic": true,
+          "font_color": "#112233",
+          "fill_color": "#AABBCC",
+          "fill": {
+            "origin": "styles-record",
+            "fill_id": 2,
+            "record_sha256": "sha256:ddf08585518145b40fef313a7ac8b7d915d7223a46e3d12fa4638d0029240528",
+            "color": "#AABBCC"
+          },
+          "border": {
+            "origin": "styles-record",
+            "border_id": 0,
+            "record_sha256": "sha256:eff01ea31d34d34de10ee1a6a92a5b1bdb43aacdd203cb959c5a2cd319902d2c"
+          },
+          "horizontal_alignment": "center",
+          "vertical_alignment": "middle",
+          "wrap_text": true,
+          "projection": "full",
+          "unsupported": []
+        },
+        "raw_projection_sha256": "sha256:f042ae2859342f31fb6b7ac6abc04f2d7e7bdaa912a4ad78b2d150f51ac4680f"
+      }
+    ],
+    "capabilities": [
+      {
+        "name": "native-ooxml-parse",
+        "level": "read-only",
+        "detail": "HTML-free SpreadsheetML extraction with lexical values and formula caches"
+      },
+      {
+        "name": "native-v1-mutations",
+        "level": "partial",
+        "detail": "Cells, formulas, row/column dimensions, and the bounded style.patch projection"
+      },
+      {
+        "name": "unsupported-content",
+        "level": "preserve-exact",
+        "detail": "Unmodeled OOXML remains authoritative in the original package"
+      }
+    ],
+    "passthrough_parts": [],
+    "unsupported": []
+  }
+}

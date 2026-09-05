@@ -1,0 +1,457 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "pptx-transitional-common",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen declarative OOXML",
+    "source": "hand-authored Transitional PresentationML with generated text and AutoShapes",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "autoshapes",
+    "common-text",
+    "lexical-xml-space",
+    "native-json-round-trip",
+    "transitional"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/relocated/deck.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/><Override PartName=\"/relocated/slides/slide-a.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/><Override PartName=\"/relocated/layouts/layout.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/><Override PartName=\"/relocated/masters/master.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/><Override PartName=\"/relocated/themes/theme.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdRoot\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"relocated/deck.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/deck.xml",
+      "text": "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:sldIdLst><p:sldId id=\"256\" r:id=\"rId7\"/></p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\"/></p:presentation>"
+    },
+    {
+      "name": "relocated/_rels/deck.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId7\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide-a.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/slides/slide-a.xml",
+      "text": "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Lexical text\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"914400\" y=\"457200\"/><a:ext cx=\"4572000\" cy=\"914400\"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn=\"ctr\" lvl=\"0\"><a:buNone/></a:pPr><a:r><a:rPr b=\"1\" i=\"0\" sz=\"3200\"><a:solidFill><a:srgbClr val=\"112233\"/></a:solidFill><a:latin typeface=\"Aptos\"/></a:rPr><a:t xml:space=\"preserve\"> Native </a:t></a:r><a:r><a:rPr b=\"0\" i=\"1\" sz=\"2800\"><a:solidFill><a:srgbClr val=\"445566\"/></a:solidFill><a:latin typeface=\"Aptos\"/></a:rPr><a:t>Office</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id=\"3\" name=\"Rectangle\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"300000\" y=\"150000\"/><a:ext cx=\"1000000\" cy=\"500000\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"DDEEFF\"/></a:solidFill><a:ln w=\"12700\" cap=\"flat\" cmpd=\"sng\" algn=\"ctr\"><a:solidFill><a:srgbClr val=\"112233\"/></a:solidFill><a:prstDash val=\"solid\"/><a:round/></a:ln></p:spPr></p:sp><p:sp><p:nvSpPr><p:cNvPr id=\"4\" name=\"Ellipse\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"400000\" y=\"200000\"/><a:ext cx=\"1000000\" cy=\"500000\"/></a:xfrm><a:prstGeom prst=\"ellipse\"><a:avLst/></a:prstGeom><a:noFill/><a:ln w=\"25400\" cap=\"rnd\" cmpd=\"sng\" algn=\"ctr\"><a:solidFill><a:srgbClr val=\"445566\"/></a:solidFill><a:prstDash val=\"solid\"/><a:miter lim=\"800000\"/></a:ln></p:spPr></p:sp><p:sp><p:nvSpPr><p:cNvPr id=\"5\" name=\"Triangle\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x=\"500000\" y=\"250000\"/><a:ext cx=\"1000000\" cy=\"500000\"/></a:xfrm><a:prstGeom prst=\"triangle\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"Aa00fF\"/></a:solidFill><a:ln w=\"0\" cap=\"sq\" cmpd=\"sng\" algn=\"ctr\"><a:noFill/><a:prstDash val=\"solid\"/><a:bevel/></a:ln></p:spPr></p:sp><p:sp><p:nvSpPr><p:cNvPr id=\"6\" name=\"Diamond\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm rot=\"0\" flipH=\"false\" flipV=\"0\"><a:off x=\"600000\" y=\"300000\"/><a:ext cx=\"1000000\" cy=\"500000\"/></a:xfrm><a:prstGeom prst=\"diamond\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"00AA11\"/></a:solidFill><a:ln w=\"0\" cap=\"sq\" cmpd=\"sng\" algn=\"ctr\"><a:solidFill><a:srgbClr val=\"000000\"/></a:solidFill><a:prstDash val=\"solid\"/><a:bevel/></a:ln></p:spPr></p:sp></p:spTree></p:cSld></p:sld>"
+    },
+    {
+      "name": "relocated/slides/_rels/slide-a.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdLayout\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../layouts/layout.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/layouts/layout.xml",
+      "text": "<p:sldLayout xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sldLayout>"
+    },
+    {
+      "name": "relocated/layouts/_rels/layout.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdMaster\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../masters/master.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/masters/master.xml",
+      "text": "<p:sldMaster xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sldMaster>"
+    },
+    {
+      "name": "relocated/masters/_rels/master.xml.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdTheme\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../themes/theme.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/themes/theme.xml",
+      "text": "<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"Fixture\"><a:themeElements/></a:theme>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "pptx-transitional-common",
+    "format": "pptx",
+    "dialect": "transitional",
+    "outcome": "accepted",
+    "native": {
+      "assets": [],
+      "compatibility": {
+        "diagnostics": [
+          {
+            "code": "pptx.relationship-map-preserve",
+            "message": "slide relationship map is capability-bound to the source revision",
+            "scope": {
+              "partName": "relocated/slides/_rels/slide-a.xml.rels",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.relationship-map-preserve",
+            "message": "layout relationship map is capability-bound to the source revision",
+            "scope": {
+              "partName": "relocated/layouts/_rels/layout.xml.rels",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.relationship-map-preserve",
+            "message": "master relationship map is capability-bound to the source revision",
+            "scope": {
+              "partName": "relocated/masters/_rels/master.xml.rels",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.unsupported-theme-markup",
+            "message": "theme root contains unmodeled markup",
+            "scope": {
+              "partName": "relocated/themes/theme.xml",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.unsupported-theme-dependency",
+            "message": "theme semantics are relationship-routed but not resolved by native PPTX v1",
+            "scope": {
+              "partName": "relocated/themes/theme.xml",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.relationship-map-preserve",
+            "message": "package relationship map is capability-bound to the source revision",
+            "scope": {
+              "partName": "_rels/.rels",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          },
+          {
+            "code": "pptx.relationship-map-preserve",
+            "message": "package relationship map is capability-bound to the source revision",
+            "scope": {
+              "partName": "relocated/_rels/deck.xml.rels",
+              "slideId": "slide-941fe56d9a028963577039e8"
+            },
+            "severity": "warning"
+          }
+        ],
+        "status": "preserveOnly"
+      },
+      "contractVersion": "pptx-native/v1",
+      "documentId": "deck-574b4cdaa42f6a7cb9cad9ce",
+      "origin": "parsed",
+      "size": {
+        "cx": 12192000,
+        "cy": 6858000
+      },
+      "slides": [
+        {
+          "compatibility": {
+            "diagnostics": [
+              {
+                "code": "pptx.relationship-map-preserve",
+                "message": "slide relationship map is capability-bound to the source revision",
+                "scope": {
+                  "partName": "relocated/slides/_rels/slide-a.xml.rels",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.relationship-map-preserve",
+                "message": "layout relationship map is capability-bound to the source revision",
+                "scope": {
+                  "partName": "relocated/layouts/_rels/layout.xml.rels",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.relationship-map-preserve",
+                "message": "master relationship map is capability-bound to the source revision",
+                "scope": {
+                  "partName": "relocated/masters/_rels/master.xml.rels",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.unsupported-theme-markup",
+                "message": "theme root contains unmodeled markup",
+                "scope": {
+                  "partName": "relocated/themes/theme.xml",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.unsupported-theme-dependency",
+                "message": "theme semantics are relationship-routed but not resolved by native PPTX v1",
+                "scope": {
+                  "partName": "relocated/themes/theme.xml",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.relationship-map-preserve",
+                "message": "package relationship map is capability-bound to the source revision",
+                "scope": {
+                  "partName": "_rels/.rels",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              },
+              {
+                "code": "pptx.relationship-map-preserve",
+                "message": "package relationship map is capability-bound to the source revision",
+                "scope": {
+                  "partName": "relocated/_rels/deck.xml.rels",
+                  "slideId": "slide-941fe56d9a028963577039e8"
+                },
+                "severity": "warning"
+              }
+            ],
+            "status": "preserveOnly"
+          },
+          "elements": [
+            {
+              "compatibility": {
+                "diagnostics": [],
+                "status": "editable"
+              },
+              "id": "element-99e465e868d6ec0a938db1f5",
+              "kind": "text",
+              "name": "Lexical text",
+              "paragraphs": [
+                {
+                  "align": "center",
+                  "bullet": false,
+                  "level": 0,
+                  "runs": [
+                    {
+                      "bold": true,
+                      "color": "112233",
+                      "fontFamily": "Aptos",
+                      "fontSizeHundredthPt": 3200,
+                      "italic": false,
+                      "text": " Native "
+                    },
+                    {
+                      "bold": false,
+                      "color": "445566",
+                      "fontFamily": "Aptos",
+                      "fontSizeHundredthPt": 2800,
+                      "italic": true,
+                      "text": "Office"
+                    }
+                  ]
+                }
+              ],
+              "passthrough": [],
+              "provenance": "parsed",
+              "source": {
+                "fingerprintSha256": "08ef64238dfaf7459af4f49281afefd974f6ea8261c28273f1598d43b91bcf4b",
+                "objectId": "cNvPr-2",
+                "partName": "relocated/slides/slide-a.xml"
+              },
+              "textBody": {
+                "autoFit": "none",
+                "bottomInsetEmu": 45720,
+                "horizontalOverflow": "overflow",
+                "leftInsetEmu": 91440,
+                "rightInsetEmu": 91440,
+                "topInsetEmu": 45720,
+                "verticalAnchor": "top",
+                "verticalOverflow": "overflow",
+                "wrap": "square"
+              },
+              "transform": {
+                "cx": 4572000,
+                "cy": 914400,
+                "x": 914400,
+                "y": 457200
+              }
+            },
+            {
+              "compatibility": {
+                "diagnostics": [],
+                "status": "editable"
+              },
+              "fill": "DDEEFF",
+              "id": "element-9c68cb285f2e2b25bd06e8b1",
+              "kind": "shape",
+              "name": "Rectangle",
+              "paragraphs": [],
+              "passthrough": [],
+              "preset": "rect",
+              "provenance": "parsed",
+              "source": {
+                "fingerprintSha256": "8948c506a14ddcc39f94409ccf3b5f01a52035a949f3ee1a47805f553266dbbe",
+                "objectId": "cNvPr-3",
+                "partName": "relocated/slides/slide-a.xml"
+              },
+              "stroke": {
+                "cap": "flat",
+                "color": "112233",
+                "dash": "solid",
+                "join": "round",
+                "widthEmu": 12700
+              },
+              "transform": {
+                "cx": 1000000,
+                "cy": 500000,
+                "x": 300000,
+                "y": 150000
+              }
+            },
+            {
+              "compatibility": {
+                "diagnostics": [],
+                "status": "editable"
+              },
+              "id": "element-669c6b195d27863e9bd22c93",
+              "kind": "shape",
+              "name": "Ellipse",
+              "paragraphs": [],
+              "passthrough": [],
+              "preset": "ellipse",
+              "provenance": "parsed",
+              "source": {
+                "fingerprintSha256": "72db173ee2e8e99aa20e0659c7c047135de0cdb2d36aedcd0db501badb913c61",
+                "objectId": "cNvPr-4",
+                "partName": "relocated/slides/slide-a.xml"
+              },
+              "stroke": {
+                "cap": "round",
+                "color": "445566",
+                "dash": "solid",
+                "join": "miter",
+                "miterLimit": 800000,
+                "widthEmu": 25400
+              },
+              "transform": {
+                "cx": 1000000,
+                "cy": 500000,
+                "x": 400000,
+                "y": 200000
+              }
+            },
+            {
+              "compatibility": {
+                "diagnostics": [],
+                "status": "editable"
+              },
+              "fill": "AA00FF",
+              "id": "element-7822f12abed1606ccc83e582",
+              "kind": "shape",
+              "name": "Triangle",
+              "paragraphs": [],
+              "passthrough": [],
+              "preset": "triangle",
+              "provenance": "parsed",
+              "source": {
+                "fingerprintSha256": "2389232287349d8b1d8fa56b2b5f0b4d62c1fbd9a4590ca89ee69dd3f8703afc",
+                "objectId": "cNvPr-5",
+                "partName": "relocated/slides/slide-a.xml"
+              },
+              "transform": {
+                "cx": 1000000,
+                "cy": 500000,
+                "x": 500000,
+                "y": 250000
+              }
+            },
+            {
+              "compatibility": {
+                "diagnostics": [],
+                "status": "editable"
+              },
+              "fill": "00AA11",
+              "id": "element-2b4c8358c39b65b62b95fed6",
+              "kind": "shape",
+              "name": "Diamond",
+              "paragraphs": [],
+              "passthrough": [],
+              "preset": "diamond",
+              "provenance": "parsed",
+              "source": {
+                "fingerprintSha256": "c3e367ecfe092d40119fe4ca04509d6ab148da568f8102043e0d3046929e1d20",
+                "objectId": "cNvPr-6",
+                "partName": "relocated/slides/slide-a.xml"
+              },
+              "stroke": {
+                "cap": "square",
+                "color": "000000",
+                "dash": "solid",
+                "join": "bevel",
+                "widthEmu": 0
+              },
+              "transform": {
+                "cx": 1000000,
+                "cy": 500000,
+                "x": 600000,
+                "y": 300000
+              }
+            }
+          ],
+          "id": "slide-941fe56d9a028963577039e8",
+          "passthrough": [
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "4f5dc044dbf921a7d82b45ccfd8d3b27ea228ea9137d7517fbd95b3f841573c7",
+              "ownerPart": "relocated/slides/_rels/slide-a.xml.rels",
+              "token": "token-4b1cf494eb07558bb891e21a"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "f91afd19d0a31c906a046f19704230056fe66517fe87a5268e94241fe0a3e5b5",
+              "ownerPart": "relocated/layouts/_rels/layout.xml.rels",
+              "token": "token-3c659119eaae70c1848a23c2"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "d30ca7a4f23579a1af3a7a22b5db45bdf43f628f5ccf0f03a5494876d2e9ebe8",
+              "ownerPart": "relocated/masters/_rels/master.xml.rels",
+              "token": "token-2758402787be022f64841587"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "d42be909be7f65f6505b1dba19d4f27790b37e8de96259887b274e8458b1387f",
+              "ownerPart": "relocated/themes/theme.xml",
+              "token": "token-57cd13955cab117cdfcb996b"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "f4cc502ff89b428f92330f1448f51d533152a321602e4ec5d0f376625f5becbb",
+              "ownerPart": "relocated/themes/theme.xml",
+              "token": "token-51960e81463b326eea25c204"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "1cb52196cd34a8679dbbfae812d8d0de0f8cc91febafb5cffc8a55ed2fe133ca",
+              "ownerPart": "_rels/.rels",
+              "token": "token-878195f0689a2d686ca0ab20"
+            },
+            {
+              "disposition": "preserve",
+              "fingerprintSha256": "312cc562b30018d40df42a9f73baba2cbc5dd653348ec669a402465244adcf50",
+              "ownerPart": "relocated/_rels/deck.xml.rels",
+              "token": "token-214da6d62d8d8bac44b77cda"
+            }
+          ],
+          "provenance": "parsed",
+          "source": {
+            "fingerprintSha256": "2c8c994063a74906cd0ff9c25485ac6ea0ed54bb13e940478f562721de1a0df5",
+            "objectId": "sldId-256",
+            "partName": "relocated/slides/slide-a.xml",
+            "relationshipId": "rId7"
+          }
+        }
+      ],
+      "sourceRevision": "rev-09041bde998c7f18db24a7f9c9aae250fce53784265f928fa8c0fcc97b990ff4"
+    }
+  }
+}

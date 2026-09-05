@@ -1,0 +1,70 @@
+InjOffice
+Copyright 2026 Injecting Inc.
+
+This product includes software developed at Injecting Inc.
+
+`@injoffice/xlsx-wasm`, `@injoffice/docx-wasm`, and `@injoffice/pptx-wasm` contain the Go
+JavaScript/WebAssembly runtime and WebAssembly binaries produced by the Go
+toolchain. Go is copyright The Go Authors and distributed under a BSD-style
+license reproduced in `THIRD_PARTY_LICENSES/GO-BSD-3-CLAUSE.txt`.
+
+The XLSX workbooks in `go/xlsxpatch/testdata/excel-authored` are unmodified
+Microsoft Office Scripts documentation samples from
+https://github.com/OfficeDev/office-scripts-docs, licensed under Creative
+Commons Attribution 4.0 International
+(https://creativecommons.org/licenses/by/4.0/). Source commit and exact binary
+provenance are recorded beside the fixture.
+
+The PPTX package in `go/pptxpatch/testdata/powerpoint-authored` is an unmodified
+Microsoft community-content sample from
+https://github.com/microsoft/community-content, licensed under Creative
+Commons Attribution 4.0 International
+(https://creativecommons.org/licenses/by/4.0/). Source commit and exact binary
+provenance are recorded beside the fixture. OfficeDev office-scripts-docs does
+not publish a PowerPoint-authored PPTX.
+
+`packages/font-metrics` depends on harfbuzzjs
+(https://github.com/harfbuzz/harfbuzzjs), MIT License, for the pinned
+HarfBuzz WebAssembly text-shaping runtime exposed by the opt-in Node
+`@injoffice/font-metrics/harfbuzz` entry.
+
+The complete harfbuzzjs MIT license is reproduced in
+`THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt`.
+
+`packages/font-metrics` also depends on bidi-js 1.0.3
+(https://github.com/lojjic/bidi-js), MIT License, for its pinned,
+source-digest-verified Unicode Bidirectional Algorithm 13.0.0 implementation.
+The complete bidi-js MIT license is reproduced in
+`THIRD_PARTY_LICENSES/BIDI-JS-MIT.txt`.
+
+bidi-js declares require-from-string 2.0.2
+(https://github.com/floatdrop/require-from-string) as a runtime dependency.
+InjOffice pins that transitive dependency exactly; its MIT license is reproduced
+in `THIRD_PARTY_LICENSES/REQUIRE-FROM-STRING-MIT.txt`.
+
+`scripts/unicode13/ucd` contains the exact Unicode Character Database 13.0.0
+Scripts, PropList, DerivedCoreProperties, UnicodeData, and DerivedAge sources.
+The checked generator produces the compact Script/Common/Inherited,
+White_Space, punctuation, Default_Ignorable/control, and assigned-repertoire
+tables shared by native itemization, shaping, and bidi admission. Every source,
+the projection, generator, and runtime encoding is SHA-256-bound. Copyright ©
+2019-2020 Unicode, Inc. The data is distributed under Unicode License v3,
+reproduced in `/LICENSE-UNICODE.txt`.
+
+`packages/pdf` depends on `pngjs` (https://github.com/lukeapage/pngjs),
+MIT License, for PNG decode/encode in `image/decodePng.ts` and
+`ocr/encodePng.ts`.
+
+`packages/pdf/src/ocr` (vision-LLM OCR — page rasterization and the
+invisible-text-layer splice) is InjOffice code.
+
+A full copy of the Apache License, Version 2.0 is in
+`THIRD_PARTY_LICENSES/APACHE-2.0.txt`. InjOffice itself is distributed under
+the Apache License, Version 2.0; see `LICENSE`.
+
+`packages/pdf/src/textEdit/radicals.ts` contains a generated mapping derived
+from Unicode Character Database 17.0.0, EquivalentUnifiedIdeograph.txt
+(2025-08-01): https://www.unicode.org/Public/17.0.0/ucd/EquivalentUnifiedIdeograph.txt
+Copyright © 1991-2026 Unicode, Inc. This data is distributed under Unicode
+License v3. The complete copyright and permission notice is reproduced in
+/LICENSE-UNICODE.txt.

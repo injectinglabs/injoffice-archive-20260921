@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+artifacts/
+.DS_Store
+go/xlsxpatch/cmd/xlsxnativewasm/dist/
+testdata/native-office-production-e2e/v1/host-observations/*.json
+testdata/native-office-production-e2e/v1/host-observations/adapter-requests/*.json

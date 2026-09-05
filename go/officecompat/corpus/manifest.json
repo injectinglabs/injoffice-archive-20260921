@@ -1,0 +1,621 @@
+{
+  "protocol": "injoffice-office-compat-corpus/v1",
+  "generator": "officecompat-corpusgen/v1",
+  "fixtures": [
+    {
+      "id": "docx-adversarial-traversal",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/docx-adversarial-traversal.docx",
+      "expected": "generated/expected/docx-adversarial-traversal.json",
+      "sha256": "225fc5c10595b2d38e69a462578800626aeba35c3fb348e19fee4a6729bcefc4",
+      "expectedSha256": "29533a506c1d4675fa857332c34f336075b56de7d0e05187fbdaca0281fc06e6",
+      "bytes": 926,
+      "expandedBytes": 796,
+      "parts": 3,
+      "coverage": [
+        "encoded-alias",
+        "opc-traversal",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic adversarial OPC package",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-inline-png-page-paint",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-inline-png-page-paint.docx",
+      "expected": "generated/expected/docx-inline-png-page-paint.json",
+      "sha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
+      "expectedSha256": "789015eac4d56b012683988eccde40b55cac46461cb048c66249242238928092",
+      "bytes": 1941,
+      "expandedBytes": 2204,
+      "parts": 5,
+      "coverage": [
+        "digest-bound-embedded-png",
+        "exact-emu-inline-image",
+        "identity-picture-transform",
+        "native-page-paint"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML inline PNG",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-malformed-doctype",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/docx-malformed-doctype.docx",
+      "expected": "generated/expected/docx-malformed-doctype.json",
+      "sha256": "aff5edaaa04efda37561537217f766092600d0c9a41bb67f2db30739ca5e87cc",
+      "expectedSha256": "96991ac495f3c352a240a99f5e2626bb2393cd23af92822c7967cd5169961edc",
+      "bytes": 969,
+      "expandedBytes": 845,
+      "parts": 3,
+      "coverage": [
+        "doctype-refusal",
+        "malformed-xml",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic malformed WordprocessingML",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-preserve-refuse",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-preserve-refuse.docx",
+      "expected": "generated/expected/docx-preserve-refuse.json",
+      "sha256": "4804dfeca55c45e6aea689d027208c55ee7d624237e9eb8b0103af96d07109e1",
+      "expectedSha256": "b634f06b7b62a01277c1a741e30fd154042533b353c4c8b198cbdb790847d4c5",
+      "bytes": 1963,
+      "expandedBytes": 2254,
+      "parts": 6,
+      "coverage": [
+        "explicit-refusals",
+        "opaque-passthrough",
+        "preserve-verbatim",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML refusal fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-related-stories",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-related-stories.docx",
+      "expected": "generated/expected/docx-related-stories.json",
+      "sha256": "beaaf6c41f62f121ff18c969cd04db7380402062fb2afe9097e38fd16d9fc996",
+      "expectedSha256": "5ce912da2c5233c07cdb83e4d08befc30c168890d2433e8e3d8abfc140a24edc",
+      "bytes": 3143,
+      "expandedBytes": 3975,
+      "parts": 9,
+      "coverage": [
+        "comment-identity",
+        "endnote-identity",
+        "footer-relationship",
+        "footnote-identity",
+        "header-relationship",
+        "related-story-graph",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "CC0 hand-authored minimal WordprocessingML related-story graph",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-resource-compression",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/docx-resource-compression.docx",
+      "expected": "generated/expected/docx-resource-compression.json",
+      "sha256": "afa2f0269c0dc64e84e42b63a6f5dc02e480d1c8e67da4d1d3ee99d2a91761fa",
+      "expectedSha256": "83be218ab6ea2635d442ca6d6a8a16381a10f6d45542d8fdceab59979549caed",
+      "bytes": 5168,
+      "expandedBytes": 4195151,
+      "parts": 4,
+      "coverage": [
+        "compression-ratio-limit",
+        "resource-bound",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic bounded compression fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-sections-columns",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-sections-columns.docx",
+      "expected": "generated/expected/docx-sections-columns.json",
+      "sha256": "65559c8cf39c2d9c9a2e40b4b53b10ea44875257626bc66b4478f65c15f4882c",
+      "expectedSha256": "1cf5051bddd50e0a8fbc8761207e1959d2ae23256a853319a9c7b339bf2ea1c7",
+      "bytes": 1324,
+      "expandedBytes": 2364,
+      "parts": 3,
+      "coverage": [
+        "continuous-section",
+        "equal-width-columns",
+        "even-page-section",
+        "explicit-columns",
+        "next-column-section",
+        "next-page-section",
+        "odd-page-section",
+        "stable-column-identity",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-strict-relocated",
+      "format": "docx",
+      "dialect": "strict",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-strict-relocated.docx",
+      "expected": "generated/expected/docx-strict-relocated.json",
+      "sha256": "59a4a063e44c820c272179e1290cf99fa6fa8ca04767473209f5b62774a99e62",
+      "expectedSha256": "63b6b5eac339bd7a21582a36f5446e02546bd6285eee68ea28108c08e6daf6bf",
+      "bytes": 1649,
+      "expandedBytes": 1573,
+      "parts": 5,
+      "coverage": [
+        "case-preserved-routing",
+        "header",
+        "relocated-main-part",
+        "strict"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic Strict WordprocessingML",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "docx-transitional-common",
+      "format": "docx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/docx-transitional-common.docx",
+      "expected": "generated/expected/docx-transitional-common.json",
+      "sha256": "47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209",
+      "expectedSha256": "dc8aaf485874d84233aff93fc73ceba7bdeb133a9373b3d6c212f09e72fad64d",
+      "bytes": 1316,
+      "expandedBytes": 1292,
+      "parts": 3,
+      "coverage": [
+        "common-text-and-table",
+        "default-section",
+        "exact-lexical-anchors",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "InjOffice officecompat corpusgen v1",
+        "source": "CC0 hand-authored deterministic WordprocessingML",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-adversarial-encoded-traversal",
+      "format": "pptx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/pptx-adversarial-encoded-traversal.pptx",
+      "expected": "generated/expected/pptx-adversarial-encoded-traversal.json",
+      "sha256": "7ff1242b90a63594f0190a379220ff982cbcf5e1dc94605b8c07b87663afca1f",
+      "expectedSha256": "ee91ed35c6d440eb063aec9c1c5614c341ab216a9f2098438253020d1913e9bc",
+      "bytes": 1576,
+      "expandedBytes": 1386,
+      "parts": 5,
+      "coverage": [
+        "adversarial-opc",
+        "encoded-traversal",
+        "explicit-refusal",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored adversarial OPC relationship target",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-duplicate-relationship-id",
+      "format": "pptx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/pptx-duplicate-relationship-id.pptx",
+      "expected": "generated/expected/pptx-duplicate-relationship-id.json",
+      "sha256": "b27425d6dc2f6529e4aba12f70696c53e84ce22175d4364651fcee6b240f3cf9",
+      "expectedSha256": "49d784f1b90514706d3fb966b62ff6f5a4e9a485da6019d3952805d286e9cc05",
+      "bytes": 1832,
+      "expandedBytes": 1736,
+      "parts": 6,
+      "coverage": [
+        "ambiguous-relationship-map",
+        "duplicate-relationship-id",
+        "explicit-refusal",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "CC0 hand-authored ambiguous PresentationML relationship map",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-malformed-dialect-mix",
+      "format": "pptx",
+      "dialect": "strict",
+      "outcome": "refused",
+      "package": "generated/packages/pptx-malformed-dialect-mix.pptx",
+      "expected": "generated/expected/pptx-malformed-dialect-mix.json",
+      "sha256": "0edd9aa25f2093ee5aa8f74842ed03ac9c4b996dc4988d3aaf7f0e6e2f01c894",
+      "expectedSha256": "fbec5c65fabaf7c25cf41b08b8f9eda5e4533f3273b6e1d9c3510ff25d422fd4",
+      "bytes": 941,
+      "expandedBytes": 829,
+      "parts": 3,
+      "coverage": [
+        "dialect-mix",
+        "explicit-refusal",
+        "malformed-package",
+        "strict"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored mixed Strict and Transitional OOXML relationship types",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-resource-depth-refusal",
+      "format": "pptx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/pptx-resource-depth-refusal.pptx",
+      "expected": "generated/expected/pptx-resource-depth-refusal.json",
+      "sha256": "62ffeabcc39ab623e737aa09bce5ec860e8a1ca129401843320e1da11f5e26e2",
+      "expectedSha256": "64ec1b434435a730a81325ddcb3c34447f224589669661bb0b14a846cc75b32a",
+      "bytes": 941,
+      "expandedBytes": 2241,
+      "parts": 3,
+      "coverage": [
+        "explicit-refusal",
+        "resource-bound",
+        "transitional",
+        "xml-depth"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored bounded XML depth adversary",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-strict-picture",
+      "format": "pptx",
+      "dialect": "strict",
+      "outcome": "accepted",
+      "package": "generated/packages/pptx-strict-picture.pptx",
+      "expected": "generated/expected/pptx-strict-picture.json",
+      "sha256": "e06e8fdc4fafd755c3a023a1bf26aab36f90a77674faaad5c5e9fbb94b8ff7af",
+      "expectedSha256": "5d28ff37f3e1c8e20d7b74ed1f0e8da68b89b782bd07b930241ff1cb1f2a556f",
+      "bytes": 4027,
+      "expandedBytes": 3762,
+      "parts": 12,
+      "coverage": [
+        "actual-part-spelling",
+        "embedded-picture",
+        "native-json-round-trip",
+        "strict"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored Strict PresentationML plus a generated 1x1 PNG pixel",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-transitional-common",
+      "format": "pptx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/pptx-transitional-common.pptx",
+      "expected": "generated/expected/pptx-transitional-common.json",
+      "sha256": "09041bde998c7f18db24a7f9c9aae250fce53784265f928fa8c0fcc97b990ff4",
+      "expectedSha256": "bd4a5567e2c05f5139b00ca372e7991e1722034179b519f6baa85848e83bb6ce",
+      "bytes": 4117,
+      "expandedBytes": 5598,
+      "parts": 11,
+      "coverage": [
+        "autoshapes",
+        "common-text",
+        "lexical-xml-space",
+        "native-json-round-trip",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored Transitional PresentationML with generated text and AutoShapes",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "pptx-transitional-fidelity-diagnostics",
+      "format": "pptx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/pptx-transitional-fidelity-diagnostics.pptx",
+      "expected": "generated/expected/pptx-transitional-fidelity-diagnostics.json",
+      "sha256": "b5deef92481018000ad2ef9699d9f90aab809640cca85d0f438f9105998df0eb",
+      "expectedSha256": "b65385592e187160013909b24474a44d996480cba75df2f39243484aa4a53e9e",
+      "bytes": 4281,
+      "expandedBytes": 4584,
+      "parts": 12,
+      "coverage": [
+        "exact-passthrough-provenance",
+        "explicit-refusal",
+        "native-json-round-trip",
+        "preserve-only",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen declarative OOXML",
+        "source": "hand-authored unsupported PresentationML geometry/effects plus a generated 1x1 PNG pixel",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-refused-compression-ratio",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/xlsx-refused-compression-ratio.xlsx",
+      "expected": "generated/expected/xlsx-refused-compression-ratio.json",
+      "sha256": "41c3542ddf689eb13b1c5b21fd07b0cc4d700187946c9bb89db5cceefba5160a",
+      "expectedSha256": "8b9192d50c425f6232b713f7bc382090ac43a0d68490553b9eebbac691c1c6c8",
+      "bytes": 3759,
+      "expandedBytes": 2098534,
+      "parts": 6,
+      "coverage": [
+        "bounded-adversarial-package",
+        "compression-ratio-limit",
+        "resource-refusal"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored bounded adversarial compression-ratio fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-refused-malformed-numeric",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/xlsx-refused-malformed-numeric.xlsx",
+      "expected": "generated/expected/xlsx-refused-malformed-numeric.json",
+      "sha256": "8fb622418b0d8732e512bc40ef6dbb4c7e7a895d8f81f4f40e926ec3a8402ded",
+      "expectedSha256": "3f37846283fe7fe863cab1da96db51c61769e1835da6e2f0fd9b50ab01b52835",
+      "bytes": 1549,
+      "expandedBytes": 1371,
+      "parts": 5,
+      "coverage": [
+        "malformed-numeric-lexical",
+        "malformed-xml-semantics",
+        "native-refusal"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored malformed SpreadsheetML numeric lexical fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-refused-relationship-type-confusion",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/xlsx-refused-relationship-type-confusion.xlsx",
+      "expected": "generated/expected/xlsx-refused-relationship-type-confusion.json",
+      "sha256": "a1ef57c12d37eb093998776c456c18258b166e2e4e5e082da92c4a15f4355dc5",
+      "expectedSha256": "fc4c621db1d443eb389e387611beb11641268cac7979bbe2934314895239cc73",
+      "bytes": 1527,
+      "expandedBytes": 1320,
+      "parts": 5,
+      "coverage": [
+        "relationship-type-confusion",
+        "semantic-routing-refusal",
+        "worksheet-relationship-integrity"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored SpreadsheetML worksheet relationship type-confusion fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-refused-routing-alias",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "refused",
+      "package": "generated/packages/xlsx-refused-routing-alias.xlsx",
+      "expected": "generated/expected/xlsx-refused-routing-alias.json",
+      "sha256": "7fb05396fb618ee578879c285ee6d2e5222af8e14532557a2bf66c047969fac3",
+      "expectedSha256": "5a392cf99c7e6f3de6d954453effa43a2c3b65cc56342a8b5d05014b6d956c7e",
+      "bytes": 1737,
+      "expandedBytes": 1394,
+      "parts": 6,
+      "coverage": [
+        "adversarial-package",
+        "case-alias-refusal",
+        "malformed-routing"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored adversarial OPC alias fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-relational-preservation",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/xlsx-relational-preservation.xlsx",
+      "expected": "generated/expected/xlsx-relational-preservation.json",
+      "sha256": "6fa5d6029e501d23228ccb1a7e0581c87fa1afebda4ac3445fbfc96e29311617",
+      "expectedSha256": "1b34b90e2fddbd5c8d1b329f7cdc143417f5fde622c98ff9d9b2200335fe9c3d",
+      "bytes": 4887,
+      "expandedBytes": 5537,
+      "parts": 14,
+      "coverage": [
+        "calculation-settings-preservation",
+        "defined-names-preservation",
+        "external-link-preservation",
+        "external-relationship-preservation",
+        "formula-cache-semantics",
+        "hidden-sheet-states",
+        "internal-hyperlink-preservation",
+        "multi-sheet-order",
+        "nested-relationship-graph",
+        "passthrough-provenance"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored SpreadsheetML workbook and relationship preservation fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-strict-common",
+      "format": "xlsx",
+      "dialect": "strict",
+      "outcome": "accepted",
+      "package": "generated/packages/xlsx-strict-common.xlsx",
+      "expected": "generated/expected/xlsx-strict-common.json",
+      "sha256": "9d718af236fec72b0f7c17a33864f78d00acc0906fa6f210ca527ad890efe429",
+      "expectedSha256": "cee94ebdbf4549b1dc419004148ffeace0770a6aa402b9d0621986182e2b8142",
+      "bytes": 1621,
+      "expandedBytes": 1390,
+      "parts": 5,
+      "coverage": [
+        "actual-part-spelling",
+        "common-supported-cells",
+        "strict"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored minimal Strict SpreadsheetML compatibility fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-transitional-common",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/xlsx-transitional-common.xlsx",
+      "expected": "generated/expected/xlsx-transitional-common.json",
+      "sha256": "d5b0e821886fd43d7d484310e1a6c86ead6af813ce5c47bb2a2f33a31eea6bb2",
+      "expectedSha256": "2947a8f439266b8a44088b09faa1cff0d43f0617e5b398f877fce582391027b8",
+      "bytes": 2740,
+      "expandedBytes": 3618,
+      "parts": 7,
+      "coverage": [
+        "common-supported-cells",
+        "contract-round-trip",
+        "deterministic-grid-geometry",
+        "lexical-preservation",
+        "transitional"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored minimal SpreadsheetML compatibility fixture",
+        "license": "CC0-1.0"
+      }
+    },
+    {
+      "id": "xlsx-unsupported-preserve",
+      "format": "xlsx",
+      "dialect": "transitional",
+      "outcome": "accepted",
+      "package": "generated/packages/xlsx-unsupported-preserve.xlsx",
+      "expected": "generated/expected/xlsx-unsupported-preserve.json",
+      "sha256": "c8de505cf5ac8a53ae7809c3c17550e6d067a7bde3fb6686518649c1cafa7079",
+      "expectedSha256": "f663d128943de2b9ff847c66dca7ecee51ff000d2d6c2126977ed36c15c7f627",
+      "bytes": 2891,
+      "expandedBytes": 2920,
+      "parts": 9,
+      "coverage": [
+        "blank-covered-cells",
+        "explicit-refusals",
+        "formula-groups",
+        "hidden-dimensions",
+        "merged-ranges",
+        "opaque-parts",
+        "passthrough-provenance",
+        "shared-styles",
+        "top-left-authority",
+        "unsupported-diagnostics"
+      ],
+      "provenance": {
+        "kind": "generated",
+        "generator": "officecompat-corpusgen/v1",
+        "source": "Hand-authored SpreadsheetML unsupported-content preservation fixture",
+        "license": "CC0-1.0"
+      }
+    }
+  ]
+}

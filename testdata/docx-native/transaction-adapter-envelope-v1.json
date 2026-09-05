@@ -1,0 +1,4 @@
+{
+  "expected_text": "Strict native",
+  "encoded_envelope": "{\"expected_revision\":\"sha256:59a4a063e44c820c272179e1290cf99fa6fa8ca04767473209f5b62774a99e62\",\"format\":\"docx\",\"mutation_id\":\"pm-save-1\",\"payload\":{\"mutations\":[{\"expected_xml_sha256\":\"sha256:0e0d3ceb49fbb4e3159a96668c911c0ebf42ca5a0f4f5113b892354bafa170c1\",\"target_id\":\"run:eb2d52f19c42f8817e1d56fa\",\"target_kind\":\"run\",\"text\":\"Strict native\"}]},\"protocol\":\"injoffice.office.mutations\",\"version\":1}"
+}

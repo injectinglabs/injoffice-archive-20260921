@@ -1,0 +1,17 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-percent-part",
+  "origin": "parsed",
+  "sourceRevision": "rev-percent",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-1",
+    "provenance": "parsed",
+    "elements": [],
+    "source": { "partName": "custom/slides/custom%20slide.xml", "objectId": "slide-1", "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

@@ -1,0 +1,220 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-parsed-1",
+  "origin": "parsed",
+  "sourceRevision": "rev-7f4a",
+  "size": { "cx": 12192000, "cy": 6858000 },
+  "assets": [
+    {
+      "id": "z-picture",
+      "provenance": "parsed",
+      "contentType": "image/png",
+      "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      "byteLength": 5,
+      "dataBase64": "aGVsbG8=",
+      "source": {
+        "partName": "ppt/media/image1.png",
+        "objectId": "media-1",
+        "fingerprintSha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "passthrough": []
+    },
+    {
+      "id": "a-preview",
+      "provenance": "authored",
+      "contentType": "image/png",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "byteLength": 0,
+      "passthrough": []
+    }
+  ],
+  "slides": [
+    {
+      "id": "slide-a",
+      "provenance": "parsed",
+      "background": "FFFFFF",
+      "transition": { "type": "push", "direction": "left" },
+      "source": {
+        "partName": "ppt/slides/slide1.xml",
+        "objectId": "slide-256",
+        "relationshipId": "rId1",
+        "fingerprintSha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "passthrough": [
+        {
+          "token": "pass-slide-ext-1",
+          "ownerPart": "ppt/slides/slide1.xml",
+          "fingerprintSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "disposition": "preserve"
+        }
+      ],
+      "elements": [
+        {
+          "kind": "text",
+          "id": "el-title",
+          "provenance": "parsed",
+          "name": "Title 1",
+          "transform": { "x": 100, "y": 200, "cx": 5000000, "cy": 700000 },
+          "placeholder": "title",
+          "paragraphs": [
+            {
+              "runs": [
+                { "text": "Native Office", "bold": true, "fontSizeHundredthPt": 3200, "color": "112233", "fontFamily": "Aptos" }
+              ],
+              "align": "center",
+              "level": 0,
+              "bullet": false
+            }
+          ],
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-2",
+            "fingerprintSha256": "5555555555555555555555555555555555555555555555555555555555555555"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        },
+        {
+          "kind": "shape",
+          "id": "el-shape",
+          "provenance": "parsed",
+          "transform": { "x": 100, "y": 1000000, "cx": 1500000, "cy": 800000 },
+          "preset": "roundRect",
+          "fill": "DDEEFF",
+          "stroke": { "color": "112233", "widthEmu": 12700, "cap": "flat", "join": "round", "dash": "solid" },
+          "paragraphs": [],
+          "animation": { "effect": "fade", "delayMs": 100, "durationMs": 500 },
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-3",
+            "fingerprintSha256": "8888888888888888888888888888888888888888888888888888888888888888"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        },
+        {
+          "kind": "connector",
+          "id": "el-line",
+          "provenance": "parsed",
+          "transform": { "x": 1600000, "y": 1400000, "cx": 500000, "cy": 500000 },
+          "stroke": { "color": "000000", "widthEmu": 12700, "cap": "flat", "join": "round", "dash": "solid" },
+          "headArrow": false,
+          "tailArrow": true,
+          "flipH": false,
+          "animation": { "effect": "flyIn", "direction": "left", "distancePpm": 250000 },
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-4",
+            "fingerprintSha256": "9999999999999999999999999999999999999999999999999999999999999999"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        },
+        {
+          "kind": "picture",
+          "id": "el-picture",
+          "provenance": "parsed",
+          "transform": { "x": 2200000, "y": 1000000, "cx": 1000000, "cy": 1000000 },
+          "assetId": "z-picture",
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-5",
+            "relationshipId": "rId3",
+            "fingerprintSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        },
+        {
+          "kind": "table",
+          "id": "el-table",
+          "provenance": "parsed",
+          "transform": { "x": 100, "y": 2300000, "cx": 2000000, "cy": 1000000 },
+          "table": {
+            "columnWidths": [1000000, 1000000],
+            "rowHeights": [500000, 500000],
+            "rows": [
+              [{ "text": "A", "fill": "EEEEEE", "align": "left" }, { "text": "B" }],
+              [{ "text": "C" }, { "text": "D", "border": { "color": "000000", "widthEmu": 12700 } }]
+            ]
+          },
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-6",
+            "fingerprintSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        },
+        {
+          "kind": "chart",
+          "id": "el-chart",
+          "provenance": "parsed",
+          "transform": { "x": 3500000, "y": 1000000, "cx": 3000000, "cy": 2000000 },
+          "chart": {
+            "chartPart": "ppt/charts/chart1.xml",
+            "relationshipId": "rId4",
+            "opaqueRef": {
+              "token": "pass-chart-graph-1",
+              "ownerPart": "ppt/charts/chart1.xml",
+              "fingerprintSha256": "6666666666666666666666666666666666666666666666666666666666666666",
+              "disposition": "preserve"
+            },
+            "previewAssetId": "a-preview"
+          },
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-7",
+            "relationshipId": "rId4",
+            "fingerprintSha256": "7777777777777777777777777777777777777777777777777777777777777777"
+          },
+          "passthrough": [],
+          "compatibility": {
+            "status": "preserveOnly",
+            "diagnostics": [{ "severity": "warning", "code": "chart.opaque", "message": "Chart is preserved as an opaque relationship graph.", "scope": { "slideId": "slide-a", "elementId": "el-chart" } }]
+          }
+        },
+        {
+          "kind": "group",
+          "id": "el-group",
+          "provenance": "parsed",
+          "transform": { "x": 7000000, "y": 1000000, "cx": 2000000, "cy": 2000000 },
+          "childTransform": { "x": 0, "y": 0, "cx": 2000000, "cy": 2000000 },
+          "children": [
+            {
+              "kind": "shape",
+              "id": "el-group-child",
+              "provenance": "parsed",
+              "transform": { "x": 0, "y": 0, "cx": 1000000, "cy": 1000000 },
+              "preset": "ellipse",
+              "fill": "FFCC00",
+              "paragraphs": [],
+              "source": {
+                "partName": "ppt/slides/slide1.xml",
+                "objectId": "cNvPr-9",
+                "fingerprintSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "passthrough": [],
+              "compatibility": { "status": "editable", "diagnostics": [] }
+            }
+          ],
+          "source": {
+            "partName": "ppt/slides/slide1.xml",
+            "objectId": "cNvPr-8",
+            "fingerprintSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "passthrough": [],
+          "compatibility": { "status": "editable", "diagnostics": [] }
+        }
+      ],
+      "compatibility": {
+        "status": "preserveOnly",
+        "diagnostics": [{ "severity": "warning", "code": "slide.contains-opaque", "message": "Slide contains an opaque chart.", "scope": { "slideId": "slide-a" } }]
+      }
+    }
+  ],
+  "compatibility": {
+    "status": "preserveOnly",
+    "diagnostics": [{ "severity": "warning", "code": "deck.contains-opaque", "message": "Deck contains content that is preserved but not semantically editable." }]
+  }
+}

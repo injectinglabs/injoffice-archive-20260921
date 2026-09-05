@@ -1,0 +1,396 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "xlsx-unsupported-preserve",
+  "format": "xlsx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "native": {
+    "protocol": "injoffice.xlsx.native",
+    "version": 1,
+    "document_id": "workbook:09b6c6a77239e7dda79be2efb34e6c24ef709a23ab4b778f0ce45034475dd706",
+    "revision": "rev:c8de505cf5ac8a53ae7809c3c17550e6d067a7bde3fb6686518649c1cafa7079",
+    "source": {
+      "package_sha256": "sha256:c8de505cf5ac8a53ae7809c3c17550e6d067a7bde3fb6686518649c1cafa7079",
+      "workbook_part": "xl/workbook.xml",
+      "dialect": "transitional",
+      "authority": "exact-package-bytes"
+    },
+    "sheets": [
+      {
+        "id": "1",
+        "name": "Unsupported",
+        "order": 0,
+        "state": "visible",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "rows": [
+          {
+            "row": 1,
+            "hidden": true,
+            "custom_height": false
+          }
+        ],
+        "columns": [
+          {
+            "column": 0,
+            "end_column": 0,
+            "hidden": true,
+            "custom_width": false,
+            "best_fit": false,
+            "style_id": 0
+          }
+        ],
+        "cells": [
+          {
+            "row": 0,
+            "column": 0,
+            "ref": "A1",
+            "ooxml_type": "s",
+            "style_id": 0,
+            "value": {
+              "kind": "string",
+              "storage": "shared",
+              "lexical": "0",
+              "text": "Rich Text",
+              "rich": true
+            },
+            "editable": false
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "ref": "B1",
+            "style_id": 0,
+            "formula": {
+              "text": "ROW()",
+              "type": "shared",
+              "ref": "B1:B2",
+              "shared_index": 0,
+              "cached": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "1",
+                "rich": false
+              }
+            },
+            "editable": false
+          },
+          {
+            "row": 0,
+            "column": 2,
+            "ref": "C1",
+            "style_id": 0,
+            "formula": {
+              "text": "ROW()",
+              "type": "array",
+              "ref": "C1:C2",
+              "cached": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "1",
+                "rich": false
+              }
+            },
+            "editable": false
+          },
+          {
+            "row": 0,
+            "column": 3,
+            "ref": "D1",
+            "style_id": 0,
+            "formula": {
+              "text": "",
+              "type": "dataTable",
+              "ref": "D1:D2",
+              "cached": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "1",
+                "rich": false
+              }
+            },
+            "editable": false
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "ref": "A2",
+            "style_id": 0,
+            "editable": false
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "ref": "B2",
+            "style_id": 0,
+            "formula": {
+              "text": "",
+              "type": "shared",
+              "shared_index": 0,
+              "cached": {
+                "kind": "number",
+                "storage": "number",
+                "lexical": "2",
+                "rich": false
+              }
+            },
+            "editable": false
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "ref": "C2",
+            "style_id": 0,
+            "value": {
+              "kind": "number",
+              "storage": "number",
+              "lexical": "2",
+              "rich": false
+            },
+            "editable": false
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "ref": "D2",
+            "style_id": 0,
+            "value": {
+              "kind": "number",
+              "storage": "number",
+              "lexical": "2",
+              "rich": false
+            },
+            "editable": false
+          }
+        ],
+        "merged_ranges": [
+          {
+            "ref": "A1:A2",
+            "row": 0,
+            "column": 0,
+            "end_row": 1,
+            "end_column": 0,
+            "editable": false
+          }
+        ],
+        "editable": false,
+        "refusal_code": "FORMULA_GROUPS"
+      }
+    ],
+    "styles": [
+      {
+        "id": 0,
+        "effective": {
+          "number_format": "General",
+          "bold": false,
+          "italic": false,
+          "fill": {
+            "origin": "implicit-default"
+          },
+          "border": {
+            "origin": "implicit-default"
+          },
+          "horizontal_alignment": "general",
+          "vertical_alignment": "bottom",
+          "wrap_text": false,
+          "projection": "full",
+          "unsupported": []
+        },
+        "raw_projection_sha256": "sha256:6051d1baebfdc63ff53849826c70d3b262d12aa559b85eb75862ca167e2f80b9"
+      }
+    ],
+    "capabilities": [
+      {
+        "name": "native-ooxml-parse",
+        "level": "read-only",
+        "detail": "HTML-free SpreadsheetML extraction with lexical values and formula caches"
+      },
+      {
+        "name": "native-v1-mutations",
+        "level": "partial",
+        "detail": "Cells, formulas, row/column dimensions, and the bounded style.patch projection"
+      },
+      {
+        "name": "unsupported-content",
+        "level": "preserve-exact",
+        "detail": "Unmodeled OOXML remains authoritative in the original package"
+      }
+    ],
+    "passthrough_parts": [
+      {
+        "part_name": "custom/opaque.bin",
+        "content_type": "application/octet-stream",
+        "byte_length": 19,
+        "sha256": "sha256:0dfb1c3fd677e163f7a65c9b4015222bf947630cc76153fa68f13ec78722b161",
+        "policy": "preserve-exact"
+      },
+      {
+        "part_name": "xl/charts/chart1.xml",
+        "content_type": "application/vnd.openxmlformats-officedocument.drawingml.chart+xml",
+        "byte_length": 96,
+        "sha256": "sha256:e9799bf057c666c7a309204023bd2914db7f9a9c9979c3857fdca767fe4520af",
+        "policy": "preserve-exact"
+      },
+      {
+        "part_name": "xl/worksheets/_rels/sheet1.xml.rels",
+        "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+        "byte_length": 273,
+        "sha256": "sha256:d53ac28a4f8093db45594d45d103704f7073e0231244a7fc1cb265b0cf570a07",
+        "policy": "preserve-exact"
+      }
+    ],
+    "unsupported": [
+      {
+        "id": "unsupported:20ae8db9dfa023191d54233004406c6cc477172304cfa53092b9d2b6eb568034",
+        "code": "EXTERNAL_RELATIONSHIP",
+        "capability": "external-links",
+        "scope_id": "workbook",
+        "part_name": "xl/worksheets/_rels/sheet1.xml.rels",
+        "preservation": "preserve-exact",
+        "message": "external relationship is preserved but is outside native mutation scope"
+      },
+      {
+        "id": "unsupported:53f92e292e7605ed7bfc14eecc13c3606966ac37e487d13f4b13dd2eccf6dec4",
+        "code": "SHEET_DECLARATION_ATTRIBUTES",
+        "capability": "workbook-features",
+        "scope_id": "sheet:1",
+        "part_name": "xl/workbook.xml",
+        "preservation": "preserve-exact",
+        "message": "unmodeled sheet declaration attributes remain authority-bound to the source package and mutation is refused"
+      },
+      {
+        "id": "unsupported:4f277e8e06f9c9b217e5a3e8e12c0f5bc227151e29cef4f239d4516ae65f5319",
+        "code": "RICH_SHARED_STRING",
+        "capability": "rich-text",
+        "scope_id": "workbook",
+        "part_name": "xl/sharedStrings.xml",
+        "preservation": "preserve-exact",
+        "message": "rich shared-string formatting is preserved exactly and exposed as read-only text"
+      },
+      {
+        "id": "unsupported:435addb87fc37944278f2503ff2080596ad1ffafa1ef3c2455404b9544fc8f7f",
+        "code": "RICH_CELL_STRING",
+        "capability": "rich-text",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "cell_ref": "A1",
+        "preservation": "preserve-exact",
+        "message": "rich string text is readable but mutation-refused to prevent formatting loss"
+      },
+      {
+        "id": "unsupported:e2dcbcf03b8eff714c12c057456bcbec1545c0a3f996031ab4bb8caba39398c6",
+        "code": "FORMULA_SHARED",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "cell_ref": "B1",
+        "preservation": "preserve-exact",
+        "message": "shared/array/data-table formulas are surfaced but mutation-refused without group-wide fidelity"
+      },
+      {
+        "id": "unsupported:f0383c9033207d3d3180b9c608fc7c0f96e5f6965771d7861c15a47794dcd280",
+        "code": "FORMULA_ARRAY",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "cell_ref": "C1",
+        "preservation": "preserve-exact",
+        "message": "shared/array/data-table formulas are surfaced but mutation-refused without group-wide fidelity"
+      },
+      {
+        "id": "unsupported:5ca7d109de31c91a68119b84615319b212728062cfeaf40e8ad2c55ad4d65c45",
+        "code": "FORMULA_DATATABLE",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "cell_ref": "D1",
+        "preservation": "preserve-exact",
+        "message": "shared/array/data-table formulas are surfaced but mutation-refused without group-wide fidelity"
+      },
+      {
+        "id": "unsupported:3be376be0b04765e1bd8138912e960753af800ed7029615d2729929fc8082940",
+        "code": "FORMULA_SHARED",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "cell_ref": "B2",
+        "preservation": "preserve-exact",
+        "message": "shared/array/data-table formulas are surfaced but mutation-refused without group-wide fidelity"
+      },
+      {
+        "id": "unsupported:4cf0eae7341cb299f911d808ea1a856aa73df74f0f2316cc4e230fc8e012b008",
+        "code": "MERGED_CELLS",
+        "capability": "merges",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "preservation": "preserve-exact",
+        "message": "merged ranges are projected exactly as read-only grid regions; original SpreadsheetML remains source authority until an atomic merge writer is proven"
+      },
+      {
+        "id": "unsupported:49ecfdeda4cde6e4923370aad75d6abd53e359432ba39491964d00edd79e4a6e",
+        "code": "CONDITIONAL_FORMATTING",
+        "capability": "conditional-formatting",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "preservation": "preserve-exact",
+        "message": "worksheet feature is preserved exactly outside the v1 native projection"
+      },
+      {
+        "id": "unsupported:3650a1c3333f2cc9e74434d97385b816e0d43c04ccc800daa2bc9e0d63460583",
+        "code": "FORMULA_GROUP_RANGE",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "range_ref": "B1:B2",
+        "preservation": "preserve-exact",
+        "message": "the exact formula-group range is authority-bound to the source package; the complete sheet is mutation-refused"
+      },
+      {
+        "id": "unsupported:fd28ebd744c440bc58eb73d971b95d60440d1564da1394be0215f06d0cf3b5ac",
+        "code": "FORMULA_GROUP_RANGE",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "range_ref": "C1:C2",
+        "preservation": "preserve-exact",
+        "message": "the exact formula-group range is authority-bound to the source package; the complete sheet is mutation-refused"
+      },
+      {
+        "id": "unsupported:9dc57ef4833d86d66a3cda4010d8024d90f415e68dd2f6593535c6e99432a908",
+        "code": "FORMULA_GROUP_RANGE",
+        "capability": "formula-groups",
+        "scope_id": "sheet:1",
+        "part_name": "xl/worksheets/sheet1.xml",
+        "range_ref": "D1:D2",
+        "preservation": "preserve-exact",
+        "message": "the exact formula-group range is authority-bound to the source package; the complete sheet is mutation-refused"
+      },
+      {
+        "id": "unsupported:40dbcc7fdaa801faaafef4a00ea94db27f512c411fdca2b3fe8a38b975d90e49",
+        "code": "OPAQUE_PACKAGE_PART",
+        "capability": "opaque-parts",
+        "scope_id": "workbook",
+        "part_name": "custom/opaque.bin",
+        "preservation": "preserve-exact",
+        "message": "part is preserved exactly and is outside the v1 native mutation projection"
+      },
+      {
+        "id": "unsupported:32a1d617db25b38365bffaa7da12b1edc2c2d2115cc493a2f6e76f7b3aa7eec9",
+        "code": "CHART_CONTENT",
+        "capability": "charts",
+        "scope_id": "workbook",
+        "part_name": "xl/charts/chart1.xml",
+        "preservation": "preserve-exact",
+        "message": "part is preserved exactly and is outside the v1 native mutation projection"
+      },
+      {
+        "id": "unsupported:3194a5c2ceb00d0fac167a6f52ebe77273747de7b890f5680841d4c0cbfc5420",
+        "code": "OPAQUE_PACKAGE_PART",
+        "capability": "opaque-parts",
+        "scope_id": "workbook",
+        "part_name": "xl/worksheets/_rels/sheet1.xml.rels",
+        "preservation": "preserve-exact",
+        "message": "part is preserved exactly and is outside the v1 native mutation projection"
+      }
+    ]
+  }
+}

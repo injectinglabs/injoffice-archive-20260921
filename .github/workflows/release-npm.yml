@@ -1,0 +1,95 @@
+name: Release npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Package version to validate without publishing (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - name: Require release tags to point at main
+        if: github.event_name == 'push'
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tag $RELEASE_TAG does not point at main." >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - name: Require dependency and license integrity
+        run: npm run check:dependency-integrity
+      - run: npm run check:packages
+      - name: Validate package publication
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run release:packages -- "$RELEASE_TAG" --dry-run
+      - name: Prepare immutable release tarballs
+        run: npm run release:packages -- "$RELEASE_TAG" --pack-destination release-tarballs
+      - name: Upload validated release tarballs
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-release-${{ github.sha }}
+          path: release-tarballs/
+          if-no-files-found: error
+          retention-days: 1
+
+  stage:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - name: Require staged-publishing support
+        run: |
+          npm_version="$(npm --version)"
+          node -e "const [major, minor] = process.argv[1].split('.').map(Number); if (major < 11 || (major === 11 && minor < 15)) throw new Error('npm 11.15.0 or newer is required')" "$npm_version"
+          echo "npm $npm_version"
+      - uses: actions/download-artifact@v7
+        with:
+          name: npm-release-${{ github.sha }}
+          path: release-tarballs
+      - name: Stage packages through npm trusted publishing
+        run: npm run release:packages -- "$RELEASE_TAG" --stage-from release-tarballs

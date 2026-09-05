@@ -1,0 +1,463 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "docx-sections-columns",
+  "format": "docx",
+  "dialect": "transitional",
+  "outcome": "accepted",
+  "native": {
+    "body": {
+      "anchor": {
+        "end_byte": 1659,
+        "part_name": "word/document.xml",
+        "path": "/w:document[1]/w:body[1]",
+        "start_byte": 121,
+        "xml_sha256": "sha256:1eb158fe72e3746a54b2885186b4e983a35a200f1b908908955b23586364f55d"
+      },
+      "blocks": [
+        {
+          "id": "paragraph:a3f01c186401b8c209d2452f",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 413,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[1]",
+              "start_byte": 129,
+              "xml_sha256": "sha256:82a86de98d657294c39c35e43e99269f41d671e32aec3bfa3023b80b6f2a7b72"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:a3f01c186401b8c209d2452f",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 401,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:t[1]",
+                  "start_byte": 380,
+                  "xml_sha256": "sha256:8f3f08e85259c3a0c8256fe7f934c5eb49c54ce6ad2ac71d73b7051a58f8e8c4"
+                },
+                "id": "run:3e67489e4da2574806945109",
+                "kind": "text",
+                "text": "continuous"
+              }
+            ]
+          }
+        },
+        {
+          "id": "paragraph:e9151ff1b69b955a39ac6281",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 757,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[2]",
+              "start_byte": 413,
+              "xml_sha256": "sha256:38aa28ac5e733f44fd46046faf8421b35c247a33551d984ec4d84d50ee53a83f"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:e9151ff1b69b955a39ac6281",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 745,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[2]/w:r[1]/w:t[1]",
+                  "start_byte": 725,
+                  "xml_sha256": "sha256:793c6f3be4549b4b7474e2ba5fab891baf02f39906959d45dc78f89a64bc66be"
+                },
+                "id": "run:abde87f24d2cb0558803a840",
+                "kind": "text",
+                "text": "next page"
+              }
+            ]
+          }
+        },
+        {
+          "id": "paragraph:0c42960a2b0717e8312c822a",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 1038,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[3]",
+              "start_byte": 757,
+              "xml_sha256": "sha256:5a2311ac0a9962366b16f3bc1dfdcc684b9ce066f7fee44d33872daf12ecf292"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:0c42960a2b0717e8312c822a",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 1026,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[3]/w:r[1]/w:t[1]",
+                  "start_byte": 1006,
+                  "xml_sha256": "sha256:37edcc332471e246cdeed873e75cbc6bae6eb6d5342207d2dc8e11389d99e44e"
+                },
+                "id": "run:4c1351ffa5235b0e7ddbdab4",
+                "kind": "text",
+                "text": "even page"
+              }
+            ]
+          }
+        },
+        {
+          "id": "paragraph:facf4193895853a26d8d076d",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 1380,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[4]",
+              "start_byte": 1038,
+              "xml_sha256": "sha256:c5145da44e2edc56d7c0d3d64e13866aec3191110c6f68be193b7e9a60c57429"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:facf4193895853a26d8d076d",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 1368,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[4]/w:r[1]/w:t[1]",
+                  "start_byte": 1349,
+                  "xml_sha256": "sha256:bce6ed1c396cd0fbfaaedbe939fc836aa4c30b1630309d83893f54b7fc295d3d"
+                },
+                "id": "run:6e612d7729758ba675054826",
+                "kind": "text",
+                "text": "odd page"
+              }
+            ]
+          }
+        },
+        {
+          "id": "paragraph:96436611876d5c020632ea87",
+          "kind": "paragraph",
+          "paragraph": {
+            "anchor": {
+              "end_byte": 1424,
+              "part_name": "word/document.xml",
+              "path": "/w:document[1]/w:body[1]/w:p[5]",
+              "start_byte": 1380,
+              "xml_sha256": "sha256:d75e229bb230b91811ff48a31477b2b85efb67f6ddea579e36159e965f3834f7"
+            },
+            "edit_policy": {
+              "allowed_operations": [
+                "text.replace"
+              ],
+              "mode": "read-write"
+            },
+            "id": "paragraph:96436611876d5c020632ea87",
+            "properties": {},
+            "runs": [
+              {
+                "anchor": {
+                  "end_byte": 1412,
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[5]/w:r[1]/w:t[1]",
+                  "start_byte": 1390,
+                  "xml_sha256": "sha256:e936b7be3c3ea4a29f73db87a566fe4387ec285d08503de10b16b3b260dd90b6"
+                },
+                "id": "run:3a9778b6c69d6a14a7275bb8",
+                "kind": "text",
+                "text": "next column"
+              }
+            ]
+          }
+        }
+      ],
+      "id": "story:6435600de677c2d5b040878a",
+      "kind": "body",
+      "part_name": "word/document.xml"
+    },
+    "capabilities": [
+      {
+        "detail": "HTML-free, part-qualified WordprocessingML extraction",
+        "level": "read-only",
+        "name": "native-ooxml-parse"
+      },
+      {
+        "detail": "Exact XML byte ranges and fingerprints guard atomic native text mutations",
+        "level": "read-write",
+        "name": "surgical-byte-anchors"
+      },
+      {
+        "detail": "Guarded paragraph and text-run replacement with post-write native validation",
+        "level": "read-write",
+        "name": "native-text-mutation"
+      },
+      {
+        "detail": "Unmodeled OOXML is preserved verbatim and must not be flattened",
+        "level": "unsupported",
+        "name": "full-document-regeneration"
+      }
+    ],
+    "comment_stories": [],
+    "comments": [],
+    "document_id": "document:a552e98ce8d143986a1c50d4",
+    "footers": [],
+    "headers": [],
+    "notes": [],
+    "passthrough_parts": [
+      {
+        "byte_length": 280,
+        "content_type": "application/vnd.openxmlformats-package.relationships+xml",
+        "part_name": "_rels/.rels",
+        "policy": "preserve-verbatim",
+        "sha256": "sha256:737f8dfc276e8f3fe5afd5c285ceabd020379fef289d1c001c395bc3b393a513"
+      }
+    ],
+    "protocol": "injoffice.docx.native",
+    "revision": "rev:65559c8cf39c2d9c9a2e40b4b53b10ea",
+    "sections": [
+      {
+        "anchor": {
+          "end_byte": 367,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:p[1]/w:pPr[1]/w:sectPr[1]",
+          "start_byte": 141,
+          "xml_sha256": "sha256:3403160e25b1d11753f357dc502ef9f0c5913a0578200071e6ede23415196476"
+        },
+        "break_type": "continuous",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:277891b561a6dc61b647524c",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:277891b561a6dc61b647524c:column:0",
+              "ordinal": 0
+            },
+            {
+              "id": "section:277891b561a6dc61b647524c:column:1",
+              "ordinal": 1
+            }
+          ],
+          "column_layout": "equal-width",
+          "column_spacing_twips": 720,
+          "columns": 2,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:a3f01c186401b8c209d2452f",
+        "title_page": false
+      },
+      {
+        "anchor": {
+          "end_byte": 712,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:p[2]/w:pPr[1]/w:sectPr[1]",
+          "start_byte": 425,
+          "xml_sha256": "sha256:88e9d2540b6d58d51b69c9956f9d3bf463f4e80c8da8a470728f55836879226c"
+        },
+        "break_type": "next-page",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:5d29a3134a727f984e86d8b0",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:5d29a3134a727f984e86d8b0:column:0",
+              "ordinal": 0,
+              "space_after_twips": 720,
+              "width_twips": 4320
+            },
+            {
+              "id": "section:5d29a3134a727f984e86d8b0:column:1",
+              "ordinal": 1,
+              "space_after_twips": 0,
+              "width_twips": 4320
+            }
+          ],
+          "column_layout": "explicit",
+          "column_spacing_twips": 0,
+          "columns": 2,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:e9151ff1b69b955a39ac6281",
+        "title_page": false
+      },
+      {
+        "anchor": {
+          "end_byte": 993,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:p[3]/w:pPr[1]/w:sectPr[1]",
+          "start_byte": 769,
+          "xml_sha256": "sha256:894050f79c45090b57e095760e4d51feae7fa48df8e223c40ea76e37a415d5a4"
+        },
+        "break_type": "even-page",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:4d21394a77dc753aadabfb64",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:4d21394a77dc753aadabfb64:column:0",
+              "ordinal": 0
+            },
+            {
+              "id": "section:4d21394a77dc753aadabfb64:column:1",
+              "ordinal": 1
+            }
+          ],
+          "column_layout": "equal-width",
+          "column_spacing_twips": 720,
+          "columns": 2,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:0c42960a2b0717e8312c822a",
+        "title_page": false
+      },
+      {
+        "anchor": {
+          "end_byte": 1336,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:p[4]/w:pPr[1]/w:sectPr[1]",
+          "start_byte": 1050,
+          "xml_sha256": "sha256:ae57cab15d4a7a8481a309b946b79e0c3d62e4a5494b4255ae2c03aedd6b59eb"
+        },
+        "break_type": "odd-page",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:6472918637632d3b384bfff6",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:6472918637632d3b384bfff6:column:0",
+              "ordinal": 0,
+              "space_after_twips": 720,
+              "width_twips": 4320
+            },
+            {
+              "id": "section:6472918637632d3b384bfff6:column:1",
+              "ordinal": 1,
+              "space_after_twips": 0,
+              "width_twips": 4320
+            }
+          ],
+          "column_layout": "explicit",
+          "column_spacing_twips": 0,
+          "columns": 2,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:facf4193895853a26d8d076d",
+        "title_page": false
+      },
+      {
+        "anchor": {
+          "end_byte": 1650,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:sectPr[1]",
+          "start_byte": 1424,
+          "xml_sha256": "sha256:52926d26d3e436ac9d0365bf8cb089c17346ebd297f2b4d6e60eb1a00068bab0"
+        },
+        "break_type": "next-column",
+        "footer_refs": [],
+        "header_refs": [],
+        "id": "section:02592db3a1be1e94b1dac711",
+        "page": {
+          "column_definitions": [
+            {
+              "id": "section:02592db3a1be1e94b1dac711:column:0",
+              "ordinal": 0
+            },
+            {
+              "id": "section:02592db3a1be1e94b1dac711:column:1",
+              "ordinal": 1
+            }
+          ],
+          "column_layout": "equal-width",
+          "column_spacing_twips": 720,
+          "columns": 2,
+          "height_twips": 15840,
+          "margins": {
+            "bottom_twips": 1440,
+            "footer_twips": 720,
+            "gutter_twips": 0,
+            "header_twips": 720,
+            "left_twips": 1440,
+            "right_twips": 1440,
+            "top_twips": 1440
+          },
+          "orientation": "portrait",
+          "width_twips": 12240
+        },
+        "starts_at_block_id": "paragraph:96436611876d5c020632ea87",
+        "title_page": false
+      }
+    ],
+    "source": {
+      "main_part": "word/document.xml",
+      "package_sha256": "sha256:65559c8cf39c2d9c9a2e40b4b53b10ea44875257626bc66b4478f65c15f4882c"
+    },
+    "unsupported": [],
+    "version": 1
+  }
+}

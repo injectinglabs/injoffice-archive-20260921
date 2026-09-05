@@ -1,0 +1,49 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-missing-required",
+  "origin": "authored",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [{
+    "id": "asset-empty",
+    "provenance": "authored",
+    "contentType": "image/png",
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "passthrough": []
+  }],
+  "slides": [{
+    "id": "slide-1",
+    "provenance": "authored",
+    "elements": [{
+      "kind": "text",
+      "id": "text-1",
+      "provenance": "authored",
+      "transform": { "y": 0, "cx": 100, "cy": 100 },
+      "paragraphs": [{ "runs": [{}] }],
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }, {
+      "kind": "connector",
+      "id": "connector-1",
+      "provenance": "authored",
+      "transform": { "x": 0, "y": 0, "cx": 100, "cy": 100 },
+      "stroke": { "color": "000000" },
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }, {
+      "kind": "table",
+      "id": "table-1",
+      "provenance": "authored",
+      "transform": { "x": 0, "y": 0, "cx": 100, "cy": 100 },
+      "table": {
+        "columnWidths": [100],
+        "rowHeights": [100],
+        "rows": [[{ "border": { "color": "000000" } }]]
+      },
+      "passthrough": [],
+      "compatibility": { "status": "editable", "diagnostics": [] }
+    }],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

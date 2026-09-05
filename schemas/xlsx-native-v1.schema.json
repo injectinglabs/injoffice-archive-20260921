@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.injoffice.dev/xlsx/native-v1.schema.json",
+  "title": "InjOffice native XLSX workbook v1",
+  "description": "Renderer-neutral, source-authoritative projection emitted by go/xlsxpatch.",
+  "type": "object",
+  "x-binding-name": "NativeWorkbookV1",
+  "x-resource-limits": {
+    "maxJsonBytes": 134217728,
+    "maxJsonDepth": 256,
+    "maxJsonTokens": 4000000,
+    "maxSheets": 1024,
+    "maxRows": 1048576,
+    "maxColumns": 16384,
+    "maxCells": 1000000,
+    "maxMergedRanges": 100000,
+    "maxStyles": 100000,
+    "maxInventory": 10000,
+    "maxTextBytes": 33554432,
+    "maxPartBytes": 67108864,
+    "maxIssues": 100
+  },
+  "x-unsupported-classifications": {
+    "CELL_ATTRIBUTES": { "capability": "cell-markup", "scope": "sheet", "impact": "cell" },
+    "CELL_EXTENSIONS": { "capability": "extensions", "scope": "sheet", "impact": "cell" },
+    "CELL_METADATA": { "capability": "cell-metadata", "scope": "sheet", "impact": "cell" },
+    "OPAQUE_CELL_MARKUP": { "capability": "cell-markup", "scope": "sheet", "impact": "cell" },
+    "RICH_CELL_STRING": { "capability": "rich-text", "scope": "sheet", "impact": "cell" },
+    "FORMULA_ATTRIBUTES": { "capability": "formula-groups", "scope": "sheet", "impact": "cell" },
+    "FORMULA_SHARED": { "capability": "formula-groups", "scope": "sheet", "impact": "cell" },
+    "FORMULA_ARRAY": { "capability": "formula-groups", "scope": "sheet", "impact": "cell" },
+    "FORMULA_DATATABLE": { "capability": "formula-groups", "scope": "sheet", "impact": "cell" },
+    "FORMULA_GROUP_RANGE": { "capability": "formula-groups", "scope": "sheet", "impact": "range" },
+    "SHEET_PROTECTION": { "capability": "protection", "scope": "sheet", "impact": "sheet", "refusalCode": "SHEET_PROTECTION" },
+    "WORKSHEET_ATTRIBUTES": { "capability": "worksheet-features", "scope": "sheet", "impact": "sheet", "refusalCode": "UNSAFE_WORKSHEET_ATTRIBUTES" },
+    "SHEET_DATA_ATTRIBUTES": { "capability": "worksheet-features", "scope": "sheet", "impact": "sheet", "refusalCode": "SHEET_DATA_ATTRIBUTES" },
+    "SHEET_DECLARATION_ATTRIBUTES": { "capability": "workbook-features", "scope": "sheet", "impact": "sheet", "refusalCode": "SHEET_DECLARATION_ATTRIBUTES" },
+    "COLS_ATTRIBUTES": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "SHEET_FORMAT_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "SHEET_VIEW_GEOMETRY": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "COLUMN_DIMENSION_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "ROW_DIMENSION_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "ROW_EXTENSIONS": { "capability": "extensions", "scope": "sheet", "impact": "none" },
+    "INLINE_STRING_ATTRIBUTES": { "capability": "rich-text", "scope": "sheet", "impact": "cell" },
+    "MERGED_CELLS": { "capability": "merges", "scope": "sheet", "impact": "none" },
+    "CONDITIONAL_FORMATTING": { "capability": "conditional-formatting", "scope": "sheet", "impact": "none" },
+    "DATA_VALIDATION": { "capability": "data-validation", "scope": "sheet", "impact": "none" },
+    "HYPERLINKS": { "capability": "hyperlinks", "scope": "sheet", "impact": "none" },
+    "DRAWING_REFERENCE": { "capability": "drawings", "scope": "sheet", "impact": "none" },
+    "TABLE_REFERENCE": { "capability": "tables", "scope": "sheet", "impact": "none" },
+    "WORKSHEET_EXTENSIONS": { "capability": "extensions", "scope": "sheet", "impact": "none" },
+    "FOREIGN_WORKSHEET_MARKUP": { "capability": "extensions", "scope": "sheet", "impact": "none" },
+    "UNMODELED_WORKSHEET_FEATURE": { "capability": "worksheet-features", "scope": "sheet", "impact": "none" },
+    "RICH_SHARED_STRING": { "capability": "rich-text", "scope": "workbook", "impact": "none" },
+    "SHARED_STRING_TABLE_ATTRIBUTES": { "capability": "rich-text", "scope": "workbook", "impact": "none" },
+    "SHARED_STRING_ITEM_ATTRIBUTES": { "capability": "rich-text", "scope": "workbook", "impact": "none" },
+    "SHARED_STRING_TABLE_OPAQUE_CONTENT": { "capability": "rich-text", "scope": "workbook", "impact": "none" },
+    "WORKBOOK_ATTRIBUTES": { "capability": "workbook-features", "scope": "workbook", "impact": "none" },
+    "SHEETS_ATTRIBUTES": { "capability": "workbook-features", "scope": "workbook", "impact": "none" },
+    "UNMODELED_WORKBOOK_FEATURE": { "capability": "workbook-features", "scope": "workbook", "impact": "none" },
+    "EXTERNAL_RELATIONSHIP": { "capability": "external-links", "scope": "workbook", "impact": "none" },
+    "STYLE_SHEET_ATTRIBUTES": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_TABLE_ATTRIBUTES": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_TABLE_OPAQUE_CONTENT": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_RECORD_ATTRIBUTES": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_FONT_OPAQUE_CONTENT": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_XF_OPAQUE_CONTENT": { "capability": "styles", "scope": "workbook", "impact": "none" },
+    "STYLE_NUMBER_FORMAT": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_FONT_COLOR": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_FILL": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_BORDER": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_HORIZONTAL_ALIGNMENT": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_VERTICAL_ALIGNMENT": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_ALIGNMENT_EXTENDED": { "capability": "styles", "scope": "style", "impact": "none" },
+    "CHART_CONTENT": { "capability": "charts", "scope": "workbook", "impact": "none" },
+    "PIVOT_OR_SLICER_CONTENT": { "capability": "pivots", "scope": "workbook", "impact": "none" },
+    "DRAWING_OR_MEDIA_CONTENT": { "capability": "drawings", "scope": "workbook", "impact": "none" },
+    "TABLE_CONTENT": { "capability": "tables", "scope": "workbook", "impact": "none" },
+    "COMMENT_CONTENT": { "capability": "comments", "scope": "workbook", "impact": "none" },
+    "EXTERNAL_LINK_CONTENT": { "capability": "external-links", "scope": "workbook", "impact": "none" },
+    "MACRO_CONTENT": { "capability": "macros", "scope": "workbook", "impact": "none" },
+    "OPAQUE_PACKAGE_PART": { "capability": "opaque-parts", "scope": "workbook", "impact": "none" }
+  },
+  "additionalProperties": false,
+  "required": ["protocol", "version", "document_id", "revision", "source", "sheets", "styles", "capabilities", "passthrough_parts", "unsupported"],
+  "properties": {
+    "protocol": { "const": "injoffice.xlsx.native" },
+    "version": { "const": 1 },
+    "document_id": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$" },
+    "revision": { "type": "string", "pattern": "^rev:[0-9a-f]{64}$" },
+    "source": { "$ref": "#/$defs/source" },
+    "normal_style": { "$ref": "#/$defs/normalStyle" },
+    "sheets": { "type": "array", "minItems": 1, "maxItems": 1024, "items": { "$ref": "#/$defs/sheet" } },
+    "styles": { "type": "array", "minItems": 1, "maxItems": 100000, "items": { "$ref": "#/$defs/style" } },
+    "capabilities": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/capability" } },
+    "passthrough_parts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughPart" } },
+    "unsupported": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/unsupported" } }
+  },
+  "$defs": {
+    "dialect": { "type": "string", "enum": ["transitional", "strict"], "x-binding-name": "NativeWorkbookDialect" },
+    "sheetState": { "type": "string", "enum": ["visible", "hidden", "veryHidden"], "x-binding-name": "NativeSheetState" },
+    "valueKind": { "type": "string", "enum": ["number", "boolean", "error", "date", "string"], "x-binding-name": "NativeValueKind" },
+    "valueStorage": { "type": "string", "enum": ["number", "boolean", "error", "date", "formula-string", "shared", "inline"], "x-binding-name": "NativeValueStorage" },
+    "ooxmlCellType": { "type": "string", "enum": ["n", "s", "str", "inlineStr", "b", "e", "d"], "x-binding-name": "NativeOOXMLCellType" },
+    "formulaType": { "type": "string", "enum": ["normal", "shared", "array", "dataTable"], "x-binding-name": "NativeFormulaType" },
+    "styleProjection": { "type": "string", "enum": ["full", "partial"], "x-binding-name": "NativeStyleProjection" },
+    "styleUnsupported": { "type": "string", "enum": ["alignment-extended", "border", "fill", "font-color", "horizontal-alignment", "number-format", "vertical-alignment"], "x-binding-name": "NativeStyleUnsupportedCode" },
+    "borderStyle": {
+      "type": "string",
+      "enum": ["dashDot", "dashDotDot", "dashed", "dotted", "double", "hair", "medium", "mediumDashDot", "mediumDashDotDot", "mediumDashed", "slantDashDot", "thick", "thin"],
+      "x-binding-name": "NativeBorderStyle"
+    },
+    "borderOrigin": { "type": "string", "enum": ["implicit-default", "styles-record"], "x-binding-name": "NativeBorderOrigin" },
+    "horizontalAlignment": { "type": "string", "enum": ["general", "left", "center", "right"], "x-binding-name": "NativeHorizontalAlignment" },
+    "verticalAlignment": { "type": "string", "enum": ["top", "middle", "bottom"], "x-binding-name": "NativeVerticalAlignment" },
+    "source": {
+      "type": "object", "x-binding-name": "NativeWorkbookSourceV1", "additionalProperties": false,
+      "required": ["package_sha256", "workbook_part", "dialect", "authority"],
+      "properties": {
+        "package_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "workbook_part": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "dialect": { "$ref": "#/$defs/dialect" },
+        "authority": { "const": "exact-package-bytes" }
+      }
+    },
+    "capability": {
+      "type": "object", "x-binding-name": "NativeWorkbookCapabilityV1", "additionalProperties": false,
+      "required": ["name", "level"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z][a-z0-9-]{0,127}$" },
+        "level": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      }
+    },
+    "passthroughPart": {
+      "type": "object", "x-binding-name": "NativeWorkbookPassthroughPartV1", "additionalProperties": false,
+      "required": ["part_name", "content_type", "byte_length", "sha256", "policy"],
+      "properties": {
+        "part_name": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "content_type": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "byte_length": { "type": "integer", "minimum": 0, "maximum": 67108864 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "policy": { "const": "preserve-exact" }
+      }
+    },
+    "unsupported": {
+      "type": "object", "x-binding-name": "NativeWorkbookUnsupportedV1", "additionalProperties": false,
+      "required": ["id", "code", "capability", "scope_id", "preservation", "message"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^unsupported:[0-9a-f]{64}$" },
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,127}$" },
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,127}$" },
+        "scope_id": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "part_name": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "cell_ref": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "range_ref": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "preservation": { "const": "preserve-exact" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      }
+    },
+    "value": {
+      "type": "object", "x-binding-name": "NativeWorkbookValueV1", "additionalProperties": false,
+      "required": ["kind", "storage", "rich"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/valueKind" },
+        "storage": { "$ref": "#/$defs/valueStorage" },
+        "lexical": { "type": "string", "minLength": 1, "maxLength": 32767 },
+        "text": { "type": "string", "maxLength": 32767, "x-maxUtf16Length": 32767 },
+        "rich": { "type": "boolean" }
+      }
+    },
+    "formula": {
+      "type": "object", "x-binding-name": "NativeWorkbookFormulaV1", "additionalProperties": false,
+      "required": ["text", "type"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 8191, "x-maxUtf16Length": 8191 },
+        "type": { "$ref": "#/$defs/formulaType" },
+        "ref": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "shared_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "cached": { "$ref": "#/$defs/value" }
+      }
+    },
+    "cell": {
+      "type": "object", "x-binding-name": "NativeWorkbookCellV1", "additionalProperties": false,
+      "required": ["row", "column", "ref", "style_id", "editable"],
+      "properties": {
+        "row": { "type": "integer", "minimum": 0, "maximum": 1048575 },
+        "column": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "ref": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "ooxml_type": { "$ref": "#/$defs/ooxmlCellType" },
+        "style_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "value": { "$ref": "#/$defs/value" },
+        "formula": { "$ref": "#/$defs/formula" },
+        "editable": { "type": "boolean" }
+      }
+    },
+    "mergedRange": {
+      "type": "object", "x-binding-name": "NativeWorkbookMergedRangeV1", "additionalProperties": false,
+      "required": ["ref", "row", "column", "end_row", "end_column", "editable"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 3, "maxLength": 33 },
+        "row": { "type": "integer", "minimum": 0, "maximum": 1048575 },
+        "column": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "end_row": { "type": "integer", "minimum": 0, "maximum": 1048575 },
+        "end_column": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "editable": { "const": false }
+      }
+    },
+    "sheetFormat": {
+      "type": "object", "x-binding-name": "NativeWorkbookSheetFormatV1", "additionalProperties": false,
+      "required": ["default_row_height_points", "custom_height", "zero_height"],
+      "properties": {
+        "base_column_width": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "default_column_width": { "type": "number", "exclusiveMinimum": 0, "maximum": 255 },
+        "default_row_height_points": { "type": "number", "exclusiveMinimum": 0, "maximum": 409.5 },
+        "custom_height": { "type": "boolean" },
+        "zero_height": { "type": "boolean" }
+      }
+    },
+    "normalStyle": {
+      "type": "object", "x-binding-name": "NativeWorkbookNormalStyleV1", "additionalProperties": false,
+      "required": ["style_xf_id", "font_id", "font_name", "font_size_points", "font_bold", "font_italic", "font_record_sha256"],
+      "properties": {
+        "style_xf_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "font_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "font_name": { "type": "string", "minLength": 1, "maxLength": 255, "x-maxUtf16Length": 255 },
+        "font_size_points": { "type": "number", "exclusiveMinimum": 0, "maximum": 409.5 },
+        "font_bold": { "type": "boolean" },
+        "font_italic": { "type": "boolean" },
+        "font_record_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "rowDimension": {
+      "type": "object", "x-binding-name": "NativeWorkbookRowDimensionV1", "additionalProperties": false,
+      "required": ["row", "hidden", "custom_height"],
+      "properties": {
+        "row": { "type": "integer", "minimum": 0, "maximum": 1048575 },
+        "height_points": { "type": "number", "minimum": 0, "maximum": 409.5 },
+        "hidden": { "type": "boolean" },
+        "custom_height": { "type": "boolean" },
+        "style_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "columnDimension": {
+      "type": "object", "x-binding-name": "NativeWorkbookColumnDimensionV1", "additionalProperties": false,
+      "required": ["column", "end_column", "hidden", "custom_width", "best_fit"],
+      "properties": {
+        "column": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "end_column": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "width": { "type": "number", "minimum": 0, "maximum": 255 },
+        "hidden": { "type": "boolean" },
+        "custom_width": { "type": "boolean" },
+        "best_fit": { "type": "boolean" },
+        "style_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "borderSide": {
+      "type": "object", "x-binding-name": "NativeWorkbookBorderSideV1", "additionalProperties": false,
+      "required": ["style", "color"],
+      "properties": {
+        "style": { "$ref": "#/$defs/borderStyle" },
+        "color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" }
+      }
+    },
+    "border": {
+      "type": "object", "x-binding-name": "NativeWorkbookBorderV1", "additionalProperties": false,
+      "required": ["origin"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/borderOrigin" },
+        "border_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "record_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "left": { "$ref": "#/$defs/borderSide" },
+        "right": { "$ref": "#/$defs/borderSide" },
+        "top": { "$ref": "#/$defs/borderSide" },
+        "bottom": { "$ref": "#/$defs/borderSide" }
+      }
+    },
+    "fill": {
+      "type": "object", "x-binding-name": "NativeWorkbookFillV1", "additionalProperties": false,
+      "required": ["origin"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/borderOrigin" },
+        "fill_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "record_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" }
+      }
+    },
+    "effectiveStyle": {
+      "type": "object", "x-binding-name": "NativeWorkbookEffectiveStyleV1", "additionalProperties": false,
+      "required": ["projection", "unsupported"],
+      "properties": {
+        "number_format": { "type": "string", "minLength": 1, "maxLength": 255, "x-maxUtf16Length": 255 },
+        "font_name": { "type": "string", "minLength": 1, "maxLength": 255, "x-maxUtf16Length": 255 },
+        "font_size_points": { "type": "number", "exclusiveMinimum": 0, "maximum": 409 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "font_color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+        "fill_color": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+        "fill": { "$ref": "#/$defs/fill" },
+        "border": { "$ref": "#/$defs/border" },
+        "horizontal_alignment": { "$ref": "#/$defs/horizontalAlignment" },
+        "vertical_alignment": { "$ref": "#/$defs/verticalAlignment" },
+        "wrap_text": { "type": "boolean" },
+        "projection": { "$ref": "#/$defs/styleProjection" },
+        "unsupported": { "type": "array", "maxItems": 7, "items": { "$ref": "#/$defs/styleUnsupported" } }
+      }
+    },
+    "style": {
+      "type": "object", "x-binding-name": "NativeWorkbookStyleV1", "additionalProperties": false,
+      "required": ["id", "effective", "raw_projection_sha256"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "effective": { "$ref": "#/$defs/effectiveStyle" },
+        "raw_projection_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "sheet": {
+      "type": "object", "x-binding-name": "NativeWorkbookSheetV1", "additionalProperties": false,
+      "required": ["id", "name", "order", "state", "part_name", "rows", "columns", "cells", "merged_ranges", "editable"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 10, "pattern": "^[1-9][0-9]{0,9}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 31, "x-maxUtf16Length": 31 },
+        "order": { "type": "integer", "minimum": 0, "maximum": 1023 },
+        "state": { "$ref": "#/$defs/sheetState" },
+        "part_name": { "type": "string", "minLength": 1, "maxLength": 8192 },
+        "sheet_format": { "$ref": "#/$defs/sheetFormat" },
+        "rows": { "type": "array", "maxItems": 1048576, "items": { "$ref": "#/$defs/rowDimension" } },
+        "columns": { "type": "array", "maxItems": 16384, "items": { "$ref": "#/$defs/columnDimension" } },
+        "cells": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/cell" } },
+        "merged_ranges": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/mergedRange" } },
+        "editable": { "type": "boolean" },
+        "refusal_code": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Z][A-Z0-9_]{0,127}$" }
+      }
+    }
+  }
+}

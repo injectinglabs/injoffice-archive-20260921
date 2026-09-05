@@ -1,0 +1,11 @@
+{
+  "protocol": "injoffice-expected-native-json/v1",
+  "fixtureId": "pptx-duplicate-relationship-id",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "refusal": {
+    "class": "ambiguous-relationship-map",
+    "contains": "invalid or duplicate relationship"
+  }
+}

@@ -1,0 +1,382 @@
+# @injoffice/docs
+
+Renderer-independent Docs contracts and layout helpers. Native DOCX v1 is the
+strict JSON boundary between authoritative `go/docxpatch` parsing/persistence
+and future browser layout and ProseMirror adapters.
+
+```ts
+import { decodeNativeDocxJson, encodeNativeDocxDocument } from '@injoffice/docs'
+
+const decoded = decodeNativeDocxJson(await response.text())
+if (!decoded.ok) {
+  console.error(decoded.issues)
+} else {
+  const canonical = encodeNativeDocxDocument(decoded.value)
+}
+```
+
+Browser-local extract/apply clients should import the native contract and
+mutation envelope from `@injoffice/docs/native-docx`. That entry does not load
+the root package's Node-qualified shaping or page-paint providers.
+
+The published schema is available as
+`@injoffice/docs/native-docx-v1.schema.json`. Unknown fields, dangling native
+identities, wrong-kind references, inconsistent source anchors, invalid union
+payloads, unsafe edit policies, JSON null/negative-zero hazards, and inputs over
+the documented resource limits are rejected.
+The model is not a DOCX generator: source anchors and passthrough inventories
+must be applied surgically to the original OPC package by `go/docxpatch`.
+
+## Native ProseMirror transaction adapter v1
+
+`adaptNativeDocxProseMirrorTransactionV1` translates only a complete, exact,
+versioned body-text projection into the existing shared Office mutation
+envelope and `go/docxpatch` run-replacement payload. Positions are ProseMirror
+UTF-16 code units. The input binds the exact `source.package_sha256`, durable
+paragraph/run IDs, run XML fingerprints, native run properties, opaque mark
+sets, every pre-step run value, and the complete before/after body projection.
+
+V1 accepts only closed text replace slices wholly inside one native text run.
+It simulates successive step coordinates, rejects mapping drift, overlap and
+reordering, and coalesces ordered changes to one guarded mutation per run.
+Tables, controls, references, drawings, notes/comments, fields, tracked or
+unsupported markup, mark changes, structural/open slices, stale revisions or
+anchors, unknown or duplicate keys, unsafe XML text, unattested edge
+whitespace, partial coverage, and all resource
+overflow return issues with no envelope. The canonical output uses the shared
+3 MiB payload and 4 MiB envelope ceilings.
+
+The typed `NativeDocxTextMutationPayloadV1` also exposes Go's narrow direct
+paragraph selector. `target_kind: 'paragraph'` is valid only when the native
+paragraph contains exactly one run and that run is text; it binds the
+paragraph ID and paragraph XML fingerprint while Go replaces the sole text
+node. It must not overlap that run's selector in the same atomic batch. The
+ProseMirror adapter continues to emit run selectors because its steps and
+source fingerprints are run-addressed.
+
+The optional `adaptNativeDocxProseMirrorTransactionWithHostV1` seam accepts a
+host-owned projector for an actual ProseMirror transaction. It adds no runtime
+ProseMirror dependency and no persistence or layout authority: the original
+DOCX and Go native engine remain authoritative. The website/editor integration
+must carry durable native IDs and exact anchors in its TipTap schema, project
+transactions before save, and keep collaboration sequence/rebase state
+separate from the exact package-byte revision.
+
+## Native shaping and lines
+
+The additive `shapeNativeDocxLinesV1` API consumes both validated Go wire
+projections (`NativeDocumentV1` and `NativeResolvedLayoutInputV1`) plus the
+shared `@injoffice/font-metrics/layout` manifest/provider contract. A future
+paginator supplies an explicit inline width and tab interval; the core never
+reads browser pixels or invents Word defaults.
+
+```ts
+import { shapeNativeDocxLinesV1 } from '@injoffice/docs'
+
+const result = await shapeNativeDocxLinesV1(
+  {
+    protocol: 'injoffice.docx.shaping-request',
+    version: 1,
+    document: nativeDocument,
+    resolved_layout: resolvedLayout,
+    font_manifest: manifest,
+    available_width_millipoints: 468_000,
+    tab_interval_millipoints: 36_000,
+  },
+  { resolver, shaper },
+)
+```
+
+The output is `injoffice.docx.shaped-lines` v1: deterministic paragraphs,
+lines, and cluster fragments keyed to native paragraph/run IDs. All distances
+are integer milli-points and text offsets are UTF-16. The core handles resolved
+paragraph spacing/indents/alignment/line rules, paragraph-content-relative
+tabs, hard breaks, exact resolved list-marker text and geometry, script/language/direction
+shaping requests, and conservative cluster-safe Unicode wrapping.
+The Go resolver discovers `numbering.xml` only through the main-part internal
+relationship and exact content type, then attests the owning relationship part,
+raw numbering part, and canonical source-ordered marker model. The bounded
+slice supports decimal, lower/upper repeated-letter, lower/upper Roman, and
+literal bullet levels; `%1` through `%9` placeholders with other percent forms retained literally,
+concrete-instance `startOverride`, bounded restart policies, authored numbering suffix-tab stops,
+logical alignment at the numbering text-margin anchor, and hanging indents are
+resolved before HarfBuzz shaping. Style-supplied `ilvl` is ignored in favor of
+one exact abstract-level `pStyle` link, and definition/model hashes use the same
+versioned canonical UTF-8 serializer in Go and TypeScript. Explicit numbering tabs
+at or before the shaped marker end and marker advances beyond the label end are
+refused before any partial marker can escape. Pagination recomputes the shaped
+marker end and suffix target from the exact numbering tab or attested Word default
+tab interval, so a self-consistent shaped-marker tamper cannot pass the join.
+Unknown or foreign numbering-root semantics stay silent only while numbering is
+unused and block every concrete `numId` reference. All accepted twips are bounded
+before their exact ×50 milli-point conversion, with negative zero rejected.
+Resolved paragraph-mark properties supply font metrics for blank,
+hidden-only, tab-only, and explicit empty lines without emitting synthetic
+text fragments.
+
+The bounded visual slice resolves Unicode bidi over the logical paragraph with
+an explicit LTR/RTL paragraph base, applies explicit run direction as UAX #9
+isolates, shapes each resolved direction/script span, and emits fragments in
+left-to-right visual paint order. Every fragment retains its bidi level and
+logical ordinal; each line carries the complete logical-to-visual permutation.
+Soft-wrapped `both` lines expand only shaped U+0020 clusters between content,
+distributing integer milli-point remainders in visual order and recording each
+expansion. Final and hard-break lines remain unexpanded. `distribute`, authored
+bidi controls, and soft justified lines without a qualified U+0020 opportunity
+fail closed rather than using character spacing.
+
+Table grids, drawings, theme/script gaps, pagination, and painting remain
+explicit diagnostics. Both
+wire projections and the font manifest are strictly validated before a
+provider runs; injected font resources and returned cluster/glyph ranges are
+validated again, including manifest-backed face identity, bounded metadata,
+and the loaded byte SHA-256. A refusal or invalid result in any numbered
+paragraph atomically empties the complete shaped paragraph projection, so a
+partial list is never presented as complete. The validated request/manifest and provider callable
+identities are snapshotted before any provider call; output records those exact
+manifest and resolver/shaper IDs and revisions, and mid-call provider identity
+changes fail closed. Validated resources are cached by the complete resolved-face
+identity: at most 64 MiB per resource, 128 MiB of unique font bytes, and 256
+faces, with 50,000 resolve/shape calls and 256 loads per request. Resolver and
+shaper results, runs, and faces are copied into owned snapshots at each async
+boundary. The shaper receives one separately copied resource per exact face,
+bounded to another 128 MiB per request, so its mutable `Uint8Array` cannot
+corrupt the digest-checked authoritative cache. Because JavaScript cannot make
+typed-array elements immutable without copying on every span, the injected
+shaper remains trusted not to change that provider-facing byte copy; all
+identity, metrics, run, manifest, and provenance metadata stays immutable.
+The module imports no DOM, HTML, canvas, Mammoth, React, Konva, or platform
+font-measurement API.
+
+For Node 22, `@injoffice/font-metrics/harfbuzz` supplies the resolver-neutral,
+real HarfBuzz qualification boundary for page-paint v1's horizontal
+Latin/Arabic/Hebrew slice.
+It consumes only the exact face/bytes/metrics returned by the injected
+resolver; it performs no inventory, resolution, loading, or substitution.
+Its composite `providerRevision` binds the pinned HarfBuzz JavaScript/WASM
+artifacts, runtime, generated Unicode 13 classifier, configuration, and host source revision.
+The page-paint compiler accepts only a shaper instance attested by that exact
+runtime module and resolve/loads every unique authored font reference through
+the digest-bound embedded-font provider before bidi resolution begins.
+The shaping cache key binds the exact digest and face; shaped-lines carries the
+face ID plus manifest/provider revisions; page paint's full manifest and
+shaped-lines hashes complete that content-addressed join. Shaped-lines also
+records the pinned bidi provider revision, Unicode 13.0.0 data version, and
+hash-bound shared classifier revision. The bidi boundary atomically refuses all
+supplementary scalars before invoking the UTF-16-based engine.
+
+## Native pagination v1
+
+`paginateNativeDocxV1` is the next renderer-neutral stage. It consumes the
+native document, resolved-layout input, and shaped-lines output together, then
+emits `injoffice.docx.paginated-layout` v1. The request and output have strict
+exact-key decoders; document/revision/story/paragraph/run/fragment joins are
+verified before placement.
+
+```ts
+import { paginateNativeDocxV1 } from '@injoffice/docs'
+
+const result = paginateNativeDocxV1({
+  protocol: 'injoffice.docx.pagination-request',
+  version: 1,
+  document: nativeDocument,
+  resolved_layout: resolvedLayout,
+  shaped_lines: shapedLines,
+  pagination_settings: paginationSettings,
+})
+```
+
+The supported v1 slice places shaped body paragraphs and lines in integer
+milli-points (one twip is exactly 50 milli-points). It applies page geometry,
+top/right/bottom/left margins and gutter, continuous/next/even/odd/next-column
+section starts, exact equal-width column grids,
+paragraph page breaks, keep-lines, atomic keep-next chains, default-on widow/orphan
+control, and Word's maximum (not additive) adjacent paragraph spacing. Stable
+page, paragraph-slice, and placed-line IDs retain section and shaped-line
+provenance. Blank parity fillers are explicit, header/footer-free output pages
+owned by the preceding section and point at the odd/even section they precede.
+Consumers that receive stored or transported page output should use
+`decodeNativeDocxPaginatedLayoutForRequest(output, request)`: unlike the
+standalone structural decoder, it proves every shaped body line is present
+exactly once in native source order and binds source sections, page geometry,
+header/footer provenance, engine provenance, vertical placement, paragraph
+spacing, and page/slice break choices to the exact deterministic request. The
+paginator runs the same source-completeness check before returning success.
+
+An exact bounded note slice is included. Footnote and endnote stories must be
+relationship-resolved from their owning main-part relationship, carry distinct
+native IDs, and contain paragraphs only. Each content story must have exactly
+one matching native reference in the body and exactly one self-label reference;
+decimal labels are assigned from body reference order, independently per note
+kind, starting at one. One qualified separator story is required per used kind.
+Footnotes are placed as an atomic separator-plus-notes group in the unused
+bottom region of the referencing page. Endnotes are placed as one atomic group
+on the final content page, or on one new final page when the existing page has
+insufficient room. Every placed note and note line carries its exact section
+and column identity. The normal `-1` sentinel produces one deterministic
+bounded separator rule; an unused `0` continuation sentinel stays inert.
+Actual continuation still refuses the whole projection.
+
+Because keep-with-next constrains a paragraph boundary rather than making every
+line indivisible, v1 accepts a keep chain only when every multiline member is
+also `keep_lines`; other chains refuse pending boundary-aware split planning.
+
+V1 is deliberately fail-closed. Every section column must have the same body
+width used by shaping. Continuous transitions require an identical
+single-column physical grid; next-column requires an identical exact grid.
+Equal-width columns must divide exactly, while explicit columns must completely
+describe equal widths and authored gaps; omitted explicit spacing is standard
+zero. Notes that require body reflow or splitting refuse the complete
+projection; an unused continuation separator remains inert. Custom
+numbering/restarts/positions, ambiguous or duplicate
+references, missing labels or separators, cycles, nested tables, drawings,
+fields, unsupported note markup, note-bearing pages with multiple columns or
+section grids, and cross-continuous note boundaries also refuse with no partial
+pages. Note-free multicolumn documents remain supported. Column separators and
+unequal or ambiguous widths,
+unsupported attested settings semantics, body tables, inline/floating drawings,
+and body comment or non-note references,
+inline page/column breaks, and invalid/unknown pagination-affecting source
+markup return `status: 'refused'` with no partial pages. Pagination retains
+header/footer reference provenance; the native header/footer planner resolves
+per-kind section inheritance and selects first/even/default stories from exact
+`title_page`, physical parity, and the attested even/odd setting. The separate extractor-owned settings attestation represents an absent
+part with exact Word defaults, but pagination refuses it because omitted
+compatibility mode means Word mode 12. The bounded supported profile requires
+explicit mode 15, binds the source package plus the owning `.rels` and settings
+part fingerprints, and verifies that shaping used its default tab stop. Mirror
+margins, top gutter, legacy/unknown compatibility semantics, and unknown
+layout-affecting settings refuse. Every accepted settings element has an exact
+attribute/child/text shape; theme-font language, shape defaults, attached
+templates, native math defaults, placeholder/revision display settings,
+enabled field-result updates, and other inputs not proven irrelevant to
+resolved/shaped advances remain unsupported. `updateFields=false` is attested
+explicitly, and content-type identity uses ASCII-only case folding. Explicit
+extractor-owned Word default section
+geometry is accepted; no other geometry is inferred.
+
+Top-of-page paragraph-before spacing is retained only on the first content page
+of a section and suppressed on later pages, including automatic, explicit, and
+keep/widow-driven page moves. Keep-chain planning uses one bounded reverse pass.
+The paginator is bounded to 2,048 pages, 100,000 line placements, 100,000
+paragraph slices, 1,000 diagnostics, two million decoded output values, and
+integer coordinates within one trillion milli-points. It imports no DOM,
+HTML, CSS layout, canvas, browser renderer, Mammoth, or legacy pixel paginator.
+Wire-visible diagnostics use locale-independent UTF-16 code-unit ordering.
+The provenance checks are structural joins, not cryptographic authorization;
+callers must keep all four projections inside the trusted native pipeline.
+Paginated-layout v1 does not carry full resolved-layout/shaped-lines content,
+so independent transport still requires the complete request and request-bound
+deterministic recomputation. Numbered documents additionally carry the exact
+numbering relationship/part hashes and canonical marker-model digest through
+pagination provenance.
+
+## Native page paint v1
+
+`compileNativeDocxPagePaintV1` closes the final renderer-neutral gap from the
+native document/resolved-layout/shaped-lines/pagination request and its exact
+paginated output to deterministic replayable page paths. The request carries
+the full font manifest plus canonical manifest, shaped-lines, qualified-table,
+embedded-media, and complete paginated-layout SHA-256 attestations, plus an
+expected outline-provider ID/revision. Every
+painted `face_id` must resolve to a non-system manifest face with an explicit
+SHA-256 content digest; the injected provider is called only with the tuple
+`(content_digest, collection_index, glyph_id)`, with `face_id` retained as the
+manifest identity attestation.
+
+The provider returns bounded integer design-unit move/line/quadratic/cubic/close
+commands and `units_per_em`. The engine applies the shared deterministic
+font-unit scaling rule, the resolved run or list-marker font size/color, shaped glyph offsets
+and advances, and the paginated line origin. Font outlines use a y-up baseline
+coordinate system; output paths use absolute y-down page milli-points. Each
+page explicitly records its white background, full-page clip, body geometry,
+every placed line (including glyphless lines), baseline, nonzero fill rule, and
+left-to-right visual-order glyph path commands. A replay adapter therefore performs no
+text shaping, measurement, font selection, or paint-policy inference.
+
+V1 deliberately accepts only diagnostic-free, simple horizontal body and
+selected static header/footer paragraphs with natural shaped line height, plus
+qualified footnote/endnote paragraphs with natural shaped line height, plus a
+bounded body-table subset:
+explicit fixed dxa width and grid, left alignment/indent, four cell margins,
+indivisible non-repeating rows, direct cell paragraphs, table-level single/RGB
+borders, and clear RGB cell shading. Horizontal `grid_span`, vertical restart/continue
+merges, `atLeast`/`exact` row heights, and simple whole-table styles that project
+onto those same border/fill commands are included. Merged rows paginate as one
+atomic group and shared edges are emitted once in deterministic table-fill →
+line-content → border order. It refuses autofit/percentage/missing widths, repeated
+headers, cell-border conflicts, nested content, numbered cells, conditional
+`tblStylePr` effects, and any table-descendant resolution diagnostic. Selected story
+lines must fit between the exact header/footer edge distance and the body box.
+The planner independently inherits reference kinds, keeps parity fillers blank,
+and content-addresses its complete selection/placement plan in page-paint
+provenance. Exact left-to-right list-marker fragments are replayed from their
+already-shaped glyphs and numbering provenance.
+
+`vertAlign` remains preserved OOXML only. Native shaping and page paint refuse
+it atomically because v1 has no qualified scale, baseline, and advance metric.
+
+The qualified native-image slice is equally renderer-neutral and
+self-contained: the compiler exact-joins each drawing's internal relationship
+and preserved relationship-part digest to one preserved media part, verifies
+caller-supplied bytes against that part's byte length and SHA-256, parses bounded static PNG
+dimensions, and carries canonical base64 bytes as an output resource. Inline
+image commands retain the exact DrawingML EMU extent projected through the
+integer-only `10/127` milli-point ratio, an explicit full-source crop, and an
+explicit identity transform. Prepared and completed compiler envelopes expose
+canonical hashes for the complete validated request and output.
+
+Images are restricted to embedded static PNG pictures in `wp:inline` with zero
+distances/effect extents, identity `a:xfrm`, full-source crop, exact integer
+milli-point geometry, and bounded bytes/pixels. It refuses anchors/floating
+placement, wrapping, remote or external relationships, vectors and other
+raster formats, animation, crop/rotation/flip/effects, mismatched extents, and
+media digest drift. Selected header/footer inline PNG runs use the same
+digest-bound asset join and `paint_inline_image` command as body pictures. V1
+also emits RTL/mixed-bidi fragments and bounded U+0020-justified lines in
+visual paint order, requiring no paint-time text reversal or measurement. It
+also emits RTL/mixed-bidi fragments, exact list-marker glyphs, and bounded
+U+0020-justified lines in visual paint order, requiring no paint-time text
+reversal or measurement. It refuses distributed-character justification,
+underline/highlight paint, header/footer tables, shapes, references, fields
+(including cached PAGE results),
+and unsupported note content. Native note marker fragments must exactly equal
+the paginator-assigned decimal label. It also refuses
+system or unaddressed faces, missing glyphs, invalid/mismatched provider output,
+unclosed or overflowing paths, incomplete pages, and all resource overflows.
+Any such condition returns one `status: 'refused'` output with `pages: []`; no
+previously accumulated page or command escapes.
+
+Stored output should first pass `decodeNativeDocxPagePaintV1`, then
+`decodeNativeDocxPagePaintForRequestV1` for exact request/page/line/glyph/style
+identity joins. When provider-authenticated path geometry and the legitimacy of
+a refusal must also be proven, use the async
+`validateNativeDocxPagePaintForRequestV1`, which recompiles with the exact
+provider and compares the complete wire output. These content hashes detect
+projection substitution between engine stages; they are integrity joins, not
+external authorization signatures, so the upstream projections must still
+remain inside the trusted native pipeline.
+
+See [the native DOCX contract migration guide](../../docs/DOCX-NATIVE-CONTRACT.md)
+for scope and rollout boundaries.
+
+Pure document pagination, header/footer tokens, and comment-thread helpers.
+
+```bash
+npm install @injoffice/docs
+```
+
+```ts
+import { DEFAULT_PAGINATION_OPTIONS, paginate } from '@injoffice/docs'
+
+const layout = paginate(
+  [
+    { id: 'heading', height: 52 },
+    { id: 'paragraph', height: 420 },
+    { id: 'next-page', height: 80, breakBefore: true },
+  ],
+  DEFAULT_PAGINATION_OPTIONS,
+)
+```
+
+The package intentionally contains no editor framework or DOM measurement layer. The legacy `paginate(BlockBox[])` helper remains available unchanged and isolated from native pagination.

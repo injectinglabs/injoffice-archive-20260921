@@ -1,0 +1,63 @@
+{
+  "name": "@injoffice/font-metrics",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Renderer-neutral native Office text layout contracts, font discovery, and canonical Node HarfBuzz shaping.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./layout": {
+      "types": "./dist/layout.d.ts",
+      "import": "./dist/layout.js"
+    },
+    "./harfbuzz": {
+      "types": "./dist/harfbuzz.d.ts",
+      "import": "./dist/harfbuzz.js"
+    },
+    "./bidi": {
+      "types": "./dist/bidi.d.ts",
+      "import": "./dist/bidi.js"
+    },
+    "./unicode13": {
+      "types": "./dist/unicode13.d.ts",
+      "import": "./dist/unicode13.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/font-metrics"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "entries": { "index": "src/index.ts", "layout": "src/layout.ts", "harfbuzz": "src/harfbuzz.ts", "bidi": "src/bidi.ts", "unicode13": "src/unicode13.ts" },
+    "legalFiles": ["NOTICE", "LICENSE-UNICODE.txt", "THIRD_PARTY_LICENSES/APACHE-2.0.txt", "THIRD_PARTY_LICENSES/HARFBUZZJS-MIT.txt", "THIRD_PARTY_LICENSES/BIDI-JS-MIT.txt", "THIRD_PARTY_LICENSES/REQUIRE-FROM-STRING-MIT.txt"]
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0",
+    "bidi-js": "1.0.3",
+    "harfbuzzjs": "1.6.0",
+    "require-from-string": "2.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "dejavu-fonts-ttf": "2.37.3",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  }
+}

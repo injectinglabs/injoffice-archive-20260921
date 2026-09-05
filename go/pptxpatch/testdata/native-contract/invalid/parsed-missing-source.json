@@ -1,0 +1,16 @@
+{
+  "contractVersion": "pptx-native/v1",
+  "documentId": "deck-parsed-source",
+  "origin": "parsed",
+  "sourceRevision": "rev-1",
+  "size": { "cx": 100, "cy": 100 },
+  "assets": [],
+  "slides": [{
+    "id": "slide-1",
+    "provenance": "parsed",
+    "elements": [],
+    "passthrough": [],
+    "compatibility": { "status": "editable", "diagnostics": [] }
+  }],
+  "compatibility": { "status": "editable", "diagnostics": [] }
+}

@@ -1,0 +1,44 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "pptx-resource-depth-refusal",
+  "format": "pptx",
+  "dialect": "transitional",
+  "outcome": "refused",
+  "provenance": {
+    "kind": "generated",
+    "generator": "officecompat-corpusgen declarative OOXML",
+    "source": "hand-authored bounded XML depth adversary",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "explicit-refusal",
+    "resource-bound",
+    "transitional",
+    "xml-depth"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/relocated/deck.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/></Types>"
+    },
+    {
+      "name": "_rels/.rels",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rIdRoot\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"relocated/deck.xml\"/></Relationships>"
+    },
+    {
+      "name": "relocated/deck.xml",
+      "text": "<p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:x=\"urn:injoffice:depth\"><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n><x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></x:n></p:presentation>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "pptx-resource-depth-refusal",
+    "format": "pptx",
+    "dialect": "transitional",
+    "outcome": "refused",
+    "refusal": {
+      "class": "xml-resource-budget",
+      "contains": "resource budget exceeded"
+    }
+  }
+}

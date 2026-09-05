@@ -1,0 +1,49 @@
+{
+  "protocol": "injoffice-office-fixture-spec/v1",
+  "id": "docx-strict-relocated",
+  "format": "docx",
+  "dialect": "strict",
+  "outcome": "accepted",
+  "provenance": {
+    "kind": "generated",
+    "generator": "InjOffice officecompat corpusgen v1",
+    "source": "CC0 hand-authored deterministic Strict WordprocessingML",
+    "license": "CC0-1.0"
+  },
+  "coverage": [
+    "case-preserved-routing",
+    "header",
+    "relocated-main-part",
+    "strict"
+  ],
+  "parts": [
+    {
+      "name": "[Content_Types].xml",
+      "text": "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/odd/main.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/><Override PartName=\"/odd/stories/header.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/></Types>"
+    },
+    {
+      "name": "_RELS/.RELS",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"office\" Type=\"http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument\" Target=\"ODD/MAIN.xml\"/></Relationships>"
+    },
+    {
+      "name": "Odd/Main.XML",
+      "text": "<w:document xmlns:r=\"http://purl.oclc.org/ooxml/officeDocument/relationships\" xmlns:w=\"http://purl.oclc.org/ooxml/wordprocessingml/main\"><w:body><w:p><w:pPr><w:keepNext/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val=\"24\"/></w:rPr><w:t>Strict routed</w:t></w:r></w:p><w:sectPr><w:headerReference w:type=\"default\" r:id=\"rHeader\"/><w:pgSz w:w=\"12240\" w:h=\"15840\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>"
+    },
+    {
+      "name": "Odd/Stories/Header.XML",
+      "text": "<w:hdr xmlns:w=\"http://purl.oclc.org/ooxml/wordprocessingml/main\"><w:p><w:r><w:t>Strict header</w:t></w:r></w:p></w:hdr>"
+    },
+    {
+      "name": "Odd/_RELS/Main.XML.RELS",
+      "text": "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rHeader\" Type=\"http://purl.oclc.org/ooxml/officeDocument/relationships/header\" Target=\"stories/HEADER.xml\"/></Relationships>"
+    }
+  ],
+  "expectation": {
+    "protocol": "injoffice-expected-native-json/v1",
+    "fixtureId": "docx-strict-relocated",
+    "format": "docx",
+    "dialect": "strict",
+    "outcome": "accepted",
+    "native": {"body":{"anchor":{"end_byte":484,"part_name":"Odd/Main.XML","path":"/w:document[1]/w:body[1]","start_byte":137,"xml_sha256":"sha256:45a7ce7ce93e5d09035c667882657ec1c02efb7a941ab6cef52407aeab6b70f5"},"blocks":[{"id":"paragraph:00137911b67175aeee2d9444","kind":"paragraph","paragraph":{"anchor":{"end_byte":258,"part_name":"Odd/Main.XML","path":"/w:document[1]/w:body[1]/w:p[1]","start_byte":145,"xml_sha256":"sha256:0631e5fe00cb2c16244e368572ddf205eb694c61db722447a576a12192f3e386"},"edit_policy":{"allowed_operations":["text.replace"],"mode":"read-write"},"id":"paragraph:00137911b67175aeee2d9444","properties":{"keep_next":true},"runs":[{"anchor":{"end_byte":246,"part_name":"Odd/Main.XML","path":"/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:t[1]","start_byte":222,"xml_sha256":"sha256:0e0d3ceb49fbb4e3159a96668c911c0ebf42ca5a0f4f5113b892354bafa170c1"},"id":"run:eb2d52f19c42f8817e1d56fa","kind":"text","properties":{"font_size_half_points":24,"italic":true},"text":"Strict routed"}]}}],"id":"story:c386e74d854dc71e39c4ae9e","kind":"body","part_name":"Odd/Main.XML"},"capabilities":[{"detail":"HTML-free, part-qualified WordprocessingML extraction","level":"read-only","name":"native-ooxml-parse"},{"detail":"Exact XML byte ranges and fingerprints guard atomic native text mutations","level":"read-write","name":"surgical-byte-anchors"},{"detail":"Guarded paragraph and text-run replacement with post-write native validation","level":"read-write","name":"native-text-mutation"},{"detail":"Unmodeled OOXML is preserved verbatim and must not be flattened","level":"unsupported","name":"full-document-regeneration"}],"comment_stories":[],"comments":[],"document_id":"document:1f85c94d92481768a73439b5","footers":[],"headers":[{"anchor":{"end_byte":120,"part_name":"Odd/Stories/Header.XML","path":"/w:hdr[1]","start_byte":0,"xml_sha256":"sha256:e4e31ab92fff9de1417f2a435dd48ce06debeb369bb7ad8406a8a5898610b648"},"blocks":[{"id":"paragraph:aad25a75c548f67560e1cf66","kind":"paragraph","paragraph":{"anchor":{"end_byte":112,"part_name":"Odd/Stories/Header.XML","path":"/w:hdr[1]/w:p[1]","start_byte":66,"xml_sha256":"sha256:742c2652971212cee316ff49f8d19bf294c04b24e31004c93f35ec9e9952ff2d"},"edit_policy":{"allowed_operations":["text.replace"],"mode":"read-write"},"id":"paragraph:aad25a75c548f67560e1cf66","properties":{},"runs":[{"anchor":{"end_byte":100,"part_name":"Odd/Stories/Header.XML","path":"/w:hdr[1]/w:p[1]/w:r[1]/w:t[1]","start_byte":76,"xml_sha256":"sha256:b4c1a26d2e6f19a62d3c25ee58a71bc5bc8fb8653a658361df54d9460a25ba18"},"id":"run:c902f17ca031f6a4c29e94fd","kind":"text","text":"Strict header"}]}}],"id":"story:d66115d8618f55e74f6f2408","kind":"header","part_name":"Odd/Stories/Header.XML"}],"notes":[],"passthrough_parts":[{"byte_length":226,"content_type":"application/vnd.openxmlformats-package.relationships+xml","part_name":"Odd/_RELS/Main.XML.RELS","policy":"preserve-verbatim","sha256":"sha256:0f6bc9c96df92eb48d493413793a765fdf6c5874362fec89b554f127aefe0375"},{"byte_length":227,"content_type":"application/vnd.openxmlformats-package.relationships+xml","part_name":"_RELS/.RELS","policy":"preserve-verbatim","sha256":"sha256:670f4d6d359ec7968485164e85e9f636a5c515a401a016e01c6cf69cd6774c69"}],"protocol":"injoffice.docx.native","revision":"rev:59a4a063e44c820c272179e1290cf99f","sections":[{"anchor":{"end_byte":475,"part_name":"Odd/Main.XML","path":"/w:document[1]/w:body[1]/w:sectPr[1]","start_byte":258,"xml_sha256":"sha256:dec74293e7ca6aa17a5b58bb179efc29a8a5da1c0d230b15e86cf4ce053405f1"},"break_type":"next-page","footer_refs":[],"header_refs":[{"kind":"default","relationship_id":"rHeader","story_id":"story:d66115d8618f55e74f6f2408"}],"id":"section:14448bf6583b4b43e1608ce9","page":{"column_definitions":[{"id":"section:14448bf6583b4b43e1608ce9:column:0","ordinal":0}],"column_layout":"equal-width","column_spacing_twips":720,"columns":1,"height_twips":15840,"margins":{"bottom_twips":1440,"footer_twips":720,"gutter_twips":0,"header_twips":720,"left_twips":1440,"right_twips":1440,"top_twips":1440},"orientation":"portrait","width_twips":12240},"starts_at_block_id":"paragraph:00137911b67175aeee2d9444","title_page":false}],"source":{"main_part":"Odd/Main.XML","package_sha256":"sha256:59a4a063e44c820c272179e1290cf99fa6fa8ca04767473209f5b62774a99e62"},"unsupported":[],"version":1}
+  }
+}

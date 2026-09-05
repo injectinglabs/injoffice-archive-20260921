@@ -1,0 +1,418 @@
+{
+  "protocol": "injoffice.docx.native",
+  "version": 1,
+  "document_id": "doc:fixture",
+  "revision": "rev:fixture:1",
+  "source": {
+    "package_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "main_part": "word/document.xml"
+  },
+  "body": {
+    "id": "story:body",
+    "kind": "body",
+    "part_name": "word/document.xml",
+    "anchor": {
+      "part_name": "word/document.xml",
+      "path": "/w:document[1]/w:body[1]",
+      "start_byte": 100,
+      "end_byte": 3000,
+      "xml_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "id": "paragraph:intro",
+        "paragraph": {
+          "id": "paragraph:intro",
+          "anchor": {
+            "part_name": "word/document.xml",
+            "path": "/w:document[1]/w:body[1]/w:p[1]",
+            "start_byte": 150,
+            "end_byte": 800,
+            "xml_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          },
+          "edit_policy": {
+            "mode": "read-write",
+            "allowed_operations": ["text.replace", "properties.patch", "block.insert_after", "block.delete"]
+          },
+          "properties": {
+            "paragraph_style_id": "Heading1",
+            "numbering": {
+              "num_id": "7",
+              "level": 0,
+              "abstract_num_id": "3"
+            },
+            "alignment": "left",
+            "keep_next": true,
+            "widow_control": true
+          },
+          "runs": [
+            {
+              "kind": "text",
+              "id": "run:intro:text",
+              "anchor": {
+                "part_name": "word/document.xml",
+                "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]",
+                "start_byte": 250,
+                "end_byte": 380,
+                "xml_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+              },
+              "properties": {
+                "font_family": "Aptos",
+                "font_size_half_points": 24,
+                "bold": true,
+                "color": "1F4E79",
+                "language": "en-US"
+              },
+              "text": "Native DOCX"
+            },
+            {
+              "kind": "reference",
+              "id": "run:intro:comment",
+              "anchor": {
+                "part_name": "word/document.xml",
+                "path": "/w:document[1]/w:body[1]/w:p[1]/w:commentRangeStart[1]",
+                "start_byte": 381,
+                "end_byte": 420,
+                "xml_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+              },
+              "reference": {
+                "kind": "comment-range-start",
+                "target_id": "comment:1"
+              }
+            },
+            {
+              "kind": "drawing",
+              "id": "run:intro:drawing",
+              "anchor": {
+                "part_name": "word/document.xml",
+                "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[3]",
+                "start_byte": 421,
+                "end_byte": 720,
+                "xml_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+              },
+              "drawing": {
+                "id": "drawing:logo",
+                "anchor": {
+                  "part_name": "word/document.xml",
+                  "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:drawing[1]",
+                  "start_byte": 450,
+                  "end_byte": 700,
+                  "xml_sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                },
+                "relationship_id": "rId9",
+                "media_part": "word/media/image1.png",
+                "content_type": "image/png",
+                "name": "Logo",
+                "alt_text": "Company logo",
+                "placement": "floating",
+                "width_emu": 914400,
+                "height_emu": 457200,
+                "x_emu": 120000,
+                "y_emu": 240000,
+                "horizontal_relative_from": "column",
+                "vertical_relative_from": "paragraph",
+                "wrap": "square",
+                "edit_policy": {
+                  "mode": "read-only",
+                  "allowed_operations": [],
+                  "refusal": {
+                    "code": "DRAWING_EFFECTS_UNSUPPORTED",
+                    "message": "Preserve the original drawing until its effects are modeled.",
+                    "preservation": "refuse-mutation"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "kind": "table",
+        "id": "table:summary",
+        "table": {
+          "id": "table:summary",
+          "anchor": {
+            "part_name": "word/document.xml",
+            "path": "/w:document[1]/w:body[1]/w:tbl[1]",
+            "start_byte": 801,
+            "end_byte": 2200,
+            "xml_sha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+          },
+          "edit_policy": {
+            "mode": "read-only",
+            "allowed_operations": [],
+            "refusal": {
+              "code": "TABLE_NESTED_CONTENT_UNSUPPORTED",
+              "message": "The conservative table projection is readable but cannot be mutated.",
+              "preservation": "preserve-verbatim"
+            }
+          },
+          "table_style_id": "TableGrid",
+          "rows": [
+            {
+              "id": "row:summary:1",
+              "anchor": {
+                "part_name": "word/document.xml",
+                "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]",
+                "start_byte": 900,
+                "end_byte": 2000,
+                "xml_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+              },
+              "height_twips": 360,
+              "height_rule": "atLeast",
+              "repeat_header": true,
+              "cells": [
+                {
+                  "id": "cell:summary:1:1",
+                  "anchor": {
+                    "part_name": "word/document.xml",
+                    "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]",
+                    "start_byte": 950,
+                    "end_byte": 1500,
+                    "xml_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  "width_twips": 4320,
+                  "grid_span": 1,
+                  "vertical_merge": "none",
+                  "paragraphs": [
+                    {
+                      "id": "paragraph:cell:1",
+                      "anchor": {
+                        "part_name": "word/document.xml",
+                        "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[1]",
+                        "start_byte": 1000,
+                        "end_byte": 1400,
+                        "xml_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                      },
+                      "edit_policy": {
+                        "mode": "read-write",
+                        "allowed_operations": ["text.replace"]
+                      },
+                      "properties": {},
+                      "runs": [
+                        {
+                          "kind": "text",
+                          "id": "run:cell:1",
+                          "anchor": {
+                            "part_name": "word/document.xml",
+                            "path": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[1]/w:r[1]",
+                            "start_byte": 1050,
+                            "end_byte": 1300,
+                            "xml_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                          },
+                          "text": "Summary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sections": [
+    {
+      "id": "section:1",
+      "anchor": {
+        "part_name": "word/document.xml",
+        "path": "/w:document[1]/w:body[1]/w:sectPr[1]",
+        "start_byte": 2500,
+        "end_byte": 2900,
+        "xml_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "starts_at_block_id": "paragraph:intro",
+      "break_type": "next-page",
+      "title_page": false,
+      "page": {
+        "width_twips": 12240,
+        "height_twips": 15840,
+        "orientation": "portrait",
+        "margins": {
+          "top_twips": 1440,
+          "right_twips": 1440,
+          "bottom_twips": 1440,
+          "left_twips": 1440,
+          "header_twips": 720,
+          "footer_twips": 720,
+          "gutter_twips": 0
+        },
+        "columns": 1,
+        "column_spacing_twips": 720,
+        "column_layout": "equal-width",
+        "column_definitions": [
+          { "id": "column:section:1:0", "ordinal": 0 }
+        ]
+      },
+      "header_refs": [
+        {
+          "kind": "default",
+          "story_id": "story:header:default",
+          "relationship_id": "rId2"
+        }
+      ],
+      "footer_refs": [
+        {
+          "kind": "default",
+          "story_id": "story:footer:default",
+          "relationship_id": "rId3"
+        }
+      ]
+    }
+  ],
+  "headers": [
+    {
+      "id": "story:header:default",
+      "kind": "header",
+      "part_name": "word/header1.xml",
+      "anchor": {
+        "part_name": "word/header1.xml",
+        "path": "/w:hdr[1]",
+        "start_byte": 0,
+        "end_byte": 128,
+        "xml_sha256": "sha256:0101010101010101010101010101010101010101010101010101010101010101"
+      },
+      "blocks": []
+    }
+  ],
+  "footers": [
+    {
+      "id": "story:footer:default",
+      "kind": "footer",
+      "part_name": "word/footer1.xml",
+      "anchor": {
+        "part_name": "word/footer1.xml",
+        "path": "/w:ftr[1]",
+        "start_byte": 0,
+        "end_byte": 128,
+        "xml_sha256": "sha256:0202020202020202020202020202020202020202020202020202020202020202"
+      },
+      "blocks": []
+    }
+  ],
+  "notes": [
+    {
+      "id": "note:footnote:1",
+      "kind": "footnote",
+      "part_name": "word/footnotes.xml",
+      "native_story_id": "1",
+      "relationship_id": "rIdFootnotes",
+      "note_role": "content",
+      "anchor": {
+        "part_name": "word/footnotes.xml",
+        "path": "/w:footnotes[1]/w:footnote[1]",
+        "start_byte": 100,
+        "end_byte": 300,
+        "xml_sha256": "sha256:0303030303030303030303030303030303030303030303030303030303030303"
+      },
+      "blocks": []
+    }
+  ],
+  "comment_stories": [
+    {
+      "id": "story:comment:1",
+      "kind": "comment",
+      "part_name": "word/comments.xml",
+      "native_story_id": "1",
+      "anchor": {
+        "part_name": "word/comments.xml",
+        "path": "/w:comments[1]/w:comment[1]",
+        "start_byte": 100,
+        "end_byte": 600,
+        "xml_sha256": "sha256:0404040404040404040404040404040404040404040404040404040404040404"
+      },
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "id": "paragraph:comment:1",
+          "paragraph": {
+            "id": "paragraph:comment:1",
+            "anchor": {
+              "part_name": "word/comments.xml",
+              "path": "/w:comments[1]/w:comment[1]/w:p[1]",
+              "start_byte": 150,
+              "end_byte": 550,
+              "xml_sha256": "sha256:0505050505050505050505050505050505050505050505050505050505050505"
+            },
+            "edit_policy": {
+              "mode": "read-write",
+              "allowed_operations": ["text.replace", "properties.patch"]
+            },
+            "properties": {},
+            "runs": [
+              {
+                "kind": "text",
+                "id": "run:comment:1",
+                "anchor": {
+                  "part_name": "word/comments.xml",
+                  "path": "/w:comments[1]/w:comment[1]/w:p[1]/w:r[1]",
+                  "start_byte": 200,
+                  "end_byte": 500,
+                  "xml_sha256": "sha256:0606060606060606060606060606060606060606060606060606060606060606"
+                },
+                "text": "This body is native DOCX content, not flattened metadata."
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "comments": [
+    {
+      "id": "comment:1",
+      "native_comment_id": "1",
+      "author": "Ada Lovelace",
+      "initials": "AL",
+      "created_at": "2026-08-27T00:00:00Z",
+      "anchor": {
+        "part_name": "word/comments.xml",
+        "path": "/w:comments[1]/w:comment[1]",
+        "start_byte": 100,
+        "end_byte": 600,
+        "xml_sha256": "sha256:0404040404040404040404040404040404040404040404040404040404040404"
+      },
+      "body_story_id": "story:comment:1"
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "paragraph-text",
+      "level": "read-write"
+    },
+    {
+      "name": "nested-tables",
+      "level": "passthrough",
+      "detail": "Nested table XML is retained but not projected in v1."
+    }
+  ],
+  "passthrough_parts": [
+    {
+      "part_name": "word/media/image1.png",
+      "content_type": "image/png",
+      "byte_length": 128,
+      "sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "policy": "preserve-verbatim"
+    },
+    {
+      "part_name": "word/styles.xml",
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+      "byte_length": 512,
+      "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "policy": "preserve-verbatim"
+    }
+  ],
+  "unsupported": [
+    {
+      "id": "unsupported:nested-table:1",
+      "code": "NESTED_TABLE_PASSTHROUGH",
+      "capability": "nested-table-edit",
+      "scope_id": "table:summary",
+      "preservation": "refuse-mutation",
+      "message": "Refuse table mutation while nested table XML is outside the v1 projection."
+    }
+  ]
+}

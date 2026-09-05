@@ -1,0 +1,1 @@
+require('./forbidden-entrypoint.js')
