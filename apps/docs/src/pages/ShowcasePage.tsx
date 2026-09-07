@@ -1,11 +1,15 @@
 import { lazy, Suspense } from 'react'
 import { ChartsBench } from '../examples/ChartsBench'
+import { CollabBench } from '../examples/CollabBench'
 import { ConnectorsBench } from '../examples/ConnectorsBench'
+import { FontMetricsBench } from '../examples/FontMetricsBench'
 import { FormulasBench } from '../examples/FormulasBench'
 import { HistoryBench } from '../examples/HistoryBench'
 import { MutationsBench } from '../examples/MutationsBench'
+import { PdfBench } from '../examples/PdfBench'
 import { PivotsBench } from '../examples/PivotsBench'
 import { ShapesBench } from '../examples/ShapesBench'
+import { SlidesBench } from '../examples/SlidesBench'
 
 const EditorBench = lazy(() => import('../examples/EditorBench').then((mod) => ({ default: mod.EditorBench })))
 
@@ -35,6 +39,18 @@ export function ShowcasePage() {
       <h2 id="formulas">Formulas</h2>
       <p><a href="#/guides/formulas">Guide and copy-paste API →</a></p>
       <FormulasBench />
+      <h2 id="pdf">PDF</h2>
+      <p><a href="#/guides/pdf">Guide and copy-paste API →</a></p>
+      <PdfBench />
+      <h2 id="slides">Slides</h2>
+      <p><a href="#/guides/slides">Guide and copy-paste API →</a></p>
+      <SlidesBench />
+      <h2 id="collab">Collaboration transforms</h2>
+      <p><a href="#/guides/collaboration">Guide and copy-paste API →</a></p>
+      <CollabBench />
+      <h2 id="fonts">Font metrics</h2>
+      <p><a href="#/guides/font-metrics">Guide and copy-paste API →</a></p>
+      <FontMetricsBench />
       <h2 id="editor">Univer OSS editor</h2>
       <p><a href="#/guides/sheets-editor">Guide and copy-paste API →</a></p>
       <Suspense fallback={<p>Loading Univer OSS editor…</p>}>

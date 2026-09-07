@@ -1,5 +1,5 @@
 export type DocRuntime = 'Browser' | 'Browser + sidecar' | 'Go sidecar' | 'Node host'
-export type FileAuthority = 'Original OOXML bytes' | 'Plain JSON spec' | 'Host-owned' | 'Univer snapshot (UI only)'
+export type FileAuthority = 'Original OOXML bytes' | 'Original PDF bytes' | 'Plain JSON spec' | 'Host-owned' | 'Univer snapshot (UI only)'
 
 export type DocId =
   | 'home'
@@ -223,9 +223,9 @@ export const PAGES: DocPage[] = [
     navTitle: 'Font metrics',
     group: 'Production',
     packageName: '@injoffice/font-metrics',
-    runtime: 'Node host',
+    runtime: 'Browser',
     authority: 'Host-owned',
-    description: 'Font discovery and a renderer-neutral native text-layout contract.',
+    description: 'Renderer-neutral native text-layout contract. Font file discovery is Node-only.',
     keywords: ['font', 'harfbuzz', 'shaping', 'layout'],
   },
   {
@@ -236,8 +236,8 @@ export const PAGES: DocPage[] = [
     group: 'Production',
     packageName: '@injoffice/pdf',
     runtime: 'Browser',
-    authority: 'Original OOXML bytes',
-    description: 'Inspect, render, rotate, and transform PDF bytes. Editing APIs exist beyond the viewer demo.',
+    authority: 'Original PDF bytes',
+    description: 'Inspect, rotate, and transform original PDF bytes. Editing APIs exist beyond the viewer demo.',
     keywords: ['pdf', 'viewer', 'rotate'],
   },
   {

@@ -401,6 +401,26 @@
 .grid-table th { background: #f3f6f8; }
 .editor-host { height: 560px; background: #fff; }
 .editor-host .univer-app, .editor-host #univer-root { height: 100%; }
+.api-package { margin: 28px 0 36px; }
+.api-package h3 { margin: 0 0 8px; }
+.api-package table code { font-size: 12px; white-space: pre-wrap; }
+.bench-button {
+  border: 1px solid var(--rule);
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.bench-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.deck-preview {
+  max-width: 560px;
+  margin-top: 12px;
+  container-type: inline-size;
+}
 
 .home-hero {
   display: grid;

@@ -34,12 +34,13 @@ export function InstallationPage() {
       <Install packages="@injoffice/charts echarts" />
       <Install packages="@injoffice/sheets" />
       <Install packages="@injoffice/univer-sheets @univerjs/core react react-dom rxjs" />
+      <Install packages="@injoffice/xlsx-wasm" />
       <h2 id="workspace">This repository</h2>
       <CodeBlock language="bash" title="bash" code={`git clone https://github.com/injectinglabs/injoffice.git
 cd injoffice
 npm ci
 npm run dev`} />
-      <p><code>npm run dev</code> starts the workbench and these guides on port 3100. Open <code>#/guides</code> for documentation and <code>#/overview</code> for the interactive labs. Native extract/apply still needs the optional Go sidecar on <code>127.0.0.1:18765</code>.</p>
+      <p><code>npm run dev</code> starts the workbench and these guides on port 3100. Open <code>#/guides</code> for documentation and <code>#/overview</code> for the interactive labs. Native extract/apply in the browser uses <code>@injoffice/xlsx-wasm</code>, <code>@injoffice/docx-wasm</code>, and <code>@injoffice/pptx-wasm</code>.</p>
       <h2 id="sidecar">Optional native sidecar</h2>
       <CodeBlock language="bash" title="bash" code={`cd go/injoffice-server
 go run ./cmd/injoffice-server --addr 127.0.0.1:18765 --artifacts ./artifacts`} />
@@ -118,14 +119,19 @@ const decoded = decodeWorkbookMutationBatch({
 if (!decoded.ok) console.error(decoded.issues)
 else await fetch('/v1/xlsx/mutations', { method: 'POST', body: encodeWorkbookMutationBatch(decoded.value) })`}
       />
-      <h2 id="extract">3. Extract a real XLSX</h2>
-      <Callout kind="caution">This step needs the Go sidecar. Browser-only labs stop at step 2.</Callout>
+      <h2 id="extract">3. Extract a real XLSX in the browser</h2>
+      <Install packages="@injoffice/xlsx-wasm" />
       <CodeBlock
-        language="bash"
-        code={`curl -sS -H 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' \\
-  --data-binary @input.xlsx http://127.0.0.1:18765/v1/xlsx/extract`}
+        language="ts"
+        code={`import { createXlsxWasmClient } from '@injoffice/xlsx-wasm'
+
+const original = new Uint8Array(await file.arrayBuffer())
+const client = createXlsxWasmClient()
+const workbook = await client.extract(original)
+console.log(workbook.sheets.map((sheet) => sheet.name))
+client.terminate()`}
       />
-      <p>Next: <a href="#/guides/xlsx">Native XLSX</a> or <a href="#/guides/sheets-editor">the Univer editor shell</a>.</p>
+      <p>The Go sidecar on <code>127.0.0.1:18765</code> is an optional host fallback, not a requirement for this step. Next: <a href="#/guides/xlsx">Native XLSX</a> or <a href="#/guides/sheets-editor">the Univer editor shell</a>.</p>
     </Article>
   )
 }

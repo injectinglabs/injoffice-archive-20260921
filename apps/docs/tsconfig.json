@@ -13,15 +13,22 @@
       "@injoffice/collab": ["../../packages/collab/src/index.ts"],
       "@injoffice/connectors": ["../../packages/connectors/src/index.ts"],
       "@injoffice/docs": ["../../packages/docs/src/index.ts"],
+      "@injoffice/font-metrics": ["../../packages/font-metrics/src/index.ts"],
+      "@injoffice/font-metrics/layout": ["../../packages/font-metrics/src/layout.ts"],
       "@injoffice/formulas": ["../../packages/formulas/src/index.ts"],
       "@injoffice/history": ["../../packages/history/src/index.ts"],
+      "@injoffice/native-runtime": ["../../packages/native-runtime/src/index.ts"],
+      "@injoffice/pdf/browser": ["../../packages/pdf/src/browser.ts"],
       "@injoffice/pivots": ["../../packages/pivots/src/index.ts"],
       "@injoffice/pptx-authored": ["../../packages/pptx-authored/src/index.ts"],
       "@injoffice/shapes": ["../../packages/shapes/src/index.ts"],
       "@injoffice/sheets": ["../../packages/sheets/src/index.ts"],
+      "@injoffice/sheets/browser": ["../../packages/sheets/src/browser.ts"],
       "@injoffice/slides": ["../../packages/slides/src/index.ts"],
+      "@injoffice/slides/authoring": ["../../packages/slides/src/authoring.ts"],
       "@injoffice/univer-sheets/browser": ["../../packages/univer-sheets/src/browser.ts"],
-      "@injoffice/univer-sheets/styles.css": ["../../packages/univer-sheets/styles.css"]
+      "@injoffice/univer-sheets/styles.css": ["../../packages/univer-sheets/styles.css"],
+      "@injoffice/xlsx-wasm": ["../../packages/xlsx-wasm/src/index.ts"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },

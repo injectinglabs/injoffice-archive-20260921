@@ -1,8 +1,11 @@
+import { lazy, Suspense } from 'react'
 import { Article } from '../components/Article'
 import { Callout } from '../components/Callout'
 import { CodeBlock } from '../components/CodeBlock'
 import { Install } from '../components/Install'
 import { MutationsBench } from '../examples/MutationsBench'
+
+const NativeExtractBench = lazy(() => import('../examples/NativeExtractBench').then((mod) => ({ default: mod.NativeExtractBench })))
 
 export function XlsxPage() {
   return (
@@ -49,7 +52,25 @@ else {
         </tbody>
       </table>
       <Callout kind="caution">Sheet add/delete/rename/reorder and row/column insert/delete/move are exported as <code>UNSUPPORTED_STRUCTURAL_MUTATION_KINDS</code>. Validation returns <code>UNSUPPORTED_OPERATION</code> instead of dropping them.</Callout>
-      <h2 id="extract">Extract with the sidecar</h2>
+      <h2 id="extract">Extract and apply in the browser</h2>
+      <Install packages="@injoffice/xlsx-wasm" />
+      <p>The published WASM client runs the same Go engine as the sidecar, inside a Worker. No HTTP service is required.</p>
+      <CodeBlock
+        language="ts"
+        code={`import { adaptWorkbookMutationBatchV1, createXlsxWasmClient } from '@injoffice/xlsx-wasm'
+
+const original = new Uint8Array(await file.arrayBuffer())
+const client = createXlsxWasmClient()
+const workbook = await client.extract(original)
+const saved = await client.apply(original, workbook, adaptWorkbookMutationBatchV1(workbook, batch))
+client.terminate()`}
+      />
+      <Suspense fallback={<p>Loading the browser XLSX engine…</p>}>
+        <NativeExtractBench />
+      </Suspense>
+      <p><code>ExtractNativeWorkbookV2</code> is the read projection (geometry, decorations, unsupported content preserved exactly). v1 remains the mutation/save contract. Formula text is never evaluated.</p>
+      <h2 id="sidecar">Optional sidecar</h2>
+      <p>Use the sidecar when you already run Go on a host. Browser labs do not need it.</p>
       <CodeBlock
         language="bash"
         code={`cd go/xlsxpatch
@@ -58,7 +79,6 @@ go run ./cmd/xlsxnative serve
 curl -sS -H 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' \\
   --data-binary @input.xlsx http://127.0.0.1:18765/v1/xlsx/extract`}
       />
-      <p><code>ExtractNativeWorkbookV2</code> is the read projection (geometry, decorations, unsupported content preserved exactly). v1 remains the mutation/save contract. Formula text is never evaluated.</p>
       <h2 id="go">Go extract</h2>
       <CodeBlock
         language="go"
@@ -90,6 +110,18 @@ else {
       <p>The published schema is <code>@injoffice/docs/native-docx-v1.schema.json</code>. Unknown fields, dangling identities, and over-limit inputs are rejected.</p>
       <h2 id="run">Guarded run replacement</h2>
       <p>v1 accepts only a closed text replace wholly inside one native text run. Tables, drawings, notes, fields, and tracked markup return issues with no envelope.</p>
+      <Install packages="@injoffice/docx-wasm" />
+      <CodeBlock
+        language="ts"
+        code={`import { createDocxWasmClient } from '@injoffice/docx-wasm'
+
+const original = new Uint8Array(await file.arrayBuffer())
+const client = createDocxWasmClient()
+const document = await client.extract(original)
+const saved = await client.apply(original, document, envelope)
+client.terminate()`}
+      />
+      <p>The sidecar is optional fallback, not the default:</p>
       <CodeBlock
         language="bash"
         code={`curl -sS --data-binary @input.docx http://127.0.0.1:18765/v1/docx/extract
@@ -105,7 +137,18 @@ export function PptxPage() {
     <Article id="pptx">
       <h2 id="native">Native contract</h2>
       <Install packages="@injoffice/pptx-native" />
-      <p>Versioned native PPTX JSON is shared by parsers, patchers, and renderers. Extract and apply live in <code>go/pptxpatch</code>.</p>
+      <p>Versioned native PPTX JSON is shared by parsers, patchers, and renderers. Browser extract/apply is <code>@injoffice/pptx-wasm</code>; <code>go/pptxpatch</code> is the same engine on a host.</p>
+      <Install packages="@injoffice/pptx-wasm" />
+      <CodeBlock
+        language="ts"
+        code={`import { createPptxWasmClient } from '@injoffice/pptx-wasm'
+
+const original = new Uint8Array(await file.arrayBuffer())
+const client = createPptxWasmClient()
+const deck = await client.extract(original)
+const saved = await client.apply(original, deck, mutation)
+client.terminate()`}
+      />
       <h2 id="authored">Compile an authored deck</h2>
       <Install packages="@injoffice/pptx-authored" />
       <CodeBlock
@@ -117,7 +160,7 @@ if (!result.ok) throw new Error(result.issues.map(({ message }) => message).join
 const nativeDeck = result.deck`}
       />
       <p>Compilation is atomic. Unknown fields and unmodeled wire semantics return a refusal with no partial deck. HTML/CSS measurement is not an authoring authority.</p>
-      <h2 id="http">HTTP</h2>
+      <h2 id="http">Optional HTTP sidecar</h2>
       <CodeBlock
         language="bash"
         code={`curl -sS --data-binary @deck.pptx http://127.0.0.1:18765/v1/pptx/extract`}

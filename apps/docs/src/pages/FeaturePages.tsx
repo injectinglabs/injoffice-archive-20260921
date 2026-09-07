@@ -4,11 +4,15 @@ import { Callout } from '../components/Callout'
 import { CodeBlock } from '../components/CodeBlock'
 import { Install } from '../components/Install'
 import { ChartsBench } from '../examples/ChartsBench'
+import { CollabBench } from '../examples/CollabBench'
 import { ConnectorsBench } from '../examples/ConnectorsBench'
+import { FontMetricsBench } from '../examples/FontMetricsBench'
 import { FormulasBench } from '../examples/FormulasBench'
 import { HistoryBench } from '../examples/HistoryBench'
+import { PdfBench } from '../examples/PdfBench'
 import { PivotsBench } from '../examples/PivotsBench'
 import { ShapesBench } from '../examples/ShapesBench'
+import { SlidesBench } from '../examples/SlidesBench'
 
 const EditorBench = lazy(() => import('../examples/EditorBench').then((mod) => ({ default: mod.EditorBench })))
 
@@ -207,6 +211,7 @@ const transport: CollabTransport = {
   opSince: (path, sinceSeq) => rpc('collab.op.since', { path, since_seq: sinceSeq }),
 }`}
       />
+      <CollabBench />
       <p>The package includes no server. Optional in-repo hub:</p>
       <CodeBlock
         language="bash"
@@ -265,7 +270,8 @@ if (isFamilyInstalled('Arial')) {
   validateTextRunInput,
 } from '@injoffice/font-metrics/layout'`}
       />
-      <p><code>@injoffice/font-metrics/layout</code> is pure TypeScript: no DOM, canvas, or Node. Callers remain responsible for font licensing.</p>
+      <FontMetricsBench />
+      <p><code>@injoffice/font-metrics/layout</code> is pure TypeScript: no DOM, canvas, or Node. Callers remain responsible for font licensing. <code>findSystemFont</code> is Node-only.</p>
     </Article>
   )
 }
@@ -295,6 +301,7 @@ import { configurePdfWorker, PdfViewerDocument } from '@injoffice/pdf/browser'
 configurePdfWorker(workerURL)
 const viewer = await PdfViewerDocument.load(source)`}
       />
+      <PdfBench />
       <p>Univer’s OSS and Pro demos do not include a PDF engine. Treat transformed files as untrusted input.</p>
     </Article>
   )
@@ -313,6 +320,7 @@ export function SlidesGuidePage() {
 const result = compileDeckSpecToNativeV1(spec)
 if (!result.ok) throw new Error(result.issues.map(({ message }) => message).join('; '))`}
       />
+      <SlidesBench />
       <p><code>@injoffice/slides</code> authors a <code>DeckSpec</code>. <code>pptx-authored</code> compiles it to native v1. <code>pptx-render</code> emits a renderer-neutral paint tree. Univer Slides is a separate, thinner OSS demo and is not this pipeline.</p>
     </Article>
   )

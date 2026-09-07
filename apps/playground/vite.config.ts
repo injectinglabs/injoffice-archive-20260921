@@ -51,6 +51,7 @@ export default defineConfig(async ({ command }) => {
         '@injoffice/univer-sheets/browser': pkgFile('univer-sheets', 'browser.ts'),
         '@injoffice/univer-sheets/styles.css': fileURLToPath(new URL('../../packages/univer-sheets/styles.css', import.meta.url)),
         '@injoffice/history': pkgSrc('history'),
+        '@injoffice/pdf/browser': pkgFile('pdf', 'browser.ts'),
         '@injoffice/pivots': pkgSrc('pivots'),
         '@injoffice/pptx-authored': pkgSrc('pptx-authored'),
         '@injoffice/pptx-native': pkgSrc('pptx-native'),
