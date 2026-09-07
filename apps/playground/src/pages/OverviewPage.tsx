@@ -50,8 +50,8 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
             <a className="secondary-action" href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Run the native XLSX proof</a>
           </div>
           <dl className="hero-facts">
-            <div><dt>24</dt><dd>composable packages</dd></div>
-            <div><dt>15</dt><dd>proof surfaces</dd></div>
+            <div><dt>26</dt><dd>composable packages</dd></div>
+            <div><dt>16</dt><dd>proof surfaces</dd></div>
             <div><dt>4</dt><dd>document formats</dd></div>
           </dl>
         </div>
@@ -77,7 +77,7 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
         <header className="showcase-heading">
           <div>
             <h1 id="showcase-title" tabIndex={-1}>Start with what you need to do</h1>
-            <p>Filter fifteen focused surfaces across the twenty-four packages. Shared infrastructure appears inside the workflows it powers. These are bounded proofs, not a claim of unrestricted Microsoft Office parity.</p>
+            <p>Filter sixteen focused surfaces across the twenty-six packages. Shared infrastructure appears inside the workflows it powers. These are bounded proofs, not a claim of unrestricted Microsoft Office parity.</p>
           </div>
           <span className={`overview-runtime overview-runtime--${sidecar}`} role="status" aria-live="polite">{runtimeLabel}</span>
         </header>

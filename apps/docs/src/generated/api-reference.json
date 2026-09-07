@@ -2,6 +2,434 @@
   "schemaVersion": 1,
   "packages": [
     {
+      "name": "@injoffice/agent-office",
+      "description": "Provider-neutral agent adapters for safe XLSX, DOCX, authored and native PPTX, and PDF changes.",
+      "exports": [
+        {
+          "subpath": ".",
+          "file": "index.d.ts",
+          "symbols": [
+            {
+              "name": "createOfficeAdapterRegistry",
+              "kind": "function",
+              "signature": "export declare function createOfficeAdapterRegistry(adapters?: readonly AgentArtifactAdapter<unknown>[]): AgentAdapterRegistry"
+            }
+          ]
+        },
+        {
+          "subpath": "./xlsx",
+          "file": "xlsx.d.ts",
+          "symbols": [
+            {
+              "name": "createXlsxAgentAdapter",
+              "kind": "function",
+              "signature": "export declare function createXlsxAgentAdapter(): AgentArtifactAdapter<XlsxAgentArtifact>"
+            },
+            {
+              "name": "XlsxAgentArtifact",
+              "kind": "interface",
+              "signature": "export interface XlsxAgentArtifact"
+            },
+            {
+              "name": "XlsxAgentSnapshot",
+              "kind": "interface",
+              "signature": "export interface XlsxAgentSnapshot"
+            },
+            {
+              "name": "XlsxNativeWorkbook",
+              "kind": "type",
+              "signature": "export type XlsxNativeWorkbook = NativeWorkbookV1 | NativeWorkbookV2"
+            }
+          ]
+        },
+        {
+          "subpath": "./docx",
+          "file": "docx.d.ts",
+          "symbols": [
+            {
+              "name": "createDocxAgentAdapter",
+              "kind": "function",
+              "signature": "export declare function createDocxAgentAdapter(): AgentArtifactAdapter<DocxAgentArtifact>"
+            },
+            {
+              "name": "DocxAgentArtifact",
+              "kind": "interface",
+              "signature": "export interface DocxAgentArtifact"
+            },
+            {
+              "name": "DocxAgentSnapshot",
+              "kind": "interface",
+              "signature": "export interface DocxAgentSnapshot"
+            }
+          ]
+        },
+        {
+          "subpath": "./pptx",
+          "file": "pptx.d.ts",
+          "symbols": [
+            {
+              "name": "AuthoredDeckAgentArtifact",
+              "kind": "interface",
+              "signature": "export interface AuthoredDeckAgentArtifact"
+            },
+            {
+              "name": "createAuthoredDeckAgentAdapter",
+              "kind": "function",
+              "signature": "export declare function createAuthoredDeckAgentAdapter(): AgentArtifactAdapter<AuthoredDeckAgentArtifact>"
+            },
+            {
+              "name": "createNativePptxAgentAdapter",
+              "kind": "function",
+              "signature": "export declare function createNativePptxAgentAdapter(): AgentArtifactAdapter<NativePptxAgentArtifact>"
+            },
+            {
+              "name": "NativePptxAgentArtifact",
+              "kind": "interface",
+              "signature": "export interface NativePptxAgentArtifact"
+            },
+            {
+              "name": "NativePptxAgentSnapshot",
+              "kind": "interface",
+              "signature": "export interface NativePptxAgentSnapshot"
+            },
+            {
+              "name": "PptxNativeExactParagraph",
+              "kind": "interface",
+              "signature": "export interface PptxNativeExactParagraph"
+            },
+            {
+              "name": "PptxNativeExactTextRun",
+              "kind": "interface",
+              "signature": "export interface PptxNativeExactTextRun"
+            },
+            {
+              "name": "PptxNativeMutationRequest",
+              "kind": "interface",
+              "signature": "export interface PptxNativeMutationRequest"
+            }
+          ]
+        },
+        {
+          "subpath": "./pdf",
+          "file": "pdf.d.ts",
+          "symbols": [
+            {
+              "name": "createPdfAgentAdapter",
+              "kind": "function",
+              "signature": "export declare function createPdfAgentAdapter(): AgentArtifactAdapter<PdfAgentArtifact>"
+            },
+            {
+              "name": "PdfAgentArtifact",
+              "kind": "interface",
+              "signature": "export interface PdfAgentArtifact"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "@injoffice/agent-tools",
+      "description": "Model-neutral, revision-safe agent sessions and change sets for InjOffice artifacts.",
+      "exports": [
+        {
+          "subpath": ".",
+          "file": "index.d.ts",
+          "symbols": [
+            {
+              "name": "AGENT_CHANGESET_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const AGENT_CHANGESET_PROTOCOL: 'injoffice.agent-changeset'"
+            },
+            {
+              "name": "AGENT_CHANGESET_PROTOCOL_VERSION",
+              "kind": "const",
+              "signature": "export declare const AGENT_CHANGESET_PROTOCOL_VERSION: 1"
+            },
+            {
+              "name": "AGENT_TOOL_DESCRIPTORS",
+              "kind": "const",
+              "signature": "export declare const AGENT_TOOL_DESCRIPTORS: readonly AgentToolDescriptor[]"
+            },
+            {
+              "name": "AGENT_TOOLS_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const AGENT_TOOLS_PROTOCOL: 'injoffice.agent-tools'"
+            },
+            {
+              "name": "AGENT_TOOLS_PROTOCOL_VERSION",
+              "kind": "const",
+              "signature": "export declare const AGENT_TOOLS_PROTOCOL_VERSION: 1"
+            },
+            {
+              "name": "AgentActor",
+              "kind": "type",
+              "signature": "AgentActor"
+            },
+            {
+              "name": "AgentAdapterCommitRequest",
+              "kind": "type",
+              "signature": "AgentAdapterCommitRequest"
+            },
+            {
+              "name": "AgentAdapterCommitResult",
+              "kind": "type",
+              "signature": "AgentAdapterCommitResult"
+            },
+            {
+              "name": "AgentAdapterContext",
+              "kind": "type",
+              "signature": "AgentAdapterContext"
+            },
+            {
+              "name": "AgentAdapterIdentityContext",
+              "kind": "type",
+              "signature": "AgentAdapterIdentityContext"
+            },
+            {
+              "name": "AgentAdapterOperationRequest",
+              "kind": "type",
+              "signature": "AgentAdapterOperationRequest"
+            },
+            {
+              "name": "AgentAdapterRegistry",
+              "kind": "class",
+              "signature": "export declare class AgentAdapterRegistry"
+            },
+            {
+              "name": "AgentAdapterRestoreRequest",
+              "kind": "type",
+              "signature": "AgentAdapterRestoreRequest"
+            },
+            {
+              "name": "AgentAdapterVerifyRequest",
+              "kind": "type",
+              "signature": "AgentAdapterVerifyRequest"
+            },
+            {
+              "name": "AgentArtifactAdapter",
+              "kind": "type",
+              "signature": "AgentArtifactAdapter"
+            },
+            {
+              "name": "AgentArtifactEvidence",
+              "kind": "type",
+              "signature": "AgentArtifactEvidence"
+            },
+            {
+              "name": "AgentArtifactIdentity",
+              "kind": "type",
+              "signature": "AgentArtifactIdentity"
+            },
+            {
+              "name": "AgentArtifactView",
+              "kind": "type",
+              "signature": "AgentArtifactView"
+            },
+            {
+              "name": "AgentBoundedAdapterResult",
+              "kind": "type",
+              "signature": "AgentBoundedAdapterResult"
+            },
+            {
+              "name": "AgentBoundedRequest",
+              "kind": "type",
+              "signature": "AgentBoundedRequest"
+            },
+            {
+              "name": "AgentBoundedResult",
+              "kind": "type",
+              "signature": "AgentBoundedResult"
+            },
+            {
+              "name": "AgentCapabilitiesResult",
+              "kind": "type",
+              "signature": "AgentCapabilitiesResult"
+            },
+            {
+              "name": "AgentCapability",
+              "kind": "type",
+              "signature": "AgentCapability"
+            },
+            {
+              "name": "AgentChangeSet",
+              "kind": "class",
+              "signature": "export declare class AgentChangeSet<TArtifact>"
+            },
+            {
+              "name": "AgentChangeSetEnvelope",
+              "kind": "type",
+              "signature": "AgentChangeSetEnvelope"
+            },
+            {
+              "name": "AgentCommitOptions",
+              "kind": "type",
+              "signature": "AgentCommitOptions"
+            },
+            {
+              "name": "AgentCommitResult",
+              "kind": "type",
+              "signature": "AgentCommitResult"
+            },
+            {
+              "name": "AgentDestructiveConfirmationHook",
+              "kind": "type",
+              "signature": "AgentDestructiveConfirmationHook"
+            },
+            {
+              "name": "AgentDestructiveConfirmationRequest",
+              "kind": "type",
+              "signature": "AgentDestructiveConfirmationRequest"
+            },
+            {
+              "name": "AgentErrorCode",
+              "kind": "type",
+              "signature": "AgentErrorCode"
+            },
+            {
+              "name": "AgentErrorData",
+              "kind": "type",
+              "signature": "AgentErrorData"
+            },
+            {
+              "name": "AgentInputSchema",
+              "kind": "type",
+              "signature": "AgentInputSchema"
+            },
+            {
+              "name": "AgentIssue",
+              "kind": "type",
+              "signature": "AgentIssue"
+            },
+            {
+              "name": "AgentOperation",
+              "kind": "type",
+              "signature": "AgentOperation"
+            },
+            {
+              "name": "AgentOperationInput",
+              "kind": "type",
+              "signature": "AgentOperationInput"
+            },
+            {
+              "name": "AgentPlanOptions",
+              "kind": "type",
+              "signature": "AgentPlanOptions"
+            },
+            {
+              "name": "AgentRestoreRequest",
+              "kind": "type",
+              "signature": "AgentRestoreRequest"
+            },
+            {
+              "name": "AgentSession",
+              "kind": "class",
+              "signature": "export declare class AgentSession<TArtifact>"
+            },
+            {
+              "name": "AgentSessionLimits",
+              "kind": "type",
+              "signature": "AgentSessionLimits"
+            },
+            {
+              "name": "AgentToolCall",
+              "kind": "type",
+              "signature": "AgentToolCall"
+            },
+            {
+              "name": "AgentToolCallResult",
+              "kind": "type",
+              "signature": "AgentToolCallResult"
+            },
+            {
+              "name": "AgentToolDescriptor",
+              "kind": "type",
+              "signature": "AgentToolDescriptor"
+            },
+            {
+              "name": "AgentToolDispatcher",
+              "kind": "type",
+              "signature": "AgentToolDispatcher"
+            },
+            {
+              "name": "AgentToolDispatcherOptions",
+              "kind": "type",
+              "signature": "AgentToolDispatcherOptions"
+            },
+            {
+              "name": "AgentToolMethod",
+              "kind": "type",
+              "signature": "AgentToolMethod"
+            },
+            {
+              "name": "AgentToolsError",
+              "kind": "class",
+              "signature": "export declare class AgentToolsError extends Error"
+            },
+            {
+              "name": "AgentValidationReport",
+              "kind": "type",
+              "signature": "AgentValidationReport"
+            },
+            {
+              "name": "AgentValidationResult",
+              "kind": "type",
+              "signature": "AgentValidationResult"
+            },
+            {
+              "name": "AgentVerificationCheck",
+              "kind": "type",
+              "signature": "AgentVerificationCheck"
+            },
+            {
+              "name": "AgentVerificationResult",
+              "kind": "type",
+              "signature": "AgentVerificationResult"
+            },
+            {
+              "name": "asAgentToolsError",
+              "kind": "function",
+              "signature": "export declare function asAgentToolsError(error: unknown): AgentToolsError"
+            },
+            {
+              "name": "createAgentSession",
+              "kind": "function",
+              "signature": "export declare function createAgentSession<TArtifact>(options: CreateAgentSessionOptions<TArtifact>): Promise<AgentSession<TArtifact>>"
+            },
+            {
+              "name": "CreateAgentSessionOptions",
+              "kind": "type",
+              "signature": "CreateAgentSessionOptions"
+            },
+            {
+              "name": "createAgentToolDispatcher",
+              "kind": "function",
+              "signature": "export declare function createAgentToolDispatcher<TArtifact>(session: AgentSession<TArtifact>, options?: AgentToolDispatcherOptions): AgentToolDispatcher"
+            },
+            {
+              "name": "DEFAULT_AGENT_SESSION_LIMITS",
+              "kind": "const",
+              "signature": "export declare const DEFAULT_AGENT_SESSION_LIMITS: Readonly<AgentSessionLimits>"
+            },
+            {
+              "name": "JsonObject",
+              "kind": "type",
+              "signature": "JsonObject"
+            },
+            {
+              "name": "JsonPrimitive",
+              "kind": "type",
+              "signature": "JsonPrimitive"
+            },
+            {
+              "name": "JsonValue",
+              "kind": "type",
+              "signature": "JsonValue"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "@injoffice/charts",
       "description": "Floating chart layer for Univer OSS sheets: ECharts-rendered, agent-drivable, snapshot-persisted.",
       "exports": [

@@ -21,6 +21,7 @@ import {
 import { ComparePage } from './pages/ComparePage'
 import { ShowcasePage } from './pages/ShowcasePage'
 import { ReferencePage } from './pages/ReferencePage'
+import { AgentWorkflowsPage } from './pages/AgentWorkflowsPage'
 import './styles.css'
 
 const PAGES: Record<DocId, () => ReactNode> = {
@@ -29,6 +30,7 @@ const PAGES: Record<DocId, () => ReactNode> = {
   installation: () => <InstallationPage />,
   concepts: () => <ConceptsPage />,
   quickstart: () => <QuickstartPage />,
+  'agent-workflows': () => <AgentWorkflowsPage />,
   xlsx: () => <XlsxPage />,
   docx: () => <DocxPage />,
   pptx: () => <PptxPage />,

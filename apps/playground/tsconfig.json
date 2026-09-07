@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
+      "@injoffice/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@injoffice/font-metrics/layout": ["../../packages/font-metrics/src/layout.ts"],
       "@injoffice/charts": ["../../packages/charts/src/index.ts"],
       "@injoffice/collab": ["../../packages/collab/src/index.ts"],

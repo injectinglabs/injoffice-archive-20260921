@@ -12,8 +12,8 @@ describe('overview native workflow', () => {
   })
 
   it('states the package-to-surface coverage without implying full Office parity', () => {
-    expect(source).toContain('<dt>24</dt><dd>composable packages</dd>')
-    expect(source).toContain('<dt>15</dt><dd>proof surfaces</dd>')
+    expect(source).toContain('<dt>26</dt><dd>composable packages</dd>')
+    expect(source).toContain('<dt>16</dt><dd>proof surfaces</dd>')
     expect(source).toContain('Shared infrastructure appears inside the workflows it powers')
     expect(source).toContain('not a claim of unrestricted Microsoft Office parity')
     expect(source).not.toMatch(/alternative to Google and Microsoft Office/i)

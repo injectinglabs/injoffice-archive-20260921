@@ -9,6 +9,7 @@ export const SURFACES = [
   'docs',
   'slides',
   'pdf',
+  'agent',
   'collab',
   'history',
   'font-metrics',

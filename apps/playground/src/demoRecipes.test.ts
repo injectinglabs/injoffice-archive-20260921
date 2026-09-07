@@ -16,8 +16,8 @@ describe('guided demo recipes', () => {
     const registeredSurfaces = SURFACES.filter((surface) => surface !== 'overview').sort()
 
     expect(Object.keys(DEMO_RECIPES).sort()).toEqual(registeredSurfaces)
-    expect(DEMOS.map((demo) => demo.recipe.id)).toHaveLength(15)
-    expect(new Set(DEMOS.map((demo) => demo.recipe.id)).size).toBe(15)
+    expect(DEMOS.map((demo) => demo.recipe.id)).toHaveLength(16)
+    expect(new Set(DEMOS.map((demo) => demo.recipe.id)).size).toBe(16)
 
     for (const demo of DEMOS) {
       const { recipe } = demo

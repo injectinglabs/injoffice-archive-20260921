@@ -9,6 +9,7 @@ export type DocId =
   | 'installation'
   | 'concepts'
   | 'quickstart'
+  | 'agent-workflows'
   | 'xlsx'
   | 'docx'
   | 'pptx'
@@ -83,6 +84,18 @@ export const PAGES: DocPage[] = [
     group: 'Getting started',
     description: 'A working chart, a validated mutation batch, and a native extract in a few minutes.',
     keywords: ['quickstart', 'hello', 'first'],
+  },
+  {
+    id: 'agent-workflows',
+    href: '#/guides/agent-workflows',
+    title: 'Agent change sets',
+    navTitle: 'Agent workflows',
+    group: 'Getting started',
+    packageName: '@injoffice/agent-tools',
+    runtime: 'Browser',
+    authority: 'Host-owned',
+    description: 'Provider-independent inspect, plan, preview, validate, approve, commit, and verify workflows for Office artifacts.',
+    keywords: ['agent', 'ai', 'changeset', 'approval', 'verification', 'capabilities'],
   },
   {
     id: 'xlsx',

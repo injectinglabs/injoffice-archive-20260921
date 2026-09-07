@@ -43,6 +43,7 @@ export default defineConfig(async ({ command }) => {
     } : undefined,
     resolve: {
       alias: {
+        '@injoffice/agent-tools': pkgSrc('agent-tools'),
         '@injoffice/font-metrics/layout': pkgFile('font-metrics', 'layout.ts'),
         '@injoffice/charts': pkgSrc('charts'),
         '@injoffice/collab': pkgSrc('collab'),

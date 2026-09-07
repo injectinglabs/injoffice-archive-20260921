@@ -1,0 +1,86 @@
+{
+  "name": "@injoffice/agent-office",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Injecting Inc.",
+  "description": "Provider-neutral agent adapters for safe XLSX, DOCX, authored and native PPTX, and PDF changes.",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./xlsx": {
+      "types": "./dist/xlsx.d.ts",
+      "import": "./dist/xlsx.js"
+    },
+    "./docx": {
+      "types": "./dist/docx.d.ts",
+      "import": "./dist/docx.js"
+    },
+    "./pptx": {
+      "types": "./dist/pptx.d.ts",
+      "import": "./dist/pptx.js"
+    },
+    "./pdf": {
+      "types": "./dist/pdf.d.ts",
+      "import": "./dist/pdf.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/injectinglabs/injoffice.git",
+    "directory": "packages/agent-office"
+  },
+  "homepage": "https://github.com/injectinglabs/injoffice#readme",
+  "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
+  "injoffice": {
+    "entries": {
+      "index": "src/index.ts",
+      "xlsx": "src/xlsx.ts",
+      "docx": "src/docx.ts",
+      "pptx": "src/pptx.ts",
+      "pdf": "src/pdf.ts"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build -w @injoffice/agent-tools -w @injoffice/docs -w @injoffice/pdf -w @injoffice/pptx-native -w @injoffice/sheets -w @injoffice/slides",
+    "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@injoffice/docs": "0.1.0",
+    "@injoffice/pdf": "0.1.0",
+    "@injoffice/pptx-native": "0.1.0",
+    "@injoffice/sheets": "0.1.0",
+    "@injoffice/slides": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@injoffice/docs": { "optional": true },
+    "@injoffice/pdf": { "optional": true },
+    "@injoffice/pptx-native": { "optional": true },
+    "@injoffice/sheets": { "optional": true },
+    "@injoffice/slides": { "optional": true }
+  },
+  "devDependencies": {
+    "@injoffice/agent-tools": "0.1.0",
+    "@injoffice/docs": "0.1.0",
+    "@injoffice/pdf": "0.1.0",
+    "@injoffice/pptx-native": "0.1.0",
+    "@injoffice/sheets": "0.1.0",
+    "@injoffice/slides": "0.1.0",
+    "@types/node": "^26.0.0",
+    "pdf-lib": "^1.17.1",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.8"
+  },
+  "dependencies": {
+    "@injoffice/agent-tools": "0.1.0"
+  }
+}

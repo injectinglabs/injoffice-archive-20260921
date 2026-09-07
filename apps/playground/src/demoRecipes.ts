@@ -182,6 +182,22 @@ export const DEMO_RECIPES = {
       { surface: 'history', reason: 'Inspect readable diffs when formulas or cell values change.' },
     ],
   },
+  agent: {
+    id: 'agent-guarded-change-set',
+    title: 'Run a guarded agent change from proposal to proof',
+    outcome: 'Inspect a bounded artifact, review an immutable proposal, approve one atomic commit, and verify the replacement revision.',
+    minutes: 3,
+    steps: [
+      { id: 'prepare-agent-change', title: 'Prepare a bounded proposal', instruction: 'Choose XLSX, DOCX, PPTX, or PDF, keep Supported change selected, then choose “Prepare change.”', evidence: 'The flight recorder advances through inspect, plan, preview and diff, and validation without writing the source.' },
+      { id: 'review-agent-diff', title: 'Review the exact change', instruction: 'Compare the artifact preview, proposed change, semantic diff, source identity, and advertised operations.', evidence: 'The proposal stays bound to one source revision and only uses a discovered capability.' },
+      { id: 'approve-agent-commit', title: 'Approve and verify', instruction: 'Select the review checkbox, then choose “Commit approved change.”', evidence: 'Commit advances the revision and the Verify stage records output identity and machine-readable evidence.' },
+    ],
+    sources: [source('Agent workflow demo', 'apps/playground/src/pages/AgentPage.tsx'), source('Agent change-set core', 'packages/agent-tools/src/session.ts')],
+    related: [
+      { surface: 'collab', reason: 'Continue into real-time human and agent participation over shared operations.' },
+      { surface: 'history', reason: 'Capture verified agent output as an attributable durable version.' },
+    ],
+  },
   collab: {
     id: 'collab-two-editor-proof',
     title: 'Prove an operation crosses editor boundaries',

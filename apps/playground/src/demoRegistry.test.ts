@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DEMO_FORMATS, DEMOS, DEMO_TASKS } from './demoRegistry'
 
 describe('playground capability registry', () => {
-  it('registers fifteen focused proof surfaces without implying one page per package', () => {
-    expect(DEMOS).toHaveLength(15)
-    expect(new Set(DEMOS.map((demo) => demo.surface)).size).toBe(15)
-    expect(new Set(DEMOS.map((demo) => demo.packageName)).size).toBe(15)
+  it('registers sixteen focused proof surfaces without implying one page per package', () => {
+    expect(DEMOS).toHaveLength(16)
+    expect(new Set(DEMOS.map((demo) => demo.surface)).size).toBe(16)
+    expect(new Set(DEMOS.map((demo) => demo.packageName)).size).toBe(16)
     expect(DEMOS.every((demo) => demo.description.length > 40)).toBe(true)
     expect(DEMOS.every((demo) => demo.tasks.length > 0 && demo.formats.length > 0)).toBe(true)
     expect(new Set(DEMOS.flatMap((demo) => demo.tasks))).toEqual(new Set(DEMO_TASKS))

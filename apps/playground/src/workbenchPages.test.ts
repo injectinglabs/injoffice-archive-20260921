@@ -5,7 +5,7 @@ const pageSource = (name: string) => readFileSync(new URL(`./pages/${name}.tsx`,
 
 describe('playground workbench page contract', () => {
   it('keeps analytical demos in the shared tool workbench', () => {
-    for (const page of ['ChartsPage', 'ConnectorsPage', 'PivotsPage', 'ShapesPage', 'FormulasPage', 'HistoryPage']) {
+    for (const page of ['ChartsPage', 'ConnectorsPage', 'PivotsPage', 'ShapesPage', 'FormulasPage', 'HistoryPage', 'AgentPage']) {
       const source = pageSource(page)
       expect(source, page).toContain('className="tool-page"')
       expect(source, page).toMatch(/role="(?:toolbar|search)"/)

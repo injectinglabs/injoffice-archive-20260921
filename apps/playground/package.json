@@ -4,15 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "npm run build -w @injoffice/univer-sheets -w @injoffice/xlsx-wasm -w @injoffice/docx-wasm -w @injoffice/pptx-wasm",
+    "predev": "npm run build -w @injoffice/agent-tools -w @injoffice/univer-sheets -w @injoffice/xlsx-wasm -w @injoffice/docx-wasm -w @injoffice/pptx-wasm",
     "dev": "vite --port 3100",
-    "prebuild": "npm run build -w @injoffice/univer-sheets -w @injoffice/xlsx-wasm -w @injoffice/docx-wasm -w @injoffice/pptx-wasm",
+    "prebuild": "npm run build -w @injoffice/agent-tools -w @injoffice/univer-sheets -w @injoffice/xlsx-wasm -w @injoffice/docx-wasm -w @injoffice/pptx-wasm",
     "build": "vite build",
     "build:renderer": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@injoffice/agent-tools": "*",
     "@injoffice/charts": "*",
     "@injoffice/collab": "*",
     "@injoffice/connectors": "*",

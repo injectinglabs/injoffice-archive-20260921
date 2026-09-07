@@ -4,7 +4,7 @@
 
 # InjOffice
 
-InjOffice is a set of browser and server libraries for editing office artifacts. It adds plain-JSON models, pure transformation engines, optional editor integrations, and surgical OOXML patching. A hosted InjOffice service is not required: consumers can use the browser-local WASM engine, run offline, inject their own backend, or opt into the in-repo `injoffice-server`.
+InjOffice is a set of browser and server libraries for editing office artifacts. It adds plain-JSON models, pure transformation engines, provider-neutral agent change sets, optional editor integrations, and surgical OOXML patching. A hosted InjOffice service is not required: consumers can use the browser-local WASM engine, run offline, inject their own backend, or opt into the in-repo `injoffice-server`.
 
 Try the [deployed browser playground](https://solid-chainsaw-62n2zgm.pages.github.io/). The site is hosted with private GitHub Pages, so access requires authorization to this repository.
 
@@ -26,10 +26,12 @@ React, Konva, DOM/HTML layout, screenshots, and Univer must not decide file iden
 
 ## Packages
 
-Twenty-four TypeScript packages under `packages/`:
+Twenty-six TypeScript packages under `packages/`:
 
 | Package | Purpose |
 |---|---|
+| `@injoffice/agent-tools` | Model-neutral agent sessions, bounded reads, immutable change sets, approval hooks, CAS commits, verification, and a JSON tool dispatcher |
+| `@injoffice/agent-office` | Capability-scoped XLSX, DOCX, native/authored PPTX, and PDF adapters for the agent change-set lifecycle |
 | `@injoffice/sheets` | Native XLSX JSON contracts, sheet paint compilers, and fail-closed mutation batches |
 | `@injoffice/docs` | Native DOCX JSON contracts, pagination, and page-paint compilers |
 | `@injoffice/pptx-native` | Versioned native PPTX JSON contract shared by parsers, patchers, and renderers |
@@ -97,7 +99,7 @@ Run the browser playground with:
 npm run dev
 ```
 
-Open http://127.0.0.1:3100. The lightweight `#/overview` route is the default. Developer guides live on the same server at `#/guides`. Fifteen lazy-loaded proof surfaces demonstrate the twenty-four TypeScript packages; shared infrastructure packages appear inside the workflows they power instead of getting artificial standalone pages.
+Open http://127.0.0.1:3100. The lightweight `#/overview` route is the default. Developer guides live on the same server at `#/guides`. Sixteen lazy-loaded proof surfaces demonstrate the twenty-six TypeScript packages; shared infrastructure packages appear inside the workflows they power instead of getting artificial standalone pages.
 
 Create and edit:
 
@@ -112,6 +114,7 @@ Focused workbook tools:
 
 Production-pipeline tools:
 
+- `#/agent` provider-independent capability discovery, bounded inspection, immutable planning, preview/diff, validation, human approval, atomic commit, verification, and refusal proofs across XLSX, DOCX, PPTX, and PDF-shaped artifacts
 - `#/history` structured workbook and document diffs
 - `#/pptx-authored`, `#/pptx-native`, and `#/pptx-render`, including browser-local bounded PPTX text and AutoShape mutation, exact-byte re-extraction verification, and download
 - `#/font-metrics` browser-safe layout contracts with an explicit Node shaping boundary
@@ -166,6 +169,7 @@ go test ./...
 
 - **Native file API.** Go `Extract*` → native JSON (`@injoffice/sheets`, `@injoffice/docs`, `@injoffice/pptx-native`) → TypeScript paint compilers (preview) → mutation JSON → Go `Apply*`.
 - **Plain data contracts.** Native JSON, `ChartSpec`, `PivotSpec`, `DeckSpec`, and the wire types are JSON-compatible and independent of a particular host.
+- **Agent change sets.** `@injoffice/agent-tools` owns a provider-neutral inspect → plan → preview/diff → validate → approve → commit → verify lifecycle. Format adapters advertise exact JSON-schema capabilities and refuse unsupported work; applications retain model, prompt, authorization, storage, and UI control.
 - **Pure core, optional shell.** Aggregation, extraction, diffing, pagination, paint compilation, and mutations can run without React, Univer, or the DOM. Univer is an optional editor shell, not the file authority.
 - **Optional runtime.** Libraries work offline or with a host-injected backend. The XLSX, DOCX, and PPTX WASM runtimes are the playground's browser-local defaults; the in-repo `injoffice-server` remains optional for storage, collaboration, and centralized trust or policy enforcement. Public releases contain only generic library and server components, never consumer-specific backend code, authentication configuration, tenant data, or credentials.
 - **Fail-closed fidelity.** Surgical writers start from original OOXML bytes and preserve untouched ZIP parts. If a requested edit cannot be performed safely, it should return an error rather than silently rebuild and discard unsupported content.
@@ -177,6 +181,7 @@ The capabilities enumerated by the scoped v3 completion matrix are complete, but
 - [Native Office completion matrix](docs/NATIVE-OFFICE-COMPLETION.md)
 - [Native Office production E2E contract kit](docs/NATIVE-OFFICE-PRODUCTION-E2E.md)
 - [Collaboration protocol](docs/COLLABORATION-PROTOCOL.md)
+- [Agent change sets](docs/AGENT-CHANGESETS.md)
 - [Public-release checklist](docs/PUBLIC-RELEASE.md)
 - [Office roadmap](docs/ROADMAP.md)
 - [PDF roadmap](docs/ROADMAP-PDF.md)
