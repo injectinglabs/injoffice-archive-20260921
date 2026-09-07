@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { TARGET_FUNCTIONS } from '@injoffice/formulas'
+import { DsButton, DsCallout, DsChip, DsField, DsInput } from '../design-system/primitives'
+import '../design-system/live-tools.css'
 import { createPlaygroundCalculator, playgroundCalculationRequest } from '../formulaCalculation'
 import type { CalculationJobSnapshot, CalculationResult } from '../../../../packages/formulas/src/calculation'
 
@@ -30,24 +32,30 @@ export default function FormulasPage() {
   const [jobCount, setJobCount] = useState(0)
 
   return (
+    <div className="ds">
     <section className="tool-page" data-demo-surface="formulas" aria-label="Formula compatibility workbench">
-      <div className="tool-page__controls" role="search" aria-label="Formula search">
-        <label className="tool-field tool-field--search">Search audited functions<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="XLOOKUP, date, text…" /></label>
-        <span className="tool-page__status" role="status" aria-live="polite">{matches.length} matching · real-engine audit, not a name-list comparison</span>
+      <div className="tool-page__controls ds-workstrip" role="search" aria-label="Formula search">
+        <DsField label="Search audited functions">
+          <DsInput type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="XLOOKUP, date, text…" />
+        </DsField>
+        <span className="tool-page__status ds-muted" role="status" aria-live="polite">{matches.length} matching · real-engine audit, not a name-list comparison</span>
       </div>
 
-      <div className="tool-kpis" aria-label="Formula coverage summary">
+      <div className="tool-kpis ds-kpis" aria-label="Formula coverage summary">
         <div><strong>{DECLARED_FUNCTIONS}</strong><span>functions declared by the engine</span></div>
         <div><strong>{TARGET_FUNCTIONS.length}/{TARGET_FUNCTIONS.length}</strong><span>high-value formulas computing in CI</span></div>
         <div><strong>0</strong><span>#NAME? regressions in the audited set</span></div>
       </div>
 
-      <div className="tool-page__grid">
-        <section className="tool-card" aria-labelledby="formula-list-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Compatibility inventory</span><h2 id="formula-list-title">Audited formulas</h2></div><span className="tool-chip">{matches.length}</span></div>
+      <div className="tool-page__grid ds-split">
+        <section className="tool-card ds-split-main" aria-labelledby="formula-list-title" style={{ padding: 0 }}>
+          <div className="tool-card__heading" style={{ padding: '12px 16px 8px' }}>
+            <div><span className="tool-eyebrow ds-eyebrow">Compatibility inventory</span><h2 id="formula-list-title">Audited formulas</h2></div>
+            <DsChip>{matches.length}</DsChip>
+          </div>
           <div className="formula-list">
             {matches.map((item) => (
-              <button key={item.name} type="button" aria-pressed={selected.name === item.name} className={selected.name === item.name ? 'formula-list__item formula-list__item--selected' : 'formula-list__item'} onClick={() => setSelectedName(item.name)}>
+              <button key={item.name} type="button" aria-pressed={selected.name === item.name} className={selected.name === item.name ? 'formula-list__item formula-list__item--selected ds-pick' : 'formula-list__item ds-pick'} onClick={() => setSelectedName(item.name)}>
                 <strong>{item.name}</strong><span>{family(item.name)}</span>
               </button>
             ))}
@@ -55,37 +63,51 @@ export default function FormulasPage() {
           </div>
         </section>
 
-        <section className="tool-card tool-card--hero" aria-labelledby="formula-detail-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Valid fixture invocation</span><h2 id="formula-detail-title">{selected.name}</h2></div><span className="tool-chip">{family(selected.name)}</span></div>
-          <div className="formula-example"><code>{selected.formula}</code></div>
+        <section className="tool-card tool-card--hero ds-split-side" aria-labelledby="formula-detail-title">
+          <span className="ds-eyebrow tool-eyebrow">Valid fixture invocation</span>
+          <h2 id="formula-detail-title">{selected.name}</h2>
+          <DsChip>{family(selected.name)}</DsChip>
+          <p className="formula-example ds-code"><code>{selected.formula}</code></p>
+          <DsCallout tone="green" title="Computes in the pinned Univer engine">
+            CI evaluates this invocation against a real workbook and fails on name, argument, or computation regressions.
+          </DsCallout>
           <div className="formula-proof">
             <span className="formula-proof__mark" aria-hidden="true">✓</span>
-            <div><strong>Computes in the pinned Univer engine</strong><p>CI evaluates this invocation against a real workbook and fails on name, argument, or computation regressions.</p></div>
+            <div><strong>Computes in the pinned Univer engine</strong><p>The package publishes the typed, auditable matrix. Formula calculation remains the responsibility of the selected workbook engine.</p></div>
           </div>
-          <p className="tool-note">The package publishes the typed, auditable matrix. Formula calculation remains the responsibility of the selected workbook engine.</p>
-          <div className="formula-example">
-            <label className="tool-field">Calculation job<input value={jobFormula} onChange={(event) => setJobFormula(event.target.value)} aria-label="Formula for calculation job" /></label>
-            <button className="workbench-button" type="button" onClick={() => {
-              setJobError(null)
-              const next = jobCount + 1
-              setJobCount(next)
-              const submitted = calculator.manager.submit(playgroundCalculationRequest(jobFormula, `job-${next}`))
-              setJob(submitted.getState())
-              void submitted.result.then((result) => {
-                setJob(calculator.manager.getJob(submitted.id) ?? submitted.getState())
-                setJobResult(result)
-              }).catch((reason: unknown) => {
-                setJob(calculator.manager.getJob(submitted.id) ?? submitted.getState())
-                setJobError(reason instanceof Error ? reason.message : String(reason))
-              })
-            }}>Submit job</button>
-            <button className="workbench-button" type="button" onClick={() => setJobFormula(selected.formula)}>Use selected formula</button>
+          <p className="tool-note ds-muted">The package publishes the typed, auditable matrix. Formula calculation remains the responsibility of the selected workbook engine.</p>
+          <DsField label="Calculation job">
+            <DsInput value={jobFormula} onChange={(event) => setJobFormula(event.target.value)} aria-label="Formula for calculation job" />
+          </DsField>
+          <div className="ds-row">
+            <DsButton
+              variant="filled"
+              className="workbench-button"
+              onClick={() => {
+                setJobError(null)
+                const next = jobCount + 1
+                setJobCount(next)
+                const submitted = calculator.manager.submit(playgroundCalculationRequest(jobFormula, `job-${next}`))
+                setJob(submitted.getState())
+                void submitted.result.then((result) => {
+                  setJob(calculator.manager.getJob(submitted.id) ?? submitted.getState())
+                  setJobResult(result)
+                }).catch((reason: unknown) => {
+                  setJob(calculator.manager.getJob(submitted.id) ?? submitted.getState())
+                  setJobError(reason instanceof Error ? reason.message : String(reason))
+                })
+              }}
+            >
+              Submit job
+            </DsButton>
+            <DsButton variant="outlined" className="workbench-button" onClick={() => setJobFormula(selected.formula)}>Use selected formula</DsButton>
           </div>
-          {job && <p className="tool-note" role="status">{job.id} · {job.state} · {job.requestFingerprint}</p>}
-          {jobResult && <p className="tool-note">{jobResult.cells.map((cell) => cell.result.kind === 'value' ? String(cell.result.value) : cell.result.kind === 'error' ? cell.result.code : 'spill').join(', ')}</p>}
+          {job && <p className="tool-note ds-muted" role="status">{job.id} · {job.state} · {job.requestFingerprint}</p>}
+          {jobResult && <p className="tool-note ds-muted">{jobResult.cells.map((cell) => cell.result.kind === 'value' ? String(cell.result.value) : cell.result.kind === 'error' ? cell.result.code : 'spill').join(', ')}</p>}
           {jobError && <p className="tool-error" role="alert">{jobError}</p>}
         </section>
       </div>
     </section>
+    </div>
   )
 }

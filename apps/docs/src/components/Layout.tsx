@@ -1,4 +1,5 @@
 import { useMemo, useState, type MouseEvent, type ReactNode } from 'react'
+import { DsMark } from '../../../playground/src/design-system/primitives'
 import { NAV_GROUPS, PAGES, PAGE_BY_ID, type DocId } from '../catalog'
 import { navigate } from '../route'
 
@@ -31,15 +32,15 @@ export function Layout({
   }, [query])
 
   return (
-    <div className="inj-docs">
+    <div className="ds inj-docs">
       <a className="skip" href="#doc-main">Skip to content</a>
       <header className="topbar">
         <a className="brand" href="#/guides" onClick={handleNav}>
-          <img src="/logo.svg" alt="" />
-          <div>
+          <DsMark />
+          <span>
             <strong>InjOffice</strong>
             <small>Documentation</small>
-          </div>
+          </span>
         </a>
         <label className="top-search">
           <span className="visually-hidden">Search</span>
@@ -55,7 +56,7 @@ export function Layout({
           <button className="menu-btn" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>Menu</button>
           <a href="#/guides/showcase" onClick={handleNav} aria-current={id === 'showcase' ? 'page' : undefined}>Showcase</a>
           <a href="#/guides/reference" onClick={handleNav} aria-current={id === 'reference' ? 'page' : undefined}>Packages</a>
-          <a href="#/overview">Workbench</a>
+          <a className="top-link-workbench" href="#/overview">Workbench</a>
           <a href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">GitHub</a>
         </nav>
       </header>

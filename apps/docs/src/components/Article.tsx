@@ -42,7 +42,7 @@ export function Article({
           {page.packageName ? <span className="badge badge--pkg">{page.packageName}</span> : null}
           {page.runtime ? <span className="badge">{page.runtime}</span> : null}
           {page.authority ? (
-            <span className={`badge ${page.authority.includes('OOXML') || page.authority.includes('PDF') ? 'badge--pass' : page.authority.includes('Univer') ? 'badge--patch' : ''}`}>
+            <span className={`badge ${page.authority.includes('OOXML') || page.authority.includes('PDF') ? 'badge--pass' : page.authority.includes('Univer') ? 'badge--note' : ''}`}>
               {page.authority}
             </span>
           ) : null}

@@ -23,6 +23,8 @@ describe('overview native workflow', () => {
     expect(source).toContain('role="search"')
     expect(source).toContain('DEMO_TASKS.map')
     expect(source).toContain('DEMO_FORMATS.map')
+    expect(source).toContain('showcaseItems(DEMOS)')
+    expect(source).toContain('filterShowcaseItems')
     expect(source).toContain('aria-pressed={selected}')
     expect(source).toContain('aria-live="polite"')
     expect(source).toContain('No working proof matches those filters')

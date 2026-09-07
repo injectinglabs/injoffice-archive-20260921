@@ -22,6 +22,8 @@ import {
   type PptxRoundTripMode,
   type PptxRoundTripRuntime,
 } from '../pptxRoundTripRuntime'
+import { DsButton, DsChip, DsField, DsInput, DsSelect } from '../design-system/primitives'
+import '../design-system/live-tools.css'
 
 const PPTX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 const SAMPLE_PATH = new URL('../../../../go/pptxpatch/testdata/playground_northstar_review.pptx', import.meta.url).href
@@ -257,25 +259,26 @@ export default function PptxNativePage() {
   }
 
   return (
-    <div className="platen-fill native-demo workbench-surface" data-demo-surface="pptx-native">
-      <div className="view-switcher" role="group" aria-label="PPTX processing runtime">
-        <div className="tool-segment">
+    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="pptx-native">
+      <div className="view-switcher ds-workstrip" role="group" aria-label="PPTX processing runtime">
+        <div className="tool-segment ds-segment">
           <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>
           <button type="button" aria-pressed={mode === 'server'} disabled={busy || !SERVER_FALLBACK_CONFIGURED} title={SERVER_FALLBACK_CONFIGURED ? 'Upload to the configured PPTX API' : 'Set VITE_INJOFFICE_API_BASE to enable'} onClick={() => chooseMode('server')}>Server fallback{SERVER_FALLBACK_CONFIGURED ? '' : ' (not configured)'}</button>
         </div>
-        <span>{mode === 'browser' ? 'Original bytes stay in this browser' : 'Uploads bytes to the configured API'}</span>
+        <span className="ds-muted">{mode === 'browser' ? 'Original bytes stay in this browser' : 'Uploads bytes to the configured API'}</span>
       </div>
-      <div className="native-toolbar workbench-toolbar" role="group" aria-label="Native PPTX actions">
-        <button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Use bundled .pptx</button>
-        <button type="button" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>Open .pptx</button>
+      <div className="native-toolbar workbench-toolbar ds-workstrip" role="group" aria-label="Native PPTX actions">
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Use bundled .pptx</DsButton>
+        <DsButton variant="outlined" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>Open .pptx</DsButton>
         <input ref={uploadRef} className="visually-hidden" type="file" accept={`.pptx,${PPTX_MEDIA_TYPE}`} disabled={busy} aria-label="Open a PPTX file" onChange={(event) => {
           const file = event.currentTarget.files?.[0]
           if (file) void extractFile(file, file.name)
           event.currentTarget.value = ''
         }} />
+        <DsChip>{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</DsChip>
         <span className="native-badge workbench-badge">{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</span>
       </div>
-      <p className="native-status workbench-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : deck ? 'ready' : 'idle'}>{busy ? 'Working · ' : ''}{status}</p>
+      <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : deck ? 'ready' : 'idle'}>{busy ? 'Working · ' : ''}{status}</p>
       <p className="native-help workbench-callout workbench-callout--warning">
         {mode === 'browser'
           ? <>The first operation loads the version-matched Go engine (about 6.2 MiB) in a Web Worker. This proof exposes exact text replacement and four exact AutoShape presets; unsupported presentation features remain preserved or refused. Server fallback stays disabled until <code>VITE_INJOFFICE_API_BASE</code> is set.</>
@@ -283,26 +286,26 @@ export default function PptxNativePage() {
       </p>
       {error && <div className="native-error workbench-callout workbench-callout--error" role="alert"><strong>{mode === 'browser' ? 'Browser engine' : 'Server response'}</strong><span>{error}</span></div>}
 
-      <div className="native-workspace">
-        <section className="native-main" aria-label="Extracted presentation preview">
+      <div className="native-workspace ds-split">
+        <section className="native-main ds-split-main" aria-label="Extracted presentation preview">
           {deck ? (
             <>
-              <div className="native-sheet-heading"><div><span className="native-kicker">Exact native projection</span><h2>{sourceName}</h2></div><span className="native-muted">{deck.slides.length} slide{deck.slides.length === 1 ? '' : 's'} · {deck.origin}</span></div>
+              <div className="native-sheet-heading"><div><span className="native-kicker ds-eyebrow">Exact native projection</span><h2>{sourceName}</h2></div><span className="native-muted ds-muted">{deck.slides.length} slide{deck.slides.length === 1 ? '' : 's'} · {deck.origin}</span></div>
               {targets.length > 0 ? (
-                <div className="native-grid-wrap"><table className="native-grid"><thead><tr><th>Slide</th><th>Exact target</th><th>Operation</th><th>Current value</th></tr></thead><tbody>{targets.map((candidate) => {
+                <div className="native-grid-wrap"><table className="native-grid ds-table"><thead><tr><th>Slide</th><th>Exact target</th><th>Operation</th><th>Current value</th></tr></thead><tbody>{targets.map((candidate) => {
                   const active = target && pptxTargetKey(candidate) === pptxTargetKey(target)
                   return <tr key={pptxTargetKey(candidate)}><td><span>{candidate.slideIndex + 1}</span></td><td className={active ? 'native-cell-active' : undefined}><button type="button" onClick={() => chooseTarget(candidate)}>{candidate.elementName}</button></td><td><span>{candidate.operationKind}</span></td><td><span>{pptxTargetValue(candidate) || '\u00a0'}</span></td></tr>
                 })}</tbody></table></div>
               ) : <p className="native-muted">This presentation exposes no exact text or AutoShape target. That refusal is intentional.</p>}
             </>
           ) : (
-            <div className="native-empty"><span className="native-kicker">Native PPTX round trip</span><h2>Put real PPTX bytes through the engine.</h2><p>The bundled proof is a populated, reproducible three-slide launch review with styled metrics, plan content, and exact AutoShapes—not an empty conformance shell. The Go engine extracts a revision-bound model, applies one exact edit, reopens the saved package, and returns real <code>.pptx</code> bytes without a server.</p><button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</button></div>
+            <div className="native-empty"><span className="native-kicker ds-eyebrow">Native PPTX round trip</span><h2>Put real PPTX bytes through the engine.</h2><p>The bundled proof is a populated, reproducible three-slide launch review with styled metrics, plan content, and exact AutoShapes—not an empty conformance shell. The Go engine extracts a revision-bound model, applies one exact edit, reopens the saved package, and returns real <code>.pptx</code> bytes without a server.</p><DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</DsButton></div>
           )}
         </section>
 
-        <aside className="native-side workbench-inspector" aria-label="PPTX mutation controls">
-          <div className="native-panel"><span className="native-kicker">01 · Extract</span>{deck ? (
-            <dl className="native-proof-list">
+        <aside className="native-side workbench-inspector ds-split-side" aria-label="PPTX mutation controls">
+          <div className="native-panel ds-panel"><span className="native-kicker ds-eyebrow">01 · Extract</span>{deck ? (
+            <dl className="native-proof-list ds-proof">
               <div className="native-proof-row"><dt>Document</dt><dd>{deck.documentId.slice(0, 20)}…</dd></div>
               <div className="native-proof-row"><dt>Revision</dt><dd>{shortRevision(deck.sourceRevision || '')}</dd></div>
               <div className="native-proof-row"><dt>Warnings</dt><dd>{deck.compatibility.diagnostics.length}</dd></div>
@@ -311,46 +314,54 @@ export default function PptxNativePage() {
             </dl>
           ) : <p className="native-muted">No presentation extracted yet.</p>}</div>
 
-          <div className="native-panel"><span className="native-kicker">02 · Mutate</span>{target ? (
+          <div className="native-panel ds-panel"><span className="native-kicker ds-eyebrow">02 · Mutate</span>{target ? (
             <>
-              <label className="native-field">Exact mutation target<select value={pptxTargetKey(target)} onChange={(event) => {
-                const next = targets.find((candidate) => pptxTargetKey(candidate) === event.target.value)
-                if (next) chooseTarget(next)
-              }}>{targets.map((candidate) => <option key={pptxTargetKey(candidate)} value={pptxTargetKey(candidate)}>Slide {candidate.slideIndex + 1} · {candidate.elementName} · {candidate.operationKind}</option>)}</select></label>
+              <DsField className="native-field" label="Exact mutation target">
+                <DsSelect value={pptxTargetKey(target)} onChange={(event) => {
+                  const next = targets.find((candidate) => pptxTargetKey(candidate) === event.target.value)
+                  if (next) chooseTarget(next)
+                }}>{targets.map((candidate) => <option key={pptxTargetKey(candidate)} value={pptxTargetKey(candidate)}>Slide {candidate.slideIndex + 1} · {candidate.elementName} · {candidate.operationKind}</option>)}</DsSelect>
+              </DsField>
               {target.operationKind === 'text.replace' ? (
-                <label className="native-field">New first-run text<input value={draft} maxLength={32_767} onChange={(event) => {
-                  setDraft(event.target.value)
-                  setProof(null)
-                  setOutput(null)
-                }} /></label>
+                <DsField className="native-field" label="New first-run text">
+                  <DsInput value={draft} maxLength={32_767} onChange={(event) => {
+                    setDraft(event.target.value)
+                    setProof(null)
+                    setOutput(null)
+                  }} />
+                </DsField>
               ) : <>
-                <label className="native-field">Exact preset<select value={shapePreset} onChange={(event) => {
-                  setShapePreset(event.target.value as ExactPptxShapePreset)
-                  setProof(null)
-                  setOutput(null)
-                }}>{exactPptxShapePresets.map((preset) => <option key={preset} value={preset}>{preset}</option>)}</select></label>
-                <label className="native-field">Fill (blank means no fill)<input value={shapeFill} maxLength={6} pattern="[0-9A-Fa-f]{6}" onChange={(event) => {
-                  setShapeFill(event.target.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6))
-                  setProof(null)
-                  setOutput(null)
-                }} /></label>
+                <DsField className="native-field" label="Exact preset">
+                  <DsSelect value={shapePreset} onChange={(event) => {
+                    setShapePreset(event.target.value as ExactPptxShapePreset)
+                    setProof(null)
+                    setOutput(null)
+                  }}>{exactPptxShapePresets.map((preset) => <option key={preset} value={preset}>{preset}</option>)}</DsSelect>
+                </DsField>
+                <DsField className="native-field" label="Fill (blank means no fill)">
+                  <DsInput value={shapeFill} maxLength={6} pattern="[0-9A-Fa-f]{6}" onChange={(event) => {
+                    setShapeFill(event.target.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6))
+                    setProof(null)
+                    setOutput(null)
+                  }} />
+                </DsField>
               </>}
               {textInvalid && <p className="native-muted">Tabs and line breaks are outside this exact mutation subset.</p>}
               <div className="native-actions">
-                <button type="button" className="workbench-button workbench-button--primary" disabled={busy || !mutation || textInvalid || target.operationKind === 'autoshape.update' && shapeFill.length > 0 && shapeFill.length !== 6} onClick={() => void mutate()}>Save to PPTX</button>
-                <button type="button" className="workbench-button" disabled={busy || !mutationEvidence} onClick={() => void copyMutationEvidence()}>Copy evidence</button>
+                <DsButton variant="green" className="workbench-button workbench-button--primary" disabled={busy || !mutation || textInvalid || target.operationKind === 'autoshape.update' && shapeFill.length > 0 && shapeFill.length !== 6} onClick={() => void mutate()}>Save to PPTX</DsButton>
+                <DsButton variant="outlined" className="workbench-button" disabled={busy || !mutationEvidence} onClick={() => void copyMutationEvidence()}>Copy evidence</DsButton>
               </div>
               {(target.operationKind === 'text.replace' ? draft === targetValue : shapeUnchanged) && <p className="native-muted">Change the selected value to enable a non-empty transaction.</p>}
               <div className="native-contract-evidence" aria-label="Current PPTX mutation evidence">
-                <span className="native-kicker">Agent contract · bounded evidence</span>
-                <pre>{mutationEvidence || 'Change the selected value to preview the guarded mutation.'}</pre>
+                <span className="native-kicker ds-eyebrow">Agent contract · bounded evidence</span>
+                <pre className="ds-code">{mutationEvidence || 'Change the selected value to preview the guarded mutation.'}</pre>
               </div>
             </>
           ) : <p className="native-muted">No fully materialized text or AutoShape target can be edited safely.</p>}</div>
 
-          <div className="native-panel"><span className="native-kicker">03 · Verify</span>{proof ? (
+          <div className="native-panel ds-panel"><span className="native-kicker ds-eyebrow">03 · Verify</span>{proof ? (
             <>
-              <dl className="native-proof-list">
+              <dl className="native-proof-list ds-proof">
                 <div className="native-proof-row"><dt>Target</dt><dd>{proof.target}</dd></div>
                 <div className="native-proof-row"><dt>Before</dt><dd>{proof.before || 'blank'}</dd></div>
                 <div className="native-proof-row"><dt>After</dt><dd>{proof.after || 'blank'}</dd></div>
@@ -358,6 +369,7 @@ export default function PptxNativePage() {
                 <div className="native-proof-row"><dt>Untouched anchors</dt><dd>{proof.preservedElements} verified</dd></div>
                 <div className="native-proof-row"><dt>CAS moved</dt><dd>{shortRevision(proof.previousRevision)} → {shortRevision(proof.revision)}</dd></div>
               </dl>
+              <DsChip tone="green">Untouched anchors verified</DsChip>
               {downloadURL && <a className="native-download workbench-button workbench-button--primary" href={downloadURL} download={pptxDownloadName(sourceName)}>Download verified .pptx</a>}
             </>
           ) : <p className="native-muted">After save, the page re-extracts the exact produced bytes and verifies the requested edit, document identity, revision headers, and every untouched source anchor. Download stays disabled unless every check passes.</p>}</div>

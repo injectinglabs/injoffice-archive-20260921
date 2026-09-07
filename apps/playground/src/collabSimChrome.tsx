@@ -1,5 +1,7 @@
-import { type CSSProperties, type ReactNode, type Ref } from 'react'
+import { type ReactNode, type Ref } from 'react'
 import { PresenceStack, type PresenceSource } from '../../../packages/collab/src/index.js'
+import { DsAvatar, DsChip } from './design-system/primitives'
+import './design-system/live-tools.css'
 import { COLLAB_FORMATS, type CollabFormat } from './collabScope'
 
 export type SimConnection = 'starting' | 'live' | 'error'
@@ -13,8 +15,8 @@ export type SimEditorProfile = {
 }
 
 export const SIM_EDITORS: SimEditorProfile[] = [
-  { id: 'mira', name: 'Mira', color: '#2855d9', label: 'Product editor' },
-  { id: 'noah', name: 'Noah', color: '#b34c36', label: 'Review editor' },
+  { id: 'mira', name: 'Mira', color: '#0f6f8f', label: 'Product editor' },
+  { id: 'noah', name: 'Noah', color: '#1a6b52', label: 'Review editor' },
 ]
 
 export const SIM_FORMAT_LABEL: Record<CollabFormat, string> = {
@@ -58,10 +60,10 @@ export function SimEditorFrame({
   children: ReactNode
 }) {
   return (
-    <section className="collab-sim-editor" aria-labelledby={`sim-editor-${profile.id}`}>
+    <section className="collab-sim-editor ds-editor-card" aria-labelledby={`sim-editor-${profile.id}`}>
       <header className="collab-sim-editor__header">
-        <div className="collab-sim-identity">
-          <span style={{ '--collab-color': profile.color } as CSSProperties}>{profile.name.slice(0, 1)}</span>
+        <div className="collab-sim-identity ds-row">
+          <DsAvatar initials={profile.name.slice(0, 1)} tone={profile.id === 'noah' ? 2 : 3} />
           <div>
             <h3 id={`sim-editor-${profile.id}`}>{profile.name}</h3>
             <p>{profile.label}</p>
@@ -69,10 +71,12 @@ export function SimEditorFrame({
         </div>
         <div className="collab-sim-editor__state">
           {presence ? <PresenceStack manager={presence} /> : null}
-          <span className={`collab-connection collab-connection--${status === 'live' ? 'live' : status === 'error' ? 'error' : 'joining'}`} role="status">
-            <i aria-hidden="true" />
-            {status === 'live' ? 'Connected' : status === 'error' ? 'Unavailable' : 'Connecting'}
-          </span>
+          <DsChip tone={status === 'live' ? 'green' : status === 'error' ? 'refuse' : 'plain'}>
+            <span className={`collab-connection collab-connection--${status === 'live' ? 'live' : status === 'error' ? 'error' : 'joining'}`} role="status">
+              <i aria-hidden="true" />
+              {status === 'live' ? 'Connected' : status === 'error' ? 'Unavailable' : 'Connecting'}
+            </span>
+          </DsChip>
         </div>
       </header>
       <div ref={stageRef} className={`collab-sim-editor__stage${canvasClassName ? ` ${canvasClassName}` : ''}`}>
@@ -98,12 +102,12 @@ export function SimFormatTabs({
   hint?: string
 }) {
   return (
-    <div className="view-switcher collab-format-bar" role="tablist" aria-label="Collaboration format">
+    <div className="view-switcher collab-format-bar ds-workstrip" role="tablist" aria-label="Collaboration format">
       <div className="collab-format-bar__label">
         <strong>Format</strong>
         <span>One room, four editors</span>
       </div>
-      <div className="tool-segment">
+      <div className="tool-segment ds-segment">
         {COLLAB_FORMATS.map((item) => (
           <button
             key={item}
@@ -117,7 +121,7 @@ export function SimFormatTabs({
           </button>
         ))}
       </div>
-      {hint ? <span>{hint}</span> : null}
+      {hint ? <span className="ds-muted">{hint}</span> : null}
     </div>
   )
 }

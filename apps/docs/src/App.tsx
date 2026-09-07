@@ -22,6 +22,7 @@ import { ComparePage } from './pages/ComparePage'
 import { ShowcasePage } from './pages/ShowcasePage'
 import { ReferencePage } from './pages/ReferencePage'
 import { AgentWorkflowsPage } from './pages/AgentWorkflowsPage'
+import '../../playground/src/design-system/tokens.css'
 import './styles.css'
 
 const PAGES: Record<DocId, () => ReactNode> = {

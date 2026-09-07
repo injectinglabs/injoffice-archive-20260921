@@ -88,7 +88,7 @@ if (!receipt.verification.verified) throw new Error('Committed output verificati
       <p>This boundary keeps InjOffice usable as an open-source library inside a browser app, local tool, server, MCP adapter, or a product-specific agent experience.</p>
 
       <h2 id="demo">Run the local proof</h2>
-      <p>Open <a href="#/agent">Agent workflows</a> in the workbench. The demo supplies a deterministic local proposal so you can inspect the execution contract without an API key or network request. Switch among XLSX, DOCX, PPTX, and PDF, then run the refusal proof to see an unsupported request stop before write.</p>
+      <p>Open the AI change-set proofs for <a href="#/agent?format=sheets">Sheets</a>, <a href="#/agent?format=docs">Docs</a>, <a href="#/agent?format=slides">Slides</a>, or <a href="#/agent?format=pdf">PDF</a>. Each demo supplies a deterministic local proposal so you can inspect the execution contract without an API key or network request. Keep Supported change selected, then run the refusal proof to see an unsupported request stop before write.</p>
     </Article>
   )
 }

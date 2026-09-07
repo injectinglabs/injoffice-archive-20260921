@@ -9,6 +9,8 @@ import {
   movingAverage,
   type ChartType,
 } from '@injoffice/charts'
+import { DsButton, DsChip, DsField, DsSelect } from '../design-system/primitives'
+import '../design-system/live-tools.css'
 import { playgroundChartSvgExport, playgroundChartWire } from '../chartWire'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
@@ -72,61 +74,46 @@ export default function ChartsPage() {
   const wire = useMemo(() => playgroundChartWire(spec, grid), [grid, spec])
   const [exportNote, setExportNote] = useState('No image export yet.')
   return (
+    <div className="ds">
     <section className="tool-page" data-demo-surface="charts" aria-label="Chart analysis workbench">
-      <div className="tool-page__controls" role="toolbar" aria-label="Chart controls">
-        <label className="tool-field">
-          Chart type
-          <select value={type} onChange={(event) => setType(event.target.value as ChartType)}>
+      <div className="tool-page__controls ds-workstrip" role="toolbar" aria-label="Chart controls">
+        <DsField label="Chart type">
+          <DsSelect value={type} onChange={(event) => setType(event.target.value as ChartType)}>
             {CHART_TYPES.map((chartType) => <option key={chartType}>{chartType}</option>)}
-          </select>
-        </label>
-        <label className="tool-check">
+          </DsSelect>
+        </DsField>
+        <label className="ds-check tool-check">
           <input type="checkbox" checked={showTrend} disabled={!supportsTrend} onChange={(event) => setShowTrend(event.target.checked)} />
-          Linear trendline (line, column, area, combination)
+          Linear trendline
         </label>
-        <button className="workbench-button" type="button" onClick={() => setRevenue(START_REVENUE)}>Reset data</button>
-        <button className="workbench-button" type="button" onClick={() => {
-          void playgroundChartSvgExport(spec, spec.title ?? type).then((artifact) => {
-            setExportNote(`Exported ${artifact.mediaType} · ${artifact.bytes.byteLength} bytes`)
-          }).catch((reason: unknown) => setExportNote(reason instanceof Error ? reason.message : String(reason)))
-        }}>Export SVG</button>
-        <span className="tool-page__status" role="status">{CHART_TYPES.length} chart types · ChartSpec to ECharts option and native wire</span>
+        <DsButton variant="outlined" className="workbench-button" onClick={() => setRevenue(START_REVENUE)}>Reset data</DsButton>
+        <DsButton
+          variant="outlined"
+          className="workbench-button"
+          onClick={() => {
+            void playgroundChartSvgExport(spec, spec.title ?? type).then((artifact) => {
+              setExportNote(`Exported ${artifact.mediaType} · ${artifact.bytes.byteLength} bytes`)
+            }).catch((reason: unknown) => setExportNote(reason instanceof Error ? reason.message : String(reason)))
+          }}
+        >
+          Export SVG
+        </DsButton>
+        <span className="tool-page__status ds-muted" role="status">{CHART_TYPES.length} chart types · ChartSpec to ECharts option and native wire</span>
       </div>
 
-      <div className="tool-page__grid tool-page__grid--wide">
-        <section className="tool-card tool-card--hero" aria-labelledby="chart-preview-title">
-          <div className="tool-card__heading">
-            <div><span className="tool-eyebrow">Interactive proof</span><h2 id="chart-preview-title">{chartTitle}</h2></div>
-            <span className="tool-chip">{type}</span>
+      <div className="tool-page__grid tool-page__grid--wide ds-split ds-split--wide">
+        <section className="tool-card tool-card--hero ds-split-main" aria-labelledby="chart-preview-title">
+          <span className="ds-eyebrow tool-eyebrow">Interactive proof</span>
+          <div className="ds-row" style={{ marginBottom: 8 }}>
+            <h2 id="chart-preview-title" style={{ margin: 0, fontSize: 16 }}>{chartTitle}</h2>
+            <DsChip tone="blue">{type}</DsChip>
           </div>
           <EChartsPreview
             className="chart-proof chart-proof--echarts"
             option={option}
             ariaLabel={`${type} chart preview: ${chartTitle}`}
           />
-        </section>
-
-        <section className="tool-card" aria-labelledby="chart-data-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Source range</span><h2 id="chart-data-title">Edit the series</h2></div></div>
-          <div className="tool-data-list">
-            {categories.map((category, index) => (
-              <label key={category} className="tool-data-row">
-                <span>{category}</span>
-                <input
-                  aria-label={`${category} revenue`}
-                  type="number"
-                  min="0"
-                  value={revenue[index]}
-                  onChange={(event) => setRevenue((current) => current.map((value, at) => at === index ? Number(event.target.value) : value))}
-                />
-              </label>
-            ))}
-          </div>
-        </section>
-
-        <section className="tool-card" aria-labelledby="chart-analysis-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Analysis APIs</span><h2 id="chart-analysis-title">Computed from the same series</h2></div></div>
-          <dl className="tool-metrics">
+          <dl className="ds-kpis tool-kpis tool-metrics" aria-label="Analysis APIs">
             <div><dt>Minimum</dt><dd>{summary?.[0] ?? '—'}</dd></div>
             <div><dt>Median</dt><dd>{summary?.[2] ?? '—'}</dd></div>
             <div><dt>Maximum</dt><dd>{summary?.[4] ?? '—'}</dd></div>
@@ -135,16 +122,41 @@ export default function ChartsPage() {
           </dl>
         </section>
 
-        <section className="tool-card tool-card--code" aria-labelledby="chart-option-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Renderer-neutral output</span><h2 id="chart-option-title">Generated option</h2></div></div>
-          <pre>{JSON.stringify(option, null, 2)}</pre>
-        </section>
-        <section className="tool-card tool-card--code" aria-labelledby="chart-wire-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Native XLSX wire</span><h2 id="chart-wire-title">toWireCharts</h2></div></div>
-          <pre>{JSON.stringify(wire.charts[0] ?? { skipped: wire.skipped }, null, 2)}</pre>
-          <p className="tool-note">{exportNote}</p>
+        <section className="tool-card ds-split-side" aria-labelledby="chart-data-title">
+          <span className="ds-eyebrow tool-eyebrow">Source range</span>
+          <h2 id="chart-data-title">Edit the series</h2>
+          <table className="ds-table tool-table">
+            <caption className="visually-hidden">Editable chart source range</caption>
+            <thead>
+              <tr>
+                <th>{categoryHeader}</th>
+                <th className="num">Revenue</th>
+                <th className="num">Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category, index) => (
+                <tr key={category}>
+                  <td>{category}</td>
+                  <td className="num">
+                    <input
+                      aria-label={`${category} revenue`}
+                      type="number"
+                      min="0"
+                      value={revenue[index]}
+                      onChange={(event) => setRevenue((current) => current.map((value, at) => at === index ? Number(event.target.value) : value))}
+                    />
+                  </td>
+                  <td className="num">{START_TARGET[index]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="ds-code">{JSON.stringify(wire.charts[0] ?? { skipped: wire.skipped }, null, 2)}</p>
+          <p className="tool-note ds-muted">{exportNote}</p>
         </section>
       </div>
     </section>
+    </div>
   )
 }

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { adaptWorkbookMutationBatchV1 } from '@injoffice/xlsx-wasm'
 import {
+  DsButton,
+  DsCallout,
+  DsChip,
+  DsField,
+  DsInput,
+  DsSelect,
+} from '../design-system/primitives'
+import '../design-system/live-create-edit.css'
+import {
   buildCellMutation,
   displayCellValue,
   downloadName,
@@ -313,9 +322,9 @@ export default function NativeRoundTripPage() {
   const editableMap = new Map(targets.map((candidate) => [targetKey(candidate), candidate]))
 
   return (
-    <div className="platen-fill native-demo workbench-surface" data-demo-surface="native">
-      <div className="view-switcher" role="group" aria-label="XLSX processing runtime">
-        <div className="tool-segment">
+    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="native">
+      <div className="view-switcher ds-workstrip" role="group" aria-label="XLSX processing runtime">
+        <div className="tool-segment ds-segment" role="group" aria-label="XLSX processing runtime">
           <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>
           <button
             type="button"
@@ -325,15 +334,15 @@ export default function NativeRoundTripPage() {
             onClick={() => chooseMode('server')}
           >Server fallback{SERVER_FALLBACK_CONFIGURED ? '' : ' (not configured)'}</button>
         </div>
-        <span>{mode === 'browser' ? 'Original bytes stay in this browser' : 'Uploads bytes to the configured API'}</span>
+        <span className="ds-muted">{mode === 'browser' ? 'Original bytes stay in this browser' : 'Uploads bytes to the configured API'}</span>
       </div>
-      <div className="native-toolbar workbench-toolbar" role="group" aria-label="Native XLSX actions">
-        <button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>
+      <div className="native-toolbar workbench-toolbar ds-workstrip" role="group" aria-label="Native XLSX actions">
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>
           Use bundled .xlsx
-        </button>
-        <button type="button" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>
+        </DsButton>
+        <DsButton variant="outlined" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>
           Open .xlsx
-        </button>
+        </DsButton>
         <input
           ref={uploadRef}
           className="visually-hidden"
@@ -347,28 +356,31 @@ export default function NativeRoundTripPage() {
             event.currentTarget.value = ''
           }}
         />
-        <span className="native-badge workbench-badge">{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</span>
+        <DsChip>{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</DsChip>
       </div>
-      <p className="native-status workbench-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : workbook ? 'ready' : 'idle'}>
+      <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : workbook ? 'ready' : 'idle'}>
         {busy ? 'Working · ' : ''}{status}
       </p>
-      <p className="native-help workbench-callout workbench-callout--warning">
+      <DsCallout
+        tone="note"
+        title={mode === 'browser' ? 'Browser-local engine' : 'Explicit server fallback'}
+      >
         {mode === 'browser'
-          ? <>The first operation loads the version-matched Go engine (about 6.3 MiB) in a Web Worker. A native feature refusal remains a refusal on the server path. Server fallback stays disabled until <code>VITE_INJOFFICE_API_BASE</code> is set.</>
-          : <>This mode uploads the workbook. Local Vite uses its proxy; a static build needs a secured compatible API configured with <code>VITE_INJOFFICE_API_BASE</code>.</>}
-      </p>
-      {error && <div className="native-error workbench-callout workbench-callout--error" role="alert"><strong>{mode === 'browser' ? 'Browser engine' : 'Server response'}</strong><span>{error}</span></div>}
+          ? 'The first operation loads the version-matched Go engine (about 6.3 MiB) in a Web Worker. A native feature refusal remains a refusal on the server path. Server fallback stays disabled until VITE_INJOFFICE_API_BASE is set.'
+          : 'This mode uploads the workbook. Local Vite uses its proxy; a static build needs a secured compatible API configured with VITE_INJOFFICE_API_BASE.'}
+      </DsCallout>
+      {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
 
-      <div className="native-workspace">
-        <section className="native-main" aria-label="Extracted workbook preview">
+      <div className="native-workspace ds-split">
+        <section className={`native-main ds-split-main${workbook && activeSheet && bounds ? ' ds-split-main--flush' : ''}`} aria-label="Extracted workbook preview">
           {workbook && activeSheet && bounds ? (
             <>
               <div className="native-sheet-heading">
                 <div>
-                  <span className="native-kicker">Exact native projection</span>
+                  <span className="native-kicker ds-eyebrow">Exact native projection</span>
                   <h2>{activeSheet.name}</h2>
                 </div>
-                <span className="native-muted">{sourceName} · {workbook.source.authority}</span>
+                <span className="native-muted ds-muted">{sourceName} · {workbook.source.authority}</span>
               </div>
               <div className="native-grid-wrap">
                 <table className="native-grid">
@@ -399,69 +411,68 @@ export default function NativeRoundTripPage() {
             </>
           ) : (
             <div className="native-empty">
-              <span className="native-kicker">Native XLSX round trip</span>
+              <span className="native-kicker ds-eyebrow">Native XLSX round trip</span>
               <h2>Put real XLSX bytes through the engine.</h2>
               <p>The Go engine runs inside a browser Worker by default. It extracts a revision-bound model, applies one supported edit, reopens the saved package, and returns real <code>.xlsx</code> bytes without a server.</p>
-              <button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</button>
+              <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</DsButton>
             </div>
           )}
         </section>
 
-        <aside className="native-side workbench-inspector" aria-label="Mutation controls">
-          <div className="native-panel">
-            <span className="native-kicker">01 · Extract</span>
+        <aside className="native-side workbench-inspector ds-split-side" aria-label="Mutation controls">
+          <div className="native-panel ds-panel">
+            <span className="native-kicker ds-eyebrow">01 · Extract</span>
             {workbook ? (
-              <dl className="native-proof-list">
+              <dl className="native-proof-list ds-proof">
                 <div className="native-proof-row"><dt>Document</dt><dd>{workbook.document_id.slice(0, 20)}…</dd></div>
                 <div className="native-proof-row"><dt>Revision</dt><dd>{shortRevision(workbook.revision)}</dd></div>
-                <div className="native-proof-row"><dt>Preserved warnings</dt><dd>{workbook.unsupported?.length ?? 0}</dd></div>
+                <div className="native-proof-row"><dt>Warnings</dt><dd>{workbook.unsupported?.length ?? 0}</dd></div>
                 <div className="native-proof-row"><dt>Runtime</dt><dd>{mode === 'browser' ? 'browser-local' : 'server fallback'}</dd></div>
                 <div className="native-proof-row"><dt>Artifact</dt><dd>{mode === 'browser' ? 'browser memory' : artifactId ? 'stored' : 'request-local'}</dd></div>
               </dl>
-            ) : <p className="native-muted">No workbook extracted yet.</p>}
+            ) : <p className="native-muted ds-muted">No workbook extracted yet.</p>}
           </div>
 
-          <div className="native-panel">
-            <span className="native-kicker">02 · Mutate</span>
+          <div className="native-panel ds-panel">
+            <span className="native-kicker ds-eyebrow">02 · Mutate</span>
             {target ? (
               <>
-                <label className="native-field">
-                  Safe cell
-                  <select value={targetKey(target)} onChange={(event) => {
+                <DsField className="native-field" label="Safe cell">
+                  <DsSelect value={targetKey(target)} onChange={(event) => {
                     const next = targets.find((candidate) => targetKey(candidate) === event.target.value)
                     if (next) chooseTarget(next)
                   }}>
                     {targets.map((candidate) => <option key={targetKey(candidate)} value={targetKey(candidate)}>{candidate.sheetName}!{candidate.ref}</option>)}
-                  </select>
-                </label>
-                <label className="native-field">
-                  New literal value
-                  <input value={draft} maxLength={32767} onChange={(event) => setDraft(event.target.value)} />
-                </label>
+                  </DsSelect>
+                </DsField>
+                <DsField className="native-field" label="New literal value">
+                  <DsInput value={draft} maxLength={32767} onChange={(event) => setDraft(event.target.value)} />
+                </DsField>
                 <div className="native-actions">
-                  <button type="button" className="workbench-button workbench-button--primary" disabled={busy || draft === targetValue} onClick={() => void mutate()}>Save to XLSX</button>
+                  <DsButton variant="green" className="workbench-button workbench-button--primary" disabled={busy || draft === targetValue} onClick={() => void mutate()}>Save to XLSX</DsButton>
                 </div>
-                {draft === targetValue && <p className="native-muted">Change the value to enable a non-empty transaction.</p>}
+                {draft === targetValue && <p className="native-muted ds-muted">Change the value to enable a non-empty transaction.</p>}
               </>
-            ) : <p className="native-muted">This workbook exposes no safely editable literal cells. That refusal is intentional.</p>}
+            ) : <p className="native-muted ds-muted">This workbook exposes no safely editable literal cells. That refusal is intentional.</p>}
           </div>
 
-          <div className="native-panel">
-            <span className="native-kicker">03 · Verify</span>
+          <div className="native-panel ds-panel">
+            <span className="native-kicker ds-eyebrow">03 · Verify</span>
             {proof ? (
               <>
-                <dl className="native-proof-list">
+                <dl className="native-proof-list ds-proof">
                   <div className="native-proof-row"><dt>Cell</dt><dd>{proof.cell}</dd></div>
                   <div className="native-proof-row"><dt>Before</dt><dd>{proof.before || 'blank'}</dd></div>
                   <div className="native-proof-row"><dt>After</dt><dd>{proof.after || 'blank'}</dd></div>
                   <div className="native-proof-row"><dt>CAS moved</dt><dd>{shortRevision(proof.previousRevision)} → {shortRevision(proof.revision)}</dd></div>
                 </dl>
-                {downloadURL && <a className="native-download workbench-button workbench-button--primary" href={downloadURL} download={downloadName(sourceName)}>Download verified .xlsx</a>}
+                <DsChip tone="green">Applied</DsChip>
+                {downloadURL && <a className="native-download workbench-button workbench-button--primary ds-btn ds-btn--filled" href={downloadURL} download={downloadName(sourceName)}>Download verified .xlsx</a>}
               </>
             ) : (
               <>
-                <p className="native-muted">After save, the page re-extracts the exact response bytes and shows the revision change here.</p>
-                {downloadURL && <a className="native-download workbench-button" href={downloadURL} download={downloadName(sourceName)}>Download saved .xlsx</a>}
+                <p className="native-muted ds-muted">After save, the page re-extracts the exact response bytes and shows the revision change here.</p>
+                {downloadURL && <a className="native-download workbench-button ds-btn ds-btn--outlined" href={downloadURL} download={downloadName(sourceName)}>Download saved .xlsx</a>}
               </>
             )}
           </div>

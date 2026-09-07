@@ -8,6 +8,8 @@ import {
   type SlideRenderTree,
 } from '@injoffice/pptx-render'
 import type { NativeShapePreset } from '@injoffice/pptx-native'
+import { DsCallout, DsChip, DsField, DsSelect } from '../design-system/primitives'
+import '../design-system/live-tools.css'
 
 const PRESETS: readonly NativeShapePreset[] = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'pentagon', 'hexagon', 'star5']
 const SHAPE_CX = 4_200_000
@@ -24,8 +26,8 @@ function makeTree(preset: NativeShapePreset, includeConnector: boolean): SlideRe
     compatibility: 'editable',
     preset,
     path: presetPath(preset, SHAPE_CX, SHAPE_CY),
-    fill: { color: '625BF6' },
-    stroke: { color: '312E81', widthEmu: 22_860, cap: 'flat', join: 'round', dash: 'solid' },
+    fill: { color: '0F6F8F' },
+    stroke: { color: '1A6B52', widthEmu: 22_860, cap: 'flat', join: 'round', dash: 'solid' },
   }]
 
   if (includeConnector) {
@@ -38,7 +40,7 @@ function makeTree(preset: NativeShapePreset, includeConnector: boolean): SlideRe
       bounds: { x: 0, y: 0, cx: 2_400_000, cy: 1_200_000 },
       compatibility: 'editable',
       path: [{ kind: 'moveTo', x: 0, y: 0 }, { kind: 'lineTo', x: 2_400_000, y: 1_200_000 }],
-      stroke: { color: 'FF7867', widthEmu: 36_000, cap: 'round', join: 'round', dash: 'solid' },
+      stroke: { color: 'C23A2B', widthEmu: 36_000, cap: 'round', join: 'round', dash: 'solid' },
       headArrow: false,
       tailArrow: true,
     })
@@ -50,7 +52,7 @@ function makeTree(preset: NativeShapePreset, includeConnector: boolean): SlideRe
     slideId: 'slide-one',
     slideIndex: 0,
     size: { cx: 10_000_000, cy: 5_625_000 },
-    background: { color: 'F7FAFF' },
+    background: { color: 'F5F6F6' },
     clip: { kind: 'rect', rect: { x: 0, y: 0, cx: 10_000_000, cy: 5_625_000 } },
     nodes,
     assets: [],
@@ -87,46 +89,47 @@ export default function PptxRenderPage() {
   const shape = tree.nodes[0]
 
   return (
-    <section className="capability-page capability-page--pptx-render" data-demo-surface="pptx-render" aria-labelledby="pptx-render-title">
-      <header className="capability-intro">
+    <section className="capability-page capability-page--pptx-render ds" data-demo-surface="pptx-render" aria-labelledby="pptx-render-title">
+      <header className="capability-intro ds-surf-head">
         <div>
-          <p className="capability-package">@injoffice/pptx-render</p>
+          <p className="capability-package ds-surf-pkg">@injoffice/pptx-render</p>
           <h2 id="pptx-render-title">Turn a RenderTree into deterministic paint commands</h2>
           <p>The library emits renderer-neutral geometry and an ordered command stream. The small SVG is a host preview; it is not a browser-layout substitute for native Office text.</p>
         </div>
         <span className="capability-runtime" role="status">Browser-safe command layer</span>
       </header>
 
-      <div className="capability-workspace">
-        <div className="capability-controls">
-          <label className="capability-field">
-            Native shape preset
-            <select value={preset} onChange={(event) => setPreset(event.target.value as NativeShapePreset)}>
+      <div className="capability-workspace ds-split ds-split--wide">
+        <div className="capability-controls ds-split-main">
+          <DsField label="Native shape preset">
+            <DsSelect value={preset} onChange={(event) => setPreset(event.target.value as NativeShapePreset)}>
               {PRESETS.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-          </label>
-          <label className="capability-check">
+            </DsSelect>
+          </DsField>
+          <label className="ds-check capability-check">
             <input type="checkbox" checked={includeConnector} onChange={(event) => setIncludeConnector(event.target.checked)} />
             Include a connector in the command stream
           </label>
-          <div className="capability-slide-preview" aria-label={`Host preview of the ${preset} geometry`}>
+          <div className="capability-slide-preview ds-shape-stage" aria-label={`Host preview of the ${preset} geometry`}>
             <svg viewBox={`0 0 ${SHAPE_CX} ${SHAPE_CY}`} role="img" aria-label={`${preset} native preset path`}>
-              <g fill="#625BF6" stroke="#312E81" strokeWidth="36000">{shape.kind === 'shape' ? geometryPreview(shape.path) : null}</g>
+              <g fill="var(--ds-select-soft)" stroke="var(--ds-select)" strokeWidth="36000">{shape.kind === 'shape' ? geometryPreview(shape.path) : null}</g>
             </svg>
           </div>
-          <p className="capability-note">Native text compilation additionally requires a manifest, exact font bytes, a resolver, and a trusted shaper. This page intentionally does not fake those host inputs.</p>
+          <DsCallout tone="note" title="Host preview is not native text layout">
+            Native text compilation additionally requires a manifest, exact font bytes, a resolver, and a trusted shaper. This page intentionally does not fake those host inputs.
+          </DsCallout>
         </div>
 
-        <div className="capability-result" aria-live="polite">
+        <div className="capability-result ds-split-side" aria-live="polite">
           <div className="capability-result-heading">
-            <span className="capability-status capability-status--success">Recording complete</span>
+            <DsChip tone="green"><span className="capability-status capability-status--success">Recording complete</span></DsChip>
             <strong>{commands.length} commands</strong>
           </div>
           <ol className="capability-command-list">
             {commands.map((command, index) => (
-              <li key={`${index}-${command.kind}`}>
+              <li className="ds-command" key={`${index}-${command.kind}`}>
                 <code>{command.kind}</code>
-                {'sourceElementId' in command ? <span>{command.sourceElementId}</span> : null}
+                {'sourceElementId' in command ? <span className="ds-muted">{command.sourceElementId}</span> : null}
               </li>
             ))}
           </ol>

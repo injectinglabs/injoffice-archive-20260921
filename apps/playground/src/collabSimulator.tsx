@@ -188,8 +188,8 @@ export function CollabSimulator() {
   }
 
   return (
-    <div className="collab-simulator workbench-surface">
-      <div className="collab-sim-toolbar workbench-toolbar" role="toolbar" aria-label="Collaboration simulation controls">
+    <div className="collab-simulator workbench-surface ds">
+      <div className="collab-sim-toolbar workbench-toolbar ds-workstrip" role="toolbar" aria-label="Collaboration simulation controls">
         <div>
           <strong>Two editors, one browser room</strong>
           <span>Runs entirely in this page</span>
@@ -211,7 +211,7 @@ export function CollabSimulator() {
         </ol>
       </section>
 
-      <div className="collab-sim-editors" key={`${session.id}-${format}`}>
+      <div className="collab-sim-editors ds-dual" key={`${session.id}-${format}`}>
         {format === 'sheets' ? EDITORS.map((profile) => <SimulatedEditor key={profile.id} hub={session.hub} profile={profile} />) : null}
         {format === 'docs' ? <CollabSimulatorDocs hub={session.hub} /> : null}
         {format === 'slides' ? <CollabSimulatorSlides hub={session.hub} /> : null}

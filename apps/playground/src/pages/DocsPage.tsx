@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS } from '@injoffice/docx-wasm'
 import {
+  DsButton,
+  DsCallout,
+  DsChip,
+  DsField,
+  DsSelect,
+  DsTextarea,
+} from '../design-system/primitives'
+import '../design-system/live-create-edit.css'
+import {
   DOCX_MEDIA_TYPE,
   nativeDocxParagraphText,
   nativeDocxPreviewStats,
@@ -336,9 +345,9 @@ export default function DocsPage() {
   }
 
   return (
-    <div className="platen-fill native-demo docx-demo workbench-surface" data-demo-surface="docs">
-      <div className="view-switcher" role="group" aria-label="DOCX processing runtime">
-        <div className="tool-segment">
+    <div className="platen-fill native-demo docx-demo workbench-surface ds" data-demo-surface="docs">
+      <div className="view-switcher ds-workstrip" role="group" aria-label="DOCX processing runtime">
+        <div className="tool-segment ds-segment" role="group" aria-label="DOCX processing runtime">
           <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>
           <button
             type="button"
@@ -348,15 +357,12 @@ export default function DocsPage() {
             onClick={() => chooseMode('server')}
           >Server fallback{SERVER_FALLBACK_CONFIGURED ? '' : ' (not configured)'}</button>
         </div>
-        <span>{mode === 'browser' ? 'Original bytes stay in this browser' : 'Uploads bytes to the configured API'}</span>
-      </div>
-      <div className="native-toolbar workbench-toolbar" role="group" aria-label="DOCX actions">
-        <button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>
           Use bundled .docx
-        </button>
-        <button type="button" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>
+        </DsButton>
+        <DsButton variant="outlined" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>
           Open .docx
-        </button>
+        </DsButton>
         <input
           ref={uploadRef}
           className="visually-hidden"
@@ -370,95 +376,92 @@ export default function DocsPage() {
             event.currentTarget.value = ''
           }}
         />
-        <span className="native-badge workbench-badge">{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</span>
+        <DsChip>{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</DsChip>
       </div>
-      <p className="native-status workbench-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : document ? 'ready' : 'idle'}>
+      <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : document ? 'ready' : 'idle'}>
         {busy ? 'Working · ' : ''}{status}
       </p>
-      <p className="native-help workbench-callout workbench-callout--warning">
+      <DsCallout
+        tone="note"
+        title={mode === 'browser' ? 'Semantic contract, not Word paint' : 'Explicit server fallback'}
+      >
         {mode === 'browser'
-          ? <>The first operation loads the version-matched Go engine (about 5.3 MiB) in a Web Worker. This is real DOCX extraction and guarded text write-back, but <strong>not</strong> Word-compatible pagination or native page-paint. Server fallback stays disabled until <code>VITE_INJOFFICE_API_BASE</code> is set.</>
-          : <>This mode uploads the document. It uses the same fail-closed extraction and mutation contract as the browser engine; unsupported structures stay explicit instead of being approximated.</>}
-      </p>
-      {error && <div className="native-error workbench-callout workbench-callout--error" role="alert"><strong>{mode === 'browser' ? 'Browser engine' : 'Server response'}</strong><span>{error}</span></div>}
+          ? 'The first operation loads the version-matched Go engine (about 5.3 MiB) in a Web Worker. This is real DOCX extraction and guarded text write-back, but not Word-compatible pagination or native page-paint. Server fallback stays disabled until VITE_INJOFFICE_API_BASE is set.'
+          : 'This mode uploads the document. It uses the same fail-closed extraction and mutation contract as the browser engine; unsupported structures stay explicit instead of being approximated.'}
+      </DsCallout>
+      {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
 
-      <div className="native-workspace docx-workspace">
-        <main className="native-main docx-main" aria-label="Native DOCX semantic preview">
+      <div className="native-workspace docx-workspace ds-split">
+        <main className="native-main docx-main ds-split-main" aria-label="Native DOCX semantic preview">
           {!document || !preview ? (
             <div className="native-empty">
               <div>
                 <span className="native-empty-mark">D</span>
                 <h2>Open a real DOCX</h2>
                 <p>The Go engine runs inside a browser Worker by default. It extracts a revision-bound model, applies one supported text edit, reopens the saved package, and returns real <code>.docx</code> bytes without a server.</p>
-                <button type="button" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</button>
+                <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</DsButton>
               </div>
             </div>
           ) : (
-            <>
-              <div className="native-sheet-heading">
-                <div><p className="native-kicker">Native source flow · not paginated</p><h2>{sourceName}</h2></div>
-                <span className="native-badge">{document.protocol} v{document.version}</span>
-              </div>
-              <article className="docx-contract-sheet" style={{ aspectRatio: pageRatio }}>
-                {preview.blocks.map((block) => <BlockView key={block.id} block={block} />)}
-                {preview.omitted > 0 && <p className="docx-omitted">Preview stopped after 200 body blocks; {preview.omitted} remain in the validated contract.</p>}
-              </article>
-            </>
+            <article className="docx-contract-sheet ds-page" style={{ aspectRatio: pageRatio }}>
+              <h4>{sourceName}</h4>
+              <p className="native-kicker ds-eyebrow">Native source flow · not paginated · {document.protocol} v{document.version}</p>
+              {preview.blocks.map((block) => <BlockView key={block.id} block={block} />)}
+              {preview.omitted > 0 && <p className="docx-omitted">Preview stopped after 200 body blocks; {preview.omitted} remain in the validated contract.</p>}
+            </article>
           )}
         </main>
 
-        <aside className="native-side docx-side workbench-inspector" aria-label="Native DOCX evidence">
-          <section className="native-panel">
-            <p className="native-kicker">01 · Extract</p>
+        <aside className="native-side docx-side workbench-inspector ds-split-side" aria-label="Native DOCX evidence">
+          <section className="native-panel ds-panel">
+            <p className="native-kicker ds-eyebrow">01 · Extract</p>
             {document ? (
-              <dl className="native-proof-list">
+              <dl className="native-proof-list ds-proof">
                 <div className="native-proof-row"><dt>Revision</dt><dd>{shortDigest(document.revision)}</dd></div>
                 <div className="native-proof-row"><dt>Safe targets</dt><dd>{targets.length}</dd></div>
                 <div className="native-proof-row"><dt>Runtime</dt><dd>{mode === 'browser' ? 'browser-local' : 'server fallback'}</dd></div>
                 <div className="native-proof-row"><dt>Artifact</dt><dd>{mode === 'browser' ? 'browser memory' : artifactId ? 'stored' : 'request-local'}</dd></div>
               </dl>
-            ) : <p className="native-muted">No document extracted yet.</p>}
+            ) : <p className="native-muted ds-muted">No document extracted yet.</p>}
           </section>
 
-          <section className="native-panel">
-            <p className="native-kicker">02 · Mutate</p>
+          <section className="native-panel ds-panel">
+            <p className="native-kicker ds-eyebrow">02 · Mutate</p>
             {target ? (
               <>
-                <label className="native-field">
-                  Safe text run
-                  <select value={target.key} onChange={(event) => {
+                <DsField className="native-field" label="Safe text run">
+                  <DsSelect value={target.key} onChange={(event) => {
                     const next = targets.find((candidate) => candidate.key === event.target.value)
                     if (next) chooseTarget(next)
                   }}>
                     {targets.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.label}</option>)}
-                  </select>
-                </label>
-                <label className="native-field">
-                  Replacement text
-                  <textarea value={draft} maxLength={DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS} rows={5} onChange={(event) => {
+                  </DsSelect>
+                </DsField>
+                <DsField className="native-field" label="Replacement text">
+                  <DsTextarea value={draft} maxLength={DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS} rows={4} onChange={(event) => {
                     setDraft(event.target.value)
                     setProof(null)
                     setOutput(null)
                   }} />
-                </label>
+                </DsField>
                 <div className="native-actions">
-                  <button type="button" className="workbench-button workbench-button--primary" disabled={busy || draft === target.text} onClick={() => void mutate()}>Save to DOCX</button>
-                  <button type="button" className="workbench-button" disabled={busy || !mutationEvidence} onClick={() => void copyMutationEvidence()}>Copy evidence</button>
+                  <DsButton variant="green" className="workbench-button workbench-button--primary" disabled={busy || draft === target.text} onClick={() => void mutate()}>Save to DOCX</DsButton>
+                  <DsButton variant="outlined" className="workbench-button" disabled={busy || !mutationEvidence} onClick={() => void copyMutationEvidence()}>Copy evidence</DsButton>
                 </div>
-                {draft === target.text && <p className="native-muted">Change the text to enable a non-empty transaction.</p>}
+                {draft === target.text && <p className="native-muted ds-muted">Change the text to enable a non-empty transaction.</p>}
                 <div className="native-contract-evidence" aria-label="Current DOCX mutation evidence">
-                  <span className="native-kicker">Agent contract · bounded evidence</span>
+                  <span className="native-kicker ds-eyebrow">Agent contract · bounded evidence</span>
                   <pre>{mutationEvidence}</pre>
                 </div>
               </>
-            ) : <p className="native-muted">This document exposes no safely editable visible text runs. That refusal is intentional.</p>}
+            ) : <p className="native-muted ds-muted">This document exposes no safely editable visible text runs. That refusal is intentional.</p>}
           </section>
 
-          <section className="native-panel">
-            <p className="native-kicker">03 · Verify</p>
+          <section className="native-panel ds-panel">
+            <p className="native-kicker ds-eyebrow">03 · Verify</p>
             {proof ? (
               <>
-                <dl className="native-proof-list">
+                <dl className="native-proof-list ds-proof">
                   <div className="native-proof-row"><dt>Target</dt><dd>{proof.target}</dd></div>
                   <div className="native-proof-row"><dt>Before</dt><dd>{proof.before || 'blank'}</dd></div>
                   <div className="native-proof-row"><dt>After</dt><dd>{proof.after || 'blank'}</dd></div>
@@ -467,18 +470,19 @@ export default function DocsPage() {
                   <div className="native-proof-row"><dt>Preserved parts</dt><dd>{proof.preservedParts} verified</dd></div>
                   <div className="native-proof-row"><dt>CAS moved</dt><dd>{shortDigest(proof.previousRevision)} → {shortDigest(proof.revision)}</dd></div>
                 </dl>
-                {downloadURL && <a className="native-download workbench-button workbench-button--primary" href={downloadURL} download={docxDownloadName(sourceName)}>Download verified .docx</a>}
+                <DsChip tone="green">Applied</DsChip>
+                {downloadURL && <a className="native-download workbench-button workbench-button--primary ds-btn ds-btn--filled" href={downloadURL} download={docxDownloadName(sourceName)}>Download verified .docx</a>}
               </>
             ) : (
-              <p className="native-muted">After save, the page re-extracts the exact response bytes and verifies text, main-part identity, package revision, and preserve-verbatim inventory. Download stays disabled unless every check passes.</p>
+              <p className="native-muted ds-muted">After save, the page re-extracts the exact response bytes and verifies text, main-part identity, package revision, and preserve-verbatim inventory. Download stays disabled unless every check passes.</p>
             )}
           </section>
 
-          <section>
-            <p className="native-kicker">Fidelity boundary</p>
+          <section className="native-panel ds-panel">
+            <p className="native-kicker ds-eyebrow">Fidelity boundary</p>
             <h3>What was actually parsed</h3>
             {document && stats ? (
-              <dl className="docx-meta">
+              <dl className="docx-meta ds-proof">
                 <MetaRow label="Revision"><code>{shortDigest(document.revision)}</code></MetaRow>
                 <MetaRow label="Package"><code>{shortDigest(document.source.package_sha256)}</code></MetaRow>
                 <MetaRow label="Main part"><code>{document.source.main_part}</code></MetaRow>
@@ -488,27 +492,27 @@ export default function DocsPage() {
                 <MetaRow label="Stories"><span>{document.headers.length} headers · {document.footers.length} footers · {document.notes.length} notes · {document.comments.length} comments</span></MetaRow>
                 <MetaRow label="Sections"><span>{document.sections.length}</span></MetaRow>
               </dl>
-            ) : <p className="native-muted">No package has been extracted.</p>}
+            ) : <p className="native-muted ds-muted">No package has been extracted.</p>}
           </section>
 
           {document && <>
-            <section>
-              <p className="native-kicker">Headers and footers</p>
+            <section className="native-panel ds-panel">
+              <p className="native-kicker ds-eyebrow">Headers and footers</p>
               {[...document.headers, ...document.footers].length === 0
-                ? <p className="native-muted">None modeled.</p>
+                ? <p className="native-muted ds-muted">None modeled.</p>
                 : [...document.headers, ...document.footers].map((story) => <div className="docx-story" key={story.id}><strong>{story.kind}</strong><span>{nativeDocxStoryText(story) || 'Empty story'}</span></div>)}
             </section>
-            <section>
-              <p className="native-kicker">Declared capabilities</p>
+            <section className="native-panel ds-panel">
+              <p className="native-kicker ds-eyebrow">Declared capabilities</p>
               <div className="docx-chips">{document.capabilities.map((capability) => <span key={capability.name} title={capability.detail}>{capability.name} · {capability.level}</span>)}</div>
             </section>
-            <section>
-              <p className="native-kicker">Preserved or refused</p>
+            <section className="native-panel ds-panel">
+              <p className="native-kicker ds-eyebrow">Preserved or refused</p>
               <h3>{document.unsupported.length} explicit limitation{document.unsupported.length === 1 ? '' : 's'}</h3>
               {document.unsupported.length === 0
-                ? <p className="native-muted">The extractor reported no unsupported capabilities for this package.</p>
+                ? <p className="native-muted ds-muted">The extractor reported no unsupported capabilities for this package.</p>
                 : <ul className="docx-limitations">{document.unsupported.slice(0, 12).map((item) => <li key={item.id}><strong>{item.code}</strong><span>{item.message}</span><small>{item.preservation}</small></li>)}</ul>}
-              {document.unsupported.length > 12 && <p className="native-muted">{document.unsupported.length - 12} more remain in the native contract.</p>}
+              {document.unsupported.length > 12 && <p className="native-muted ds-muted">{document.unsupported.length - 12} more remain in the native contract.</p>}
             </section>
           </>}
         </aside>

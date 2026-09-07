@@ -1,22 +1,27 @@
 :root {
-  --ink: #12161a;
-  --rail: #1b2227;
-  --rail-2: #242c32;
-  --brass: #b8893a;
-  --brass-2: #e8d2a0;
-  --paper: #f6f3ea;
-  --paper-2: #fffdf7;
-  --rule: #d5cfc0;
-  --mute: #8a928a;
-  --live: #2c6b5e;
-  --danger: #a33b2c;
-  --type-display: "Fraunces", "Iowan Old Style", serif;
-  --type-body: "Source Sans 3", "Segoe UI", sans-serif;
+  --ink: #141816;
+  --rail: #f5f6f6;
+  --rail-2: #eceeed;
+  --brass: #0f6f8f;
+  --brass-2: #7ec4d8;
+  --paper: #ffffff;
+  --paper-2: #f7f8f8;
+  --rule: #e3e7e5;
+  --mute: #5a6560;
+  --live: #1a6b52;
+  --danger: #c23a2b;
+  --type-display: "Source Serif 4", "Iowan Old Style", serif;
+  --type-body: "Instrument Sans", "Segoe UI", sans-serif;
   --type-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; }
-html, body, #root { margin: 0; height: 100%; }
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+}
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -29,8 +34,8 @@ html, body, #root { margin: 0; height: 100%; }
   border: 0;
 }
 body {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--type-body);
   font-size: 14px;
   line-height: 1.45;
@@ -1102,9 +1107,7 @@ button, input, select, textarea { font: inherit; }
   grid-template: 68px minmax(0, 1fr) / 268px minmax(0, 1fr);
   min-height: 100dvh;
   height: 100dvh;
-  background:
-    radial-gradient(circle at 1px 1px, rgba(98, 91, 246, .09) 1px, transparent 1px) 0 0 / 22px 22px,
-    var(--paper);
+  background: var(--paper);
 }
 
 .app-header {

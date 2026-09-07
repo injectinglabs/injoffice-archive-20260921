@@ -32,7 +32,7 @@ export default function DemoSource({ source }: { source: DemoRecipeSource }) {
       </div>
       {status === 'loading' ? <p role="status">Loading source…</p> : null}
       {status === 'error' ? <p role="status">Source could not load. <button type="button" onClick={() => { void loadSource() }}>Retry</button> or open the repository link above.</p> : null}
-      {status === 'ready' ? <pre tabIndex={0} aria-label="Demo source code"><code>{code}</code></pre> : null}
+      {status === 'ready' ? <pre className="ds-code" tabIndex={0} aria-label="Demo source code"><code>{code}</code></pre> : null}
     </details>
   )
 }

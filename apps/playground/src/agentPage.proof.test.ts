@@ -12,6 +12,12 @@ describe('agent workflow page proof', () => {
     expect(parseSurface('#/agent')).toBe('agent')
     expect(DEMOS.find((demo) => demo.surface === 'agent')).toMatchObject({ packageName: '@injoffice/agent-tools', runtime: 'Browser' })
     expect(page).toContain('no model SDK or network request')
+    expect(page).toContain('Run agent')
+    expect(page).toContain('office.inspect')
+    expect(page).toContain('office.plan')
+    expect(page).toContain('AGENT_TOOLS')
+    expect(page).toContain('label="Office tool"')
+    expect(page).toContain('data-agent-tool={tool}')
     expect(runtime).toContain("from '@injoffice/agent-tools'")
     expect(runtime).toContain('createAgentSession({')
   })
@@ -28,5 +34,8 @@ describe('agent workflow page proof', () => {
     for (const heading of ['architecture', 'capabilities', 'safety', 'non-goals']) expect(guide).toContain(`id="${heading}"`)
     for (const format of ['XLSX', 'DOCX', 'PPTX', 'PDF']) expect(guide).toContain(`<strong>${format}:</strong>`)
     expect(guide).toContain('do not contain a model SDK')
+    for (const href of ['#/agent?format=sheets', '#/agent?format=docs', '#/agent?format=slides', '#/agent?format=pdf']) {
+      expect(guide).toContain(href)
+    }
   })
 })

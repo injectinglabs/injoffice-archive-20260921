@@ -7,11 +7,15 @@ const styles = readFileSync(new URL('./workbench.css', import.meta.url), 'utf8')
 const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
 
 describe('playground navigation continuity', () => {
-  it('keeps a revealed route visible while the requested lazy route resolves', () => {
-    expect(appSource).toContain('useTransition()')
-    expect(appSource).toContain('startRouteTransition(() => setSurface(nextSurface))')
-    expect(appSource).toMatch(/<Suspense[\s\S]*surface === 'overview'/)
-    expect(appSource).not.toMatch(/<section className="demo-stage"[\s\S]*<Suspense/)
+  it('mounts one Univer-style preview page at a time from the hash route', () => {
+    expect(appSource).toContain('data-layout="univer"')
+    expect(appSource).toContain("surface === 'overview' || !demo")
+    expect(appSource).toContain('<DemoSection')
+    expect(appSource).toContain('<DemoComponent key={`${demo.surface}:${agentTool?.tool ?? \'page\'}:${revision}`} />')
+    expect(appSource).not.toContain('DEMOS.map((item) => (')
+    expect(appSource).not.toContain('className="demo-stage-placeholder"')
+    expect(appSource).toContain('setHashTick')
+    expect(appSource).toContain('isDocsHash() || isDesignSystemHash()')
   })
 
   it('warms route chunks for pointer and keyboard navigation intent', () => {

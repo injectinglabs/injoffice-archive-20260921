@@ -7,6 +7,8 @@ import {
   resetSlideIds,
   type AnimDirection,
 } from '@injoffice/slides'
+import { DsButton, DsField, DsSelect } from '../design-system/primitives'
+import '../design-system/live-create-edit.css'
 import { playgroundDeckAudit, updateSlideTransition, type SlideTransitionChoice } from '../slideQc'
 import { PRESENTATION_DEMO_OUTLINE, PRESENTATION_DEMO_TITLE } from '../presentationDemoFixtures'
 
@@ -25,11 +27,10 @@ export default function SlidesPage() {
   const transition = spec.slides[at]?.transition
 
   return (
-    <div className="platen-fill" data-demo-surface="slides">
-      <div className="toolstrip univer-toolbar" role="toolbar" aria-label="Presentation tools">
-        <label className="tool-field">
-          <span>Theme</span>
-          <select
+    <div className="platen-fill ds" data-demo-surface="slides">
+      <div className="toolstrip univer-toolbar ds-workstrip" role="toolbar" aria-label="Presentation tools">
+        <DsField label="Theme">
+          <DsSelect
             value={themeId}
             aria-label="Deck theme"
             onChange={(e) => {
@@ -41,11 +42,10 @@ export default function SlidesPage() {
             {BUILTIN_THEMES.map((t) => (
               <option key={t.id} value={t.id}>{t.id}</option>
             ))}
-          </select>
-        </label>
-        <label className="tool-field">
-          <span>Transition</span>
-          <select
+          </DsSelect>
+        </DsField>
+        <DsField label="Transition">
+          <DsSelect
             value={transition?.kind ?? 'none'}
             aria-label="Selected slide transition"
             onChange={(event) => setSpec((current) => updateSlideTransition(current, at, event.target.value as SlideTransitionChoice, transition?.direction))}
@@ -54,12 +54,11 @@ export default function SlidesPage() {
             <option value="fade">Fade</option>
             <option value="push">Push</option>
             <option value="wipe">Wipe</option>
-          </select>
-        </label>
+          </DsSelect>
+        </DsField>
         {transition && transition.kind !== 'fade' ? (
-          <label className="tool-field">
-            <span>Direction</span>
-            <select
+          <DsField label="Direction">
+            <DsSelect
               value={transition.direction ?? 'left'}
               aria-label="Selected slide transition direction"
               onChange={(event) => setSpec((current) => updateSlideTransition(current, at, transition.kind, event.target.value as AnimDirection))}
@@ -68,11 +67,11 @@ export default function SlidesPage() {
               <option value="right">Right</option>
               <option value="top">Top</option>
               <option value="bottom">Bottom</option>
-            </select>
-          </label>
+            </DsSelect>
+          </DsField>
         ) : null}
-        <button
-          type="button"
+        <DsButton
+          variant="filled"
           className="workbench-button workbench-button--primary"
           onClick={() => {
             resetSlideIds()
@@ -83,30 +82,43 @@ export default function SlidesPage() {
           }}
         >
           Build slides
-        </button>
-        <span className="univer-toolbar__status">
+        </DsButton>
+        <span className="univer-toolbar__status ds-muted">
           {spec.slides.length} {spec.slides.length === 1 ? 'slide' : 'slides'} · built from DeckSpec; no PPTX file is loaded
         </span>
       </div>
-      <div className="split">
-        <div
-          className="split-main slides-workspace"
-          style={{ '--slides-workspace-background': theme.background } as CSSProperties}
-        >
-          <DeckCanvasView spec={spec} at={at} onAtChange={setAt} width={720} editable />
+      <div className="split ds-split">
+        <div className="split-main slides-workspace ds-split-main">
+          <div
+            className="ds-slide live-slide-stage"
+            style={{ '--slides-workspace-background': theme.background } as CSSProperties}
+          >
+            <DeckCanvasView spec={spec} at={at} onAtChange={setAt} width={720} editable />
+          </div>
           <textarea
-            className="slides-outline"
+            className="slides-outline ds-outline"
             aria-label="Deck outline"
             value={outline}
             onChange={(e) => setOutline(e.target.value)}
           />
         </div>
-        <aside className="split-side">
+        <aside className="split-side ds-split-side">
+          {spec.slides.map((slide, index) => (
+            <button
+              type="button"
+              key={slide.id}
+              className="ds-pick"
+              aria-pressed={at === index}
+              onClick={() => setAt(index)}
+            >
+              <strong>{index + 1}. {slide.title || slide.quote || slide.kind}</strong>
+            </button>
+          ))}
           <DeckEditorPanel spec={spec} at={at} onChange={setSpec} onSelect={setAt} />
-          <div className="ioc-panel">
-            <strong>Layout QC</strong>
-            <p>{audit.issues.length === 0 ? 'No estimated overflow or overlap.' : `${audit.issues.length} issue${audit.issues.length === 1 ? '' : 's'}.`}</p>
-            <pre>{audit.report}</pre>
+          <div className="ioc-panel ds-panel">
+            <span className="ds-eyebrow">Layout QC</span>
+            <p className="ds-muted">{audit.issues.length === 0 ? 'No estimated overflow or overlap.' : `${audit.issues.length} issue${audit.issues.length === 1 ? '' : 's'}.`}</p>
+            <pre className="ds-code">{audit.report}</pre>
           </div>
         </aside>
       </div>

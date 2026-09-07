@@ -7,7 +7,7 @@ describe('playground workbench page contract', () => {
   it('keeps analytical demos in the shared tool workbench', () => {
     for (const page of ['ChartsPage', 'ConnectorsPage', 'PivotsPage', 'ShapesPage', 'FormulasPage', 'HistoryPage', 'AgentPage']) {
       const source = pageSource(page)
-      expect(source, page).toContain('className="tool-page"')
+      expect(source, page).toMatch(/className="[^"]*\btool-page\b[^"]*"/)
       expect(source, page).toMatch(/role="(?:toolbar|search)"/)
       expect(source, page).toContain('aria-label=')
     }

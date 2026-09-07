@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type RefObject } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react'
 import {
   applyColorScheme,
   currentColorScheme,
@@ -9,74 +9,74 @@ import {
 } from './colorScheme'
 import GuidedRecipe from './components/GuidedRecipe'
 import DemoSource from './components/DemoSource'
-import { DEMO_BY_SURFACE, DEMO_GROUPS, DEMOS, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
+import { DsMark } from './design-system/primitives'
+import { DEMO_BY_SURFACE, DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
 import OverviewPage from './pages/OverviewPage'
-import { isDocsHash, parseSurface, surfaceHref, type Surface } from './route'
+import { agentHref, isDesignSystemHash, isDocsHash, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
+import { surfaceSectionId } from './scrollSpy'
 
 const DocsApp = lazy(() => import('../../docs/src/App'))
+const DesignSystemGallery = lazy(() => import('./design-system/GalleryPage'))
 
 type SidecarState = 'checking' | 'connected' | 'offline'
 
 const API_BASE = (import.meta.env.VITE_INJOFFICE_API_BASE ?? '').replace(/\/$/, '')
 
-function ToolGlyph({ demo }: { demo: DemoDefinition }) {
-  return <span className={`tool-glyph tool-glyph--${demo.accent}`} aria-hidden="true">{demo.glyph}</span>
+function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
 }
 
-function ToolNavigation({ surface, collapsed = false }: { surface: Surface; collapsed?: boolean }) {
+function ToolNavigation({ surface }: { surface: Surface }) {
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (isModifiedClick(event)) return
+    const href = event.currentTarget.getAttribute('href')
+    if (href && location.hash === href) event.preventDefault()
+  }
+  const agentTool = surface === 'agent' ? parseAgentTool() : undefined
   return (
     <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
-      <a
-        className="tool-nav-home"
-        href={surfaceHref('overview')}
-        aria-current={surface === 'overview' ? 'page' : undefined}
-        aria-label={collapsed ? 'Showcase' : undefined}
-        title={collapsed ? 'Showcase' : undefined}
-      >
-        <span className="tool-glyph tool-glyph--ink" aria-hidden="true">⌂</span>
-        <span><strong>Showcase</strong><small>Find an example</small></span>
-      </a>
       {DEMO_GROUPS.map((group) => (
         <section
           className="tool-nav-group"
           key={group}
-          aria-label={collapsed ? group : undefined}
-          aria-labelledby={collapsed ? undefined : `nav-${group.replaceAll(' ', '-').toLowerCase()}`}
+          aria-labelledby={`nav-${group.replaceAll(' ', '-').toLowerCase()}`}
         >
           <h2 id={`nav-${group.replaceAll(' ', '-').toLowerCase()}`}>{group}</h2>
-          {DEMOS.filter((demo) => demo.group === group).map((demo) => {
+          {DEMOS.filter((demo) => demo.group === group).flatMap((demo) => {
             const warmRoute = () => { preloadDemoOnIntent(demo.surface) }
+            if (demo.surface === 'agent') {
+              return AGENT_TOOLS.map((item) => (
+                <a
+                  key={item.tool}
+                  href={agentHref(item.tool)}
+                  aria-label={`AI change sets, ${item.label}`}
+                  aria-current={agentTool === item.tool ? 'page' : undefined}
+                  onPointerEnter={warmRoute}
+                  onPointerDown={warmRoute}
+                  onFocus={warmRoute}
+                  onClick={onClick}
+                >
+                  {item.label}
+                </a>
+              ))
+            }
             return (
               <a
                 key={demo.surface}
                 href={surfaceHref(demo.surface)}
                 aria-current={surface === demo.surface ? 'page' : undefined}
-                aria-label={collapsed ? demo.navTitle : undefined}
-                title={collapsed ? demo.navTitle : undefined}
                 onPointerEnter={warmRoute}
                 onPointerDown={warmRoute}
                 onFocus={warmRoute}
+                onClick={onClick}
               >
-                <ToolGlyph demo={demo} />
-                <span><strong>{demo.navTitle}</strong><small>{demo.packageName}</small></span>
+                {demo.navTitle}
               </a>
             )
           })}
         </section>
       ))}
     </nav>
-  )
-}
-
-function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const label = collapsed ? 'Expand navigation' : 'Collapse navigation'
-  return (
-    <div className="navigation-controls">
-      <span>Demo index</span>
-      <button type="button" aria-label={label} title={label} aria-expanded={!collapsed} aria-controls="demo-navigation" onClick={onToggle}>
-        <span className="navigation-toggle-glyph" aria-hidden="true"><i /><i /><i /></span>
-      </button>
-    </div>
   )
 }
 
@@ -103,18 +103,24 @@ function ColorSchemeToggle({ scheme, onScheme }: { scheme: ColorScheme; onScheme
 function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
   return (
     <header className="app-header">
-      <a className="app-brand" href={surfaceHref('overview')} aria-label="InjOffice overview">
-        <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-        <span><strong>InjOffice</strong><small>Source-authoritative file engines</small></span>
-      </a>
-      <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
-        <i aria-hidden="true" />
-        {sidecar === 'checking' ? 'Browser engines ready · checking server' : sidecar === 'connected' ? 'Browser + server fallback ready' : 'Browser engines ready'}
-      </div>
-      <div className="app-header-actions">
-        <ColorSchemeToggle scheme={scheme} onScheme={onScheme} />
-        <a className="github-link" href="#/guides">Guides</a>
-        <a className="github-link" href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">View source<span aria-hidden="true">↗</span></a>
+      <div className="app-header-inner">
+        <a className="app-brand" href={surfaceHref('overview')} aria-label="InjOffice overview">
+          <DsMark />
+          <span><strong>InjOffice</strong></span>
+        </a>
+        <nav className="app-header-links" aria-label="Site">
+          <a href={surfaceHref('overview')} aria-current="page">Showcase</a>
+          <a href="#/guides">Guides</a>
+          <a href="#/design-system">Design system</a>
+        </nav>
+        <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
+          <i aria-hidden="true" />
+          {sidecar === 'checking' ? 'Checking server' : sidecar === 'connected' ? 'Browser + server ready' : 'Browser engines ready'}
+        </div>
+        <div className="app-header-actions">
+          <ColorSchemeToggle scheme={scheme} onScheme={onScheme} />
+          <a className="github-link" href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">GitHub<span aria-hidden="true">↗</span></a>
+        </div>
       </div>
     </header>
   )
@@ -200,30 +206,122 @@ function SourceProofDrawer({
   )
 }
 
+function DemoSection({
+  demo,
+  sidecar,
+  proofOpen,
+  onOpenProof,
+  proofButtonRef,
+}: {
+  demo: DemoDefinition
+  sidecar: SidecarState
+  proofOpen: boolean
+  onOpenProof: () => void
+  proofButtonRef: RefObject<HTMLButtonElement | null>
+}) {
+  const [revision, setRevision] = useState(0)
+  const DemoComponent = demo.component
+  const agentTool = demo.surface === 'agent' ? AGENT_TOOLS.find((item) => item.tool === parseAgentTool()) : undefined
+  const title = agentTool?.title ?? demo.title
+  const description = agentTool?.description ?? demo.description
+  return (
+    <article
+      className="demo-section"
+      id={surfaceSectionId(demo.surface)}
+      data-accent={demo.accent}
+      aria-labelledby={`demo-title-${demo.surface}`}
+    >
+      <header className={`page-heading demo-context-header demo-page-header page-heading--${demo.accent}`}>
+        <div className="page-heading-copy">
+          <nav className="demo-breadcrumb" aria-label="Breadcrumb">
+            <a href={surfaceHref('overview')}>Showcase</a><span aria-hidden="true">/</span><span>{demo.group}</span>{agentTool ? <><span aria-hidden="true">/</span><span>{agentTool.label}</span></> : null}
+          </nav>
+          <div className="demo-chips" aria-label="Demo tags">
+            <span className="demo-chip">{demo.group}</span>
+            {agentTool ? <span className="demo-chip">{agentTool.fileType}</span> : null}
+            <span className="demo-chip demo-chip--pkg">{demo.packageName}</span>
+          </div>
+          <div className="demo-title-line">
+            <h1 id={`demo-title-${demo.surface}`} tabIndex={-1}>{title}</h1>
+          </div>
+          <p>{description}</p>
+        </div>
+        <div className="demo-context-actions">
+          <button
+            className="demo-reset-trigger"
+            type="button"
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            Reset
+          </button>
+          <button
+            ref={proofButtonRef}
+            className="source-proof-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={proofOpen}
+            aria-controls="source-proof-drawer"
+            onClick={onOpenProof}
+          >
+            Source
+          </button>
+          <a className="demo-back" href={surfaceHref('overview')}>Back</a>
+        </div>
+      </header>
+      <section className="demo-preview" aria-label={`${title} preview`}>
+        <header className="demo-preview__bar">
+          <span>Preview</span>
+          <RuntimePill demo={demo} sidecar={sidecar} />
+        </header>
+        <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`}>
+          <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
+            <DemoComponent key={`${demo.surface}:${agentTool?.tool ?? 'page'}:${revision}`} />
+          </Suspense>
+        </div>
+      </section>
+    </article>
+  )
+}
+
 export default function App() {
   const [surface, setSurface] = useState<Surface>(() => parseSurface())
   const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
-  const [navigationExpanded, setNavigationExpanded] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [demoRevision, setDemoRevision] = useState(0)
-  const [isRoutePending, startRouteTransition] = useTransition()
+  const [isRoutePending, setIsRoutePending] = useState(false)
+  const [, setHashTick] = useState(0)
   const detailsButtonRef = useRef<HTMLButtonElement>(null)
+  const surfaceRef = useRef(surface)
   const previousSurfaceRef = useRef(surface)
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
+  const demo = useMemo(() => surface === 'overview' ? undefined : DEMO_BY_SURFACE.get(surface), [surface])
+  const requestedTitle = surface === 'overview' ? 'Overview' : demo?.title
+
+  useEffect(() => {
+    surfaceRef.current = surface
+  }, [surface])
 
   useEffect(() => {
     if (previousSurfaceRef.current === surface) return
     previousSurfaceRef.current = surface
-    document.querySelector<HTMLElement>('.app-main h1')?.focus({ preventScroll: true })
+    document.querySelector<HTMLElement>('.tool-nav a[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
+    document.querySelector<HTMLElement>(`#${surfaceSectionId(surface)} h1, #showcase-title`)?.focus({ preventScroll: true })
   }, [surface])
 
   useEffect(() => {
     const sync = () => {
+      setHashTick((tick) => tick + 1)
+      if (isDocsHash() || isDesignSystemHash()) return
       const nextSurface = parseSurface()
       preloadDemoOnIntent(nextSurface)
+      if (nextSurface === surfaceRef.current) return
+      surfaceRef.current = nextSurface
       setDetailsOpen(false)
-      startRouteTransition(() => setSurface(nextSurface))
+      if (nextSurface !== 'overview') {
+        setIsRoutePending(true)
+        void preloadDemo(nextSurface).finally(() => setIsRoutePending(false))
+      }
+      setSurface(nextSurface)
     }
     window.addEventListener('hashchange', sync)
     if (!location.hash) location.hash = surfaceHref('overview')
@@ -258,11 +356,17 @@ export default function App() {
     return () => { window.clearTimeout(timeout); controller.abort() }
   }, [])
 
-  const demo = useMemo(() => surface === 'overview' ? undefined : DEMO_BY_SURFACE.get(surface), [surface])
-  const DemoComponent = demo?.component
-  const navigationCollapsed = surface !== 'overview' && !navigationExpanded
-  const requestedSurface = parseSurface()
-  const requestedTitle = requestedSurface === 'overview' ? 'Overview' : DEMO_BY_SURFACE.get(requestedSurface)?.title
+  useEffect(() => {
+    preloadDemoOnIntent(surface)
+  }, [surface])
+
+  if (isDesignSystemHash()) {
+    return (
+      <Suspense fallback={<div className="demo-loading" role="status">Opening design system…</div>}>
+        <DesignSystemGallery />
+      </Suspense>
+    )
+  }
 
   if (isDocsHash()) {
     return (
@@ -273,59 +377,32 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell" data-surface={surface} data-navigation={navigationCollapsed ? 'collapsed' : 'expanded'}>
+    <div className="app-shell ds" data-surface={surface} data-layout="univer" data-navigation="text">
       <a className="skip-link" href="#main-content">Skip to demo</a>
       <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
+      <div className="app-frame">
       <aside className="app-sidebar">
-        {surface !== 'overview' ? <NavigationToggle collapsed={navigationCollapsed} onToggle={() => setNavigationExpanded((expanded) => !expanded)} /> : null}
-        <ToolNavigation surface={surface} collapsed={navigationCollapsed} />
+        <ToolNavigation surface={surface} />
       </aside>
       <main className="app-main" id="main-content" data-workbench-surface={surface}>
         <div className="route-progress" data-active={isRoutePending ? 'true' : undefined} aria-hidden="true"><i /></div>
         <span className="visually-hidden" role="status" aria-live="polite">
           {isRoutePending && requestedTitle ? `Opening ${requestedTitle}…` : ''}
         </span>
-        <Suspense fallback={<div className="demo-loading app-route-loading" role="status">Opening {requestedTitle ?? 'demo'}…</div>}>
-          {surface === 'overview' ? <OverviewPage sidecar={sidecar} /> : demo && DemoComponent ? (
-            <>
-              <header className={`page-heading demo-context-header page-heading--${demo.accent}`}>
-                <div className="page-heading-copy">
-                  <nav className="demo-breadcrumb" aria-label="Breadcrumb">
-                    <a href={surfaceHref('overview')}>Showcase</a><span aria-hidden="true">/</span><span>{demo.group}</span>
-                  </nav>
-                  <div className="demo-title-line"><ToolGlyph demo={demo} /><h1 tabIndex={-1}>{demo.title}</h1><code>{demo.packageName}</code></div>
-                  <p>{demo.description}</p>
-                </div>
-                <div className="demo-context-actions">
-                  <RuntimePill demo={demo} sidecar={sidecar} />
-                  <button
-                    className="demo-reset-trigger"
-                    type="button"
-                    onClick={() => setDemoRevision((revision) => revision + 1)}
-                  >
-                    Reset demo
-                  </button>
-                  <button
-                    ref={detailsButtonRef}
-                    className="source-proof-trigger"
-                    type="button"
-                    aria-haspopup="dialog"
-                    aria-expanded={detailsOpen}
-                    aria-controls="source-proof-drawer"
-                    onClick={() => setDetailsOpen(true)}
-                  >
-                    Source / proof
-                  </button>
-                </div>
-              </header>
-              <section className="demo-stage" data-accent={demo.accent} aria-label={`${demo.title} interactive demo`}>
-                <DemoComponent key={`${demo.surface}:${demoRevision}`} />
-              </section>
-            </>
-          ) : null}
-        </Suspense>
+        {surface === 'overview' || !demo ? (
+          <OverviewPage sidecar={sidecar} />
+        ) : (
+          <DemoSection
+            demo={demo}
+            sidecar={sidecar}
+            proofOpen={detailsOpen}
+            onOpenProof={() => setDetailsOpen(true)}
+            proofButtonRef={detailsButtonRef}
+          />
+        )}
         {demo ? <SourceProofDrawer key={demo.surface} demo={demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
       </main>
+      </div>
     </div>
   )
 }

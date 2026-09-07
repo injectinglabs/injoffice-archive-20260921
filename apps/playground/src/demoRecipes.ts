@@ -188,7 +188,7 @@ export const DEMO_RECIPES = {
     outcome: 'Inspect a bounded artifact, review an immutable proposal, approve one atomic commit, and verify the replacement revision.',
     minutes: 3,
     steps: [
-      { id: 'prepare-agent-change', title: 'Prepare a bounded proposal', instruction: 'Choose XLSX, DOCX, PPTX, or PDF, keep Supported change selected, then choose “Prepare change.”', evidence: 'The flight recorder advances through inspect, plan, preview and diff, and validation without writing the source.' },
+      { id: 'prepare-agent-change', title: 'Run the AI-first proposal', instruction: 'Open Sheets, Docs, Slides, or PDF under AI-first, keep Supported change selected, then choose “Run agent.”', evidence: 'office.inspect, office.plan, office.preview, office.diff, and office.validate run without writing the source.' },
       { id: 'review-agent-diff', title: 'Review the exact change', instruction: 'Compare the artifact preview, proposed change, semantic diff, source identity, and advertised operations.', evidence: 'The proposal stays bound to one source revision and only uses a discovered capability.' },
       { id: 'approve-agent-commit', title: 'Approve and verify', instruction: 'Select the review checkbox, then choose “Commit approved change.”', evidence: 'Commit advances the revision and the Verify stage records output identity and machine-readable evidence.' },
     ],

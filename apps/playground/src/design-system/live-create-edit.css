@@ -1,0 +1,775 @@
+/* Live create-and-edit demos. Tokens stay scoped to .ds; this file only
+   restyles the six playground pages that import it. */
+@import './tokens.css';
+@import './components.css';
+@import './surfaces.css';
+
+.app-shell .ds,
+.app-shell .ds :where(button, input, select, textarea) {
+  font-family: var(--ds-type);
+}
+
+.ds.tool-page,
+.ds.platen-fill {
+  min-width: 0;
+  min-height: 0;
+  background: var(--ds-paper);
+  color: var(--ds-ink);
+}
+
+.ds .view-switcher.ds-workstrip,
+.ds .native-toolbar.ds-workstrip,
+.ds .toolstrip.ds-workstrip,
+.ds .tool-page__controls.ds-workstrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ds-line);
+  background: var(--ds-chrome);
+}
+
+.ds .ds-workstrip > .ds-muted,
+.ds .ds-workstrip > .tool-page__status,
+.ds .ds-workstrip > .univer-toolbar__status,
+.ds .view-switcher.ds-workstrip > span {
+  margin-left: auto;
+  min-height: 0;
+  color: var(--ds-mute);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ds .ds-segment,
+.ds .tool-segment.ds-segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  height: auto;
+  padding: 3px;
+  gap: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ds-chrome-2);
+}
+
+.ds .ds-segment button,
+.ds .view-switcher .ds-segment button,
+.ds .tool-segment.ds-segment button {
+  appearance: none;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ds-mute);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ds .ds-segment button:hover:not(:disabled),
+.ds .view-switcher .ds-segment button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ds-ink);
+}
+
+.ds .ds-segment button[aria-pressed="true"],
+.ds .view-switcher .ds-segment button[aria-pressed="true"] {
+  background: var(--ds-paper);
+  color: var(--ds-ink);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--ds-line);
+}
+
+.app-shell .ds .ds-btn,
+.app-shell .ds .ds-btn.workbench-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none !important;
+  color: var(--ds-select);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.app-shell .ds .ds-btn:hover:not(:disabled),
+.app-shell .ds .ds-btn.workbench-button:hover:not(:disabled) {
+  background: var(--ds-select-soft);
+  border-color: transparent;
+  color: var(--ds-select);
+}
+
+.app-shell .ds .ds-btn--filled,
+.app-shell .ds .ds-btn--filled.workbench-button,
+.app-shell .ds .ds-btn--filled.workbench-button--primary {
+  border-color: transparent !important;
+  background: var(--ds-select) !important;
+  color: var(--ds-on-select) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .ds .ds-btn--filled:hover:not(:disabled),
+.app-shell .ds .ds-btn--filled.workbench-button--primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+  background: var(--ds-select) !important;
+  color: var(--ds-on-select) !important;
+}
+
+.app-shell .ds .ds-btn--green,
+.app-shell .ds .ds-btn--green.workbench-button,
+.app-shell .ds .ds-btn--green.workbench-button--primary {
+  border-color: transparent !important;
+  background: var(--ds-green) !important;
+  color: var(--ds-on-green) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .ds .ds-btn--outlined,
+.app-shell .ds .ds-btn--outlined.workbench-button {
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--ds-ink);
+}
+
+.app-shell .ds .ds-btn--outlined:hover:not(:disabled) {
+  background: var(--ds-chrome-2);
+  border-color: var(--ds-mute);
+  color: var(--ds-ink);
+}
+
+.app-shell .ds a.ds-btn,
+.app-shell .ds a.native-download.ds-btn {
+  text-decoration: none;
+}
+
+.ds .ds-chip,
+.ds .native-badge.ds-chip,
+.ds .workbench-badge.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ds-chrome-2);
+  color: var(--ds-ink);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ds .ds-chip--green { background: var(--ds-green-soft); color: var(--ds-green); }
+.ds .ds-chip--blue { background: var(--ds-select-soft); color: var(--ds-select); }
+.ds .ds-chip--refuse { background: var(--ds-refuse-soft); color: var(--ds-refuse); }
+
+.ds .native-status.ds-status,
+.ds .workbench-status.ds-status {
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--ds-line);
+  background: transparent;
+  color: var(--ds-mute);
+  font-family: var(--ds-type);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ds .ds-status[data-state="ready"] { color: var(--ds-green); }
+.ds .ds-status[data-state="refuse"],
+.ds .ds-status[data-state="error"] { color: var(--ds-refuse); }
+.ds .ds-status[data-state="busy"],
+.ds .ds-status[data-state="loading"],
+.ds .ds-status[data-state="rendering"],
+.ds .ds-status[data-state="editing"] { color: var(--ds-select); }
+
+.ds .ds-callout {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.ds .native-workspace.ds-split,
+.ds .split.ds-split,
+.ds .docx-workspace.ds-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ds-paper);
+}
+
+.ds .native-main.ds-split-main,
+.ds .split-main.ds-split-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--ds-paper);
+}
+
+.ds .docx-main.ds-split-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--ds-chrome);
+}
+
+.ds .native-main.ds-split-main--flush {
+  padding: 0;
+}
+
+.ds .native-main.ds-split-main--flush .native-sheet-heading {
+  padding: 16px 16px 0;
+}
+
+.ds .native-side.ds-split-side,
+.ds .split-side.ds-split-side,
+.ds .docx-side.ds-split-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+  border-left: 1px solid var(--ds-line);
+  background: var(--ds-header);
+}
+
+.ds .native-panel.ds-panel,
+.ds .ioc-panel.ds-panel,
+.ds .tool-card.ds-panel {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  background: var(--ds-paper);
+  box-shadow: none;
+}
+
+.ds .native-panel.ds-panel + .native-panel.ds-panel,
+.ds .docx-side .native-panel.ds-panel + .native-panel.ds-panel {
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ds-line);
+}
+
+.ds .ds-eyebrow,
+.ds .native-kicker.ds-eyebrow,
+.ds .tool-eyebrow.ds-eyebrow {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--ds-mute);
+  font-family: var(--ds-type);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ds .ds-proof,
+.ds dl.native-proof-list.ds-proof {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ds .ds-proof > div,
+.ds .native-proof-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+}
+
+.ds .ds-proof dt,
+.ds .native-proof-row dt { color: var(--ds-mute); }
+
+.ds .ds-proof dd,
+.ds .native-proof-row dd {
+  margin: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  font-family: var(--ds-mono);
+}
+
+.ds .native-field.ds-field,
+.ds .tool-field.ds-field,
+.ds label.ds-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--ds-mute);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ds .ds-workstrip .ds-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.ds .ds-field :where(input, select, textarea),
+.ds .native-field :where(input, select, textarea) {
+  width: 100%;
+  min-height: 36px;
+  height: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  background: var(--ds-paper);
+  box-shadow: none;
+  color: var(--ds-ink);
+  font-size: 13px;
+}
+
+.ds .ds-workstrip .ds-field :where(input, select, textarea) {
+  min-height: 32px;
+  min-width: 112px;
+  width: auto;
+}
+
+.ds .ds-field textarea,
+.ds .native-field textarea {
+  min-height: 88px;
+  resize: vertical;
+  font-family: var(--ds-cell);
+}
+
+.ds .ds-field input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--ds-select);
+}
+
+.ds .native-muted,
+.ds .tool-note {
+  color: var(--ds-mute);
+  font-size: 12px;
+}
+
+.ds .native-sheet-heading {
+  margin: 0 0 12px;
+}
+
+.ds .native-sheet-heading h2 {
+  margin: 0;
+  color: var(--ds-ink);
+  font-family: var(--ds-display);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.ds .native-grid-wrap {
+  overflow: auto;
+  border: 1px solid var(--ds-line);
+  background: var(--ds-paper);
+}
+
+.ds .native-grid th,
+.ds .native-grid td {
+  min-width: 72px;
+  height: var(--ds-row);
+  border-right: 1px solid var(--ds-grid);
+  border-bottom: 1px solid var(--ds-grid);
+  padding: 0;
+  font-size: 13px;
+}
+
+.ds .native-grid th {
+  background: var(--ds-header);
+  color: var(--ds-mute);
+  font-family: var(--ds-type);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.ds .native-grid td > button,
+.ds .native-grid td > span {
+  padding: 1px 6px;
+  font-family: var(--ds-cell);
+}
+
+.ds .native-grid td > button {
+  background: var(--ds-paper);
+  cursor: cell;
+}
+
+.ds .native-grid td > button:hover { background: var(--ds-select-soft); }
+
+.ds .native-cell-active {
+  outline: 2px solid var(--ds-select);
+  outline-offset: -2px;
+  box-shadow: none;
+  position: relative;
+  z-index: 1;
+}
+
+.ds .native-empty {
+  color: var(--ds-mute);
+}
+
+.ds .native-empty h2 {
+  color: var(--ds-ink);
+  font-family: var(--ds-display);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.ds .native-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.ds .native-contract-evidence {
+  margin-top: 12px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  background: var(--ds-chrome-2);
+}
+
+.ds .native-contract-evidence pre {
+  color: var(--ds-ink);
+  font-family: var(--ds-mono);
+  font-size: 11px;
+}
+
+.ds .docx-contract-sheet.ds-page {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: 28px 32px 36px;
+  overflow: auto;
+  aspect-ratio: auto;
+  background: #fff;
+  color: #141816;
+  border: 1px solid var(--ds-line);
+  box-shadow: var(--ds-shadow);
+}
+
+.ds .docx-contract-sheet.ds-page h4 {
+  margin: 0 0 10px;
+  font-family: var(--ds-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: #141816;
+}
+
+.ds .docx-paragraph,
+.ds .docx-heading {
+  color: #141816;
+}
+
+.ds .docx-heading {
+  font-family: var(--ds-display);
+}
+
+.ds .docx-side section {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ds .docx-meta-row {
+  grid-template-columns: 92px minmax(0, 1fr);
+  border-top: 0;
+  border-bottom: 1px solid var(--ds-grid);
+  font-size: 12px;
+}
+
+.ds .docx-meta-row dt {
+  color: var(--ds-mute);
+  font-family: var(--ds-type);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ds .docx-chips span {
+  border: 0;
+  border-radius: 12px;
+  background: var(--ds-chrome-2);
+  color: var(--ds-ink);
+}
+
+.ds .docx-limitations li {
+  border-left-color: var(--ds-refuse);
+  background: var(--ds-refuse-soft);
+}
+
+.ds .tool-page__grid.ds-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: var(--ds-paper);
+}
+
+.ds .tool-card.ds-panel .tool-card__heading {
+  padding: 0 0 8px;
+  border: 0;
+}
+
+.ds .tool-card.ds-panel .tool-card__heading h2,
+.ds .tool-card.ds-panel strong {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ds .tool-chip {
+  border: 0;
+  border-radius: 12px;
+  background: var(--ds-select-soft);
+  color: var(--ds-select);
+}
+
+.ds .ds-tools-grid,
+.ds ol.formula-list {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.ds ol.formula-list > li {
+  display: contents;
+}
+
+.ds ol.formula-list > li::before {
+  content: "";
+}
+
+.ds .formula-list .tool-empty,
+.ds .ds-tools-grid s {
+  color: var(--ds-mute);
+  text-decoration: line-through;
+}
+
+.ds .ioc-print-workspace {
+  --ioc-print-ink: var(--ds-ink);
+  --ioc-print-muted: var(--ds-mute);
+  --ioc-print-rule: var(--ds-line);
+  --ioc-print-panel: var(--ds-chrome);
+  --ioc-print-paper: #fff;
+  --ioc-print-blue: var(--ds-select);
+}
+
+.ds .live-slide-stage.ds-slide {
+  width: min(100%, 720px);
+  margin: 0 auto 12px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--slides-workspace-background, #16332c);
+  color: #f4fbf8;
+  display: grid;
+  place-items: center;
+}
+
+.ds .slides-workspace.ds-split-main {
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-paper);
+}
+
+.ds textarea.slides-outline.ds-outline {
+  width: 100%;
+  min-height: 72px;
+  height: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-line) !important;
+  border-radius: var(--ds-radius) !important;
+  background: var(--ds-paper) !important;
+  color: var(--ds-ink);
+  font-family: var(--ds-mono) !important;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.ds .ioc-deck-editor {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ds .pdf-pages.ds-split-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  background: var(--ds-chrome);
+}
+
+.ds .ds-pdf-sheet {
+  width: min(100%, 420px);
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.ds .ds-pdf-sheet .pdf-canvas {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.ds .pdf-inspector .view-switcher,
+.ds .pdf-inspector [role="tablist"] {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  overflow: hidden;
+  background: var(--ds-paper);
+}
+
+.ds .pdf-inspector .ds-pick,
+.ds .pdf-inspector .view-switcher .ds-pick {
+  appearance: none;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ds-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ds .pdf-inspector .ds-pick:last-child { border-bottom: 0; }
+
+.ds .pdf-inspector .ds-pick:hover,
+.ds .pdf-inspector .ds-pick[aria-selected="true"],
+.ds .pdf-inspector .ds-pick[aria-pressed="true"] {
+  background: var(--ds-select-soft);
+  color: var(--ds-ink);
+}
+
+.ds .pdf-inspector .ds-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds .pdf-inspector .ds-panel .ds-stack,
+.ds .pdf-inspector .ds-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ds .pdf-inspector .ds-stack {
+  flex-direction: column;
+}
+
+.ds .pdf-page-input {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-mute);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ds .pdf-page-input input {
+  width: 56px;
+  min-height: 32px;
+  height: 32px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius);
+  background: var(--ds-paper);
+  color: var(--ds-ink);
+}
+
+.ds .pdf-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.ds .pdf-result-list button {
+  width: 100%;
+  text-align: left;
+}
+
+.ds .pdf-text {
+  margin: 0;
+  color: var(--ds-mute);
+  font-family: var(--ds-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.ds .pdf-empty { color: var(--ds-mute); }
+
+@media (max-width: 860px) {
+  .ds .native-workspace.ds-split,
+  .ds .split.ds-split,
+  .ds .docx-workspace.ds-split,
+  .ds .tool-page__grid.ds-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .ds .native-side.ds-split-side,
+  .ds .split-side.ds-split-side,
+  .ds .docx-side.ds-split-side {
+    border-left: 0;
+    border-top: 1px solid var(--ds-line);
+  }
+}

@@ -33,7 +33,7 @@ export function CollabDemo() {
   }
 
   return (
-    <div className="collab-demo workbench-surface">
+    <div className="collab-demo workbench-surface ds">
       <SimFormatTabs format={format} onFormat={selectFormat} hint={FORMAT_HINT[format]} />
       <Suspense fallback={<div className="demo-loading" role="status">Opening {SIM_FORMAT_LABEL[format]} collaboration…</div>}>
         {format === 'sheets' ? <CollabSheetsPanel /> : null}

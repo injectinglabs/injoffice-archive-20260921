@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
+import { DsSegment } from '../design-system/primitives'
+import '../design-system/live-create-edit.css'
 import UniverEditor from '../UniverEditor'
 import { parseSheetsView, type SheetsView } from '../route'
 import NativeRoundTripPage from './NativeRoundTripPage'
 import SheetsToolsPage from './SheetsToolsPage'
+
+const SHEETS_VIEWS: readonly { id: SheetsView; label: string }[] = [
+  { id: 'editor', label: 'Edit workbook' },
+  { id: 'native', label: 'Test XLSX round trip' },
+  { id: 'tools', label: 'Package tools' },
+]
 
 export default function SheetsPage() {
   const [view, setView] = useState<SheetsView>(() => parseSheetsView())
@@ -16,14 +24,17 @@ export default function SheetsPage() {
     window.location.hash = `#/sheets?view=${next}`
   }
   return (
-    <div className="tool-page tool-page--flush">
-      <div className="view-switcher" role="group" aria-label="Spreadsheet demonstration">
-        <div className="tool-segment">
-          <button type="button" aria-pressed={view === 'editor'} onClick={() => selectView('editor')}>Edit workbook</button>
-          <button type="button" aria-pressed={view === 'native'} onClick={() => selectView('native')}>Test XLSX round trip</button>
-          <button type="button" aria-pressed={view === 'tools'} onClick={() => selectView('tools')}>Package tools</button>
-        </div>
-        <span>{view === 'editor' ? 'Runs in your browser' : view === 'native' ? 'Runs locally by default · server fallback is explicit' : 'Sparklines, print, outlines, and exchange'}</span>
+    <div className="tool-page tool-page--flush ds">
+      <div className="view-switcher ds-workstrip" role="group" aria-label="Spreadsheet demonstration">
+        <DsSegment
+          label="Spreadsheet demonstration"
+          value={view}
+          onChange={(id) => selectView(id as SheetsView)}
+          options={SHEETS_VIEWS}
+        />
+        <span className="ds-muted">
+          {view === 'editor' ? 'Runs in your browser' : view === 'native' ? 'Original bytes stay in this browser' : 'Sparklines, print, outlines, and exchange'}
+        </span>
       </div>
       <div className="tool-page-fill">{view === 'editor' ? <UniverEditor /> : view === 'native' ? <NativeRoundTripPage /> : <SheetsToolsPage />}</div>
     </div>

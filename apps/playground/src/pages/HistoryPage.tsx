@@ -4,6 +4,8 @@ import type { HistoryCommandController } from '../../../../packages/history/src/
 import type { HistoryManager } from '../../../../packages/history/src/manager'
 import { HistoryTimeline } from '../../../../packages/history/src/react'
 import type { HistoryListPage, HistoryVersionInfo } from '../../../../packages/history/src/types'
+import { DsButton, DsChip, DsSegment } from '../design-system/primitives'
+import '../design-system/live-tools.css'
 import { createPlaygroundHistory, playgroundHistoryAuthors, type HistorySnapshot } from '../historyLifecycle'
 import { createPlaygroundHistoryController } from '../historyTimeline'
 
@@ -92,56 +94,62 @@ export default function HistoryPage() {
   }
 
   return (
+    <div className="ds">
     <section className="tool-page" data-demo-surface="history" aria-label="Document history workbench">
-      <div className="tool-page__controls" role="toolbar" aria-label="History controls">
-        <span className="tool-segment" role="group" aria-label="Diff mode">
-          <button type="button" aria-pressed={mode === 'grid'} onClick={() => setMode('grid')}>Spreadsheet</button>
-          <button type="button" aria-pressed={mode === 'text'} onClick={() => setMode('text')}>Document</button>
-        </span>
-        <button className="workbench-button" type="button" onClick={() => {
+      <div className="tool-page__controls ds-workstrip" role="toolbar" aria-label="History controls">
+        <DsSegment
+          label="Diff mode"
+          value={mode}
+          onChange={(id) => setMode(id as 'grid' | 'text')}
+          options={[{ id: 'grid', label: 'Spreadsheet' }, { id: 'text', label: 'Document' }]}
+        />
+        <DsButton variant="outlined" className="workbench-button" onClick={() => {
           if (mode === 'grid') { setBeforeGrid(BEFORE_GRID); setAfterGrid(AFTER_GRID) } else { setBeforeText(BEFORE_TEXT); setAfterText(AFTER_TEXT) }
-        }}>Reset example</button>
-        <button className="workbench-button" type="button" onClick={() => void run(async (manager) => {
+        }}>Reset example</DsButton>
+        <DsButton variant="outlined" className="workbench-button" onClick={() => void run(async (manager) => {
           const created = await manager.capture({ snapshot: live, author: authors.user, contentType, description: 'User capture' })
           await refresh(manager, created.id)
           return `Captured ${created.id} as a user save.`
-        })}>Capture after</button>
-        <button className="workbench-button" type="button" onClick={() => void run(async (manager) => {
+        })}>Capture after</DsButton>
+        <DsButton variant="outlined" className="workbench-button" onClick={() => void run(async (manager) => {
           const created = await manager.capture({ snapshot: live, author: authors.agent, reason: 'agent-delivery', contentType, description: 'Agent capture' })
           await refresh(manager, created.id)
           return `Captured ${created.id} as an agent delivery.`
-        })}>Capture as agent</button>
-        <button className="workbench-button" type="button" disabled={!selectedId} onClick={() => void run(async (manager) => {
+        })}>Capture as agent</DsButton>
+        <DsButton variant="outlined" className="workbench-button" disabled={!selectedId} onClick={() => void run(async (manager) => {
           const restored = await manager.restore({ sourceVersionId: selectedId!, author: authors.user })
           const loaded = await manager.loadPreview(restored.id)
           if (mode === 'grid') setAfterGrid(loaded.snapshot)
           else setAfterText(loaded.snapshot)
           await refresh(manager, restored.id)
           return `Restored ${selectedId} as new version ${restored.id}.`
-        })}>Restore selected</button>
-        <span className="tool-page__status">{status}</span>
+        })}>Restore selected</DsButton>
+        <span className="tool-page__status ds-muted">{status}</span>
       </div>
       {error && <p className="tool-error" role="alert">{error}</p>}
 
-      <div className="tool-page__grid tool-page__grid--three">
-        <section className="tool-card" aria-labelledby="history-before-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Live editor</span><h2 id="history-before-title">Before</h2></div></div>
-          <textarea className="tool-editor" value={mode === 'grid' ? beforeGrid : beforeText} onChange={(event) => mode === 'grid' ? setBeforeGrid(event.target.value) : setBeforeText(event.target.value)} aria-label="Before content" />
+      <div className="tool-page__grid tool-page__grid--three ds-split ds-split--three">
+        <section className="tool-card ds-split-main" aria-labelledby="history-before-title">
+          <span className="ds-eyebrow tool-eyebrow">Before</span>
+          <h2 id="history-before-title">Before</h2>
+          <textarea className="tool-editor ds-outline" value={mode === 'grid' ? beforeGrid : beforeText} onChange={(event) => mode === 'grid' ? setBeforeGrid(event.target.value) : setBeforeText(event.target.value)} aria-label="Before content" />
         </section>
-        <section className="tool-card" aria-labelledby="history-after-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Live editor</span><h2 id="history-after-title">After</h2></div></div>
-          <textarea className="tool-editor" value={mode === 'grid' ? afterGrid : afterText} onChange={(event) => mode === 'grid' ? setAfterGrid(event.target.value) : setAfterText(event.target.value)} aria-label="After content" />
+        <section className="tool-card ds-split-main" aria-labelledby="history-after-title">
+          <span className="ds-eyebrow tool-eyebrow">After</span>
+          <h2 id="history-after-title">After</h2>
+          <textarea className="tool-editor ds-outline" value={mode === 'grid' ? afterGrid : afterText} onChange={(event) => mode === 'grid' ? setAfterGrid(event.target.value) : setAfterText(event.target.value)} aria-label="After content" />
         </section>
-        <section className="tool-card tool-card--hero" aria-labelledby="history-diff-title">
-          <div className="tool-card__heading">
-            <div><span className="tool-eyebrow">Structured result</span><h2 id="history-diff-title">Changes</h2></div>
-            <span className="tool-chip">{mode === 'grid' ? gridDiff.changeCount : textDiff.added + textDiff.removed}</span>
+        <section className="tool-card tool-card--hero ds-split-main" aria-labelledby="history-diff-title">
+          <span className="ds-eyebrow tool-eyebrow">Changes</span>
+          <div className="ds-row">
+            <h2 id="history-diff-title">Changes</h2>
+            <DsChip>{mode === 'grid' ? gridDiff.changeCount : textDiff.added + textDiff.removed}</DsChip>
           </div>
           {mode === 'grid' ? (
             <div className="diff-list">
-              {gridDiff.changes.map((change) => <div className="diff-row" key={change.address}><strong>{change.address}</strong><del>{change.from || 'blank'}</del><span aria-hidden="true">→</span><ins>{change.to || 'blank'}</ins></div>)}
+              {gridDiff.changes.map((change) => <div className="diff-row ds-diff-row" key={change.address}><strong>{change.address}</strong><del>{change.from || 'blank'}</del><span aria-hidden="true">→</span><ins>{change.to || 'blank'}</ins></div>)}
               {gridDiff.changes.length === 0 && <p className="tool-empty">The grids are identical.</p>}
-              <p className="tool-note">Rows {gridDiff.rowDelta >= 0 ? '+' : ''}{gridDiff.rowDelta} · columns {gridDiff.colDelta >= 0 ? '+' : ''}{gridDiff.colDelta}</p>
+              <p className="tool-note ds-muted">Rows {gridDiff.rowDelta >= 0 ? '+' : ''}{gridDiff.rowDelta} · columns {gridDiff.colDelta >= 0 ? '+' : ''}{gridDiff.colDelta}</p>
             </div>
           ) : (
             <div className="diff-text">
@@ -151,9 +159,13 @@ export default function HistoryPage() {
         </section>
       </div>
 
-      <div className="tool-page__grid">
-        <section className="tool-card" aria-labelledby="history-versions-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Durable lifecycle</span><h2 id="history-versions-title">Version timeline</h2></div><span className="tool-chip">{versions.length}</span></div>
+      <div className="tool-page__grid ds-split ds-split--wide">
+        <section className="tool-card ds-split-main" aria-labelledby="history-versions-title">
+          <span className="ds-eyebrow tool-eyebrow">Version timeline</span>
+          <div className="ds-row">
+            <h2 id="history-versions-title">Version timeline</h2>
+            <DsChip>{versions.length}</DsChip>
+          </div>
           {timeline ? (
             <HistoryTimeline
               key={timeline.page.versions[0]?.id ?? 'empty'}
@@ -166,12 +178,14 @@ export default function HistoryPage() {
             <p className="tool-empty">Loading saved versions…</p>
           )}
         </section>
-        <section className="tool-card" aria-labelledby="history-preview-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">Isolated preview</span><h2 id="history-preview-title">{selectedId ?? 'No version'}</h2></div></div>
-          <textarea className="tool-editor" readOnly value={preview} aria-label="Isolated history preview" />
-          <p className="tool-note">The package timeline mounts here. Previews stay cloned; restore writes a new immutable version.</p>
+        <section className="tool-card ds-split-side" aria-labelledby="history-preview-title">
+          <span className="ds-eyebrow tool-eyebrow">Isolated preview</span>
+          <h2 id="history-preview-title">{selectedId ?? 'No version'}</h2>
+          <textarea className="tool-editor ds-outline" readOnly value={preview} aria-label="Isolated history preview" />
+          <p className="tool-note ds-muted">The package timeline mounts here. Previews stay cloned; restore writes a new immutable version.</p>
         </section>
       </div>
     </section>
+    </div>
   )
 }

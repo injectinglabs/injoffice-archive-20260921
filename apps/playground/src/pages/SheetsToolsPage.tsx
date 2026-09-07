@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { PrintWorkspace } from '../../../../packages/print/src/react'
+import { DsButton, DsField, DsSelect } from '../design-system/primitives'
+import '../design-system/live-create-edit.css'
 import {
   SAMPLE_SPARKLINE_VALUES,
   createPlaygroundExchange,
@@ -26,37 +28,30 @@ export default function SheetsToolsPage() {
   const [exchangeNote, setExchangeNote] = useState('No exchange jobs yet.')
 
   return (
-    <section className="tool-page" data-demo-surface="sheets-tools" aria-label="Spreadsheet package tools">
-      <div className="tool-page__controls" role="toolbar" aria-label="Sheet tool proofs">
-        <label className="tool-field">
-          Sparkline
-          <select value={sparkType} aria-label="Sparkline type" onChange={(event) => setSparkType(event.target.value as SparklineType)}>
-            <option value="line">line</option>
-            <option value="column">column</option>
-            <option value="win-loss">win-loss</option>
-          </select>
-        </label>
-        <span className="tool-page__status">{printNote}</span>
-        <button className="workbench-button" type="button" onClick={() => {
-          const next = outlines.manager.toggle('q1')
-          if (next.ok) setHidden([...outlines.hidden])
-        }}>{visible[2] ? 'Collapse Q1 rows' : 'Expand Q1 rows'}</button>
-        <button className="workbench-button" type="button" onClick={() => {
-          const { manager } = createPlaygroundExchange()
-          const job = manager.importSnapshot({ source: { kind: 'bytes', bytes: new Uint8Array([80, 75, 3, 4]), name: 'demo.xlsx' } })
-          void job.result.then((result) => setExchangeNote(`${job.id} imported ${result.snapshot.name} (${result.snapshot.bytes} bytes).`))
-        }}>Import XLSX job</button>
-        <span className="tool-page__status">Sparklines, print, outlines, and exchange stay on this existing spreadsheet demo</span>
+    <section className="tool-page ds" data-demo-surface="sheets-tools" aria-label="Spreadsheet package tools">
+      <div className="tool-page__controls ds-workstrip" role="toolbar" aria-label="Sheet tool proofs">
+        <span>Sparklines, print, outlines, and exchange</span>
+        <span className="tool-page__status ds-muted">{printNote}</span>
       </div>
 
-      <div className="tool-page__grid">
-        <section className="tool-card" aria-labelledby="sparkline-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">@injoffice/sparklines</span><h2 id="sparkline-title">Sparkline</h2></div><span className="tool-chip">{sparkType}</span></div>
-          <img alt="Sparkline" src={`data:image/svg+xml;utf8,${encodeURIComponent(sparkline.svg)}`} width={180} height={48} />
-          <p className="tool-note">{SAMPLE_SPARKLINE_VALUES.join(', ')}</p>
+      <div className="tool-page__grid ds-cards">
+        <section className="tool-card ds-panel" aria-labelledby="sparkline-title">
+          <span className="tool-eyebrow ds-eyebrow">@injoffice/sparklines</span>
+          <div className="tool-card__heading"><div><h2 id="sparkline-title">Sparkline</h2></div><span className="tool-chip">{sparkType}</span></div>
+          <DsField label="Sparkline">
+            <DsSelect value={sparkType} aria-label="Sparkline type" onChange={(event) => setSparkType(event.target.value as SparklineType)}>
+              <option value="line">line</option>
+              <option value="column">column</option>
+              <option value="win-loss">win-loss</option>
+            </DsSelect>
+          </DsField>
+          <img className="ds-spark" alt="Sparkline" src={`data:image/svg+xml;utf8,${encodeURIComponent(sparkline.svg)}`} width={180} height={48} />
+          <p className="tool-note ds-muted">{SAMPLE_SPARKLINE_VALUES.join(', ')}</p>
         </section>
-        <section className="tool-card" aria-labelledby="print-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">@injoffice/print</span><h2 id="print-title">Print workspace</h2></div></div>
+        <section className="tool-card ds-panel" aria-labelledby="print-title">
+          <span className="tool-eyebrow ds-eyebrow">@injoffice/print</span>
+          <strong id="print-title">Print workspace</strong>
+          <p className="tool-note ds-muted">{printNote}</p>
           <PrintWorkspace
             controller={print.controller}
             previewManager={print.previewManager}
@@ -68,17 +63,31 @@ export default function SheetsToolsPage() {
             }}
           />
         </section>
-        <section className="tool-card" aria-labelledby="outline-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">@injoffice/outlines</span><h2 id="outline-title">Row groups</h2></div></div>
-          <ol className="formula-list">
+        <section className="tool-card ds-panel" aria-labelledby="outline-title">
+          <span className="tool-eyebrow ds-eyebrow">@injoffice/outlines</span>
+          <strong id="outline-title">Row groups</strong>
+          <div className="ds-tools-grid">
             {ROW_LABELS.map((label, index) => (
-              <li key={label} className={visible[index] ? undefined : 'tool-empty'}>{visible[index] ? label : `${label} (hidden)`}</li>
+              <div key={label} style={{ display: 'contents' }}>
+                <span>{index === 1 ? (visible[2] ? '▾' : '▸') : ''}</span>
+                {visible[index] ? <span>{label}</span> : <s>{label}</s>}
+              </div>
             ))}
-          </ol>
+          </div>
+          <DsButton className="workbench-button" onClick={() => {
+            const next = outlines.manager.toggle('q1')
+            if (next.ok) setHidden([...outlines.hidden])
+          }}>{visible[2] ? 'Collapse Q1 rows' : 'Expand Q1 rows'}</DsButton>
         </section>
-        <section className="tool-card" aria-labelledby="exchange-title">
-          <div className="tool-card__heading"><div><span className="tool-eyebrow">@injoffice/xlsx-exchange</span><h2 id="exchange-title">Exchange job</h2></div></div>
-          <p className="tool-note">{exchangeNote}</p>
+        <section className="tool-card ds-panel" aria-labelledby="exchange-title">
+          <span className="tool-eyebrow ds-eyebrow">@injoffice/xlsx-exchange</span>
+          <strong id="exchange-title">Exchange job</strong>
+          <p className="tool-note ds-muted">{exchangeNote}</p>
+          <DsButton className="workbench-button" onClick={() => {
+            const { manager } = createPlaygroundExchange()
+            const job = manager.importSnapshot({ source: { kind: 'bytes', bytes: new Uint8Array([80, 75, 3, 4]), name: 'demo.xlsx' } })
+            void job.result.then((result) => setExchangeNote(`${job.id} imported ${result.snapshot.name} (${result.snapshot.bytes} bytes).`))
+          }}>Import XLSX job</DsButton>
         </section>
       </div>
     </section>

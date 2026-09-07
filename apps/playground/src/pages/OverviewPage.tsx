@@ -7,7 +7,7 @@ import {
   type DemoFormat,
   type DemoTask,
 } from '../demoRegistry'
-import { filterShowcaseDemos } from '../showcaseCatalog'
+import { filterShowcaseItems, showcaseItems } from '../showcaseCatalog'
 import { surfaceHref } from '../route'
 
 const ALL_TASKS = 'All tasks' as const
@@ -27,7 +27,8 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
     : sidecar === 'connected'
       ? 'Browser engines ready · server fallback connected'
       : 'Browser engines ready · server fallback offline'
-  const matches = useMemo(() => filterShowcaseDemos(DEMOS, { query, task, format }), [query, task, format])
+  const catalog = useMemo(() => showcaseItems(DEMOS), [])
+  const matches = useMemo(() => filterShowcaseItems(catalog, { query, task, format }), [catalog, query, task, format])
   const hasFilters = query.length > 0 || task !== ALL_TASKS || format !== ALL_FORMATS
   const resetFilters = () => {
     setQuery('')
@@ -127,26 +128,26 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
 
         {matches.length > 0 ? (
           <ul className="showcase-results" aria-label="Matching working proofs">
-            {matches.map((demo) => {
-              const warmRoute = () => { preloadDemoOnIntent(demo.surface) }
+            {matches.map((item) => {
+              const warmRoute = () => { preloadDemoOnIntent(item.surface) }
               return (
-                <li key={demo.surface}>
+                <li key={item.key}>
                   <a
-                    className={`showcase-item showcase-item--${demo.accent}`}
-                    href={demo.surface === 'sheets' ? `${surfaceHref('sheets')}?view=native` : surfaceHref(demo.surface)}
+                    className={`showcase-item showcase-item--${item.accent}`}
+                    href={item.href}
                     onPointerEnter={warmRoute}
                     onPointerDown={warmRoute}
                     onFocus={warmRoute}
                   >
-                    <span className="showcase-item__glyph" aria-hidden="true">{demo.glyph}</span>
+                    <span className="showcase-item__glyph" aria-hidden="true">{item.glyph}</span>
                     <span className="showcase-item__body">
-                      <span className="showcase-item__title"><strong>{demo.recipe.title}</strong></span>
-                      <span className="showcase-item__description">{demo.recipe.outcome}</span>
-                      <span className="showcase-item__tasks">{demo.title} · {demo.tasks.join(' · ')}</span>
+                      <span className="showcase-item__title"><strong>{item.title}</strong></span>
+                      <span className="showcase-item__description">{item.description}</span>
+                      <span className="showcase-item__tasks">{item.subtitle}</span>
                     </span>
                     <span className="showcase-item__meta">
-                      <span>{demo.formats.join(' + ')}</span>
-                      <small>{demo.runtime} · {demo.recipe.minutes} min</small>
+                      <span>{item.formats.join(' + ')}</span>
+                      <small>{item.runtime} · {item.minutes} min</small>
                       <b>Open proof</b>
                     </span>
                   </a>
