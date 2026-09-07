@@ -1,24 +1,53 @@
-import { DEMO_GROUPS, DEMOS, preloadDemoOnIntent } from '../demoRegistry'
+import { useMemo, useState } from 'react'
+import {
+  DEMO_FORMATS,
+  DEMOS,
+  DEMO_TASKS,
+  preloadDemoOnIntent,
+  type DemoFormat,
+  type DemoTask,
+} from '../demoRegistry'
+import { filterShowcaseDemos } from '../showcaseCatalog'
 import { surfaceHref } from '../route'
 
+const ALL_TASKS = 'All tasks' as const
+const ALL_FORMATS = 'All formats' as const
+
+function FilterButton<T extends string>({ value, selected, onSelect }: { value: T; selected: boolean; onSelect: (value: T) => void }) {
+  return <button type="button" aria-pressed={selected} onClick={() => onSelect(value)}>{value}</button>
+}
+
 export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'connected' | 'offline' }) {
+  const [query, setQuery] = useState('')
+  const [task, setTask] = useState<DemoTask | typeof ALL_TASKS>(ALL_TASKS)
+  const [format, setFormat] = useState<DemoFormat | typeof ALL_FORMATS>(ALL_FORMATS)
   const warmSheets = () => { preloadDemoOnIntent('sheets') }
   const runtimeLabel = sidecar === 'checking'
     ? 'Browser engines ready · checking optional server'
     : sidecar === 'connected'
       ? 'Browser engines ready · server fallback connected'
       : 'Browser engines ready · server fallback offline'
+  const matches = useMemo(() => filterShowcaseDemos(DEMOS, { query, task, format }), [query, task, format])
+  const hasFilters = query.length > 0 || task !== ALL_TASKS || format !== ALL_FORMATS
+  const resetFilters = () => {
+    setQuery('')
+    setTask(ALL_TASKS)
+    setFormat(ALL_FORMATS)
+  }
+  const focusCatalog = () => {
+    document.querySelector('#showcase-query')?.scrollIntoView({ block: 'center' })
+    document.querySelector<HTMLInputElement>('#showcase-query')?.focus({ preventScroll: true })
+  }
 
-  return (
-    <div className="overview-page">
+  const authorityProof = (
       <section className="overview-hero" aria-labelledby="overview-title">
         <div className="overview-copy">
           <p className="hero-note"><span aria-hidden="true">↻</span> Original Office bytes stay authoritative</p>
-          <h1 id="overview-title">Edit Office files without rebuilding what you don’t understand.</h1>
+          <h2 id="overview-title">Choose the job. Keep the source file.</h2>
           <p className="hero-lede">Open-source TypeScript, Go, and browser-WASM engines for agents and web applications. Inspect a real file, apply a bounded change, reopen the exact output, and preserve everything outside the edit.</p>
           <div className="hero-actions">
-            <a className="primary-action" href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Run the native XLSX proof</a>
-            <a className="secondary-action" href="#/guides">Read the guides</a>
+            <button className="primary-action" type="button" onClick={focusCatalog}>Find a working proof</button>
+            <a className="secondary-action" href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Run the native XLSX proof</a>
           </div>
           <dl className="hero-facts">
             <div><dt>24</dt><dd>composable packages</dd></div>
@@ -38,37 +67,102 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
             <li><span>Verify</span><div><strong>Reopen the exact returned bytes</strong><code>value confirmed · revision advanced</code></div></li>
           </ol>
           <footer><span aria-hidden="true">✓</span><div><strong>Fail closed</strong><small>Unsafe or stale changes produce no replacement file.</small></div></footer>
-          <a href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Open the working proof <span aria-hidden="true">›</span></a>
         </div>
       </section>
+  )
 
-      <section className="capability-index" id="tools" aria-labelledby="tools-title">
-        <header><div><h2 id="tools-title">Explore the engine labs</h2><p>Fifteen focused surfaces demonstrate the twenty-four packages. Shared infrastructure appears inside the workflows it powers. These are bounded proofs, not a claim of unrestricted Microsoft Office parity.</p></div><span className={`overview-runtime overview-runtime--${sidecar}`} role="status" aria-live="polite">{runtimeLabel}</span></header>
-        <div className="capability-groups">
-          {DEMO_GROUPS.map((group) => (
-            <section key={group}>
-              <h3>{group}</h3>
-              {DEMOS.filter((demo) => demo.group === group).map((demo) => {
-                const warmRoute = () => { preloadDemoOnIntent(demo.surface) }
-                return (
+  return (
+    <div className="overview-page">
+      <section className="showcase-catalog" id="showcase-catalog" aria-labelledby="showcase-title">
+        <header className="showcase-heading">
+          <div>
+            <h1 id="showcase-title" tabIndex={-1}>Start with what you need to do</h1>
+            <p>Filter fifteen focused surfaces across the twenty-four packages. Shared infrastructure appears inside the workflows it powers. These are bounded proofs, not a claim of unrestricted Microsoft Office parity.</p>
+          </div>
+          <span className={`overview-runtime overview-runtime--${sidecar}`} role="status" aria-live="polite">{runtimeLabel}</span>
+        </header>
+        <div className="showcase-shortcuts">
+          <a href={`${surfaceHref('sheets')}?view=editor`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Try the spreadsheet editor</a>
+          <a href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Verify an XLSX round trip</a>
+          <a href={`${surfaceHref('sheets')}?view=tools`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Explore workbook tools</a>
+          <a href="#/guides">Integration guides</a>
+        </div>
+
+        <form className="showcase-filters" role="search" onSubmit={(event) => event.preventDefault()}>
+          <div className="showcase-search">
+            <label htmlFor="showcase-query">Search the working proofs</label>
+            <div>
+              <span aria-hidden="true">⌕</span>
+              <input
+                id="showcase-query"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Try “edit PPTX”, “redact PDF”, or “chart”"
+                autoComplete="off"
+              />
+              {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search">Clear</button>}
+            </div>
+          </div>
+          <fieldset className="showcase-filter-group">
+            <legend>Task</legend>
+            <div>
+              <FilterButton value={ALL_TASKS} selected={task === ALL_TASKS} onSelect={setTask} />
+              {DEMO_TASKS.map((value) => <FilterButton key={value} value={value} selected={task === value} onSelect={setTask} />)}
+            </div>
+          </fieldset>
+          <fieldset className="showcase-filter-group showcase-filter-group--formats">
+            <legend>File type</legend>
+            <div>
+              <FilterButton value={ALL_FORMATS} selected={format === ALL_FORMATS} onSelect={setFormat} />
+              {DEMO_FORMATS.map((value) => <FilterButton key={value} value={value} selected={format === value} onSelect={setFormat} />)}
+            </div>
+          </fieldset>
+        </form>
+
+        <div className="showcase-results-heading">
+          <p aria-live="polite"><strong>{matches.length}</strong> {matches.length === 1 ? 'proof' : 'proofs'} available</p>
+          {hasFilters && <button type="button" onClick={resetFilters}>Reset filters</button>}
+        </div>
+
+        {matches.length > 0 ? (
+          <ul className="showcase-results" aria-label="Matching working proofs">
+            {matches.map((demo) => {
+              const warmRoute = () => { preloadDemoOnIntent(demo.surface) }
+              return (
+                <li key={demo.surface}>
                   <a
-                    className={`capability-row capability-row--${demo.accent}`}
-                    href={surfaceHref(demo.surface)}
-                    key={demo.surface}
+                    className={`showcase-item showcase-item--${demo.accent}`}
+                    href={demo.surface === 'sheets' ? `${surfaceHref('sheets')}?view=native` : surfaceHref(demo.surface)}
                     onPointerEnter={warmRoute}
                     onPointerDown={warmRoute}
                     onFocus={warmRoute}
                   >
-                    <span className="capability-row-glyph" aria-hidden="true">{demo.glyph}</span>
-                    <span><strong>{demo.navTitle}</strong><small>{demo.description}</small></span>
-                    <em>{demo.runtime}</em>
+                    <span className="showcase-item__glyph" aria-hidden="true">{demo.glyph}</span>
+                    <span className="showcase-item__body">
+                      <span className="showcase-item__title"><strong>{demo.recipe.title}</strong></span>
+                      <span className="showcase-item__description">{demo.recipe.outcome}</span>
+                      <span className="showcase-item__tasks">{demo.title} · {demo.tasks.join(' · ')}</span>
+                    </span>
+                    <span className="showcase-item__meta">
+                      <span>{demo.formats.join(' + ')}</span>
+                      <small>{demo.runtime} · {demo.recipe.minutes} min</small>
+                      <b>Open proof</b>
+                    </span>
                   </a>
-                )
-              })}
-            </section>
-          ))}
-        </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div className="showcase-empty" role="status">
+            <span aria-hidden="true">⌕</span>
+            <div><strong>No working proof matches those filters.</strong><p>Try a broader task, another file type, or fewer search terms.</p></div>
+            <button type="button" onClick={resetFilters}>Show all proofs</button>
+          </div>
+        )}
       </section>
+      {authorityProof}
     </div>
   )
 }

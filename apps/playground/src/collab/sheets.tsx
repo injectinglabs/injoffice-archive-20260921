@@ -11,6 +11,7 @@ import { createHttpCollabTransport, type HttpCollabTransport } from '../collabTr
 import { COLLAB_COPY, parseCollabQuery } from '../collabScope'
 import { createOssUniver } from '@injoffice/univer-sheets'
 import { bindUniverColorScheme, univerDarkMode } from '../univerColorScheme'
+import { deferNestedReactRootStart } from '../nestedReactRootLifecycle'
 import {
   COLLAB_API_BASE,
   CollabRoomChrome,
@@ -58,11 +59,12 @@ export function CollabSheetsPanel() {
   const [error, setError] = useState('')
   const [metrics, setMetrics] = useState({ peers: 0, applied: 0, pending: 0 })
 
-  useEffect(() => {
+  useEffect(() => deferNestedReactRootStart(() => {
+    if (!editorRef.current) return
     const { univer, univerAPI } = createOssUniver({
       locale: LocaleType.EN_US,
       locales: { [LocaleType.EN_US]: mergeLocales(sheetsCoreEnUS) },
-      presets: [UniverSheetsCorePreset({ container: editorRef.current! })],
+      presets: [UniverSheetsCorePreset({ container: editorRef.current })],
       darkMode: univerDarkMode(),
     })
     const unbindScheme = bindUniverColorScheme(univerAPI)
@@ -90,9 +92,11 @@ export function CollabSheetsPanel() {
       transportRef.current = null
       apiRef.current = null
       commandServiceRef.current = null
-      univer.dispose()
+      // Univer owns a nested React root. Dispose it after the outer reset or
+      // route commit so React never tears down both roots synchronously.
+      window.setTimeout(() => univer.dispose(), 0)
     }
-  }, [])
+  }), [])
 
   const disconnect = () => {
     managerRef.current?.stop()

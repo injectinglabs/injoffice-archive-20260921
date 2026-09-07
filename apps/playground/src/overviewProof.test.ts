@@ -18,4 +18,14 @@ describe('overview native workflow', () => {
     expect(source).toContain('not a claim of unrestricted Microsoft Office parity')
     expect(source).not.toMatch(/alternative to Google and Microsoft Office/i)
   })
+
+  it('offers task, file type, and text filters with announced results and recovery', () => {
+    expect(source).toContain('role="search"')
+    expect(source).toContain('DEMO_TASKS.map')
+    expect(source).toContain('DEMO_FORMATS.map')
+    expect(source).toContain('aria-pressed={selected}')
+    expect(source).toContain('aria-live="polite"')
+    expect(source).toContain('No working proof matches those filters')
+    expect(source).toContain('Show all proofs')
+  })
 })

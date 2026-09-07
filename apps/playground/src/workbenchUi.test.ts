@@ -58,6 +58,32 @@ describe('playground workbench design system', () => {
     expect(app).toContain('persistColorScheme')
   })
 
+  it('gives opened demos a compact, collapsible focus shell', () => {
+    expect(app).toContain("surface !== 'overview' && !navigationExpanded")
+    expect(app).toContain("data-navigation={navigationCollapsed ? 'collapsed' : 'expanded'}")
+    expect(app).toContain('aria-label={label}')
+    expect(app).toContain('aria-expanded={!collapsed}')
+    expect(app).toContain('className="demo-breadcrumb" aria-label="Breadcrumb"')
+    expect(app).toContain('className="demo-context-actions"')
+    expect(css).toContain('@media (min-width: 761px)')
+    expect(css).toContain('.app-shell[data-navigation="collapsed"]')
+    expect(css).toContain('grid-template-columns: 64px minmax(0, 1fr)')
+  })
+
+  it('provides an accessible source and proof drawer from demo metadata', () => {
+    expect(app).toContain('function SourceProofDrawer')
+    expect(app).toContain('<GuidedRecipe recipe={demo.recipe}')
+    expect(app).toContain('<DemoSource source={demo.recipe.sources[0]}')
+    expect(app).toContain('aria-haspopup="dialog"')
+    expect(app).toContain('role="dialog"')
+    expect(app).toContain('aria-modal="true"')
+    expect(app).toContain("event.key === 'Escape'")
+    expect(app).toContain("event.key !== 'Tab'")
+    expect(app).toContain('returnFocusRef.current?.focus()')
+    expect(css).toContain('.source-proof-drawer')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.source-proof-drawer \{ animation: none; \}/)
+  })
+
   it('drives Univer dark mode from the playground color scheme', () => {
     const editor = readFileSync(resolve(source, 'UniverEditor.tsx'), 'utf8')
     const simulator = readFileSync(resolve(source, 'collabSimulator.tsx'), 'utf8')

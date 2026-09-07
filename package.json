@@ -26,6 +26,7 @@
     "test:office-browser-smoke:built": "npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/ && node scripts/smoke-playground-xlsx-wasm-browser.mjs",
     "test:wasm-tarball-browser": "node scripts/smoke-wasm-tarball-browser.mjs",
     "test:chrome-cdp-startup": "node --test scripts/chrome-cdp-startup.test.mjs",
+    "test:showcase-browser": "node scripts/smoke-showcase-browser.mjs",
     "check:packages": "node scripts/check-packages.mjs",
     "check:office-architecture": "node scripts/check-office-architecture.mjs",
     "check:office-provenance": "node scripts/check-office-provenance.mjs",

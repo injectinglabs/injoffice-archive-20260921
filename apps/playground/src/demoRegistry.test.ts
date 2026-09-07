@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEMOS } from './demoRegistry'
+import { DEMO_FORMATS, DEMOS, DEMO_TASKS } from './demoRegistry'
 
 describe('playground capability registry', () => {
   it('registers fifteen focused proof surfaces without implying one page per package', () => {
@@ -7,6 +7,9 @@ describe('playground capability registry', () => {
     expect(new Set(DEMOS.map((demo) => demo.surface)).size).toBe(15)
     expect(new Set(DEMOS.map((demo) => demo.packageName)).size).toBe(15)
     expect(DEMOS.every((demo) => demo.description.length > 40)).toBe(true)
+    expect(DEMOS.every((demo) => demo.tasks.length > 0 && demo.formats.length > 0)).toBe(true)
+    expect(new Set(DEMOS.flatMap((demo) => demo.tasks))).toEqual(new Set(DEMO_TASKS))
+    expect(new Set(DEMOS.flatMap((demo) => demo.formats))).toEqual(new Set(DEMO_FORMATS))
   })
 
   it('keeps interactive document controls distinct from package-only capabilities', () => {

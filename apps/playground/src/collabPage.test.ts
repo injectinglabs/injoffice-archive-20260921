@@ -50,9 +50,13 @@ describe('collaboration playground', () => {
 
   it('boots and disposes nested Univer roots outside the Strict Mode effect cycle', () => {
     const simulator = source('collabSimulator.tsx')
+    const serverSheets = source('collab/sheets.tsx')
     expect(simulator).toContain("window.setTimeout(startEditor, profile.id === 'noah' ? 75 : 0)")
     expect(simulator).toContain('window.clearTimeout(startTimer)')
     expect(simulator).toContain('window.setTimeout(() => univer.dispose(), 0)')
+    expect(serverSheets).toContain('useEffect(() => deferNestedReactRootStart(() => {')
+    expect(serverSheets).toContain('if (!editorRef.current) return')
+    expect(serverSheets).toContain('window.setTimeout(() => univer.dispose(), 0)')
   })
 
   it('projects remote drafts into the peer cell without enabling Univer popups', () => {
