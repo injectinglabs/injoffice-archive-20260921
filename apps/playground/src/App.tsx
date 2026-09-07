@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react'
 import {
   applyColorScheme,
   currentColorScheme,
@@ -9,14 +9,10 @@ import {
 } from './colorScheme'
 import GuidedRecipe from './components/GuidedRecipe'
 import DemoSource from './components/DemoSource'
-import { DsMark } from './design-system/primitives'
 import { DEMO_BY_SURFACE, DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
 import OverviewPage from './pages/OverviewPage'
-import { agentHref, isDesignSystemHash, isDocsHash, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
+import { agentHref, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
 import { surfaceSectionId } from './scrollSpy'
-
-const DocsApp = lazy(() => import('../../docs/src/App'))
-const DesignSystemGallery = lazy(() => import('./design-system/GalleryPage'))
 
 type SidecarState = 'checking' | 'connected' | 'offline'
 
@@ -100,18 +96,16 @@ function ColorSchemeToggle({ scheme, onScheme }: { scheme: ColorScheme; onScheme
   )
 }
 
-function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
+function AppHeader({ sidecar, scheme, onScheme, surface }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void; surface: Surface }) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
         <a className="app-brand" href={surfaceHref('overview')} aria-label="InjOffice overview">
-          <DsMark />
+          <img className="app-logo" src="/logo.svg" alt="" width={32} height={32} />
           <span><strong>InjOffice</strong></span>
         </a>
         <nav className="app-header-links" aria-label="Site">
-          <a href={surfaceHref('overview')} aria-current="page">Showcase</a>
-          <a href="#/guides">Guides</a>
-          <a href="#/design-system">Design system</a>
+          <a href={surfaceHref('overview')} aria-current={surface === 'overview' ? 'page' : undefined}>Showcase</a>
         </nav>
         <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
           <i aria-hidden="true" />
@@ -311,7 +305,6 @@ export default function App() {
   useEffect(() => {
     const sync = () => {
       setHashTick((tick) => tick + 1)
-      if (isDocsHash() || isDesignSystemHash()) return
       const nextSurface = parseSurface()
       preloadDemoOnIntent(nextSurface)
       if (nextSurface === surfaceRef.current) return
@@ -360,26 +353,10 @@ export default function App() {
     preloadDemoOnIntent(surface)
   }, [surface])
 
-  if (isDesignSystemHash()) {
-    return (
-      <Suspense fallback={<div className="demo-loading" role="status">Opening design system…</div>}>
-        <DesignSystemGallery />
-      </Suspense>
-    )
-  }
-
-  if (isDocsHash()) {
-    return (
-      <Suspense fallback={<div className="demo-loading" role="status">Opening guides…</div>}>
-        <DocsApp />
-      </Suspense>
-    )
-  }
-
   return (
     <div className="app-shell ds" data-surface={surface} data-layout="univer" data-navigation="text">
       <a className="skip-link" href="#main-content">Skip to demo</a>
-      <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
+      <AppHeader sidecar={sidecar} scheme={scheme} surface={surface} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
         <ToolNavigation surface={surface} />

@@ -86,7 +86,6 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
           <a href={`${surfaceHref('sheets')}?view=editor`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Try the spreadsheet editor</a>
           <a href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Verify an XLSX round trip</a>
           <a href={`${surfaceHref('sheets')}?view=tools`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Explore workbook tools</a>
-          <a href="#/guides">Integration guides</a>
         </div>
 
         <form className="showcase-filters" role="search" onSubmit={(event) => event.preventDefault()}>

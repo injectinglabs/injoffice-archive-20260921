@@ -57,7 +57,7 @@ html[data-theme="light"] {
   --chip-line: #d7edf3;
   --code-bg: #eceeed;
   --code-ink: #141816;
-  --type-display: "Source Serif 4", "Iowan Old Style", serif;
+  --type-display: "Sora", "Avenir Next", sans-serif;
   --type-body: "Instrument Sans", "Segoe UI", sans-serif;
   --type-mono: "IBM Plex Mono", ui-monospace, monospace;
   --control-height: 36px;
@@ -219,6 +219,16 @@ body {
   color: var(--ink);
 }
 
+.app-logo {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  background: #eef3f0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
 .app-brand .ds-mark,
 .brand-mark {
   width: 36px;
@@ -241,9 +251,9 @@ body {
 .brand-mark i:nth-child(3) { background: var(--action); }
 .app-brand strong {
   font-family: var(--type-display);
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -.03em;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.04em;
 }
 .app-brand small { color: var(--mute); font-size: 12px; padding-left: 0; }
 
@@ -517,9 +527,9 @@ body {
 .page-heading h1 {
   font-family: var(--type-display);
   font-size: clamp(28px, 2.6vw, 36px);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.04em;
 }
 .page-heading p { max-width: 72ch; margin-top: 6px; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
 
@@ -550,9 +560,9 @@ body {
   overflow: visible;
   font-family: var(--type-display);
   font-size: clamp(28px, 3vw, 36px);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.04em;
   text-overflow: unset;
   white-space: normal;
 }
@@ -655,8 +665,8 @@ body {
   margin: 0;
   font-family: var(--type-display);
   font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  letter-spacing: -.04em;
 }
 .source-proof-close { width: 34px; height: 34px; flex: 0 0 34px; font-size: 20px; font-weight: 400; line-height: 1; }
 .source-proof-body { flex: 1; padding: 16px; min-height: 0; overflow: auto; }
@@ -1433,9 +1443,9 @@ body {
   max-width: 18em;
   font-family: var(--type-display);
   font-size: clamp(28px, 3.4vw, 40px);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.04em;
 }
 .hero-lede { margin: 12px 0 16px; color: var(--mute); font-size: 14px; max-width: 42em; }
 .hero-actions :where(a, button) { border-radius: var(--radius-control); font-size: 13px; font-weight: 500; }
@@ -1449,8 +1459,8 @@ body {
 .hero-facts dt {
   font-family: var(--type-display);
   font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  letter-spacing: -.04em;
 }
 
 .authority-ledger {
@@ -1536,8 +1546,8 @@ body {
   margin: 0;
   font-family: var(--type-display);
   font-size: clamp(26px, 3vw, 32px);
-  font-weight: 500;
-  letter-spacing: -.03em;
+  font-weight: 600;
+  letter-spacing: -.04em;
 }
 .showcase-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
 .showcase-shortcuts a {

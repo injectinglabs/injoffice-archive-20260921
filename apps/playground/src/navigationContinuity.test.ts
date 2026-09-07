@@ -15,7 +15,11 @@ describe('playground navigation continuity', () => {
     expect(appSource).not.toContain('DEMOS.map((item) => (')
     expect(appSource).not.toContain('className="demo-stage-placeholder"')
     expect(appSource).toContain('setHashTick')
-    expect(appSource).toContain('isDocsHash() || isDesignSystemHash()')
+    expect(appSource).not.toContain('isDocsHash')
+    expect(appSource).not.toContain('isDesignSystemHash')
+    expect(appSource).not.toContain('#/guides')
+    expect(appSource).not.toContain('#/design-system')
+    expect(appSource).toContain('/logo.svg')
   })
 
   it('warms route chunks for pointer and keyboard navigation intent', () => {
@@ -27,7 +31,7 @@ describe('playground navigation continuity', () => {
   })
 
   it('pre-optimizes dependencies imported only by lazy routes in development', () => {
-    expect(viteConfig).toContain("entries: ['index.html', 'src/**/*.{ts,tsx}', '../docs/src/**/*.{ts,tsx}']")
+    expect(viteConfig).toContain("entries: ['index.html', 'src/**/*.{ts,tsx}']")
   })
 
   it('uses an in-context progress line with a reduced-motion state', () => {

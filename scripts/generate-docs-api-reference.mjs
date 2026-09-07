@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
-const outPath = resolve(root, 'apps/docs/src/generated/api-reference.json')
+const outPath = resolve(root, 'docs/api-reference.json')
 const check = process.argv.includes('--check')
 
 function packageDirs() {
@@ -162,7 +162,7 @@ if (check) {
   }
   const current = readFileSync(outPath, 'utf8')
   if (current !== serialized) {
-    console.error('apps/docs/src/generated/api-reference.json is stale; run node scripts/generate-docs-api-reference.mjs')
+    console.error('docs/api-reference.json is stale; run node scripts/generate-docs-api-reference.mjs')
     process.exit(1)
   }
   process.exit(0)

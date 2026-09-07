@@ -8,7 +8,6 @@
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "npm run dev -w apps/playground",
-    "docs": "npm run dev -w apps/playground",
     "build": "npm run build --workspaces --if-present",
     "postbuild": "node scripts/fix-declaration-specifiers.mjs",
     "generate:xlsx-contract": "node scripts/generate-xlsx-native-contract.mjs",

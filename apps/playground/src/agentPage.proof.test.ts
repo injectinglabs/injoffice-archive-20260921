@@ -6,7 +6,7 @@ import { parseSurface } from './route'
 describe('agent workflow page proof', () => {
   const page = readFileSync(new URL('./pages/AgentPage.tsx', import.meta.url), 'utf8')
   const runtime = readFileSync(new URL('./agentDemoRuntime.ts', import.meta.url), 'utf8')
-  const guide = readFileSync(new URL('../../docs/src/pages/AgentWorkflowsPage.tsx', import.meta.url), 'utf8')
+  const guide = readFileSync(new URL('../../../docs/AGENT-CHANGESETS.md', import.meta.url), 'utf8')
 
   it('is routable, discoverable, and provider independent', () => {
     expect(parseSurface('#/agent')).toBe('agent')
@@ -31,8 +31,8 @@ describe('agent workflow page proof', () => {
   })
 
   it('documents the architecture, supported formats, safety, and non-goals', () => {
-    for (const heading of ['architecture', 'capabilities', 'safety', 'non-goals']) expect(guide).toContain(`id="${heading}"`)
-    for (const format of ['XLSX', 'DOCX', 'PPTX', 'PDF']) expect(guide).toContain(`<strong>${format}:</strong>`)
+    for (const heading of ['## Architecture', '## Formats', '## Safety contract', '## Non-goals']) expect(guide).toContain(heading)
+    for (const format of ['XLSX', 'DOCX', 'PPTX', 'PDF']) expect(guide).toContain(`**${format}:**`)
     expect(guide).toContain('do not contain a model SDK')
     for (const href of ['#/agent?format=sheets', '#/agent?format=docs', '#/agent?format=slides', '#/agent?format=pdf']) {
       expect(guide).toContain(href)

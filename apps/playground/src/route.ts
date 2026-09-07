@@ -92,13 +92,3 @@ export function agentHref(tool: AgentTool): string {
 export function agentFormatFromTool(tool: AgentTool): AgentToolFormat {
   return AGENT_TOOLS.find((item) => item.tool === tool)?.format ?? 'xlsx'
 }
-
-export function isDocsHash(hash = typeof location === 'undefined' ? '' : location.hash): boolean {
-  const path = hash.replace(/^#\/?/, '').split(/[/?]/)[0]?.toLowerCase() ?? ''
-  return path === 'guides'
-}
-
-export function isDesignSystemHash(hash = typeof location === 'undefined' ? '' : location.hash): boolean {
-  const path = hash.replace(/^#\/?/, '').split(/[/?]/)[0]?.toLowerCase() ?? ''
-  return path === 'design-system'
-}

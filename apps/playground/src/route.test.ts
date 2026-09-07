@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentFormatFromTool, agentHref, isDesignSystemHash, isDocsHash, parseAgentTool, parseSheetsView, parseSurface, surfaceHref, SURFACES } from './route'
+import { agentFormatFromTool, agentHref, parseAgentTool, parseSheetsView, parseSurface, surfaceHref, SURFACES } from './route'
 
 describe('playground surfaces', () => {
   it('defaults unknown hashes to the lightweight overview and round-trips hrefs', () => {
@@ -19,20 +19,11 @@ describe('playground surfaces', () => {
     expect(parseSurface('#/native/')).toBe('sheets')
   })
 
-  it('keeps documentation on the same 3100 hash router without colliding with the DOCX lab', () => {
-    expect(isDocsHash('#/guides')).toBe(true)
-    expect(isDocsHash('#/guides/charts?section=install')).toBe(true)
-    expect(isDocsHash('#/docs')).toBe(false)
+  it('treats retired guide and design-system hashes as the showcase, without colliding with the DOCX lab', () => {
+    expect(parseSurface('#/guides')).toBe('overview')
     expect(parseSurface('#/guides/charts')).toBe('overview')
-    expect(parseSurface('#/docs')).toBe('docs')
-  })
-
-  it('serves the proposed design system without colliding with guides or the DOCX lab', () => {
-    expect(isDesignSystemHash('#/design-system')).toBe(true)
-    expect(isDesignSystemHash('#/design-system?section=buttons')).toBe(true)
-    expect(isDesignSystemHash('#/guides')).toBe(false)
-    expect(isDesignSystemHash('#/docs')).toBe(false)
     expect(parseSurface('#/design-system')).toBe('overview')
+    expect(parseSurface('#/docs')).toBe('docs')
   })
 
   it('deep-links to a spreadsheet proof without changing the surface parser', () => {

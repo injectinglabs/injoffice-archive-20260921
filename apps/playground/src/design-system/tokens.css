@@ -31,7 +31,7 @@
   --ds-gutter: 48px;
   --ds-toolbar: 44px;
   --ds-type: "Instrument Sans", "Segoe UI", sans-serif;
-  --ds-display: "Source Serif 4", "Iowan Old Style", serif;
+  --ds-display: "Sora", "Avenir Next", sans-serif;
   --ds-mono: "IBM Plex Mono", ui-monospace, monospace;
   --ds-cell: "Instrument Sans", "Segoe UI", sans-serif;
   color: var(--ds-ink);

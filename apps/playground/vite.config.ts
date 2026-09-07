@@ -1,9 +1,26 @@
+import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const pkgSrc = (name: string) => fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url))
 const pkgFile = (name: string, file: string) => fileURLToPath(new URL(`../../packages/${name}/src/${file}`, import.meta.url))
+
+/** Safari often resolves localhost to ::1; Vite's 127.0.0.1 bind misses that. */
+function ipv6Loopback(port: number): Plugin {
+  return {
+    name: 'injoffice-ipv6-loopback',
+    apply: 'serve',
+    configureServer(server) {
+      const extra = createServer(server.middlewares)
+      extra.on('upgrade', (req, socket, head) => {
+        server.httpServer?.emit('upgrade', req, socket, head)
+      })
+      extra.listen(port, '::1')
+      server.httpServer?.once('close', () => extra.close())
+    },
+  }
+}
 
 function pdfNodeHostPlugin(
   handlePdfNodeRequest: (req: unknown, res: unknown) => Promise<boolean>,
@@ -31,7 +48,7 @@ export default defineConfig(async ({ command }) => {
   const plugins: Plugin[] = [react()]
   if (command === 'serve') {
     const { handlePdfNodeRequest } = await import('./pdfNodeHost.ts')
-    plugins.push(pdfNodeHostPlugin(handlePdfNodeRequest))
+    plugins.push(pdfNodeHostPlugin(handlePdfNodeRequest), ipv6Loopback(3100))
   }
   return {
     plugins,
@@ -39,7 +56,7 @@ export default defineConfig(async ({ command }) => {
     // crawl. Discover them at startup so visiting a demo never triggers a
     // one-time dependency optimizer reload in the middle of navigation.
     optimizeDeps: command === 'serve' ? {
-      entries: ['index.html', 'src/**/*.{ts,tsx}', '../docs/src/**/*.{ts,tsx}'],
+      entries: ['index.html', 'src/**/*.{ts,tsx}'],
     } : undefined,
     resolve: {
       alias: {
@@ -65,6 +82,7 @@ export default defineConfig(async ({ command }) => {
     server: {
       host: '127.0.0.1',
       port: 3100,
+      strictPort: true,
       proxy: {
         '/healthz': process.env.INJOFFICE_SERVER || 'http://127.0.0.1:18765',
         '/v1/capabilities': process.env.INJOFFICE_SERVER || 'http://127.0.0.1:18765',

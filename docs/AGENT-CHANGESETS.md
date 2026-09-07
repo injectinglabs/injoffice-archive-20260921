@@ -37,7 +37,14 @@ The host still owns identity, authorization, tenant isolation, durable storage, 
 
 ## Formats
 
-The workflow is format-neutral, but capabilities are not. XLSX, DOCX, PPTX, and PDF adapters expose only the operations that their current native engines can preserve and verify. Unsupported macros, encrypted packages, embedded objects, ambiguous targets, or out-of-scope formatting must be preserved untouched or refused.
+The packages do not contain a model SDK. The workflow is format-neutral, but capabilities are not:
+
+- **XLSX:** bounded inspection of native v1/v2 projections plus v1 cell, formula, style, dimension, and merge mutations.
+- **DOCX:** bounded document inspection and semantic guarded text replacement.
+- **PPTX:** authored-deck slide operations plus source-anchored native text and AutoShape updates.
+- **PDF:** bounded page inspection and rotate, insert, delete, reorder, crop, resize, or n-up operations.
+
+Unsupported macros, encrypted packages, embedded objects, ambiguous targets, or out-of-scope formatting must be preserved untouched or refused.
 
 New formats implement the same adapter contract. They do not require changes to an agent loop or provider integration.
 
@@ -54,3 +61,5 @@ This layer is not:
 ## Playground proof
 
 The `#/agent` playground route demonstrates capability discovery, a bounded inspection, a deterministic local operation proposal, isolated preview and diff, validation, explicit human approval, atomic commit, and output verification. No model SDK or network request is used. Its refusal mode proves that unsupported operations stop before write.
+
+Open the proofs for [#/agent?format=sheets](#/agent?format=sheets), [#/agent?format=docs](#/agent?format=docs), [#/agent?format=slides](#/agent?format=slides), or [#/agent?format=pdf](#/agent?format=pdf).

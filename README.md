@@ -61,8 +61,7 @@ Private workspace apps (not published):
 
 | App | Purpose |
 |---|---|
-| `apps/playground` | Browser engine proofs, browser-local native XLSX, DOCX, and PPTX round trips, and collaboration demos. Developer guides are `#/guides` on the same 3100 server. |
-| `apps/docs` | Guide content, copy-paste usage, and live package examples mounted by the playground |
+| `apps/playground` | Browser engine proofs, browser-local native XLSX, DOCX, and PPTX round trips, and collaboration demos. |
 | `apps/docx-page-paint-worker` | Native DOCX page-paint worker |
 
 Go modules under `go/` are surgical file writers, native extract/apply engines, validators, an optional in-process collaboration hub, and an optional HTTP server:
@@ -99,7 +98,7 @@ Run the browser playground with:
 npm run dev
 ```
 
-Open http://127.0.0.1:3100. The lightweight `#/overview` route is the default. Developer guides live on the same server at `#/guides`. Sixteen lazy-loaded proof surfaces demonstrate the twenty-six TypeScript packages; shared infrastructure packages appear inside the workflows they power instead of getting artificial standalone pages.
+Open http://127.0.0.1:3100. The lightweight `#/overview` route is the default. Sixteen lazy-loaded proof surfaces demonstrate the twenty-six TypeScript packages; shared infrastructure packages appear inside the workflows they power instead of getting artificial standalone pages.
 
 Create and edit:
 
