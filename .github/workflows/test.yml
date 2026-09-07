@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - run: npm run check:docs-api
       - name: Installed WASM tarballs in Chrome
         timeout-minutes: 10
         run: npm run test:wasm-tarball-browser

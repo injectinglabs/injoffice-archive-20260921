@@ -31,6 +31,8 @@
     "check:office-provenance": "node scripts/check-office-provenance.mjs",
     "check:dependency-integrity": "node scripts/check-dependency-integrity.mjs",
     "generate:sbom": "node scripts/check-dependency-integrity.mjs --sbom",
+    "generate:docs-api": "node scripts/generate-docs-api-reference.mjs",
+    "check:docs-api": "node scripts/generate-docs-api-reference.mjs --check",
     "test:dependency-integrity": "node --test scripts/check-dependency-integrity.test.mjs",
     "test:release-packages": "node --test scripts/release-packages.test.mjs",
     "test:declaration-specifiers": "node --test scripts/fix-declaration-specifiers.test.mjs",
