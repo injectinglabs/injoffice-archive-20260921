@@ -96,7 +96,7 @@ function ColorSchemeToggle({ scheme, onScheme }: { scheme: ColorScheme; onScheme
   )
 }
 
-function AppHeader({ sidecar, scheme, onScheme, surface }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void; surface: Surface }) {
+function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -104,9 +104,6 @@ function AppHeader({ sidecar, scheme, onScheme, surface }: { sidecar: SidecarSta
           <img className="app-logo" src="/logo.svg" alt="" width={32} height={32} />
           <span><strong>InjOffice</strong></span>
         </a>
-        <nav className="app-header-links" aria-label="Site">
-          <a href={surfaceHref('overview')} aria-current={surface === 'overview' ? 'page' : undefined}>Showcase</a>
-        </nav>
         <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
           <i aria-hidden="true" />
           {sidecar === 'checking' ? 'Checking server' : sidecar === 'connected' ? 'Browser + server ready' : 'Browser engines ready'}
@@ -356,7 +353,7 @@ export default function App() {
   return (
     <div className="app-shell ds" data-surface={surface} data-layout="univer" data-navigation="text">
       <a className="skip-link" href="#main-content">Skip to demo</a>
-      <AppHeader sidecar={sidecar} scheme={scheme} surface={surface} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
+      <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
         <ToolNavigation surface={surface} />
