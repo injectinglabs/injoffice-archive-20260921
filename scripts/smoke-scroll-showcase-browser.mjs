@@ -83,6 +83,54 @@ async function screenshot(name) {
   writeFileSync(resolve(output, `${name}.png`), Buffer.from(data, 'base64'))
 }
 
+async function assertNavigationSelection(viewport) {
+  const originalTheme = await evaluate(`document.documentElement.getAttribute('data-theme')`)
+  try {
+    for (const theme of ['light', 'dark']) {
+      await evaluate(`document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)})`)
+      const style = await evaluate(`(() => {
+        const selected = document.querySelector('.app-sidebar a[aria-current="location"]');
+        const unselected = document.querySelector('.app-sidebar a:not([aria-current])');
+        const current = getComputedStyle(selected);
+        return {
+          boxShadow: current.boxShadow,
+          borders: ['Top', 'Right', 'Bottom', 'Left'].map(side => current['border' + side + 'Width']),
+          background: current.backgroundColor,
+          unselectedBackground: getComputedStyle(unselected).backgroundColor,
+          fontWeight: Number(current.fontWeight),
+        };
+      })()`)
+      const label = `${viewport} ${theme} selected navigation`
+      assert.equal(style.boxShadow, 'none', `${label} has no inset edge highlight`)
+      assert.deepEqual(style.borders, ['0px', '0px', '0px', '0px'], `${label} has no border highlight`)
+      assert.notEqual(style.background, style.unselectedBackground, `${label} uses a distinct background`)
+      assert.notEqual(style.background, 'rgba(0, 0, 0, 0)', `${label} has a visible fill`)
+      assert.ok(style.fontWeight >= 600, `${label} emphasizes the selected label`)
+
+      // Exercise real keyboard navigation back to the selected link so that
+      // removing its selection stripe cannot silently remove its focus ring.
+      await evaluate(`document.querySelector('.app-sidebar a[aria-current="location"]').focus({ preventScroll: true })`)
+      for (const modifiers of [8, 0]) {
+        await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers })
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers })
+      }
+      assert.equal(await evaluate(`(() => {
+        const selected = document.querySelector('.app-sidebar a[aria-current="location"]');
+        const style = getComputedStyle(selected);
+        return document.activeElement === selected && selected.matches(':focus-visible') &&
+          parseFloat(style.outlineWidth) >= 2 && style.outlineStyle !== 'none' &&
+          style.outlineColor !== 'rgba(0, 0, 0, 0)';
+      })()`), true, `${label} retains a visible keyboard focus outline`)
+      await screenshot(`scroll-selection-${viewport}-${theme}-keyboard`)
+      await evaluate(`document.activeElement.blur()`)
+    }
+  } finally {
+    await evaluate(originalTheme === null
+      ? `document.documentElement.removeAttribute('data-theme')`
+      : `document.documentElement.setAttribute('data-theme', ${JSON.stringify(originalTheme)})`)
+  }
+}
+
 const active = (key, hash = href(key)) => `location.hash === ${JSON.stringify(hash)} && document.querySelector('.app-sidebar a[aria-current="location"]')?.getAttribute('href') === ${JSON.stringify(href(key))}`
 const ready = (key) => `document.querySelector(${JSON.stringify(section(key))})?.dataset.scrollState === 'ready'`
 const agentState = (key, state) => `document.querySelector(${JSON.stringify(`${section(key)} .agent-demo__status`)})?.dataset.state === ${JSON.stringify(state)}${state === 'ready' ? ` && Array.from(document.querySelector(${JSON.stringify(section(key))}).querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)` : ''}`
@@ -142,6 +190,7 @@ try {
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-scroll-section]')).every(element => element.querySelector('h1,h2'))`), true, 'every section has a discoverable heading before its editor loads')
   assert.equal(await evaluate(`document.querySelectorAll('[data-scroll-state="ready"]').length < ${keys.length - 1}`), true, 'initial overview does not eagerly initialize every editor')
   await until(active('overview'), 'overview is the current sidebar location')
+  await assertNavigationSelection('desktop')
   await screenshot('scroll-overview-desktop')
 
   if (process.argv.includes('--fault')) {
@@ -266,11 +315,55 @@ try {
     return prompts.length >= 2 && new Set(prompts.map(input => input.id)).size === prompts.length && prompts.every(input => Array.from(input.labels ?? []).some(label => label.closest('[data-scroll-section]') === input.closest('[data-scroll-section]')));
   })()`), true, 'mounted agents have unique prompt ids with labels belonging to their own section')
 
+  // Reproduce a preceding lazy editor growing after an explicit destination has
+  // already been reached. Disable native scroll anchoring just for this fixture
+  // so Chromium cannot mask the application's anchor-preservation behavior.
+  await anchor('agent-sheets')
+  await until(agentState('agent-sheets', 'ready'), 'preceding agent initialized for layout regression', 90_000)
+  const layoutFixture = await evaluate(`({
+    documentStyle: document.documentElement.getAttribute('style'),
+    precedingStyle: document.querySelector('${section('agent-sheets')}').getAttribute('style'),
+    precedingPadding: parseFloat(getComputedStyle(document.querySelector('${section('agent-sheets')}')).paddingBottom) || 0,
+  })`)
+  try {
+    await evaluate(`document.documentElement.style.overflowAnchor = 'none'`)
+    await anchor('agent-docs')
+    const docsAligned = `(() => {
+      const element = document.querySelector('${section('agent-docs')}');
+      return Math.abs(element.getBoundingClientRect().top - parseFloat(getComputedStyle(element).scrollMarginTop)) < 4;
+    })()`
+    await until(docsAligned, 'warm DOCX anchor reaches its heading before delayed growth')
+    await evaluate(`new Promise(resolve => setTimeout(() => {
+      document.querySelector('${section('agent-sheets')}').style.paddingBottom = '${layoutFixture.precedingPadding + 400}px';
+      resolve();
+    }, 50))`)
+    await until(`${docsAligned} && ${active('agent-docs')}`, 'delayed preceding growth preserves the explicit DOCX destination')
+
+    await wheelTo('agent-slides')
+    await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
+    const positionAfterWheel = await evaluate('scrollY')
+    await evaluate(`document.querySelector('${section('agent-sheets')}').style.paddingBottom = '${layoutFixture.precedingPadding + 800}px'`)
+    await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))`)
+    assert.ok(Math.abs(await evaluate('scrollY') - positionAfterWheel) < 4, 'native wheel releases the destination pin before another layout change')
+    assert.equal(await evaluate(docsAligned), false, 'later growth does not snap the user back to the previous DOCX destination')
+  } finally {
+    await evaluate(`(() => {
+      for (const [element, style] of [
+        [document.documentElement, ${JSON.stringify(layoutFixture.documentStyle)}],
+        [document.querySelector('${section('agent-sheets')}'), ${JSON.stringify(layoutFixture.precedingStyle)}],
+      ]) {
+        if (style === null) element.removeAttribute('style');
+        else element.setAttribute('style', style);
+      }
+    })()`)
+  }
+
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
   await anchor('agent-pdf')
   assert.equal(await evaluate(`document.documentElement.scrollWidth <= 390`), true, 'mobile document has no horizontal overflow')
   assert.equal(await evaluate(`(() => { const navigator = document.querySelector('.app-sidebar'); const bounds = navigator.getBoundingClientRect(); return bounds.top >= -1 && bounds.top < 200 && bounds.bottom > 0 && bounds.bottom < innerHeight; })()`), true, 'mobile section navigator stays in the viewport')
   assert.equal(await evaluate(`(() => { const link = document.querySelector('.app-sidebar a[aria-current="location"]'); const bounds = link.getBoundingClientRect(); return bounds.left >= -1 && bounds.right <= innerWidth + 1 && bounds.top >= -1 && bounds.bottom <= innerHeight; })()`), true, 'the current mobile section link is visible')
+  await assertNavigationSelection('mobile')
   await screenshot('scroll-navigation-mobile')
   await anchor('charts')
   assert.equal(await evaluate(`document.documentElement.scrollWidth <= 390`), true, 'later mounted editor does not overflow the mobile document')

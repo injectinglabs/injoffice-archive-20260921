@@ -2446,10 +2446,10 @@ body {
 }
 
 .app-shell[data-navigation="scroll"] .tool-nav a[aria-current="location"] {
-  background: var(--action-soft);
-  color: var(--action-ink);
+  background: var(--live-soft);
+  color: var(--live);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--action);
+  box-shadow: none;
 }
 
 .app-shell[data-navigation="scroll"] .tool-nav a:focus-visible {
@@ -2521,10 +2521,6 @@ body {
     min-height: 36px;
     align-items: center;
     white-space: nowrap;
-  }
-
-  .app-shell[data-navigation="scroll"] .tool-nav a[aria-current="location"] {
-    box-shadow: inset 0 -2px 0 var(--action);
   }
 
   .app-shell[data-navigation="scroll"] .app-main {

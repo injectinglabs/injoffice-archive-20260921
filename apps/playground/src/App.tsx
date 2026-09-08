@@ -341,6 +341,7 @@ export default function App() {
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
   const sectionHashes = useRef(new Map<string, string>())
   const navigating = useRef(false)
+  const anchorTarget = useRef<string | null>(null)
   const handledHash = useRef(location.hash || surfaceHref('overview'))
 
   useEffect(() => {
@@ -359,6 +360,7 @@ export default function App() {
     let frame = 0
     const navigate = (focus = true) => {
       const section = sectionForHash(location.hash)
+      anchorTarget.current = section.key
       handledHash.current = location.hash || section.href
       sectionHashes.current.set(section.key, location.hash || section.href)
       setRequestedKey(section.key)
@@ -404,7 +406,18 @@ export default function App() {
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
     window.addEventListener('scroll', schedule, { passive: true })
     window.addEventListener('resize', schedule)
-    const observer = new ResizeObserver(schedule)
+    // Lazy sections above a clicked destination can grow after its first
+    // scroll. Preserve that destination until the user takes over scrolling.
+    const onLayout = () => {
+      if (anchorTarget.current && document.body.style.overflow !== 'hidden') {
+        document.getElementById(`demo-${anchorTarget.current}`)?.scrollIntoView({ block: 'start', behavior: 'instant' })
+      }
+      schedule()
+    }
+    const releaseAnchor = () => { anchorTarget.current = null }
+    const intentEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
+    intentEvents.forEach(event => window.addEventListener(event, releaseAnchor, { passive: true }))
+    const observer = new ResizeObserver(onLayout)
     const main = document.querySelector('.app-main')
     if (main) observer.observe(main)
     return () => {
@@ -412,6 +425,7 @@ export default function App() {
       window.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
       observer.disconnect()
+      intentEvents.forEach(event => window.removeEventListener(event, releaseAnchor))
     }
   }, [])
 

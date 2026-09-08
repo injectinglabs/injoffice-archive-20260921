@@ -9,6 +9,16 @@ const main = readFileSync(resolve(source, 'main.tsx'), 'utf8')
 const app = readFileSync(resolve(source, 'App.tsx'), 'utf8')
 
 describe('playground workbench design system', () => {
+  it('uses a filled active navigation item without edge stripes on desktop or mobile', () => {
+    const selections = [...css.matchAll(/\.app-shell\[data-navigation="scroll"\] \.tool-nav a\[aria-current="location"\] \{([^}]+)\}/g)]
+    expect(selections).toHaveLength(1)
+    expect(selections[0]?.[1]).toContain('background: var(--live-soft)')
+    expect(selections[0]?.[1]).toContain('color: var(--live)')
+    expect(selections[0]?.[1]).toContain('font-weight: 600')
+    expect(selections[0]?.[1]).toContain('box-shadow: none')
+    expect(css).toContain('.tool-nav a:focus-visible')
+  })
+
   it('loads one app-level override after the legacy proof surface styles', () => {
     expect(main.indexOf("'./workbench.css'")).toBeGreaterThan(main.indexOf("'./studio.css'"))
     expect(existsSync(resolve(source, 'panel.css'))).toBe(false)
