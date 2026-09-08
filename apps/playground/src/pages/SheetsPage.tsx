@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DsSegment } from '../design-system/primitives'
 import '../design-system/live-create-edit.css'
 import UniverEditor from '../UniverEditor'
-import { parseSheetsView, type SheetsView } from '../route'
+import { parseSheetsView, parseSurface, type SheetsView } from '../route'
 import NativeRoundTripPage from './NativeRoundTripPage'
 import SheetsToolsPage from './SheetsToolsPage'
 
@@ -12,10 +12,13 @@ const SHEETS_VIEWS: readonly { id: SheetsView; label: string }[] = [
   { id: 'tools', label: 'Package tools' },
 ]
 
-export default function SheetsPage() {
-  const [view, setView] = useState<SheetsView>(() => parseSheetsView())
+export default function SheetsPage({ initialHash }: { initialHash?: string } = {}) {
+  const [view, setView] = useState<SheetsView>(() => parseSheetsView(initialHash))
   useEffect(() => {
-    const syncView = () => setView(parseSheetsView())
+    // Retained scroll sections must not reset when another section owns the URL.
+    const syncView = () => {
+      if (parseSurface() === 'sheets') setView(parseSheetsView())
+    }
     window.addEventListener('hashchange', syncView)
     return () => window.removeEventListener('hashchange', syncView)
   }, [])

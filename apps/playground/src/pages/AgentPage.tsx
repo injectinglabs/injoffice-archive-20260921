@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { AgentToolCall, AgentToolCallResult, JsonObject } from '@injoffice/agent-tools'
 import {
   createDemoSessionInput,
@@ -20,7 +20,7 @@ import { requestMockAgentProposal } from '../mockAgentTransport'
 import { createBrowserXlsxRoundTripRuntime } from '../xlsxRoundTripRuntime'
 import { createBrowserDocxRoundTripRuntime } from '../docxRoundTripRuntime'
 import { createBrowserPptxRoundTripRuntime } from '../pptxRoundTripRuntime'
-import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, type AgentTool } from '../route'
+import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, parseSurface, type AgentTool } from '../route'
 import { DsButton, DsCallout, DsChip, DsSegment } from '../design-system/primitives'
 import '../design-system/live-tools.css'
 import './AgentWorkflow.css'
@@ -124,18 +124,25 @@ function ArtifactView({ format, content, highlighted }: { format: AgentDemoForma
   return <PdfArtifact content={content} highlighted={highlighted} />
 }
 
-export default function AgentPage() {
-  const [, setRouteTick] = useState(0)
-  const tool = parseAgentTool()
+export default function AgentPage({ fixedTool }: { fixedTool?: AgentTool } = {}) {
+  const [routedTool, setRoutedTool] = useState<AgentTool>(() => parseAgentTool())
   useEffect(() => {
-    const syncTool = () => setRouteTick((tick) => tick + 1)
+    if (fixedTool !== undefined) return
+    const syncTool = () => {
+      if (parseSurface() === 'agent') setRoutedTool(parseAgentTool())
+    }
+    syncTool()
     window.addEventListener('hashchange', syncTool)
     return () => window.removeEventListener('hashchange', syncTool)
-  }, [])
-  return <AgentWorkflow key={tool} tool={tool} />
+  }, [fixedTool])
+  const tool = fixedTool ?? routedTool
+  return <AgentWorkflow key={tool} tool={tool} fixedTool={fixedTool !== undefined} />
 }
 
-function AgentWorkflow({ tool }: { tool: AgentTool }) {
+function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolean }) {
+  const instanceId = useId()
+  const promptId = `agent-prompt-${instanceId}`
+  const artifactTitleId = `agent-artifact-title-${instanceId}`
   const format: AgentDemoFormat = agentFormatFromTool(tool)
   const [mode, setMode] = useState<AgentDemoMode>('safe')
   const [state, setState] = useState<WorkflowState>('ready')
@@ -463,12 +470,12 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     <div className="ds">
     <section className="tool-page" data-demo-surface="agent" data-agent-tool={tool} aria-label={toolMeta.title}>
       <div className="agent-demo__toolbar workbench-toolbar ds-workstrip" role="toolbar" aria-label="Agent workflow controls">
-        <DsSegment
+        {!fixedTool && <DsSegment
           label="Office tool"
           value={tool}
           onChange={(id) => selectTool(id as AgentTool)}
           options={AGENT_TOOLS.map((item) => ({ id: item.tool, label: item.label }))}
-        />
+        />}
         <DsSegment
           label="Proposal type"
           value={mode}
@@ -483,8 +490,8 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       </div>
 
       <div className="agent-request">
-        <label htmlFor="agent-prompt">Agent request</label>
-        <textarea id="agent-prompt" data-agent-request maxLength={2000} readOnly={mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
+        <label htmlFor={promptId}>Agent request</label>
+        <textarea id={promptId} data-agent-request maxLength={2000} readOnly={mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
         <small data-agent-boundary>{boundary}</small>
         {mode === 'safe' && <>
           <label className="agent-proposal-source">Proposal source <select data-agent-proposal-source value={proposalSource} disabled={state !== 'ready' || safetyBusy} onChange={(event) => { reset(); setProposalSource(event.target.value as 'mock' | 'local' | 'live') }}><option value="mock">Built-in mock agent (no LLM)</option><option value="local">Local rule-based proposer</option><option value="live">Live agent via configured host</option></select></label>
@@ -519,9 +526,9 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       </ol>
 
       <div className="agent-demo__workspace ds-split">
-        <section className="agent-demo__document ds-split-main" aria-labelledby="agent-artifact-title">
+        <section className="agent-demo__document ds-split-main" aria-labelledby={artifactTitleId}>
           <header>
-            <div><span>{verification?.ok ? 'Reopened output projection' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id="agent-artifact-title">{scenario.artifact.name}</h2></div>
+            <div><span>{verification?.ok ? 'Reopened output projection' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id={artifactTitleId}>{scenario.artifact.name}</h2></div>
             <dl className="ds-proof">
               <div><dt>Artifact</dt><dd>{scenario.artifact.artifactId}</dd></div>
               <div><dt>Revision</dt><dd>{receipt?.revision ?? inspection?.revision ?? scenario.artifact.revision}</dd></div>

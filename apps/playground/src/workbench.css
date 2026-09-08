@@ -2376,6 +2376,176 @@ body {
   .showcase-item__meta b { justify-self: end; margin-top: 0; }
 }
 
+/* Continuous showcase: one document, with each workspace retaining its own
+ * reserved canvas height. Keep standalone route geometry unchanged. */
+.app-shell[data-navigation="scroll"] .app-main {
+  gap: 64px;
+}
+
+.app-shell[data-navigation="scroll"] .demo-section {
+  min-width: 0;
+  scroll-margin-top: 72px;
+}
+
+.app-shell[data-navigation="scroll"] .demo-section + .demo-section {
+  padding-top: 32px;
+  border-top: 1px solid var(--rule);
+}
+
+.app-shell[data-navigation="scroll"] .demo-section--overview {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* Agent proposals are a reading-and-approval workflow, not an editor canvas.
+ * Let their content extend the document instead of nesting vertical scroll
+ * regions. Unloaded previews keep the standard reserved workspace height. */
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"][data-section-loaded="true"] .demo-preview {
+  height: auto;
+  overflow: visible;
+}
+
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .demo-stage,
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .demo-stage > .ds,
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] [data-demo-surface="agent"] {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  flex: 1 0 auto;
+  overflow: visible;
+}
+
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-demo__workspace {
+  height: auto;
+  min-height: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-demo__inspector,
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-artifact {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app-shell[data-navigation="scroll"] .demo-title-line h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--type-display);
+  font-size: clamp(28px, 3vw, 36px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.04em;
+  overflow-wrap: anywhere;
+}
+
+.app-shell[data-navigation="scroll"] .demo-title-line h2:focus {
+  outline: none;
+}
+
+.app-shell[data-navigation="scroll"] .tool-nav a[aria-current="location"] {
+  background: var(--action-soft);
+  color: var(--action-ink);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--action);
+}
+
+.app-shell[data-navigation="scroll"] .tool-nav a:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: -2px;
+}
+
+.demo-section-placeholder,
+.demo-section-error {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background: var(--workspace);
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.demo-section-placeholder p,
+.demo-section-error p {
+  max-width: 46ch;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.demo-section-placeholder button,
+.demo-section-error button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--control-ink);
+  font: 500 14px var(--type-body);
+  cursor: pointer;
+}
+
+.demo-section-placeholder button:hover,
+.demo-section-error button:hover {
+  border-color: var(--control-line-hover);
+  background: var(--control-hover);
+}
+
+.demo-section-placeholder button:focus-visible,
+.demo-section-error button:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .app-shell[data-navigation="scroll"] .app-sidebar {
+    position: sticky;
+    z-index: 30;
+    top: 48px;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--paper);
+    overscroll-behavior-x: contain;
+  }
+
+  .app-shell[data-navigation="scroll"] .tool-nav a {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .app-shell[data-navigation="scroll"] .tool-nav a[aria-current="location"] {
+    box-shadow: inset 0 -2px 0 var(--action);
+  }
+
+  .app-shell[data-navigation="scroll"] .app-main {
+    gap: 40px;
+    width: 100%;
+  }
+
+  .app-shell[data-navigation="scroll"] .demo-section {
+    padding-inline: 0;
+    scroll-margin-top: 116px;
+  }
+
+  .app-shell[data-navigation="scroll"] .demo-section + .demo-section {
+    padding-top: 24px;
+  }
+
+  .app-shell[data-navigation="scroll"] .demo-title-line h2 {
+    flex: 1 1 auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell :where(button, input, select, textarea) { transition: none; }
   .route-progress { transition: none; }

@@ -2,7 +2,11 @@
 
 Run `npm run dev` from the repository root (Node 22 or newer). The playground normally starts on port 3100.
 
-The landing page searches the registered examples by task, file type, package, and recipe language. Every example has a focused work surface and a Source / proof drawer containing a manual checklist, expected evidence, exact repository links, related examples, and lazily loaded demo source. Closing the drawer retains checklist progress on the current surface; the checklist does not perform or certify engine operations.
+The showcase is one continuous page: the overview and nineteen live examples follow the same order as the sidebar. Scroll to explore, or use the sidebar and searchable catalogue to jump to a section. The highlighted sidebar link follows your position. Passive scrolling updates the shareable URL without adding history entries or moving keyboard focus; explicit links support Back/Forward and direct deep links.
+
+Each live demo loads near the viewport and stays mounted after loading, so scrolling away preserves its edits and pending approvals. The four AI formats have independent sessions. AI workflows use the document's vertical scroll; canvas editors and long code traces retain their own necessary scrolling. Reset affects only its section; refreshing the page discards local demo state. A failed lazy download is isolated to its section, with retry and an explicitly confirmed reload fallback for browser-cached failures.
+
+Every example has a Guide & source drawer containing a manual checklist, expected evidence, exact repository links, related examples, and lazily loaded demo source. Closing the drawer retains checklist progress on the current surface; the checklist does not perform or certify engine operations.
 
 The spreadsheet modes have shareable links: `#/sheets?view=editor`, `#/sheets?view=native`, and `#/sheets?view=tools`. Reset demo restores the current work surface's initial state and discards edits in that surface.
 
@@ -43,6 +47,7 @@ Reload sample discards local session state and reloads the bundled source. For p
 - `SHOWCASE_URL=http://127.0.0.1:3100/ npm run test:showcase-browser` with the playground running
 - `npm run test:showcase-browser -- --built` after the Office browser smoke build above; starts and stops its own ephemeral server at `/injoffice-smoke/`, without touching an existing demo server
 - `npm run test:showcase-browser -- --dev` after building workspace packages; starts and stops an isolated development server on an ephemeral IPv4 port, omitting the playground's fixed-port IPv6 listener so neither side of port 3100 is touched
+- `npm run test:scroll-showcase-browser -- --built` (or `--dev`) checks continuous scrolling, lazy loading, sidebar tracking, history, focus, retained edits/approvals, and mobile navigation
 
 Development smoke also exercises the optional live-proposal bridge against its own loopback-only mock, never a real provider. It temporarily replaces any configured proposal URL and removes any configured token, then restores both environment values during cleanup without printing them. The test proves context discovery sends no upstream request, consent is required before sharing the exact disclosed context, provider-supplied approval flags cannot authorize a write, and separate human approval produces a verified XLSX. Built and existing-server smoke never trigger live-provider requests.
 

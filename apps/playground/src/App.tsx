@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type MouseEvent, type RefObject } from 'react'
+import { Component, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type MouseEvent, type ReactNode, type RefObject } from 'react'
 import {
   applyColorScheme,
   currentColorScheme,
@@ -9,11 +9,11 @@ import {
 } from './colorScheme'
 import GuidedRecipe from './components/GuidedRecipe'
 import DemoSource from './components/DemoSource'
-import { DEMO_BY_SURFACE, DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
+import { DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
 import OverviewPage from './pages/OverviewPage'
 import { agentHref, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
-import { surfaceSectionId } from './scrollSpy'
-import { createRouteLoader } from './routeLoader'
+import { SCROLL_SECTIONS, sectionForHash, activeSectionKey, type ScrollSection } from './scrollSections'
+import type { AgentTool } from './route'
 
 type SidecarState = 'checking' | 'connected' | 'offline'
 
@@ -27,11 +27,15 @@ function ToolNavigation({ surface, hash }: { surface: Surface; hash: string }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (isModifiedClick(event)) return
     const href = event.currentTarget.getAttribute('href')
-    if (href && location.hash === href) event.preventDefault()
+    if (href && location.hash === href) {
+      event.preventDefault()
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    }
   }
   const agentTool = surface === 'agent' ? parseAgentTool(hash) : undefined
   return (
     <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
+      <a className="tool-nav-home" href={surfaceHref('overview')} aria-current={surface === 'overview' ? 'location' : undefined} onClick={onClick}>Overview</a>
       {DEMO_GROUPS.map((group) => (
         <section
           className="tool-nav-group"
@@ -47,7 +51,7 @@ function ToolNavigation({ surface, hash }: { surface: Surface; hash: string }) {
                   key={item.tool}
                   href={agentHref(item.tool)}
                   aria-label={`AI change sets, ${item.label}`}
-                  aria-current={agentTool === item.tool ? 'page' : undefined}
+                  aria-current={agentTool === item.tool ? 'location' : undefined}
                   onPointerEnter={warmRoute}
                   onPointerDown={warmRoute}
                   onFocus={warmRoute}
@@ -61,7 +65,7 @@ function ToolNavigation({ surface, hash }: { surface: Surface; hash: string }) {
               <a
                 key={demo.surface}
                 href={surfaceHref(demo.surface)}
-                aria-current={surface === demo.surface ? 'page' : undefined}
+                aria-current={surface === demo.surface ? 'location' : undefined}
                 onPointerEnter={warmRoute}
                 onPointerDown={warmRoute}
                 onFocus={warmRoute}
@@ -203,27 +207,59 @@ function DemoSection({
   sidecar,
   proofOpen,
   onOpenProof,
-  proofButtonRef,
-  hash,
+  section,
+  requested,
+  initialHash,
 }: {
   demo: DemoDefinition
   sidecar: SidecarState
   proofOpen: boolean
-  onOpenProof: () => void
-  proofButtonRef: RefObject<HTMLButtonElement | null>
-  hash: string
+  onOpenProof: (button: HTMLButtonElement) => void
+  section: ScrollSection
+  requested: boolean
+  initialHash: string
 }) {
   const [revision, setRevision] = useState(0)
-  const DemoComponent = demo.component
-  const agentTool = demo.surface === 'agent' ? AGENT_TOOLS.find((item) => item.tool === parseAgentTool(hash)) : undefined
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const sectionRef = useRef<HTMLElement>(null)
+  const attempt = useRef(0)
+  const loading = useRef(false)
+  const load = useCallback(() => {
+    if (loading.current) return
+    loading.current = true
+    const id = ++attempt.current
+    setLoadState('loading')
+    void preloadDemo(demo.surface).then(() => {
+      if (attempt.current === id) setLoadState('ready')
+    }, () => {
+      if (attempt.current === id) { loading.current = false; setLoadState('error') }
+    })
+  }, [demo.surface])
+  useEffect(() => () => { attempt.current++; loading.current = false }, [])
+  useEffect(() => { if (requested) load() }, [requested, load])
+  useEffect(() => {
+    const element = sectionRef.current
+    if (!element || loadState !== 'idle') return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) load()
+    }, { rootMargin: '160px 0px' })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [load, loadState])
+  const DemoComponent = demo.component as ComponentType<{ fixedTool?: AgentTool; initialHash?: string }>
+  const agentTool = section.tool ? AGENT_TOOLS.find((item) => item.tool === section.tool) : undefined
   const title = agentTool?.title ?? demo.title
   const description = agentTool?.description ?? demo.description
   return (
     <article
       className="demo-section"
-      id={surfaceSectionId(demo.surface)}
+      ref={sectionRef}
+      id={`demo-${section.key}`}
+      data-scroll-section={section.key}
+      data-scroll-state={loadState}
+      data-section-loaded={loadState === 'ready'}
       data-accent={demo.accent}
-      aria-labelledby={`demo-title-${demo.surface}`}
+      aria-labelledby={`demo-title-${section.key}`}
     >
       <header className={`page-heading demo-context-header demo-page-header page-heading--${demo.accent}`}>
         <div className="page-heading-copy">
@@ -236,7 +272,7 @@ function DemoSection({
             <span className="demo-chip demo-chip--pkg">{demo.packageName}</span>
           </div>
           <div className="demo-title-line">
-            <h1 id={`demo-title-${demo.surface}`} tabIndex={-1}>{title}</h1>
+            <h2 id={`demo-title-${section.key}`} tabIndex={-1}>{title}</h2>
           </div>
           <p>{description}</p>
         </div>
@@ -249,13 +285,12 @@ function DemoSection({
             Reset
           </button>
           <button
-            ref={proofButtonRef}
             className="source-proof-trigger"
             type="button"
             aria-haspopup="dialog"
             aria-expanded={proofOpen}
             aria-controls="source-proof-drawer"
-            onClick={onOpenProof}
+            onClick={event => onOpenProof(event.currentTarget)}
           >
             Guide &amp; source
           </button>
@@ -268,69 +303,117 @@ function DemoSection({
           <RuntimePill demo={demo} sidecar={sidecar} />
         </header>
         <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`}>
-          <DemoComponent key={`${demo.surface}:${agentTool?.tool ?? 'page'}:${revision}`} />
+          {loadState === 'ready' ? <SectionBoundary key={revision} onRetry={() => setRevision(value => value + 1)}>
+            <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
+              <DemoComponent fixedTool={section.tool} initialHash={initialHash} />
+            </Suspense>
+          </SectionBoundary> : <div className={loadState === 'error' ? 'demo-section-error' : 'demo-section-placeholder'} role={loadState === 'error' ? 'alert' : undefined}>
+            <p>{loadState === 'error' ? `Could not load ${title}. Other demos are still available.` : loadState === 'loading' ? `Opening ${title}…` : 'This live demo loads as you reach it. Your changes stay here while you explore other sections.'}</p>
+            {loadState !== 'loading' && <button type="button" onClick={load}>{loadState === 'error' ? 'Retry' : 'Load demo'}</button>}
+            {loadState === 'error' && <>
+              <p>If retrying does not help, reload to fetch a fresh copy of the demo.</p>
+              <button type="button" onClick={() => { if (window.confirm('Reload this page? Unsaved demo changes will be lost.')) location.reload() }}>Reload page</button>
+            </>}
+          </div>}
         </div>
       </section>
     </article>
   )
 }
 
+class SectionBoundary extends Component<{ children: ReactNode; onRetry: () => void }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    return this.state.failed ? <div className="demo-section-error" role="alert"><p>This demo could not start. Other sections are still available.</p><button type="button" onClick={this.props.onRetry}>Retry</button></div> : this.props.children
+  }
+}
+
 export default function App() {
-  // Start with a usable catalogue, including when a deep-link chunk is offline.
-  const [route, setRoute] = useState({ surface: 'overview' as Surface, hash: surfaceHref('overview') })
+  const [route, setRoute] = useState(() => ({ surface: parseSurface(), hash: location.hash || surfaceHref('overview') }))
   const { surface, hash } = route
   const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
+  const [proofSection, setProofSection] = useState<ScrollSection | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [pendingRoute, setPendingRoute] = useState<typeof route | null>(null)
-  const [routeError, setRouteError] = useState<typeof route | null>(null)
-  const [isTransitionPending, startTransition] = useTransition()
-  const isRoutePending = pendingRoute !== null || isTransitionPending
+  const [requestedKey, setRequestedKey] = useState(() => sectionForHash(location.hash).key)
   const detailsButtonRef = useRef<HTMLButtonElement>(null)
-  const previousHashRef = useRef(hash)
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
-  const demo = useMemo(() => surface === 'overview' ? undefined : DEMO_BY_SURFACE.get(surface), [surface])
-  const requestedSurface = pendingRoute?.surface ?? surface
-  const requestedTitle = requestedSurface === 'overview' ? 'Overview' : DEMO_BY_SURFACE.get(requestedSurface)?.title
-  const drawerKey = surface === 'agent' ? `agent:${parseAgentTool(hash)}` : surface
-  const routeLoader = useMemo(() => createRouteLoader<typeof route>({
-    preload: (next) => preloadDemo(next.surface),
-    pending: (next) => {
-      setDetailsOpen(false)
-      setRouteError(null)
-      setPendingRoute(next)
-    },
-    ready: (next) => {
-      setPendingRoute(null)
-      // The shared Suspense boundary retains the prior editor while React
-      // resolves the warmed lazy component; no blank intermediate stage.
-      startTransition(() => setRoute(next))
-    },
-    failed: (next) => {
-      setPendingRoute(null)
-      setRouteError(next)
-    },
-  }), [])
+  const sectionHashes = useRef(new Map<string, string>())
+  const navigating = useRef(false)
+  const handledHash = useRef(location.hash || surfaceHref('overview'))
 
   useEffect(() => {
-    if (previousHashRef.current === hash) return
-    previousHashRef.current = hash
-    document.querySelector<HTMLElement>('.tool-nav a[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
-    document.querySelector<HTMLElement>(`#${surfaceSectionId(surface)} h1, #showcase-title`)?.focus({ preventScroll: true })
+    // Scroll the rail only; scrollIntoView here would move the document too.
+    const link = document.querySelector<HTMLElement>('.tool-nav a[aria-current="location"]')
+    const rail = document.querySelector<HTMLElement>('.app-sidebar')
+    if (!link || !rail) return
+    const item = link.getBoundingClientRect(), bounds = rail.getBoundingClientRect()
+    if (item.top < bounds.top) rail.scrollTop += item.top - bounds.top
+    else if (item.bottom > bounds.bottom) rail.scrollTop += item.bottom - bounds.bottom
+    if (item.left < bounds.left) rail.scrollLeft += item.left - bounds.left
+    else if (item.right > bounds.right) rail.scrollLeft += item.right - bounds.right
   }, [surface, hash])
 
   useEffect(() => {
-    const sync = () => {
-      void routeLoader.load({ surface: parseSurface(), hash: location.hash })
+    let frame = 0
+    const navigate = (focus = true) => {
+      const section = sectionForHash(location.hash)
+      handledHash.current = location.hash || section.href
+      sectionHashes.current.set(section.key, location.hash || section.href)
+      setRequestedKey(section.key)
+      setRoute({ surface: section.surface, hash: location.hash || section.href })
+      setDetailsOpen(false)
+      navigating.current = true
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const element = document.getElementById(`demo-${section.key}`)
+        element?.scrollIntoView({ block: 'start', behavior: 'instant' })
+        if (focus) element?.querySelector<HTMLElement>('h1, h2')?.focus({ preventScroll: true })
+        navigating.current = false
+      })
     }
+    const sync = () => navigate()
     window.addEventListener('hashchange', sync)
-    if (!location.hash) location.hash = surfaceHref('overview')
-    sync()
+    if (!location.hash) history.replaceState(history.state, '', surfaceHref('overview'))
+    navigate(false)
     return () => {
       window.removeEventListener('hashchange', sync)
-      routeLoader.cancel()
+      cancelAnimationFrame(frame)
     }
-  }, [routeLoader])
+  }, [])
+
+  useEffect(() => {
+    let frame = 0
+    const update = () => {
+      frame = 0
+      // A new hash can precede its queued hashchange event. Never let a stale
+      // scroll/resize frame overwrite that explicit navigation intent.
+      if (navigating.current || location.hash !== handledHash.current || document.body.style.overflow === 'hidden') return
+      const header = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 48
+      const rail = document.querySelector('.app-sidebar')?.getBoundingClientRect()
+      const top = window.innerWidth <= 760 ? Math.max(header, rail?.bottom ?? 0) : header
+      const key = activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32)
+      const section = SCROLL_SECTIONS.find(item => item.key === key)
+      if (!section) return
+      const nextHash = sectionHashes.current.get(section.key) ?? section.href
+      if (location.hash !== nextHash) history.replaceState(history.state, '', nextHash)
+      handledHash.current = nextHash
+      setRoute(previous => previous.hash === nextHash ? previous : { surface: section.surface, hash: nextHash })
+    }
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
+    window.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    const observer = new ResizeObserver(schedule)
+    const main = document.querySelector('.app-main')
+    if (main) observer.observe(main)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      observer.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     applyColorScheme(scheme)
@@ -365,38 +448,31 @@ export default function App() {
   }, [surface])
 
   return (
-    <div className="app-shell ds" data-surface={surface} data-layout="univer" data-navigation="text">
-      <a className="skip-link" href="#main-content">Skip to demo</a>
+    <div className="app-shell ds" data-surface={surface} data-layout="univer" data-navigation="scroll">
+      <a className="skip-link" href="#main-content" onClick={event => {
+        event.preventDefault()
+        document.getElementById('main-content')?.focus({ preventScroll: true })
+      }}>Skip to demo</a>
       <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
         <ToolNavigation surface={surface} hash={hash} />
       </aside>
-      <main className="app-main" id="main-content" data-workbench-surface={surface} aria-busy={isRoutePending}>
-        <div className="route-progress" data-active={isRoutePending ? 'true' : undefined} aria-hidden="true"><i /></div>
-        <span className="visually-hidden" role="status" aria-live="polite">
-          {isRoutePending && requestedTitle ? `Opening ${requestedTitle}…` : ''}
-        </span>
-        {routeError ? <div className="route-error" role="alert">
-          <p>Could not open {routeError.surface === 'overview' ? 'Overview' : DEMO_BY_SURFACE.get(routeError.surface)?.title}. Your current demo is still available. Check your connection and retry; if the demo was just updated, reload this page.</p>
-          <button type="button" onClick={() => { void routeLoader.load(routeError) }}>Retry</button>
-          <a href={surfaceHref('overview')}>Back to showcase</a>
-        </div> : null}
-        <Suspense fallback={<div className="demo-loading" role="status">Opening demo…</div>}>
-        {surface === 'overview' || !demo ? (
+      <main className="app-main" id="main-content" tabIndex={-1} data-workbench-surface={surface} aria-busy={false}>
+        <section className="demo-section demo-section--overview" id="demo-overview" data-scroll-section="overview" data-scroll-state="ready" aria-labelledby="showcase-title">
           <OverviewPage sidecar={sidecar} />
-        ) : (
-          <DemoSection
-            demo={demo}
+        </section>
+        {SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection
+            key={section.key}
+            section={section}
+            demo={section.demo!}
             sidecar={sidecar}
-            proofOpen={detailsOpen}
-            onOpenProof={() => setDetailsOpen(true)}
-            proofButtonRef={detailsButtonRef}
-            hash={hash}
-          />
-        )}
-        </Suspense>
-        {demo ? <SourceProofDrawer key={drawerKey} demo={demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
+            requested={requestedKey === section.key}
+            initialHash={sectionHashes.current.get(section.key) ?? section.href}
+            proofOpen={detailsOpen && proofSection?.key === section.key}
+            onOpenProof={button => { detailsButtonRef.current = button; setProofSection(section); setDetailsOpen(true) }}
+          />)}
+        {proofSection?.demo ? <SourceProofDrawer key={proofSection.key} demo={proofSection.demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
       </main>
       </div>
     </div>

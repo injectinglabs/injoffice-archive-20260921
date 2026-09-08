@@ -12,6 +12,7 @@ mkdirSync(output, { recursive: true })
 let chrome, socket, staticServer
 let proposalMock, restoreProposalEnv
 let sequence = 0
+let scopeKey = 'overview'
 const pending = new Map()
 const errors = []
 const heldRequests = []
@@ -45,7 +46,18 @@ function send(method, params = {}) {
   })
 }
 async function evaluate(expression) {
-  const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+  // Multiple editors now remain mounted. Every editor assertion and action is
+  // scoped to the section selected by this test, never the first agent in DOM.
+  // Shell, catalogue, and the one shared source drawer remain document-wide.
+  const globalSelectors = ['.app-', '.scheme-toggle', '.showcase-', '#showcase-', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
+  const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'testQueryAll(').replaceAll('document.querySelector(', 'testQuery(')
+  const result = await send('Runtime.evaluate', { expression: `{
+    const smokeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${scopeKey}"]`)});
+    const smokeRoot = selector => ${JSON.stringify(globalSelectors)}.some(prefix => selector.startsWith(prefix)) ? document : smokeSection;
+    const testQuery = selector => smokeRoot(selector)?.querySelector(selector) ?? null;
+    const testQueryAll = selector => smokeRoot(selector)?.querySelectorAll(selector) ?? [];
+    ${scopedExpression}
+  }`, returnByValue: true, awaitPromise: true })
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
   return result.result.value
 }
@@ -94,9 +106,10 @@ async function screenshot(name) {
   writeFileSync(resolve(output, `${name}.png`), Buffer.from(data, 'base64'))
 }
 async function route(path) {
+  const [surface, query = ''] = path.split('?')
+  scopeKey = surface === 'agent' ? `agent-${new URLSearchParams(query).get('format') ?? 'sheets'}` : surface
   await evaluate(`location.hash = '#/${path}'`)
-  const surface = path.split('?')[0]
-  await until(`document.querySelector('.app-shell')?.dataset.surface === ${JSON.stringify(surface)} && !document.querySelector('.demo-loading') && document.querySelector('.app-main')?.getAttribute('aria-busy') !== 'true'`, path)
+  await until(`document.querySelector('.app-shell')?.dataset.surface === ${JSON.stringify(surface)} && !document.querySelector('.demo-loading') && (smokeSection?.dataset.scrollState === 'ready' || ${JSON.stringify(surface)} === 'overview')`, path, 90_000)
 }
 try {
   assert.ok(!(process.argv.includes('--built') && process.argv.includes('--dev')), 'choose either --built or --dev')
@@ -134,8 +147,10 @@ try {
   await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group button')).find(button => button.textContent === 'Edit files').click()`)
   await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group--formats button')).find(button => button.textContent === 'PDF').click()`)
   await click('.showcase-item')
+  scopeKey = 'pdf'
   await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !document.querySelector('.demo-loading')`, 'filtered result opens')
   await click('.demo-back')
+  scopeKey = 'overview'
   await until(`document.querySelector('#showcase-query')?.value === 'redact' && document.querySelectorAll('.showcase-item').length === 1`, 'Back preserves search')
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group button[aria-pressed=true]')).map(button => button.textContent)`), ['Edit files', 'PDF'], 'Back preserves task and file-type filters')
   await evaluate(`(() => { const input = document.querySelector('#showcase-query'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'zzznomatch'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
@@ -144,20 +159,21 @@ try {
   await until(`document.querySelectorAll('.showcase-item').length === 19`, 'clear filters')
   assert.equal(await evaluate(`new Set([...document.querySelectorAll('.showcase-item')].map(item => item.getAttribute('href'))).size`), 19, 'catalogue examples have distinct routes')
   await route('charts')
-  assert.equal(await evaluate(`document.querySelector('.app-shell').dataset.navigation`), 'text')
+  assert.equal(await evaluate(`document.querySelector('.app-shell').dataset.navigation`), 'scroll')
   assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[href^="#/agent?format="]').length`), 4, 'all AI formats appear in navigation')
 
-  // Hold the first cold route's scripts until continuity has been observed. This
-  // catches the loading blink deterministically rather than racing local disk.
+  // A cold section loads independently: already visited editors stay mounted,
+  // and every section heading remains usable while its script is held.
   await send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Script', requestStage: 'Request' }] })
-  await evaluate(`window.__showcasePreviousStage = document.querySelector('.demo-stage'); location.hash = '#/pivots'`)
+  await evaluate(`window.__showcasePreviousStage = document.querySelector('.demo-stage'); location.hash = '#/pptx-render'`)
+  scopeKey = 'pptx-render'
   const coldStart = Date.now()
   while (heldRequests.length === 0 && Date.now() - coldStart < 10_000) await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(heldRequests.length > 0, 'cold navigation requests a lazy script')
-  await until(`document.querySelector('.app-main')?.getAttribute('aria-busy') === 'true'`, 'cold navigation announced busy')
-  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && !document.querySelector('.demo-loading') && document.querySelector('.app-shell').dataset.surface === 'charts'`), true, 'previous editor remains visible during cold navigation')
+  await until(`smokeSection?.dataset.scrollState === 'loading'`, 'cold section reports loading')
+  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && document.querySelectorAll('[data-scroll-section]').length === 20 && Array.from(document.querySelectorAll('[data-scroll-section]')).every(section => section.querySelector('h1,h2'))`), true, 'loaded editor and all headings remain during cold section navigation')
   await send('Fetch.disable')
-  await until(`document.querySelector('.app-shell')?.dataset.surface === 'pivots' && !document.querySelector('.demo-loading')`, 'cold route completes')
+  await until(`smokeSection?.dataset.scrollState === 'ready' && !document.querySelector('.demo-loading')`, 'cold section completes', 90_000)
   await route('charts')
   await click('.source-proof-trigger')
   await until(`document.activeElement?.classList.contains('source-proof-close')`, 'modal initial focus')
@@ -170,7 +186,7 @@ try {
   await until(`document.querySelector('.demo-source pre')?.textContent.includes('export default')`, 'actual source loaded')
   await screenshot('source-and-guide')
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' })
-  await until(`document.querySelector('.source-proof-layer').hidden && document.activeElement?.classList.contains('source-proof-trigger')`, 'Escape restores focus')
+  await until(`(!document.querySelector('.source-proof-layer') || document.querySelector('.source-proof-layer').hidden) && document.activeElement?.classList.contains('source-proof-trigger')`, 'Escape restores focus')
   await click('.source-proof-trigger')
   assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '1')
   await click('.source-proof-close')
@@ -185,7 +201,7 @@ try {
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'reset restores workbook')
   await until(`(${sheetChartState})?.firstValue === ${JSON.stringify(originalChart.firstValue)} && (${sheetChartState})?.series.length > 0`, 'reset restores seeded chart data')
   assert.deepEqual(await evaluate(sheetChartState), originalChart, 'reset restores the complete numeric chart source')
-  for (let i = 0; i < 2; i++) { await route('charts'); await route('sheets'); await until(`document.querySelector('[data-demo-surface="sheets"] canvas')`, 'remounted sheet') }
+  for (let i = 0; i < 2; i++) { await route('charts'); await route('sheets'); await until(`document.querySelector('[data-demo-surface="sheets"] canvas')`, 'preserved sheet') }
   await evaluate(`location.hash = '#/sheets?view=native'`)
   await until(`!!document.querySelector('.native-toolbar')`, 'same-surface deep link switches mode')
   await route('collab')
@@ -384,12 +400,12 @@ try {
   await click('.guided-recipe__complete')
   await until(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow') === '1'`, 'AI guide progress recorded')
   await route('agent?format=docs')
-  await until(`document.querySelector('.source-proof-layer').hidden && document.querySelector('[data-agent-tool=docs]')`, 'same-surface format switch closes stale guide')
+  await until(`(!document.querySelector('.source-proof-layer') || document.querySelector('.source-proof-layer').hidden) && document.querySelector('[data-agent-tool=docs]')`, 'same-surface format switch closes stale guide')
   await click('.source-proof-trigger')
   assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '0', 'new AI format starts its own guide progress')
   await click('.source-proof-close')
   await route('overview')
-  await evaluate(`document.querySelector('.app-main').scrollTop = 0`)
+  await evaluate(`window.scrollTo({ top: 0, behavior: 'instant' })`)
   for (const width of [1200, 1024, 768]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
     await until(`document.querySelector('.app-main').scrollWidth <= document.querySelector('.app-main').clientWidth`, `catalogue fits width ${width}`, 1000)
@@ -449,7 +465,7 @@ try {
   await until(`document.documentElement.dataset.theme === 'dark'`, 'dark theme')
   await screenshot('focused-chart-dark')
   assert.deepEqual(errors, [], 'uncaught or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['19 distinct examples', 'search', 'filter return persistence', 'empty recovery', 'text navigation', 'cold-route continuity', 'modal focus/inert', 'checklist persistence', 'source loading', 'all 16 surfaces', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-surface deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['19 distinct examples', 'search', 'filter return persistence', 'empty recovery', 'continuous section navigation', 'cold-section isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'all 16 surfaces', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-surface deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     await screenshot('failure')

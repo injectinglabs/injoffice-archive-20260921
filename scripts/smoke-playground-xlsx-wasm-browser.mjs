@@ -15,6 +15,7 @@ const loadingFailures = []
 let chrome
 let cdp
 let staticServer
+let sectionKey = 'sheets'
 
 const mime = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -139,6 +140,7 @@ try {
   if (xlsxProof.After !== expectedXlsx) throw new Error(`XLSX readback mismatch: expected ${JSON.stringify(expectedXlsx)}, received ${JSON.stringify(xlsxProof.After)}`)
   assertBrowserLocalProof(xlsxProof, 'XLSX')
 
+  sectionKey = 'docs'
   await cdp.send('Page.navigate', { url: `${siteUrl}#/docs` })
   await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
@@ -183,6 +185,7 @@ try {
   if (docxProof.After !== expectedDocx) throw new Error(`DOCX readback mismatch: expected ${JSON.stringify(expectedDocx)}, received ${JSON.stringify(docxProof.After)}`)
   assertBrowserLocalProof(docxProof, 'DOCX')
 
+  sectionKey = 'pptx-native'
   await cdp.send('Page.navigate', { url: `${siteUrl}#/pptx-native` })
   await pollExpression(cdp, `document.querySelector('[data-demo-surface="pptx-native"]') !== null`, 'native PPTX view')
   await pollExpression(cdp, `(() => {
@@ -375,7 +378,16 @@ async function connectCDP(url) {
 }
 
 async function evaluate(client, expression) {
-  const response = await client.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
+  // Continuous showcase sections stay mounted. Read and mutate only the target
+  // format's inputs, status, and proof rows; a previous XLSX result is not DOCX
+  // evidence. Keep compatibility with standalone pages without scroll sections.
+  const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'nativeQueryAll(').replaceAll('document.querySelector(', 'nativeQuery(')
+  const response = await client.send('Runtime.evaluate', { expression: `{
+    const nativeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${sectionKey}"]`)}) ?? (document.querySelector('[data-scroll-section]') ? null : document);
+    const nativeQuery = selector => nativeSection?.querySelector(selector) ?? null;
+    const nativeQueryAll = selector => nativeSection?.querySelectorAll(selector) ?? [];
+    ${scopedExpression}
+  }`, awaitPromise: true, returnByValue: true })
   if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text)
   return response.result.value
 }

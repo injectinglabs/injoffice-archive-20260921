@@ -37,6 +37,28 @@ describe('agent workflow page proof', () => {
     expect(page).toContain('Output fingerprint')
   })
 
+  it('keeps retained format sections independent of global hash navigation', () => {
+    expect(page).toContain('fixedTool?: AgentTool')
+    expect(page).toContain('if (fixedTool !== undefined) return')
+    expect(page).toContain("if (parseSurface() === 'agent') setRoutedTool(parseAgentTool())")
+    expect(page).toContain('const tool = fixedTool ?? routedTool')
+    expect(page).toContain('{!fixedTool && <DsSegment')
+    expect(page).toContain('const instanceId = useId()')
+    expect(page).toContain('htmlFor={promptId}')
+    expect(page).toContain('id={promptId}')
+    expect(page).toContain('aria-labelledby={artifactTitleId}')
+    expect(page).toContain('id={artifactTitleId}')
+    expect(page).not.toContain('id="agent-prompt"')
+    expect(page).not.toContain('id="agent-artifact-title"')
+  })
+
+  it('does not reset a retained spreadsheet view when an unrelated section changes the hash', () => {
+    const sheets = readFileSync(new URL('./pages/SheetsPage.tsx', import.meta.url), 'utf8')
+    expect(sheets).toContain("if (parseSurface() === 'sheets') setView(parseSheetsView())")
+    expect(sheets).toContain('parseSheetsView(initialHash)')
+    expect(sheets).toContain("window.removeEventListener('hashchange', syncView)")
+  })
+
   it('documents the architecture, supported formats, safety, and non-goals', () => {
     for (const heading of ['## Architecture', '## Formats', '## Safety contract', '## Non-goals']) expect(guide).toContain(heading)
     for (const format of ['XLSX', 'DOCX', 'PPTX', 'PDF']) expect(guide).toContain(`**${format}:**`)

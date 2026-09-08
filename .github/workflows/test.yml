@@ -52,6 +52,8 @@ jobs:
           node --test scripts/showcase-smoke-server.test.mjs
           npm run test:showcase-browser -- --built
           SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault
       - name: Upload showcase browser diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
