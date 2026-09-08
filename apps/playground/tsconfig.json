@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
@@ -10,6 +11,10 @@
     "noEmit": true,
     "paths": {
       "@injoffice/agent-office/xlsx": ["../../packages/agent-office/src/xlsx.ts"],
+      "@injoffice/agent-office/docx": ["../../packages/agent-office/src/docx.ts"],
+      "@injoffice/agent-office/pptx": ["../../packages/agent-office/src/pptx.ts"],
+      "@injoffice/agent-office/pdf": ["../../packages/agent-office/src/pdf.ts"],
+      "@injoffice/docs/native-docx": ["../../packages/docs/src/nativeDocx.ts"],
       "@injoffice/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@injoffice/font-metrics/layout": ["../../packages/font-metrics/src/layout.ts"],
       "@injoffice/charts": ["../../packages/charts/src/index.ts"],

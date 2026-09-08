@@ -12345,6 +12345,11 @@
               "signature": "export type AnimDirection = 'left' | 'right' | 'top' | 'bottom'"
             },
             {
+              "name": "auditDeck",
+              "kind": "function",
+              "signature": "export declare function auditDeck(deck: DeckSpec): QCIssue[]"
+            },
+            {
               "name": "boardroomTheme",
               "kind": "const",
               "signature": "export declare const boardroomTheme: DeckTheme"

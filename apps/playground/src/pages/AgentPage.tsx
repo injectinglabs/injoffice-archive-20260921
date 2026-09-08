@@ -13,8 +13,13 @@ import {
 } from '../agentDemoRuntime'
 import { createAgentDemoScenario, type AgentDemoFormat, type AgentDemoMode, type AgentDemoOperation } from '../agentDemoScenario'
 import { AGENT_XLSX_NAME, createNativeAgentSessionInput } from '../agentXlsxDemo'
+import { createNativeDocxAgentSessionInput } from '../agentDocxDemo'
+import { createNativePptxAgentSessionInput } from '../agentPptxDemo'
+import { createNativePdfAgentSessionInput } from '../agentPdfDemo'
 import { requestMockAgentProposal } from '../mockAgentTransport'
 import { createBrowserXlsxRoundTripRuntime } from '../xlsxRoundTripRuntime'
+import { createBrowserDocxRoundTripRuntime } from '../docxRoundTripRuntime'
+import { createBrowserPptxRoundTripRuntime } from '../pptxRoundTripRuntime'
 import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, type AgentTool } from '../route'
 import { DsButton, DsCallout, DsChip, DsSegment } from '../design-system/primitives'
 import '../design-system/live-tools.css'
@@ -74,33 +79,40 @@ function SheetArtifact({ content, highlighted }: { content: Record<string, unkno
 
 function DocxArtifact({ content, highlighted }: { content: Record<string, unknown>; highlighted: boolean }) {
   const blocks = content.blocks as Array<{ id: string; kind: string; text: string }>
+  const titleBlock = blocks[0]?.text === content.title ? blocks[0] : undefined
   return (
     <article className="agent-artifact__doc ds-page">
-      <h3>{String(content.title)}</h3>
-      {blocks.map((block) => <p className={highlighted && block.id === 'block-summary' ? 'agent-artifact__changed' : undefined} key={block.id}>{block.text}</p>)}
+      <h3 className={highlighted && titleBlock?.id === content.changedBlockId ? 'agent-artifact__changed' : undefined}>{String(content.title)}</h3>
+      {blocks.filter((block) => block !== titleBlock).map((block) => <p className={highlighted && block.id === content.changedBlockId ? 'agent-artifact__changed' : undefined} key={block.id}>{block.text}</p>)}
     </article>
   )
 }
 
 function PptxArtifact({ content, highlighted }: { content: Record<string, unknown>; highlighted: boolean }) {
-  const metric = content.metric as { label: string; value: string }
+  const blocks = content.blocks as Array<{ id: string; text: string }>
+  const titleBlock = blocks[0]?.text === content.title ? blocks[0] : undefined
   return (
     <article className="agent-artifact__slide ds-slide">
-      <span>Board update</span>
-      <h3>{String(content.title)}</h3>
+      <span>Extracted presentation text</span>
+      <h3 className={highlighted && titleBlock?.id === content.changedBlockId ? 'agent-artifact__changed' : undefined}>{String(content.title)}</h3>
       <p>{String(content.subtitle)}</p>
-      <div className={`agent-artifact__metric${highlighted ? ' agent-artifact__changed' : ''}`}><strong>{metric.value}</strong><small>{metric.label}</small></div>
+      {blocks.filter((block) => block !== titleBlock).map((block) => <p key={block.id} className={highlighted && block.id === content.changedBlockId ? 'agent-artifact__changed' : undefined}>{block.text}</p>)}
     </article>
   )
 }
 
 function PdfArtifact({ content, highlighted }: { content: Record<string, unknown>; highlighted: boolean }) {
+  const pages = content.pages as Array<{ page: number; rotation: number; width: number; height: number }>
   return (
     <article className="agent-artifact__pdf ds-pdf-sheet">
-      <span>Review packet · page 2 of {String(content.pageCount)}</span>
-      <h3>{String(content.heading)}</h3>
-      <p>{String(content.body)}</p>
-      <aside className={`agent-artifact__note${highlighted ? ' agent-artifact__changed' : ''}`}>Page rotation: {String(content.rotation)}°</aside>
+      <span>Parsed PDF page metadata · {String(content.pageCount)} pages</span>
+      <h3>{String(content.title)}</h3>
+      <div className="agent-pdf-page-scroll" role="region" aria-label="PDF page metadata" tabIndex={0}>
+        <table className="ds-table"><thead><tr><th>Page</th><th>Rotation</th><th>Size (pt)</th></tr></thead>
+          <tbody>{pages.map((page) => <tr key={page.page} className={highlighted && page.page === content.selectedPage ? 'agent-artifact__changed' : undefined}><th>{page.page}</th><td>{page.rotation}°</td><td>{Math.round(page.width)} × {Math.round(page.height)}</td></tr>)}</tbody>
+        </table>
+      </div>
+      <p>This is a page-metadata preview, not a rendered PDF page. The verified download contains the real document.</p>
     </article>
   )
 }
@@ -210,10 +222,16 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     setConsent(false)
     let cancelled = false
     let loaded: SessionInput | undefined
-    const runtime = format === 'xlsx' ? createBrowserXlsxRoundTripRuntime() : undefined
+    const xlsxRuntime = format === 'xlsx' ? createBrowserXlsxRoundTripRuntime() : undefined
+    const docxRuntime = format === 'docx' ? createBrowserDocxRoundTripRuntime() : undefined
+    const pptxRuntime = format === 'pptx' ? createBrowserPptxRoundTripRuntime() : undefined
+    const terminateLoading = () => { xlsxRuntime?.terminate(); docxRuntime?.terminate(); pptxRuntime?.terminate() }
     const initialize = async () => {
       try {
-        loaded = runtime ? await createNativeAgentSessionInput(mode, runtime) : createDemoSessionInput(format, mode)
+        loaded = format === 'xlsx' ? await createNativeAgentSessionInput(mode, xlsxRuntime)
+          : format === 'docx' ? await createNativeDocxAgentSessionInput(mode, docxRuntime)
+          : format === 'pptx' ? await createNativePptxAgentSessionInput(mode, pptxRuntime)
+          : await createNativePdfAgentSessionInput(mode)
         if (cancelled) { loaded.dispose?.(); return }
         const report = await loaded.session.capabilities()
         if (cancelled) return
@@ -222,20 +240,22 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
         setPrompt(loaded.scenario.prompt)
         refreshTrace(loaded)
       } catch (reason: unknown) {
+        loaded?.dispose?.()
+        terminateLoading()
         if (cancelled) return
         setError(reason instanceof Error ? reason.message : String(reason))
         setState('error')
       }
     }
     void initialize()
-    return () => { cancelled = true; generation.current += 1; proposalAbort.current?.abort(); loaded?.dispose?.(); runtime?.terminate() }
+    return () => { cancelled = true; generation.current += 1; proposalAbort.current?.abort(); loaded?.dispose?.(); terminateLoading() }
   }, [format, mode, reload])
 
   useEffect(() => {
     setLiveContext(null)
     setLiveHost('')
     setConsent(false)
-    if (format !== 'xlsx' || mode !== 'safe' || proposalSource === 'local' || !sessionInput?.proposalContext) return
+    if (mode !== 'safe' || proposalSource === 'local' || !sessionInput?.proposalContext) return
     const controller = new AbortController()
     let cancelled = false
     setLiveNotice(proposalSource === 'mock' ? 'Reading the sample for the built-in mock…' : 'Checking the local proposal host…')
@@ -311,7 +331,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
             body: JSON.stringify({ request: prompt, context, capabilities: sharedCapabilities, consent: true }),
           })
-          if (!response.ok) throw new Error(`The proposal host could not complete the request (HTTP ${response.status}). No workbook change was committed.`)
+          if (!response.ok) throw new Error(`The proposal host could not complete the request (HTTP ${response.status}). No file change was committed.`)
           const proposed: unknown = await response.json()
           if (run !== generation.current) return
           operations = sessionInput.acceptProposal(proposed)
@@ -428,13 +448,16 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               ? `Verified ${receipt?.revision}. The output matches its receipt.`
               : state === 'unverified' ? 'Write completed; verification failed. No verified download is available.'
               : 'The workflow stopped. See the error details below; reload the sample to try again.'
-  const boundary = format === 'xlsx'
-    ? mode === 'safe' && proposalSource === 'mock'
-      ? 'Simulated AI proposal · real XLSX preview, approval, native write, and verification · no language model or external service'
-      : mode === 'safe' && proposalSource === 'live'
-      ? 'Real XLSX file · optional live proposal from a configured host · only consented bounded context is shared · native write and verification stay local'
-      : 'Real XLSX file · local rule-based proposal through public tools · native browser write and exact-byte reopen · no model service or file upload'
-    : 'Lifecycle simulation · document-shaped sample data, not Office file bytes · real approval and revision guards · no model service'
+  const fileType = format.toUpperCase()
+  const boundary = mode === 'safe' && proposalSource === 'mock'
+    ? `Simulated AI proposal · real ${fileType} preview, approval, file write, and verification · no language model or external service`
+    : mode === 'safe' && proposalSource === 'live'
+      ? `Real ${fileType} file · optional live proposal · only consented bounded context is shared · file write and verification stay local`
+      : `Real ${fileType} file · local rule-based proposal through public tools · browser file write and exact-byte reopen · no model service or file upload`
+  const requestHelp = format === 'xlsx'
+    ? 'Try “Mark Mobile as On track” or “Mark Security as Ready”. Supports one workstream status edit at a time.'
+    : format === 'pdf' ? 'Try “Rotate page 2 by 90 degrees” or “Rotate page 1 by 180 degrees”. Supports one page rotation at a time.'
+    : 'Use Replace "exact current text" with "replacement text". Supports one uniquely identified editable text target at a time; copy the current text from the preview.'
 
   return (
     <div className="ds">
@@ -455,20 +478,20 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
             { id: 'refusal', label: 'Refusal proof' },
           ]}
         />
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (state === 'ready' && format === 'xlsx' && mode === 'safe' && proposalSource !== 'local' && (!liveContext || (proposalSource === 'live' && !consent)))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (state === 'ready' && mode === 'safe' && proposalSource !== 'local' && (!liveContext || (proposalSource === 'live' && !consent)))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
         <span className="agent-demo__status" data-state={state} role="status" aria-live="polite">{status}</span>
       </div>
 
       <div className="agent-request">
         <label htmlFor="agent-prompt">Agent request</label>
-        <textarea id="agent-prompt" data-agent-request maxLength={2000} readOnly={format !== 'xlsx' || mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={format === 'xlsx' && mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
+        <textarea id="agent-prompt" data-agent-request maxLength={2000} readOnly={mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
         <small data-agent-boundary>{boundary}</small>
-        {format === 'xlsx' && mode === 'safe' && <>
+        {mode === 'safe' && <>
           <label className="agent-proposal-source">Proposal source <select data-agent-proposal-source value={proposalSource} disabled={state !== 'ready' || safetyBusy} onChange={(event) => { reset(); setProposalSource(event.target.value as 'mock' | 'local' | 'live') }}><option value="mock">Built-in mock agent (no LLM)</option><option value="local">Local rule-based proposer</option><option value="live">Live agent via configured host</option></select></label>
-          <p className="agent-request-help">Try “Mark Mobile as On track” or “Mark Security as Ready”. The mock and local proposer support one workstream status edit at a time; neither is a language model.</p>
+          <p className="agent-request-help">{requestHelp} The mock and local proposer are not language models.</p>
           {proposalSource === 'mock' && <div data-agent-mock className="agent-live-proposal">
             <p role="status">{liveNotice}</p>
-            <p>The built-in mock endpoint returns a deterministic proposal from the inspected workbook. {import.meta.env.DEV ? 'It runs on this local demo server.' : 'On this static site, the endpoint response is simulated in your browser.'} No provider is contacted. Preview, approval, file editing, and verification are real.</p>
+            <p>The built-in mock endpoint returns a deterministic proposal from the inspected document. {import.meta.env.DEV ? 'It runs on this local demo server.' : 'On this static site, the endpoint response is simulated in your browser.'} No provider is contacted. Preview, approval, file editing, and verification are real.</p>
             {proposalExchange && <details data-agent-proposal-trace><summary>Mock proposal request and response</summary><pre className="ds-code" tabIndex={0}>{JSON.stringify(proposalExchange, null, 2)}</pre></details>}
           </div>}
           {proposalSource === 'live' && <div className="agent-live-proposal">
@@ -477,14 +500,14 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               <details data-agent-live-context><summary>Exact bounded context shared with {liveHost}</summary><pre className="ds-code" tabIndex={0}>{JSON.stringify(liveContext, null, 2)}</pre></details>
               <label className="ds-check"><input data-agent-live-consent type="checkbox" checked={consent} disabled={state !== 'ready'} onChange={(event) => setConsent(event.target.checked)} />Send this context and my request to {liveHost} for a proposal. This may incur charges from my configured provider. No Office file bytes or browser-stored API key are sent.</label>
             </>}
-            <p>The endpoint can propose only a bounded status edit. It cannot approve or commit. Use local mode if you do not want to share document context.</p>
+            <p>The endpoint can propose only the disclosed bounded edit. It cannot approve or commit. Use mock or local mode if you do not want to share document context.</p>
           </div>}
         </>}
       </div>
 
-      <ol className="agent-tool-log" aria-label={format === 'xlsx' ? 'Actual office.* tool calls' : 'Simulated lifecycle stages'}>
+      <ol className="agent-tool-log" aria-label="Actual office.* tool calls">
         {AGENT_TOOL_METHODS.map((method) => (
-          <li key={method} data-state={(format === 'xlsx' ? trace.some((entry) => entry.request.method === method && entry.response.ok) : toolLog.includes(method)) ? 'done' : 'waiting'}><code>{method}</code></li>
+          <li key={method} data-state={(sessionInput?.trace ? trace.some((entry) => entry.request.method === method && entry.response.ok) : toolLog.includes(method)) ? 'done' : 'waiting'}><code>{method}</code></li>
         ))}
       </ol>
 
@@ -498,7 +521,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       <div className="agent-demo__workspace ds-split">
         <section className="agent-demo__document ds-split-main" aria-labelledby="agent-artifact-title">
           <header>
-            <div><span>{verification?.ok ? format === 'xlsx' ? 'Reopened output projection' : 'Verified simulated state' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id="agent-artifact-title">{scenario.artifact.name}</h2></div>
+            <div><span>{verification?.ok ? 'Reopened output projection' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id="agent-artifact-title">{scenario.artifact.name}</h2></div>
             <dl className="ds-proof">
               <div><dt>Artifact</dt><dd>{scenario.artifact.artifactId}</dd></div>
               <div><dt>Revision</dt><dd>{receipt?.revision ?? inspection?.revision ?? scenario.artifact.revision}</dd></div>
@@ -509,8 +532,9 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
           </div>
           <footer>
             <strong>Agent request</strong>
-            <p>{format === 'xlsx' && mode === 'safe' ? prompt : scenario.prompt}</p>
+            <p>{mode === 'safe' ? prompt : scenario.prompt}</p>
             <small>{boundary}</small>
+            <p className="agent-approval-note">{format === 'pdf' ? 'PDF page metadata comes from parsing the actual file bytes.' : format === 'xlsx' ? 'The table is a bounded workbook projection, not a rendered Excel page.' : 'This is extracted document text, not a full-fidelity page or slide rendering.'}</p>
           </footer>
         </section>
 
@@ -523,7 +547,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
           </section>
 
           <section className="ds-panel">
-            <header><div><span>Plan</span><h2>{format === 'xlsx' && mode === 'safe' ? 'Proposed workbook change' : scenario.summary}</h2></div></header>
+            <header><div><span>Plan</span><h2>{mode === 'safe' ? `Proposed ${fileType} change` : scenario.summary}</h2></div></header>
             {diff?.changes.length ? (
               <div className="agent-diff">
                 {diff.changes.map((change) => <div className="ds-diff-row" key={change.target}><code>{change.target}</code><del>{change.before}</del><ins>{change.after}</ins></div>)}
@@ -548,12 +572,12 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
                 I reviewed this exact diff and approve one atomic commit.
               </label>
               <DsButton variant={state === 'verified' ? 'green' : 'filled'} className="workbench-button workbench-button--primary" disabled={!approved || state !== 'awaiting-approval' || safetyBusy} onClick={() => void commit()}>Commit approved change</DsButton>
-              {format === 'xlsx' && <p className="agent-approval-note">Approval is stored by the host for this exact change set. A tool argument saying “approved” cannot grant permission.</p>}
+              <p className="agent-approval-note">Approval is stored by the host for this exact change set. A tool argument saying “approved” cannot grant permission.</p>
             </section>
           )}
 
           <section className="agent-evidence ds-panel">
-            <header><div><span>Commit</span><h2>{verification?.ok ? format === 'xlsx' ? 'XLSX output verified' : 'Simulation verified' : 'Execution record'}</h2></div>{verification?.ok && <DsChip tone="green">Pass</DsChip>}</header>
+            <header><div><span>Commit</span><h2>{verification?.ok ? `${fileType} output verified` : 'Execution record'}</h2></div>{verification?.ok && <DsChip tone="green">Pass</DsChip>}</header>
             <dl className="ds-proof">
               <div><dt>Source revision</dt><dd><code>{inspection?.revision ?? '—'}</code></dd></div>
               <div><dt>Source fingerprint</dt><dd><code>{inspection?.fingerprint ?? '—'}</code></dd></div>
@@ -561,30 +585,30 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               <div><dt>Output fingerprint</dt><dd><code>{verification?.fingerprint ?? '—'}</code></dd></div>
             </dl>
             {verification && <ul>{verification.evidence.map((item) => <li key={item}>{item}</li>)}</ul>}
-            {format === 'xlsx' && <p>Verification above comes from the committed receipt, not a second <code>office.verify</code> call.</p>}
-            {state === 'verified' && verification?.ok && downloadURL && <a data-agent-download className="workbench-button ds-btn ds-btn--filled" href={downloadURL} download="launch-readiness-plan-approved.xlsx">Download verified .xlsx</a>}
+            <p>Verification above comes from the committed receipt, not a second <code>office.verify</code> call.</p>
+            {state === 'verified' && verification?.ok && downloadURL && <a data-agent-download className="workbench-button ds-btn ds-btn--filled" href={downloadURL} download={`${scenario.artifact.name.replace(/\.[^.]+$/, '')}-approved.${format}`}>Download verified .{format}</a>}
           </section>
-          {format === 'xlsx' && <section className="ds-panel agent-safety" aria-label="Safety scenarios">
+          {sessionInput?.stats && <section className="ds-panel agent-safety" aria-label="Safety scenarios">
             <header><h2>Try the safety boundaries</h2></header>
-            <p>Native source writes: <span data-agent-native-writes>{nativeWrites}</span>. Isolated preview writes are not counted.</p>
-            <DsButton data-agent-concurrent-edit variant="outlined" disabled={state !== 'awaiting-approval' || sourceChanged || safetyBusy} onClick={() => void simulateConcurrentEdit()}>Simulate another editor changing the source</DsButton>
+            <p>Source file writes: <span data-agent-native-writes>{nativeWrites}</span>. Isolated preview writes are not counted.</p>
+            {sessionInput.simulateConcurrentEdit && <DsButton data-agent-concurrent-edit variant="outlined" disabled={state !== 'awaiting-approval' || sourceChanged || safetyBusy} onClick={() => void simulateConcurrentEdit()}>Simulate another editor changing the source</DsButton>}
             {sourceChanged && <p role="status">The source has changed. Try committing the reviewed plan: its stale revision must be rejected.</p>}
-            <label className="ds-check"><input data-agent-fail-verification type="checkbox" checked={failVerification} disabled={state !== 'awaiting-approval' || safetyBusy} onChange={(event) => setFailVerification(event.target.checked)} />Inject a verification-read failure after the write</label>
-            <p>This explicitly simulates a readback failure; it does not corrupt the sample file.</p>
+            {sessionInput.setVerificationFailure && <><label className="ds-check"><input data-agent-fail-verification type="checkbox" checked={failVerification} disabled={state !== 'awaiting-approval' || safetyBusy} onChange={(event) => setFailVerification(event.target.checked)} />Inject a verification-read failure after the write</label>
+            <p>This explicitly simulates a readback failure; it does not corrupt the sample file.</p></>}
             <DsButton data-agent-retry variant="outlined" disabled={state !== 'verified' || safetyBusy} onClick={() => void retryCommit()}>Retry the same commit</DsButton>
             {retryResult && <p role="status">{retryResult}</p>}
           </section>}
           {error && <p className="tool-error" role="alert">{error}</p>}
         </aside>
       </div>
-      {format === 'xlsx' && <details data-agent-trace className="agent-dispatch-trace">
+      <details data-agent-trace className="agent-dispatch-trace">
         <summary>Actual tool requests and results ({trace.length})</summary>
-        <p>Requests pass through <code>createAgentToolDispatcher</code> and the public XLSX adapter. The final commit result contains post-write verification. Read and preview results are bounded document projections.</p>
+        <p>Requests pass through <code>createAgentToolDispatcher</code> and the public {fileType} adapter. The final commit result contains post-write verification. Read and preview results are bounded document projections.</p>
         {trace.map((entry) => <details key={entry.request.requestId}>
           <summary>{entry.request.method} · {entry.response.ok ? 'Completed' : 'Refused or failed'}</summary>
           <pre className="ds-code" tabIndex={0}>{JSON.stringify(entry, null, 2)}</pre>
         </details>)}
-      </details>}
+      </details>
     </section>
     </div>
   )

@@ -185,12 +185,12 @@ export const DEMO_RECIPES = {
   agent: {
     id: 'agent-guarded-change-set',
     title: 'Run a guarded agent change from proposal to proof',
-    outcome: 'Use Sheets for a real XLSX write, reopen, and download; explore the same guarded lifecycle with simulated Docs, Slides, and PDF data.',
+    outcome: 'Use a mocked proposal to make one real, approved XLSX, DOCX, PPTX, or PDF change, verify the saved bytes, and download the result.',
     minutes: 3,
     steps: [
-      { id: 'prepare-agent-change', title: 'Run a mock agent proposal', instruction: 'Start with Sheets for a real file. Keep “Built-in mock agent (no LLM)”, try “Mark Mobile as On track”, and choose “Run agent.” No configuration is needed. Other formats remain lifecycle simulations.', evidence: 'The mock request and response are shown separately from actual public-tool calls. The proposal is simulated; the native preview is real and never replaces the source file.' },
+      { id: 'prepare-agent-change', title: 'Run a mock agent proposal', instruction: 'Choose Sheets, Docs, Slides, or PDF. Keep “Built-in mock agent (no LLM)” and run the suggested request. Sheets edits one status, Docs and Slides replace one exact text target, and PDF rotates one page. No configuration is needed.', evidence: 'The mock request and response are shown separately from actual public-tool calls. The proposal is simulated; the real-file preview never replaces the source bytes.' },
       { id: 'review-agent-diff', title: 'Review the exact change', instruction: 'Compare the artifact preview, proposed change, semantic diff, source identity, and advertised operations.', evidence: 'The proposal stays bound to one source revision and only uses a discovered capability.' },
-      { id: 'approve-agent-commit', title: 'Approve, verify, and download', instruction: 'Approve the exact diff, then commit and download. Try the safety controls on a fresh sample: another editor invalidates the plan; retry returns the same receipt; injected readback failure withholds a verified download.', evidence: 'The public adapter verifies the requested target in a fresh native snapshot. Post-write verification is part of the commit receipt, not a second office.verify call.' },
+      { id: 'approve-agent-commit', title: 'Approve, verify, and download', instruction: 'Approve the exact diff, then commit and download. Try the safety controls on a fresh sample: another editor invalidates the plan; retry returns the same receipt; injected readback failure withholds a verified download.', evidence: 'Fresh native extraction or PDF parsing verifies the requested edit. Post-write verification is part of the commit receipt, not a second office.verify call.' },
     ],
     sources: [source('Agent workflow demo', 'apps/playground/src/pages/AgentPage.tsx'), source('Real-file XLSX adapter', 'apps/playground/src/agentXlsxDemo.ts'), source('Agent change-set core', 'packages/agent-tools/src/session.ts')],
     related: [

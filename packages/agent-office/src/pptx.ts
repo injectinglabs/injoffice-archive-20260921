@@ -1,4 +1,4 @@
-import { auditDeck, compileDeckToWire, type DeckSpec, type DeckTheme, type SlideSpec } from '@injoffice/slides'
+import { auditDeck, compileDeckToWire, type DeckSpec, type DeckTheme, type SlideSpec } from '@injoffice/slides/authoring'
 import { PPTX_NATIVE_RESOURCE_LIMITS, validateNativePptx, type NativeElement, type NativeParagraph, type NativePptxDeck, type NativeShapeElement, type NativeTransform } from '@injoffice/pptx-native'
 import type { AgentArtifactAdapter, AgentArtifactIdentity, AgentCapability, AgentIssue, AgentOperation, JsonValue } from '@injoffice/agent-tools'
 import { assertFresh, boundedObject, cursorOffset, errorIssue, fingerprintJSON, toJson } from './hash.js'

@@ -54,7 +54,7 @@ export const AGENT_TOOLS = [
     fileType: 'DOCX',
     label: 'Docs',
     title: 'AI change sets · Docs',
-    description: 'Explore approval and revision guards with a simulated document edit. This lifecycle example uses document-shaped data, not DOCX bytes. No model service.',
+    description: 'Use a built-in mock agent to propose an anchored text replacement in a real DOCX launch brief. Inspect extracted text, review and approve the exact edit, then download the natively verified file. No model or setup.',
   },
   {
     tool: 'slides',
@@ -62,7 +62,7 @@ export const AGENT_TOOLS = [
     fileType: 'PPTX',
     label: 'Slides',
     title: 'AI change sets · Slides',
-    description: 'Explore approval and revision guards with a simulated slide update. This lifecycle example uses document-shaped data, not PPTX bytes. No model service.',
+    description: 'Use a built-in mock agent to propose a text replacement in a real PPTX launch review. Inspect extracted slide text, approve the exact target, and download the natively verified presentation. No model or setup.',
   },
   {
     tool: 'pdf',
@@ -70,7 +70,7 @@ export const AGENT_TOOLS = [
     fileType: 'PDF',
     label: 'PDF',
     title: 'AI change sets · PDF',
-    description: 'Explore approval and revision guards with a simulated page rotation. This lifecycle example uses document-shaped data, not PDF bytes. No model service.',
+    description: 'Use a built-in mock agent to rotate a page in a real PDF operating review. Compare parsed page metadata, approve the change, then download the verified PDF. No model or setup.',
   },
 ] as const
 export type AgentTool = (typeof AGENT_TOOLS)[number]['tool']

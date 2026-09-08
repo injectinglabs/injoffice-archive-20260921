@@ -14,7 +14,16 @@ The default **Built-in mock agent (no LLM)** needs no endpoint configuration or 
 
 In development, the browser calls the bundled `POST /api/agent/mock-propose` route on the same local server. Static builds simulate the response in the browser using the same generator, with no API call. Neither path contacts a provider, forwards an API token, or grants approval—even if live-provider environment variables are set. No model SDK or external service is required. The original local rule-based mode and explicitly consented live integration remain optional choices; see [proposal modes](../../docs/AGENT-PROPOSAL-HOST.md).
 
-Only the proposal is mocked for Sheets: preview, human approval, file edits, and verification operate on real XLSX bytes. Docs, Slides, and PDF remain explicitly labelled object-backed lifecycle simulations; they do not write Office file bytes.
+Only the proposal is mocked. All four agent demos edit and verify real files:
+
+| Format | Demonstrated edit | Output verification |
+| --- | --- | --- |
+| XLSX | One discovered workstream status cell | Native browser Worker re-extracts saved bytes |
+| DOCX | One exact, source-anchored text run | Native browser Worker re-extracts saved bytes |
+| PPTX | One exact native text element | Native browser Worker re-extracts saved bytes |
+| PDF | One page rotation | Fresh PDF parse checks rotation, page count, geometry, and SHA-256 |
+
+Docs starts with `Replace "Northstar Launch Brief" with "Northstar Beta Launch Brief"`; Slides uses `Replace "Northstar launch review" with "Northstar: ready for launch"`; PDF uses `Rotate page 2 by 90 degrees`. Each uses a populated fixture, an isolated preview, exact-plan approval, verified download, and the same stale-source/retry/fault scenarios. Text and page-metadata previews are bounded projections, not full-fidelity Office renderers. These examples do not imply arbitrary edits or uploaded-file support.
 
 The expandable tool trace shows actual dispatcher arguments and results, including `office.read`. Approval is host-owned and bound to the exact reviewed change set; a model/tool argument containing `confirmation: "approved"` is not approval. After approval, `office.commit` performs the native write and returns committed verification. `office.verify` is a planned-result check, not a separate post-commit reopen call.
 

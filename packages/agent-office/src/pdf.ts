@@ -1,4 +1,4 @@
-import { applyPageOps, readInfo, type PageOpSpec, type PdfDocumentInfo } from '@injoffice/pdf'
+import { applyPageOps, readInfo, type PageOpSpec, type PdfDocumentInfo } from '@injoffice/pdf/browser'
 import type { AgentArtifactAdapter, AgentArtifactIdentity, AgentCapability, AgentIssue, AgentOperation, JsonObject } from '@injoffice/agent-tools'
 import { assertFresh, boundedObject, cursorOffset, errorIssue, fingerprintBytes, toJson } from './hash.js'
 

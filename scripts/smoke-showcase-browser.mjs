@@ -191,11 +191,15 @@ try {
   await route('collab')
   await until(`document.querySelectorAll('canvas').length > 0`, 'collaboration rendered')
   for (const tool of ['sheets', 'docs', 'slides', 'pdf']) {
+    const fileFormat = { sheets: 'xlsx', docs: 'docx', slides: 'pptx', pdf: 'pdf' }[tool]
     await route(`agent?format=${tool}`)
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} AI deep link`, 90_000)
     const boundary = await evaluate(`document.querySelector('[data-agent-boundary]')?.textContent`)
+    const defaultRequest = await evaluate(`document.querySelector('[data-agent-request]').value`)
+    assert.match(boundary, new RegExp(`Simulated AI proposal.*real ${fileFormat}.*file write.*verification.*no language model`, 'i'), `${tool} distinguishes mocked proposal from real file proof`)
+    assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]').value`), 'mock', `${tool} defaults to the bundled mock`)
+    const proposalsBeforeRun = proposalRequests.length
     if (tool === 'sheets') {
-      assert.match(boundary, /Simulated AI proposal.*real XLSX.*native write.*verification.*no language model/i, 'mock boundary distinguishes simulated AI from real workbook operations')
       assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]').value`), 'mock', 'bundled mock is the zero-configuration default')
       const mockNotice = await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`)
       assert.match(mockNotice, /mock/i, 'mock proposer is explicitly labelled')
@@ -203,11 +207,16 @@ try {
       assert.equal(await evaluate(`document.querySelector('[data-agent-live-consent]') === null`), true, 'default mock requires no external-provider consent')
       assert.equal(proposalRequests.length, 0, 'loading the mock demo does not request a proposal')
     }
-    else assert.match(boundary, /Lifecycle simulation.*not Office file bytes/, 'simulated formats disclose their file boundary')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} preview and validation`, 90_000)
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'commit requires explicit approval')
     assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'proposal does not preapprove itself')
+    assert.equal(await agentWrites(), 0, `${tool} preview does not write the source`)
+    assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} proposal cannot release a download`)
+    assert.match(await evaluate(`document.querySelector('[data-agent-trace]').textContent`), /office.read/, `${tool} discovers targets through actual public reads`)
+    if (process.argv.includes('--dev')) assert.equal(proposalRequests.length, proposalsBeforeRun + 1, `${tool} mock uses one local HTTP proposal`)
+    if (process.argv.includes('--built')) assert.equal(proposalRequests.length, proposalsBeforeRun, `${tool} static mock needs no endpoint`)
+    if (proposalMock) assert.equal(proposalMock.requests.length, 0, `${tool} mock never contacts a live upstream`)
     if (tool === 'sheets') {
       assert.equal(await agentWrites(), 0, 'mock proposal and native preview leave the source untouched')
       assert.match(await evaluate(`document.querySelector('[data-agent-proposal-trace]')?.textContent`), /request/i, 'mock proposal exposes its request trace separately from actual Office tools')
@@ -224,6 +233,22 @@ try {
     await click('.agent-approval input[type=checkbox]')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, `${tool} approved commit verifies`, 90_000)
+    await until(`!!document.querySelector('[data-agent-download]')`, `${tool} verified bytes released`)
+    const fileProof = await evaluate(`(async () => {
+      const link = document.querySelector('[data-agent-download]');
+      const bytes = new Uint8Array(await (await fetch(link.href)).arrayBuffer());
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map(value => value.toString(16).padStart(2, '0')).join('');
+      const field = Array.from(document.querySelectorAll('.agent-evidence dl > div')).find(item => item.querySelector('dt').textContent === 'Output fingerprint');
+      return { name: link.download, length: bytes.length, signature: Array.from(bytes.slice(0, 4)), hash, receiptFingerprint: field.querySelector('dd').textContent };
+    })()`)
+    assert.ok(fileProof.name.endsWith(`.${fileFormat}`), `${tool} download has the real format extension`)
+    assert.ok(fileProof.length > 1000, `${tool} has a populated output file`)
+    assert.deepEqual(fileProof.signature, tool === 'pdf' ? [37, 80, 68, 70] : [80, 75, 3, 4], `${tool} output is real file bytes, not JSON`)
+    assert.ok(fileProof.receiptFingerprint.endsWith(fileProof.hash), `${tool} download bytes match the verified receipt fingerprint`)
+    assert.equal(await agentWrites(), 1, `${tool} approval writes exactly once`)
+    await screenshot(`agent-real-${fileFormat}-verified`)
+    await evaluate(`document.querySelector('.agent-artifact').scrollIntoView({ block: 'start' })`)
+    await screenshot(`agent-real-${fileFormat}-content`)
     if (tool === 'sheets') {
       const download = await evaluate(`(async () => {
         const link = document.querySelector('[data-agent-download]')
@@ -276,12 +301,39 @@ try {
       assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'unverified bytes are not offered as a verified download')
       await screenshot('agent-written-but-unverified')
     }
+    else {
+      await click('[data-agent-retry]')
+      await until(`!document.querySelector('[data-agent-retry]').disabled && document.querySelector('.agent-safety').textContent.includes('No additional native write')`, `${tool} cached retry completes`, 90_000)
+      assert.equal(await agentWrites(), 1, `${tool} retry does not write again`)
+      const prepareAgain = async () => {
+        await clickButton('Reload sample')
+        await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} sample reloaded`, 90_000)
+        assert.equal(await evaluate(`document.querySelector('[data-agent-request]').value`), defaultRequest, `${tool} reload restores its real-file request`)
+        await clickButton('Run agent')
+        await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} fresh proposal reviewed`, 90_000)
+      }
+      await prepareAgain()
+      await click('[data-agent-concurrent-edit]')
+      await until(`document.querySelector('.agent-safety').textContent.includes('The source has changed.')`, `${tool} concurrent edit completes`, 90_000)
+      const writesBeforeStale = await agentWrites()
+      await approveAgentCommit()
+      await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'error'`, `${tool} stale approval rejected`, 90_000)
+      assert.equal(await agentWrites(), writesBeforeStale, `${tool} stale plan cannot add a source write`)
+      assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} stale plan cannot release output`)
+      await prepareAgain()
+      await click('[data-agent-fail-verification]')
+      await approveAgentCommit()
+      await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'unverified'`, `${tool} failed readback distinguished from write`, 90_000)
+      assert.equal(await agentWrites(), 1, `${tool} readback fault follows a completed write`)
+      assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} unverified bytes remain unavailable`)
+      await screenshot(`agent-${fileFormat}-unverified`)
+    }
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Refusal proof').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} refusal ready`, 90_000)
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'refused'`, `${tool} unsupported operation refused`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('.agent-approval input')`), true, 'refusal does not allow approval')
-    if (tool === 'sheets') assert.equal(await agentWrites(), 0, 'unsupported proposal never reaches the native writer')
+    assert.equal(await agentWrites(), 0, `${tool} unsupported proposal never reaches the writer`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'refusal does not expose a previous output')
     await click('.demo-reset-trigger')
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
@@ -369,6 +421,24 @@ try {
   await screenshot('agent-mobile-workbook')
   await evaluate(`document.querySelector('[data-agent-trace]').scrollIntoView({ block: 'start' })`)
   await screenshot('agent-mobile-expanded-trace')
+  for (const tool of ['docs', 'slides', 'pdf']) {
+    await route(`agent?format=${tool}`)
+    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} mobile sample ready`, 90_000)
+    await clickButton('Run agent')
+    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} mobile preview ready`, 90_000)
+    await evaluate(`document.querySelector('[data-agent-trace]').open = true`)
+    assert.equal(await evaluate(`(() => {
+      const workspace = document.querySelector('.agent-demo__workspace').getBoundingClientRect();
+      const inspector = document.querySelector('.agent-demo__inspector').getBoundingClientRect();
+      const trace = document.querySelector('[data-agent-trace]').getBoundingClientRect();
+      const section = document.querySelector('[data-agent-tool]');
+      return workspace.bottom <= trace.top + 1 && inspector.bottom <= workspace.bottom + 1 && section.scrollWidth <= section.clientWidth && document.documentElement.scrollWidth <= 390;
+    })()`), true, `${tool} mobile content has no horizontal overflow or trace overlap`)
+    await evaluate(`document.querySelector('.agent-artifact').scrollIntoView({ block: 'start' })`)
+    await screenshot(`agent-mobile-${tool}-content`)
+    await evaluate(`document.querySelector('[data-agent-trace]').scrollIntoView({ block: 'start' })`)
+    await screenshot(`agent-mobile-${tool}-trace`)
+  }
   await route('charts')
   await screenshot('focused-chart-mobile')
   await click('.source-proof-trigger')

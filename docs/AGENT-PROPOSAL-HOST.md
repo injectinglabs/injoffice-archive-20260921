@@ -2,10 +2,15 @@
 
 ## Built-in mock agent: default, no setup
 
-Open `#/agent?format=sheets`, keep **Built-in mock agent (no LLM)**, and select
-**Run agent**. The bundled mock proposes one status edit from the inspected
-workbook. Try `Mark Security as Ready`, `Mark Mobile as On track`, or
-`Set Analytics status to Review`. Unknown, ambiguous, and unsupported requests
+Open an agent example, keep **Built-in mock agent (no LLM)**, and select
+**Run agent**. The bundled mock proposes one bounded edit from the inspected file:
+
+- Sheets: `Mark Mobile as On track` changes one disclosed status cell.
+- Docs: `Replace "Northstar Launch Brief" with "Northstar Beta Launch Brief"` replaces one source-anchored run.
+- Slides: `Replace "Northstar launch review" with "Northstar: ready for launch"` replaces one exact native text element.
+- PDF: `Rotate page 2 by 90 degrees` rotates one disclosed page.
+
+Unknown, ambiguous, and unsupported requests
 are refused rather than guessed. This is a deterministic simulation, not model
 reasoning or an autonomous agent.
 
@@ -19,7 +24,7 @@ without a backend too. There is no automatic fallback to the live endpoint.
 
 The UI discloses the mock and its transport and shows the proposal request/response.
 The resulting proposal passes through the same strict target/revision validation,
-real native XLSX preview, separate human approval, commit, and readback verification
+real-file preview, separate human approval, commit, and readback verification
 as a live proposal. The original local rule-based proposer is also available.
 
 ## Optional local live-proposal bridge
@@ -70,7 +75,10 @@ Operation inputs must follow the advertised Office capabilities; use the actual
 sheet ID from inspection and zero-based cell coordinates. The response
 must be JSON, contain one to eight operations, and fit within 32 KiB. The Sheets
 demo applies a tighter limit: exactly one status-cell edit to a disclosed target,
-using one of the disclosed allowed values. The relay
+using one of the disclosed allowed values. Docs accepts one disclosed text run
+with its expected text; Slides accepts one exact element tied to the inspected
+source revision and fingerprint. PDF accepts one disclosed page
+rotation. Non-XLSX mock contexts specify `context.format` for dispatch. The relay
 validates the envelope, **not the operation's authority or semantic correctness**.
 It strips extra top-level and operation metadata. Local planning/validation still
 has to reject unsupported or unsafe edits.

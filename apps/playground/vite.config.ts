@@ -73,6 +73,10 @@ export default defineConfig(async ({ command }) => {
     resolve: {
       alias: {
         '@injoffice/agent-office/xlsx': pkgFile('agent-office', 'xlsx.ts'),
+        '@injoffice/agent-office/docx': pkgFile('agent-office', 'docx.ts'),
+        '@injoffice/agent-office/pptx': pkgFile('agent-office', 'pptx.ts'),
+        '@injoffice/agent-office/pdf': pkgFile('agent-office', 'pdf.ts'),
+        '@injoffice/docs/native-docx': pkgFile('docs', 'nativeDocx.ts'),
         '@injoffice/sheets/browser': pkgFile('sheets', 'browser.ts'),
         '@injoffice/agent-tools': pkgSrc('agent-tools'),
         '@injoffice/font-metrics/layout': pkgFile('font-metrics', 'layout.ts'),
