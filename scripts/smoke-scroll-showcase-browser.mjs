@@ -220,10 +220,10 @@ try {
   await anchor('agent-docs')
   await until(agentState('agent-docs', 'ready'), 'DOCX agent initialized', 90_000)
   assert.equal(await evaluate(`window.__overviewNode.isConnected && window.__overviewNode === document.querySelector('[data-scroll-section="overview"]')`), true, 'anchor navigation preserves existing sections')
-  const prompt = 'Replace "Northstar Launch Brief" with "Northstar Scrolling Review"'
+  const prompt = 'Northstar Scrolling Review'
   await evaluate(`(() => {
-    const input = document.querySelector('${section('agent-docs')} [data-agent-request]');
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(prompt)});
+    const input = document.querySelector('${section('agent-docs')} [data-agent-task-value]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(prompt)});
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus();
     window.__persistedPrompt = input;
@@ -234,7 +234,7 @@ try {
   assert.equal(await evaluate(`history.length === window.__beforePassiveHistory.length && window.__scrollHistory.pushes === window.__beforePassiveHistory.pushes && window.__scrollHistory.replacements > window.__beforePassiveHistory.replacements`), true, 'scroll spy replaces the URL without adding browser history entries')
   assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[aria-current="location"]').length`), 1, 'exactly one sidebar link is current')
   await anchor('agent-docs')
-  assert.equal(await evaluate(`window.__persistedPrompt.isConnected && document.querySelector('${section('agent-docs')} [data-agent-request]').value === ${JSON.stringify(prompt)}`), true, 'scrolling away and back preserves typed editor state')
+  assert.equal(await evaluate(`window.__persistedPrompt.isConnected && document.querySelector('${section('agent-docs')} [data-agent-task-value]').value === ${JSON.stringify(prompt)}`), true, 'scrolling away and back preserves typed guided task state')
   await button('agent-docs', 'Run agent')
   await until(agentState('agent-docs', 'awaiting-approval'), 'real DOCX preview ready', 90_000)
   const plan = await evaluate(`document.querySelector('${section('agent-docs')} .agent-diff').textContent`)

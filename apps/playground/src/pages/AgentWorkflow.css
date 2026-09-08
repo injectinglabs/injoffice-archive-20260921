@@ -1,5 +1,5 @@
 .agent-request-help, .agent-approval-note { margin: 8px 0 0; color: var(--ds-mute); font-size: 12px; line-height: 1.5; }
-.agent-safety { display: grid; gap: 12px; }
+.agent-safety[open] { display: grid; gap: 12px; }
 .agent-safety > p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ds-mute); }
 .agent-safety button { white-space: normal; text-align: left; }
 .agent-dispatch-trace { margin: 16px; padding: 16px; border: 1px solid var(--ds-line); border-radius: 8px; min-width: 0; }
@@ -8,11 +8,38 @@
 .agent-dispatch-trace > details { padding: 10px 0; border-top: 1px solid var(--ds-line); }
 .agent-dispatch-trace pre { max-height: 400px; overflow: auto; font-size: 11px; }
 .agent-dispatch-trace summary:focus-visible { outline: 2px solid var(--ds-blue); outline-offset: 4px; }
-.agent-proposal-source { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 12px; }
-.agent-proposal-source select { max-width: 100%; padding: 6px; color: var(--ds-ink); background: var(--ds-paper); border: 1px solid var(--ds-line); border-radius: 6px; }
-.agent-live-proposal { margin-top: 12px; padding: 12px; border: 1px solid var(--ds-line); border-radius: 8px; }
-.agent-live-proposal p { font-size: 12px; line-height: 1.5; }
-.agent-live-proposal pre { max-height: 280px; overflow: auto; font-size: 11px; }
+.ds .agent-task-intro { padding: 24px 24px 16px; }
+.ds .agent-task-intro h2 { margin: 0; font-family: var(--ds-display); font-size: clamp(18px, 2vw, 23px); font-weight: 600; letter-spacing: -.035em; }
+.ds .agent-task-intro p { max-width: 76ch; margin: 10px 0 0; color: var(--ds-mute); font-size: 13px; line-height: 1.6; }
+.ds .agent-task-intro [data-agent-boundary] { color: var(--ds-green); }
+.ds .agent-task-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; padding: 16px 24px; margin: 0; gap: 18px; border-bottom: 1px solid var(--ds-line); }
+.ds .agent-task-progress li { display: flex; gap: 10px; min-width: 0; color: var(--ds-mute); }
+.ds .agent-task-progress li > span { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; border: 1px solid var(--ds-line); border-radius: 50%; font-size: 12px; }
+.ds .agent-task-progress strong { display: block; font-size: 13px; font-weight: 600; }
+.ds .agent-task-progress small { display: block; margin-top: 4px; font-size: 11px; line-height: 1.5; }
+.ds .agent-task-progress li[data-state="active"] { color: var(--ds-ink); }
+.ds .agent-task-progress li[data-state="active"] > span { border-color: var(--ds-green); color: var(--ds-green); }
+.ds .agent-task-progress li[data-state="done"] > span { background: var(--ds-green-soft); color: var(--ds-green); border-color: transparent; }
+.ds .agent-task-progress li[data-state="refused"] > span { background: var(--ds-refuse-soft); color: var(--ds-refuse); border-color: transparent; }
+.ds .agent-task-editor { padding: 20px 24px; border-bottom: 1px solid var(--ds-line); }
+.ds .agent-task-editor > p { color: var(--ds-mute); }
+.ds .agent-advanced-notice { padding: 14px 16px; border-left: 3px solid var(--ds-select); background: var(--ds-select-soft); }
+.ds .agent-advanced-notice p { margin: 8px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ds .agent-advanced-notice small { color: var(--ds-mute); }
+.ds .agent-task-editor .agent-demo__toolbar { padding: 16px 0 0; border: 0; background: transparent; }
+.ds .agent-technical { min-width: 0; margin: 16px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius); }
+.ds .agent-technical > summary { padding: 16px; cursor: pointer; font-weight: 600; }
+.ds .agent-technical summary:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 3px; }
+.ds .agent-technical > .agent-request { padding: 16px; }
+.ds .agent-technical .agent-request label { display: block; margin-bottom: 8px; font-weight: 600; }
+.ds .agent-technical textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid var(--ds-line); border-radius: 6px; color: var(--ds-ink); background: var(--ds-paper); }
+.ds .agent-technical pre { max-height: 400px; max-width: 100%; overflow: auto; }
+.ds .agent-technical-evidence, .ds .agent-technical > .agent-safety { padding: 16px; border-top: 1px solid var(--ds-line); }
+.ds .agent-technical-evidence h3 { margin: 0 0 12px; font-size: 14px; }
+.ds .agent-technical-evidence p, .ds .agent-technical-evidence li { font-size: 12px; line-height: 1.6; }
+.ds .agent-technical-evidence .ds-proof { margin-top: 16px; }
+.ds .agent-technical-evidence dd { overflow-wrap: anywhere; }
+.ds .agent-technical > .agent-safety > summary { cursor: pointer; font-weight: 600; }
 
 /* The bounded preview scrolls as one column. Never shrink the workspace below
    its contents: later siblings (especially the trace) would paint over it. */
@@ -32,7 +59,16 @@
 .ds .agent-artifact__sheet-scroll > .agent-artifact__sheet { min-width: 720px; table-layout: auto; }
 
 @media (max-width: 860px) {
+  .ds .agent-task-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ds [data-demo-surface="agent"] .agent-demo__document > header { flex-direction: column; }
   .ds [data-demo-surface="agent"] .agent-demo__document > header dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; width: 100%; }
   .ds [data-demo-surface="agent"] .agent-demo__document > header dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .ds .agent-task-intro, .ds .agent-task-editor { padding: 16px; }
+  .ds .agent-task-progress { padding: 12px 16px; gap: 16px 10px; }
+  .ds .agent-task-progress li { gap: 6px; }
+  .ds .agent-task-progress small { font-size: 11px; }
+  .ds .agent-technical { margin: 12px; }
 }

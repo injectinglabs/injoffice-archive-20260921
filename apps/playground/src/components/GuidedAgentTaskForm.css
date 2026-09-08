@@ -1,0 +1,13 @@
+.agent-guided-task { min-width: 0; margin: 0; padding: 0; border: 0; }
+.agent-guided-task legend { margin-bottom: 12px; padding: 0; font-size: 14px; font-weight: 600; }
+.agent-guided-task label { display: block; margin: 0 0 6px; color: var(--ds-ink); font-size: 12px; font-weight: 600; }
+.agent-guided-task select, .agent-guided-task input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--ds-line); border-radius: 6px; background: var(--ds-paper); color: var(--ds-ink); font: inherit; font-size: 13px; }
+.agent-guided-task select:focus-visible, .agent-guided-task input:focus-visible { outline: 2px solid var(--ds-green); outline-offset: 2px; }
+.agent-guided-task:disabled select, .agent-guided-task:disabled input { opacity: .65; cursor: not-allowed; }
+.agent-guided-task__fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; }
+.agent-guided-task__current { margin: 8px 0 16px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.agent-guided-task__current span { color: var(--ds-mute); }
+.agent-guided-task__help, .agent-guided-task__error { max-width: 70ch; margin: 10px 0 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-guided-task__help { color: var(--ds-mute); }
+.agent-guided-task__error { color: var(--danger, #a32424); }
+@media (max-width: 480px) { .agent-guided-task__fields { grid-template-columns: minmax(0, 1fr); } }

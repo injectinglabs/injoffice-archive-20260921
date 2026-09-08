@@ -17,6 +17,7 @@ const pending = new Map()
 const errors = []
 const heldRequests = []
 const proposalRequests = []
+const liveRequests = []
 function onMessage({ data }) {
   const message = JSON.parse(data)
   if (message.id) {
@@ -34,6 +35,7 @@ function onMessage({ data }) {
     heldRequests.push(message.params.requestId)
   } else if (message.method === 'Network.requestWillBeSent') {
     const { request } = message.params
+    if (/\/api\/agent\/(?:proposal-status|propose)(?:\?|$)/.test(new URL(request.url).pathname)) liveRequests.push(request.url)
     if (/\/api\/agent\/(?:mock-propose|propose)(?:\?|$)/.test(request.url)) proposalRequests.push(request)
   }
 }
@@ -73,7 +75,18 @@ const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(se
 const clickButton = (label) => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`)
 const agentReady = `document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`
 const agentWrites = () => evaluate(`Number(document.querySelector('[data-agent-native-writes]')?.textContent)`)
-const setAgentRequest = (request) => evaluate(`(() => { const input = document.querySelector('[data-agent-request]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(request)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
+const setGuidedField = (selector, value) => evaluate(`(() => {
+  const input = document.querySelector(${JSON.stringify(selector)});
+  const isSelect = input instanceof HTMLSelectElement;
+  Object.getOwnPropertyDescriptor(isSelect ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+  input.dispatchEvent(new Event(isSelect ? 'change' : 'input', { bubbles: true }));
+})()`)
+const openAgentDetails = (attribute) => evaluate(`(() => { let detail = document.querySelector('[${attribute}]'); while (detail) { detail.open = true; detail = detail.parentElement?.closest('details'); } })()`)
+const setAgentRequest = async (request) => {
+  await openAgentDetails('data-agent-technical')
+  await evaluate(`(() => { const toggle = document.querySelector('[data-agent-advanced-request]'); if (!toggle.checked) toggle.click(); })()`)
+  return evaluate(`(() => { const input = document.querySelector('[data-agent-request]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(request)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
+}
 async function prepareAgentRequest(request, target) {
   await clickButton('Reload sample')
   await until(agentReady, 'real XLSX sample reload', 90_000)
@@ -212,19 +225,32 @@ try {
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} AI deep link`, 90_000)
     const boundary = await evaluate(`document.querySelector('[data-agent-boundary]')?.textContent`)
     const defaultRequest = await evaluate(`document.querySelector('[data-agent-request]').value`)
-    assert.match(boundary, new RegExp(`Simulated AI proposal.*real ${fileFormat}.*file write.*verification.*no language model`, 'i'), `${tool} distinguishes mocked proposal from real file proof`)
-    assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]').value`), 'mock', `${tool} defaults to the bundled mock`)
+    assert.match(await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`), /Simulated agent · real document operations/i, `${tool} distinguishes mocked proposal from real file proof`)
+    assert.match(boundary, new RegExp(`Real ${fileFormat}.*verification.*No language model`, 'i'), `${tool} discloses real operations and no LLM`)
+    assert.equal(await evaluate(`!!document.querySelector('[data-agent-guided-task]') && !document.querySelector('[data-agent-technical]').open && !document.querySelector('[data-agent-safety-details]').open`), true, `${tool} starts with a guided task and collapsed technical details`)
+    assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]') === null`), true, `${tool} defaults to the bundled mock`)
+    const guidedSelector = tool === 'pdf' ? '[data-agent-task-degrees]' : '[data-agent-task-value]'
+    if (tool !== 'pdf') {
+      await setGuidedField(guidedSelector, tool === 'sheets' ? 'Review' : '')
+      await until(`document.querySelector('[data-agent-task-error]') && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').disabled`, `${tool} rejects an unchanged status or empty replacement`)
+      assert.equal(await agentWrites(), 0, `${tool} invalid task cannot write`)
+    }
+    const guidedValue = { sheets: 'Blocked', docs: 'Northstar Guided Launch Brief', slides: 'Northstar guided launch review', pdf: '180' }[tool]
+    await setGuidedField(guidedSelector, guidedValue)
+    await until(agentReady, `${tool} customized guided task ready`)
+    assert.notEqual(await evaluate(`document.querySelector('[data-agent-request]').value`), defaultRequest, `${tool} guided fields create a changed request`)
     const proposalsBeforeRun = proposalRequests.length
     if (tool === 'sheets') {
-      assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]').value`), 'mock', 'bundled mock is the zero-configuration default')
+      assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]') === null`), true, 'bundled mock is the zero-configuration default')
       const mockNotice = await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`)
-      assert.match(mockNotice, /mock/i, 'mock proposer is explicitly labelled')
+      assert.match(mockNotice, /simulated/i, 'mock proposer is explicitly labelled')
       assert.match(mockNotice, /no (?:real )?(?:language model|model|LLM)|not (?:a |an )?(?:language model|LLM)/i, 'mock is not presented as real model reasoning')
       assert.equal(await evaluate(`document.querySelector('[data-agent-live-consent]') === null`), true, 'default mock requires no external-provider consent')
       assert.equal(proposalRequests.length, 0, 'loading the mock demo does not request a proposal')
     }
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} preview and validation`, 90_000)
+    assert.ok((await evaluate(`document.querySelector('.agent-diff').textContent`)).includes(guidedValue), `${tool} preview reflects the edited guided value`)
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'commit requires explicit approval')
     assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'proposal does not preapprove itself')
     assert.equal(await agentWrites(), 0, `${tool} preview does not write the source`)
@@ -246,6 +272,17 @@ try {
       if (proposalMock) assert.equal(proposalMock.requests.length, 0, 'bundled mock never contacts the configured upstream')
       await screenshot('agent-mock-proposal-review')
     }
+    if (tool === 'docs') {
+      await click('.agent-approval input[type=checkbox]')
+      await setGuidedField('[data-agent-task-value]', '')
+      await until(`!document.querySelector('.agent-diff') && !document.querySelector('.agent-approval input').checked && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').disabled`, 'editing a reviewed task revokes approval and removes the stale preview')
+      assert.equal(await agentWrites(), 0, 'editing a reviewed task does not write')
+      await setGuidedField('[data-agent-task-value]', guidedValue)
+      await until(agentReady, 'corrected guided task ready')
+      await clickButton('Run agent')
+      await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'corrected task gets a fresh review', 90_000)
+      assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'correcting a task does not restore old approval')
+    }
     await click('.agent-approval input[type=checkbox]')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, `${tool} approved commit verifies`, 90_000)
@@ -254,7 +291,7 @@ try {
       const link = document.querySelector('[data-agent-download]');
       const bytes = new Uint8Array(await (await fetch(link.href)).arrayBuffer());
       const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map(value => value.toString(16).padStart(2, '0')).join('');
-      const field = Array.from(document.querySelectorAll('.agent-evidence dl > div')).find(item => item.querySelector('dt').textContent === 'Output fingerprint');
+      const field = Array.from(document.querySelectorAll('.agent-technical-evidence dl > div')).find(item => item.querySelector('dt').textContent === 'Output fingerprint');
       return { name: link.download, length: bytes.length, signature: Array.from(bytes.slice(0, 4)), hash, receiptFingerprint: field.querySelector('dd').textContent };
     })()`)
     assert.ok(fileProof.name.endsWith(`.${fileFormat}`), `${tool} download has the real format extension`)
@@ -278,6 +315,7 @@ try {
       await screenshot('agent-real-xlsx-verified')
       const originalWrites = await agentWrites()
       assert.equal(originalWrites, 1, 'one approved plan causes exactly one native write')
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-retry]')
       await until(`!document.querySelector('[data-agent-retry]').disabled && document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, 'verified commit retry completes', 90_000)
       assert.equal(await agentWrites(), originalWrites, 'idempotent retry does not duplicate the native write')
@@ -299,8 +337,9 @@ try {
       assert.equal(await evaluate(`document.querySelector('.agent-approval input')?.checked ?? false`), false, 'unsupported mock prompt does not grant approval')
 
       await prepareAgentRequest('Mark Security as Ready', 'C5')
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-concurrent-edit]')
-      await until(`document.querySelector('.agent-safety')?.textContent.includes('The source has changed.')`, 'concurrent source edit completes', 90_000)
+      await until(`document.querySelector('.agent-demo__inspector')?.textContent.includes('The source has changed.')`, 'concurrent source edit completes', 90_000)
       const writesBeforeStaleCommit = await agentWrites()
       await approveAgentCommit()
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'error'`, 'stale approval fails closed', 90_000)
@@ -309,6 +348,7 @@ try {
       assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'stale approval offers no verified output')
 
       await prepareAgentRequest('Mark Security as Ready', 'C5')
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-fail-verification]')
       await approveAgentCommit()
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'unverified'`, 'post-write verification failure has a distinct state', 90_000)
@@ -318,6 +358,7 @@ try {
       await screenshot('agent-written-but-unverified')
     }
     else {
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-retry]')
       await until(`!document.querySelector('[data-agent-retry]').disabled && document.querySelector('.agent-safety').textContent.includes('No additional native write')`, `${tool} cached retry completes`, 90_000)
       assert.equal(await agentWrites(), 1, `${tool} retry does not write again`)
@@ -329,14 +370,16 @@ try {
         await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} fresh proposal reviewed`, 90_000)
       }
       await prepareAgain()
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-concurrent-edit]')
-      await until(`document.querySelector('.agent-safety').textContent.includes('The source has changed.')`, `${tool} concurrent edit completes`, 90_000)
+      await until(`document.querySelector('.agent-demo__inspector').textContent.includes('The source has changed.')`, `${tool} concurrent edit completes`, 90_000)
       const writesBeforeStale = await agentWrites()
       await approveAgentCommit()
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'error'`, `${tool} stale approval rejected`, 90_000)
       assert.equal(await agentWrites(), writesBeforeStale, `${tool} stale plan cannot add a source write`)
       assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} stale plan cannot release output`)
       await prepareAgain()
+      await openAgentDetails('data-agent-safety-details')
       await click('[data-agent-fail-verification]')
       await approveAgentCommit()
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'unverified'`, `${tool} failed readback distinguished from write`, 90_000)
@@ -344,6 +387,7 @@ try {
       assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} unverified bytes remain unavailable`)
       await screenshot(`agent-${fileFormat}-unverified`)
     }
+    await openAgentDetails('data-agent-safety-details')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Refusal proof').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} refusal ready`, 90_000)
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
@@ -355,47 +399,9 @@ try {
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('[data-agent-download]') && !document.querySelector('.agent-diff') && !Array.from(document.querySelectorAll('.agent-tool-log li[data-state=done]')).some(item => /office\\.(plan|commit)/.test(item.textContent)) && document.querySelector('.agent-approval input').checked === false`), true, 'reset clears outputs, plans, commits, and approval; initial capability discovery is allowed')
   }
-  if (proposalMock) {
-    await route('agent?format=sheets')
-    await until(agentReady, 'mock sample ready for isolated live proposal test', 90_000)
-    assert.equal(proposalMock.requests.length, 0, 'default mock workflows never contact the proposal upstream')
-    await evaluate(`(() => { const select = document.querySelector('[data-agent-proposal-source]'); select.value = 'live'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
-    await until(`document.querySelector('[data-agent-live-context] pre') && document.querySelector('[data-agent-live-consent]')`, 'live mode discloses bounded context before consent', 90_000)
-    await setAgentRequest('Mark Mobile as On track')
-    const disclosedContext = await evaluate(`JSON.parse(document.querySelector('[data-agent-live-context] pre').textContent)`)
-    assert.ok(disclosedContext.constraints.allowedTargets.some((target) => target.ref === 'C3' && target.workstream === 'Mobile'), 'disclosure identifies the allowed Mobile cell')
-    assert.equal(proposalMock.requests.length, 0, 'selection, request editing, and context discovery do not send anything upstream')
-    assert.equal(await evaluate(`document.querySelector('[data-agent-live-consent]').checked`), false, 'data-sharing consent starts unchecked')
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').disabled`), true, 'no live request can run without consent')
-    await click('[data-agent-live-consent]')
-    await clickButton('Run agent')
-    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'mock live proposal enters human review', 90_000)
-    assert.equal(proposalMock.requests.length, 1, 'one consented Run produces exactly one mock upstream request')
-    const sent = proposalMock.requests[0]
-    assert.equal(sent.hasAuthorization, false, 'no existing provider token is forwarded to the test mock')
-    assert.equal(sent.body.request, 'Mark Mobile as On track')
-    const { capabilities: disclosedCapabilities, ...disclosedWorkbook } = disclosedContext
-    assert.deepEqual(sent.body.context, disclosedWorkbook, 'only the exact disclosed bounded workbook context is sent')
-    assert.deepEqual(sent.body.capabilities, disclosedCapabilities, 'only the disclosed capabilities are sent')
-    assert.deepEqual(Object.keys(sent.body).sort(), ['capabilities', 'context', 'request'], 'upstream receives proposal context, not file bytes or approval authority')
-    assert.match(await evaluate(`document.querySelector('.agent-diff').textContent`), /C3/, 'live proposal resolves the disclosed Mobile target')
-    assert.equal(await agentWrites(), 0, 'a live proposal cannot write native bytes')
-    assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'upstream confirmation approved cannot grant host approval')
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'commit remains disabled until separate human approval')
-    assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'the unapproved proposal cannot expose output bytes')
-    await screenshot('agent-live-proposal-review')
-    await approveAgentCommit()
-    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified' && document.querySelector('[data-agent-download]')`, 'human-approved live proposal produces verified native output', 90_000)
-    assert.equal(await agentWrites(), 1, 'the approved live proposal writes exactly once')
-    assert.equal(proposalMock.requests.length, 1, 'native commit and verification do not contact the proposal provider')
-    const signature = await evaluate(`(async () => Array.from(new Uint8Array(await (await fetch(document.querySelector('[data-agent-download]').href)).arrayBuffer()).slice(0, 4)))()`)
-    assert.deepEqual(signature, [80, 75, 3, 4], 'live-proposed verified download is a real XLSX archive')
-    await clickButton('Reload sample')
-    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && !document.querySelector('[data-agent-proposal-source]').disabled`, 'live sample reloaded without automatic proposal', 90_000)
-    await evaluate(`(() => { const select = document.querySelector('[data-agent-proposal-source]'); select.value = 'local'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
-    await until(agentReady, 'local proposal mode restored', 90_000)
-    assert.equal(proposalMock.requests.length, 1, 'reset and mode changes do not make hidden upstream requests')
-  }
+  assert.deepEqual(liveRequests, [], 'guided demo never fetches live configuration or proposals')
+  if (proposalMock) assert.equal(proposalMock.requests.length, 0, 'all workflows leave even a configured provider untouched')
+  await route('agent?format=sheets')
   await click('.source-proof-trigger')
   await click('.guided-recipe__complete')
   await until(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow') === '1'`, 'AI guide progress recorded')
@@ -418,6 +424,7 @@ try {
   await until(agentReady, 'mobile AI sample ready', 90_000)
   await clickButton('Run agent')
   await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'mobile AI preview prepared', 90_000)
+  await openAgentDetails('data-agent-technical')
   await evaluate(`document.querySelector('[data-agent-trace]').open = true`)
   assert.equal(await evaluate(`(() => {
     const workspace = document.querySelector('.agent-demo__workspace').getBoundingClientRect();
@@ -442,7 +449,8 @@ try {
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} mobile sample ready`, 90_000)
     await clickButton('Run agent')
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} mobile preview ready`, 90_000)
-    await evaluate(`document.querySelector('[data-agent-trace]').open = true`)
+    await openAgentDetails('data-agent-technical')
+  await evaluate(`document.querySelector('[data-agent-trace]').open = true`)
     assert.equal(await evaluate(`(() => {
       const workspace = document.querySelector('.agent-demo__workspace').getBoundingClientRect();
       const inspector = document.querySelector('.agent-demo__inspector').getBoundingClientRect();

@@ -8,11 +8,18 @@ import {
   type DemoTask,
 } from '../demoRegistry'
 import { filterShowcaseItems, showcaseItems } from '../showcaseCatalog'
-import { surfaceHref } from '../route'
+import { agentHref, surfaceHref, type AgentTool } from '../route'
 import { persistShowcasePreferences, readShowcasePreferences } from '../showcasePreferences'
 
 const ALL_TASKS = 'All tasks' as const
 const ALL_FORMATS = 'All formats' as const
+
+const AGENT_STARTERS: { tool: AgentTool; format: string; title: string; description: string; file: string }[] = [
+  { tool: 'sheets', format: 'XLSX', title: 'Update a workstream status', description: 'Move a workstream forward in a populated launch-readiness plan.', file: 'Launch-readiness plan' },
+  { tool: 'docs', format: 'DOCX', title: 'Revise a document title', description: 'Give the Northstar launch brief a new title without rebuilding the document.', file: 'Northstar launch brief' },
+  { tool: 'slides', format: 'PPTX', title: 'Update a presentation title', description: 'Rename the opening slide in a real Northstar launch-review deck.', file: 'Northstar launch review' },
+  { tool: 'pdf', format: 'PDF', title: 'Rotate a PDF page', description: 'Change one page’s orientation in a four-page operating review.', file: 'Northstar operating review' },
+]
 
 function FilterButton<T extends string>({ value, selected, onSelect }: { value: T; selected: boolean; onSelect: (value: T) => void }) {
   return <button type="button" aria-pressed={selected} onClick={() => onSelect(value)}>{value}</button>
@@ -43,44 +50,37 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
     document.querySelector<HTMLInputElement>('#showcase-query')?.focus({ preventScroll: true })
   }
 
-  const authorityProof = (
-      <section className="overview-hero" aria-labelledby="overview-title">
-        <div className="overview-copy">
-          <p className="hero-note"><span aria-hidden="true">↻</span> Original Office bytes stay authoritative</p>
-          <h2 id="overview-title">Choose the job. Keep the source file.</h2>
-          <p className="hero-lede">Open-source TypeScript, Go, and browser-WASM engines for agents and web applications. Inspect a real file, apply a bounded change, reopen the exact output, and preserve everything outside the edit.</p>
-          <div className="hero-actions">
-            <button className="primary-action" type="button" onClick={focusCatalog}>Find a working proof</button>
-            <a className="secondary-action" href={`${surfaceHref('sheets')}?view=native`} onPointerEnter={warmSheets} onPointerDown={warmSheets} onFocus={warmSheets}>Run the native XLSX proof</a>
-          </div>
-          <dl className="hero-facts">
-            <div><dt>26</dt><dd>composable packages</dd></div>
-            <div><dt>16</dt><dd>proof surfaces</dd></div>
-            <div><dt>4</dt><dd>document formats</dd></div>
-          </dl>
-        </div>
-        <div className="authority-ledger" aria-label="Native XLSX proof sequence">
-          <header>
-            <div><strong>launch-readiness-plan.xlsx</strong><span>Bundled, repository-owned business fixture</span></div>
-            <span className="authority-ledger__runtime"><i aria-hidden="true" />Browser-local</span>
-          </header>
-          <ol>
-            <li><span>Extract</span><div><strong>Read the original package</strong><code>sha256:bdf753af2b…612f0d</code></div></li>
-            <li><span>Guard</span><div><strong>Bind one typed change to that revision</strong><code>cell.set_value · Data!A1</code></div></li>
-            <li><span>Apply</span><div><strong>Patch only the requested XML</strong><code>Go engine in a browser Worker</code></div></li>
-            <li><span>Verify</span><div><strong>Reopen the exact returned bytes</strong><code>value confirmed · revision advanced</code></div></li>
-          </ol>
-          <footer><span aria-hidden="true">✓</span><div><strong>Fail closed</strong><small>Unsafe or stale changes produce no replacement file.</small></div></footer>
-        </div>
-      </section>
-  )
-
   return (
     <div className="overview-page">
-      <section className="showcase-catalog" id="showcase-catalog" aria-labelledby="showcase-title">
+      <section className="task-launch" aria-labelledby="showcase-title">
+        <header className="task-launch__intro">
+          <h1 id="showcase-title" tabIndex={-1}>Give an agent a document task</h1>
+          <p>Pick a sample file and a focused edit. Review what will change, approve it yourself, and download the verified result.</p>
+          <p className="task-launch__boundary"><strong>Simulated agent · real document operations</strong><span>A deterministic mock proposes the edit. No LLM, API key, or external AI service.</span></p>
+        </header>
+        <ul className="task-launch__tasks" aria-label="Choose a document task">
+          {AGENT_STARTERS.map((starter) => (
+            <li key={starter.tool}>
+              <a className="task-launch__task" href={agentHref(starter.tool)} data-agent-task={starter.tool} onPointerEnter={() => preloadDemoOnIntent('agent')} onFocus={() => preloadDemoOnIntent('agent')}>
+                <span className="task-launch__format">{starter.format}</span>
+                <span className="task-launch__task-copy"><strong>{starter.title}</strong><span>{starter.description}</span><small>{starter.file} · bundled sample</small></span>
+                <span className="task-launch__open">Try task</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <ol className="task-launch__workflow" aria-label="How the guided demo works">
+          <li><strong>Choose a task</strong><span>Inspect a real sample file.</span></li>
+          <li><strong>Review the difference</strong><span>See the proposed change.</span></li>
+          <li><strong>Approve the edit</strong><span>You authorize the file write.</span></li>
+          <li><strong>Download verified output</strong><span>Reopen and check the result.</span></li>
+        </ol>
+        <div className="task-launch__footnote"><p>These guided tasks cover specific edits in bundled files, not unrestricted AI. Choosing a task never applies or approves a change.</p><button type="button" onClick={focusCatalog}>Browse all demos</button></div>
+      </section>
+      <section className="showcase-catalog" id="showcase-catalog" aria-labelledby="showcase-catalog-title">
         <header className="showcase-heading">
           <div>
-            <h1 id="showcase-title" tabIndex={-1}>Start with what you need to do</h1>
+            <h2 id="showcase-catalog-title">Explore the document engines</h2>
             <p>Scroll through the demos below, or jump to a section from the navigation. Filter sixteen focused surfaces across twenty-six packages to find a starting point. These are bounded proofs, not a claim of unrestricted Microsoft Office parity.</p>
           </div>
           <span className={`overview-runtime overview-runtime--${sidecar}`} role="status" aria-live="polite">{runtimeLabel}</span>
@@ -165,7 +165,6 @@ export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'conne
           </div>
         )}
       </section>
-      {authorityProof}
     </div>
   )
 }

@@ -3,21 +3,33 @@ import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./pages/OverviewPage.tsx', import.meta.url), 'utf8')
 
-describe('overview native workflow', () => {
-  it('presents the catalogue as the introduction to one continuous live demo', () => {
+describe('overview guided workflow', () => {
+  it('introduces document tasks before the searchable catalogue in one continuous demo', () => {
     expect(source).toContain('Scroll through the demos below, or jump to a section from the navigation.')
-    expect(source).toContain('<h1 id="showcase-title" tabIndex={-1}>')
+    expect(source).toContain('<h1 id="showcase-title" tabIndex={-1}>Give an agent a document task</h1>')
+    expect(source).toContain('<h2 id="showcase-catalog-title">')
+    expect(source.indexOf('className="task-launch"')).toBeLessThan(source.indexOf('className="showcase-catalog"'))
+    expect(source).toContain('Browse all demos')
   })
-  it('leads with the source-authoritative workflow and opens the native XLSX proof directly', () => {
-    expect(source).toContain('Original Office bytes stay authoritative')
-    expect(source).toContain("${surfaceHref('sheets')}?view=native")
-    expect(source).toContain('Reopen the exact returned bytes')
-    expect(source).toContain('Unsafe or stale changes produce no replacement file')
+  it('offers four bounded starter links without triggering writes or approval', () => {
+    for (const tool of ['sheets', 'docs', 'slides', 'pdf']) expect(source).toContain(`tool: '${tool}'`)
+    for (const task of ['Update a workstream status', 'Revise a document title', 'Update a presentation title', 'Rotate a PDF page']) expect(source).toContain(task)
+    expect(source).toContain('href={agentHref(starter.tool)}')
+    expect(source).toContain('Choosing a task never applies or approves a change.')
+    expect(source).not.toMatch(/\.commit\(|\.approve\(/)
+  })
+
+  it('clearly separates simulated proposals from real document operations without invented evidence', () => {
+    expect(source).toContain('Simulated agent · real document operations')
+    expect(source).toContain('No LLM, API key, or external AI service.')
+    expect(source).toContain('These guided tasks cover specific edits in bundled files, not unrestricted AI.')
+    for (const step of ['Choose a task', 'Review the difference', 'Approve the edit', 'Download verified output']) expect(source).toContain(step)
+    expect(source).not.toContain('sha256:')
+    expect(source).not.toContain('value confirmed')
+    expect(source).not.toContain('Open-source')
   })
 
   it('states the package-to-surface coverage without implying full Office parity', () => {
-    expect(source).toContain('<dt>26</dt><dd>composable packages</dd>')
-    expect(source).toContain('<dt>16</dt><dd>proof surfaces</dd>')
     expect(source).toContain('Filter sixteen focused surfaces across twenty-six packages')
     expect(source).toContain('not a claim of unrestricted Microsoft Office parity')
     expect(source).not.toMatch(/alternative to Google and Microsoft Office/i)

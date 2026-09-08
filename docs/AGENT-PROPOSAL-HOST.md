@@ -1,9 +1,11 @@
-# Demo proposal modes
+# Guided mock demo and standalone proposal host
 
-## Built-in mock agent: default, no setup
+## Guided mock agent: no model or setup
 
-Open an agent example, keep **Built-in mock agent (no LLM)**, and select
-**Run agent**. The bundled mock proposes one bounded edit from the inspected file:
+Choose one of the overview's four task starters, then use the guided controls
+to prepare an edit. The demo is labelled **Simulated agent · real document operations**.
+It has no live-provider or local-rule mode selector. Task choices produce bounded
+requests to the mock; examples of its internal request grammar are:
 
 - Sheets: `Mark Mobile as On track` changes one disclosed status cell.
 - Docs: `Replace "Northstar Launch Brief" with "Northstar Beta Launch Brief"` replaces one source-anchored run.
@@ -22,22 +24,32 @@ variables or additional server process are needed. Static builds simulate the
 endpoint response entirely in the browser using the same generator, so they work
 without a backend too. There is no automatic fallback to the live endpoint.
 
-The UI discloses the mock and its transport and shows the proposal request/response.
+The primary UI leads with task controls, **Run agent**, a real before/after review,
+separate human approval, and verified download. Collapsed **Technical details**
+disclose the mock transport and show the proposal request/response alongside
+actual tool calls. The nested **Try the safety boundaries** section is also
+collapsed until requested.
 The resulting proposal passes through the same strict target/revision validation,
 real-file preview, separate human approval, commit, and readback verification
-as a live proposal. The original local rule-based proposer is also available.
+required of any proposal source. Configuring provider environment variables does
+not make this UI call a provider; no LLM, API key, or external AI service is used.
+Task links never apply or approve a change. These examples demonstrate bundled
+files and specific operations, not unrestricted reasoning or arbitrary uploads.
 
-## Optional local live-proposal bridge
+## Standalone integrator example: local proposal bridge
 
-The playground's deterministic proposal mode works without any external service.
-Live mode is an **optional proposal-only integration point**, not a bundled model
-provider or autonomous editing service. You supply a trusted endpoint implementing
-the contract below. There is no default provider, model, or endpoint.
+The repository also retains an **optional proposal-only integration point** for
+developers building their own host. It is separate from the guided demo UI, not
+a bundled model provider or autonomous editing service. You supply a trusted
+endpoint implementing the contract below and your own explicit integration.
+There is no default provider, model, or endpoint. Merely configuring the bridge
+does not trigger an upstream request.
 
-Configure these **server-only** environment variables before starting the Vite demo:
+For a standalone integration, configure this **server-only** environment variable
+before starting the API-only host (Node 22.18+):
 
 ```sh
-INJOFFICE_AGENT_PROPOSAL_URL=https://your-trusted-host.example/propose npm run dev -w apps-playground
+INJOFFICE_AGENT_PROPOSAL_URL=https://your-trusted-host.example/propose node scripts/agent-proposal-host.mjs
 ```
 
 Optionally set `INJOFFICE_AGENT_PROPOSAL_TOKEN` securely in the host environment; the
@@ -58,7 +70,7 @@ Your endpoint receives a POST with JSON:
 }
 ```
 
-The actual context contains only the bounded inspection selected by the demo,
+The actual context should contain only the bounded inspection selected by the host,
 not full Office file bytes. Treat workbook text as untrusted data, not instructions.
 Your provider adapter is responsible for calling its chosen model and translating
 its output to this provider-neutral response:
@@ -83,8 +95,8 @@ validates the envelope, **not the operation's authority or semantic correctness*
 It strips extra top-level and operation metadata. Local planning/validation still
 has to reject unsupported or unsafe edits.
 
-The browser must explicitly consent before the request and inspected context leave
-the demo. Consent to share data is **not approval to edit a file**. The proposal
+Your browser integration must obtain explicit consent before the request and
+inspected context leave the local host. Consent to share data is **not approval to edit a file**. The proposal
 endpoint cannot grant approval, commit a change, or invoke Office tools. A trusted
 host must bind any actual write approval to the exact reviewed change set; never
 accept a model-supplied approval string as authorization.
@@ -100,8 +112,8 @@ accept a model-supplied approval string as authorization.
 - Cancellation/disconnection aborts the upstream request. Errors are generic and
   do not return upstream response bodies, tokens, or internal diagnostics.
 
-Static deployments do not contain this Node bridge. Live mode should remain
-unavailable there. The local relay intentionally has no permissive CORS and must
+Static deployments do not contain this Node bridge, and the guided demo never
+uses it for live proposals in any deployment. The local relay intentionally has no permissive CORS and must
 not be exposed as a public unauthenticated model proxy. Production hosts need
 authentication, authorization, cost/rate controls, audit policy, and their own
 approved data-sharing policy. These safeguards do not make arbitrary endpoints or
@@ -123,6 +135,13 @@ call a model:
 curl http://127.0.0.1:3102/api/agent/proposal-status
 ```
 
-Browser integrations must serve the UI and relay at the same origin (for example,
+Browser integrations must serve their own UI and relay at the same origin (for example,
 mount this handler in the UI server). Pointing a cross-origin browser directly at
-port 3102 is deliberately rejected. Use the Vite-integrated handler for the demo.
+port 3102 is deliberately rejected. Vite also mounts the handler for integration
+testing, but the shipped guided demo calls only the mock proposal route.
+
+Development browser smoke configures an isolated loopback upstream stub and
+asserts that the guided workflow sends it zero requests, including after real
+file approval and download. Standalone handler tests cover explicit consent,
+envelope limits, cancellation, and credential handling separately. No test needs
+a real model or provider.

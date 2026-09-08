@@ -12,6 +12,14 @@ const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const githubSourceRoot = 'https://github.com/injectinglabs/injoffice/blob/main/'
 
 describe('guided demo recipes', () => {
+  it('guides agent tasks through the mock-only controls and expandable evidence', () => {
+    const instructions = DEMO_RECIPES.agent.steps.map((step) => step.instruction).join(' ')
+    expect(instructions).toContain('Customize this task')
+    expect(instructions).toContain('Run agent')
+    expect(instructions).toContain('Technical details → Try the safety boundaries')
+    expect(instructions).not.toContain('Keep “Built-in mock agent')
+  })
+
   it('covers every proof surface with actionable, ordered steps', () => {
     const registeredSurfaces = SURFACES.filter((surface) => surface !== 'overview').sort()
 
