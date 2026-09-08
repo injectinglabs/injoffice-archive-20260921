@@ -45,12 +45,13 @@ jobs:
       - name: Browser-local XLSX, DOCX, and PPTX extract/apply smoke
         run: npm run test:office-browser-smoke:built
       - name: Showcase navigation, accessibility, and AI workflows
-        timeout-minutes: 5
+        timeout-minutes: 10
         env:
           SHOWCASE_OUTPUT: artifacts/showcase-browser
         run: |
           node --test scripts/showcase-smoke-server.test.mjs
           npm run test:showcase-browser -- --built
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
       - name: Upload showcase browser diagnostics
         if: failure()
         uses: actions/upload-artifact@v6

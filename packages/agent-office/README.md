@@ -33,6 +33,14 @@ writes, PDF delete/reorder/crop/resize/n-up, and authored slide removal require
 the changeset's confirmation hook. Hosts should still apply their own access
 control and durable idempotency store at the execution boundary.
 
+The [playground Sheets example](../../apps/playground/README.md#agent-integration-example)
+connects the public XLSX adapter to a native browser Worker and dispatches actual
+JSON tools. It demonstrates editable deterministic requests, exact-plan host
+approval, source-revision conflicts, idempotent retries, and committed-output
+verification. The other three playground agent formats are lifecycle simulations;
+they should not be mistaken for native-byte integrations. Model-generated
+confirmation values never substitute for the host's authenticated approval state.
+
 ## Honest boundaries
 
 - Native XLSX support is limited to the public v1 mutation protocol. The agent adapter intentionally refuses null style fields because the effective-style projection cannot prove that a direct property was cleared.

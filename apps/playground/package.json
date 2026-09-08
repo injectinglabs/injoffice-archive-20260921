@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@injoffice/agent-office": "*",
     "@injoffice/agent-tools": "*",
     "@injoffice/charts": "*",
     "@injoffice/collab": "*",

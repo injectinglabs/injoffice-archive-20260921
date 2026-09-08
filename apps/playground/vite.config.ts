@@ -48,6 +48,18 @@ export default defineConfig(async ({ command }) => {
   const plugins: Plugin[] = [react()]
   if (command === 'serve') {
     const { handlePdfNodeRequest } = await import('./pdfNodeHost.ts')
+    const { handleAgentProposalRequest } = await import('./agentProposalHost.ts')
+    plugins.push({
+      name: 'injoffice-agent-proposal-host',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          void handleAgentProposalRequest(req, res).then((handled) => { if (!handled) next() }).catch(() => {
+            if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'The proposal host could not complete the request.' }))
+          })
+        })
+      },
+    })
     plugins.push(pdfNodeHostPlugin(handlePdfNodeRequest), ipv6Loopback(3100))
   }
   return {
@@ -60,6 +72,8 @@ export default defineConfig(async ({ command }) => {
     } : undefined,
     resolve: {
       alias: {
+        '@injoffice/agent-office/xlsx': pkgFile('agent-office', 'xlsx.ts'),
+        '@injoffice/sheets/browser': pkgFile('sheets', 'browser.ts'),
         '@injoffice/agent-tools': pkgSrc('agent-tools'),
         '@injoffice/font-metrics/layout': pkgFile('font-metrics', 'layout.ts'),
         '@injoffice/charts': pkgSrc('charts'),

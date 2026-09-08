@@ -1,7 +1,7 @@
 import {
   WORKBOOK_MUTATION_PROTOCOL, WORKBOOK_MUTATION_VERSION, decodeWorkbookMutationBatch, validateNativeWorkbookV1, validateNativeWorkbookV2,
   type NativeWorkbookV1, type NativeWorkbookV2, type StyleDelta, type SupportedWorkbookMutation, type WorkbookMutationBatchV1,
-} from '@injoffice/sheets'
+} from '@injoffice/sheets/browser'
 import type { AgentArtifactAdapter, AgentArtifactIdentity, AgentCapability, AgentIssue, AgentOperation, JsonObject, JsonValue } from '@injoffice/agent-tools'
 import { assertFresh, boundedObject, cursorOffset, errorIssue, toJson } from './hash.js'
 

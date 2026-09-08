@@ -46,7 +46,7 @@ export const AGENT_TOOLS = [
     fileType: 'XLSX',
     label: 'Sheets',
     title: 'AI change sets · Sheets',
-    description: 'Review a proposed Security status change in a real XLSX, approve the native write, reopen the exact output, and download the verified file. No model service or file upload.',
+    description: 'Ask for a workbook status edit through public agent tools, review and approve the exact change, then inspect native verification. Try stale approvals, safe retries, and readback failures. Local by default; live proposals require an explicitly configured host.',
   },
   {
     tool: 'docs',

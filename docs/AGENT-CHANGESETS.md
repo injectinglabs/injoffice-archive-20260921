@@ -60,9 +60,9 @@ This layer is not:
 
 ## Playground proof
 
-The `#/agent` playground route demonstrates capability discovery, a bounded inspection, a deterministic local operation proposal, isolated preview and diff, validation, explicit human approval, commit, and verification. No model service or API key is used. Its refusal mode proves that unsupported operations stop before write.
+The `#/agent` playground route demonstrates capability discovery, a bounded inspection, an operation proposal, isolated preview and diff, validation, explicit human approval, commit, and verification. Local rule-based mode needs no model service or API key. Its refusal mode proves that unsupported operations stop before write. Optional live proposals require a configured local host and explicit consent; see [proposal host setup](AGENT-PROPOSAL-HOST.md).
 
-The **Sheets** example loads the bundled `launch-readiness-plan.xlsx` and proposes changing Security status at `Launch Readiness!C5` from Review to Ready. Its bounded playground adapter delegates the write to the native XLSX browser Worker. After approval it reopens the exact output bytes, checks the cell value and package identity, and offers those verified bytes for download. Preview is a projected cell diff, not a rendered Excel preview. Sample and engine assets are fetched from the demo host; workbook bytes are never uploaded and no server fallback is attempted.
+The **Sheets** example loads the bundled `launch-readiness-plan.xlsx`. Editable requests such as “Mark Security as Ready” and “Mark Mobile as On track” discover the correct target through public capability, inspection, and read calls. The shipped XLSX adapter delegates preview and write to native browser Worker callbacks. Preview applies to an isolated copy, never the authoritative source. After host approval, commit writes the source replacement and verifies native readback. Verified output bytes can be downloaded. The displayed table is a bounded projection, not a rendered Excel page. Sample and engine assets are fetched from the demo host; Office file bytes are never uploaded and no native-write server fallback is attempted. Live proposals share only the displayed bounded context after consent.
 
 **Docs, Slides, and PDF are lifecycle simulations**, using document-shaped JavaScript data and the real `@injoffice/agent-tools` session. They do not write or reopen Office files. Their verification proves simulated state/receipt consistency, not file fidelity. Their visible capabilities are limited to the operation actually implemented by each sample adapter.
 
@@ -73,9 +73,10 @@ import { createAgentSession } from '@injoffice/agent-tools'
 
 // artifact, adapter, actor and proposedOperations come from your host.
 // The adapter owns format I/O; approval must come from your review UI.
+const approvedChanges = new Set<string>() // private to the trusted host
 const session = await createAgentSession({
   artifact, adapter, actor,
-  confirmDestructive: async ({ confirmation }) => confirmation === 'approved',
+  confirmDestructive: async ({ changeSet }) => !!changeSet && approvedChanges.has(changeSet.changeSetId),
 })
 const change = await session.plan(proposedOperations, {
   expectedRevision: session.identity.revision,
@@ -86,7 +87,8 @@ const diff = await change.diff()
 const validation = await change.validate()
 // Show preview/diff, then wait for explicit approval of this exact change.
 if (validation.valid && approvedByUser) {
-  const receipt = await change.commit({ idempotencyKey, confirmation: 'approved' })
+  approvedChanges.add(change.envelope.changeSetId) // trusted host review action only
+  const receipt = await change.commit({ idempotencyKey })
   // A completed mutation and successful verification are distinct outcomes.
   showResult(receipt.verification)
 }

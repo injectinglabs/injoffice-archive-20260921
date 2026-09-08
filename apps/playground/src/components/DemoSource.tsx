@@ -3,12 +3,19 @@ import type { DemoRecipeSource } from '../demoRecipes'
 
 // Keep source text out of the initial bundle; load only the selected example.
 const sourceFiles = import.meta.glob<string>(['../pages/*.tsx', '../collabSimulator.tsx'], { query: '?raw', import: 'default' })
-const agentIntegration = `import { createAgentSession } from '@injoffice/agent-tools'
+const agentIntegration = `import { createAgentSession, createAgentToolDispatcher } from '@injoffice/agent-tools'
+import { createXlsxAgentAdapter } from '@injoffice/agent-office/xlsx'
 
-// Your host supplies the artifact, format adapter, actor and operations.
-const session = await createAgentSession({ artifact, adapter, actor,
-  confirmDestructive: async ({ confirmation }) => confirmation === 'approved',
+// Host-private state. Never grant approval from an agent's tool arguments.
+const approvedChanges = new Set()
+// artifact supplies native snapshot / preview / atomic apply callbacks.
+const session = await createAgentSession({ artifact, actor,
+  adapter: createXlsxAgentAdapter(),
+  confirmDestructive: async ({ changeSet }) =>
+    !!changeSet && approvedChanges.has(changeSet.changeSetId),
 })
+const tools = createAgentToolDispatcher(session)
+// Give the agent a restricted proposal/read interface, not approval access.
 const change = await session.plan(operations, {
   expectedRevision: session.identity.revision,
   expectedFingerprint: session.identity.fingerprint,
@@ -17,7 +24,9 @@ const diff = await change.diff()
 const validation = await change.validate()
 // Show the diff and wait for approval of this exact change.
 if (validation.valid && approvedByUser) {
-  const receipt = await change.commit({ idempotencyKey, confirmation: 'approved' })
+  // Only your authenticated host review handler may execute this line.
+  approvedChanges.add(change.envelope.changeSetId)
+  const receipt = await change.commit({ idempotencyKey })
   showResult(receipt.verification)
 }`
 

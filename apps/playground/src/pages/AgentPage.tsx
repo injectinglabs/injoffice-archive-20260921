@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { AgentToolCall, AgentToolCallResult, JsonObject } from '@injoffice/agent-tools'
 import {
   createDemoSessionInput,
   type AgentCapability,
@@ -10,20 +11,32 @@ import {
   type AgentValidation,
   type AgentVerification,
 } from '../agentDemoRuntime'
-import { createAgentDemoScenario, type AgentDemoFormat, type AgentDemoMode } from '../agentDemoScenario'
+import { createAgentDemoScenario, type AgentDemoFormat, type AgentDemoMode, type AgentDemoOperation } from '../agentDemoScenario'
 import { AGENT_XLSX_NAME, createNativeAgentSessionInput } from '../agentXlsxDemo'
 import { createBrowserXlsxRoundTripRuntime } from '../xlsxRoundTripRuntime'
 import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, type AgentTool } from '../route'
 import { DsButton, DsCallout, DsChip, DsSegment } from '../design-system/primitives'
 import '../design-system/live-tools.css'
+import './AgentWorkflow.css'
 
-type WorkflowState = 'ready' | 'preparing' | 'awaiting-approval' | 'refused' | 'committing' | 'verified' | 'error'
+type WorkflowState = 'ready' | 'preparing' | 'awaiting-approval' | 'refused' | 'committing' | 'verified' | 'unverified' | 'error'
 type WorkflowStep = 'Inspect' | 'Plan' | 'Preview + diff' | 'Validate' | 'Approve' | 'Commit' | 'Verify'
-type AgentToolName = 'office.capabilities' | 'office.inspect' | 'office.plan' | 'office.preview' | 'office.diff' | 'office.validate' | 'office.commit' | 'office.verify'
+type AgentToolName = 'office.capabilities' | 'office.inspect' | 'office.read' | 'office.plan' | 'office.preview' | 'office.diff' | 'office.validate' | 'office.commit' | 'office.verify'
 
 const STEPS: WorkflowStep[] = ['Inspect', 'Plan', 'Preview + diff', 'Validate', 'Approve', 'Commit', 'Verify']
-const AGENT_TOOL_METHODS: AgentToolName[] = ['office.capabilities', 'office.inspect', 'office.plan', 'office.preview', 'office.diff', 'office.validate', 'office.commit', 'office.verify']
-type SessionInput = ReturnType<typeof createDemoSessionInput> & { dispose?: () => void; download?: () => Blob | null }
+const AGENT_TOOL_METHODS: AgentToolName[] = ['office.capabilities', 'office.inspect', 'office.read', 'office.plan', 'office.preview', 'office.diff', 'office.validate', 'office.commit']
+type TraceEntry = { request: AgentToolCall; response: AgentToolCallResult }
+type SessionInput = ReturnType<typeof createDemoSessionInput> & {
+  dispose?: () => void; download?: () => Blob | null
+  approve?: (changeSetId: string) => Promise<void>
+  propose?: (request: string) => Promise<AgentDemoOperation[]>
+  trace?: () => TraceEntry[]
+  simulateConcurrentEdit?: () => Promise<void>
+  setVerificationFailure?: (enabled: boolean) => void
+  stats?: () => { nativeWrites: number }
+  proposalContext?: () => Promise<JsonObject>
+  acceptProposal?: (proposal: unknown) => AgentDemoOperation[]
+}
 
 function stepState(step: WorkflowStep, state: WorkflowState): 'done' | 'active' | 'waiting' | 'refused' {
   const progress: Record<WorkflowState, number> = {
@@ -33,10 +46,12 @@ function stepState(step: WorkflowStep, state: WorkflowState): 'done' | 'active' 
     refused: 3,
     committing: 5,
     verified: 7,
+    unverified: 6,
     error: 0,
   }
   const index = STEPS.indexOf(step)
   if (state === 'refused' && step === 'Validate') return 'refused'
+  if (state === 'unverified' && step === 'Verify') return 'refused'
   if (index < progress[state]) return 'done'
   if (index === progress[state]) return 'active'
   return 'waiting'
@@ -47,10 +62,12 @@ function SheetArtifact({ content, highlighted }: { content: Record<string, unkno
   const rows = content.rows as Array<Array<string | number>>
   const changed = content.changedCell as { row: number; column: number } | undefined
   return (
+    <div className="agent-artifact__sheet-scroll" role="region" aria-label="Workbook preview; scroll horizontally to see all columns" tabIndex={0}>
     <table className="agent-artifact__sheet ds-table">
       <thead><tr><th aria-label="Row number" />{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
       <tbody>{rows.map((row, rowIndex) => <tr key={String(row[0])}><th>{rowIndex + 2}</th>{row.map((cell, cellIndex) => <td className={highlighted && rowIndex === (changed?.row ?? 3) && cellIndex === (changed?.column ?? 3) ? 'agent-artifact__changed' : undefined} key={`${rowIndex}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody>
     </table>
+    </div>
   )
 }
 
@@ -123,20 +140,38 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
   const [sessionInput, setSessionInput] = useState<SessionInput | null>(null)
   const [reload, setReload] = useState(0)
   const [downloadURL, setDownloadURL] = useState('')
+  const [prompt, setPrompt] = useState('Mark Security as Ready')
+  const [trace, setTrace] = useState<TraceEntry[]>([])
+  const [nativeWrites, setNativeWrites] = useState(0)
+  const [sourceChanged, setSourceChanged] = useState(false)
+  const [failVerification, setFailVerification] = useState(false)
+  const [safetyBusy, setSafetyBusy] = useState(false)
+  const [retryResult, setRetryResult] = useState('')
+  const [proposalSource, setProposalSource] = useState<'local' | 'live'>('local')
+  const [liveContext, setLiveContext] = useState<JsonObject | null>(null)
+  const [liveHost, setLiveHost] = useState('')
+  const [liveNotice, setLiveNotice] = useState('')
+  const [consent, setConsent] = useState(false)
+  const proposalAbort = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const fallbackScenario = useMemo(() => {
     const sample = createAgentDemoScenario(format, mode)
     if (format !== 'xlsx') return sample
     return { ...sample, artifact: { ...sample.artifact, name: AGENT_XLSX_NAME, revision: 'Not loaded' },
-      prompt: mode === 'safe' ? 'Mark Security as Ready after the approved pen-test review.' : 'Execute an unsupported workbook macro.',
+      prompt: mode === 'safe' ? 'Mark Security as Ready' : 'Execute an unsupported workbook macro.',
       summary: 'Load the real workbook to inspect the exact source and proposed change.',
     }
   }, [format, mode])
   const scenario = sessionInput?.scenario ?? fallbackScenario
   const toolMeta = AGENT_TOOLS.find((item) => item.tool === tool) ?? AGENT_TOOLS[0]
   const markTool = (name: AgentToolName) => setToolLog((log) => log.includes(name) ? log : [...log, name])
+  const refreshTrace = (input: SessionInput | null = sessionInput) => {
+    setTrace(input?.trace?.() ?? [])
+    setNativeWrites(input?.stats?.().nativeWrites ?? 0)
+  }
 
   const reset = () => {
+    proposalAbort.current?.abort()
     generation.current += 1
     setState('ready')
     setApproved(false)
@@ -149,6 +184,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     setVerification(null)
     setError(null)
     setToolLog([])
+    setRetryResult('')
   }
 
   useEffect(() => {
@@ -163,6 +199,12 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     reset()
     setSessionInput(null)
     setCapabilities([])
+    setSourceChanged(false)
+    setFailVerification(false)
+    setSafetyBusy(false)
+    setTrace([])
+    setNativeWrites(0)
+    setConsent(false)
     let cancelled = false
     let loaded: SessionInput | undefined
     const runtime = format === 'xlsx' ? createBrowserXlsxRoundTripRuntime() : undefined
@@ -174,6 +216,8 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
         if (cancelled) return
         setSessionInput(loaded)
         setCapabilities(report.operations)
+        setPrompt(loaded.scenario.prompt)
+        refreshTrace(loaded)
       } catch (reason: unknown) {
         if (cancelled) return
         setError(reason instanceof Error ? reason.message : String(reason))
@@ -181,8 +225,36 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       }
     }
     void initialize()
-    return () => { cancelled = true; generation.current += 1; loaded?.dispose?.(); runtime?.terminate() }
+    return () => { cancelled = true; generation.current += 1; proposalAbort.current?.abort(); loaded?.dispose?.(); runtime?.terminate() }
   }, [format, mode, reload])
+
+  useEffect(() => {
+    setLiveContext(null)
+    setLiveHost('')
+    setConsent(false)
+    if (format !== 'xlsx' || proposalSource !== 'live' || !sessionInput?.proposalContext) return
+    const controller = new AbortController()
+    let cancelled = false
+    setLiveNotice('Checking the local proposal host…')
+    const connect = async () => {
+      try {
+        const response = await fetch('/api/agent/proposal-status', { signal: controller.signal })
+        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Live proposals require a configured local host. This deployment supports local mode.')
+        const status = await response.json() as { configured?: boolean; destination?: string }
+        if (!status.configured) throw new Error('No live agent endpoint is configured. Set INJOFFICE_AGENT_PROPOSAL_URL on the local host, then reload this demo.')
+        const context = await sessionInput.proposalContext!()
+        if (cancelled) return
+        setLiveContext(context)
+        setLiveHost(status.destination || 'the configured agent endpoint')
+        setLiveNotice('Review the shared context below before enabling the live request.')
+        refreshTrace()
+      } catch (reason) {
+        if (!cancelled) setLiveNotice(reason instanceof Error ? reason.message : String(reason))
+      }
+    }
+    void connect()
+    return () => { cancelled = true; controller.abort() }
+  }, [format, proposalSource, sessionInput])
 
   const selectTool = (next: AgentTool) => {
     if (parseAgentTool() !== next) window.location.hash = agentHref(next)
@@ -202,7 +274,26 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     const run = generation.current
     setState('preparing')
     try {
-      const { session, operations } = sessionInput
+      const { session } = sessionInput
+      let operations = sessionInput.operations
+      if (mode === 'safe' && sessionInput.propose) {
+        if (proposalSource === 'live') {
+          if (!consent || !liveContext || !sessionInput.acceptProposal) throw new Error('Review the bounded context and explicitly consent before requesting a live proposal.')
+          const controller = new AbortController()
+          proposalAbort.current = controller
+          const { capabilities: sharedCapabilities, ...context } = liveContext
+          const response = await fetch('/api/agent/propose', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+            body: JSON.stringify({ request: prompt, context, capabilities: sharedCapabilities, consent: true }),
+          })
+          if (!response.ok) throw new Error(`The proposal host could not complete the request (HTTP ${response.status}). No workbook change was committed.`)
+          const proposed: unknown = await response.json()
+          if (run !== generation.current) return
+          operations = sessionInput.acceptProposal(proposed)
+        } else operations = await sessionInput.propose(prompt)
+      }
+      if (run !== generation.current) return
+      refreshTrace()
       const report = await session.capabilities()
       if (run !== generation.current) return
       markTool('office.capabilities')
@@ -228,6 +319,8 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       if (run !== generation.current) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setState('error')
+    } finally {
+      if (run === generation.current) refreshTrace()
     }
   }
 
@@ -237,6 +330,10 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     setError(null)
     const run = generation.current
     try {
+      // This function is reached from a trusted UI action, never a tool call.
+      await sessionInput?.approve?.(changeSet.id)
+      if (run !== generation.current) return
+      sessionInput?.setVerificationFailure?.(failVerification)
       const nextReceipt = await changeSet.commit({
         expectedRevision: inspection.revision,
         idempotencyKey: `demo-${changeSet.id}`,
@@ -247,14 +344,46 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       setReceipt(nextReceipt)
       const nextVerification = await changeSet.verify(nextReceipt)
       if (run !== generation.current) return
-      markTool('office.verify')
       setVerification(nextVerification)
-      setState(nextVerification.ok ? 'verified' : 'error')
-      if (!nextVerification.ok) setError('The committed output did not match its receipt.')
+      setState(nextVerification.ok ? 'verified' : 'unverified')
+      if (!nextVerification.ok) setError('Write completed; verification failed. The commit receipt exists, but no verified download is available. Reload the sample before trying another edit.')
     } catch (reason: unknown) {
       if (run !== generation.current) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setState('error')
+    } finally {
+      if (run === generation.current) refreshTrace()
+    }
+  }
+
+  const simulateConcurrentEdit = async () => {
+    if (!sessionInput?.simulateConcurrentEdit || sourceChanged || safetyBusy) return
+    const run = generation.current
+    setSafetyBusy(true)
+    try {
+      await sessionInput.simulateConcurrentEdit()
+      if (run === generation.current) setSourceChanged(true)
+    } catch (reason) {
+      if (run === generation.current) setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      if (run === generation.current) { setSafetyBusy(false); refreshTrace() }
+    }
+  }
+
+  const retryCommit = async () => {
+    if (!changeSet || !inspection || !receipt || !sessionInput?.stats || safetyBusy) return
+    const run = generation.current
+    const before = sessionInput.stats().nativeWrites
+    setSafetyBusy(true)
+    try {
+      const repeated = await changeSet.commit({ expectedRevision: inspection.revision, idempotencyKey: `demo-${changeSet.id}`, confirmation: 'approved' })
+      if (run !== generation.current) return
+      const after = sessionInput.stats().nativeWrites
+      setRetryResult(repeated.fingerprint === receipt.fingerprint && before === after ? 'Same receipt returned. No additional native write.' : 'Retry returned a different result; inspect the tool trace.')
+    } catch (reason) {
+      if (run === generation.current) setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      if (run === generation.current) { setSafetyBusy(false); refreshTrace() }
     }
   }
 
@@ -272,9 +401,12 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
             ? 'Applying the approved change set atomically.'
             : state === 'verified'
               ? `Verified ${receipt?.revision}. The output matches its receipt.`
+              : state === 'unverified' ? 'Write completed; verification failed. No verified download is available.'
               : 'The workflow stopped. See the error details below; reload the sample to try again.'
   const boundary = format === 'xlsx'
-    ? 'Real XLSX file · deterministic proposal · native browser write and exact-byte reopen · no model service or file upload'
+    ? proposalSource === 'live'
+      ? 'Real XLSX file · optional live proposal from a configured host · only consented bounded context is shared · native write and verification stay local'
+      : 'Real XLSX file · local rule-based proposal through public tools · native browser write and exact-byte reopen · no model service or file upload'
     : 'Lifecycle simulation · document-shaped sample data, not Office file bytes · real approval and revision guards · no model service'
 
   return (
@@ -296,19 +428,31 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
             { id: 'refusal', label: 'Refusal proof' },
           ]}
         />
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing'} onClick={() => state === 'verified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (state === 'ready' && mode === 'safe' && proposalSource === 'live' && (!liveContext || !consent))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
         <span className="agent-demo__status" data-state={state} role="status" aria-live="polite">{status}</span>
       </div>
 
       <div className="agent-request">
         <label htmlFor="agent-prompt">Agent request</label>
-        <textarea id="agent-prompt" readOnly value={scenario.prompt} rows={2} />
+        <textarea id="agent-prompt" data-agent-request maxLength={2000} readOnly={format !== 'xlsx' || mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={format === 'xlsx' && mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
         <small data-agent-boundary>{boundary}</small>
+        {format === 'xlsx' && mode === 'safe' && <>
+          <label className="agent-proposal-source">Proposal source <select data-agent-proposal-source value={proposalSource} disabled={state !== 'ready' || safetyBusy} onChange={(event) => { reset(); setProposalSource(event.target.value as 'local' | 'live') }}><option value="local">Local rule-based proposer</option><option value="live">Live agent via configured host</option></select></label>
+          <p className="agent-request-help">Try “Mark Mobile as On track” or “Mark Security as Ready”. The local rule-based proposer discovers the target from workbook reads; it is not a language model.</p>
+          {proposalSource === 'live' && <div className="agent-live-proposal">
+            <p role="status">{liveNotice}</p>
+            {liveContext && <>
+              <details data-agent-live-context><summary>Exact bounded context shared with {liveHost}</summary><pre className="ds-code" tabIndex={0}>{JSON.stringify(liveContext, null, 2)}</pre></details>
+              <label className="ds-check"><input data-agent-live-consent type="checkbox" checked={consent} disabled={state !== 'ready'} onChange={(event) => setConsent(event.target.checked)} />Send this context and my request to {liveHost} for a proposal. This may incur charges from my configured provider. No Office file bytes or browser-stored API key are sent.</label>
+            </>}
+            <p>The endpoint can propose only a bounded status edit. It cannot approve or commit. Use local mode if you do not want to share document context.</p>
+          </div>}
+        </>}
       </div>
 
-      <ol className="agent-tool-log" aria-label="office.* tool calls">
+      <ol className="agent-tool-log" aria-label={format === 'xlsx' ? 'Actual office.* tool calls' : 'Simulated lifecycle stages'}>
         {AGENT_TOOL_METHODS.map((method) => (
-          <li key={method} data-state={toolLog.includes(method) ? 'done' : 'waiting'}><code>{method}</code></li>
+          <li key={method} data-state={(format === 'xlsx' ? trace.some((entry) => entry.request.method === method && entry.response.ok) : toolLog.includes(method)) ? 'done' : 'waiting'}><code>{method}</code></li>
         ))}
       </ol>
 
@@ -333,7 +477,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
           </div>
           <footer>
             <strong>Agent request</strong>
-            <p>{scenario.prompt}</p>
+            <p>{format === 'xlsx' && mode === 'safe' ? prompt : scenario.prompt}</p>
             <small>{boundary}</small>
           </footer>
         </section>
@@ -347,7 +491,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
           </section>
 
           <section className="ds-panel">
-            <header><div><span>Plan</span><h2>{scenario.summary}</h2></div></header>
+            <header><div><span>Plan</span><h2>{format === 'xlsx' && mode === 'safe' ? 'Proposed workbook change' : scenario.summary}</h2></div></header>
             {diff?.changes.length ? (
               <div className="agent-diff">
                 {diff.changes.map((change) => <div className="ds-diff-row" key={change.target}><code>{change.target}</code><del>{change.before}</del><ins>{change.after}</ins></div>)}
@@ -361,7 +505,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               <DsCallout tone="refuse" title="Fail closed">
                 Refused before write. No output was produced.
               </DsCallout>
-              {validation.issues.map((issue) => <div key={issue.path}><strong>{issue.code}</strong><code>{issue.path}</code><p>{issue.message}</p></div>)}
+              {validation.issues.map((issue, index) => <div key={`${issue.code}:${issue.path}:${index}`}><strong>{issue.code}</strong><code>{issue.path}</code><p>{issue.message}</p></div>)}
             </section>
           ) : (
             <section className="agent-approval ds-panel">
@@ -371,7 +515,8 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
                 <input type="checkbox" checked={approved} disabled={state !== 'awaiting-approval'} onChange={(event) => setApproved(event.target.checked)} />
                 I reviewed this exact diff and approve one atomic commit.
               </label>
-              <DsButton variant={state === 'verified' ? 'green' : 'filled'} className="workbench-button workbench-button--primary" disabled={!approved || state !== 'awaiting-approval'} onClick={() => void commit()}>Commit approved change</DsButton>
+              <DsButton variant={state === 'verified' ? 'green' : 'filled'} className="workbench-button workbench-button--primary" disabled={!approved || state !== 'awaiting-approval' || safetyBusy} onClick={() => void commit()}>Commit approved change</DsButton>
+              {format === 'xlsx' && <p className="agent-approval-note">Approval is stored by the host for this exact change set. A tool argument saying “approved” cannot grant permission.</p>}
             </section>
           )}
 
@@ -384,11 +529,30 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               <div><dt>Output fingerprint</dt><dd><code>{verification?.fingerprint ?? '—'}</code></dd></div>
             </dl>
             {verification && <ul>{verification.evidence.map((item) => <li key={item}>{item}</li>)}</ul>}
+            {format === 'xlsx' && <p>Verification above comes from the committed receipt, not a second <code>office.verify</code> call.</p>}
             {state === 'verified' && verification?.ok && downloadURL && <a data-agent-download className="workbench-button ds-btn ds-btn--filled" href={downloadURL} download="launch-readiness-plan-approved.xlsx">Download verified .xlsx</a>}
           </section>
+          {format === 'xlsx' && <section className="ds-panel agent-safety" aria-label="Safety scenarios">
+            <header><h2>Try the safety boundaries</h2></header>
+            <p>Native source writes: <span data-agent-native-writes>{nativeWrites}</span>. Isolated preview writes are not counted.</p>
+            <DsButton data-agent-concurrent-edit variant="outlined" disabled={state !== 'awaiting-approval' || sourceChanged || safetyBusy} onClick={() => void simulateConcurrentEdit()}>Simulate another editor changing the source</DsButton>
+            {sourceChanged && <p role="status">The source has changed. Try committing the reviewed plan: its stale revision must be rejected.</p>}
+            <label className="ds-check"><input data-agent-fail-verification type="checkbox" checked={failVerification} disabled={state !== 'awaiting-approval' || safetyBusy} onChange={(event) => setFailVerification(event.target.checked)} />Inject a verification-read failure after the write</label>
+            <p>This explicitly simulates a readback failure; it does not corrupt the sample file.</p>
+            <DsButton data-agent-retry variant="outlined" disabled={state !== 'verified' || safetyBusy} onClick={() => void retryCommit()}>Retry the same commit</DsButton>
+            {retryResult && <p role="status">{retryResult}</p>}
+          </section>}
           {error && <p className="tool-error" role="alert">{error}</p>}
         </aside>
       </div>
+      {format === 'xlsx' && <details data-agent-trace className="agent-dispatch-trace">
+        <summary>Actual tool requests and results ({trace.length})</summary>
+        <p>Requests pass through <code>createAgentToolDispatcher</code> and the public XLSX adapter. The final commit result contains post-write verification. Read and preview results are bounded document projections.</p>
+        {trace.map((entry) => <details key={entry.request.requestId}>
+          <summary>{entry.request.method} · {entry.response.ok ? 'Completed' : 'Refused or failed'}</summary>
+          <pre className="ds-code" tabIndex={0}>{JSON.stringify(entry, null, 2)}</pre>
+        </details>)}
+      </details>}
     </section>
     </div>
   )

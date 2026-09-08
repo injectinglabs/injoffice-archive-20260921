@@ -9,14 +9,19 @@ export {
 } from './mutationProtocol.js'
 
 export type {
+  StyleDelta,
   SupportedWorkbookMutation,
   WorkbookMutationBatchV1,
 } from './mutationProtocol.js'
+
+export { validateNativeWorkbookV1 } from './nativeValidation.js'
+export type { NativeWorkbookV1 } from './nativeContract.generated.js'
 
 export {
   NativeWorkbookV2ValidationError,
   assertNativeWorkbookV2,
   decodeNativeWorkbookV2,
+  validateNativeWorkbookV2,
 } from './nativeValidationV2.js'
 
 export type {

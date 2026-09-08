@@ -11992,6 +11992,11 @@
               "signature": "export interface NativeWorkbookSheetV2"
             },
             {
+              "name": "NativeWorkbookV1",
+              "kind": "type",
+              "signature": "export interface NativeWorkbookV1"
+            },
+            {
               "name": "NativeWorkbookV2",
               "kind": "type",
               "signature": "export interface NativeWorkbookV2"
@@ -12002,9 +12007,24 @@
               "signature": "export declare class NativeWorkbookV2ValidationError extends Error"
             },
             {
+              "name": "StyleDelta",
+              "kind": "type",
+              "signature": "StyleDelta"
+            },
+            {
               "name": "SupportedWorkbookMutation",
               "kind": "type",
               "signature": "SupportedWorkbookMutation"
+            },
+            {
+              "name": "validateNativeWorkbookV1",
+              "kind": "function",
+              "signature": "export declare function validateNativeWorkbookV1(input: unknown): ValidateNativeWorkbookResult"
+            },
+            {
+              "name": "validateNativeWorkbookV2",
+              "kind": "function",
+              "signature": "export declare function validateNativeWorkbookV2(input: unknown): ValidateNativeWorkbookV2Result"
             },
             {
               "name": "WORKBOOK_MUTATION_PROTOCOL",
