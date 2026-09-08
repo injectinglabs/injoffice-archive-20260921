@@ -1,4 +1,28 @@
-# Optional local live-proposal bridge
+# Demo proposal modes
+
+## Built-in mock agent: default, no setup
+
+Open `#/agent?format=sheets`, keep **Built-in mock agent (no LLM)**, and select
+**Run agent**. The bundled mock proposes one status edit from the inspected
+workbook. Try `Mark Security as Ready`, `Mark Mobile as On track`, or
+`Set Analytics status to Review`. Unknown, ambiguous, and unsupported requests
+are refused rather than guessed. This is a deterministic simulation, not model
+reasoning or an autonomous agent.
+
+The development server includes `POST /api/agent/mock-propose`, accepting
+`{ request, context, capabilities }` and returning `{ operations }`. The route
+retains the local Host/Origin, JSON, size, deadline, and concurrency guards.
+It never calls a provider, uses a token, or grants approval. No environment
+variables or additional server process are needed. Static builds simulate the
+endpoint response entirely in the browser using the same generator, so they work
+without a backend too. There is no automatic fallback to the live endpoint.
+
+The UI discloses the mock and its transport and shows the proposal request/response.
+The resulting proposal passes through the same strict target/revision validation,
+real native XLSX preview, separate human approval, commit, and readback verification
+as a live proposal. The original local rule-based proposer is also available.
+
+## Optional local live-proposal bridge
 
 The playground's deterministic proposal mode works without any external service.
 Live mode is an **optional proposal-only integration point**, not a bundled model

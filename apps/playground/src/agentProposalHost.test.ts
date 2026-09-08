@@ -11,6 +11,9 @@ const response = (value: unknown = { operations: [operation] }) => new Response(
 })
 const environment = { INJOFFICE_AGENT_PROPOSAL_URL: 'https://proposals.example.test/private?secret=hidden', INJOFFICE_AGENT_PROPOSAL_TOKEN: 'private-token' }
 type Handler = ReturnType<typeof createAgentProposalHandler>
+const mockBody = { request: 'Mark Security as Ready', capabilities: [{ name: 'xlsx.cell.set_value' }],
+  context: { constraints: { maxOperations: 1, allowedValues: ['Ready'],
+    allowedTargets: [{ sheetId: 'sheet1', row: 4, column: 2, ref: 'C5', workstream: 'Security' }] } } }
 
 function request(handler: Handler, options: {
   method?: string; path?: string; headers?: Record<string, string | undefined>; value?: unknown; raw?: string
@@ -32,6 +35,72 @@ function request(handler: Handler, options: {
 }
 
 describe('local proposal-only host', () => {
+  it.each([{}, environment])('serves the built-in mock without consent, credentials, or outward calls', async (env) => {
+    const fetcher = vi.fn(() => { throw new Error('Must not contact provider') })
+    const handler = createAgentProposalHandler({ env, fetch: fetcher })
+    const result = await request(handler, { path: '/api/agent/mock-propose', value: mockBody }).done
+    expect(result.status).toBe(200)
+    expect(result.body).toEqual({ operations: [{ ...operation, operationId: 'mock-status-4-2' }] })
+    expect(JSON.stringify(result)).not.toContain('private-token')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('does not even read the server token for a mock request', async () => {
+    const env = { INJOFFICE_AGENT_PROPOSAL_URL: 'https://provider.example.test',
+      get INJOFFICE_AGENT_PROPOSAL_TOKEN(): string { throw new Error('Token must stay unused') } }
+    expect((await request(createAgentProposalHandler({ env }), { path: '/api/agent/mock-propose', value: mockBody }).done).status).toBe(200)
+  })
+
+  it('keeps mock refusals distinct from malformed input without exposing arbitrary context', async () => {
+    const handler = createAgentProposalHandler({ env: {} })
+    const result = await request(handler, { path: '/api/agent/mock-propose', value: { ...mockBody, request: 'Mark PRIVATE UNKNOWN as Ready' } }).done
+    expect(result.status).toBe(422)
+    expect(JSON.stringify(result.body)).not.toContain('PRIVATE UNKNOWN')
+    expect((await request(handler, { path: '/api/agent/mock-propose', raw: '{bad' }).done).status).toBe(400)
+    expect((await request(handler, { path: '/api/agent/mock-propose', value: { ...mockBody, approved: true } }).done).status).toBe(400)
+  })
+
+  it.each([
+    [{ method: 'GET' }, 405], [{ headers: { origin: undefined } }, 403],
+    [{ headers: { host: 'evil.test:3100' } }, 403], [{ headers: { origin: 'http://localhost:9999' } }, 403],
+    [{ headers: { 'content-type': 'text/plain' } }, 415],
+    [{ headers: { 'content-length': '50000' } }, 413],
+    [{ raw: JSON.stringify({ ...mockBody, extra: 'x'.repeat(49 * 1024) }) }, 413],
+  ])('preserves HTTP guards on the mock route', async (options, status) => {
+    const fetcher = vi.fn()
+    const handler = createAgentProposalHandler({ env: environment, fetch: fetcher })
+    expect((await request(handler, { ...options, path: '/api/agent/mock-propose', value: mockBody }).done).status).toBe(status)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('shares the deadline and concurrency guard with live requests', async () => {
+    const fetcher = vi.fn().mockImplementation(() => new Promise(() => {}))
+    const handler = createAgentProposalHandler({ env: environment, fetch: fetcher, timeoutMs: 10 })
+    const live = request(handler)
+    expect((await request(handler, { path: '/api/agent/mock-propose', value: mockBody }).done).status).toBe(429)
+    expect((await live.done).status).toBe(504)
+    expect((await request(handler, { path: '/api/agent/mock-propose', value: mockBody }).done).status).toBe(200)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('times out an unfinished mock request body and releases its listeners and slot', async () => {
+    const fetcher = vi.fn()
+    const handler = createAgentProposalHandler({ env: {}, fetch: fetcher, timeoutMs: 10 })
+    const req = Object.assign(new PassThrough(), { method: 'POST', url: '/api/agent/mock-propose',
+      headers: { host: 'localhost:3100', origin: 'http://localhost:3100', 'content-type': 'application/json' } })
+    let result = ''
+    const res = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: () => {}, end: (value: string) => { result = value } })
+    await handler(req as unknown as IncomingMessage, res as unknown as ServerResponse)
+    expect(res.statusCode).toBe(504)
+    expect(JSON.parse(result).error).toContain('timed out')
+    expect(req.listenerCount('data')).toBe(0)
+    expect(req.listenerCount('end')).toBe(0)
+    expect(res.listenerCount('close')).toBe(0)
+    expect((await request(handler, { path: '/api/agent/mock-propose', value: mockBody }).done).status).toBe(200)
+    expect(fetcher).not.toHaveBeenCalled()
+    req.destroy()
+  })
+
   it('passes through unrelated routes', async () => {
     expect((await request(createAgentProposalHandler(), { path: '/other' }).done).handled).toBe(false)
   })

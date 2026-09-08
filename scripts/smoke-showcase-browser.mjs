@@ -15,6 +15,7 @@ let sequence = 0
 const pending = new Map()
 const errors = []
 const heldRequests = []
+const proposalRequests = []
 function onMessage({ data }) {
   const message = JSON.parse(data)
   if (message.id) {
@@ -30,6 +31,9 @@ function onMessage({ data }) {
     errors.push(message.params.args.map((arg) => arg.value ?? arg.description).join(' '))
   } else if (message.method === 'Fetch.requestPaused') {
     heldRequests.push(message.params.requestId)
+  } else if (message.method === 'Network.requestWillBeSent') {
+    const { request } = message.params
+    if (/\/api\/agent\/(?:mock-propose|propose)(?:\?|$)/.test(request.url)) proposalRequests.push(request)
   }
 }
 function send(method, params = {}) {
@@ -67,6 +71,8 @@ async function prepareAgentRequest(request, target) {
   assert.ok((await evaluate(`document.querySelector('.agent-diff')?.textContent`)).includes(target), `request resolves real target ${target}`)
   assert.match(await evaluate(`document.querySelector('[data-agent-trace]')?.textContent`), /office\.read/, 'trace includes a real bounded read')
   assert.equal(await agentWrites(), 0, 'planning does not write native bytes')
+  assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'each mock proposal requires fresh human approval')
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'mock endpoint cannot authorize its own proposed edit')
 }
 async function approveAgentCommit() {
   await click('.agent-approval input[type=checkbox]')
@@ -116,6 +122,7 @@ try {
   socket.addEventListener('message', onMessage)
   await send('Runtime.enable')
   await send('Page.enable')
+  await send('Network.enable')
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: origin.href })
   await until(`document.querySelectorAll('.showcase-item').length === 19`, 'catalogue ready')
@@ -187,11 +194,33 @@ try {
     await route(`agent?format=${tool}`)
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} AI deep link`, 90_000)
     const boundary = await evaluate(`document.querySelector('[data-agent-boundary]')?.textContent`)
-    if (tool === 'sheets') assert.match(boundary, /Real XLSX file.*native browser write and exact-byte reopen/, 'native workflow describes real byte proof')
+    if (tool === 'sheets') {
+      assert.match(boundary, /Simulated AI proposal.*real XLSX.*native write.*verification.*no language model/i, 'mock boundary distinguishes simulated AI from real workbook operations')
+      assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]').value`), 'mock', 'bundled mock is the zero-configuration default')
+      const mockNotice = await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`)
+      assert.match(mockNotice, /mock/i, 'mock proposer is explicitly labelled')
+      assert.match(mockNotice, /no (?:real )?(?:language model|model|LLM)|not (?:a |an )?(?:language model|LLM)/i, 'mock is not presented as real model reasoning')
+      assert.equal(await evaluate(`document.querySelector('[data-agent-live-consent]') === null`), true, 'default mock requires no external-provider consent')
+      assert.equal(proposalRequests.length, 0, 'loading the mock demo does not request a proposal')
+    }
     else assert.match(boundary, /Lifecycle simulation.*not Office file bytes/, 'simulated formats disclose their file boundary')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} preview and validation`, 90_000)
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'commit requires explicit approval')
+    assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'proposal does not preapprove itself')
+    if (tool === 'sheets') {
+      assert.equal(await agentWrites(), 0, 'mock proposal and native preview leave the source untouched')
+      assert.match(await evaluate(`document.querySelector('[data-agent-proposal-trace]')?.textContent`), /request/i, 'mock proposal exposes its request trace separately from actual Office tools')
+      assert.match(await evaluate(`document.querySelector('[data-agent-proposal-trace]')?.textContent`), /response/i, 'mock proposal exposes its response for inspection')
+      assert.equal(proposalRequests.filter((request) => new URL(request.url).pathname.endsWith('/propose')).length, 0, 'default mock never invokes the live proposal relay')
+      if (process.argv.includes('--dev')) {
+        assert.equal(proposalRequests.length, 1, 'development mock executes through one same-origin endpoint request')
+        assert.equal(proposalRequests[0].method, 'POST')
+        assert.equal(new URL(proposalRequests[0].url).origin, origin.origin, 'mock context stays on the demo origin')
+      } else if (process.argv.includes('--built')) assert.equal(proposalRequests.length, 0, 'static mock transport works without an API server')
+      if (proposalMock) assert.equal(proposalMock.requests.length, 0, 'bundled mock never contacts the configured upstream')
+      await screenshot('agent-mock-proposal-review')
+    }
     await click('.agent-approval input[type=checkbox]')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, `${tool} approved commit verifies`, 90_000)
@@ -217,6 +246,16 @@ try {
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, 'different request writes and verifies the Mobile cell', 90_000)
       assert.match(await evaluate(`document.querySelector('.agent-diff')?.textContent`), /On track/, 'the requested new value is visible in the diff')
       assert.equal(await agentWrites(), 1, 'different request also applies exactly once')
+
+      await clickButton('Reload sample')
+      await until(agentReady, 'sample reload before unsupported mock request', 90_000)
+      await setAgentRequest('Write a poem about this workbook')
+      await clickButton('Run agent')
+      await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'error'`, 'unsupported mock prompt is rejected honestly', 90_000)
+      assert.match(await evaluate(`document.querySelector('.tool-error[role=alert]')?.textContent`), /mock|support|try|workstream/i, 'mock failure explains its bounded request support')
+      assert.equal(await agentWrites(), 0, 'unsupported mock prompt never writes native bytes')
+      assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null && !document.querySelector('.agent-diff')`), true, 'unsupported mock prompt leaves no previous preview or download')
+      assert.equal(await evaluate(`document.querySelector('.agent-approval input')?.checked ?? false`), false, 'unsupported mock prompt does not grant approval')
 
       await prepareAgentRequest('Mark Security as Ready', 'C5')
       await click('[data-agent-concurrent-edit]')
@@ -250,8 +289,8 @@ try {
   }
   if (proposalMock) {
     await route('agent?format=sheets')
-    await until(agentReady, 'local sample ready for isolated live proposal test', 90_000)
-    assert.equal(proposalMock.requests.length, 0, 'local workflows never contact the proposal upstream')
+    await until(agentReady, 'mock sample ready for isolated live proposal test', 90_000)
+    assert.equal(proposalMock.requests.length, 0, 'default mock workflows never contact the proposal upstream')
     await evaluate(`(() => { const select = document.querySelector('[data-agent-proposal-source]'); select.value = 'live'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
     await until(`document.querySelector('[data-agent-live-context] pre') && document.querySelector('[data-agent-live-consent]')`, 'live mode discloses bounded context before consent', 90_000)
     await setAgentRequest('Mark Mobile as On track')
@@ -340,7 +379,7 @@ try {
   await until(`document.documentElement.dataset.theme === 'dark'`, 'dark theme')
   await screenshot('focused-chart-dark')
   assert.deepEqual(errors, [], 'uncaught or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['19 distinct examples', 'search', 'filter return persistence', 'empty recovery', 'text navigation', 'cold-route continuity', 'modal focus/inert', 'checklist persistence', 'source loading', 'all 16 surfaces', 'four AI approvals and refusals', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-surface deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['19 distinct examples', 'search', 'filter return persistence', 'empty recovery', 'text navigation', 'cold-route continuity', 'modal focus/inert', 'checklist persistence', 'source loading', 'all 16 surfaces', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-surface deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     await screenshot('failure')

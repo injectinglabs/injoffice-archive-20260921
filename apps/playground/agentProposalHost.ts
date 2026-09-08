@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createMockAgentProposal, MockAgentProposalError } from './src/mockAgentProposal.ts'
 
 const REQUEST_LIMIT = 48 * 1024
 const RESPONSE_LIMIT = 32 * 1024
@@ -150,8 +151,9 @@ export function createAgentProposalHandler(options: HostOptions = {}) {
   let busy = false
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const path = req.url?.split('?')[0]
-    if (path !== '/api/agent/proposal-status' && path !== '/api/agent/propose') return false
-    if (!trustedRequest(req, path === '/api/agent/propose')) {
+    const mock = path === '/api/agent/mock-propose'
+    if (path !== '/api/agent/proposal-status' && path !== '/api/agent/propose' && !mock) return false
+    if (!trustedRequest(req, path !== '/api/agent/proposal-status')) {
       send(res, 403, { error: 'Same-origin loopback demo requests only' }); return true
     }
     const endpoint = endpointFrom(env)
@@ -167,7 +169,7 @@ export function createAgentProposalHandler(options: HostOptions = {}) {
     if (Number(req.headers['content-length']) > REQUEST_LIMIT) {
       send(res, 413, { error: 'Request is too large' }); return true
     }
-    if (!endpoint) { send(res, 503, { error: 'Live proposal endpoint is not configured' }); return true }
+    if (!mock && !endpoint) { send(res, 503, { error: 'Live proposal endpoint is not configured' }); return true }
     if (busy) { send(res, 429, { error: 'A proposal request is already running' }); return true }
     busy = true
     const controller = new AbortController()
@@ -182,10 +184,12 @@ export function createAgentProposalHandler(options: HostOptions = {}) {
         }, timeoutMs)
       })
       const operation = async () => {
-        const body = validateRequest(await readRequest(req, controller.signal))
+        const input = await readRequest(req, controller.signal)
         controller.signal.throwIfAborted()
+        if (mock) return createMockAgentProposal(input)
+        const body = validateRequest(input)
         const token = env.INJOFFICE_AGENT_PROPOSAL_TOKEN
-        const response = await fetcher(endpoint, {
+        const response = await fetcher(endpoint!, {
           method: 'POST', redirect: 'error', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify(body),
@@ -194,7 +198,7 @@ export function createAgentProposalHandler(options: HostOptions = {}) {
       }
       send(res, 200, await Promise.race([operation(), timeout]))
     } catch (error) {
-      const failure = error instanceof RequestFailure ? error : new RequestFailure(502, 'Proposal endpoint unavailable or invalid')
+      const failure = error instanceof RequestFailure || error instanceof MockAgentProposalError ? error : new RequestFailure(502, 'Proposal endpoint unavailable or invalid')
       send(res, failure.status, { error: failure.message })
     } finally {
       clearTimeout(timer); controller.abort(); busy = false

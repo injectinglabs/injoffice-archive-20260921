@@ -13,6 +13,7 @@ import {
 } from '../agentDemoRuntime'
 import { createAgentDemoScenario, type AgentDemoFormat, type AgentDemoMode, type AgentDemoOperation } from '../agentDemoScenario'
 import { AGENT_XLSX_NAME, createNativeAgentSessionInput } from '../agentXlsxDemo'
+import { requestMockAgentProposal } from '../mockAgentTransport'
 import { createBrowserXlsxRoundTripRuntime } from '../xlsxRoundTripRuntime'
 import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, type AgentTool } from '../route'
 import { DsButton, DsCallout, DsChip, DsSegment } from '../design-system/primitives'
@@ -147,7 +148,8 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
   const [failVerification, setFailVerification] = useState(false)
   const [safetyBusy, setSafetyBusy] = useState(false)
   const [retryResult, setRetryResult] = useState('')
-  const [proposalSource, setProposalSource] = useState<'local' | 'live'>('local')
+  const [proposalSource, setProposalSource] = useState<'mock' | 'local' | 'live'>('mock')
+  const [proposalExchange, setProposalExchange] = useState<{ request: JsonObject; response: unknown } | null>(null)
   const [liveContext, setLiveContext] = useState<JsonObject | null>(null)
   const [liveHost, setLiveHost] = useState('')
   const [liveNotice, setLiveNotice] = useState('')
@@ -185,6 +187,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     setError(null)
     setToolLog([])
     setRetryResult('')
+    setProposalExchange(null)
   }
 
   useEffect(() => {
@@ -232,12 +235,20 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
     setLiveContext(null)
     setLiveHost('')
     setConsent(false)
-    if (format !== 'xlsx' || proposalSource !== 'live' || !sessionInput?.proposalContext) return
+    if (format !== 'xlsx' || mode !== 'safe' || proposalSource === 'local' || !sessionInput?.proposalContext) return
     const controller = new AbortController()
     let cancelled = false
-    setLiveNotice('Checking the local proposal host…')
+    setLiveNotice(proposalSource === 'mock' ? 'Reading the sample for the built-in mock…' : 'Checking the local proposal host…')
     const connect = async () => {
       try {
+        if (proposalSource === 'mock') {
+          const context = await sessionInput.proposalContext!()
+          if (cancelled) return
+          setLiveContext(context)
+          setLiveNotice('Mock ready. No language model, API key, or external service is used.')
+          refreshTrace()
+          return
+        }
         const response = await fetch('/api/agent/proposal-status', { signal: controller.signal })
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Live proposals require a configured local host. This deployment supports local mode.')
         const status = await response.json() as { configured?: boolean; destination?: string }
@@ -249,12 +260,16 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
         setLiveNotice('Review the shared context below before enabling the live request.')
         refreshTrace()
       } catch (reason) {
-        if (!cancelled) setLiveNotice(reason instanceof Error ? reason.message : String(reason))
+        if (!cancelled) {
+          const message = reason instanceof Error ? reason.message : String(reason)
+          setLiveNotice(message)
+          if (proposalSource === 'mock') { setError(message); setState('error') }
+        }
       }
     }
     void connect()
     return () => { cancelled = true; controller.abort() }
-  }, [format, proposalSource, sessionInput])
+  }, [format, mode, proposalSource, sessionInput])
 
   const selectTool = (next: AgentTool) => {
     if (parseAgentTool() !== next) window.location.hash = agentHref(next)
@@ -277,7 +292,17 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
       const { session } = sessionInput
       let operations = sessionInput.operations
       if (mode === 'safe' && sessionInput.propose) {
-        if (proposalSource === 'live') {
+        if (proposalSource === 'mock') {
+          if (!liveContext || !sessionInput.acceptProposal) throw new Error('The mock context is not ready. Reload the sample and try again.')
+          const controller = new AbortController()
+          proposalAbort.current = controller
+          const { capabilities: sharedCapabilities, ...context } = liveContext
+          const request = { request: prompt, context, capabilities: sharedCapabilities } as JsonObject
+          const proposed = await requestMockAgentProposal(request, controller.signal)
+          if (run !== generation.current) return
+          setProposalExchange({ request, response: proposed })
+          operations = sessionInput.acceptProposal(proposed)
+        } else if (proposalSource === 'live') {
           if (!consent || !liveContext || !sessionInput.acceptProposal) throw new Error('Review the bounded context and explicitly consent before requesting a live proposal.')
           const controller = new AbortController()
           proposalAbort.current = controller
@@ -404,7 +429,9 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
               : state === 'unverified' ? 'Write completed; verification failed. No verified download is available.'
               : 'The workflow stopped. See the error details below; reload the sample to try again.'
   const boundary = format === 'xlsx'
-    ? proposalSource === 'live'
+    ? mode === 'safe' && proposalSource === 'mock'
+      ? 'Simulated AI proposal · real XLSX preview, approval, native write, and verification · no language model or external service'
+      : mode === 'safe' && proposalSource === 'live'
       ? 'Real XLSX file · optional live proposal from a configured host · only consented bounded context is shared · native write and verification stay local'
       : 'Real XLSX file · local rule-based proposal through public tools · native browser write and exact-byte reopen · no model service or file upload'
     : 'Lifecycle simulation · document-shaped sample data, not Office file bytes · real approval and revision guards · no model service'
@@ -428,7 +455,7 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
             { id: 'refusal', label: 'Refusal proof' },
           ]}
         />
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (state === 'ready' && mode === 'safe' && proposalSource === 'live' && (!liveContext || !consent))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (state === 'ready' && format === 'xlsx' && mode === 'safe' && proposalSource !== 'local' && (!liveContext || (proposalSource === 'live' && !consent)))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
         <span className="agent-demo__status" data-state={state} role="status" aria-live="polite">{status}</span>
       </div>
 
@@ -437,8 +464,13 @@ function AgentWorkflow({ tool }: { tool: AgentTool }) {
         <textarea id="agent-prompt" data-agent-request maxLength={2000} readOnly={format !== 'xlsx' || mode !== 'safe'} disabled={state === 'preparing' || state === 'committing' || state === 'verified' || state === 'unverified' || sourceChanged || safetyBusy} value={format === 'xlsx' && mode === 'safe' ? prompt : scenario.prompt} onChange={(event) => { reset(); setConsent(false); setPrompt(event.target.value) }} rows={2} />
         <small data-agent-boundary>{boundary}</small>
         {format === 'xlsx' && mode === 'safe' && <>
-          <label className="agent-proposal-source">Proposal source <select data-agent-proposal-source value={proposalSource} disabled={state !== 'ready' || safetyBusy} onChange={(event) => { reset(); setProposalSource(event.target.value as 'local' | 'live') }}><option value="local">Local rule-based proposer</option><option value="live">Live agent via configured host</option></select></label>
-          <p className="agent-request-help">Try “Mark Mobile as On track” or “Mark Security as Ready”. The local rule-based proposer discovers the target from workbook reads; it is not a language model.</p>
+          <label className="agent-proposal-source">Proposal source <select data-agent-proposal-source value={proposalSource} disabled={state !== 'ready' || safetyBusy} onChange={(event) => { reset(); setProposalSource(event.target.value as 'mock' | 'local' | 'live') }}><option value="mock">Built-in mock agent (no LLM)</option><option value="local">Local rule-based proposer</option><option value="live">Live agent via configured host</option></select></label>
+          <p className="agent-request-help">Try “Mark Mobile as On track” or “Mark Security as Ready”. The mock and local proposer support one workstream status edit at a time; neither is a language model.</p>
+          {proposalSource === 'mock' && <div data-agent-mock className="agent-live-proposal">
+            <p role="status">{liveNotice}</p>
+            <p>The built-in mock endpoint returns a deterministic proposal from the inspected workbook. {import.meta.env.DEV ? 'It runs on this local demo server.' : 'On this static site, the endpoint response is simulated in your browser.'} No provider is contacted. Preview, approval, file editing, and verification are real.</p>
+            {proposalExchange && <details data-agent-proposal-trace><summary>Mock proposal request and response</summary><pre className="ds-code" tabIndex={0}>{JSON.stringify(proposalExchange, null, 2)}</pre></details>}
+          </div>}
           {proposalSource === 'live' && <div className="agent-live-proposal">
             <p role="status">{liveNotice}</p>
             {liveContext && <>

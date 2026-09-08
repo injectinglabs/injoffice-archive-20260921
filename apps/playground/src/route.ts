@@ -46,7 +46,7 @@ export const AGENT_TOOLS = [
     fileType: 'XLSX',
     label: 'Sheets',
     title: 'AI change sets · Sheets',
-    description: 'Ask for a workbook status edit through public agent tools, review and approve the exact change, then inspect native verification. Try stale approvals, safe retries, and readback failures. Local by default; live proposals require an explicitly configured host.',
+    description: 'Try a simulated AI request with the built-in mock agent—no model, credentials, or setup. Review and approve a real XLSX change through public tools, then inspect native verification. Explore stale approvals, safe retries, and readback failures.',
   },
   {
     tool: 'docs',
