@@ -98,7 +98,7 @@ Run the browser playground with:
 npm run dev
 ```
 
-Open http://127.0.0.1:3100. The lightweight `#/overview` route is the default. Sixteen lazy-loaded proof surfaces demonstrate the twenty-six TypeScript packages; shared infrastructure packages appear inside the workflows they power instead of getting artificial standalone pages.
+Open http://127.0.0.1:3100. The lightweight `#/overview` introduces exactly four comprehensive workspaces: Sheets, Docs, Slides, and PDF. Existing capabilities from the twenty-six TypeScript packages are grouped inside those examples, not separate sidebar pages. Advanced views use explicitly labelled independent samples where they do not share an artifact model.
 
 Create and edit:
 
@@ -107,11 +107,11 @@ Create and edit:
 - `#/slides` DeckSpec authoring, themes, editable transitions, layout QC, and canvas editing
 - `#/pdf` real-file PDF viewing, high-DPI rendering, navigation, zoom, text search, outline inspection, current-page rotation, and download
 
-Focused workbook tools:
+Within Sheets, Analyze and More tools include:
 
-- `#/charts`, `#/pivots`, `#/shapes`, `#/connectors`, and `#/formulas`
+- `#/sheets?feature=charts`, `pivots`, `shapes`, `connectors`, and `formulas` (the old standalone hashes remain compatible bookmarks).
 
-Production-pipeline tools:
+Other capabilities remain inside their relevant tool workspace; these legacy bookmarks still select the corresponding internal view:
 
 - `#/agent` provider-independent capability discovery, bounded inspection, immutable planning, preview/diff, validation, human approval, atomic commit, verification, and refusal proofs across XLSX, DOCX, PPTX, and PDF-shaped artifacts
 - `#/history` structured workbook and document diffs

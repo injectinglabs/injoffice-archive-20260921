@@ -11,7 +11,7 @@ describe('playground navigation continuity', () => {
     expect(appSource).toContain('data-layout="univer"')
     expect(appSource).toContain('SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection')
     expect(appSource).toContain('key={section.key}')
-    expect(appSource).toContain('<DemoComponent fixedTool={section.tool} initialHash={initialHash} />')
+    expect(appSource).toContain('<DemoComponent initialHash={initialHash} />')
     expect(appSource).toContain('location.hash !== handledHash.current')
     expect(appSource).toContain('anchorTarget.current = section.key')
     expect(appSource).toContain('new ResizeObserver(onLayout)')
@@ -46,12 +46,12 @@ describe('playground navigation continuity', () => {
     expect(sectionSource).toContain('<Suspense fallback=')
   })
 
-  it('makes walkthroughs discoverable and resets the drawer for each AI format', () => {
+  it('makes walkthroughs discoverable and scopes the drawer to the active feature', () => {
     expect(appSource).toContain('Guide &amp; source')
-    expect(appSource).toContain('<SourceProofDrawer key={proofSection.key}')
-    expect(appSource).toContain('detailsButtonRef.current = button; setProofSection(section)')
-    expect(overviewSource).toContain('readShowcasePreferences()')
-    expect(overviewSource).toContain('persistShowcasePreferences({ query, task, format })')
+    expect(appSource).toContain('resolveToolWorkspace(proofSection.featureHash)?.feature')
+    expect(appSource).toContain('demo={workspaceProofDemo(proofSection.featureHash)}')
+    expect(appSource).toContain('featureHash: sectionHashes.current.get(section.key)')
+    expect(overviewSource).toContain('TOOL_WORKSPACES.map')
   })
 
   it('clears the desktop sidebar basis when navigation becomes a mobile row', () => {
@@ -60,10 +60,17 @@ describe('playground navigation continuity', () => {
 
   it('warms route chunks for pointer and keyboard navigation intent', () => {
     for (const source of [appSource, overviewSource]) {
-      expect(source).toContain('onPointerEnter={warmRoute}')
-      expect(source).toContain('onPointerDown={warmRoute}')
-      expect(source).toContain('onFocus={warmRoute}')
+      expect(source).toContain('onPointerEnter={() => preloadWorkspaceOnIntent(')
+      expect(source).toContain('onFocus={() => preloadWorkspaceOnIntent(')
     }
+  })
+
+  it('keeps internal feature changes from moving focus or jumping to the section heading', () => {
+    expect(appSource).toContain('focus && !changingView')
+    expect(appSource).toContain("window.addEventListener('injoffice:workspace-view', internalView)")
+    expect(appSource).toContain('anchorViewTop.current = changingView ? intent.top : null')
+    expect(appSource).toContain('anchorTarget.current ?? activeSectionKey')
+    expect(appSource).toContain('remembered.get(sectionForHash(href).key)')
   })
 
   it('pre-optimizes dependencies imported only by lazy routes in development', () => {

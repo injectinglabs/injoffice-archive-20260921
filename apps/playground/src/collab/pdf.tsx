@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   PDFArray,
   PDFCheckBox,
@@ -42,7 +42,8 @@ import {
   PdfViewerDocument,
   renderPageToCanvas,
 } from '../../../../packages/pdf/src/viewer'
-import { COLLAB_COPY, parseCollabQuery, writeCollabQuery } from '../collabScope'
+import { COLLAB_COPY, writeCollabQuery } from '../collabScope'
+import { collabRoomHref, initialCollabArtifact, useCollabComposition } from '../collabComposition'
 import { createHttpCollabTransport, type HttpCollabTransport } from '../collabTransport'
 
 configurePdfWorker(pdfWorkerUrl)
@@ -238,6 +239,9 @@ export async function inspectCollabPdf(bytes: Uint8Array): Promise<{ annots: Col
 }
 
 export function CollabPdfPanel() {
+  const id = useId()
+  const scope = useCollabComposition()
+  const { fixedFormat } = scope
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const transportRef = useRef<HttpCollabTransport | null>(null)
   const managerRef = useRef<PdfPresenceManager | null>(null)
@@ -250,7 +254,7 @@ export function CollabPdfPanel() {
   const pendingRef = useRef<unknown[]>([])
   const applyChainRef = useRef(Promise.resolve())
   const [name, setName] = useState(defaultCollabName)
-  const [artifact, setArtifact] = useState(() => parseCollabQuery(window.location.href).artifact)
+  const [artifact, setArtifact] = useState(() => initialCollabArtifact(scope, window.location.href))
   const memoDirtyRef = useRef(false)
   const agreeDirtyRef = useRef(false)
   const noteDirtyRef = useRef(false)
@@ -301,8 +305,9 @@ export function CollabPdfPanel() {
   }, [name])
 
   useEffect(() => {
+    if (fixedFormat !== undefined) return
     writeCollabQuery({ artifact, format: 'pdf' })
-  }, [artifact])
+  }, [artifact, fixedFormat])
 
   useEffect(() => {
     let cancelled = false
@@ -562,7 +567,7 @@ export function CollabPdfPanel() {
         <button type="button" className="workbench-button" disabled={busy} onClick={() => void onMint()}>
           Mint sample
         </button>
-        <button type="button" className="workbench-button" disabled={!artifact} onClick={() => window.open(window.location.href, '_blank')}>
+        <button type="button" className="workbench-button" disabled={!artifact} onClick={() => window.open(collabRoomHref(window.location.href, artifact, fixedFormat), '_blank')}>
           Open second tab
         </button>
         {manager ? <PresenceStack manager={manager} /> : null}
@@ -571,9 +576,9 @@ export function CollabPdfPanel() {
       <p className="native-status workbench-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : connection}>{status}</p>
       {error ? <p className="native-error workbench-callout workbench-callout--error" role="alert">{error}</p> : null}
 
-      <section className="collab-boundaries workbench-boundary" aria-labelledby="collab-pdf-boundaries-title">
+      <section className="collab-boundaries workbench-boundary" aria-labelledby={`${id}-collab-pdf-boundaries-title`}>
         <div>
-          <h2 id="collab-pdf-boundaries-title">What this proves</h2>
+          <h2 id={`${id}-collab-pdf-boundaries-title`}>What this proves</h2>
           <p>{PDF_PROOF}</p>
         </div>
         <div className="collab-security workbench-callout workbench-callout--warning" role="note">

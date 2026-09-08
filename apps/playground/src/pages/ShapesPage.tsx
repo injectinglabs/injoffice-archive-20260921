@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   SHAPE_CATEGORIES,
   SHAPE_DEFAULTS,
@@ -31,6 +31,7 @@ function fidelityTone(fidelity: ShapePreviewFidelity): 'green' | 'plain' | 'refu
 }
 
 export default function ShapesPage() {
+  const id = useId()
   const [category, setCategory] = useState(SHAPE_CATEGORIES[0]!.label)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<ShapeKind>('roundRect')
@@ -60,10 +61,10 @@ export default function ShapesPage() {
       </div>
 
       <div className="tool-page__grid ds-split">
-        <section className="tool-card ds-split-main" aria-labelledby="shape-library-title">
+        <section className="tool-card ds-split-main" aria-labelledby={`${id}-shape-library-title`}>
           <span className="ds-eyebrow tool-eyebrow">Preset library</span>
           <div className="ds-row" style={{ marginBottom: 8 }}>
-            <h2 id="shape-library-title">{category}</h2>
+            <h2 id={`${id}-shape-library-title`}>{category}</h2>
             <DsChip>{kinds.length} shown</DsChip>
           </div>
           <div className="shape-library ds-shape-lib">
@@ -84,9 +85,9 @@ export default function ShapesPage() {
           </div>
         </section>
 
-        <section className="tool-card tool-card--hero ds-split-side" aria-labelledby="shape-inspector-title">
+        <section className="tool-card tool-card--hero ds-split-side" aria-labelledby={`${id}-shape-inspector-title`}>
           <span className="ds-eyebrow tool-eyebrow">Browser preview fidelity</span>
-          <h2 id="shape-inspector-title">{shapeLabel(selected)}</h2>
+          <h2 id={`${id}-shape-inspector-title`}>{shapeLabel(selected)}</h2>
           <div className="shape-stage ds-shape-stage">
             <ShapePreview kind={selected} fill={fill} stroke={stroke} strokeWidth={2} ariaLabel={`${shapeLabel(selected)} browser preview`} />
           </div>

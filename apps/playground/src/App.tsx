@@ -9,11 +9,12 @@ import {
 } from './colorScheme'
 import GuidedRecipe from './components/GuidedRecipe'
 import DemoSource from './components/DemoSource'
-import { DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, type DemoDefinition } from './demoRegistry'
+import type { DemoDefinition } from './demoRegistry'
+import { WORKSPACE_DEMOS, preloadWorkspace, preloadWorkspaceOnIntent, workspaceProofDemo } from './workspaceRegistry'
+import { resolveToolWorkspace } from './toolWorkspaces'
 import OverviewPage from './pages/OverviewPage'
-import { agentHref, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
+import { surfaceHref, type Surface } from './route'
 import { SCROLL_SECTIONS, sectionForHash, activeSectionKey, type ScrollSection } from './scrollSections'
-import type { AgentTool } from './route'
 import { createDemoRetention } from './demoRetention'
 
 type SidecarState = 'checking' | 'connected' | 'offline'
@@ -24,62 +25,26 @@ function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
 }
 
-function ToolNavigation({ surface, hash }: { surface: Surface; hash: string }) {
+function ToolNavigation({ surface, remembered }: { surface: Surface; remembered: Map<string, string> }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (isModifiedClick(event)) return
     const href = event.currentTarget.getAttribute('href')
-    if (href && location.hash === href) {
+    if (href && sectionForHash(location.hash).href === href) {
       event.preventDefault()
       window.dispatchEvent(new HashChangeEvent('hashchange'))
+    } else if (href) {
+      const previous = remembered.get(sectionForHash(href).key)
+      if (previous) { event.preventDefault(); window.location.hash = previous }
     }
   }
-  const agentTool = surface === 'agent' ? parseAgentTool(hash) : undefined
-  return (
-    <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
-      <a className="tool-nav-home" href={surfaceHref('overview')} aria-current={surface === 'overview' ? 'location' : undefined} onClick={onClick}>Overview</a>
-      {DEMO_GROUPS.map((group) => (
-        <section
-          className="tool-nav-group"
-          key={group}
-          aria-labelledby={`nav-${group.replaceAll(' ', '-').toLowerCase()}`}
-        >
-          <h2 id={`nav-${group.replaceAll(' ', '-').toLowerCase()}`}>{group}</h2>
-          {DEMOS.filter((demo) => demo.group === group).flatMap((demo) => {
-            const warmRoute = () => { preloadDemoOnIntent(demo.surface) }
-            if (demo.surface === 'agent') {
-              return AGENT_TOOLS.map((item) => (
-                <a
-                  key={item.tool}
-                  href={agentHref(item.tool)}
-                  aria-label={`AI change sets, ${item.label}`}
-                  aria-current={agentTool === item.tool ? 'location' : undefined}
-                  onPointerEnter={warmRoute}
-                  onPointerDown={warmRoute}
-                  onFocus={warmRoute}
-                  onClick={onClick}
-                >
-                  {item.label}
-                </a>
-              ))
-            }
-            return (
-              <a
-                key={demo.surface}
-                href={surfaceHref(demo.surface)}
-                aria-current={surface === demo.surface ? 'location' : undefined}
-                onPointerEnter={warmRoute}
-                onPointerDown={warmRoute}
-                onFocus={warmRoute}
-                onClick={onClick}
-              >
-                {demo.navTitle}
-              </a>
-            )
-          })}
-        </section>
-      ))}
-    </nav>
-  )
+  return <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
+    {WORKSPACE_DEMOS.map(demo => <a key={demo.surface} href={surfaceHref(demo.surface)}
+      aria-current={surface === demo.surface ? 'location' : undefined}
+      onPointerEnter={() => preloadWorkspaceOnIntent(demo.surface)}
+      onPointerDown={() => preloadWorkspaceOnIntent(demo.surface)}
+      onFocus={() => preloadWorkspaceOnIntent(demo.surface)}
+      onClick={onClick}>{demo.navTitle}</a>)}
+  </nav>
 }
 
 function RuntimePill({ demo, sidecar }: { demo: DemoDefinition; sidecar: SidecarState }) {
@@ -260,7 +225,7 @@ function DemoSection({
     loading.current = true
     const id = ++attempt.current
     setLoadState('loading')
-    void preloadDemo(demo.surface).then(() => {
+    void preloadWorkspace(demo.surface).then(() => {
       if (attempt.current === id) setLoadState('ready')
     }, () => {
       if (attempt.current === id) { loading.current = false; setLoadState('error') }
@@ -281,10 +246,9 @@ function DemoSection({
     observer.observe(element)
     return () => observer.disconnect()
   }, [load, loadState, retention])
-  const DemoComponent = demo.component as ComponentType<{ fixedTool?: AgentTool; initialHash?: string }>
-  const agentTool = section.tool ? AGENT_TOOLS.find((item) => item.tool === section.tool) : undefined
-  const title = agentTool?.title ?? demo.title
-  const description = agentTool?.description ?? demo.description
+  const DemoComponent = demo.component as ComponentType<{ initialHash?: string }>
+  const title = demo.title
+  const description = demo.description
   return (
     <article
       className="demo-section"
@@ -299,11 +263,10 @@ function DemoSection({
       <header className={`page-heading demo-context-header demo-page-header page-heading--${demo.accent}`}>
         <div className="page-heading-copy">
           <nav className="demo-breadcrumb" aria-label="Breadcrumb">
-            <a href={surfaceHref('overview')}>Showcase</a><span aria-hidden="true">/</span><span>{demo.group}</span>{agentTool ? <><span aria-hidden="true">/</span><span>{agentTool.label}</span></> : null}
+            <a href={surfaceHref('overview')}>Showcase</a><span aria-hidden="true">/</span><span>{title}</span>
           </nav>
           <div className="demo-chips" aria-label="Demo tags">
-            <span className="demo-chip">{demo.group}</span>
-            {agentTool ? <span className="demo-chip">{agentTool.fileType}</span> : null}
+            <span className="demo-chip">{demo.formats.join(' + ')}</span>
           </div>
           <div className="demo-title-line">
             <h2 id={`demo-title-${section.key}`} tabIndex={-1}>{title}</h2>
@@ -341,7 +304,7 @@ function DemoSection({
         <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`} onPointerDownCapture={touch} onKeyDownCapture={touch} onInputCapture={touch} onClickCapture={touch}>
           {loadState === 'ready' ? <SectionBoundary key={revision} onRetry={() => setRevision(value => value + 1)}>
             <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
-              <DemoComponent fixedTool={section.tool} initialHash={initialHash} />
+              <DemoComponent initialHash={initialHash} />
             </Suspense>
           </SectionBoundary> : <div className={loadState === 'error' ? 'demo-section-error' : 'demo-section-placeholder'} role={loadState === 'error' ? 'alert' : undefined}>
             <p>{loadState === 'error' ? `Could not load ${title}. Other demos are still available.` : loadState === 'loading' ? `Opening ${title}…` : 'This live demo loads as you reach it. Your changes stay here while you explore other sections.'}</p>
@@ -366,11 +329,11 @@ class SectionBoundary extends Component<{ children: ReactNode; onRetry: () => vo
 }
 
 export default function App() {
-  const [route, setRoute] = useState(() => ({ surface: parseSurface(), hash: location.hash || surfaceHref('overview') }))
+  const [route, setRoute] = useState(() => ({ surface: sectionForHash(location.hash).surface, hash: location.hash || surfaceHref('overview') }))
   const { surface, hash } = route
   const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
-  const [proofSection, setProofSection] = useState<ScrollSection | null>(null)
+  const [proofSection, setProofSection] = useState<(ScrollSection & { featureHash: string }) | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [requestedKey, setRequestedKey] = useState(() => sectionForHash(location.hash).key)
   const [requestVersion, setRequestVersion] = useState(0)
@@ -379,7 +342,20 @@ export default function App() {
   const sectionHashes = useRef(new Map<string, string>())
   const navigating = useRef(false)
   const anchorTarget = useRef<string | null>(null)
+  const anchorViewTop = useRef<number | null>(null)
+  const viewIntent = useRef<{ key: string; top: number } | null>(null)
   const handledHash = useRef(location.hash || surfaceHref('overview'))
+  const pinAnchor = useCallback(() => {
+    if (!anchorTarget.current) return
+    const element = document.getElementById(`demo-${anchorTarget.current}`)
+    if (anchorViewTop.current !== null) {
+      const controls = element?.querySelector('.tool-workspace__navigation')
+      if (controls) {
+        const delta = controls.getBoundingClientRect().top - anchorViewTop.current
+        if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'instant' })
+      }
+    } else element?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  }, [])
 
   useEffect(() => {
     // Scroll the rail only; scrollIntoView here would move the document too.
@@ -395,9 +371,19 @@ export default function App() {
 
   useEffect(() => {
     let frame = 0
+    const internalView = (event: Event) => {
+      const tool = (event as CustomEvent<{ tool?: string }>).detail?.tool
+      const section = SCROLL_SECTIONS.find(item => item.key === tool)
+      const controls = section && document.getElementById(`demo-${section.key}`)?.querySelector('.tool-workspace__navigation')
+      if (section && controls) viewIntent.current = { key: section.key, top: controls.getBoundingClientRect().top }
+    }
     const navigate = (focus = true) => {
       const section = sectionForHash(location.hash)
+      const intent = viewIntent.current
+      viewIntent.current = null
+      const changingView = focus && intent?.key === section.key
       anchorTarget.current = section.key
+      anchorViewTop.current = changingView ? intent.top : null
       handledHash.current = location.hash || section.href
       sectionHashes.current.set(section.key, location.hash || section.href)
       setRequestedKey(section.key)
@@ -408,20 +394,22 @@ export default function App() {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         const element = document.getElementById(`demo-${section.key}`)
-        element?.scrollIntoView({ block: 'start', behavior: 'instant' })
-        if (focus) element?.querySelector<HTMLElement>('h1, h2')?.focus({ preventScroll: true })
+        pinAnchor()
+        if (focus && !changingView) element?.querySelector<HTMLElement>('h1, h2')?.focus({ preventScroll: true })
         navigating.current = false
       })
     }
     const sync = () => navigate()
+    window.addEventListener('injoffice:workspace-view', internalView)
     window.addEventListener('hashchange', sync)
     if (!location.hash) history.replaceState(history.state, '', surfaceHref('overview'))
     navigate(false)
     return () => {
       window.removeEventListener('hashchange', sync)
+      window.removeEventListener('injoffice:workspace-view', internalView)
       cancelAnimationFrame(frame)
     }
-  }, [])
+  }, [pinAnchor])
 
   useEffect(() => {
     let frame = 0
@@ -433,7 +421,7 @@ export default function App() {
       const header = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 48
       const rail = document.querySelector('.app-sidebar')?.getBoundingClientRect()
       const top = window.innerWidth <= 760 ? Math.max(header, rail?.bottom ?? 0) : header
-      const key = activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32)
+      const key = anchorTarget.current ?? activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32)
       const section = SCROLL_SECTIONS.find(item => item.key === key)
       if (!section) return
       const nextHash = sectionHashes.current.get(section.key) ?? section.href
@@ -448,11 +436,11 @@ export default function App() {
     // scroll. Preserve that destination until the user takes over scrolling.
     const onLayout = () => {
       if (anchorTarget.current && document.body.style.overflow !== 'hidden') {
-        document.getElementById(`demo-${anchorTarget.current}`)?.scrollIntoView({ block: 'start', behavior: 'instant' })
+        pinAnchor()
       }
       schedule()
     }
-    const releaseAnchor = () => { anchorTarget.current = null }
+    const releaseAnchor = () => { anchorTarget.current = null; anchorViewTop.current = null }
     const intentEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
     intentEvents.forEach(event => window.addEventListener(event, releaseAnchor, { passive: true }))
     const observer = new ResizeObserver(onLayout)
@@ -465,7 +453,7 @@ export default function App() {
       observer.disconnect()
       intentEvents.forEach(event => window.removeEventListener(event, releaseAnchor))
     }
-  }, [])
+  }, [pinAnchor])
 
   useEffect(() => {
     applyColorScheme(scheme)
@@ -496,7 +484,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    preloadDemoOnIntent(surface)
+    preloadWorkspaceOnIntent(surface)
   }, [surface])
 
   return (
@@ -508,7 +496,7 @@ export default function App() {
       <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
-        <ToolNavigation surface={surface} hash={hash} />
+        <ToolNavigation surface={surface} remembered={sectionHashes.current} />
       </aside>
       <main className="app-main" id="main-content" tabIndex={-1} data-workbench-surface={surface} aria-busy={false}>
         <section className="demo-section demo-section--overview" id="demo-overview" data-scroll-section="overview" data-scroll-state="ready" aria-labelledby="showcase-title">
@@ -523,9 +511,9 @@ export default function App() {
             requestVersion={requestVersion}
             initialHash={sectionHashes.current.get(section.key) ?? section.href}
             proofOpen={detailsOpen && proofSection?.key === section.key}
-            onOpenProof={button => { detailsButtonRef.current = button; setProofSection(section); setDetailsOpen(true) }}
+            onOpenProof={button => { detailsButtonRef.current = button; setProofSection({ ...section, featureHash: sectionHashes.current.get(section.key) ?? section.href }); setDetailsOpen(true) }}
           />)}
-        {proofSection?.demo ? <SourceProofDrawer key={proofSection.key} demo={proofSection.demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
+        {proofSection?.demo ? <SourceProofDrawer key={`${proofSection.key}:${resolveToolWorkspace(proofSection.featureHash)?.feature}`} demo={workspaceProofDemo(proofSection.featureHash)} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
       </main>
       </div>
     </div>

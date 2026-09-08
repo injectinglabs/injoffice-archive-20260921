@@ -3,10 +3,11 @@ import { DsChip } from './design-system/primitives'
 import './design-system/live-tools.css'
 import { CollabDemo as ServerCollabDemo } from './collabDemo'
 import { CollabSimulator } from './collabSimulator'
+import type { CollabCompositionProps } from './collabComposition'
 
 type Mode = 'simulation' | 'server'
 
-export function CollabDemo() {
+export function CollabDemo({ fixedFormat, initialHash }: CollabCompositionProps = {}) {
   const [mode, setMode] = useState<Mode>('simulation')
   const id = useId()
   const chooseMode = (next: Mode) => {
@@ -35,7 +36,7 @@ export function CollabDemo() {
         {mode === 'simulation' ? <DsChip tone="green">No server or upload required</DsChip> : <DsChip tone="blue">HTTP + SSE integration</DsChip>}
       </nav>
       <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${mode}`} tabIndex={0}>
-        {mode === 'simulation' ? <CollabSimulator /> : <ServerCollabDemo />}
+        {mode === 'simulation' ? <CollabSimulator fixedFormat={fixedFormat} initialHash={initialHash} /> : <ServerCollabDemo fixedFormat={fixedFormat} initialHash={initialHash} />}
       </div>
     </div>
   )

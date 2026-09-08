@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 import { PresenceStack, type PresenceSource } from '../../../../packages/collab/src/index.js'
 import { COLLAB_COPY, parseCollabQuery, writeCollabQuery } from '../collabScope'
+import { collabRoomHref, useCollabComposition } from '../collabComposition'
 
 export type ConnectionState = 'idle' | 'joining' | 'live' | 'error'
 
@@ -87,14 +88,17 @@ export function CollabRoomChrome({
   protocolExtra?: ReactNode
   children: ReactNode
 }) {
+  const id = useId()
+  const { fixedFormat } = useCollabComposition()
   useEffect(() => {
     sessionStorage.setItem('injoffice-collab-name', name)
   }, [name])
 
   useEffect(() => {
+    if (fixedFormat !== undefined) return
     const { format } = parseCollabQuery(window.location.href)
     writeCollabQuery({ artifact, format })
-  }, [artifact])
+  }, [artifact, fixedFormat])
 
   return (
     <>
@@ -122,7 +126,7 @@ export function CollabRoomChrome({
           Join
         </button>
         {actions}
-        <button type="button" className="workbench-button" disabled={!artifact} onClick={() => window.open(window.location.href, '_blank')}>
+        <button type="button" className="workbench-button" disabled={!artifact} onClick={() => window.open(collabRoomHref(window.location.href, artifact, fixedFormat), '_blank')}>
           Open second tab
         </button>
         {presence ? <PresenceStack manager={presence} /> : null}
@@ -131,9 +135,9 @@ export function CollabRoomChrome({
       <p className="native-status workbench-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : connection}>{status}</p>
       {error ? <p className="native-error workbench-callout workbench-callout--error" role="alert">{error}</p> : null}
 
-      <section className="collab-boundaries workbench-boundary" aria-labelledby="collab-boundaries-title">
+      <section className="collab-boundaries workbench-boundary" aria-labelledby={`${id}-collab-boundaries-title`}>
         <div>
-          <h2 id="collab-boundaries-title">What this proves</h2>
+          <h2 id={`${id}-collab-boundaries-title`}>What this proves</h2>
           <p>{proof}</p>
         </div>
         <div className="collab-security workbench-callout workbench-callout--warning" role="note">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
 import type { HistoryCommandController } from './commands'
 import type {
   HistoryAuthor,
@@ -54,6 +54,7 @@ export function HistoryTimeline<TSnapshot>({
   formatSize = defaultSize,
   onError,
 }: HistoryTimelineProps<TSnapshot>) {
+  const id = useId()
   const [versions, setVersions] = useState(() => initialPage?.versions ?? [])
   const [nextCursor, setNextCursor] = useState(initialPage?.nextCursor)
   const [reason, setReason] = useState<'' | HistoryChangeReason>(initialFilter.reasons?.length === 1 ? initialFilter.reasons[0]! : '')
@@ -116,10 +117,10 @@ export function HistoryTimeline<TSnapshot>({
 
   const disabled = busy !== null
   return (
-    <aside className="ioc-history" style={styles.shell} aria-labelledby="ioc-history-title" aria-busy={disabled}>
+    <aside className="ioc-history" style={styles.shell} aria-labelledby={`${id}-ioc-history-title`} aria-busy={disabled}>
       <header style={styles.header}>
         <div>
-          <h2 id="ioc-history-title" style={styles.title}>{title}</h2>
+          <h2 id={`${id}-ioc-history-title`} style={styles.title}>{title}</h2>
           <p style={styles.subtitle}>Browse saved states without changing the open workbook.</p>
         </div>
         {canCapture && author ? <button type="button" style={styles.primaryButton} disabled={disabled} onClick={() => void capture()}>Save version</button> : null}
@@ -170,12 +171,12 @@ export function HistoryTimeline<TSnapshot>({
           ref={confirmRef}
           role="alertdialog"
           aria-modal="true"
-          aria-labelledby="ioc-history-confirm-title"
+          aria-labelledby={`${id}-ioc-history-confirm-title`}
           tabIndex={-1}
           style={styles.confirm}
           onKeyDown={(event) => trapHistoryDialogFocus(event, confirmRef.current, () => setRestoreTarget(null))}
         >
-          <strong id="ioc-history-confirm-title">Restore this version?</strong>
+          <strong id={`${id}-ioc-history-confirm-title`}>Restore this version?</strong>
           <p style={styles.confirmCopy}>A new saved version will be created. Existing history stays intact.</p>
           <div style={styles.actions}>
             <button type="button" disabled={disabled} onClick={() => void restore()} style={styles.warningButton}>Restore version</button>

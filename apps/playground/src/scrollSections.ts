@@ -1,19 +1,17 @@
-import { DEMOS, DEMO_GROUPS, type DemoDefinition } from './demoRegistry'
-import { AGENT_TOOLS, agentHref, parseAgentTool, parseSurface, surfaceHref, type AgentTool, type Surface } from './route'
+import type { DemoDefinition } from './demoRegistry'
+import { surfaceHref, type Surface } from './route'
+import { WORKSPACE_DEMOS } from './workspaceRegistry'
+import { resolveToolWorkspace } from './toolWorkspaces'
 
-export type ScrollSection = { key: string; surface: Surface; href: string; demo?: DemoDefinition; tool?: AgentTool }
+export type ScrollSection = { key: string; surface: Surface; href: string; demo?: DemoDefinition }
 export const SCROLL_SECTIONS: ScrollSection[] = [
   { key: 'overview', surface: 'overview', href: surfaceHref('overview') },
-  ...DEMO_GROUPS.flatMap(group => DEMOS.filter(demo => demo.group === group).flatMap<ScrollSection>(demo =>
-    demo.surface === 'agent'
-      ? AGENT_TOOLS.map(({ tool }) => ({ key: `agent-${tool}`, surface: demo.surface, href: agentHref(tool), demo, tool }))
-      : [{ key: demo.surface, surface: demo.surface, href: surfaceHref(demo.surface), demo }],
-  )),
+  ...WORKSPACE_DEMOS.map(demo => ({ key: demo.surface, surface: demo.surface, href: surfaceHref(demo.surface), demo })),
 ]
 
 export function sectionForHash(hash: string): ScrollSection {
-  const surface = parseSurface(hash)
-  return SCROLL_SECTIONS.find(section => section.surface === surface && (surface !== 'agent' || section.tool === parseAgentTool(hash))) ?? SCROLL_SECTIONS[0]!
+  const target = resolveToolWorkspace(hash)
+  return SCROLL_SECTIONS.find(section => section.surface === target?.tool) ?? SCROLL_SECTIONS[0]!
 }
 
 /** Coordinates are relative to the viewport. Reading never moves focus or scroll. */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { diffGrids, diffText } from '@injoffice/history'
 import type { HistoryCommandController } from '../../../../packages/history/src/commands'
 import type { HistoryManager } from '../../../../packages/history/src/manager'
@@ -18,8 +18,10 @@ function parseGrid(value: string): string[][] {
   return value.split('\n').map((row) => row.split(',').map((cell) => cell.trim()))
 }
 
-export default function HistoryPage() {
-  const [mode, setMode] = useState<'grid' | 'text'>('grid')
+export default function HistoryPage({ fixedFormat }: { fixedFormat?: 'sheets' | 'docs' } = {}) {
+  const id = useId()
+  const [selectedMode, setMode] = useState<'grid' | 'text'>('grid')
+  const mode = fixedFormat === 'docs' ? 'text' : fixedFormat === 'sheets' ? 'grid' : selectedMode
   const [beforeGrid, setBeforeGrid] = useState(BEFORE_GRID)
   const [afterGrid, setAfterGrid] = useState(AFTER_GRID)
   const [beforeText, setBeforeText] = useState(BEFORE_TEXT)
@@ -57,7 +59,10 @@ export default function HistoryPage() {
   }
 
   useEffect(() => {
-    const { manager } = createPlaygroundHistory([
+    const { manager } = createPlaygroundHistory(mode === 'text' ? [
+      { snapshot: BEFORE_TEXT, contentType: 'text/plain', description: 'Seeded before document' },
+      { snapshot: AFTER_TEXT, contentType: 'text/plain', description: 'Seeded after document' },
+    ] : [
       { snapshot: BEFORE_GRID, contentType: 'text/csv', description: 'Seeded before grid' },
       { snapshot: AFTER_GRID, contentType: 'text/csv', description: 'Seeded after grid' },
     ])
@@ -97,12 +102,12 @@ export default function HistoryPage() {
     <div className="ds">
     <section className="tool-page" data-demo-surface="history" aria-label="Document history workbench">
       <div className="tool-page__controls ds-workstrip" role="toolbar" aria-label="History controls">
-        <DsSegment
+        {fixedFormat === undefined && <DsSegment
           label="Diff mode"
           value={mode}
           onChange={(id) => setMode(id as 'grid' | 'text')}
           options={[{ id: 'grid', label: 'Spreadsheet' }, { id: 'text', label: 'Document' }]}
-        />
+        />}
         <DsButton variant="outlined" className="workbench-button" onClick={() => {
           if (mode === 'grid') { setBeforeGrid(BEFORE_GRID); setAfterGrid(AFTER_GRID) } else { setBeforeText(BEFORE_TEXT); setAfterText(AFTER_TEXT) }
         }}>Reset example</DsButton>
@@ -129,20 +134,20 @@ export default function HistoryPage() {
       {error && <p className="tool-error" role="alert">{error}</p>}
 
       <div className="tool-page__grid tool-page__grid--three ds-split ds-split--three">
-        <section className="tool-card ds-split-main" aria-labelledby="history-before-title">
+        <section className="tool-card ds-split-main" aria-labelledby={`${id}-history-before-title`}>
           <span className="ds-eyebrow tool-eyebrow">Before</span>
-          <h2 id="history-before-title">Before</h2>
+          <h2 id={`${id}-history-before-title`}>Before</h2>
           <textarea className="tool-editor ds-outline" value={mode === 'grid' ? beforeGrid : beforeText} onChange={(event) => mode === 'grid' ? setBeforeGrid(event.target.value) : setBeforeText(event.target.value)} aria-label="Before content" />
         </section>
-        <section className="tool-card ds-split-main" aria-labelledby="history-after-title">
+        <section className="tool-card ds-split-main" aria-labelledby={`${id}-history-after-title`}>
           <span className="ds-eyebrow tool-eyebrow">After</span>
-          <h2 id="history-after-title">After</h2>
+          <h2 id={`${id}-history-after-title`}>After</h2>
           <textarea className="tool-editor ds-outline" value={mode === 'grid' ? afterGrid : afterText} onChange={(event) => mode === 'grid' ? setAfterGrid(event.target.value) : setAfterText(event.target.value)} aria-label="After content" />
         </section>
-        <section className="tool-card tool-card--hero ds-split-main" aria-labelledby="history-diff-title">
+        <section className="tool-card tool-card--hero ds-split-main" aria-labelledby={`${id}-history-diff-title`}>
           <span className="ds-eyebrow tool-eyebrow">Changes</span>
           <div className="ds-row">
-            <h2 id="history-diff-title">Changes</h2>
+            <h2 id={`${id}-history-diff-title`}>Changes</h2>
             <DsChip>{mode === 'grid' ? gridDiff.changeCount : textDiff.added + textDiff.removed}</DsChip>
           </div>
           {mode === 'grid' ? (
@@ -160,10 +165,10 @@ export default function HistoryPage() {
       </div>
 
       <div className="tool-page__grid ds-split ds-split--wide">
-        <section className="tool-card ds-split-main" aria-labelledby="history-versions-title">
+        <section className="tool-card ds-split-main" aria-labelledby={`${id}-history-versions-title`}>
           <span className="ds-eyebrow tool-eyebrow">Version timeline</span>
           <div className="ds-row">
-            <h2 id="history-versions-title">Version timeline</h2>
+            <h2 id={`${id}-history-versions-title`}>Version timeline</h2>
             <DsChip>{versions.length}</DsChip>
           </div>
           {timeline ? (
@@ -178,9 +183,9 @@ export default function HistoryPage() {
             <p className="tool-empty">Loading saved versions…</p>
           )}
         </section>
-        <section className="tool-card ds-split-side" aria-labelledby="history-preview-title">
+        <section className="tool-card ds-split-side" aria-labelledby={`${id}-history-preview-title`}>
           <span className="ds-eyebrow tool-eyebrow">Isolated preview</span>
-          <h2 id="history-preview-title">{selectedId ?? 'No version'}</h2>
+          <h2 id={`${id}-history-preview-title`}>{selectedId ?? 'No version'}</h2>
           <textarea className="tool-editor ds-outline" readOnly value={preview} aria-label="Isolated history preview" />
           <p className="tool-note ds-muted">The package timeline mounts here. Previews stay cloned; restore writes a new immutable version.</p>
         </section>

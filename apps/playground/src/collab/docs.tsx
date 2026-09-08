@@ -10,7 +10,7 @@ import {
   type PeerInfo,
 } from '../../../../packages/collab/src/index.js'
 import { createHttpCollabTransport, type HttpCollabTransport } from '../collabTransport'
-import { parseCollabQuery } from '../collabScope'
+import { initialCollabArtifact, useCollabComposition } from '../collabComposition'
 import {
   COLLAB_API_BASE,
   CollabRoomChrome,
@@ -29,6 +29,7 @@ function caretLabel(selection: DocSelection | null | undefined): string {
 }
 
 export function CollabDocsPlaceholder() {
+  const scope = useCollabComposition()
   const editorRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const transportRef = useRef<HttpCollabTransport | null>(null)
@@ -36,7 +37,7 @@ export function CollabDocsPlaceholder() {
   const engineRef = useRef<DocSyncEngine | null>(null)
   const collabClientIdRef = useRef(`docs-${crypto.randomUUID()}`)
   const [name, setName] = useState(defaultCollabName)
-  const [artifact, setArtifact] = useState(() => parseCollabQuery(window.location.href).artifact)
+  const [artifact, setArtifact] = useState(() => initialCollabArtifact(scope, window.location.href))
   const [manager, setManager] = useState<DocPresenceManager | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('idle')
   const [editorReady, setEditorReady] = useState(false)

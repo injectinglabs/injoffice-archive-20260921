@@ -13,7 +13,7 @@ import {
 } from '@injoffice/slides'
 import { seedCollabDeck } from './slidesSeed'
 import { createHttpCollabTransport, type HttpCollabTransport } from '../collabTransport'
-import { parseCollabQuery } from '../collabScope'
+import { initialCollabArtifact, useCollabComposition } from '../collabComposition'
 import {
   COLLAB_API_BASE,
   CollabRoomChrome,
@@ -26,12 +26,13 @@ import {
 const SLIDES_PROOF = 'This tab mounts a live DeckSpec canvas and sends field updates, one-slide structure edits, ordered replay, reconnect catch-up, and slide presence through injoffice-server over HTTP and server-sent events.'
 
 export function CollabSlidesPanel() {
+  const scope = useCollabComposition()
   const transportRef = useRef<HttpCollabTransport | null>(null)
   const managerRef = useRef<DeckPresenceManager<DeckSpec> | null>(null)
   const engineRef = useRef<DeckSyncEngine<DeckSpec> | null>(null)
   const specRef = useRef<DeckSpec | null>(null)
   const [name, setName] = useState(defaultCollabName)
-  const [artifact, setArtifact] = useState(() => parseCollabQuery(window.location.href).artifact)
+  const [artifact, setArtifact] = useState(() => initialCollabArtifact(scope, window.location.href))
   const [manager, setManager] = useState<DeckPresenceManager<DeckSpec> | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('idle')
   const [busy, setBusy] = useState(false)

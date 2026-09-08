@@ -66,7 +66,20 @@ try {
 
   await tab('draw')
   await button('Rectangle')
-  const drawing = await evaluate(`(() => { const el = ${pdf}.querySelector('.pdf-drawing-surface'); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.x + 90, y: r.y + 100 }; })()`)
+  await evaluate(`${pdf}.querySelector('.pdf-drawing-surface').scrollIntoView({ block: 'center' })`)
+  await delay(150)
+  // The page is taller than its scrolling viewport. Draw inside the visible
+  // intersection, not at a fixed offset from the potentially clipped SVG top.
+  const drawing = await evaluate(`(() => {
+    const el = ${pdf}.querySelector('.pdf-drawing-surface');
+    const r = el.getBoundingClientRect();
+    const viewport = el.closest('.pdf-pages').getBoundingClientRect();
+    const x = Math.max(r.left, viewport.left, 0) + 40;
+    const y = Math.max(r.top, viewport.top, 80) + 40;
+    if (x + 120 >= Math.min(r.right, viewport.right, innerWidth) || y + 60 >= Math.min(r.bottom, viewport.bottom, innerHeight)) throw new Error('PDF drawing viewport is too small');
+    if (!el.contains(document.elementFromPoint(x, y)) || !el.contains(document.elementFromPoint(x + 120, y + 60))) throw new Error('PDF drawing coordinates are occluded');
+    return { x, y };
+  })()`)
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: drawing.x, y: drawing.y, button: 'left', clickCount: 1 })
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: drawing.x + 120, y: drawing.y + 60, button: 'left', buttons: 1 })
   await assert(`Boolean(${pdf}.querySelector('.pdf-drawing-surface rect'))`, 'live drawing preview')

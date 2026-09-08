@@ -43,7 +43,7 @@ export const DEMO_RECIPES = {
     outcome: 'Change a real workbook, reopen the emitted bytes, and inspect exact cell and revision readback evidence.',
     minutes: 3,
     steps: [
-      { id: 'open-native', title: 'Open the native proof', instruction: 'Choose “Test XLSX round trip,” then select “Use bundled .xlsx.”', evidence: 'The workbook grid and a revision-bound Safe cell target appear.' },
+      { id: 'open-native', title: 'Open the native proof', instruction: 'In Sheets, choose Edit → XLSX file round trip, then select “Use bundled .xlsx.”', evidence: 'The workbook grid and a revision-bound Safe cell target appear.' },
       { id: 'edit-cell', title: 'Make one guarded edit', instruction: 'Choose a Safe cell, change its New literal value, and select “Save to XLSX.”', evidence: 'The status reports a successful mutation and verified download bytes become available.' },
       { id: 'verify-xlsx', title: 'Read the result back', instruction: 'In 03 · Verify, compare Cell, Before, After, and CAS moved before downloading.', evidence: 'After matches the value you entered and CAS moved shows the package revision changed.' },
     ],
@@ -188,7 +188,7 @@ export const DEMO_RECIPES = {
     outcome: 'Use a mocked proposal to make one real, approved XLSX, DOCX, PPTX, or PDF change, verify the saved bytes, and download the result.',
     minutes: 3,
     steps: [
-      { id: 'prepare-agent-change', title: 'Customize and run a task', instruction: 'Open Sheets, Docs, Slides, or PDF. Use “Customize this task” to choose a status, replacement text, or page rotation, then select “Run agent”. The deterministic mock needs no LLM, credentials, or configuration.', evidence: 'The proposal is simulated; the real-file preview never replaces the source bytes. Technical details shows the mock exchange separately from actual public-tool calls.' },
+      { id: 'prepare-agent-change', title: 'Customize and run a task', instruction: 'Choose AI inside Sheets, Docs, Slides, or PDF. Use “Customize this task” to choose a status, replacement text, or page rotation, then select “Run agent”. The deterministic mock needs no LLM, credentials, or configuration.', evidence: 'The proposal is simulated; the real-file preview never replaces the source bytes. Technical details shows the mock exchange separately from actual public-tool calls.' },
       { id: 'review-agent-diff', title: 'Review the exact change', instruction: 'Compare the sample preview and the proposed before-and-after values. Open Technical details to inspect source identity, advertised operations, and actual tool calls.', evidence: 'The proposal stays bound to one source revision and only uses a discovered capability. Editing the task clears the previous preview and approval.' },
       { id: 'approve-agent-commit', title: 'Approve, verify, and download', instruction: 'Approve the exact diff, then commit and download. On a fresh sample, open Technical details → Try the safety boundaries: another editor invalidates the plan; retry returns the same receipt; injected readback failure withholds a verified download.', evidence: 'Fresh native extraction or PDF parsing verifies the requested edit. Post-write verification is part of the commit receipt, not a second office.verify call.' },
     ],
@@ -204,7 +204,7 @@ export const DEMO_RECIPES = {
     outcome: 'Make an edit on one surface, observe it on another, and inspect the ordered operation ledger.',
     minutes: 3,
     steps: [
-      { id: 'choose-collab-format', title: 'Choose an artifact', instruction: 'Keep “Two-editor simulation” selected, then choose Sheets, Docs, Slides, or PDF.', evidence: 'Two independent editors join one browser-local room.' },
+      { id: 'choose-collab-format', title: 'Open the shared sample', instruction: 'Keep “Two-editor simulation” selected. The format is already fixed to this workspace’s tool.', evidence: 'Two independent editors join one browser-local room.' },
       { id: 'make-collab-edit', title: 'Edit on one side', instruction: 'Change content or presence in the left editor.', evidence: 'The right editor receives the operation while retaining its own local identity.' },
       { id: 'inspect-ledger', title: 'Inspect ordering', instruction: 'Read the Shared operation ledger and compare ordered content operations with presence events.', evidence: 'Ordered edits have sequence numbers while ephemeral presence is labeled separately.' },
     ],
@@ -220,7 +220,7 @@ export const DEMO_RECIPES = {
     outcome: 'Turn two snapshots into a readable diff, capture attribution, and restore without rewriting history.',
     minutes: 3,
     steps: [
-      { id: 'edit-snapshots', title: 'Create a meaningful change', instruction: 'Choose Spreadsheet or Document and edit the Before and After content.', evidence: 'The Changes panel reports structured cells or text spans rather than opaque bytes.' },
+      { id: 'edit-snapshots', title: 'Create a meaningful change', instruction: 'Edit the Before and After content. The sample format is already fixed to this workspace’s tool.', evidence: 'The Changes panel reports structured cells or text spans rather than opaque bytes.' },
       { id: 'capture-version', title: 'Capture with attribution', instruction: 'Select Capture after or Capture as agent.', evidence: 'A new timeline entry records the author and capture reason.' },
       { id: 'restore-version', title: 'Restore non-destructively', instruction: 'Select a version and choose Restore selected.', evidence: 'The restored snapshot becomes a new version while earlier history stays intact.' },
     ],

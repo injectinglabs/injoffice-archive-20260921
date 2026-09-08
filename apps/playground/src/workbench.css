@@ -1428,6 +1428,10 @@ body {
 .task-launch { padding: clamp(24px, 4vw, 44px) clamp(20px, 4vw, 48px) 32px; }
 .task-launch__intro { max-width: 76ch; }
 .task-launch__intro h1 { max-width: 21ch; margin: 0; font: 600 clamp(28px, 3.4vw, 42px)/1.14 var(--type-display); letter-spacing: -.04em; }
+.four-tool-launch__notes { display: grid; gap: 12px; max-width: 76ch; margin-top: 24px; }
+.four-tool-launch__notes p { margin: 0; color: var(--mute); font-size: 13px; line-height: 1.6; }
+.four-tool-launch__notes strong { color: var(--ink); }
+.four-tool-launch__runtime { font-size: 12px; }
 .task-launch__intro > p { margin: 16px 0 0; color: var(--mute); font-size: 15px; line-height: 1.5; }
 .task-launch__intro .task-launch__boundary { display: grid; gap: 3px; margin-top: 20px; font-size: 13px; }
 .task-launch__boundary strong { color: var(--ink); font-weight: 600; }

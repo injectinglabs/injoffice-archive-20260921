@@ -16,6 +16,7 @@ let chrome
 let cdp
 let staticServer
 let sectionKey = 'sheets'
+let featureKey = 'native'
 
 const mime = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -88,14 +89,8 @@ try {
     cdp.send('Page.enable'),
     cdp.send('Runtime.enable'),
   ])
-  await cdp.send('Page.navigate', { url: `${siteUrl}#/sheets` })
-
-  await pollExpression(cdp, `(() => {
-    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Test XLSX round trip')
-    if (!button) return false
-    button.click()
-    return true
-  })()`, 'spreadsheet native view')
+  await cdp.send('Page.navigate', { url: `${siteUrl}#/sheets?feature=native` })
+  await pollExpression(cdp, `document.querySelector('.native-toolbar') !== null`, 'spreadsheet native workspace feature', 90_000)
   await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
     return Boolean(button?.disabled && button.textContent?.includes('not configured'))
@@ -141,7 +136,8 @@ try {
   assertBrowserLocalProof(xlsxProof, 'XLSX')
 
   sectionKey = 'docs'
-  await cdp.send('Page.navigate', { url: `${siteUrl}#/docs` })
+  featureKey = 'editor'
+  await cdp.send('Page.navigate', { url: `${siteUrl}#/docs?feature=editor` })
   await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
     return Boolean(button?.disabled && button.title?.includes('VITE_INJOFFICE_API_BASE'))
@@ -200,8 +196,9 @@ try {
   await pollExpression(cdp, `document.querySelector('.native-status')?.textContent?.includes('Last change undone') === true`, 'DOCX exact-byte undo', 90_000)
   await pollExpression(cdp, `document.querySelector('#docx-replacement-text')?.value === ${JSON.stringify(selectedDocxText)} && Boolean(document.querySelector('.native-download[href^="blob:"]'))`, 'DOCX undo restores editable text and download')
 
-  sectionKey = 'pptx-native'
-  await cdp.send('Page.navigate', { url: `${siteUrl}#/pptx-native` })
+  sectionKey = 'slides'
+  featureKey = 'pptx-native'
+  await cdp.send('Page.navigate', { url: `${siteUrl}#/slides?feature=pptx-native` })
   await pollExpression(cdp, `document.querySelector('[data-demo-surface="pptx-native"]') !== null`, 'native PPTX view')
   await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
@@ -398,7 +395,8 @@ async function evaluate(client, expression) {
   // evidence. Keep compatibility with standalone pages without scroll sections.
   const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'nativeQueryAll(').replaceAll('document.querySelector(', 'nativeQuery(')
   const response = await client.send('Runtime.evaluate', { expression: `{
-    const nativeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${sectionKey}"]`)}) ?? (document.querySelector('[data-scroll-section]') ? null : document);
+    const toolSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${sectionKey}"]`)});
+    const nativeSection = toolSection?.querySelector(${JSON.stringify(`[data-workspace-panel="${featureKey}"]:not([hidden])`)}) ?? (document.querySelector('[data-scroll-section]') ? null : document);
     const nativeQuery = selector => nativeSection?.querySelector(selector) ?? null;
     const nativeQueryAll = selector => nativeSection?.querySelectorAll(selector) ?? [];
     ${scopedExpression}

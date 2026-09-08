@@ -123,7 +123,9 @@ export default function PdfPage() {
   useEffect(() => { setSelection([]); setTool(null) }, [page, zoom, bytes, inspector])
   useEffect(() => {
     if (!tool) return
-    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setTool(null) }
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && canvasRef.current?.getClientRects().length && !canvasRef.current.closest('[inert]')) setTool(null)
+    }
     window.addEventListener('keydown', cancel)
     return () => window.removeEventListener('keydown', cancel)
   }, [tool])

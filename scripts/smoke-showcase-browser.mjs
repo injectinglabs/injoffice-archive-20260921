@@ -13,6 +13,21 @@ let chrome, socket, staticServer
 let proposalMock, restoreProposalEnv
 let sequence = 0
 let scopeKey = 'overview'
+let scopeFeature = null
+const workspaceFeatures = {
+  sheets: ['editor', 'native', 'tools', 'charts', 'pivots', 'shapes', 'connectors', 'formulas', 'agent', 'collab', 'history'],
+  docs: ['editor', 'agent', 'collab', 'history', 'font-metrics'],
+  slides: ['editor', 'pptx-native', 'pptx-authored', 'pptx-render', 'shapes', 'agent', 'collab', 'font-metrics'],
+  pdf: ['editor', 'agent', 'collab', 'font-metrics'],
+}
+function destination(path) {
+  const [surface, query = ''] = path.split('?')
+  const params = new URLSearchParams(query)
+  if (surface === 'overview') return { tool: surface, feature: null }
+  if (surface === 'agent') return { tool: params.get('format') ?? 'sheets', feature: 'agent' }
+  if (surface in workspaceFeatures) return { tool: surface, feature: params.get('feature') ?? params.get('view') ?? 'editor' }
+  return { tool: surface.startsWith('pptx-') ? 'slides' : surface === 'font-metrics' ? 'docs' : 'sheets', feature: surface }
+}
 let acceptReset = false
 const pending = new Map()
 const errors = []
@@ -52,13 +67,14 @@ function send(method, params = {}) {
 }
 async function evaluate(expression) {
   // Multiple editors now remain mounted. Every editor assertion and action is
-  // scoped to the section selected by this test, never the first agent in DOM.
-  // Shell, catalogue, and the one shared source drawer remain document-wide.
-  const globalSelectors = ['.app-', '.scheme-toggle', '.showcase-', '#showcase-', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
+  // scoped to the selected feature, never a retained hidden editor's DOM.
+  // Shell, landing, and the one shared source drawer remain document-wide.
+  const globalSelectors = ['.app-', '.scheme-toggle', '.tool-example', '[data-workspace-entry]', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
   const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'testQueryAll(').replaceAll('document.querySelector(', 'testQuery(')
   const result = await send('Runtime.evaluate', { expression: `{
     const smokeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${scopeKey}"]`)});
-    const smokeRoot = selector => ${JSON.stringify(globalSelectors)}.some(prefix => selector.startsWith(prefix)) ? document : smokeSection;
+    const smokePanel = smokeSection?.querySelector(${JSON.stringify(`[data-workspace-panel="${scopeFeature}"]:not([hidden])`)});
+    const smokeRoot = selector => ${JSON.stringify(globalSelectors)}.some(prefix => selector.startsWith(prefix)) ? document : ['.demo-reset-trigger', '.demo-context-actions', '.source-proof-trigger', '.demo-stage', '.demo-back', '[data-workspace-'].some(prefix => selector.startsWith(prefix)) ? smokeSection : ${scopeFeature === null} ? smokeSection : smokePanel;
     const testQuery = selector => smokeRoot(selector)?.querySelector(selector) ?? null;
     const testQueryAll = selector => smokeRoot(selector)?.querySelectorAll(selector) ?? [];
     ${scopedExpression}
@@ -126,10 +142,11 @@ async function screenshot(name) {
   writeFileSync(resolve(output, `${name}.png`), Buffer.from(data, 'base64'))
 }
 async function route(path) {
-  const [surface, query = ''] = path.split('?')
-  scopeKey = surface === 'agent' ? `agent-${new URLSearchParams(query).get('format') ?? 'sheets'}` : surface
+  const { tool, feature } = destination(path)
+  scopeKey = tool
+  scopeFeature = feature
   await evaluate(`location.hash = '#/${path}'`)
-  await until(`document.querySelector('.app-shell')?.dataset.surface === ${JSON.stringify(surface)} && !document.querySelector('.demo-loading') && (smokeSection?.dataset.scrollState === 'ready' || ${JSON.stringify(surface)} === 'overview')`, path, 90_000)
+  await until(`document.querySelector('.app-shell')?.dataset.surface === ${JSON.stringify(tool)} && (${feature === null} || (smokeSection?.dataset.scrollState === 'ready' && !!smokePanel && !smokePanel.querySelector('.demo-loading, [data-workspace-loading], [data-workspace-error]')))`, path, 90_000)
 }
 try {
   assert.ok(!(process.argv.includes('--built') && process.argv.includes('--dev')), 'choose either --built or --dev')
@@ -158,42 +175,36 @@ try {
   await send('Network.enable')
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: origin.href })
-  await until(`document.querySelectorAll('.showcase-item').length === 19`, 'catalogue ready')
+  await until(`document.querySelectorAll('.tool-example[data-workspace-entry]').length === 4`, 'four tool entries ready')
   await evaluate(`document.querySelector('.scheme-toggle button:first-child').click()`)
   await until(`document.documentElement.dataset.theme === 'light'`, 'light theme')
-  await screenshot('catalogue-desktop')
-  await evaluate(`(() => { const input = document.querySelector('#showcase-query'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'redact'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
-  await until(`document.querySelectorAll('.showcase-item').length === 1 && document.querySelector('.showcase-item').getAttribute('href') === '#/pdf'`, 'search narrows to PDF')
-  await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group button')).find(button => button.textContent === 'Edit files').click()`)
-  await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group--formats button')).find(button => button.textContent === 'PDF').click()`)
-  await click('.showcase-item')
+  await screenshot('four-tools-desktop')
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.tool-example[data-workspace-entry]')).map(link => link.dataset.workspaceEntry)`), Object.keys(workspaceFeatures), 'landing exposes exactly Sheets, Docs, Slides, and PDF')
+  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a').length`), 4, 'sidebar has only four tool links')
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar a')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'sidebar routes match tool workspaces')
+  await click('[data-workspace-entry="pdf"]')
   scopeKey = 'pdf'
-  await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !document.querySelector('.demo-loading')`, 'filtered result opens')
-  await click('.demo-back')
-  scopeKey = 'overview'
-  await until(`document.querySelector('#showcase-query')?.value === 'redact' && document.querySelectorAll('.showcase-item').length === 1`, 'Back preserves search')
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.showcase-filter-group button[aria-pressed=true]')).map(button => button.textContent)`), ['Edit files', 'PDF'], 'Back preserves task and file-type filters')
-  await evaluate(`(() => { const input = document.querySelector('#showcase-query'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'zzznomatch'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
-  await until(`!!document.querySelector('.showcase-empty')`, 'empty search')
-  await click('.showcase-empty button')
-  await until(`document.querySelectorAll('.showcase-item').length === 19`, 'clear filters')
-  assert.equal(await evaluate(`new Set([...document.querySelectorAll('.showcase-item')].map(item => item.getAttribute('href'))).size`), 19, 'catalogue examples have distinct routes')
+  scopeFeature = 'editor'
+  await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !!smokePanel && !document.querySelector('.demo-loading')`, 'tool entry opens the real PDF workspace')
+  await route('overview')
+  assert.equal(await evaluate(`document.querySelectorAll('.tool-example[data-workspace-entry]').length`), 4, 'return to landing preserves the four-entry structure')
   await route('charts')
   assert.equal(await evaluate(`document.querySelector('.app-shell').dataset.navigation`), 'scroll')
-  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[href^="#/agent?format="]').length`), 4, 'all AI formats appear in navigation')
+  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[href^="#/agent"]').length`), 0, 'AI actions live inside tools, not as extra top-level examples')
 
   // A cold section loads independently: already visited editors stay mounted,
   // and every section heading remains usable while its script is held.
   await send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Script', requestStage: 'Request' }] })
   await evaluate(`window.__showcasePreviousStage = document.querySelector('.demo-stage'); location.hash = '#/pptx-render'`)
-  scopeKey = 'pptx-render'
+  scopeKey = 'slides'
+  scopeFeature = 'pptx-render'
   const coldStart = Date.now()
   while (heldRequests.length === 0 && Date.now() - coldStart < 10_000) await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(heldRequests.length > 0, 'cold navigation requests a lazy script')
-  await until(`smokeSection?.dataset.scrollState === 'loading'`, 'cold section reports loading')
-  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && document.querySelectorAll('[data-scroll-section]').length === 20 && Array.from(document.querySelectorAll('[data-scroll-section]')).every(section => section.querySelector('h1,h2'))`), true, 'loaded editor and all headings remain during cold section navigation')
+  await until(`smokeSection?.dataset.scrollState === 'loading' || !!smokePanel?.querySelector('.demo-loading, [data-workspace-loading]')`, 'cold tool or feature reports loading')
+  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && document.querySelectorAll('[data-scroll-section]').length === 5 && Array.from(document.querySelectorAll('[data-scroll-section]')).every(section => section.querySelector('h1,h2'))`), true, 'loaded editor and all four tool headings remain during cold navigation')
   await send('Fetch.disable')
-  await until(`smokeSection?.dataset.scrollState === 'ready' && !document.querySelector('.demo-loading')`, 'cold section completes', 90_000)
+  await until(`smokeSection?.dataset.scrollState === 'ready' && !!smokePanel && !smokePanel.querySelector('.demo-loading, [data-workspace-loading], [data-workspace-error]')`, 'cold feature completes', 90_000)
   await route('charts')
   await click('.source-proof-trigger')
   await until(`document.activeElement?.classList.contains('source-proof-close')`, 'modal initial focus')
@@ -211,7 +222,16 @@ try {
   assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '1')
   await click('.source-proof-close')
   await screenshot('focused-chart')
-  for (const surface of ['pivots', 'shapes', 'connectors', 'formulas', 'docs', 'slides', 'pdf', 'history', 'font-metrics', 'pptx-authored', 'pptx-native', 'pptx-render', 'sheets']) await route(surface)
+  for (const [tool, features] of Object.entries(workspaceFeatures)) {
+    for (const feature of features) {
+      await route(`${tool}?feature=${feature}`)
+      assert.equal(await evaluate(`smokePanel?.hidden === false && smokeSection.querySelectorAll('[data-workspace-panel]:not([hidden])').length === 1`), true, `${tool}/${feature} is the only visible feature panel`)
+      assert.ok(await evaluate(`document.querySelectorAll('[data-workspace-group]').length > 0 && document.querySelectorAll('[data-workspace-feature]').length > 0`), `${tool} exposes grouped feature controls`)
+      assert.equal(await evaluate(`smokeSection.querySelector('[data-workspace-view]')?.value ?? smokeSection.querySelector('[data-workspace-group][aria-selected="true"]')?.dataset.workspaceFeature ?? smokeSection.querySelector('[data-workspace-group][aria-pressed="true"]')?.dataset.workspaceFeature`), feature, `${tool}/${feature} is reflected in internal navigation`)
+    }
+  }
+  // Preserve old links as redirects into their appropriate comprehensive tool.
+  for (const surface of ['pivots', 'shapes', 'connectors', 'formulas', 'history', 'font-metrics', 'pptx-authored', 'pptx-native', 'pptx-render', 'sheets']) await route(surface)
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'seeded sheet chart')
   await until(`(${sheetChartState})?.series.length > 0 && (${sheetChartState})?.numericCells.length === 5`, 'seeded chart has a numeric series')
   const originalChart = await evaluate(sheetChartState)
@@ -222,7 +242,7 @@ try {
   await until(`(${sheetChartState})?.firstValue === ${JSON.stringify(originalChart.firstValue)} && (${sheetChartState})?.series.length > 0`, 'reset restores seeded chart data')
   assert.deepEqual(await evaluate(sheetChartState), originalChart, 'reset restores the complete numeric chart source')
   for (let i = 0; i < 2; i++) { await route('charts'); await route('sheets'); await until(`document.querySelector('[data-demo-surface="sheets"] canvas')`, 'preserved sheet') }
-  await evaluate(`location.hash = '#/sheets?view=native'`)
+  await route('sheets?view=native')
   await until(`!!document.querySelector('.native-toolbar')`, 'same-surface deep link switches mode')
   await route('collab')
   await until(`document.querySelectorAll('canvas').length > 0`, 'collaboration rendered')
@@ -421,12 +441,12 @@ try {
   await evaluate(`window.scrollTo({ top: 0, behavior: 'instant' })`)
   for (const width of [1200, 1024, 768]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
-    await until(`document.querySelector('.app-main').scrollWidth <= document.querySelector('.app-main').clientWidth`, `catalogue fits width ${width}`, 1000)
+    await until(`document.querySelector('.app-main').scrollWidth <= document.querySelector('.app-main').clientWidth`, `four-tool layout fits width ${width}`, 1000)
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-  await until(`document.documentElement.scrollWidth <= 390`, 'mobile catalogue has no horizontal overflow')
+  await until(`document.documentElement.scrollWidth <= 390`, 'mobile tool landing has no horizontal overflow')
   assert.ok(await evaluate(`document.querySelector('.app-sidebar').getBoundingClientRect().height < 160`), 'mobile navigation does not retain a desktop-height blank area')
-  await screenshot('catalogue-mobile')
+  await screenshot('four-tools-mobile')
   await route('agent?format=sheets')
   await until(agentReady, 'mobile AI sample ready', 90_000)
   await clickButton('Run agent')
@@ -480,7 +500,7 @@ try {
   await until(`document.documentElement.dataset.theme === 'dark'`, 'dark theme')
   await screenshot('focused-chart-dark')
   assert.deepEqual(errors, [], 'uncaught or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['19 distinct examples', 'search', 'filter return persistence', 'empty recovery', 'continuous section navigation', 'cold-section isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'all 16 surfaces', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-surface deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tool entries and sidebar links', 'all retained feature panels accessible', 'legacy links open the correct tool feature', 'continuous workspace navigation', 'cold-feature isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-workspace deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     await screenshot('failure')

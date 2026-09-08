@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { ICommandService, LocaleType, mergeLocales } from '@univerjs/core'
 import type { FUniver } from '@univerjs/core/lib/facade'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
@@ -17,6 +17,7 @@ import { SIM_EDITORS as EDITORS, SIM_FORMAT_HINT, SIM_ROOMS, SimEditorFrame, Sim
 import { CollabSimulatorDocs } from './collabSimulatorDocs'
 import { CollabSimulatorPdf } from './collabSimulatorPdf'
 import { CollabSimulatorSlides } from './collabSimulatorSlides'
+import type { CollabCompositionProps } from './collabComposition'
 
 const ROOM = SIM_ROOMS.sheets
 const SHEET = 's1'
@@ -172,14 +173,17 @@ const FORMAT_INTRO: Record<CollabFormat, { body: string; steps: [string, string,
   },
 }
 
-export function CollabSimulator() {
-  const [format, setFormat] = useState<CollabFormat>(() => parseCollabQuery(window.location.href).format)
+export function CollabSimulator({ fixedFormat, initialHash }: CollabCompositionProps = {}) {
+  const id = useId()
+  const [selectedFormat, setFormat] = useState<CollabFormat>(() => fixedFormat ?? parseCollabQuery(initialHash ?? window.location.href).format)
+  const format = fixedFormat ?? selectedFormat
   const [session, setSession] = useState(() => ({ id: 1, hub: createBrowserCollabHub() }))
   const snapshot = useSyncExternalStore(session.hub.subscribe, session.hub.getSnapshot, session.hub.getSnapshot)
   const intro = FORMAT_INTRO[format]
 
   const resetSession = () => setSession(({ id }) => ({ id: id + 1, hub: createBrowserCollabHub() }))
   const selectFormat = (next: CollabFormat) => {
+    if (fixedFormat !== undefined) return
     if (next === format) return
     if (snapshot.head > 0 && !window.confirm('Switch format? Unsaved edits in both simulated editors will be lost.')) return
     const { artifact } = parseCollabQuery(window.location.href)
@@ -203,11 +207,11 @@ export function CollabSimulator() {
           Reset both editors
         </button>
       </div>
-      <SimFormatTabs format={format} onFormat={selectFormat} hint={SIM_FORMAT_HINT[format]} />
+      {fixedFormat === undefined && <SimFormatTabs format={format} onFormat={selectFormat} hint={SIM_FORMAT_HINT[format]} />}
 
-      <section className="collab-sim-intro" aria-labelledby="collab-sim-title">
+      <section className="collab-sim-intro" aria-labelledby={`${id}-collab-sim-title`}>
         <div>
-          <h2 id="collab-sim-title">Edit on either side. See exactly who is there.</h2>
+          <h2 id={`${id}-collab-sim-title`}>Edit on either side. See exactly who is there.</h2>
           <p>{intro.body}</p>
         </div>
         <ol aria-label="How to try the collaboration simulator">
@@ -222,10 +226,10 @@ export function CollabSimulator() {
         {format === 'pdf' ? <CollabSimulatorPdf hub={session.hub} /> : null}
       </div>
 
-      <section className="collab-sim-ledger" aria-labelledby="collab-ledger-title">
+      <section className="collab-sim-ledger" aria-labelledby={`${id}-collab-ledger-title`}>
         <header>
           <div>
-            <h3 id="collab-ledger-title">Shared operation ledger</h3>
+            <h3 id={`${id}-collab-ledger-title`}>Shared operation ledger</h3>
             <p>This is the browser hub’s ordered view of both editors.</p>
           </div>
           <dl>

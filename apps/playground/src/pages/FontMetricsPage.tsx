@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
   classifyNativeOfficeLineBreak,
   scaleFontUnits,
@@ -21,6 +21,7 @@ function decisionTone(decision: NativeOfficeLineBreakDecision): 'green' | 'refus
 }
 
 export default function FontMetricsPage() {
+  const titleId = `${useId()}-font-metrics-title`
   const [left, setLeft] = useState('Quarterly-')
   const [right, setRight] = useState('results')
   const [fontSize, setFontSize] = useState(18)
@@ -44,11 +45,11 @@ export default function FontMetricsPage() {
   }), [fontSize, left, right])
 
   return (
-    <section className="capability-page capability-page--font-metrics ds" data-demo-surface="font-metrics" aria-labelledby="font-metrics-title">
+    <section className="capability-page capability-page--font-metrics ds" data-demo-surface="font-metrics" aria-labelledby={titleId}>
       <header className="capability-intro ds-surf-head">
         <div>
           <p className="capability-package ds-surf-pkg">@injoffice/font-metrics</p>
-          <h2 id="font-metrics-title">Inspect the native text-layout contract</h2>
+          <h2 id={titleId}>Inspect the native text-layout contract</h2>
           <p>The browser-safe layout entry validates exact run inputs, uses integer milli-points, and makes conservative Office line-break decisions.</p>
         </div>
         <span className="capability-runtime" role="status">Contract in browser · shaping in Node</span>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { DemoRecipeSource } from '../demoRecipes'
 
 // Keep source text out of the initial bundle; load only the selected example.
-const sourceFiles = import.meta.glob<string>(['../pages/*.tsx', '../collabSimulator.tsx'], { query: '?raw', import: 'default' })
+const sourceFiles = import.meta.glob<string>(['../pages/*.tsx', '../collabSimulator.tsx', '../UniverEditor.tsx'], { query: '?raw', import: 'default' })
 const agentIntegration = `import { createAgentSession, createAgentToolDispatcher } from '@injoffice/agent-tools'
 import { createXlsxAgentAdapter } from '@injoffice/agent-office/xlsx'
 

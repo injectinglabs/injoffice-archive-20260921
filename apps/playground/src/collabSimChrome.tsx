@@ -1,4 +1,4 @@
-import { type ReactNode, type Ref } from 'react'
+import { useId, type ReactNode, type Ref } from 'react'
 import { PresenceStack, type PresenceSource } from '../../../packages/collab/src/index.js'
 import { DsAvatar, DsChip } from './design-system/primitives'
 import './design-system/live-tools.css'
@@ -59,13 +59,14 @@ export function SimEditorFrame({
   stageRef?: Ref<HTMLDivElement>
   children: ReactNode
 }) {
+  const titleId = `${useId()}-sim-editor-${profile.id}`
   return (
-    <section className="collab-sim-editor ds-editor-card" aria-labelledby={`sim-editor-${profile.id}`}>
+    <section className="collab-sim-editor ds-editor-card" aria-labelledby={titleId}>
       <header className="collab-sim-editor__header">
         <div className="collab-sim-identity ds-row">
           <DsAvatar initials={profile.name.slice(0, 1)} tone={profile.id === 'noah' ? 2 : 3} />
           <div>
-            <h3 id={`sim-editor-${profile.id}`}>{profile.name}</h3>
+            <h3 id={titleId}>{profile.name}</h3>
             <p>{profile.label}</p>
           </div>
         </div>

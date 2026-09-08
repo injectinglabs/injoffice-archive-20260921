@@ -1,0 +1,41 @@
+.ds.tool-workspace { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ds .tool-workspace__navigation { background: var(--ds-paper); border-bottom: 1px solid var(--ds-line); padding: 16px 20px; }
+.ds .tool-workspace__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ds .tool-workspace__tabs button { padding: 9px 14px; border: 0; border-radius: 6px; color: var(--ds-mute); background: transparent; font-weight: 500; cursor: pointer; }
+.ds .tool-workspace__tabs button:hover { color: var(--ds-ink); background: var(--ds-chrome); }
+.ds .tool-workspace__tabs button[aria-selected="true"] { color: var(--ds-green); background: var(--ds-green-soft); font-weight: 600; }
+.ds .tool-workspace__tabs button:focus-visible, .ds .tool-workspace__view select:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+.ds .tool-workspace__view { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; }
+.ds .tool-workspace__view label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; font-weight: 600; }
+.ds .tool-workspace__view select { max-width: 100%; padding: 8px 30px 8px 10px; border: 1px solid var(--ds-line); border-radius: 6px; background: var(--ds-paper); color: var(--ds-ink); font-weight: 500; }
+.ds .tool-workspace__view strong { font-size: 13px; font-weight: 600; }
+.ds .tool-workspace__view p { flex: 1 1 300px; max-width: 76ch; font-size: 12px; line-height: 1.5; color: var(--ds-mute); margin: 0; }
+.ds .tool-workspace__sample-note { max-width: 80ch; font-size: 11px; line-height: 1.5; color: var(--ds-mute); margin: 12px 0 0; }
+.ds .tool-workspace__panel { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; outline-offset: -3px; }
+.ds .tool-workspace__panel > * { flex: 1 1 auto; min-width: 0; }
+.ds .tool-workspace__navigation { flex: 0 0 auto; }
+.ds .tool-workspace__panel[hidden] { display: none; }
+/* Univer keeps measuring while retained. Preserve only its dormant layout,
+   outside normal flow and inaccessible to pointer, focus, and assistive tech. */
+.ds .tool-workspace__panel[hidden][data-workspace-retain-layout="true"] { display: flex; position: absolute; top: 0; left: 0; width: 100%; min-height: 740px; visibility: hidden; pointer-events: none; overflow: hidden; }
+.ds .tool-workspace__loading, .ds .tool-workspace__error { padding: 32px 24px; min-height: 180px; }
+.ds .tool-workspace__error p { max-width: 75ch; overflow-wrap: anywhere; }
+/* Reading and approval flows grow in the continuous document. Canvas views
+   retain the outer preview's viewport and their own local scrolling. */
+.app-shell[data-navigation="scroll"] .demo-preview:has([data-workspace-active="agent"]) { height: auto; overflow: visible; }
+.app-shell[data-navigation="scroll"] .demo-stage:has([data-workspace-active="agent"]),
+.app-shell[data-navigation="scroll"] [data-workspace-active="agent"],
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"],
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] > .ds,
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] [data-demo-surface="agent"] { height: auto; min-height: 0; max-height: none; flex: 1 0 auto; overflow: visible; }
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] .agent-demo__workspace { height: auto; min-height: auto; flex: 0 0 auto; overflow: visible; }
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] .agent-demo__inspector,
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] .agent-artifact,
+.app-shell[data-navigation="scroll"] [data-workspace-panel="agent"] .agent-demo__document { height: auto; max-height: none; overflow: visible; scrollbar-gutter: auto; }
+@media (max-width: 480px) {
+  .ds .tool-workspace__navigation { padding: 12px; }
+  .ds .tool-workspace__tabs { gap: 4px; }
+  .ds .tool-workspace__tabs button { padding: 8px 10px; font-size: 12px; }
+  .ds .tool-workspace__view { align-items: flex-start; }
+  .ds .tool-workspace__view label { width: 100%; }
+}

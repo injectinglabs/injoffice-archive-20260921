@@ -8,7 +8,8 @@ import {
   type CommandServiceLike,
 } from '../../../../packages/collab/src/index.js'
 import { createHttpCollabTransport, type HttpCollabTransport } from '../collabTransport'
-import { COLLAB_COPY, parseCollabQuery } from '../collabScope'
+import { COLLAB_COPY } from '../collabScope'
+import { initialCollabArtifact, useCollabComposition } from '../collabComposition'
 import { createOssUniver } from '@injoffice/univer-sheets'
 import { bindUniverColorScheme, univerDarkMode } from '../univerColorScheme'
 import { deferNestedReactRootStart } from '../nestedReactRootLifecycle'
@@ -43,6 +44,7 @@ function buildCellData() {
 }
 
 export function CollabSheetsPanel() {
+  const scope = useCollabComposition()
   const editorRef = useRef<HTMLDivElement | null>(null)
   const uploadRef = useRef<HTMLInputElement | null>(null)
   const transportRef = useRef<HttpCollabTransport | null>(null)
@@ -50,7 +52,7 @@ export function CollabSheetsPanel() {
   const apiRef = useRef<ReturnType<typeof createOssUniver>['univerAPI'] | null>(null)
   const commandServiceRef = useRef<CommandServiceLike | null>(null)
   const [name, setName] = useState(defaultCollabName)
-  const [artifact, setArtifact] = useState(() => parseCollabQuery(window.location.href).artifact)
+  const [artifact, setArtifact] = useState(() => initialCollabArtifact(scope, window.location.href))
   const [manager, setManager] = useState<PresenceManager | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('idle')
   const [editorReady, setEditorReady] = useState(false)
