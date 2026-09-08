@@ -13,6 +13,7 @@ let chrome, socket, staticServer
 let proposalMock, restoreProposalEnv
 let sequence = 0
 let scopeKey = 'overview'
+let acceptReset = false
 const pending = new Map()
 const errors = []
 const heldRequests = []
@@ -29,6 +30,8 @@ function onMessage({ data }) {
     else task.resolve(message.result)
   } else if (message.method === 'Runtime.exceptionThrown') {
     errors.push(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text)
+  } else if (message.method === 'Page.javascriptDialogOpening') {
+    void send('Page.handleJavaScriptDialog', { accept: acceptReset && message.params.type === 'confirm' && /Reset this demo\?.*edits.*lost/.test(message.params.message) })
   } else if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
     errors.push(message.params.args.map((arg) => arg.value ?? arg.description).join(' '))
   } else if (message.method === 'Fetch.requestPaused') {
@@ -72,6 +75,10 @@ async function until(expression, label, timeout = 30_000) {
   throw new Error(`Timed out: ${label}`)
 }
 const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`)
+const resetDemo = async () => {
+  acceptReset = true
+  try { await click('.demo-reset-trigger') } finally { acceptReset = false }
+}
 const clickButton = (label) => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`)
 const agentReady = `document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`
 const agentWrites = () => evaluate(`Number(document.querySelector('[data-agent-native-writes]')?.textContent)`)
@@ -210,7 +217,7 @@ try {
   const originalChart = await evaluate(sheetChartState)
   await evaluate(`(() => { const host = window.__injoffice; const spec = host.charts.list()[0]; host.univerAPI.getActiveWorkbook().getSheetBySheetId(spec.range.sheetId).getRange(5, 1).setValue(999); })()`)
   await until(`(${sheetChartState})?.firstValue === 999`, 'overview chart source is editable')
-  await click('.demo-reset-trigger')
+  await resetDemo()
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'reset restores workbook')
   await until(`(${sheetChartState})?.firstValue === ${JSON.stringify(originalChart.firstValue)} && (${sheetChartState})?.series.length > 0`, 'reset restores seeded chart data')
   assert.deepEqual(await evaluate(sheetChartState), originalChart, 'reset restores the complete numeric chart source')
@@ -395,7 +402,7 @@ try {
     assert.equal(await evaluate(`!document.querySelector('.agent-approval input')`), true, 'refusal does not allow approval')
     assert.equal(await agentWrites(), 0, `${tool} unsupported proposal never reaches the writer`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'refusal does not expose a previous output')
-    await click('.demo-reset-trigger')
+    await resetDemo()
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('[data-agent-download]') && !document.querySelector('.agent-diff') && !Array.from(document.querySelectorAll('.agent-tool-log li[data-state=done]')).some(item => /office\\.(plan|commit)/.test(item.textContent)) && document.querySelector('.agent-approval input').checked === false`), true, 'reset clears outputs, plans, commits, and approval; initial capability discovery is allowed')
   }

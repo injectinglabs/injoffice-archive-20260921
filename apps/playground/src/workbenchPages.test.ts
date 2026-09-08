@@ -40,7 +40,7 @@ describe('playground workbench page contract', () => {
     expect(page).not.toContain('renderPageToPng')
     expect(page).toContain('applyPdfPageOp')
     expect(page).toContain('applyPdfMarkup')
-    expect(page).toContain('applyPdfDrawing')
+    expect(page).toContain('applyPdfPlacedDrawing')
     expect(page).toContain('applyPdfFormValues')
     expect(page).toContain('applyPdfStamp')
     expect(page).toContain("type: 'nUp', n: 4")

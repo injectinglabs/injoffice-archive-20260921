@@ -102,7 +102,7 @@ export function SimFormatTabs({
   hint?: string
 }) {
   return (
-    <div className="view-switcher collab-format-bar ds-workstrip" role="tablist" aria-label="Collaboration format">
+    <div className="view-switcher collab-format-bar ds-workstrip" role="group" aria-label="Collaboration format">
       <div className="collab-format-bar__label">
         <strong>Format</strong>
         <span>One room, four editors</span>
@@ -112,8 +112,6 @@ export function SimFormatTabs({
           <button
             key={item}
             type="button"
-            role="tab"
-            aria-selected={format === item}
             aria-pressed={format === item}
             onClick={() => onFormat(item)}
           >

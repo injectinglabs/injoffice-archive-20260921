@@ -10,6 +10,10 @@ Each live demo loads near the viewport and stays mounted after loading, so scrol
 
 Every example has a Guide & source drawer containing a manual checklist, expected evidence, exact repository links, related examples, and lazily loaded demo source. Closing the drawer retains checklist progress on the current surface; the checklist does not perform or certify engine operations.
 
+Untouched demos release their mounted editors after 30 seconds offscreen. Any interaction retains the editor while you explore; **Close demo** releases it explicitly. Reset and close ask before discarding interacted state and wait for supported document operations to finish. This is in-memory demo state, not persistence across page reloads.
+
+The Documents workspace links selectable text passages to its edit panel, with undo and expandable verification details. PDF supports passage-level markup and search highlights, pointer or keyboard drawing, and undo/redo. PDF text selection covers whole extracted passages; DOCX remains a semantic preview rather than Word pagination.
+
 The spreadsheet modes have shareable links: `#/sheets?view=editor`, `#/sheets?view=native`, and `#/sheets?view=tools`. Reset demo restores the current work surface's initial state and discards edits in that surface.
 
 ## Guided agent demo
@@ -52,6 +56,7 @@ Reload sample discards local session state and reloads the bundled source. For p
 - `npm run test:showcase-browser -- --built` after the Office browser smoke build above; starts and stops its own ephemeral server at `/injoffice-smoke/`, without touching an existing demo server
 - `npm run test:showcase-browser -- --dev` after building workspace packages; starts and stops an isolated development server on an ephemeral IPv4 port, omitting the playground's fixed-port IPv6 listener so neither side of port 3100 is touched
 - `npm run test:scroll-showcase-browser -- --built` (or `--dev`) checks continuous scrolling, lazy loading, sidebar tracking, history, focus, retained edits/approvals, and mobile navigation
+- `node scripts/smoke-demo-ux-browser.mjs --built` checks PDF placement, markup, search, keyboard navigation, undo/redo, and invalid-upload recovery; build with the `/injoffice-smoke/` base first, or omit `--built` to use an isolated development server
 
 Development smoke configures its own isolated loopback-only upstream stub and verifies that the guided demo sends it zero requests. It temporarily replaces any configured proposal URL and removes any configured token, then restores both environment values during cleanup without printing them. The test demonstrates that configuring a host cannot silently turn the demo into a live-model client. Built and existing-server smoke also never trigger live-provider requests. Separate host tests cover the standalone bridge's consent and response-envelope guards.
 

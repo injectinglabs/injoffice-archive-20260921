@@ -22,11 +22,11 @@ describe('playground capability registry', () => {
     const charts = DEMOS.find((demo) => demo.surface === 'charts')!
     const shapes = DEMOS.find((demo) => demo.surface === 'shapes')!
 
-    expect(docs.description).toMatch(/guarded DOCX text run/i)
-    expect(docs.description).toMatch(/verify preservation evidence/i)
+    expect(docs.description).toMatch(/editable passage/i)
+    expect(docs.description).toMatch(/without Word pagination/i)
     expect(docs.runtime).toBe('Browser')
-    expect(pdf.description).toMatch(/page operations/i)
-    expect(pdf.description).toMatch(/PDFium/i)
+    expect(pdf.description).toMatch(/organize pages/i)
+    expect(pdf.description).toMatch(/Advanced server tools require local setup/i)
     expect(collab.description).toMatch(/two independent Univer sheets/i)
     expect(collab.description).toMatch(/deck/i)
     expect(collab.description).toMatch(/document/i)

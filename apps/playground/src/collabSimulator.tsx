@@ -181,6 +181,7 @@ export function CollabSimulator() {
   const resetSession = () => setSession(({ id }) => ({ id: id + 1, hub: createBrowserCollabHub() }))
   const selectFormat = (next: CollabFormat) => {
     if (next === format) return
+    if (snapshot.head > 0 && !window.confirm('Switch format? Unsaved edits in both simulated editors will be lost.')) return
     const { artifact } = parseCollabQuery(window.location.href)
     writeCollabQuery({ artifact, format: next })
     setFormat(next)
@@ -195,7 +196,10 @@ export function CollabSimulator() {
           <span>Runs entirely in this page</span>
         </div>
         <span className="workbench-badge workbench-badge--live" role="status"><i aria-hidden="true" />Simulation live</span>
-        <button type="button" className="workbench-button" onClick={resetSession}>
+        <button type="button" className="workbench-button" onClick={() => {
+          if (snapshot.head > 0 && !window.confirm('Reset both editors? Unsaved demo edits will be lost.')) return
+          resetSession()
+        }}>
           Reset both editors
         </button>
       </div>

@@ -1,0 +1,16 @@
+.pdf-page-stage { position: relative; width: fit-content; margin-inline: auto; }
+.ds[data-demo-surface="pdf"] .pdf-pages { justify-content: flex-start; }
+.ds[data-demo-surface="pdf"] .ds-pdf-sheet { width: max-content; max-width: none; flex-shrink: 0; padding: 0; margin-inline: auto; }
+.ds[data-demo-surface="pdf"] .pdf-page-stage .pdf-canvas { max-width: none; }
+.pdf-interaction { position: absolute; inset: 0; pointer-events: none; }
+.pdf-text-target, .pdf-search-highlight { position: absolute; box-sizing: border-box; border: 0; border-radius: 0; padding: 0; background: transparent; }
+.pdf-text-target { pointer-events: auto; cursor: text; }
+.pdf-text-target:hover { background: rgb(32 94 184 / 12%); }
+.pdf-text-target[aria-pressed="true"] { background: rgb(32 94 184 / 28%); outline: 1px solid #205eb8; }
+.pdf-text-target:focus-visible { outline: 2px solid #205eb8; outline-offset: 2px; }
+.pdf-search-highlight, .pdf-text-target[data-match] { background: rgb(255 208 0 / 35%); }
+.pdf-drawing-surface { position: absolute; inset: 0; pointer-events: auto; touch-action: none; cursor: crosshair; }
+.pdf-drawing-surface > * { fill: rgb(32 94 184 / 10%); stroke: #205eb8; stroke-width: 1.5; }
+.pdf-drawing-surface > polyline { fill: none; }
+.pdf-placement-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px; margin: 0; }
+.pdf-operation-panel { min-width: 0; }

@@ -536,7 +536,7 @@ export function CollabPdfPanel() {
 
   return (
     <>
-      <div className="native-toolbar collab-toolbar workbench-toolbar" role="group" aria-label="PDF collaboration actions">
+      <div className="native-toolbar collab-toolbar workbench-toolbar" data-demo-busy={busy || metrics.pending > 0} role="group" aria-label="PDF collaboration actions">
         <strong>Live PDF annotation protocol proof</strong>
         <span className={`collab-connection collab-connection--${connection} workbench-badge`} role="status" aria-label={`Connection: ${connection}`}>
           <i aria-hidden="true" />

@@ -61,6 +61,7 @@ html[data-theme="light"] {
   --type-body: "Instrument Sans", "Segoe UI", sans-serif;
   --type-mono: "IBM Plex Mono", ui-monospace, monospace;
   --control-height: 36px;
+  --workspace-reserved-min: clamp(480px, 72dvh, 640px);
   --radius-control: 8px;
   --radius-panel: 16px;
   --shadow-float: 0 12px 40px rgba(20, 24, 22, .08);
@@ -410,8 +411,8 @@ body {
   display: flex;
   flex: 0 0 auto;
   width: 100%;
-  height: calc(100vh - 200px);
-  min-height: 640px;
+  height: clamp(var(--workspace-reserved-min), calc(100dvh - 160px), 880px);
+  min-height: var(--workspace-reserved-min);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--rule) 80%, transparent);
@@ -434,10 +435,33 @@ body {
 .demo-section .demo-stage {
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   margin: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.demo-section .demo-stage > * {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* Editor canvases keep local overflow, but deliberately allow scroll chaining
+ * back to the continuous document. Stable gutters prevent width jumps. */
+.demo-preview :where(
+  .pages,
+  .split-side,
+  .native-demo,
+  .native-workspace,
+  .tool-page__grid,
+  .capability-page,
+  .collab-page,
+  .agent-demo__document,
+  .agent-demo__inspector
+) {
+  scrollbar-gutter: stable;
 }
 .demo-chips {
   display: flex;
@@ -850,23 +874,23 @@ body {
   outline-color: var(--focus-ring);
 }
 
-.tool-page__controls > button,
-.toolstrip button,
-.native-toolbar button,
-.native-actions button,
-.capability-editor-actions button,
-.collab-toolbar button,
-.view-switcher button,
-.univer-toolbar button,
-.ioc-panel button:not(.ioc-chip),
-.ioc-add,
-.ioc-remove,
-.ioc-primary,
-.ioc-print-button,
-.ios-deck-canvas button,
-.ioc-outline-gutter button,
-.collab-sim-slides-tools button,
-.collab-sim-pdf-tools button,
+.tool-page__controls > button:not(.ds-btn),
+.toolstrip button:not(.ds-btn),
+.native-toolbar button:not(.ds-btn),
+.native-actions button:not(.ds-btn),
+.capability-editor-actions button:not(.ds-btn),
+.collab-toolbar button:not(.ds-btn),
+.view-switcher button:not(.ds-btn),
+.univer-toolbar button:not(.ds-btn),
+.ioc-panel button:not(.ioc-chip):not(.ds-btn),
+.ioc-add:not(.ds-btn),
+.ioc-remove:not(.ds-btn),
+.ioc-primary:not(.ds-btn),
+.ioc-print-button:not(.ds-btn),
+.ios-deck-canvas button:not(.ds-btn),
+.ioc-outline-gutter button:not(.ds-btn),
+.collab-sim-slides-tools button:not(.ds-btn),
+.collab-sim-pdf-tools button:not(.ds-btn),
 .workbench-button {
   appearance: none;
   min-height: var(--control-height);
@@ -883,23 +907,23 @@ body {
   line-height: 1.2;
 }
 
-.tool-page__controls > button:hover:not(:disabled),
-.toolstrip button:hover:not(:disabled),
-.native-toolbar button:hover:not(:disabled),
-.native-actions button:hover:not(:disabled),
-.capability-editor-actions button:hover:not(:disabled),
-.collab-toolbar button:hover:not(:disabled),
-.view-switcher button:hover:not(:disabled),
-.univer-toolbar button:hover:not(:disabled),
-.ioc-panel button:not(.ioc-chip):hover:not(:disabled),
-.ioc-add:hover:not(:disabled),
-.ioc-remove:hover:not(:disabled),
-.ioc-primary:hover:not(:disabled),
-.ioc-print-button:hover:not(:disabled),
-.ios-deck-canvas button:hover:not(:disabled),
-.ioc-outline-gutter button:hover:not(:disabled),
-.collab-sim-slides-tools button:hover:not(:disabled),
-.collab-sim-pdf-tools button:hover:not(:disabled),
+.tool-page__controls > button:not(.ds-btn):hover:not(:disabled),
+.toolstrip button:not(.ds-btn):hover:not(:disabled),
+.native-toolbar button:not(.ds-btn):hover:not(:disabled),
+.native-actions button:not(.ds-btn):hover:not(:disabled),
+.capability-editor-actions button:not(.ds-btn):hover:not(:disabled),
+.collab-toolbar button:not(.ds-btn):hover:not(:disabled),
+.view-switcher button:not(.ds-btn):hover:not(:disabled),
+.univer-toolbar button:not(.ds-btn):hover:not(:disabled),
+.ioc-panel button:not(.ioc-chip):not(.ds-btn):hover:not(:disabled),
+.ioc-add:not(.ds-btn):hover:not(:disabled),
+.ioc-remove:not(.ds-btn):hover:not(:disabled),
+.ioc-primary:not(.ds-btn):hover:not(:disabled),
+.ioc-print-button:not(.ds-btn):hover:not(:disabled),
+.ios-deck-canvas button:not(.ds-btn):hover:not(:disabled),
+.ioc-outline-gutter button:not(.ds-btn):hover:not(:disabled),
+.collab-sim-slides-tools button:not(.ds-btn):hover:not(:disabled),
+.collab-sim-pdf-tools button:not(.ds-btn):hover:not(:disabled),
 .workbench-button:hover:not(:disabled) {
   border-color: var(--control-line-hover);
   background: var(--control-hover);
@@ -2094,7 +2118,7 @@ body {
 .collab-sim-truth p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.5; }
 
 /* Agent change sets — one execution rail, with the document and evidence kept separate. */
-[data-demo-surface="agent"] { min-height: 720px; }
+[data-demo-surface="agent"] { min-height: 0; overflow: hidden; }
 .agent-demo__toolbar {
   display: flex;
   align-items: flex-end;
@@ -2173,9 +2197,10 @@ body {
   flex: 1;
   grid-template-columns: minmax(420px, 1.35fr) minmax(310px, .65fr);
   min-height: 0;
+  overflow: hidden;
   background: var(--workspace);
 }
-.agent-demo__document { min-width: 0; padding: clamp(18px, 3vw, 34px); }
+.agent-demo__document { min-width: 0; overflow: auto; padding: clamp(18px, 3vw, 34px); }
 .agent-demo__document > header {
   display: flex;
   align-items: flex-start;
@@ -2302,6 +2327,10 @@ body {
 }
 
 @media (max-width: 760px) {
+  :root,
+  html[data-theme="light"],
+  html[data-theme="dark"] { --workspace-reserved-min: clamp(360px, 60dvh, 520px); }
+
   .app-shell { display: flex; flex-direction: column; height: auto; }
   .app-header { position: sticky; }
   .app-header-inner { padding-inline: 10px; }
@@ -2352,7 +2381,50 @@ body {
   .agent-demo__toolbar { align-items: stretch; flex-direction: column; }
   .agent-demo__status { margin-left: 0; }
   .agent-demo__workspace { grid-template-columns: 1fr; }
+  .agent-demo__workspace { overflow: auto; }
+  .agent-demo__document,
+  .agent-demo__inspector { overflow: visible; }
   .agent-demo__inspector { border-top: 1px solid var(--rule); border-left: 0; }
+
+  /* Reading surfaces should join the document flow on narrow screens. Their
+   * toolbar, preview, and evidence remain one continuous reading sequence
+   * instead of becoming a tall scroll region inside the page. */
+  .app-shell[data-navigation="scroll"] :is(
+    [data-scroll-section="docs"],
+    [data-scroll-section="pdf"]
+  )[data-section-loaded="true"] .demo-preview,
+  .app-shell[data-navigation="scroll"] :is(
+    [data-scroll-section="docs"],
+    [data-scroll-section="pdf"]
+  )[data-section-loaded="true"] .demo-stage,
+  .app-shell[data-navigation="scroll"] :is(
+    [data-scroll-section="docs"],
+    [data-scroll-section="pdf"]
+  )[data-section-loaded="true"] .demo-stage > * {
+    height: auto;
+    min-height: var(--workspace-reserved-min);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .app-shell[data-navigation="scroll"] :is(
+    [data-scroll-section="docs"],
+    [data-scroll-section="pdf"]
+  )[data-section-loaded="true"] :is(
+    .native-workspace,
+    .split,
+    .native-main,
+    .split-main,
+    .native-side,
+    .split-side,
+    .pages
+  ) {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
 }
 
 @media (max-width: 520px) {
@@ -2435,9 +2507,8 @@ body {
   overflow: visible;
 }
 
-/* Agent proposals are a reading-and-approval workflow, not an editor canvas.
- * Let their content extend the document instead of nesting vertical scroll
- * regions. Unloaded previews keep the standard reserved workspace height. */
+/* Agent proposals are reading-and-approval workflows. Once loaded, they grow
+ * in the document; unloaded placeholders keep the responsive reservation. */
 .app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"][data-section-loaded="true"] .demo-preview {
   height: auto;
   overflow: visible;
@@ -2461,10 +2532,12 @@ body {
 }
 
 .app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-demo__inspector,
-.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-artifact {
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-artifact,
+.app-shell[data-navigation="scroll"] [data-scroll-section^="agent-"] .agent-demo__document {
   height: auto;
   max-height: none;
   overflow: visible;
+  scrollbar-gutter: auto;
 }
 
 .app-shell[data-navigation="scroll"] .demo-title-line h2 {

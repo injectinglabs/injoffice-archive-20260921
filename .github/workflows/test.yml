@@ -54,6 +54,7 @@ jobs:
           SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/pdf-ux node scripts/smoke-demo-ux-browser.mjs --built
       - name: Upload showcase browser diagnostics
         if: failure()
         uses: actions/upload-artifact@v6

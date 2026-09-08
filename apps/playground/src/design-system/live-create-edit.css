@@ -1,8 +1,5 @@
-/* Live create-and-edit demos. Tokens stay scoped to .ds; this file only
-   restyles the six playground pages that import it. */
-@import './tokens.css';
-@import './components.css';
-@import './surfaces.css';
+/* Live create-and-edit route extensions. The base design-system layer is
+   loaded once by main.tsx; route styles must not redefine primitives. */
 
 .app-shell .ds,
 .app-shell .ds :where(button, input, select, textarea) {
@@ -83,75 +80,6 @@
   color: var(--ds-ink);
   font-weight: 500;
   box-shadow: inset 0 0 0 1px var(--ds-line);
-}
-
-.app-shell .ds .ds-btn,
-.app-shell .ds .ds-btn.workbench-button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none !important;
-  color: var(--ds-select);
-  font-weight: 500;
-  font-size: 13px;
-}
-
-.app-shell .ds .ds-btn:hover:not(:disabled),
-.app-shell .ds .ds-btn.workbench-button:hover:not(:disabled) {
-  background: var(--ds-select-soft);
-  border-color: transparent;
-  color: var(--ds-select);
-}
-
-.app-shell .ds .ds-btn--filled,
-.app-shell .ds .ds-btn--filled.workbench-button,
-.app-shell .ds .ds-btn--filled.workbench-button--primary {
-  border-color: transparent !important;
-  background: var(--ds-select) !important;
-  color: var(--ds-on-select) !important;
-  box-shadow: none !important;
-}
-
-.app-shell .ds .ds-btn--filled:hover:not(:disabled),
-.app-shell .ds .ds-btn--filled.workbench-button--primary:hover:not(:disabled) {
-  filter: brightness(1.05);
-  background: var(--ds-select) !important;
-  color: var(--ds-on-select) !important;
-}
-
-.app-shell .ds .ds-btn--green,
-.app-shell .ds .ds-btn--green.workbench-button,
-.app-shell .ds .ds-btn--green.workbench-button--primary {
-  border-color: transparent !important;
-  background: var(--ds-green) !important;
-  color: var(--ds-on-green) !important;
-  box-shadow: none !important;
-}
-
-.app-shell .ds .ds-btn--outlined,
-.app-shell .ds .ds-btn--outlined.workbench-button {
-  border: 1px solid var(--ds-line);
-  border-radius: var(--ds-radius);
-  min-height: 32px;
-  padding: 0 12px;
-  color: var(--ds-ink);
-}
-
-.app-shell .ds .ds-btn--outlined:hover:not(:disabled) {
-  background: var(--ds-chrome-2);
-  border-color: var(--ds-mute);
-  color: var(--ds-ink);
-}
-
-.app-shell .ds a.ds-btn,
-.app-shell .ds a.native-download.ds-btn {
-  text-decoration: none;
 }
 
 .ds .ds-chip,

@@ -14,6 +14,7 @@ import OverviewPage from './pages/OverviewPage'
 import { agentHref, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
 import { SCROLL_SECTIONS, sectionForHash, activeSectionKey, type ScrollSection } from './scrollSections'
 import type { AgentTool } from './route'
+import { createDemoRetention } from './demoRetention'
 
 type SidecarState = 'checking' | 'connected' | 'offline'
 
@@ -209,6 +210,7 @@ function DemoSection({
   onOpenProof,
   section,
   requested,
+  requestVersion,
   initialHash,
 }: {
   demo: DemoDefinition
@@ -217,6 +219,7 @@ function DemoSection({
   onOpenProof: (button: HTMLButtonElement) => void
   section: ScrollSection
   requested: boolean
+  requestVersion: number
   initialHash: string
 }) {
   const [revision, setRevision] = useState(0)
@@ -224,8 +227,36 @@ function DemoSection({
   const sectionRef = useRef<HTMLElement>(null)
   const attempt = useRef(0)
   const loading = useRef(false)
+  const touched = useRef(false)
+  const explicitlyClosed = useRef(false)
+  const [retention] = useState(() => createDemoRetention(() => {
+    attempt.current++
+    loading.current = false
+    setLoadState('idle')
+  }))
+  const touch = () => { touched.current = true; retention.touch() }
+  const busy = () => Boolean(sectionRef.current?.querySelector('[data-demo-busy="true"]'))
+  const resetDemo = () => {
+    if (busy()) { window.alert('Wait for the current operation to finish before resetting this demo.'); return }
+    if (touched.current && !window.confirm('Reset this demo? Your current edits and progress will be lost. Download any files you want to keep first.')) return
+    touched.current = false
+    retention.reset()
+    setRevision(value => value + 1)
+  }
+  const closeDemo = () => {
+    if (busy()) { window.alert('Wait for the current operation to finish before closing this demo.'); return }
+    if (touched.current && !window.confirm('Close this demo? Your current edits and progress will be lost. Download any files you want to keep first.')) return
+    explicitlyClosed.current = true
+    touched.current = false
+    retention.setLoaded(false)
+    retention.reset()
+    attempt.current++
+    loading.current = false
+    setLoadState('idle')
+  }
   const load = useCallback(() => {
     if (loading.current) return
+    explicitlyClosed.current = false
     loading.current = true
     const id = ++attempt.current
     setLoadState('loading')
@@ -236,16 +267,20 @@ function DemoSection({
     })
   }, [demo.surface])
   useEffect(() => () => { attempt.current++; loading.current = false }, [])
-  useEffect(() => { if (requested) load() }, [requested, load])
+  useEffect(() => () => retention.dispose(), [retention])
+  useEffect(() => { retention.setLoaded(loadState === 'ready') }, [loadState, retention])
+  useEffect(() => { if (requested) load() }, [requested, requestVersion, load])
   useEffect(() => {
     const element = sectionRef.current
-    if (!element || loadState !== 'idle') return
+    if (!element) return
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) load()
+      const visible = entries.some(entry => entry.isIntersecting)
+      retention.setVisible(visible)
+      if (visible && loadState === 'idle' && !explicitlyClosed.current) load()
     }, { rootMargin: '160px 0px' })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [load, loadState])
+  }, [load, loadState, retention])
   const DemoComponent = demo.component as ComponentType<{ fixedTool?: AgentTool; initialHash?: string }>
   const agentTool = section.tool ? AGENT_TOOLS.find((item) => item.tool === section.tool) : undefined
   const title = agentTool?.title ?? demo.title
@@ -269,7 +304,6 @@ function DemoSection({
           <div className="demo-chips" aria-label="Demo tags">
             <span className="demo-chip">{demo.group}</span>
             {agentTool ? <span className="demo-chip">{agentTool.fileType}</span> : null}
-            <span className="demo-chip demo-chip--pkg">{demo.packageName}</span>
           </div>
           <div className="demo-title-line">
             <h2 id={`demo-title-${section.key}`} tabIndex={-1}>{title}</h2>
@@ -280,10 +314,12 @@ function DemoSection({
           <button
             className="demo-reset-trigger"
             type="button"
-            onClick={() => setRevision((value) => value + 1)}
+            disabled={loadState !== 'ready'}
+            onClick={resetDemo}
           >
-            Reset
+            Reset demo
           </button>
+          {loadState === 'ready' && <button className="demo-reset-trigger" type="button" onClick={closeDemo}>Close demo</button>}
           <button
             className="source-proof-trigger"
             type="button"
@@ -294,7 +330,7 @@ function DemoSection({
           >
             Guide &amp; source
           </button>
-          <a className="demo-back" href={surfaceHref('overview')}>Back</a>
+          <a className="demo-back" href={surfaceHref('overview')}>All demos</a>
         </div>
       </header>
       <section className="demo-preview" aria-label={`${title} preview`}>
@@ -302,7 +338,7 @@ function DemoSection({
           <span>Preview</span>
           <RuntimePill demo={demo} sidecar={sidecar} />
         </header>
-        <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`}>
+        <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`} onPointerDownCapture={touch} onKeyDownCapture={touch} onInputCapture={touch} onClickCapture={touch}>
           {loadState === 'ready' ? <SectionBoundary key={revision} onRetry={() => setRevision(value => value + 1)}>
             <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
               <DemoComponent fixedTool={section.tool} initialHash={initialHash} />
@@ -337,6 +373,7 @@ export default function App() {
   const [proofSection, setProofSection] = useState<ScrollSection | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [requestedKey, setRequestedKey] = useState(() => sectionForHash(location.hash).key)
+  const [requestVersion, setRequestVersion] = useState(0)
   const detailsButtonRef = useRef<HTMLButtonElement>(null)
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
   const sectionHashes = useRef(new Map<string, string>())
@@ -364,6 +401,7 @@ export default function App() {
       handledHash.current = location.hash || section.href
       sectionHashes.current.set(section.key, location.hash || section.href)
       setRequestedKey(section.key)
+      setRequestVersion(value => value + 1)
       setRoute({ surface: section.surface, hash: location.hash || section.href })
       setDetailsOpen(false)
       navigating.current = true
@@ -482,6 +520,7 @@ export default function App() {
             demo={section.demo!}
             sidecar={sidecar}
             requested={requestedKey === section.key}
+            requestVersion={requestVersion}
             initialHash={sectionHashes.current.get(section.key) ?? section.href}
             proofOpen={detailsOpen && proofSection?.key === section.key}
             onOpenProof={button => { detailsButtonRef.current = button; setProofSection(section); setDetailsOpen(true) }}

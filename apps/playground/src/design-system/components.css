@@ -1,3 +1,6 @@
+/* Base design-system layer: shared surface layouts load once with primitives. */
+@import './surfaces.css';
+
 .ds-appbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -343,12 +346,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: var(--control-height, 36px);
   padding: 0 16px;
-  border: 0;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius);
   background: transparent;
   color: var(--ds-select);
+  box-shadow: none;
   font-weight: 500;
   font-size: 13px;
   cursor: pointer;
@@ -360,6 +364,7 @@
 .ds-btn:disabled { opacity: 0.38; cursor: default; }
 
 .ds-btn--filled {
+  border-color: var(--ds-select);
   background: var(--ds-select);
   color: var(--ds-on-select);
 }
@@ -367,6 +372,7 @@
 .ds-btn--filled:hover:not(:disabled) { filter: brightness(1.05); background: var(--ds-select); }
 
 .ds-btn--green {
+  border-color: var(--ds-green);
   background: var(--ds-green);
   color: var(--ds-on-green);
 }
@@ -374,7 +380,6 @@
 .ds-btn--outlined {
   border: 1px solid var(--ds-line);
   color: var(--ds-ink);
-  border-radius: var(--ds-radius);
   min-height: 32px;
   padding: 0 12px;
 }
@@ -382,6 +387,7 @@
 .ds-btn--outlined:hover:not(:disabled) { background: var(--ds-chrome-2); border-color: var(--ds-mute); }
 
 .ds-btn--refuse {
+  border-color: transparent;
   color: var(--ds-refuse);
 }
 

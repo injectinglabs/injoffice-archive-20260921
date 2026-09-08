@@ -98,7 +98,7 @@ export function CollabRoomChrome({
 
   return (
     <>
-      <div className="native-toolbar collab-toolbar workbench-toolbar" role="group" aria-label="Collaboration actions">
+      <div className="native-toolbar collab-toolbar workbench-toolbar" data-demo-busy={busy || metrics.pending > 0} role="group" aria-label="Collaboration actions">
         <strong>{title}</strong>
         <span className={`collab-connection collab-connection--${connection} workbench-badge`} role="status" aria-label={`Connection: ${connection}`}>
           <i aria-hidden="true" />

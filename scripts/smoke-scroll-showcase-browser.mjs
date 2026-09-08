@@ -21,6 +21,7 @@ let chrome, socket, server
 let chunkFailures = 0
 const reloadDialogs = []
 let allowReloadDialog = false
+let allowResetDialog = false
 let holdChunks = false
 const heldChunks = []
 
@@ -50,7 +51,7 @@ function onMessage({ data }) {
     }
   } else if (message.method === 'Page.javascriptDialogOpening') {
     reloadDialogs.push(message.params)
-    void send('Page.handleJavaScriptDialog', { accept: allowReloadDialog && message.params.type === 'confirm' && /unsaved.*lost/i.test(message.params.message) })
+    void send('Page.handleJavaScriptDialog', { accept: message.params.type === 'confirm' && ((allowReloadDialog && /unsaved.*lost/i.test(message.params.message)) || (allowResetDialog && /edits.*lost/i.test(message.params.message))) })
   }
 }
 
@@ -368,6 +369,34 @@ try {
   await anchor('charts')
   assert.equal(await evaluate(`document.documentElement.scrollWidth <= 390`), true, 'later mounted editor does not overflow the mobile document')
   await screenshot('scroll-chart-mobile')
+  await until(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]')`, 'chart input available after cold-link tests')
+  await evaluate(`(() => {
+    const input = document.querySelector('${section('charts')} input[aria-label="Jan revenue"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '999');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`)
+  // Untouched offscreen engines are released; interacted documents stay intact.
+  await anchor('font-metrics')
+  await until(ready('font-metrics'), 'untouched typography demo loads')
+  await anchor('charts')
+  await until(`document.querySelector('${section('font-metrics')}').dataset.scrollState === 'idle'`, 'offscreen untouched engine released', 45_000)
+  assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'interacted chart is never automatically discarded')
+  const resetChart = `Array.from(document.querySelectorAll('${section('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Reset demo').click()`
+  await evaluate(resetChart)
+  assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'cancel reset preserves edits')
+  allowResetDialog = true
+  await evaluate(resetChart)
+  allowResetDialog = false
+  await until(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value !== '999'`, 'confirmed reset restores the sample')
+  await evaluate(`Array.from(document.querySelectorAll('${section('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Close demo').click()`)
+  await until(`document.querySelector('${section('charts')}').dataset.scrollState === 'idle' && !document.querySelector('${section('charts')} input')`, 'close releases the mounted editor')
+  await evaluate(`document.querySelector('${section('charts')} .demo-section-placeholder button').click()`)
+  await until(ready('charts'), 'closed demo can be reopened')
+  allowResetDialog = true
+  await evaluate(`Array.from(document.querySelectorAll('${section('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Close demo').click()`)
+  allowResetDialog = false
+  await anchor('charts')
+  await until(ready('charts'), 'same sidebar destination reopens a closed demo')
   assert.deepEqual(liveProposals, [], 'scroll demo never calls a real model endpoint')
   assert.deepEqual(errors, [], 'no uncaught errors or console errors')
   console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['20 continuous sections', 'lazy editor initialization', 'sidebar scroll spy', 'passive scroll replaces history', 'passive scroll preserves focus', 'persistent prompt and pending approval', 'same anchor returns to heading', 'Back and Forward', 'shared format-specific deep links', 'independent mounted agent formats', 'sticky mobile navigator', 'mobile overflow', 'no real model calls'], errors }, null, 2))

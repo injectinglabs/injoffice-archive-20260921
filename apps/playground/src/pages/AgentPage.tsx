@@ -428,7 +428,7 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
 
   return (
     <div className="ds">
-    <section className="tool-page" data-demo-surface="agent" data-agent-tool={tool} aria-label={toolMeta.title}>
+    <section className="tool-page" data-demo-surface="agent" data-agent-tool={tool} data-demo-busy={state === 'preparing' || state === 'committing' || safetyBusy} aria-label={toolMeta.title}>
       <header className="agent-task-intro" data-agent-mock>
         <h2>Simulated agent · real document operations</h2>
         <p data-agent-boundary>{boundary}</p>

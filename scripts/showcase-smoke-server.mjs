@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { extname, resolve, sep } from 'node:path'
 
 const mime = new Map([
-  ['.css', 'text/css'], ['.html', 'text/html'], ['.js', 'text/javascript'],
+  ['.css', 'text/css'], ['.html', 'text/html'], ['.js', 'text/javascript'], ['.mjs', 'text/javascript'],
   ['.json', 'application/json'], ['.svg', 'image/svg+xml'], ['.wasm', 'application/wasm'],
 ])
 

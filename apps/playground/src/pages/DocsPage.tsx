@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS } from '@injoffice/docx-wasm'
 import {
   DsButton,
@@ -9,6 +9,7 @@ import {
   DsTextarea,
 } from '../design-system/primitives'
 import '../design-system/live-create-edit.css'
+import './docs-workspace.css'
 import {
   DOCX_MEDIA_TYPE,
   nativeDocxParagraphText,
@@ -43,6 +44,7 @@ import type {
 const API_BASE = (import.meta.env.VITE_INJOFFICE_API_BASE ?? '').trim().replace(/\/$/, '')
 const SERVER_FALLBACK_CONFIGURED = API_BASE.length > 0
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-docx/northstar-launch-brief.docx.b64`
+const RunSelection = createContext<{ targets: EditableDocxRun[]; selected: string; busy: boolean; choose: (target: EditableDocxRun) => void }>({ targets: [], selected: '', busy: false, choose: () => {} })
 
 function shortDigest(value: string): string {
   const digest = value.split(':')[1] ?? value
@@ -69,8 +71,11 @@ function runStyle(run: NativeDocxRunV1): CSSProperties {
 }
 
 function RunView({ run }: { run: NativeDocxRunV1 }) {
+  const selection = useContext(RunSelection)
   if (run.kind === 'text') {
     if (run.properties?.hidden) return null
+    const target = selection.targets.find((candidate) => candidate.runId === run.id && candidate.partName === run.anchor.part_name)
+    if (target) return <button type="button" className="docx-editable-run" data-run-key={target.key} style={runStyle(run)} aria-pressed={selection.selected === target.key} aria-label={`Edit ${target.label}: ${run.text || 'empty text'}`} aria-controls="docx-replacement-text" disabled={selection.busy} onClick={() => selection.choose(target)}>{run.text || '\u00a0'}</button>
     return <span style={runStyle(run)}>{run.text}</span>
   }
   if (run.kind === 'control') {
@@ -138,6 +143,8 @@ export default function DocsPage() {
   const uploadRef = useRef<HTMLInputElement | null>(null)
   const browserRuntimeRef = useRef<DocxRoundTripRuntime | null>(null)
   const serverRuntimeRef = useRef<DocxRoundTripRuntime | null>(null)
+  const sourceDigestRef = useRef('')
+  const previewRef = useRef<HTMLElement | null>(null)
   const [mode, setMode] = useState<DocxRoundTripMode>('browser')
   const [document, setDocument] = useState<NativeDocxDocumentV1 | null>(null)
   const [authoritativeBytes, setAuthoritativeBytes] = useState<Uint8Array | null>(null)
@@ -151,11 +158,18 @@ export default function DocsPage() {
   const [output, setOutput] = useState<Blob | null>(null)
   const [downloadURL, setDownloadURL] = useState('')
   const [proof, setProof] = useState<DocxRoundTripProof | null>(null)
+  const [undoBytes, setUndoBytes] = useState<Uint8Array[]>([])
+  const [changed, setChanged] = useState(false)
 
   const stats = useMemo(() => document ? nativeDocxPreviewStats(document) : null, [document])
   const preview = useMemo(() => document ? visibleNativeDocxBlocks(document) : null, [document])
   const targets = useMemo(() => document ? editableDocxRuns(document) : [], [document])
   const target = targets.find((candidate) => candidate.key === selection) ?? targets[0]
+  const hasDraft = Boolean(target && draft !== target.text)
+  const selectedOutsidePreview = document && preview && target
+    ? document.body.blocks.slice(preview.blocks.length).find((block) => block.paragraph?.id === target.paragraphId || block.table?.rows.some((row) => row.cells.some((cell) => cell.paragraphs.some((paragraph) => paragraph.id === target.paragraphId))))
+    : undefined
+  const canReplace = () => !changed && !hasDraft || window.confirm('Replace this document? Download any changes you want to keep first.')
   const mutationEvidence = useMemo(() => document && target
     ? JSON.stringify(buildDocxMutationEvidence(document, target, draft), null, 2)
     : '', [document, target, draft])
@@ -208,10 +222,13 @@ export default function DocsPage() {
     setProof(null)
     setOutput(null)
     setError('')
+    setUndoBytes([])
+    setChanged(false)
   }
 
   const chooseMode = (nextMode: DocxRoundTripMode) => {
     if (nextMode === mode) return
+    if (!canReplace()) return
     if (nextMode === 'server' && !SERVER_FALLBACK_CONFIGURED) {
       setError('Set VITE_INJOFFICE_API_BASE to enable the server fallback.')
       return
@@ -227,9 +244,7 @@ export default function DocsPage() {
   const extractFile = async (blob: Blob, name: string) => {
     setBusy(true)
     setError('')
-    setStatus(`Extracting ${name} into the native DOCX contract…`)
-    setProof(null)
-    setOutput(null)
+    setStatus(`Opening ${name}…`)
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer())
       const extracted = await runtimeFor(mode).extract(bytes)
@@ -238,12 +253,14 @@ export default function DocsPage() {
       setArtifactId(extracted.artifactId)
       setSourceName(name)
       adoptDocument(next)
+      sourceDigestRef.current = next.source.package_sha256
+      setProof(null)
+      setOutput(null)
+      setUndoBytes([])
+      setChanged(false)
       const count = editableDocxRuns(next).length
-      setStatus(`Extracted ${next.body.blocks.length} body block${next.body.blocks.length === 1 ? '' : 's'} with ${count} safe text edit target${count === 1 ? '' : 's'}.`)
+      setStatus(`Opened ${name}. Select text in the preview to edit it. ${count} editable passage${count === 1 ? '' : 's'}.`)
     } catch (reason) {
-      setDocument(null)
-      setAuthoritativeBytes(null)
-      setArtifactId('')
       setError(reason instanceof Error ? reason.message : String(reason))
       if (mode === 'browser') {
         resetBrowserRuntime()
@@ -257,6 +274,7 @@ export default function DocsPage() {
   }
 
   const loadSample = async () => {
+    if (!canReplace()) return
     setBusy(true)
     setError('')
     setStatus('Loading the bundled native DOCX sample…')
@@ -275,11 +293,37 @@ export default function DocsPage() {
   }
 
   const chooseTarget = (next: EditableDocxRun) => {
+    if (busy || next.key === target?.key) return
+    if (hasDraft && !window.confirm('Discard the unapplied text edit and select another passage?')) return
     setSelection(next.key)
     setDraft(next.text)
-    setProof(null)
-    setOutput(null)
     setError('')
+    requestAnimationFrame(() => {
+      const element = [...(previewRef.current?.querySelectorAll<HTMLElement>('[data-run-key]') ?? [])].find((node) => node.dataset.runKey === next.key)
+      element?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+  }
+
+  const undo = async () => {
+    const bytes = undoBytes.at(-1)
+    if (!bytes || busy) return
+    if (hasDraft && !window.confirm('Discard the unapplied text edit and undo the last change?')) return
+    setBusy(true)
+    setError('')
+    try {
+      const extracted = await runtimeFor(mode).extract(bytes)
+      adoptDocument(extracted.document, target)
+      setAuthoritativeBytes(bytes)
+      setArtifactId(extracted.artifactId)
+      setOutput(new Blob([copyArrayBuffer(bytes)], { type: DOCX_MEDIA_TYPE }))
+      setProof(null)
+      setUndoBytes((history) => history.slice(0, -1))
+      setChanged(extracted.document.source.package_sha256 !== sourceDigestRef.current)
+      setStatus('Last change undone. The restored document is ready to edit or download.')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setStatus('Could not restore the previous document. Your current document is still available.')
+    } finally { setBusy(false) }
   }
 
   const copyMutationEvidence = async () => {
@@ -317,6 +361,8 @@ export default function DocsPage() {
       )
 
       setAuthoritativeBytes(mutatedBytes)
+      setUndoBytes((history) => [...history.slice(-9), authoritativeBytes])
+      setChanged(true)
       setArtifactId(extracted.artifactId)
       setOutput(mutatedBlob)
       setProof(nextProof)
@@ -325,15 +371,11 @@ export default function DocsPage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       if (mode === 'browser') resetBrowserRuntime()
+      // A remote request may have advanced its artifact before a verification
+      // error or lost response. Retry from our last verified local bytes.
+      setArtifactId('')
       if (savedBytes) {
-        setDocument(null)
-        setAuthoritativeBytes(null)
-        setArtifactId('')
-        setSelection('')
-        setDraft('')
-        setOutput(null)
-        setProof(null)
-        setStatus('The engine returned DOCX bytes, but exact-byte readback verification failed. No download was enabled; re-open the source before another edit.')
+        setStatus('The edit could not be verified. Your previous document and download are unchanged; you can retry or discard the text edit.')
       } else {
         setStatus(mode === 'browser'
           ? 'The browser mutation was refused; no download was produced and no document bytes were uploaded.'
@@ -345,20 +387,10 @@ export default function DocsPage() {
   }
 
   return (
-    <div className="platen-fill native-demo docx-demo workbench-surface ds" data-demo-surface="docs">
-      <div className="view-switcher ds-workstrip" role="group" aria-label="DOCX processing runtime">
-        <div className="tool-segment ds-segment" role="group" aria-label="DOCX processing runtime">
-          <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>
-          <button
-            type="button"
-            aria-pressed={mode === 'server'}
-            disabled={busy || !SERVER_FALLBACK_CONFIGURED}
-            title={SERVER_FALLBACK_CONFIGURED ? 'Upload to the configured DOCX API' : 'Set VITE_INJOFFICE_API_BASE to enable'}
-            onClick={() => chooseMode('server')}
-          >Server fallback{SERVER_FALLBACK_CONFIGURED ? '' : ' (not configured)'}</button>
-        </div>
+    <div className="platen-fill native-demo docx-demo workbench-surface ds" data-demo-surface="docs" data-demo-dirty={changed || hasDraft} data-demo-busy={busy}>
+      <div className="view-switcher ds-workstrip" role="group" aria-label="Document actions">
         <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>
-          Use bundled .docx
+          Open sample
         </DsButton>
         <DsButton variant="outlined" className="workbench-button" disabled={busy} onClick={() => uploadRef.current?.click()}>
           Open .docx
@@ -372,93 +404,92 @@ export default function DocsPage() {
           aria-label="Open a DOCX file"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0]
-            if (file) void extractFile(file, file.name)
+            if (file && canReplace()) void extractFile(file, file.name)
             event.currentTarget.value = ''
           }}
         />
         <DsChip>{mode === 'browser' ? 'Browser-local · no upload' : 'Explicit server fallback'}</DsChip>
+        <DsButton variant="outlined" disabled={busy || !undoBytes.length} onClick={() => void undo()}>Undo change</DsButton>
+        {downloadURL && <a className="native-download ds-btn ds-btn--filled" href={downloadURL} download={docxDownloadName(sourceName)}>Download .docx</a>}
       </div>
       <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : document ? 'ready' : 'idle'}>
         {busy ? 'Working · ' : ''}{status}
       </p>
       <DsCallout
         tone="note"
-        title={mode === 'browser' ? 'Semantic contract, not Word paint' : 'Explicit server fallback'}
+        title="Document preview"
       >
         {mode === 'browser'
-          ? 'The first operation loads the version-matched Go engine (about 5.3 MiB) in a Web Worker. This is real DOCX extraction and guarded text write-back, but not Word-compatible pagination or native page-paint. Server fallback stays disabled until VITE_INJOFFICE_API_BASE is set.'
-          : 'This mode uploads the document. It uses the same fail-closed extraction and mutation contract as the browser engine; unsupported structures stay explicit instead of being approximated.'}
+          ? 'Edit supported text and download a real Word file, entirely in your browser. This preview shows document structure; page layout and drawings may look different in Word.'
+          : 'Files are uploaded to the configured server. Select supported text to edit it. This preview shows document structure; page layout and drawings may look different in Word.'}
       </DsCallout>
       {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
 
+      <RunSelection.Provider value={{ targets, selected: target?.key ?? '', busy, choose: chooseTarget }}>
       <div className="native-workspace docx-workspace ds-split">
-        <main className="native-main docx-main ds-split-main" aria-label="Native DOCX semantic preview">
+        <section ref={previewRef} className="native-main docx-main ds-split-main" aria-label="Document preview">
           {!document || !preview ? (
             <div className="native-empty">
               <div>
                 <span className="native-empty-mark">D</span>
                 <h2>Open a real DOCX</h2>
-                <p>The Go engine runs inside a browser Worker by default. It extracts a revision-bound model, applies one supported text edit, reopens the saved package, and returns real <code>.docx</code> bytes without a server.</p>
-                <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</DsButton>
+                <p>Try the sample or open your own document. Select a passage, change its text, and download the edited Word file.</p>
+                <DsButton variant="filled" disabled={busy} onClick={() => void loadSample()}>Open sample</DsButton>
               </div>
             </div>
           ) : (
             <article className="docx-contract-sheet ds-page" style={{ aspectRatio: pageRatio }}>
               <h4>{sourceName}</h4>
-              <p className="native-kicker ds-eyebrow">Native source flow · not paginated · {document.protocol} v{document.version}</p>
+              <p className="native-muted ds-muted">Select a passage to edit. The selected passage is highlighted.</p>
               {preview.blocks.map((block) => <BlockView key={block.id} block={block} />)}
               {preview.omitted > 0 && <p className="docx-omitted">Preview stopped after 200 body blocks; {preview.omitted} remain in the validated contract.</p>}
+              {selectedOutsidePreview && <section className="docx-preview-story" aria-label="Selected passage outside the preview"><h5>Selected passage</h5><BlockView block={selectedOutsidePreview} /></section>}
+              {[...document.headers, ...document.footers, ...document.notes, ...document.comment_stories].map((story) => <section key={story.id} className="docx-preview-story" aria-label={story.kind}><h5>{story.kind}</h5>{story.blocks.map((block) => <BlockView key={block.id} block={block} />)}</section>)}
             </article>
           )}
-        </main>
+        </section>
 
-        <aside className="native-side docx-side workbench-inspector ds-split-side" aria-label="Native DOCX evidence">
+        <aside className="native-side docx-side workbench-inspector ds-split-side" aria-label="Edit document">
           <section className="native-panel ds-panel">
-            <p className="native-kicker ds-eyebrow">01 · Extract</p>
-            {document ? (
-              <dl className="native-proof-list ds-proof">
-                <div className="native-proof-row"><dt>Revision</dt><dd>{shortDigest(document.revision)}</dd></div>
-                <div className="native-proof-row"><dt>Safe targets</dt><dd>{targets.length}</dd></div>
-                <div className="native-proof-row"><dt>Runtime</dt><dd>{mode === 'browser' ? 'browser-local' : 'server fallback'}</dd></div>
-                <div className="native-proof-row"><dt>Artifact</dt><dd>{mode === 'browser' ? 'browser memory' : artifactId ? 'stored' : 'request-local'}</dd></div>
-              </dl>
-            ) : <p className="native-muted ds-muted">No document extracted yet.</p>}
-          </section>
-
-          <section className="native-panel ds-panel">
-            <p className="native-kicker ds-eyebrow">02 · Mutate</p>
+            <h3>Edit selected text</h3>
             {target ? (
               <>
-                <DsField className="native-field" label="Safe text run">
-                  <DsSelect value={target.key} onChange={(event) => {
+                <DsField className="native-field" label="Selected passage">
+                  <DsSelect disabled={busy} value={target.key} onChange={(event) => {
                     const next = targets.find((candidate) => candidate.key === event.target.value)
                     if (next) chooseTarget(next)
                   }}>
-                    {targets.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.label}</option>)}
+                    {targets.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.text.slice(0, 60) || '(empty text)'} — {candidate.label}</option>)}
                   </DsSelect>
                 </DsField>
                 <DsField className="native-field" label="Replacement text">
-                  <DsTextarea value={draft} maxLength={DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS} rows={4} onChange={(event) => {
+                  <DsTextarea id="docx-replacement-text" disabled={busy} value={draft} maxLength={DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS} rows={4} onChange={(event) => {
                     setDraft(event.target.value)
-                    setProof(null)
-                    setOutput(null)
                   }} />
                 </DsField>
                 <div className="native-actions">
-                  <DsButton variant="green" className="workbench-button workbench-button--primary" disabled={busy || draft === target.text} onClick={() => void mutate()}>Save to DOCX</DsButton>
-                  <DsButton variant="outlined" className="workbench-button" disabled={busy || !mutationEvidence} onClick={() => void copyMutationEvidence()}>Copy evidence</DsButton>
+                  <DsButton variant="green" disabled={busy || draft === target.text} onClick={() => void mutate()}>Apply text change</DsButton>
+                  <DsButton variant="outlined" disabled={busy || !hasDraft} onClick={() => setDraft(target.text)}>Discard text edit</DsButton>
                 </div>
-                {draft === target.text && <p className="native-muted ds-muted">Change the text to enable a non-empty transaction.</p>}
-                <div className="native-contract-evidence" aria-label="Current DOCX mutation evidence">
-                  <span className="native-kicker ds-eyebrow">Agent contract · bounded evidence</span>
-                  <pre>{mutationEvidence}</pre>
-                </div>
+                <p className="native-muted ds-muted">{hasDraft ? 'Apply this edit to include it in the download.' : 'Select text in the preview or choose a passage above.'}</p>
               </>
-            ) : <p className="native-muted ds-muted">This document exposes no safely editable visible text runs. That refusal is intentional.</p>}
+            ) : <p className="native-muted ds-muted">{document ? 'This file has no supported editable text. You can open another document.' : 'Open a document to start editing.'}</p>}
           </section>
 
+          <details className="docx-technical-details">
+            <summary>Technical details</summary>
+            <div className="tool-segment ds-segment" role="group" aria-label="DOCX processing runtime">
+              <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser</button>
+              <button type="button" aria-pressed={mode === 'server'} disabled={busy || !SERVER_FALLBACK_CONFIGURED} title={SERVER_FALLBACK_CONFIGURED ? 'Upload to the configured DOCX API' : 'Set VITE_INJOFFICE_API_BASE to enable'} onClick={() => chooseMode('server')}>Server fallback</button>
+            </div>
+            <p className="native-muted ds-muted">The browser loads a 5.3 MiB Go engine in a worker. Edits are checked against the source revision and verified by reopening the returned bytes.</p>
+            <dl className="native-proof-list ds-proof">
+              <div className="native-proof-row"><dt>Runtime</dt><dd>{mode === 'browser' ? 'browser-local' : 'server fallback'}</dd></div>
+              <div className="native-proof-row"><dt>Artifact</dt><dd>{mode === 'browser' ? 'browser memory' : artifactId ? 'stored' : 'request-local'}</dd></div>
+            </dl>
+            {mutationEvidence && <div className="native-contract-evidence"><h4>Current mutation evidence</h4><DsButton variant="outlined" disabled={busy} onClick={() => void copyMutationEvidence()}>Copy evidence</DsButton><pre>{mutationEvidence}</pre></div>}
           <section className="native-panel ds-panel">
-            <p className="native-kicker ds-eyebrow">03 · Verify</p>
+            <h3>Last verified change</h3>
             {proof ? (
               <>
                 <dl className="native-proof-list ds-proof">
@@ -471,7 +502,6 @@ export default function DocsPage() {
                   <div className="native-proof-row"><dt>CAS moved</dt><dd>{shortDigest(proof.previousRevision)} → {shortDigest(proof.revision)}</dd></div>
                 </dl>
                 <DsChip tone="green">Applied</DsChip>
-                {downloadURL && <a className="native-download workbench-button workbench-button--primary ds-btn ds-btn--filled" href={downloadURL} download={docxDownloadName(sourceName)}>Download verified .docx</a>}
               </>
             ) : (
               <p className="native-muted ds-muted">After save, the page re-extracts the exact response bytes and verifies text, main-part identity, package revision, and preserve-verbatim inventory. Download stays disabled unless every check passes.</p>
@@ -515,8 +545,10 @@ export default function DocsPage() {
               {document.unsupported.length > 12 && <p className="native-muted ds-muted">{document.unsupported.length - 12} more remain in the native contract.</p>}
             </section>
           </>}
+          </details>
         </aside>
       </div>
+      </RunSelection.Provider>
     </div>
   )
 }

@@ -322,7 +322,7 @@ export default function NativeRoundTripPage() {
   const editableMap = new Map(targets.map((candidate) => [targetKey(candidate), candidate]))
 
   return (
-    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="native">
+    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="native" data-demo-busy={busy}>
       <div className="view-switcher ds-workstrip" role="group" aria-label="XLSX processing runtime">
         <div className="tool-segment ds-segment" role="group" aria-label="XLSX processing runtime">
           <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>

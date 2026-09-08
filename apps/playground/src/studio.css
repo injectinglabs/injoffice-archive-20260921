@@ -1,19 +1,5 @@
-:root {
-  --ink: #141816;
-  --rail: #f5f6f6;
-  --rail-2: #eceeed;
-  --brass: #0f6f8f;
-  --brass-2: #7ec4d8;
-  --paper: #ffffff;
-  --paper-2: #f7f8f8;
-  --rule: #e3e7e5;
-  --mute: #5a6560;
-  --live: #1a6b52;
-  --danger: #c23a2b;
-  --type-display: "Sora", "Avenir Next", sans-serif;
-  --type-body: "Instrument Sans", "Segoe UI", sans-serif;
-  --type-mono: "IBM Plex Mono", ui-monospace, monospace;
-}
+/* Legacy proof-surface geometry. Application tokens and shell chrome are
+ * intentionally owned by workbench.css, which is loaded after this file. */
 
 * { box-sizing: border-box; }
 html, body, #root {
@@ -1059,29 +1045,6 @@ textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
-}
-
-/* Bright capability workbench shell. */
-:root {
-  --ink: #172038;
-  --rail: #ffffff;
-  --rail-2: #f7faff;
-  --brass: #625bf6;
-  --brass-2: #dcd2ff;
-  --paper: #f7faff;
-  --paper-2: #ffffff;
-  --rule: #dce4f2;
-  --mute: #66728b;
-  --live: #2b9b63;
-  --danger: #c53f52;
-  --blue: #3b82f6;
-  --mint: #2bb673;
-  --coral: #ff7867;
-  --violet: #625bf6;
-  --yellow: #ffc857;
-  --type-display: "Manrope", "Avenir Next", sans-serif;
-  --type-body: "Manrope", "Avenir Next", sans-serif;
-  --type-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 html, body, #root { min-height: 100%; }

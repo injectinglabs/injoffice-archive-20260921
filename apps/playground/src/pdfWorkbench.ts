@@ -48,11 +48,24 @@ function defaultQuad(width: number, height: number): number[] {
   return [left, top, right, top, left, bottom, right, bottom]
 }
 
-export async function applyPdfMarkup(bytes: Uint8Array, page: number, type: MarkupType): Promise<Uint8Array> {
+export async function applyPdfMarkup(bytes: Uint8Array, page: number, type: MarkupType, quads?: number[][]): Promise<Uint8Array> {
   const info = await readInfo(bytes)
   const geometry = info.pages[page - 1]
   if (!geometry) throw new Error(`page ${page} is out of range`)
-  return applyMarkups(bytes, [{ page, type, color: type === 'highlight' ? [1, 0.92, 0.2] : [0.15, 0.2, 0.7], quads: [defaultQuad(geometry.width, geometry.height)] }])
+  return applyMarkups(bytes, [{ page, type, color: type === 'highlight' ? [1, 0.92, 0.2] : [0.15, 0.2, 0.7], quads: quads ?? [defaultQuad(geometry.width, geometry.height)] }])
+}
+
+/** User-positioned drawing. Coordinates are PDF points from the active viewport. */
+export async function applyPdfPlacedDrawing(bytes: Uint8Array, page: number, kind: Exclude<DrawingSpec['kind'], 'note'>, points: [number, number][]): Promise<Uint8Array> {
+  if (points.length < 2) throw new Error('Drag on the page to place a drawing.')
+  const from = points[0]!
+  const to = points.at(-1)!
+  const rect: [number, number, number, number] = [Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.max(from[0], to[0]), Math.max(from[1], to[1])]
+  const style = { page, color: [0.12, 0.35, 0.72] as [number, number, number], width: 1.5 }
+  const drawing: DrawingSpec = kind === 'rect' || kind === 'ellipse' ? { ...style, kind, rect }
+    : kind === 'line' || kind === 'arrow' ? { ...style, kind, from, to }
+    : { ...style, kind: 'ink', paths: [points.flat()] }
+  return applyDrawings(bytes, [drawing])
 }
 
 export async function applyPdfDrawing(bytes: Uint8Array, page: number, kind: Exclude<DrawingSpec['kind'], 'note'>): Promise<Uint8Array> {
@@ -72,7 +85,7 @@ export async function applyPdfDrawing(bytes: Uint8Array, page: number, kind: Exc
   return applyDrawings(bytes, [drawing])
 }
 
-export async function applyPdfNote(bytes: Uint8Array, page: number, contents: string): Promise<Uint8Array> {
+export async function applyPdfNote(bytes: Uint8Array, page: number, contents: string, at?: [number, number]): Promise<Uint8Array> {
   const info = await readInfo(bytes)
   const geometry = info.pages[page - 1]
   if (!geometry) throw new Error(`page ${page} is out of range`)
@@ -80,7 +93,7 @@ export async function applyPdfNote(bytes: Uint8Array, page: number, contents: st
     kind: 'note',
     page,
     color: [1, 0.85, 0.2],
-    at: [Math.max(36, geometry.width - 72), Math.max(72, geometry.height - 72)],
+    at: at ?? [Math.max(36, geometry.width - 72), Math.max(72, geometry.height - 72)],
     contents,
     author: 'InjOffice playground',
   }])

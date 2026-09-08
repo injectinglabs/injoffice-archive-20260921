@@ -36,9 +36,15 @@ export function DsMark() {
 
 export function DsButton({
   variant = 'text',
+  className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'text' | 'filled' | 'green' | 'outlined' | 'refuse' }) {
-  return <button type="button" {...props} className={`ds-btn ds-btn--${variant}${props.className ? ` ${props.className}` : ''}`} />
+  const extensionClasses = className
+    ?.split(/\s+/)
+    .filter((token) => token && token !== 'workbench-button' && !token.startsWith('workbench-button--'))
+    .join(' ')
+
+  return <button type="button" {...props} className={`ds-btn ds-btn--${variant}${extensionClasses ? ` ${extensionClasses}` : ''}`} />
 }
 
 export function DsTool(props: ButtonHTMLAttributes<HTMLButtonElement>) {

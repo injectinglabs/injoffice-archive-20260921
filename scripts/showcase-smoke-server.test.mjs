@@ -58,6 +58,7 @@ test('built showcase server respects its base and serves WASM MIME without SPA f
   try {
     await writeFile(resolve(dist, 'index.html'), '<main>showcase</main>')
     await writeFile(resolve(dist, 'test.wasm'), new Uint8Array([0, 97, 115, 109]))
+    await writeFile(resolve(dist, 'worker.mjs'), 'export const ready = true')
     server = await startShowcaseServer(dist)
     assert.equal(await (await fetch(server.url)).text(), '<main>showcase</main>')
     assert.equal((await fetch(new URL('/', server.url))).status, 404)
@@ -65,6 +66,7 @@ test('built showcase server respects its base and serves WASM MIME without SPA f
     assert.equal((await fetch(`${server.url}%ZZ`)).status, 404)
     assert.equal((await fetch(`${server.url}%2e%2e%2foutside`)).status, 400)
     assert.equal((await fetch(`${server.url}test.wasm`)).headers.get('content-type'), 'application/wasm')
+    assert.equal((await fetch(`${server.url}worker.mjs`)).headers.get('content-type'), 'text/javascript')
   } finally {
     await server?.close()
     await rm(dist, { recursive: true, force: true })

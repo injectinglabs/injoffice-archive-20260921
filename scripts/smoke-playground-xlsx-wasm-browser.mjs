@@ -144,15 +144,23 @@ try {
   await cdp.send('Page.navigate', { url: `${siteUrl}#/docs` })
   await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
-    return Boolean(button?.disabled && button.textContent?.includes('not configured'))
+    return Boolean(button?.disabled && button.title?.includes('VITE_INJOFFICE_API_BASE'))
   })()`, 'disabled unconfigured DOCX server fallback')
   await pollExpression(cdp, `(() => {
-    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Use bundled .docx')
+    const button = [...document.querySelectorAll('[data-demo-surface="docs"] button')].find((item) => item.textContent?.trim() === 'Open sample')
     if (!button) return false
     button.click()
     return true
   })()`, 'bundled DOCX action')
-  await pollExpression(cdp, `document.querySelector('.native-status')?.textContent?.includes('safe text edit target') === true`, 'browser DOCX extraction', 90_000)
+  await pollExpression(cdp, `document.querySelector('.native-status')?.textContent?.includes('editable passage') === true`, 'browser DOCX extraction', 90_000)
+  const selectedDocxText = await evaluate(cdp, `(() => {
+    const runs = [...document.querySelectorAll('.docx-editable-run')]
+    const run = runs[1] ?? runs[0]
+    if (!(run instanceof HTMLButtonElement)) throw new Error('Selectable DOCX text missing')
+    run.click()
+    return run.textContent
+  })()`)
+  await pollExpression(cdp, `document.querySelector('.docx-editable-run[aria-pressed="true"]')?.textContent === ${JSON.stringify(selectedDocxText)} && document.querySelector('#docx-replacement-text')?.value === ${JSON.stringify(selectedDocxText)}`, 'DOCX preview selection linked to text editor')
 
   const expectedDocx = `docx-browser-smoke-${Date.now().toString(36)}`
   await evaluate(cdp, `(() => {
@@ -164,7 +172,7 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })()`)
   await pollExpression(cdp, `(() => {
-    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Save to DOCX')
+    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Apply text change')
     if (!button || button.disabled) return false
     button.click()
     return true
@@ -184,6 +192,13 @@ try {
   const docxProof = await proofRows(cdp)
   if (docxProof.After !== expectedDocx) throw new Error(`DOCX readback mismatch: expected ${JSON.stringify(expectedDocx)}, received ${JSON.stringify(docxProof.After)}`)
   assertBrowserLocalProof(docxProof, 'DOCX')
+  await evaluate(cdp, `(() => {
+    const button = [...document.querySelectorAll('[data-demo-surface="docs"] button')].find((item) => item.textContent?.trim() === 'Undo change')
+    if (!button || button.disabled) throw new Error('DOCX undo unavailable after edit')
+    button.click()
+  })()`)
+  await pollExpression(cdp, `document.querySelector('.native-status')?.textContent?.includes('Last change undone') === true`, 'DOCX exact-byte undo', 90_000)
+  await pollExpression(cdp, `document.querySelector('#docx-replacement-text')?.value === ${JSON.stringify(selectedDocxText)} && Boolean(document.querySelector('.native-download[href^="blob:"]'))`, 'DOCX undo restores editable text and download')
 
   sectionKey = 'pptx-native'
   await cdp.send('Page.navigate', { url: `${siteUrl}#/pptx-native` })

@@ -1,70 +1,49 @@
-/* Proposed InjOffice design system — spreadsheet workbench, original mark.
-   Scoped to .ds so the current demo is unchanged. */
+/* Component tokens.
+ *
+ * The application palette, typography, and color-scheme are owned by
+ * workbench.css. Design-system components consume those values through the
+ * aliases below; they do not introduce a second theme.
+ */
 
 .ds {
-  --ds-paper: #ffffff;
-  --ds-chrome: #f5f6f6;
-  --ds-chrome-2: #eceeed;
-  --ds-ink: #141816;
-  --ds-mute: #5a6560;
-  --ds-line: #e3e7e5;
-  --ds-grid: #d5dad6;
-  --ds-header: #f7f8f8;
-  --ds-select: #0f6f8f;
-  --ds-select-soft: #e7f4f8;
-  --ds-select-header: #d7edf3;
-  --ds-green: #1a6b52;
-  --ds-green-soft: #e7f4ee;
-  --ds-refuse: #c23a2b;
-  --ds-refuse-soft: #fbeceb;
-  --ds-on-select: #ffffff;
-  --ds-on-green: #f4fbf8;
-  --ds-formula: #ffffff;
-  --ds-tabbar: #f5f6f6;
-  --ds-focus: #0f6f8f;
-  --ds-menu: #141816;
-  --ds-shadow: 0 12px 40px rgba(20, 24, 22, .08);
+  --ds-paper: var(--paper, #ffffff);
+  --ds-chrome: var(--chrome, #f5f6f6);
+  --ds-chrome-2: var(--chrome-2, #eceeed);
+  --ds-ink: var(--ink, #141816);
+  --ds-mute: var(--mute, #5a6560);
+  --ds-line: var(--rule, #e3e7e5);
+  --ds-grid: var(--control-line, #d5dad6);
+  --ds-header: var(--paper-2, #f7f8f8);
+  --ds-select: var(--action, #0f6f8f);
+  --ds-select-soft: var(--action-soft, #e7f4f8);
+  --ds-select-header: var(--chip-line, #d7edf3);
+  --ds-green: var(--live, #1a6b52);
+  --ds-green-soft: var(--live-soft, #e7f4ee);
+  --ds-refuse: var(--danger, #c23a2b);
+  --ds-refuse-soft: var(--danger-soft, #fbeceb);
+  --ds-on-select: var(--on-action, #ffffff);
+  --ds-on-green: var(--on-action, #ffffff);
+  --ds-formula: var(--control, #ffffff);
+  --ds-tabbar: var(--chrome, #f5f6f6);
+  --ds-focus: var(--action, #0f6f8f);
+  --ds-menu: var(--ink, #141816);
+  --ds-shadow: var(--shadow-float, 0 12px 40px rgba(20, 24, 22, .08));
   --ds-radius: 8px;
   --ds-radius-dialog: 12px;
   --ds-row: 28px;
   --ds-col: 108px;
   --ds-gutter: 48px;
   --ds-toolbar: 44px;
-  --ds-type: "Instrument Sans", "Segoe UI", sans-serif;
-  --ds-display: "Sora", "Avenir Next", sans-serif;
-  --ds-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --ds-cell: "Instrument Sans", "Segoe UI", sans-serif;
+  --ds-type: var(--type-body, "Instrument Sans", "Segoe UI", sans-serif);
+  --ds-display: var(--type-display, "Sora", "Avenir Next", sans-serif);
+  --ds-mono: var(--type-mono, "IBM Plex Mono", ui-monospace, monospace);
+  --ds-cell: var(--type-body, "Instrument Sans", "Segoe UI", sans-serif);
   color: var(--ds-ink);
   background: var(--ds-paper);
   font-family: var(--ds-type);
   font-size: 14px;
   line-height: 1.4;
   text-rendering: optimizeLegibility;
-}
-
-html[data-theme="dark"] .ds {
-  --ds-paper: #101412;
-  --ds-chrome: #171c1a;
-  --ds-chrome-2: #222826;
-  --ds-ink: #eef3f0;
-  --ds-mute: #9aa59f;
-  --ds-line: #2c3330;
-  --ds-grid: #3d4541;
-  --ds-header: #1b211e;
-  --ds-select: #7ec4d8;
-  --ds-select-soft: #163038;
-  --ds-select-header: #1d3f4a;
-  --ds-green: #8fd0b0;
-  --ds-green-soft: #173328;
-  --ds-refuse: #e39288;
-  --ds-refuse-soft: #3b201c;
-  --ds-on-select: #101412;
-  --ds-on-green: #101412;
-  --ds-formula: #101412;
-  --ds-tabbar: #171c1a;
-  --ds-focus: #7ec4d8;
-  --ds-menu: #eef3f0;
-  --ds-shadow: 0 16px 40px rgba(0, 0, 0, .4);
 }
 
 .ds *,

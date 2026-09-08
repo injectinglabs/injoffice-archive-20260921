@@ -20,7 +20,7 @@ import { PDF_NODE_PREFIX } from '../pdfHostRoutes'
 import { createPdfDemoFixture, PDF_DEMO_FILE_NAME } from '../pdfDemoFixture'
 import {
   applyPdfAnnotDelete,
-  applyPdfDrawing,
+  applyPdfPlacedDrawing,
   applyPdfFormValues,
   applyPdfMarkup,
   applyPdfNote,
@@ -36,6 +36,8 @@ import {
   type PdfAnnot,
   type PdfFormField,
 } from '../pdfWorkbench'
+import { recordPdfEdit, travelPdfHistory, type PdfHistory } from '../pdfInteraction'
+import { PdfInteractionLayer, type PdfPlacementTool } from './PdfInteractionLayer'
 
 configurePdfWorker(pdfWorkerUrl)
 
@@ -50,11 +52,11 @@ const INSPECTORS: { id: Inspector; label: string }[] = [
   { id: 'draw', label: 'Draw' },
   { id: 'forms', label: 'Forms' },
   { id: 'stamp', label: 'Stamp' },
-  { id: 'host', label: 'Node host' },
+  { id: 'host', label: 'Advanced' },
 ]
 
 export function clampPdfPage(page: number, pageCount: number): number {
-  if (pageCount < 1) return 1
+  if (pageCount < 1 || !Number.isFinite(page)) return 1
   return Math.max(1, Math.min(Math.trunc(page), pageCount))
 }
 
@@ -113,11 +115,34 @@ export default function PdfPage() {
   const [hostNew, setHostNew] = useState('InjOffice PDF')
   const [hostNote, setHostNote] = useState('Node host idle. Available during npm run dev.')
   const [inspector, setInspector] = useState<Inspector>('pages')
+  const [history, setHistory] = useState<PdfHistory>({ past: [], future: [] })
+  const [selection, setSelection] = useState<number[][]>([])
+  const [tool, setTool] = useState<PdfPlacementTool>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => { setSelection([]); setTool(null) }, [page, zoom, bytes, inspector])
+  useEffect(() => {
+    if (!tool) return
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setTool(null) }
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
+  }, [tool])
 
   const applyBytes = async (next: Uint8Array, message: string) => {
+    if (bytes) setHistory(current => recordPdfEdit(current, { bytes, page, edited }))
     setBytes(next)
     setEdited(true)
     setInfo(message)
+  }
+
+  const travel = (direction: 'undo' | 'redo') => {
+    if (!bytes || busy) return
+    const result = travelPdfHistory(history, { bytes, page, edited }, direction)
+    if (!result) return
+    setHistory(result.history)
+    setPage(result.snapshot.page)
+    setEdited(result.snapshot.edited)
+    setBytes(result.snapshot.bytes)
   }
 
   const runEdit = async (work: () => Promise<Uint8Array>, message: string) => {
@@ -285,16 +310,24 @@ export default function PdfPage() {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file) return
+    if (edited && !window.confirm('Open another PDF and discard your current edits? Download your edited PDF first if you want to keep it.')) return
     setError(null)
+    setBusy('loading')
     try {
       const nextBytes = new Uint8Array(await file.arrayBuffer())
       if (nextBytes.length === 0) throw new Error('the selected file is empty')
+      // Keep the current document and undo stack until the replacement is usable.
+      const candidate = await PdfViewerDocument.load(nextBytes)
+      try { await candidate.getPage(1) } finally { await candidate.destroy() }
       setFileName(file.name || 'document.pdf')
       setEdited(false)
+      setHistory({ past: [], future: [] })
       setPage(1)
       setBytes(nextBytes)
     } catch (reason: unknown) {
       setError(`Could not read the selected PDF: ${errorMessage(reason)}`)
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -326,6 +359,8 @@ export default function PdfPage() {
       const nextMatches = await activeViewer.search(query.trim())
       if (viewerRef.current !== activeViewer) return
       setMatches(nextMatches)
+      setSearchTerm(query.trim())
+      if (nextMatches[0]) setPage(nextMatches[0].pageIndex)
       setSearched(true)
       setSearching(false)
     } catch (reason: unknown) {
@@ -340,15 +375,15 @@ export default function PdfPage() {
   const current = geometry?.pages[page - 1]
 
   return (
-    <div className="platen-fill workbench-surface ds" data-demo-surface="pdf">
+    <div className="platen-fill workbench-surface ds" data-demo-surface="pdf" data-demo-dirty={edited} data-demo-busy={busy === 'editing'}>
       <div className="toolstrip pdf-toolbar workbench-toolbar ds-workstrip" role="group" aria-label="PDF actions">
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" onClick={() => uploadRef.current?.click()}>Open PDF</DsButton>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Open PDF</DsButton>
         <input ref={uploadRef} className="visually-hidden" type="file" accept="application/pdf,.pdf" aria-label="Open a PDF file" onChange={(event) => { void openPdf(event) }} />
         <DsButton className="workbench-button" disabled={!ready || busy !== null || page <= 1} onClick={() => setPage((currentPage) => clampPdfPage(currentPage - 1, pageCount))}>Previous</DsButton>
         <span className="pdf-page-input">
           Page
           <span className="pdf-page-input__control">
-            <input type="number" min={1} max={Math.max(1, pageCount)} value={page} disabled={!ready || busy === 'loading'} onChange={(event) => setPage(clampPdfPage(Number(event.target.value), pageCount))} />
+            <input aria-label="Page number" type="number" min={1} max={Math.max(1, pageCount)} value={page} disabled={locked} onChange={(event) => setPage(clampPdfPage(Number(event.target.value), pageCount))} />
             <span>of {pageCount || '—'}</span>
           </span>
         </span>
@@ -357,25 +392,42 @@ export default function PdfPage() {
           <DsSelect aria-label="Zoom" value={zoom} disabled={!ready} onChange={(event) => setZoom(Number(event.target.value))}>{ZOOM_STEPS.map((step) => <option key={step} value={step}>{Math.round(step * 100)}%</option>)}</DsSelect>
         </DsField>
         <DsButton variant="outlined" className="workbench-button" disabled={!bytes || busy === 'loading'} onClick={() => downloadPdf()}>Download {edited ? 'edited PDF' : 'PDF'}</DsButton>
+        <DsButton disabled={locked || !history.past.length} onClick={() => travel('undo')}>Undo</DsButton>
+        <DsButton disabled={locked || !history.future.length} onClick={() => travel('redo')}>Redo</DsButton>
       </div>
       <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ?? 'ready'}>
         {busy === 'rendering' ? 'Rendering…' : busy === 'editing' ? 'Applying PDF operation…' : info}
       </p>
       {error && <DsCallout tone="refuse" title="PDF error">{error}</DsCallout>}
+      {tool && <p className="pdf-placement-hint" role="status">{tool === 'note' ? 'Click the page to place your note.' : `Drag on the page to draw ${tool === 'ink' ? 'an ink stroke' : `a ${tool}`}.`} Keyboard: Tab to the page, arrow keys to position, Enter to place each endpoint. <DsButton onClick={() => setTool(null)}>Cancel drawing</DsButton></p>}
       <div className="split ds-split">
         <div className="split-main pages pdf-pages ds-split-main" aria-busy={busy === 'loading' || busy === 'rendering' || busy === 'editing'}>
           <article className="ds-pdf-sheet">
             {!ready && !error && <p className="pdf-empty ds-muted">Loading PDF…</p>}
-            <canvas ref={canvasRef} className="pdf-canvas" aria-label={ready ? `Rendered page ${page} of ${pageCount}` : 'PDF page'} />
+            <div className="pdf-page-stage">
+              <canvas ref={canvasRef} className="pdf-canvas" aria-label={ready ? `Rendered page ${page} of ${pageCount}` : 'PDF page'} />
+              {viewer && <PdfInteractionLayer key={`${page}-${zoom}`} viewer={viewer} page={page} zoom={zoom} locked={locked} selectText={inspector === 'mark'} tool={tool} matches={matches} queryLength={searchTerm.length} onSelection={setSelection} onPlace={(kind, points) => {
+                setTool(null)
+                void runEdit(() => kind === 'note' ? applyPdfNote(bytes!, page, noteText, points[0]) : applyPdfPlacedDrawing(bytes!, page, kind, points), `Added ${kind} on page ${page}.`)
+              }} />}
+            </div>
           </article>
         </div>
         <aside className="split-side pdf-inspector workbench-inspector ds-split-side" aria-label="PDF operations">
           <div className="view-switcher" role="tablist" aria-label="PDF tool panels">
             {INSPECTORS.map((item) => (
-              <button key={item.id} type="button" role="tab" className="ds-pick" aria-selected={inspector === item.id} aria-pressed={inspector === item.id} onClick={() => setInspector(item.id)}>{item.label}</button>
+              <button key={item.id} id={`pdf-tab-${item.id}`} type="button" role="tab" className="ds-pick" aria-selected={inspector === item.id} aria-controls="pdf-operation-panel" tabIndex={inspector === item.id ? 0 : -1} onClick={() => setInspector(item.id)} onKeyDown={event => {
+                const index = INSPECTORS.findIndex(entry => entry.id === item.id)
+                const next = event.key === 'ArrowRight' ? (index + 1) % INSPECTORS.length : event.key === 'ArrowLeft' ? (index + INSPECTORS.length - 1) % INSPECTORS.length : event.key === 'Home' ? 0 : event.key === 'End' ? INSPECTORS.length - 1 : -1
+                if (next < 0) return
+                event.preventDefault()
+                setInspector(INSPECTORS[next]!.id)
+                document.getElementById(`pdf-tab-${INSPECTORS[next]!.id}`)?.focus()
+              }}>{item.label}</button>
             ))}
           </div>
 
+          <div id="pdf-operation-panel" className="pdf-operation-panel" role="tabpanel" aria-labelledby={`pdf-tab-${inspector}`} tabIndex={0}>
           {inspector === 'inspect' && (
             <div className="ioc-panel ds-panel pdf-search">
               <span className="ds-eyebrow">Search document</span>
@@ -387,7 +439,7 @@ export default function PdfPage() {
                   <DsButton type="submit" className="workbench-button" disabled={!ready || searching || query.trim().length === 0}>{searching ? 'Finding…' : 'Find'}</DsButton>
                 </div>
               </form>
-              {searched && <p className="ds-muted">{matches.length} match{matches.length === 1 ? '' : 'es'}</p>}
+              {searched && <p className="ds-muted" role="status">{matches.length} match{matches.length === 1 ? '' : 'es'}. Matching text passages are highlighted on the page.</p>}
               {matches.length > 0 && <ol className="pdf-result-list">{matches.map((match, index) => <li key={`${match.pageIndex}-${match.offset}-${index}`}><button type="button" className="workbench-button workbench-button--quiet" onClick={() => setPage(match.pageIndex)}><span>Page {match.pageIndex}</span>{match.snippet || query}</button></li>)}</ol>}
               <p className="ds-muted">Geometry · {geometry ? `${geometry.pageCount} pages` : '—'}{current ? ` · ${Math.round(current.width)}×${Math.round(current.height)} pt · ${current.rotation}°` : ''}</p>
               <span className="ds-eyebrow">Document outline</span>
@@ -400,7 +452,7 @@ export default function PdfPage() {
           {inspector === 'pages' && (
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Page operations</span>
-              <p className="ds-muted">Browser-safe applyPageOps, merge, and split.</p>
+              <p className="ds-muted">Rearrange pages or combine documents. Undo restores your last 20 changes.</p>
               <div className="ds-stack">
                 <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfPageOp(bytes!, { type: 'rotate', pages: [page], degrees: 90 }), `Rotated page ${page} by 90°.`)}>Rotate 90°</DsButton>
                 <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfPageOp(bytes!, { type: 'rotate', pages: [page], degrees: 180 }), `Rotated page ${page} by 180°.`)}>Rotate 180°</DsButton>
@@ -434,9 +486,12 @@ export default function PdfPage() {
           {inspector === 'mark' && (
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Text markup</span>
+              <p className="ds-muted">Click text passages on the page to select them, then choose a style. Click again to deselect. Keyboard users can Tab to passages and press Space.</p>
+              <p role="status" className="ds-muted">{selection.length} passage{selection.length === 1 ? '' : 's'} selected.</p>
+              {!locked && !text.trim() && <p className="ds-muted">This page has no selectable text. Use Draw to mark an area instead.</p>}
               <div className="ds-row">
                 {(['highlight', 'underline', 'strikeout'] as MarkupType[]).map((type) => (
-                  <DsButton key={type} variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfMarkup(bytes!, page, type), `Applied ${type} on page ${page}.`)}>{type}</DsButton>
+                  <DsButton key={type} variant="outlined" className="workbench-button" disabled={locked || selection.length === 0} onClick={() => void runEdit(() => applyPdfMarkup(bytes!, page, type, selection), `Applied ${type} on page ${page}.`)}>{type}</DsButton>
                 ))}
               </div>
               <span className="ds-eyebrow">Annotations</span>
@@ -457,14 +512,10 @@ export default function PdfPage() {
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Drawings and notes</span>
               <div className="ds-row">
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfDrawing(bytes!, page, 'rect'), 'Drew a rectangle.')}>Rectangle</DsButton>
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfDrawing(bytes!, page, 'ellipse'), 'Drew an ellipse.')}>Ellipse</DsButton>
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfDrawing(bytes!, page, 'line'), 'Drew a line.')}>Line</DsButton>
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfDrawing(bytes!, page, 'arrow'), 'Drew an arrow.')}>Arrow</DsButton>
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfDrawing(bytes!, page, 'ink'), 'Drew an ink stroke.')}>Ink</DsButton>
+                {(['rect', 'ellipse', 'line', 'arrow', 'ink'] as const).map(kind => <DsButton key={kind} variant="outlined" disabled={locked} aria-pressed={tool === kind} onClick={() => setTool(tool === kind ? null : kind)}>{kind === 'rect' ? 'Rectangle' : kind[0].toUpperCase() + kind.slice(1)}</DsButton>)}
               </div>
               <DsField label="Note contents"><DsInput value={noteText} onChange={(event) => setNoteText(event.target.value)} /></DsField>
-              <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfNote(bytes!, page, noteText), 'Added a sticky note.')}>Add note</DsButton>
+              <DsButton variant="outlined" className="workbench-button" disabled={locked || !noteText.trim()} aria-pressed={tool === 'note'} onClick={() => setTool(tool === 'note' ? null : 'note')}>Place note</DsButton>
               {annots.filter((annot) => annot.subtype === 'note').map((annot) => (
                 <DsButton key={`note-${annot.objNum}`} variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfNoteEdit(bytes!, annot, noteText), 'Edited note.')}>Save note {annot.objNum}</DsButton>
               ))}
@@ -473,7 +524,7 @@ export default function PdfPage() {
 
           {inspector === 'forms' && (
             <div className="ioc-panel ds-panel">
-              <span className="ds-eyebrow">AcroForm values</span>
+              <span className="ds-eyebrow">Fill form fields</span>
               {fields.length === 0 ? <p className="ds-muted">No form fields in this file.</p> : fields.map((field, index) => (
                 <DsField key={field.name} label={field.name}>
                   {field.kind === 'checkbox' ? (
@@ -490,10 +541,10 @@ export default function PdfPage() {
           {inspector === 'stamp' && (
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Stamps</span>
-              <p className="ds-muted">Uses the package stamp/signature helpers with a 1×1 PNG fixture.</p>
+              <p className="ds-muted">These examples place a small sample image in the lower-left corner. A visual signature is an image, not a digital signature.</p>
               <div className="ds-stack">
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfStamp(bytes!, page, false), 'Applied an image stamp.')}>Image stamp</DsButton>
-                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfStamp(bytes!, page, true), 'Applied a visual signature stamp.')}>Visual signature stamp</DsButton>
+                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfStamp(bytes!, page, false), 'Applied an image stamp.')}>Apply sample image stamp</DsButton>
+                <DsButton variant="outlined" className="workbench-button" disabled={locked} onClick={() => void runEdit(() => applyPdfStamp(bytes!, page, true), 'Applied a visual signature stamp.')}>Apply sample visual signature</DsButton>
               </div>
             </div>
           )}
@@ -526,6 +577,7 @@ export default function PdfPage() {
               </div>
             </>
           )}
+          </div>
         </aside>
       </div>
     </div>

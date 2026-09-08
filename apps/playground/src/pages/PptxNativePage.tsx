@@ -259,7 +259,7 @@ export default function PptxNativePage() {
   }
 
   return (
-    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="pptx-native">
+    <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="pptx-native" data-demo-busy={busy}>
       <div className="view-switcher ds-workstrip" role="group" aria-label="PPTX processing runtime">
         <div className="tool-segment ds-segment">
           <button type="button" aria-pressed={mode === 'browser'} disabled={busy} onClick={() => chooseMode('browser')}>In browser (default)</button>
