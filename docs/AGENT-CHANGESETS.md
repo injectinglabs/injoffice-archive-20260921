@@ -60,6 +60,36 @@ This layer is not:
 
 ## Playground proof
 
-The `#/agent` playground route demonstrates capability discovery, a bounded inspection, a deterministic local operation proposal, isolated preview and diff, validation, explicit human approval, atomic commit, and output verification. No model SDK or network request is used. Its refusal mode proves that unsupported operations stop before write.
+The `#/agent` playground route demonstrates capability discovery, a bounded inspection, a deterministic local operation proposal, isolated preview and diff, validation, explicit human approval, commit, and verification. No model service or API key is used. Its refusal mode proves that unsupported operations stop before write.
+
+The **Sheets** example loads the bundled `launch-readiness-plan.xlsx` and proposes changing Security status at `Launch Readiness!C5` from Review to Ready. Its bounded playground adapter delegates the write to the native XLSX browser Worker. After approval it reopens the exact output bytes, checks the cell value and package identity, and offers those verified bytes for download. Preview is a projected cell diff, not a rendered Excel preview. Sample and engine assets are fetched from the demo host; workbook bytes are never uploaded and no server fallback is attempted.
+
+**Docs, Slides, and PDF are lifecycle simulations**, using document-shaped JavaScript data and the real `@injoffice/agent-tools` session. They do not write or reopen Office files. Their verification proves simulated state/receipt consistency, not file fidelity. Their visible capabilities are limited to the operation actually implemented by each sample adapter.
+
+### Minimal host integration
+
+```ts
+import { createAgentSession } from '@injoffice/agent-tools'
+
+// artifact, adapter, actor and proposedOperations come from your host.
+// The adapter owns format I/O; approval must come from your review UI.
+const session = await createAgentSession({
+  artifact, adapter, actor,
+  confirmDestructive: async ({ confirmation }) => confirmation === 'approved',
+})
+const change = await session.plan(proposedOperations, {
+  expectedRevision: session.identity.revision,
+  expectedFingerprint: session.identity.fingerprint,
+})
+const preview = await change.preview()
+const diff = await change.diff()
+const validation = await change.validate()
+// Show preview/diff, then wait for explicit approval of this exact change.
+if (validation.valid && approvedByUser) {
+  const receipt = await change.commit({ idempotencyKey, confirmation: 'approved' })
+  // A completed mutation and successful verification are distinct outcomes.
+  showResult(receipt.verification)
+}
+```
 
 Open the proofs for [#/agent?format=sheets](#/agent?format=sheets), [#/agent?format=docs](#/agent?format=docs), [#/agent?format=slides](#/agent?format=slides), or [#/agent?format=pdf](#/agent?format=pdf).

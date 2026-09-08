@@ -299,6 +299,8 @@ export class PivotManager {
     const rows = ref.endRow - ref.startRow + 1
     const cols = ref.endColumn - ref.startColumn + 1
     if (rows <= 0 || cols <= 0) return []
-    return sheet.getRange(ref.startRow, ref.startColumn, rows, cols).getValues()
+    const range = sheet.getRange(ref.startRow, ref.startColumn, rows, cols)
+    // Aggregate numbers, not currency/percentage display strings.
+    return typeof range.getRawValues === 'function' ? range.getRawValues() : range.getValues()
   }
 }

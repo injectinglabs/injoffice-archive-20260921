@@ -25,26 +25,26 @@ export type ShowcaseItem = {
 
 const AGENT_SHOWCASE: Record<AgentTool, { title: string; description: string; format: DemoFormat; extra: string }> = {
   sheets: {
-    title: 'Raise East forecast confidence',
-    description: 'Inspect quarterly-plan.xlsx, set Forecast!D5 from Medium to High, and verify the replacement revision.',
+    title: 'Approve an agent edit in a real XLSX',
+    description: 'Review the Security status change, approve the native write, reopen the exact output, and download the verified workbook.',
     format: 'XLSX',
-    extra: 'xlsx sheets cell forecast spreadsheet',
+    extra: 'xlsx sheets cell security launch readiness spreadsheet agent download native',
   },
   docs: {
     title: 'Replace a guarded document paragraph',
-    description: 'Inspect the launch brief, replace one paragraph with the confirmed review date, and verify the output.',
+    description: 'Simulate a launch-brief paragraph change with real approval and revision guards. No DOCX file is written.',
     format: 'DOCX',
     extra: 'docx docs paragraph document word',
   },
   slides: {
     title: 'Update a presentation readiness metric',
-    description: 'Inspect board-update.pptx, change the readiness metric from 86% to 91%, and verify the committed slide.',
+    description: 'Simulate a readiness metric change from 86% to 91% with real approval and revision guards. No PPTX file is written.',
     format: 'PPTX',
     extra: 'pptx slides deck metric presentation',
   },
   pdf: {
     title: 'Rotate a PDF review page',
-    description: 'Inspect review-packet.pdf, rotate page two by 90°, and verify the page content is otherwise unchanged.',
+    description: 'Simulate a page rotation with real approval and revision guards. No PDF file is written or rendered.',
     format: 'PDF',
     extra: 'pdf page rotate packet',
   },

@@ -8,10 +8,8 @@ import {
   CHART_TYPES,
   specsFromFileCharts,
   type ChartType,
-  type FileChartAnchor,
-  type FileChartInfo,
 } from '@injoffice/charts'
-import top100 from './top100Workbook.json'
+import { createEditorWorkbook, EDITOR_CHARTS, EDITOR_CHART_ANCHORS, EDITOR_OVERVIEW_SHEET_ID, EDITOR_SAMPLE_DISCLOSURE } from './editorWorkbook'
 import { PivotManager, PivotPanel } from '@injoffice/pivots'
 import { ShapeManager, ShapeFloat, SHAPE_COMPONENT_KEY, SHAPE_KINDS, type ShapeKind } from '@injoffice/shapes'
 import { ConnectorManager, DataPanel, jsonToGrid, csvToGrid, type ConnectorSource } from '@injoffice/connectors'
@@ -40,18 +38,6 @@ async function playgroundFetchSource(source: ConnectorSource): Promise<unknown[]
   if (!res.ok) throw new Error(`fetch failed (${res.status})`)
   if (source.format === 'csv') return csvToGrid(await res.text())
   return jsonToGrid(await res.json(), source.path)
-}
-
-function workbookCellData() {
-  const cellData: Record<number, Record<number, { v?: string | number; f?: string }>> = {}
-  for (const [row, cols] of Object.entries(top100.cellData)) {
-    const next: Record<number, { v?: string | number; f?: string }> = {}
-    for (const [col, cell] of Object.entries(cols)) {
-      next[Number(col)] = cell as { v?: string | number; f?: string }
-    }
-    cellData[Number(row)] = next
-  }
-  return cellData
 }
 
 export interface UniverEditorProps {
@@ -83,6 +69,7 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
   const [shapeKind, setShapeKind] = useState<ShapeKind>('rect')
   const [type, setType] = useState<ChartType>('column')
   const [ready, setReady] = useState(false)
+  const [activeSheetId, setActiveSheetId] = useState(EDITOR_OVERVIEW_SHEET_ID)
   const chartTypeRef = useRef(type)
   const shapeKindRef = useRef(shapeKind)
   chartTypeRef.current = type
@@ -101,25 +88,10 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
       darkMode: univerDarkMode(),
     })
     const unbindScheme = bindUniverColorScheme(univerAPI)
-    univerAPI.createWorkbook({
-      id: 'wb1',
-      name: 'top_100_companies.xlsx',
-      sheets: {
-        [top100.sheetId]: {
-          id: top100.sheetId,
-          name: top100.sheetName,
-          cellData: workbookCellData(),
-          columnData: {
-            0: { w: 72 },
-            1: { w: 220 },
-            2: { w: 88 },
-            3: { w: 160 },
-            4: { w: 140 },
-            5: { w: 140 },
-            6: { w: 120 },
-          },
-        },
-      },
+    univerAPI.createWorkbook(createEditorWorkbook())
+    setActiveSheetId(EDITOR_OVERVIEW_SHEET_ID)
+    const activeSheetHook = univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, ({ activeSheet }) => {
+      setActiveSheetId(activeSheet.getSheetId())
     })
     univerAPI.registerComponent(CHART_COMPONENT_KEY, ChartFloat)
     univerAPI.registerComponent(SHAPE_COMPONENT_KEY, ShapeFloat)
@@ -192,8 +164,8 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
       const sheetIdByName: Record<string, string> = {}
       for (const sh of sheets) sheetIdByName[sh.getSheetName()] = sh.getSheetId()
       const { conversions, skipped } = specsFromFileCharts(
-        top100.charts as FileChartInfo[],
-        top100.anchors as Record<string, FileChartAnchor>,
+        EDITOR_CHARTS,
+        EDITOR_CHART_ANCHORS,
         sheetIdByName,
       )
       for (const conversion of conversions) manager.add(conversion.spec, conversion.cellAnchor)
@@ -219,6 +191,7 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
     return () => {
       cancelled = true
       renderedHook.dispose()
+      activeSheetHook.dispose()
       unbindScheme()
       manager.stop()
       pivots.stop()
@@ -356,7 +329,7 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
             Group columns
           </button>
         </div>
-        <span className="univer-toolbar__status">Edit in Univer · file round trips use the local Go sidecar</span>
+        <span className="univer-toolbar__status">{EDITOR_SAMPLE_DISCLOSURE}</span>
       </div>
       <div className="split">
         <div ref={containerRef} className="split-main" />
@@ -369,7 +342,7 @@ export default function UniverEditor({ features, insertFeatures }: UniverEditorP
               sparkline={sparklineRef.current}
               outline={outlineRef.current}
               shapes={shapesRef.current}
-              sheetId={top100.sheetId}
+              sheetId={activeSheetId}
             />
           </aside>
         )}

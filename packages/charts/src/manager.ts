@@ -325,6 +325,9 @@ export class ChartManager {
     const rows = ref.endRow - ref.startRow + 1
     const cols = ref.endColumn - ref.startColumn + 1
     if (rows <= 0 || cols <= 0) return []
-    return sheet.getRange(ref.startRow, ref.startColumn, rows, cols).getValues()
+    const range = sheet.getRange(ref.startRow, ref.startColumn, rows, cols)
+    // Univer's getValues() includes display formats (e.g. "$1,250.00").
+    // Charts need the underlying numeric values, with a fallback for older hosts.
+    return typeof range.getRawValues === 'function' ? range.getRawValues() : range.getValues()
   }
 }

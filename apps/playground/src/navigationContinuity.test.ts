@@ -14,12 +14,34 @@ describe('playground navigation continuity', () => {
     expect(appSource).toContain('<DemoComponent key={`${demo.surface}:${agentTool?.tool ?? \'page\'}:${revision}`} />')
     expect(appSource).not.toContain('DEMOS.map((item) => (')
     expect(appSource).not.toContain('className="demo-stage-placeholder"')
-    expect(appSource).toContain('setHashTick')
+    expect(appSource).toContain('createRouteLoader')
+    expect(appSource).toContain('startTransition(() => setRoute(next))')
+    expect(appSource).toContain('aria-busy={isRoutePending}')
+    expect(appSource).toContain('routeLoader.cancel()')
     expect(appSource).not.toContain('isDocsHash')
     expect(appSource).not.toContain('isDesignSystemHash')
     expect(appSource).not.toContain('#/guides')
     expect(appSource).not.toContain('#/design-system')
-    expect(appSource).toContain('/logo.svg')
+    expect(appSource).toContain('`${import.meta.env.BASE_URL}logo.svg`')
+  })
+
+  it('offers recoverable chunk errors without unmounting the current page', () => {
+    expect(appSource).toContain('className="route-error" role="alert"')
+    expect(appSource).toContain('routeLoader.load(routeError)')
+    expect(appSource).not.toContain('preloadDemo(nextSurface).finally')
+    expect(appSource.indexOf('<Suspense fallback=')).toBeLessThan(appSource.indexOf("{surface === 'overview' || !demo"))
+  })
+
+  it('makes walkthroughs discoverable and resets the drawer for each AI format', () => {
+    expect(appSource).toContain('Guide &amp; source')
+    expect(appSource).toContain('key={drawerKey}')
+    expect(appSource).toContain('`agent:${parseAgentTool(hash)}`')
+    expect(overviewSource).toContain('readShowcasePreferences()')
+    expect(overviewSource).toContain('persistShowcasePreferences({ query, task, format })')
+  })
+
+  it('clears the desktop sidebar basis when navigation becomes a mobile row', () => {
+    expect(styles).toMatch(/@media \(max-width: 760px\)[\s\S]*?\.app-sidebar \{[^}]*flex: 0 0 auto;/)
   })
 
   it('warms route chunks for pointer and keyboard navigation intent', () => {

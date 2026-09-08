@@ -2,6 +2,7 @@ import type { FUniver } from '@univerjs/core/lib/facade'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChartManager } from './manager'
 import type { ChartSpec } from './types'
+import { getChartOption } from './registry'
 
 const A: ChartSpec = {
   id: 'ca',
@@ -60,6 +61,21 @@ describe('ChartManager range-aware invalidation', () => {
   })
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('charts underlying numbers when the host also returns formatted display values', () => {
+    const getValues = vi.fn(() => [['Company', 'USD billions'], ['Sample', '$5,331.0bn']])
+    const getRawValues = vi.fn(() => [['Company', 'USD billions'], ['Sample', 5331]])
+    const api = { getActiveWorkbook: () => ({ getSheetBySheetId: () => ({
+      getRange: () => ({ getValues, getRawValues }),
+      addFloatDomToPosition: () => ({ id: 'raw-chart', dispose: () => {} }),
+    }) }) } as unknown as FUniver
+    const manager = new ChartManager(api)
+    expect(manager.add(A)).toBe(true)
+    expect(getRawValues).toHaveBeenCalled()
+    expect(getValues).not.toHaveBeenCalled()
+    expect(getChartOption(A.id)?.series).toEqual(expect.arrayContaining([expect.objectContaining({ data: [5331] })]))
+    manager.stop()
   })
 
   it('refreshes only the chart whose source intersects the edited cells', () => {

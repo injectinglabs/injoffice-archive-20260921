@@ -32,6 +32,7 @@ export type AgentCommitReceipt = {
   operationIds: string[]
   evidence: string[]
   verification: AgentVerificationResult
+  content?: Record<string, unknown>
 }
 export type AgentVerification = { ok: boolean; revision: string; fingerprint: string; evidence: string[] }
 
@@ -55,13 +56,11 @@ export interface AgentDemoSession {
 const WRITE_OPERATIONS: Record<AgentDemoFormat, Array<{ name: string; description: string; destructive?: boolean }>> = {
   xlsx: [
     { name: 'xlsx.cell.set_value', description: 'Set one cell value using a stable sheet id and zero-based cell coordinates.' },
-    { name: 'xlsx.cell.set_formula', description: 'Set one cell formula using the guarded native mutation protocol.' },
   ],
   docx: [{ name: 'docx.text.replace', description: 'Replace one guarded native text target.' }],
   pptx: [{ name: 'pptx.authored.slide.update', description: 'Update one stable slide in an authored deck.' }],
   pdf: [
     { name: 'pdf.page.rotate', description: 'Rotate one or more bounded PDF pages.' },
-    { name: 'pdf.page.delete', description: 'Delete bounded pages from the source PDF.', destructive: true },
   ],
 }
 
@@ -153,7 +152,8 @@ function createDocumentShapedDemoAdapter(format: AgentDemoFormat): AgentArtifact
     { name: `${format}.inspect`, description: `Inspect bounded ${format.toUpperCase()} document data.`, inputSchema: EMPTY_OBJECT_SCHEMA },
     ...WRITE_OPERATIONS[format].map((item) => ({
       name: item.name, description: item.description, inputSchema: EMPTY_OBJECT_SCHEMA,
-      ...(item.destructive ? { destructive: true, requiresConfirmation: true } : {}),
+      requiresConfirmation: true,
+      ...(item.destructive ? { destructive: true } : {}),
     })),
   ]
   return {
@@ -191,7 +191,7 @@ function createDocumentShapedDemoAdapter(format: AgentDemoFormat): AgentArtifact
       const identityMatches = stage === 'planned' || Boolean(commit && commit.identity.fingerprint === artifactIdentity(artifact).fingerprint)
       const checks = [
         { name: 'all-operations-supported', passed: invalid.length === 0, message: invalid.length ? 'One or more operations are unsupported.' : 'Every operation is advertised by the adapter.' },
-        { name: stage === 'planned' ? 'preview-isolated' : 'replacement-reopened', passed: identityMatches, message: stage === 'planned' ? 'The source artifact remains authoritative.' : 'The replacement fingerprint matches the commit receipt.' },
+        { name: stage === 'planned' ? 'preview-isolated' : 'simulation-identity-matched', passed: identityMatches, message: stage === 'planned' ? 'The simulated source remains unchanged.' : 'The simulated document fingerprint matches the receipt; no Office file was written or reopened.' },
       ]
       return { verified: checks.every((check) => check.passed), checks, issues: invalid.map((operation) => refusal(artifact.format, operation)) }
     },
@@ -212,14 +212,14 @@ function createDocumentShapedDemoAdapter(format: AgentDemoFormat): AgentArtifact
 }
 
 /**
- * Tiny UI facade over @injoffice/agent-tools. Only the model proposal is
- * deterministic simulation; createAgentSession owns limits, immutable plans,
+ * UI facade over @injoffice/agent-tools. The default adapter and proposal are
+ * simulations; callers can supply a real-file adapter. The core owns limits, immutable plans,
  * revision/fingerprint guards, confirmation, idempotency, and verification.
  */
-function createAgentDemoSession(artifact: AgentDemoArtifact): AgentDemoSession {
+export function createAgentDemoSession(artifact: AgentDemoArtifact, adapter: AgentArtifactAdapter<AgentDemoArtifact> = createDocumentShapedDemoAdapter(artifact.format)): AgentDemoSession {
   const coreSession = createAgentSession({
     artifact,
-    adapter: createDocumentShapedDemoAdapter(artifact.format),
+    adapter,
     actor: { id: 'agent-local-analyst', kind: 'agent', displayName: 'Local analyst' },
     limits: { maxReadItems: 20, maxReadBytes: 16_000, maxOperations: 8, maxOperationBytes: 8_000 },
     confirmDestructive: async ({ confirmation }) => confirmation === 'approved',
@@ -276,6 +276,7 @@ function createAgentDemoSession(artifact: AgentDemoArtifact): AgentDemoSession {
             operationIds: changeSet.envelope.operations.map((operation) => operation.operationId),
             evidence: result.evidence?.map((item) => item.description ?? item.kind) ?? [],
             verification: result.verification,
+            ...(result.data && typeof result.data === 'object' && !Array.isArray(result.data) ? { content: result.data as Record<string, unknown> } : {}),
           }
         },
         async verify(receipt) {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DEMO_FORMATS,
   DEMOS,
@@ -9,6 +9,7 @@ import {
 } from '../demoRegistry'
 import { filterShowcaseItems, showcaseItems } from '../showcaseCatalog'
 import { surfaceHref } from '../route'
+import { persistShowcasePreferences, readShowcasePreferences } from '../showcasePreferences'
 
 const ALL_TASKS = 'All tasks' as const
 const ALL_FORMATS = 'All formats' as const
@@ -18,9 +19,11 @@ function FilterButton<T extends string>({ value, selected, onSelect }: { value: 
 }
 
 export default function OverviewPage({ sidecar }: { sidecar: 'checking' | 'connected' | 'offline' }) {
-  const [query, setQuery] = useState('')
-  const [task, setTask] = useState<DemoTask | typeof ALL_TASKS>(ALL_TASKS)
-  const [format, setFormat] = useState<DemoFormat | typeof ALL_FORMATS>(ALL_FORMATS)
+  const [initialFilters] = useState(() => readShowcasePreferences())
+  const [query, setQuery] = useState(initialFilters.query)
+  const [task, setTask] = useState<DemoTask | typeof ALL_TASKS>(initialFilters.task)
+  const [format, setFormat] = useState<DemoFormat | typeof ALL_FORMATS>(initialFilters.format)
+  useEffect(() => { persistShowcasePreferences({ query, task, format }) }, [query, task, format])
   const warmSheets = () => { preloadDemoOnIntent('sheets') }
   const runtimeLabel = sidecar === 'checking'
     ? 'Browser engines ready · checking optional server'

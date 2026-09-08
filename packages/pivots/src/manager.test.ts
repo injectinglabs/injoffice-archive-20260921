@@ -9,6 +9,21 @@ const GRID = [
   ['East', 35],
 ]
 
+it('aggregates raw numbers instead of formatted currency strings', () => {
+  const getValues = vi.fn(() => [['Region', 'Sales'], ['West', '$20.00'], ['West', '$35.00']])
+  const getRawValues = vi.fn(() => [['Region', 'Sales'], ['West', 20], ['West', 35]])
+  const setValues = vi.fn()
+  const api = { getActiveWorkbook: () => ({ getSheetBySheetId: () => ({
+    getRange: () => ({ getValues, getRawValues, setValues }),
+  }) }) } as unknown as FUniver
+  const manager = new PivotManager(api)
+  expect(manager.add(P1)).toBe(true)
+  expect(getRawValues).toHaveBeenCalled()
+  expect(getValues).not.toHaveBeenCalled()
+  expect(setValues.mock.calls[0][0].flat().some((cell: { v?: unknown }) => cell.v === 55)).toBe(true)
+  manager.stop()
+})
+
 const P1: PivotSpec = {
   id: 'p1',
   source: { sheetId: 's1', startRow: 0, startColumn: 0, endRow: 2, endColumn: 1 },

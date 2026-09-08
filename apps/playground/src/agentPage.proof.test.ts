@@ -11,7 +11,10 @@ describe('agent workflow page proof', () => {
   it('is routable, discoverable, and provider independent', () => {
     expect(parseSurface('#/agent')).toBe('agent')
     expect(DEMOS.find((demo) => demo.surface === 'agent')).toMatchObject({ packageName: '@injoffice/agent-tools', runtime: 'Browser' })
-    expect(page).toContain('no model SDK or network request')
+    expect(page).toContain('no model service')
+    expect(page).toContain('Lifecycle simulation')
+    expect(page).toContain('not Office file bytes')
+    expect(page).toContain('data-agent-download')
     expect(page).toContain('Run agent')
     expect(page).toContain('office.inspect')
     expect(page).toContain('office.plan')

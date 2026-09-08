@@ -44,6 +44,20 @@ jobs:
         run: npm run test:wasm-tarball-browser
       - name: Browser-local XLSX, DOCX, and PPTX extract/apply smoke
         run: npm run test:office-browser-smoke:built
+      - name: Showcase navigation, accessibility, and AI workflows
+        timeout-minutes: 5
+        env:
+          SHOWCASE_OUTPUT: artifacts/showcase-browser
+        run: |
+          node --test scripts/showcase-smoke-server.test.mjs
+          npm run test:showcase-browser -- --built
+      - name: Upload showcase browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: showcase-browser
+          path: artifacts/showcase-browser
+          if-no-files-found: ignore
       - run: npm run test
       - run: npm run check:office-architecture
       - run: npm run check:office-provenance

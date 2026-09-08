@@ -46,7 +46,7 @@ export const AGENT_TOOLS = [
     fileType: 'XLSX',
     label: 'Sheets',
     title: 'AI change sets · Sheets',
-    description: 'Inspect a workbook, propose one cell write, preview the isolated change, and verify the replacement revision. No model SDK or network request.',
+    description: 'Review a proposed Security status change in a real XLSX, approve the native write, reopen the exact output, and download the verified file. No model service or file upload.',
   },
   {
     tool: 'docs',
@@ -54,7 +54,7 @@ export const AGENT_TOOLS = [
     fileType: 'DOCX',
     label: 'Docs',
     title: 'AI change sets · Docs',
-    description: 'Inspect a document, replace one guarded paragraph, preview the isolated change, and verify the replacement revision. No model SDK or network request.',
+    description: 'Explore approval and revision guards with a simulated document edit. This lifecycle example uses document-shaped data, not DOCX bytes. No model service.',
   },
   {
     tool: 'slides',
@@ -62,7 +62,7 @@ export const AGENT_TOOLS = [
     fileType: 'PPTX',
     label: 'Slides',
     title: 'AI change sets · Slides',
-    description: 'Inspect a deck, update one stable metric shape, preview the isolated change, and verify the replacement revision. No model SDK or network request.',
+    description: 'Explore approval and revision guards with a simulated slide update. This lifecycle example uses document-shaped data, not PPTX bytes. No model service.',
   },
   {
     tool: 'pdf',
@@ -70,7 +70,7 @@ export const AGENT_TOOLS = [
     fileType: 'PDF',
     label: 'PDF',
     title: 'AI change sets · PDF',
-    description: 'Inspect a PDF, rotate one page, preview the isolated change, and verify the replacement revision. No model SDK or network request.',
+    description: 'Explore approval and revision guards with a simulated page rotation. This lifecycle example uses document-shaped data, not PDF bytes. No model service.',
   },
 ] as const
 export type AgentTool = (typeof AGENT_TOOLS)[number]['tool']

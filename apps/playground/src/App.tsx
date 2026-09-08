@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type MouseEvent, type RefObject } from 'react'
 import {
   applyColorScheme,
   currentColorScheme,
@@ -13,6 +13,7 @@ import { DEMO_BY_SURFACE, DEMO_GROUPS, DEMOS, preloadDemo, preloadDemoOnIntent, 
 import OverviewPage from './pages/OverviewPage'
 import { agentHref, parseAgentTool, parseSurface, surfaceHref, AGENT_TOOLS, type Surface } from './route'
 import { surfaceSectionId } from './scrollSpy'
+import { createRouteLoader } from './routeLoader'
 
 type SidecarState = 'checking' | 'connected' | 'offline'
 
@@ -22,13 +23,13 @@ function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
 }
 
-function ToolNavigation({ surface }: { surface: Surface }) {
+function ToolNavigation({ surface, hash }: { surface: Surface; hash: string }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (isModifiedClick(event)) return
     const href = event.currentTarget.getAttribute('href')
     if (href && location.hash === href) event.preventDefault()
   }
-  const agentTool = surface === 'agent' ? parseAgentTool() : undefined
+  const agentTool = surface === 'agent' ? parseAgentTool(hash) : undefined
   return (
     <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
       {DEMO_GROUPS.map((group) => (
@@ -101,7 +102,7 @@ function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; schem
     <header className="app-header">
       <div className="app-header-inner">
         <a className="app-brand" href={surfaceHref('overview')} aria-label="InjOffice overview">
-          <img className="app-logo" src="/logo.svg" alt="" width={32} height={32} />
+          <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={32} height={32} />
           <span><strong>InjOffice</strong></span>
         </a>
         <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
@@ -183,7 +184,7 @@ function SourceProofDrawer({
         <header>
           <div>
             <span>{demo.packageName}</span>
-            <h2 id="source-proof-title">Source &amp; proof</h2>
+            <h2 id="source-proof-title">Guide &amp; source</h2>
           </div>
           <button ref={closeRef} className="source-proof-close" type="button" aria-label="Close source and proof" onClick={onClose}>×</button>
         </header>
@@ -203,16 +204,18 @@ function DemoSection({
   proofOpen,
   onOpenProof,
   proofButtonRef,
+  hash,
 }: {
   demo: DemoDefinition
   sidecar: SidecarState
   proofOpen: boolean
   onOpenProof: () => void
   proofButtonRef: RefObject<HTMLButtonElement | null>
+  hash: string
 }) {
   const [revision, setRevision] = useState(0)
   const DemoComponent = demo.component
-  const agentTool = demo.surface === 'agent' ? AGENT_TOOLS.find((item) => item.tool === parseAgentTool()) : undefined
+  const agentTool = demo.surface === 'agent' ? AGENT_TOOLS.find((item) => item.tool === parseAgentTool(hash)) : undefined
   const title = agentTool?.title ?? demo.title
   const description = agentTool?.description ?? demo.description
   return (
@@ -254,7 +257,7 @@ function DemoSection({
             aria-controls="source-proof-drawer"
             onClick={onOpenProof}
           >
-            Source
+            Guide &amp; source
           </button>
           <a className="demo-back" href={surfaceHref('overview')}>Back</a>
         </div>
@@ -265,9 +268,7 @@ function DemoSection({
           <RuntimePill demo={demo} sidecar={sidecar} />
         </header>
         <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`}>
-          <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
-            <DemoComponent key={`${demo.surface}:${agentTool?.tool ?? 'page'}:${revision}`} />
-          </Suspense>
+          <DemoComponent key={`${demo.surface}:${agentTool?.tool ?? 'page'}:${revision}`} />
         </div>
       </section>
     </article>
@@ -275,48 +276,61 @@ function DemoSection({
 }
 
 export default function App() {
-  const [surface, setSurface] = useState<Surface>(() => parseSurface())
+  // Start with a usable catalogue, including when a deep-link chunk is offline.
+  const [route, setRoute] = useState({ surface: 'overview' as Surface, hash: surfaceHref('overview') })
+  const { surface, hash } = route
   const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [isRoutePending, setIsRoutePending] = useState(false)
-  const [, setHashTick] = useState(0)
+  const [pendingRoute, setPendingRoute] = useState<typeof route | null>(null)
+  const [routeError, setRouteError] = useState<typeof route | null>(null)
+  const [isTransitionPending, startTransition] = useTransition()
+  const isRoutePending = pendingRoute !== null || isTransitionPending
   const detailsButtonRef = useRef<HTMLButtonElement>(null)
-  const surfaceRef = useRef(surface)
-  const previousSurfaceRef = useRef(surface)
+  const previousHashRef = useRef(hash)
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
   const demo = useMemo(() => surface === 'overview' ? undefined : DEMO_BY_SURFACE.get(surface), [surface])
-  const requestedTitle = surface === 'overview' ? 'Overview' : demo?.title
+  const requestedSurface = pendingRoute?.surface ?? surface
+  const requestedTitle = requestedSurface === 'overview' ? 'Overview' : DEMO_BY_SURFACE.get(requestedSurface)?.title
+  const drawerKey = surface === 'agent' ? `agent:${parseAgentTool(hash)}` : surface
+  const routeLoader = useMemo(() => createRouteLoader<typeof route>({
+    preload: (next) => preloadDemo(next.surface),
+    pending: (next) => {
+      setDetailsOpen(false)
+      setRouteError(null)
+      setPendingRoute(next)
+    },
+    ready: (next) => {
+      setPendingRoute(null)
+      // The shared Suspense boundary retains the prior editor while React
+      // resolves the warmed lazy component; no blank intermediate stage.
+      startTransition(() => setRoute(next))
+    },
+    failed: (next) => {
+      setPendingRoute(null)
+      setRouteError(next)
+    },
+  }), [])
 
   useEffect(() => {
-    surfaceRef.current = surface
-  }, [surface])
-
-  useEffect(() => {
-    if (previousSurfaceRef.current === surface) return
-    previousSurfaceRef.current = surface
+    if (previousHashRef.current === hash) return
+    previousHashRef.current = hash
     document.querySelector<HTMLElement>('.tool-nav a[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
     document.querySelector<HTMLElement>(`#${surfaceSectionId(surface)} h1, #showcase-title`)?.focus({ preventScroll: true })
-  }, [surface])
+  }, [surface, hash])
 
   useEffect(() => {
     const sync = () => {
-      setHashTick((tick) => tick + 1)
-      const nextSurface = parseSurface()
-      preloadDemoOnIntent(nextSurface)
-      if (nextSurface === surfaceRef.current) return
-      surfaceRef.current = nextSurface
-      setDetailsOpen(false)
-      if (nextSurface !== 'overview') {
-        setIsRoutePending(true)
-        void preloadDemo(nextSurface).finally(() => setIsRoutePending(false))
-      }
-      setSurface(nextSurface)
+      void routeLoader.load({ surface: parseSurface(), hash: location.hash })
     }
     window.addEventListener('hashchange', sync)
     if (!location.hash) location.hash = surfaceHref('overview')
-    return () => window.removeEventListener('hashchange', sync)
-  }, [])
+    sync()
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      routeLoader.cancel()
+    }
+  }, [routeLoader])
 
   useEffect(() => {
     applyColorScheme(scheme)
@@ -356,13 +370,19 @@ export default function App() {
       <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
-        <ToolNavigation surface={surface} />
+        <ToolNavigation surface={surface} hash={hash} />
       </aside>
-      <main className="app-main" id="main-content" data-workbench-surface={surface}>
+      <main className="app-main" id="main-content" data-workbench-surface={surface} aria-busy={isRoutePending}>
         <div className="route-progress" data-active={isRoutePending ? 'true' : undefined} aria-hidden="true"><i /></div>
         <span className="visually-hidden" role="status" aria-live="polite">
           {isRoutePending && requestedTitle ? `Opening ${requestedTitle}…` : ''}
         </span>
+        {routeError ? <div className="route-error" role="alert">
+          <p>Could not open {routeError.surface === 'overview' ? 'Overview' : DEMO_BY_SURFACE.get(routeError.surface)?.title}. Your current demo is still available. Check your connection and retry; if the demo was just updated, reload this page.</p>
+          <button type="button" onClick={() => { void routeLoader.load(routeError) }}>Retry</button>
+          <a href={surfaceHref('overview')}>Back to showcase</a>
+        </div> : null}
+        <Suspense fallback={<div className="demo-loading" role="status">Opening demo…</div>}>
         {surface === 'overview' || !demo ? (
           <OverviewPage sidecar={sidecar} />
         ) : (
@@ -372,9 +392,11 @@ export default function App() {
             proofOpen={detailsOpen}
             onOpenProof={() => setDetailsOpen(true)}
             proofButtonRef={detailsButtonRef}
+            hash={hash}
           />
         )}
-        {demo ? <SourceProofDrawer key={demo.surface} demo={demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
+        </Suspense>
+        {demo ? <SourceProofDrawer key={drawerKey} demo={demo} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
       </main>
       </div>
     </div>

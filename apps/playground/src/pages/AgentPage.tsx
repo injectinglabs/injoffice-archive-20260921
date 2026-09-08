@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createDemoSessionInput,
   type AgentCapability,
@@ -11,6 +11,8 @@ import {
   type AgentVerification,
 } from '../agentDemoRuntime'
 import { createAgentDemoScenario, type AgentDemoFormat, type AgentDemoMode } from '../agentDemoScenario'
+import { AGENT_XLSX_NAME, createNativeAgentSessionInput } from '../agentXlsxDemo'
+import { createBrowserXlsxRoundTripRuntime } from '../xlsxRoundTripRuntime'
 import { AGENT_TOOLS, agentFormatFromTool, agentHref, parseAgentTool, type AgentTool } from '../route'
 import { DsButton, DsCallout, DsChip, DsSegment } from '../design-system/primitives'
 import '../design-system/live-tools.css'
@@ -21,6 +23,7 @@ type AgentToolName = 'office.capabilities' | 'office.inspect' | 'office.plan' | 
 
 const STEPS: WorkflowStep[] = ['Inspect', 'Plan', 'Preview + diff', 'Validate', 'Approve', 'Commit', 'Verify']
 const AGENT_TOOL_METHODS: AgentToolName[] = ['office.capabilities', 'office.inspect', 'office.plan', 'office.preview', 'office.diff', 'office.validate', 'office.commit', 'office.verify']
+type SessionInput = ReturnType<typeof createDemoSessionInput> & { dispose?: () => void; download?: () => Blob | null }
 
 function stepState(step: WorkflowStep, state: WorkflowState): 'done' | 'active' | 'waiting' | 'refused' {
   const progress: Record<WorkflowState, number> = {
@@ -42,10 +45,11 @@ function stepState(step: WorkflowStep, state: WorkflowState): 'done' | 'active' 
 function SheetArtifact({ content, highlighted }: { content: Record<string, unknown>; highlighted: boolean }) {
   const headers = content.headers as string[]
   const rows = content.rows as Array<Array<string | number>>
+  const changed = content.changedCell as { row: number; column: number } | undefined
   return (
     <table className="agent-artifact__sheet ds-table">
       <thead><tr><th aria-label="Row number" />{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
-      <tbody>{rows.map((row, rowIndex) => <tr key={String(row[0])}><th>{rowIndex + 2}</th>{row.map((cell, cellIndex) => <td className={highlighted && rowIndex === 3 && cellIndex === 3 ? 'agent-artifact__changed' : undefined} key={`${rowIndex}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody>
+      <tbody>{rows.map((row, rowIndex) => <tr key={String(row[0])}><th>{rowIndex + 2}</th>{row.map((cell, cellIndex) => <td className={highlighted && rowIndex === (changed?.row ?? 3) && cellIndex === (changed?.column ?? 3) ? 'agent-artifact__changed' : undefined} key={`${rowIndex}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody>
     </table>
   )
 }
@@ -93,6 +97,15 @@ function ArtifactView({ format, content, highlighted }: { format: AgentDemoForma
 export default function AgentPage() {
   const [, setRouteTick] = useState(0)
   const tool = parseAgentTool()
+  useEffect(() => {
+    const syncTool = () => setRouteTick((tick) => tick + 1)
+    window.addEventListener('hashchange', syncTool)
+    return () => window.removeEventListener('hashchange', syncTool)
+  }, [])
+  return <AgentWorkflow key={tool} tool={tool} />
+}
+
+function AgentWorkflow({ tool }: { tool: AgentTool }) {
   const format: AgentDemoFormat = agentFormatFromTool(tool)
   const [mode, setMode] = useState<AgentDemoMode>('safe')
   const [state, setState] = useState<WorkflowState>('ready')
@@ -107,11 +120,24 @@ export default function AgentPage() {
   const [verification, setVerification] = useState<AgentVerification | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [toolLog, setToolLog] = useState<AgentToolName[]>([])
-  const scenario = useMemo(() => createAgentDemoScenario(format, mode), [format, mode])
+  const [sessionInput, setSessionInput] = useState<SessionInput | null>(null)
+  const [reload, setReload] = useState(0)
+  const [downloadURL, setDownloadURL] = useState('')
+  const generation = useRef(0)
+  const fallbackScenario = useMemo(() => {
+    const sample = createAgentDemoScenario(format, mode)
+    if (format !== 'xlsx') return sample
+    return { ...sample, artifact: { ...sample.artifact, name: AGENT_XLSX_NAME, revision: 'Not loaded' },
+      prompt: mode === 'safe' ? 'Mark Security as Ready after the approved pen-test review.' : 'Execute an unsupported workbook macro.',
+      summary: 'Load the real workbook to inspect the exact source and proposed change.',
+    }
+  }, [format, mode])
+  const scenario = sessionInput?.scenario ?? fallbackScenario
   const toolMeta = AGENT_TOOLS.find((item) => item.tool === tool) ?? AGENT_TOOLS[0]
   const markTool = (name: AgentToolName) => setToolLog((log) => log.includes(name) ? log : [...log, name])
 
   const reset = () => {
+    generation.current += 1
     setState('ready')
     setApproved(false)
     setInspection(null)
@@ -126,39 +152,71 @@ export default function AgentPage() {
   }
 
   useEffect(() => {
-    const syncTool = () => setRouteTick((tick) => tick + 1)
-    window.addEventListener('hashchange', syncTool)
-    return () => window.removeEventListener('hashchange', syncTool)
-  }, [])
+    const blob = verification?.ok ? sessionInput?.download?.() : null
+    if (!blob) { setDownloadURL(''); return }
+    const url = URL.createObjectURL(blob)
+    setDownloadURL(url)
+    return () => URL.revokeObjectURL(url)
+  }, [verification, sessionInput])
 
   useEffect(() => {
     reset()
-    const { session } = createDemoSessionInput(format, mode)
-    void session.capabilities().then((report) => setCapabilities(report.operations)).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : String(reason))
-      setState('error')
-    })
-  }, [format, mode])
+    setSessionInput(null)
+    setCapabilities([])
+    let cancelled = false
+    let loaded: SessionInput | undefined
+    const runtime = format === 'xlsx' ? createBrowserXlsxRoundTripRuntime() : undefined
+    const initialize = async () => {
+      try {
+        loaded = runtime ? await createNativeAgentSessionInput(mode, runtime) : createDemoSessionInput(format, mode)
+        if (cancelled) { loaded.dispose?.(); return }
+        const report = await loaded.session.capabilities()
+        if (cancelled) return
+        setSessionInput(loaded)
+        setCapabilities(report.operations)
+      } catch (reason: unknown) {
+        if (cancelled) return
+        setError(reason instanceof Error ? reason.message : String(reason))
+        setState('error')
+      }
+    }
+    void initialize()
+    return () => { cancelled = true; generation.current += 1; loaded?.dispose?.(); runtime?.terminate() }
+  }, [format, mode, reload])
 
   const selectTool = (next: AgentTool) => {
     if (parseAgentTool() !== next) window.location.hash = agentHref(next)
   }
 
-  const prepare = async () => {
+  const reloadSample = () => { reset(); setSessionInput(null); setReload((value) => value + 1) }
+  const selectMode = (next: AgentDemoMode) => {
+    if (next === mode) return
     reset()
+    setSessionInput(null)
+    setMode(next)
+  }
+
+  const prepare = async () => {
+    if (!sessionInput) return
+    reset()
+    const run = generation.current
     setState('preparing')
     try {
-      const { session, operations } = createDemoSessionInput(format, mode)
+      const { session, operations } = sessionInput
       const report = await session.capabilities()
+      if (run !== generation.current) return
       markTool('office.capabilities')
       setCapabilities(report.operations)
-      const inspected = await session.inspect({ selection: format === 'xlsx' ? 'sheet-forecast!A1:D5' : 'document', maxItems: 20, maxBytes: 16_000 })
+      const inspected = await session.inspect({ selection: format === 'xlsx' ? 'A1:F8' : 'document', maxItems: 20, maxBytes: 16_000 })
+      if (run !== generation.current) return
       markTool('office.inspect')
       setInspection(inspected)
       const planned = await session.plan(operations, { expectedRevision: inspected.revision })
+      if (run !== generation.current) return
       markTool('office.plan')
       setChangeSet(planned)
       const [nextPreview, nextDiff, nextValidation] = await Promise.all([planned.preview(), planned.diff(), planned.validate()])
+      if (run !== generation.current) return
       markTool('office.preview')
       markTool('office.diff')
       markTool('office.validate')
@@ -167,6 +225,7 @@ export default function AgentPage() {
       setValidation(nextValidation)
       setState(nextValidation.ok ? 'awaiting-approval' : 'refused')
     } catch (reason: unknown) {
+      if (run !== generation.current) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setState('error')
     }
@@ -176,27 +235,32 @@ export default function AgentPage() {
     if (!changeSet || !inspection || !approved || !validation?.ok) return
     setState('committing')
     setError(null)
+    const run = generation.current
     try {
       const nextReceipt = await changeSet.commit({
         expectedRevision: inspection.revision,
         idempotencyKey: `demo-${changeSet.id}`,
         confirmation: 'approved',
       })
+      if (run !== generation.current) return
       markTool('office.commit')
       setReceipt(nextReceipt)
       const nextVerification = await changeSet.verify(nextReceipt)
+      if (run !== generation.current) return
       markTool('office.verify')
       setVerification(nextVerification)
       setState(nextVerification.ok ? 'verified' : 'error')
       if (!nextVerification.ok) setError('The committed output did not match its receipt.')
     } catch (reason: unknown) {
+      if (run !== generation.current) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setState('error')
     }
   }
 
   const shownArtifact = preview?.artifact ?? scenario.artifact
-  const status = state === 'ready'
+  const shownContent = verification?.ok && receipt?.content ? receipt.content : shownArtifact.content
+  const status = !sessionInput && state !== 'error' ? 'Loading the bundled sample and browser engine…' : state === 'ready'
     ? 'Ready to inspect a bounded document selection.'
     : state === 'preparing'
       ? 'Inspecting and validating the proposed operations.'
@@ -208,7 +272,10 @@ export default function AgentPage() {
             ? 'Applying the approved change set atomically.'
             : state === 'verified'
               ? `Verified ${receipt?.revision}. The output matches its receipt.`
-              : 'The workflow stopped without changing the source.'
+              : 'The workflow stopped. See the error details below; reload the sample to try again.'
+  const boundary = format === 'xlsx'
+    ? 'Real XLSX file · deterministic proposal · native browser write and exact-byte reopen · no model service or file upload'
+    : 'Lifecycle simulation · document-shaped sample data, not Office file bytes · real approval and revision guards · no model service'
 
   return (
     <div className="ds">
@@ -223,20 +290,20 @@ export default function AgentPage() {
         <DsSegment
           label="Proposal type"
           value={mode}
-          onChange={(id) => setMode(id as AgentDemoMode)}
+          onChange={(id) => selectMode(id as AgentDemoMode)}
           options={[
             { id: 'safe', label: 'Supported change' },
             { id: 'refusal', label: 'Refusal proof' },
           ]}
         />
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={state === 'preparing' || state === 'committing'} onClick={() => void prepare()}>Run agent</DsButton>
+        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing'} onClick={() => state === 'verified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
         <span className="agent-demo__status" data-state={state} role="status" aria-live="polite">{status}</span>
       </div>
 
       <div className="agent-request">
         <label htmlFor="agent-prompt">Agent request</label>
         <textarea id="agent-prompt" readOnly value={scenario.prompt} rows={2} />
-        <small>Deterministic local proposal · lifecycle enforced by @injoffice/agent-tools · no model SDK or network request</small>
+        <small data-agent-boundary>{boundary}</small>
       </div>
 
       <ol className="agent-tool-log" aria-label="office.* tool calls">
@@ -255,19 +322,19 @@ export default function AgentPage() {
       <div className="agent-demo__workspace ds-split">
         <section className="agent-demo__document ds-split-main" aria-labelledby="agent-artifact-title">
           <header>
-            <div><span>Isolated {preview ? 'preview' : 'source'}</span><h2 id="agent-artifact-title">{scenario.artifact.name}</h2></div>
+            <div><span>{verification?.ok ? format === 'xlsx' ? 'Reopened output projection' : 'Verified simulated state' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id="agent-artifact-title">{scenario.artifact.name}</h2></div>
             <dl className="ds-proof">
               <div><dt>Artifact</dt><dd>{scenario.artifact.artifactId}</dd></div>
               <div><dt>Revision</dt><dd>{receipt?.revision ?? inspection?.revision ?? scenario.artifact.revision}</dd></div>
             </dl>
           </header>
           <div className={`agent-artifact agent-artifact--${format}`}>
-            <ArtifactView format={format} content={shownArtifact.content} highlighted={Boolean(preview && validation?.ok)} />
+            {sessionInput ? <ArtifactView format={format} content={shownContent} highlighted={Boolean(preview && validation?.ok)} /> : <p role="status">{state === 'error' ? 'Sample unavailable. Reload to retry.' : 'Opening the sample…'}</p>}
           </div>
           <footer>
             <strong>Agent request</strong>
             <p>{scenario.prompt}</p>
-            <small>Deterministic local proposal · lifecycle enforced by @injoffice/agent-tools · no model SDK or network request</small>
+            <small>{boundary}</small>
           </footer>
         </section>
 
@@ -309,7 +376,7 @@ export default function AgentPage() {
           )}
 
           <section className="agent-evidence ds-panel">
-            <header><div><span>Commit</span><h2>{verification?.ok ? 'Output verified' : 'Execution record'}</h2></div>{verification?.ok && <DsChip tone="green">Pass</DsChip>}</header>
+            <header><div><span>Commit</span><h2>{verification?.ok ? format === 'xlsx' ? 'XLSX output verified' : 'Simulation verified' : 'Execution record'}</h2></div>{verification?.ok && <DsChip tone="green">Pass</DsChip>}</header>
             <dl className="ds-proof">
               <div><dt>Source revision</dt><dd><code>{inspection?.revision ?? '—'}</code></dd></div>
               <div><dt>Source fingerprint</dt><dd><code>{inspection?.fingerprint ?? '—'}</code></dd></div>
@@ -317,6 +384,7 @@ export default function AgentPage() {
               <div><dt>Output fingerprint</dt><dd><code>{verification?.fingerprint ?? '—'}</code></dd></div>
             </dl>
             {verification && <ul>{verification.evidence.map((item) => <li key={item}>{item}</li>)}</ul>}
+            {state === 'verified' && verification?.ok && downloadURL && <a data-agent-download className="workbench-button ds-btn ds-btn--filled" href={downloadURL} download="launch-readiness-plan-approved.xlsx">Download verified .xlsx</a>}
           </section>
           {error && <p className="tool-error" role="alert">{error}</p>}
         </aside>

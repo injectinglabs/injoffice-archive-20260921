@@ -185,14 +185,14 @@ export const DEMO_RECIPES = {
   agent: {
     id: 'agent-guarded-change-set',
     title: 'Run a guarded agent change from proposal to proof',
-    outcome: 'Inspect a bounded artifact, review an immutable proposal, approve one atomic commit, and verify the replacement revision.',
+    outcome: 'Use Sheets for a real XLSX write, reopen, and download; explore the same guarded lifecycle with simulated Docs, Slides, and PDF data.',
     minutes: 3,
     steps: [
-      { id: 'prepare-agent-change', title: 'Run the AI-first proposal', instruction: 'Open Sheets, Docs, Slides, or PDF under AI-first, keep Supported change selected, then choose “Run agent.”', evidence: 'office.inspect, office.plan, office.preview, office.diff, and office.validate run without writing the source.' },
+      { id: 'prepare-agent-change', title: 'Run the AI-first proposal', instruction: 'Start with Sheets for a real file. Wait for the bundled XLSX to load, keep Supported change selected, and choose “Run agent.” Other formats are labelled lifecycle simulations.', evidence: 'Inspection, plan, preview, diff, and validation do not change the source file.' },
       { id: 'review-agent-diff', title: 'Review the exact change', instruction: 'Compare the artifact preview, proposed change, semantic diff, source identity, and advertised operations.', evidence: 'The proposal stays bound to one source revision and only uses a discovered capability.' },
-      { id: 'approve-agent-commit', title: 'Approve and verify', instruction: 'Select the review checkbox, then choose “Commit approved change.”', evidence: 'Commit advances the revision and the Verify stage records output identity and machine-readable evidence.' },
+      { id: 'approve-agent-commit', title: 'Approve, verify, and download', instruction: 'Select the review checkbox, then choose “Commit approved change.” In Sheets, inspect native readback and choose “Download verified .xlsx.”', evidence: 'Sheets reopens the exact emitted bytes and verifies C5 and package identity. Other formats verify simulated state only.' },
     ],
-    sources: [source('Agent workflow demo', 'apps/playground/src/pages/AgentPage.tsx'), source('Agent change-set core', 'packages/agent-tools/src/session.ts')],
+    sources: [source('Agent workflow demo', 'apps/playground/src/pages/AgentPage.tsx'), source('Real-file XLSX adapter', 'apps/playground/src/agentXlsxDemo.ts'), source('Agent change-set core', 'packages/agent-tools/src/session.ts')],
     related: [
       { surface: 'collab', reason: 'Continue into real-time human and agent participation over shared operations.' },
       { surface: 'history', reason: 'Capture verified agent output as an attributable durable version.' },
