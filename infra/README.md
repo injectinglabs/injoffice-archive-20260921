@@ -1,7 +1,7 @@
 # Public browser demo on AWS
 
 `demo-site.yaml` manages the public `https://injoffice.com` demo. The GitHub
-repository remains private. Public browser code includes the deliberately
+repository visibility is independent of this deployment. Public browser code includes the deliberately
 bundled “View source” examples. No model, credentials, API bridge, or optional
 Node/PDF/collaboration server is deployed.
 
@@ -17,10 +17,13 @@ The deployment has two phases: create with `PublishDns=false`, upload and verify
 the CloudFront endpoint, then update with `PublishDns=true`. Certificate DNS
 validation happens during the first phase; the website aliases do not.
 
-Application release: `50e0cbfbceaf944bbc679c828130505e8c7f418e` (PR #17).
-Stack: `injoffice-demo-site`; AWS account: `707600960562`.
-Hosted zone: `Z037397639ZG11Y7H1802`.
-Bucket: `injoffice-demo-site-707600960562-us-east-1`.
+Use your own stack name, AWS account, and hosted zone. Read the current
+application release from the stack's `ReleaseId` parameter and bucket/distribution
+identities from its outputs; do not copy identifiers from another deployment:
+
+```sh
+aws cloudformation describe-stacks --region us-east-1 --stack-name YOUR_STACK_NAME --query 'Stacks[0].{Parameters:Parameters,Outputs:Outputs}'
+```
 
 ## Build and publish
 
@@ -73,7 +76,7 @@ before retrying; do not delete the bucket to resolve a name conflict. Storage,
 DNS and delivery incur normal AWS usage charges. Asset cleanup, logging/budgets,
 and optional backend hosting require separate decisions.
 
-This is an explicitly operated deployment. The existing private GitHub Pages
+This is an explicitly operated deployment. The separate GitHub Pages
 workflow does not update AWS; this setup grants no CI deployment credentials.
 
 References: [AWS secure static hosting](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/getting-started-secure-static-website-cloudformation-template.html),

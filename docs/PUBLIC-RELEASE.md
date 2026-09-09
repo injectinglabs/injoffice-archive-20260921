@@ -4,7 +4,7 @@ InjOffice is designed as independently consumable TypeScript packages and Go mod
 
 ## Completed in the repository
 
-- All 24 TypeScript packages emit ESM and declarations; WASM packages additionally ship their declared runtime assets.
+- All 26 TypeScript packages emit ESM and declarations; WASM packages additionally ship their declared runtime assets.
 - Every package has exports, a files allowlist, public publish metadata, repository links, and a package README with an example.
 - The package check imports built entries and inspects every npm pack payload.
 - A blank-consumer smoke test installs the generated tarballs and imports every package.
@@ -28,12 +28,19 @@ Workspace apps (`apps/playground`, `apps/docx-page-paint-worker`) are private an
 - **Product isolation.** The public repository must not contain consumer-specific gateways, dashboards, authentication configuration, tenant data, or credentials.
 - **No Office parity claim.** Native coverage is a completion matrix, not an unrestricted round-trip guarantee.
 
-## Required decisions and account setup
+## Release status and remaining account setup
 
-1. **Approve third-party attribution.** Review NOTICE, LICENSE, and LICENSE-UNICODE.txt before distribution.
-2. **Confirm ownership.** Create or confirm the injectinglabs/injoffice GitHub repository and reserve/control the @injoffice npm scope. Registry lookup currently shows no published @injoffice/charts package; that does not prove scope ownership.
-3. **Choose initial version policy.** The repository is aligned at 0.1.0. Decide whether all npm packages stay lockstep and create matching Go submodule tags such as go/xlsxpatch/v0.1.0.
-4. **Configure release accounts.** Add required reviewers to the protected `npm` GitHub environment, bootstrap the first package versions interactively with 2FA, configure stage-only trusted publishing for every package, disallow traditional publishing tokens, and configure Pages source, branch protection, and private vulnerability reporting.
+As of 2026-09-08, 25 of 26 packages are published at 0.1.0 under the controlled
+`@injoffice` scope. Only `@injoffice/xlsx-wasm@0.1.0` remains unpublished.
+Resume its bootstrap using the original validated CI artifact, not rebuilt
+tarballs for versions already published. Existing npm versions are immutable.
+
+- Preserve the attribution in NOTICE, LICENSE, LICENSE-UNICODE.txt, and package-specific legal assets.
+- Apply the [consumer dependency mitigation](DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot) for Univer 0.25.1. A clean root audit alone does not establish a clean consumer install.
+- Configure and verify stage-only trusted publishing for every package after bootstrap; disallow traditional publishing tokens once OIDC staging is verified.
+- Protect the `npm` GitHub environment with owner approval. A solo maintainer may approve their own deployment; this is separate from npm's publishing approval.
+- Enable private vulnerability reporting when the repository becomes public, and verify the reporting link in SECURITY.md. GitHub does not provide this feature for this private repository.
+- Create and test Go submodule release tags such as `go/xlsxpatch/v0.1.0` when releasing the Go modules; npm publication does not release them.
 
 Repository visibility, npm publication, release tags, and Pages deployment remain explicit owner actions. Merging readiness work does not perform them.
 
@@ -46,7 +53,7 @@ gh run download RUN_ID --name npm-release-COMMIT_SHA --dir release-tarballs
 npm run release:packages -- v0.1.0 --bootstrap-from release-tarballs
 ```
 
-The bootstrap mode validates every recorded SHA-512 digest, refuses to run when `CI` is set, and publishes in dependency order through the owner's authenticated npm session, where npm enforces 2FA. It can safely resume by skipping already-published package versions only when their registry integrity exactly matches the validated tarballs. Do not put an npm write token in GitHub.
+The bootstrap mode validates every recorded SHA-512 digest, refuses to run when `CI` is set, and publishes in dependency order through the owner's authenticated npm session, where npm enforces 2FA. It can safely resume by skipping already-published package versions only when their registry integrity exactly matches the validated tarballs. Registry errors fail closed; publishing disables automatic fetch retries so rate-limit failures are not obscured by retries with expired authentication. Resolve the error before explicitly retrying. Do not put an npm write token in GitHub.
 
 After all packages exist, configure each package's trusted publisher with these exact claims:
 

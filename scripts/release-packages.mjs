@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { publishedIntegrity } from './release-registry.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const packageRoot = resolve(root, 'packages')
@@ -91,17 +92,6 @@ const run = (args, options = {}) => {
 const sha512 = (path) => createHash('sha512').update(readFileSync(path)).digest('hex')
 const sriFromHex = (hex) => `sha512-${Buffer.from(hex, 'hex').toString('base64')}`
 
-const publishedIntegrity = async (name) => {
-  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${version}`, {
-    headers: { accept: 'application/vnd.npm.install-v1+json' },
-  })
-  if (response.status === 404) return null
-  if (!response.ok) throw new Error(`${name}@${version}: registry preflight failed with HTTP ${response.status}`)
-  const metadata = await response.json()
-  if (typeof metadata.dist?.integrity !== 'string') throw new Error(`${name}@${version}: registry response is missing dist.integrity`)
-  return metadata.dist.integrity
-}
-
 try {
   if (packDestinationArg !== undefined) {
     const destination = resolve(root, packDestinationArg)
@@ -149,7 +139,7 @@ try {
 
     const registryState = []
     for (const packed of verified) {
-      const published = await publishedIntegrity(packed.name)
+      const published = await publishedIntegrity(packed.name, version)
       if (published !== null && published !== sriFromHex(packed.sha512)) {
         throw new Error(`${packed.name}@${version}: published registry integrity does not match the validated tarball.`)
       }
@@ -170,8 +160,8 @@ try {
         }
         console.log(`${bootstrap ? 'Bootstrapping' : 'Staging'} ${packed.name}@${version}`)
         run(bootstrap
-          ? ['publish', packed.tarball, '--access', 'public', '--tag', npmTag]
-          : ['stage', 'publish', packed.tarball, '--access', 'public', '--tag', npmTag])
+          ? ['publish', packed.tarball, '--access', 'public', '--tag', npmTag, '--fetch-retries=0']
+          : ['stage', 'publish', packed.tarball, '--access', 'public', '--tag', npmTag, '--fetch-retries=0'])
       }
     }
   } else {

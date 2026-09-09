@@ -24,7 +24,7 @@ jobs:
     outputs:
       deploy: ${{ steps.changes.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # A workflow_run checkout must name the SHA explicitly; otherwise it
           # could deploy a newer, untested main commit.
@@ -54,12 +54,12 @@ jobs:
             fi
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         if: steps.changes.outputs.deploy == 'true'
         with:
           node-version: '24'
           cache: 'npm'
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         if: steps.changes.outputs.deploy == 'true'
         with:
           go-version: '1.23'
@@ -68,7 +68,7 @@ jobs:
         run: npm ci
       - id: pages
         if: steps.changes.outputs.deploy == 'true'
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
       - name: Build playground
         if: steps.changes.outputs.deploy == 'true'
         env:
@@ -82,7 +82,7 @@ jobs:
           test -n "$(find apps/playground/dist -type f -name 'pptxnative-*.wasm' -print -quit)"
           grep -R -q 'injoffice.native-wasm-worker' apps/playground/dist
           grep -R -q 'globalThis.Go' apps/playground/dist
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         if: steps.changes.outputs.deploy == 'true'
         with:
           path: apps/playground/dist
@@ -98,4 +98,4 @@ jobs:
     steps:
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

@@ -8,6 +8,12 @@ Sheet presence includes colored remote ranges, a cell-anchored collaborator name
 npm install @injoffice/collab
 ```
 
+For 0.1.0 with Univer 0.25.1, add
+`"overrides": { "@univerjs/core": { "nanoid": "5.1.16" } }` to your application's
+root `package.json`, then run `npm install` and `npm audit`. This mitigates
+GHSA-28wg-ghj8-5hjv in the Univer peer's dependency; the InjOffice monorepo's
+override is not inherited by npm consumers.
+
 ```ts
 import { COLLAB_EVENTS, type CollabTransport } from '@injoffice/collab'
 

@@ -2,7 +2,12 @@
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a suspected vulnerability. Use GitHub's private vulnerability reporting feature for this repository. If that feature is unavailable, contact the repository owner privately through the verified contact listed on the GitHub organization profile.
+Do not open a public issue for a suspected vulnerability. When enabled, use
+[GitHub private vulnerability reporting](https://github.com/injectinglabs/injoffice/security/advisories/new).
+This feature is unavailable while the repository is private. Before making the
+repository public, maintainers must enable it and verify that the reporting link
+works. Collaborators with private repository access should contact a maintainer
+through their existing private communication channel if reporting is unavailable.
 
 Include the affected package and version or commit, impact, reproduction steps, and any suggested mitigation. Do not include real customer documents or secrets. A minimal synthetic artifact is preferred.
 
@@ -10,7 +15,10 @@ Maintainers will acknowledge a complete report as soon as practical, investigate
 
 ## Supported versions
 
-Before the first public release, only the default branch is supported. After publishing begins, this file will list supported release lines. Users should expect security fixes to land in the newest compatible pre-1.0 minor release unless a maintainer states otherwise.
+The default branch and the latest 0.1.x release are supported. Users should expect
+security fixes in the newest compatible pre-1.0 minor release unless a maintainer
+states otherwise. See the [dependency advisory and consumer mitigation](docs/DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot)
+for the Univer dependency used with 0.1.0.
 
 ## Security model
 

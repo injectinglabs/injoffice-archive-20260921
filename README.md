@@ -6,11 +6,11 @@
 
 InjOffice is a set of browser and server libraries for editing office artifacts. It adds plain-JSON models, pure transformation engines, provider-neutral agent change sets, optional editor integrations, and surgical OOXML patching. A hosted InjOffice service is not required: consumers can use the browser-local WASM engine, run offline, inject their own backend, or opt into the in-repo `injoffice-server`.
 
-Try the [public browser playground](https://injoffice.com/). It runs on AWS with browser-local document engines and mock-only AI. The repository remains private; see [hosting and rollback instructions](infra/README.md). The existing [private GitHub Pages preview](https://solid-chainsaw-62n2zgm.pages.github.io/) still requires repository authorization.
+Try the [public browser playground](https://injoffice.com/). It runs on AWS with browser-local document engines and mock-only AI; see [hosting and rollback instructions](infra/README.md). GitHub Pages is a separate preview deployment and may require repository access.
 
 The repository is a monorepo with independently consumable TypeScript packages, private apps, and Go modules. The TypeScript packages target Node.js 22 or newer and modern bundlers. UI integrations use React and, where noted, Univer OSS as an optional editor shell. Univer is not the file authority. Native paint compilers are a preview mode.
 
-> Public-release status: the source is licensed under Apache-2.0 and the packages build and pass consumer packaging checks, but the repository and packages remain private/unpublished until the owner explicitly starts a release. The scoped v3 Native Office completion matrix is complete; broader format coverage remains partial and this is not Microsoft Office parity.
+> Release status (2026-09-08): the source is licensed under Apache-2.0; 25 of 26 npm packages are published at 0.1.0. `@injoffice/xlsx-wasm` is not yet published. See the [release checklist](docs/PUBLIC-RELEASE.md). The scoped v3 Native Office completion matrix is complete; broader format coverage remains partial and this is not Microsoft Office parity.
 
 ## Native file API
 
@@ -77,6 +77,12 @@ Go modules under `go/` are surgical file writers, native extract/apply engines, 
 | `github.com/injectinglabs/injoffice/go/injoffice-server` | Optional XLSX/DOCX/PPTX extract/mutations HTTP server, opaque artifact store, and collab HTTP+SSE |
 
 Each TypeScript package has its own README and five-minute example.
+
+For npm consumers using Univer 0.25.1 (including the collaboration package's
+peer dependency), add `"overrides": { "@univerjs/core": { "nanoid": "5.1.16" } }`
+to your application's root `package.json`, run `npm install`, and check `npm audit`.
+The repository's override does not propagate to consumers. See the
+[dependency advisory and mitigation](docs/DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot).
 
 ## Development
 

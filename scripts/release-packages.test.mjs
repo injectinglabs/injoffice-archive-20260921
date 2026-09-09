@@ -4,6 +4,32 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
+import { publishedIntegrity } from './release-registry.mjs'
+
+test('registry preflight requests version JSON and preserves integrity', async () => {
+  const integrity = await publishedIntegrity('@injoffice/collab', '0.1.0', async (url, options) => {
+    assert.equal(url, 'https://registry.npmjs.org/%40injoffice%2Fcollab/0.1.0')
+    assert.equal(options.headers.accept, 'application/json')
+    assert.ok(options.signal instanceof AbortSignal)
+    return new Response(JSON.stringify({ dist: { integrity: 'sha512-test' } }))
+  })
+  assert.equal(integrity, 'sha512-test')
+})
+
+test('only a registry 404 means a version is unpublished', async () => {
+  assert.equal(await publishedIntegrity('example', '0.1.0', async () => new Response('', { status: 404 })), null)
+  for (const status of [401, 403, 406, 429, 500]) {
+    await assert.rejects(publishedIntegrity('example', '0.1.0', async () => new Response('', { status })), new RegExp(`HTTP ${status}`))
+  }
+})
+
+test('registry preflight fails closed on invalid metadata or network failures', async () => {
+  for (const metadata of [{}, { dist: { integrity: '' } }, { dist: { integrity: 123 } }]) {
+    await assert.rejects(publishedIntegrity('example', '0.1.0', async () => new Response(JSON.stringify(metadata))), /missing dist.integrity/)
+  }
+  await assert.rejects(publishedIntegrity('example', '0.1.0', async () => { throw new Error('network failure') }), /network failure/)
+  await assert.rejects(publishedIntegrity('example', '0.1.0', async () => new Response('invalid JSON')), SyntaxError)
+})
 
 const root = resolve(import.meta.dirname, '..')
 const script = resolve(root, 'scripts/release-packages.mjs')

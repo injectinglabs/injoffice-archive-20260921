@@ -95,6 +95,8 @@ try {
     name: 'injoffice-consumer-smoke',
     private: true,
     type: 'module',
+    // Workspace overrides do not propagate through published dependencies.
+    overrides: { '@univerjs/core': { nanoid: '5.1.16' } },
   }, null, 2))
   writeFileSync(resolve(temporary, 'smoke.mjs'), [
     ...packageNames.map((name) => `await import(${JSON.stringify(name)})`),

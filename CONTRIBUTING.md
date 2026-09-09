@@ -1,6 +1,6 @@
 # Contributing to InjOffice
 
-Thank you for improving InjOffice. Bug reports, focused fixes, tests, documentation, and interoperability fixtures are welcome once the public repository opens.
+Thank you for improving InjOffice. Bug reports, focused fixes, tests, documentation, and interoperability fixtures are welcome.
 
 ## Before opening a change
 
@@ -47,6 +47,6 @@ The repository contains independent Go modules under `go/` (`xlsxpatch`, `docxpa
 
 ## Pull requests
 
-Explain the user-visible behavior, compatibility impact, and verification performed. Call out changes to exported types, wire formats, archive output, or security boundaries. Maintainers may ask for a changeset or version bump after the release process is finalized.
+Explain the user-visible behavior, compatibility impact, and verification performed. Call out changes to exported types, wire formats, archive output, or security boundaries. Coordinate version changes with maintainers and follow the [release checklist](docs/PUBLIC-RELEASE.md); do not overwrite already-published versions.
 
 By participating, you agree to follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

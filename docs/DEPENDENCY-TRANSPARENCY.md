@@ -35,7 +35,7 @@ can inspect blockers; the release gate fails while a production blocker exists.
 
 ## Current inventory and blockers
 
-At the audited lockfile, the workspace contains 22 npm workspaces and 370 resolved
+At the audited lockfile, the workspace contains 28 npm workspaces and 370 resolved
 npm components. The seven Go modules have no direct third-party Go module: all
 `require` directives point to sibling InjOffice modules through local `replace`
 directives.
@@ -95,7 +95,25 @@ packages. A root override now scopes Univer core to the patched NanoID 5.1.16.
 The full build and test suite pass with that override. The direct TipTap advisory
 reported by the earlier lockfile was also remediated by raising the Docs peer
 floor to TipTap 3.31.0. A subsequent online audit reports zero known
-vulnerabilities.
+vulnerabilities in the repository installation, not necessarily in consumers.
+
+**Consumer mitigation:** npm root overrides are not inherited from installed
+packages. A fresh `@injoffice/collab@0.1.0` consumer can therefore resolve the
+vulnerable NanoID through its Univer peer. Add this to the consuming application's
+root `package.json`, then run `npm install` and `npm audit`:
+
+```json
+{
+  "overrides": {
+    "@univerjs/core": { "nanoid": "5.1.16" }
+  }
+}
+```
+
+This addresses the identified NanoID advisory, not every future dependency issue.
+The blank-consumer smoke test uses the same explicit mitigation. Published 0.1.0
+tarballs are unchanged. Removing unnecessary editor peers or adopting a qualified
+Univer upgrade belongs in a subsequent package release.
 
 The online advisory snapshot is not part of the deterministic license/SBOM gate.
 Rerun it before release because registry advisory state changes over time, and
@@ -117,7 +135,7 @@ transitive components come from the generated SBOM rather than this summary.
 | Fonts | `dejavu-fonts-ttf` | package-bundled DejaVu font terms (`LicenseRef-DejaVu-Fonts`) |
 
 The development-only direct surface contains Node/React/pngjs type packages,
-TypeScript 6, the TypeScript 7 native preview, Vite, its React plugin, Vitest,
+TypeScript 7.0.2, Vite, its React plugin, Vitest,
 canvas, DejaVu test fonts, and the Univer Node sheets preset. These are included
 in the SBOM but are not runtime dependencies of published InjOffice packages.
 
