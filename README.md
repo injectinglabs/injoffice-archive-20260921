@@ -98,7 +98,7 @@ Run the browser playground with:
 npm run dev
 ```
 
-Open http://127.0.0.1:3100. The lightweight `#/overview` introduces exactly four comprehensive workspaces: Sheets, Docs, Slides, and PDF. Existing capabilities from the twenty-six TypeScript packages are grouped inside those examples, not separate sidebar pages. Advanced views use explicitly labelled independent samples where they do not share an artifact model.
+Open http://127.0.0.1:3100 directly into Sheets, the first of four comprehensive workspaces: Sheets, Docs, Slides, and PDF. The introduction is removed; legacy `#/overview` links open Sheets. Existing capabilities from the twenty-six TypeScript packages are grouped inside those examples, not separate sidebar pages. Advanced views use explicitly labelled independent samples where they do not share an artifact model.
 
 Create and edit:
 

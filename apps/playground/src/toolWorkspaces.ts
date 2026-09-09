@@ -45,6 +45,11 @@ export function workspaceHref(tool: AgentTool, feature = 'editor'): string {
   return selected === 'editor' ? `#/${tool}` : `#/${tool}?feature=${encodeURIComponent(selected)}`
 }
 
+/** Keep shell and mounted views in sync even before an old URL is replaced. */
+export function workspaceNavigationHash(hash: string): string {
+  return resolveToolWorkspace(hash) ? hash : workspaceHref('sheets')
+}
+
 /** Canonical tool routes and old individual-demo bookmarks share one resolver. */
 export function resolveToolWorkspace(hash: string): { tool: AgentTool; feature: string } | null {
   const path = hash.replace(/^#\/?/, '').split(/[/?#]/)[0]?.toLowerCase() ?? ''

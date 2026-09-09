@@ -12,9 +12,8 @@ import DemoSource from './components/DemoSource'
 import type { DemoDefinition } from './demoRegistry'
 import { WORKSPACE_DEMOS, preloadWorkspace, preloadWorkspaceOnIntent, workspaceProofDemo } from './workspaceRegistry'
 import { resolveToolWorkspace } from './toolWorkspaces'
-import OverviewPage from './pages/OverviewPage'
 import { surfaceHref, type Surface } from './route'
-import { SCROLL_SECTIONS, sectionForHash, activeSectionKey, type ScrollSection } from './scrollSections'
+import { SCROLL_SECTIONS, sectionForHash, workspaceNavigationHash, activeSectionKey, type ScrollSection } from './scrollSections'
 import { createDemoRetention } from './demoRetention'
 
 type SidecarState = 'checking' | 'connected' | 'offline'
@@ -71,7 +70,12 @@ function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; schem
   return (
     <header className="app-header">
       <div className="app-header-inner">
-        <a className="app-brand" href={surfaceHref('overview')} aria-label="InjOffice overview">
+        <a className="app-brand" href={surfaceHref('sheets')} aria-label="InjOffice demo start" onClick={event => {
+          if (!isModifiedClick(event) && location.hash === surfaceHref('sheets')) {
+            event.preventDefault()
+            window.dispatchEvent(new HashChangeEvent('hashchange'))
+          }
+        }}>
           <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={32} height={32} />
           <span><strong>InjOffice</strong></span>
         </a>
@@ -249,6 +253,7 @@ function DemoSection({
   const DemoComponent = demo.component as ComponentType<{ initialHash?: string }>
   const title = demo.title
   const description = demo.description
+  const Heading = demo.surface === 'sheets' ? 'h1' : 'h2'
   return (
     <article
       className="demo-section"
@@ -263,13 +268,13 @@ function DemoSection({
       <header className={`page-heading demo-context-header demo-page-header page-heading--${demo.accent}`}>
         <div className="page-heading-copy">
           <nav className="demo-breadcrumb" aria-label="Breadcrumb">
-            <a href={surfaceHref('overview')}>Showcase</a><span aria-hidden="true">/</span><span>{title}</span>
+            <span>Showcase</span><span aria-hidden="true">/</span><span>{title}</span>
           </nav>
           <div className="demo-chips" aria-label="Demo tags">
             <span className="demo-chip">{demo.formats.join(' + ')}</span>
           </div>
           <div className="demo-title-line">
-            <h2 id={`demo-title-${section.key}`} tabIndex={-1}>{title}</h2>
+            <Heading id={`demo-title-${section.key}`} tabIndex={-1}>{title}</Heading>
           </div>
           <p>{description}</p>
         </div>
@@ -293,7 +298,6 @@ function DemoSection({
           >
             Guide &amp; source
           </button>
-          <a className="demo-back" href={surfaceHref('overview')}>All demos</a>
         </div>
       </header>
       <section className="demo-preview" aria-label={`${title} preview`}>
@@ -329,7 +333,7 @@ class SectionBoundary extends Component<{ children: ReactNode; onRetry: () => vo
 }
 
 export default function App() {
-  const [route, setRoute] = useState(() => ({ surface: sectionForHash(location.hash).surface, hash: location.hash || surfaceHref('overview') }))
+  const [route, setRoute] = useState(() => ({ surface: sectionForHash(location.hash).surface, hash: workspaceNavigationHash(location.hash) }))
   const { surface, hash } = route
   const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
@@ -344,7 +348,7 @@ export default function App() {
   const anchorTarget = useRef<string | null>(null)
   const anchorViewTop = useRef<number | null>(null)
   const viewIntent = useRef<{ key: string; top: number } | null>(null)
-  const handledHash = useRef(location.hash || surfaceHref('overview'))
+  const handledHash = useRef(workspaceNavigationHash(location.hash))
   const pinAnchor = useCallback(() => {
     if (!anchorTarget.current) return
     const element = document.getElementById(`demo-${anchorTarget.current}`)
@@ -378,6 +382,8 @@ export default function App() {
       if (section && controls) viewIntent.current = { key: section.key, top: controls.getBoundingClientRect().top }
     }
     const navigate = (focus = true) => {
+      const destination = workspaceNavigationHash(location.hash)
+      if (location.hash !== destination) history.replaceState(history.state, '', destination)
       const section = sectionForHash(location.hash)
       const intent = viewIntent.current
       viewIntent.current = null
@@ -402,7 +408,6 @@ export default function App() {
     const sync = () => navigate()
     window.addEventListener('injoffice:workspace-view', internalView)
     window.addEventListener('hashchange', sync)
-    if (!location.hash) history.replaceState(history.state, '', surfaceHref('overview'))
     navigate(false)
     return () => {
       window.removeEventListener('hashchange', sync)
@@ -499,9 +504,6 @@ export default function App() {
         <ToolNavigation surface={surface} remembered={sectionHashes.current} />
       </aside>
       <main className="app-main" id="main-content" tabIndex={-1} data-workbench-surface={surface} aria-busy={false}>
-        <section className="demo-section demo-section--overview" id="demo-overview" data-scroll-section="overview" data-scroll-state="ready" aria-labelledby="showcase-title">
-          <OverviewPage sidecar={sidecar} />
-        </section>
         {SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection
             key={section.key}
             section={section}

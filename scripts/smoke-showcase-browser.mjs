@@ -12,8 +12,8 @@ mkdirSync(output, { recursive: true })
 let chrome, socket, staticServer
 let proposalMock, restoreProposalEnv
 let sequence = 0
-let scopeKey = 'overview'
-let scopeFeature = null
+let scopeKey = 'sheets'
+let scopeFeature = 'editor'
 const workspaceFeatures = {
   sheets: ['editor', 'native', 'tools', 'charts', 'pivots', 'shapes', 'connectors', 'formulas', 'agent', 'collab', 'history'],
   docs: ['editor', 'agent', 'collab', 'history', 'font-metrics'],
@@ -23,7 +23,7 @@ const workspaceFeatures = {
 function destination(path) {
   const [surface, query = ''] = path.split('?')
   const params = new URLSearchParams(query)
-  if (surface === 'overview') return { tool: surface, feature: null }
+  if (!surface || surface === 'overview') return { tool: 'sheets', feature: 'editor' }
   if (surface === 'agent') return { tool: params.get('format') ?? 'sheets', feature: 'agent' }
   if (surface in workspaceFeatures) return { tool: surface, feature: params.get('feature') ?? params.get('view') ?? 'editor' }
   return { tool: surface.startsWith('pptx-') ? 'slides' : surface === 'font-metrics' ? 'docs' : 'sheets', feature: surface }
@@ -68,8 +68,8 @@ function send(method, params = {}) {
 async function evaluate(expression) {
   // Multiple editors now remain mounted. Every editor assertion and action is
   // scoped to the selected feature, never a retained hidden editor's DOM.
-  // Shell, landing, and the one shared source drawer remain document-wide.
-  const globalSelectors = ['.app-', '.scheme-toggle', '.tool-example', '[data-workspace-entry]', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
+  // Shell and the one shared source drawer remain document-wide.
+  const globalSelectors = ['.app-', '.scheme-toggle', '.overview-page', '.tool-example', '[data-workspace-entry]', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
   const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'testQueryAll(').replaceAll('document.querySelector(', 'testQuery(')
   const result = await send('Runtime.evaluate', { expression: `{
     const smokeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${scopeKey}"]`)});
@@ -162,7 +162,7 @@ try {
     staticServer = await startShowcaseDevServer(resolve(import.meta.dirname, '../apps/playground'))
   }
   const origin = new URL(staticServer?.url ?? process.env.SHOWCASE_URL ?? 'http://127.0.0.1:3100/')
-  origin.hash = '#/overview'
+  origin.hash = ''
   chrome = await launchChromeForCDP({
     executable: process.env.CHROME_BIN ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(existsSync) ?? 'google-chrome',
     createProfile: () => mkdtempSync(resolve(tmpdir(), 'injoffice-showcase-chrome-')),
@@ -174,20 +174,46 @@ try {
   await send('Page.enable')
   await send('Network.enable')
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
-  await send('Page.navigate', { url: origin.href })
-  await until(`document.querySelectorAll('.tool-example[data-workspace-entry]').length === 4`, 'four tool entries ready')
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.__entryHistory = { length: history.length, pushes: 0, replacements: 0 };
+    for (const [method, counter] of [['pushState', 'pushes'], ['replaceState', 'replacements']]) {
+      const original = history[method];
+      history[method] = function (...args) { window.__entryHistory[counter]++; return original.apply(this, args); };
+    }
+  ` })
+  for (const entry of ['', '#/overview', '#/unknown']) {
+    origin.hash = entry
+    origin.searchParams.set('showcase-entry', entry || 'empty')
+    await send('Page.navigate', { url: origin.href })
+    await until(`location.hash === '#/sheets' && document.querySelector('.app-shell')?.dataset.surface === 'sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]') && !!document.querySelector('[data-demo-surface="sheets"] canvas')`, `${entry || 'empty URL'} opens the first workbook editor directly`, 90_000)
+    assert.equal(await evaluate(`history.length === window.__entryHistory.length && window.__entryHistory.pushes === 0 && window.__entryHistory.replacements >= 1`), true, `${entry || 'empty URL'} normalizes by replacing history, not adding an intro step`)
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-scroll-section]')).map(section => section.dataset.scrollSection)`), Object.keys(workspaceFeatures), 'only the four document workspaces exist')
+    assert.equal(await evaluate(`!!document.querySelector('.overview-page, .tool-example, [data-workspace-entry]') || document.querySelector('.app-main').textContent.includes('Explore the four document tools')`), false, 'the introductory section and cards are absent')
+  }
   await evaluate(`document.querySelector('.scheme-toggle button:first-child').click()`)
   await until(`document.documentElement.dataset.theme === 'light'`, 'light theme')
   await screenshot('four-tools-desktop')
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.tool-example[data-workspace-entry]')).map(link => link.dataset.workspaceEntry)`), Object.keys(workspaceFeatures), 'landing exposes exactly Sheets, Docs, Slides, and PDF')
   assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a').length`), 4, 'sidebar has only four tool links')
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar a')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'sidebar routes match tool workspaces')
-  await click('[data-workspace-entry="pdf"]')
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('.app-main a')).some(link => link.textContent.trim() === 'All demos')`), false, 'there is no link back to a removed introduction')
+  await click('.app-sidebar a[href="#/pdf"]')
   scopeKey = 'pdf'
   scopeFeature = 'editor'
-  await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !!smokePanel && !document.querySelector('.demo-loading')`, 'tool entry opens the real PDF workspace')
-  await route('overview')
-  assert.equal(await evaluate(`document.querySelectorAll('.tool-example[data-workspace-entry]').length`), 4, 'return to landing preserves the four-entry structure')
+  await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !!smokePanel && !document.querySelector('.demo-loading')`, 'sidebar opens the real PDF workspace')
+  await route('charts')
+  assert.equal(await evaluate(`document.querySelector('.app-brand').getAttribute('href')`), '#/sheets', 'brand targets the first tool directly')
+  await click('.app-brand')
+  scopeKey = 'sheets'
+  scopeFeature = 'editor'
+  await until(`location.hash === '#/sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]')`, 'brand opens the first editor instead of the remembered Charts view', 90_000)
+  for (const entry of ['#/overview', '#/unknown', '']) {
+    await route('charts')
+    await evaluate(`window.__warmHistory = { length: history.length, pushes: window.__entryHistory.pushes, replacements: window.__entryHistory.replacements }; location.hash = ${JSON.stringify(entry)}`)
+    scopeKey = 'sheets'
+    scopeFeature = 'editor'
+    await until(`location.hash === '#/sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]')`, `warm ${entry || 'empty hash'} restores the first editor`, 90_000)
+    assert.equal(await evaluate(`history.length === window.__warmHistory.length + 1 && window.__entryHistory.pushes === window.__warmHistory.pushes && window.__entryHistory.replacements > window.__warmHistory.replacements`), true, 'warm fallback replaces the requested hash without creating a second navigation entry')
+  }
   await route('charts')
   assert.equal(await evaluate(`document.querySelector('.app-shell').dataset.navigation`), 'scroll')
   assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[href^="#/agent"]').length`), 0, 'AI actions live inside tools, not as extra top-level examples')
@@ -202,7 +228,7 @@ try {
   while (heldRequests.length === 0 && Date.now() - coldStart < 10_000) await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(heldRequests.length > 0, 'cold navigation requests a lazy script')
   await until(`smokeSection?.dataset.scrollState === 'loading' || !!smokePanel?.querySelector('.demo-loading, [data-workspace-loading]')`, 'cold tool or feature reports loading')
-  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && document.querySelectorAll('[data-scroll-section]').length === 5 && Array.from(document.querySelectorAll('[data-scroll-section]')).every(section => section.querySelector('h1,h2'))`), true, 'loaded editor and all four tool headings remain during cold navigation')
+  assert.equal(await evaluate(`window.__showcasePreviousStage.isConnected && document.querySelectorAll('[data-scroll-section]').length === 4 && Array.from(document.querySelectorAll('[data-scroll-section]')).every(section => section.querySelector('h1,h2'))`), true, 'loaded editor and all four tool headings remain during cold navigation')
   await send('Fetch.disable')
   await until(`smokeSection?.dataset.scrollState === 'ready' && !!smokePanel && !smokePanel.querySelector('.demo-loading, [data-workspace-loading], [data-workspace-error]')`, 'cold feature completes', 90_000)
   await route('charts')
@@ -437,14 +463,14 @@ try {
   await click('.source-proof-trigger')
   assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '0', 'new AI format starts its own guide progress')
   await click('.source-proof-close')
-  await route('overview')
+  await route('sheets')
   await evaluate(`window.scrollTo({ top: 0, behavior: 'instant' })`)
   for (const width of [1200, 1024, 768]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
     await until(`document.querySelector('.app-main').scrollWidth <= document.querySelector('.app-main').clientWidth`, `four-tool layout fits width ${width}`, 1000)
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-  await until(`document.documentElement.scrollWidth <= 390`, 'mobile tool landing has no horizontal overflow')
+  await until(`document.documentElement.scrollWidth <= 390`, 'mobile first tool has no horizontal overflow')
   assert.ok(await evaluate(`document.querySelector('.app-sidebar').getBoundingClientRect().height < 160`), 'mobile navigation does not retain a desktop-height blank area')
   await screenshot('four-tools-mobile')
   await route('agent?format=sheets')
@@ -500,7 +526,7 @@ try {
   await until(`document.documentElement.dataset.theme === 'dark'`, 'dark theme')
   await screenshot('focused-chart-dark')
   assert.deepEqual(errors, [], 'uncaught or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tool entries and sidebar links', 'all retained feature panels accessible', 'legacy links open the correct tool feature', 'continuous workspace navigation', 'cold-feature isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-workspace deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tool sections and sidebar links with no intro', 'empty and legacy overview URLs replace history and open Sheets', 'brand opens the first editor', 'all retained feature panels accessible', 'legacy links open the correct tool feature', 'continuous workspace navigation', 'cold-feature isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-workspace deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     await screenshot('failure')

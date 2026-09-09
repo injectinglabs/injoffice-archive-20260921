@@ -28,7 +28,7 @@ describe('playground workbench page contract', () => {
 
     expect(pageSource('PptxNativePage')).toContain('aria-label="PPTX processing runtime"')
     expect(pageSource('PptxNativePage')).toContain('aria-live="polite"')
-    expect(pageSource('OverviewPage')).toContain('aria-live="polite"')
+    expect(readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')).toContain('role="status"')
     expect(pageSource('FormulasPage')).toContain('aria-live="polite"')
   })
 

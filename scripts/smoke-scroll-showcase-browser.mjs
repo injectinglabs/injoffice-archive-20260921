@@ -8,12 +8,12 @@ import { startShowcaseDevServer } from './showcase-smoke-dev-server.mjs'
 
 // This suite exercises the document navigator, not the individual editors. The
 // existing showcase smoke remains responsible for real file and tool proofs.
-const keys = ['overview', 'sheets', 'docs', 'slides', 'pdf']
+const keys = ['sheets', 'docs', 'slides', 'pdf']
 const rememberedFeatures = { sheets: 'editor', docs: 'editor', slides: 'editor', pdf: 'editor' }
 const target = key => key.startsWith('agent-') ? { tool: key.slice(6), feature: 'agent' }
   : keys.includes(key) ? { tool: key, feature: rememberedFeatures[key] }
     : { tool: key.startsWith('pptx-') ? 'slides' : key === 'font-metrics' ? 'docs' : 'sheets', feature: key }
-const href = key => { const { tool, feature } = target(key); return tool === 'overview' ? '#/overview' : `#/${tool}?feature=${feature}` }
+const href = key => { const { tool, feature } = target(key); return `#/${tool}?feature=${feature}` }
 const toolSection = key => `[data-scroll-section="${target(key).tool}"]`
 const section = key => keys.includes(key) ? toolSection(key) : `${toolSection(key)} [data-workspace-panel="${target(key).feature}"]`
 const output = process.env.SHOWCASE_OUTPUT ? resolve(process.env.SHOWCASE_OUTPUT) : mkdtempSync(resolve(tmpdir(), 'injoffice-scroll-showcase-'))
@@ -146,23 +146,19 @@ async function assertNavigationSelection(viewport) {
   }
 }
 
-const active = (key, hash = href(key)) => key === 'overview'
-  ? `location.hash === '#/overview' && !document.querySelector('.app-sidebar a[aria-current="location"]')`
-  : `(location.hash === ${JSON.stringify(hash)} || location.hash === ${JSON.stringify(href(key))} || (${keys.includes(key)} && location.hash === ${JSON.stringify(`#/${target(key).tool}`)})) && document.querySelector('.app-sidebar a[aria-current="location"]')?.getAttribute('href') === ${JSON.stringify(`#/${target(key).tool}`)}`
-const ready = key => key === 'overview' ? `document.querySelector('${toolSection(key)}')?.dataset.scrollState === 'ready'`
-  : `document.querySelector('${toolSection(key)}')?.dataset.scrollState === 'ready' && !!document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"]:not([hidden])') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-loading]') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-error]')`
+const active = (key, hash = href(key)) => `(location.hash === ${JSON.stringify(hash)} || location.hash === ${JSON.stringify(href(key))} || (${keys.includes(key)} && location.hash === ${JSON.stringify(`#/${target(key).tool}`)})) && document.querySelector('.app-sidebar a[aria-current="location"]')?.getAttribute('href') === ${JSON.stringify(`#/${target(key).tool}`)}`
+const ready = key => `document.querySelector('${toolSection(key)}')?.dataset.scrollState === 'ready' && !!document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"]:not([hidden])') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-loading]') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-error]')`
 const agentState = (key, state) => `document.querySelector(${JSON.stringify(`${section(key)} .agent-demo__status`)})?.dataset.state === ${JSON.stringify(state)}${state === 'ready' ? ` && Array.from(document.querySelector(${JSON.stringify(section(key))}).querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)` : ''}`
 
 async function anchor(key) {
   const { tool, feature } = target(key)
-  if (key === 'overview') await evaluate(`document.querySelector('.app-brand').click()`)
-  else if (keys.includes(key)) await evaluate(`document.querySelector('.app-sidebar a[href="#/${tool}"]').click()`)
+  if (keys.includes(key)) await evaluate(`document.querySelector('.app-sidebar a[href="#/${tool}"]').click()`)
   else {
     rememberedFeatures[tool] = feature
     await evaluate(`location.hash = ${JSON.stringify(href(key))}`)
   }
   await until(active(key), `${key} anchor updates the current location`)
-  if (key !== 'overview') await until(ready(key), `${key} lazy section ready`, 90_000)
+  await until(ready(key), `${key} lazy section ready`, 90_000)
 }
 
 async function button(key, text) {
@@ -240,7 +236,7 @@ async function wheelTo(key, hash = href(key)) {
   // Agent workbenches should grow naturally within the scrolling document.
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 1100, y: 450, deltaX: 0, deltaY: distance + 8 })
   await until(active(key, hash), `${key} passive wheel scroll updates location`, 90_000)
-  if (key !== 'overview') await until(ready(key), `${key} loads after entering the viewport`, 90_000)
+  await until(ready(key), `${key} loads after entering the viewport`, 90_000)
 }
 
 try {
@@ -248,7 +244,8 @@ try {
   if (process.argv.includes('--built')) server = await startShowcaseServer(resolve(import.meta.dirname, '../apps/playground/dist'))
   if (process.argv.includes('--dev')) server = await startShowcaseDevServer(resolve(import.meta.dirname, '../apps/playground'))
   const origin = new URL(server?.url ?? process.env.SHOWCASE_URL ?? 'http://127.0.0.1:3100/')
-  origin.hash = '#/overview'
+  origin.hash = '#/docs?feature=font-metrics'
+  rememberedFeatures.docs = 'font-metrics'
   chrome = await launchChromeForCDP({
     executable: process.env.CHROME_BIN ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(existsSync) ?? 'google-chrome',
     createProfile: () => mkdtempSync(resolve(tmpdir(), 'injoffice-scroll-chrome-')),
@@ -271,13 +268,13 @@ try {
   await until(`document.querySelector('.app-shell')?.dataset.navigation === 'scroll' && document.querySelectorAll('[data-scroll-section]').length === ${keys.length}`, 'continuous showcase ready')
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-scroll-section]')).map(element => element.dataset.scrollSection)`), keys, 'all sections share one document in navigation order')
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-scroll-section]')).every(element => element.querySelector('h1,h2'))`), true, 'every section has a discoverable heading before its editor loads')
-  assert.equal(await evaluate(`document.querySelectorAll('[data-scroll-state="ready"]').length < ${keys.length - 1}`), true, 'initial overview does not eagerly initialize every editor')
-  await until(active('overview'), 'overview is the current sidebar location')
+  assert.equal(await evaluate(`document.querySelectorAll('[data-scroll-state="ready"]').length < ${keys.length}`), true, 'direct Docs start does not eagerly initialize every editor')
+  await until(active('font-metrics'), 'direct Docs feature is the current sidebar location')
+  await until(ready('font-metrics'), 'direct Docs feature is ready', 90_000)
+  assert.equal(await evaluate(`!document.querySelector('.overview-page, [data-workspace-entry]') && !Array.from(document.querySelectorAll('.app-main a')).some(link => link.textContent.trim() === 'All demos')`), true, 'there is no introductory page or obsolete All demos link')
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar a')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'only four comprehensive tool links appear in navigation')
-  await screenshot('scroll-overview-desktop')
-  await anchor('font-metrics')
+  await screenshot('scroll-docs-direct-desktop')
   await assertNavigationSelection('desktop')
-  await anchor('overview')
 
   if (process.argv.includes('--fault')) {
     await send('Fetch.enable', { patterns: [{ urlPattern: '*PptxRenderPage*', resourceType: 'Script', requestStage: 'Request' }] })
@@ -285,7 +282,7 @@ try {
     await evaluate(`location.hash = '#/slides?feature=pptx-render'`)
     await until(`!!document.querySelector('${section('pptx-render')} [data-workspace-error]')`, 'failed chunk is isolated to its feature')
     assert.equal(chunkFailures, 1, 'the test deliberately failed exactly one lazy chunk')
-    assert.equal(await evaluate(`document.querySelectorAll('[data-scroll-section]').length === 5 && !!document.querySelector('${section('pptx-render')} [role=alert]')`), true, 'one failed feature leaves all four workspaces and navigation intact')
+    assert.equal(await evaluate(`document.querySelectorAll('[data-scroll-section]').length === 4 && !!document.querySelector('${section('pptx-render')} [role=alert]')`), true, 'one failed feature leaves all four workspaces and navigation intact')
     await evaluate(`document.querySelector('${section('pptx-render')} [data-workspace-retry]').click()`)
     await until(`!!document.querySelector('${section('pptx-render')} [data-workspace-error]') || (${ready('pptx-render')})`, 'retry settles without breaking other features', 30_000)
     if (!await evaluate(ready('pptx-render'))) {
@@ -299,14 +296,14 @@ try {
       assert.match(reloadDialogs[0].message, /unsaved.*lost/i, 'reload warns about losing uncommitted demo edits')
     }
     await send('Fetch.disable')
-    await anchor('overview')
+    await anchor('font-metrics')
   }
 
-  // Cold navigation preserves the overview DOM and uses a real section anchor.
-  await evaluate(`void (window.__overviewNode = document.querySelector('[data-scroll-section="overview"]'))`)
+  // Feature navigation preserves the existing tool shells in the same document.
+  await evaluate(`void (window.__sheetsNode = document.querySelector('[data-scroll-section="sheets"]'))`)
   await anchor('agent-docs')
   await until(agentState('agent-docs', 'ready'), 'DOCX agent initialized', 90_000)
-  assert.equal(await evaluate(`window.__overviewNode.isConnected && window.__overviewNode === document.querySelector('[data-scroll-section="overview"]')`), true, 'anchor navigation preserves existing sections')
+  assert.equal(await evaluate(`window.__sheetsNode.isConnected && window.__sheetsNode === document.querySelector('[data-scroll-section="sheets"]')`), true, 'anchor navigation preserves existing sections')
   const prompt = 'Northstar Scrolling Review'
   await evaluate(`(() => {
     const input = document.querySelector('${section('agent-docs')} [data-agent-task-value]');
@@ -395,11 +392,12 @@ try {
 
   // Preserve query intent even when a cold section first mounts after the user
   // has already moved elsewhere. Re-enter via passive scrolling, not a hashchange.
-  origin.hash = '#/overview'
+  origin.hash = '#/docs?feature=font-metrics'
   origin.searchParams.set('scroll-smoke-document', 'cold-sheets')
   await send('Page.navigate', { url: origin.href })
-  Object.assign(rememberedFeatures, { sheets: 'editor', docs: 'editor', slides: 'editor', pdf: 'editor' })
-  await until(active('overview'), 'fresh document ready for cold Sheets deep link')
+  Object.assign(rememberedFeatures, { sheets: 'editor', docs: 'font-metrics', slides: 'editor', pdf: 'editor' })
+  await until(active('font-metrics'), 'fresh Docs document ready for cold Sheets deep link')
+  await until(ready('font-metrics'), 'fresh Docs font metrics ready', 90_000)
   holdChunks = true
   await send('Fetch.enable', { patterns: [{ urlPattern: '*NativeRoundTripPage*', resourceType: 'Script', requestStage: 'Request' }] })
   rememberedFeatures.sheets = 'native'
@@ -535,7 +533,7 @@ try {
   await until(ready('charts'), 'same sidebar destination reopens a closed demo')
   assert.deepEqual(liveProposals, [], 'scroll demo never calls a real model endpoint')
   assert.deepEqual(errors, [], 'no uncaught errors or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['four tools plus landing in one document', 'four sidebar links', 'lazy feature initialization', 'sidebar scroll spy', 'passive scroll replaces history', 'passive scroll preserves focus', 'pointer and arrow-key groups retain focus and toolbar position', 'retained hidden workbook remains inert and keyboard-inaccessible', 'feature changes retain native edits and exact pending approval', 'same tool anchor returns to heading', 'Back and Forward across features', 'legacy format-specific deep links', 'independent mounted agent formats', 'untouched workspace release and guarded resets', 'sticky mobile navigator', 'mobile overflow', 'no real model calls'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tools in one document without an intro', 'direct Docs feature start', 'four sidebar links', 'lazy feature initialization', 'sidebar scroll spy', 'passive scroll replaces history', 'passive scroll preserves focus', 'pointer and arrow-key groups retain focus and toolbar position', 'retained hidden workbook remains inert and keyboard-inaccessible', 'feature changes retain native edits and exact pending approval', 'same tool anchor returns to heading', 'Back and Forward across features', 'legacy format-specific deep links', 'independent mounted agent formats', 'untouched workspace release and guarded resets', 'sticky mobile navigator', 'mobile overflow', 'no real model calls'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     try {

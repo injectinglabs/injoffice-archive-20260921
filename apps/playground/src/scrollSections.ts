@@ -2,10 +2,10 @@ import type { DemoDefinition } from './demoRegistry'
 import { surfaceHref, type Surface } from './route'
 import { WORKSPACE_DEMOS } from './workspaceRegistry'
 import { resolveToolWorkspace } from './toolWorkspaces'
+export { workspaceNavigationHash } from './toolWorkspaces'
 
 export type ScrollSection = { key: string; surface: Surface; href: string; demo?: DemoDefinition }
 export const SCROLL_SECTIONS: ScrollSection[] = [
-  { key: 'overview', surface: 'overview', href: surfaceHref('overview') },
   ...WORKSPACE_DEMOS.map(demo => ({ key: demo.surface, surface: demo.surface, href: surfaceHref(demo.surface), demo })),
 ]
 

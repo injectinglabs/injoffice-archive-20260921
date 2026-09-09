@@ -1,6 +1,6 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type ErrorInfo, type ReactNode } from 'react'
 import type { AgentTool } from '../route'
-import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceHref, type ToolWorkspaceFeature } from '../toolWorkspaces'
+import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceHref, workspaceNavigationHash, type ToolWorkspaceFeature } from '../toolWorkspaces'
 import '../design-system/live-create-edit.css'
 import './ToolWorkspace.css'
 
@@ -92,7 +92,7 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
 
   useEffect(() => {
     const sync = () => {
-      const route = resolveToolWorkspace(window.location.hash)
+      const route = resolveToolWorkspace(workspaceNavigationHash(window.location.hash))
       if (route?.tool === tool) activate(route.feature, window.location.hash)
     }
     window.addEventListener('hashchange', sync)

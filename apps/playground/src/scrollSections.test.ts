@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { DEMOS } from './demoRegistry'
 import { AGENT_TOOLS, agentHref, surfaceHref } from './route'
-import { activeSectionKey, SCROLL_SECTIONS, sectionForHash } from './scrollSections'
+import { activeSectionKey, SCROLL_SECTIONS, sectionForHash, workspaceNavigationHash } from './scrollSections'
 import { TOOL_WORKSPACES, workspaceHref } from './toolWorkspaces'
 
 describe('four-tool continuous showcase', () => {
-  it('provides four live workspaces plus a lightweight introduction', () => {
-    expect(SCROLL_SECTIONS.map(section => section.key)).toEqual(['overview', 'sheets', 'docs', 'slides', 'pdf'])
-    expect(new Set(SCROLL_SECTIONS.map(section => section.href)).size).toBe(5)
-    expect(SCROLL_SECTIONS[0]).toEqual({ key: 'overview', surface: 'overview', href: '#/overview' })
-    expect(SCROLL_SECTIONS.slice(1).every(section => section.demo?.surface === section.surface)).toBe(true)
+  it('starts directly with Sheets and provides only four live workspaces', () => {
+    expect(SCROLL_SECTIONS.map(section => section.key)).toEqual(['sheets', 'docs', 'slides', 'pdf'])
+    expect(new Set(SCROLL_SECTIONS.map(section => section.href)).size).toBe(4)
+    expect(SCROLL_SECTIONS[0]?.href).toBe('#/sheets')
+    expect(SCROLL_SECTIONS.every(section => section.demo?.surface === section.surface)).toBe(true)
     for (const section of SCROLL_SECTIONS) expect(sectionForHash(section.href)).toBe(section)
   })
 
@@ -25,9 +25,14 @@ describe('four-tool continuous showcase', () => {
     ['#/agent', 'sheets'], ['#/agent?format=docx', 'docs'], ['#/agent?format=pptx', 'slides'], ['#/agent?format=PDF', 'pdf'],
     ['#/native', 'sheets'], ['#/sheets?view=native', 'sheets'], ['#/charts', 'sheets'], ['#/history', 'sheets'],
     ['#/pptx-render', 'slides'], ['#/font-metrics', 'docs'], ['#/collab?format=pdf', 'pdf'],
-    ['', 'overview'], ['#/missing', 'overview'],
+    ['', 'sheets'], ['#/overview', 'sheets'], ['#/missing', 'sheets'],
   ])('resolves legacy bookmark %s to %s', (hash, tool) => {
     expect(sectionForHash(hash).key).toBe(tool)
+  })
+
+  it('normalizes the removed introduction without losing capability or room deep links', () => {
+    for (const hash of ['', '#/', '#/overview', '#/overview?anything=true', '#/missing']) expect(workspaceNavigationHash(hash)).toBe('#/sheets')
+    for (const hash of ['#/docs', '#/charts', '#/agent?format=pdf', '#/collab?format=docs&artifact=shared-room', '#/sheets?feature=native']) expect(workspaceNavigationHash(hash)).toBe(hash)
   })
 })
 

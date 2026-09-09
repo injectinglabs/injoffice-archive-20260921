@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
-const overviewSource = readFileSync(new URL('./pages/OverviewPage.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('./workbench.css', import.meta.url), 'utf8')
 const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
 
@@ -51,7 +50,7 @@ describe('playground navigation continuity', () => {
     expect(appSource).toContain('resolveToolWorkspace(proofSection.featureHash)?.feature')
     expect(appSource).toContain('demo={workspaceProofDemo(proofSection.featureHash)}')
     expect(appSource).toContain('featureHash: sectionHashes.current.get(section.key)')
-    expect(overviewSource).toContain('TOOL_WORKSPACES.map')
+    expect(appSource).not.toContain('OverviewPage')
   })
 
   it('clears the desktop sidebar basis when navigation becomes a mobile row', () => {
@@ -59,7 +58,7 @@ describe('playground navigation continuity', () => {
   })
 
   it('warms route chunks for pointer and keyboard navigation intent', () => {
-    for (const source of [appSource, overviewSource]) {
+    for (const source of [appSource]) {
       expect(source).toContain('onPointerEnter={() => preloadWorkspaceOnIntent(')
       expect(source).toContain('onFocus={() => preloadWorkspaceOnIntent(')
     }
