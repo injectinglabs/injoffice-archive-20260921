@@ -6,7 +6,7 @@
 
 InjOffice is a set of browser and server libraries for editing office artifacts. It adds plain-JSON models, pure transformation engines, provider-neutral agent change sets, optional editor integrations, and surgical OOXML patching. A hosted InjOffice service is not required: consumers can use the browser-local WASM engine, run offline, inject their own backend, or opt into the in-repo `injoffice-server`.
 
-Try the [deployed browser playground](https://solid-chainsaw-62n2zgm.pages.github.io/). The site is hosted with private GitHub Pages, so access requires authorization to this repository.
+Try the [public browser playground](https://injoffice.com/). It runs on AWS with browser-local document engines and mock-only AI. The repository remains private; see [hosting and rollback instructions](infra/README.md). The existing [private GitHub Pages preview](https://solid-chainsaw-62n2zgm.pages.github.io/) still requires repository authorization.
 
 The repository is a monorepo with independently consumable TypeScript packages, private apps, and Go modules. The TypeScript packages target Node.js 22 or newer and modern bundlers. UI integrations use React and, where noted, Univer OSS as an optional editor shell. Univer is not the file authority. Native paint compilers are a preview mode.
 
