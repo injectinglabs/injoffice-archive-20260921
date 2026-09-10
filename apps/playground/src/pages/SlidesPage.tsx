@@ -29,6 +29,7 @@ export default function SlidesPage() {
   return (
     <div className="platen-fill ds" data-demo-surface="slides">
       <div className="toolstrip univer-toolbar ds-workstrip" role="toolbar" aria-label="Presentation tools">
+        <a className="workbench-button workbench-button--primary" href="#/pptx-native">Open a real .pptx</a>
         <DsField label="Theme">
           <DsSelect
             value={themeId}

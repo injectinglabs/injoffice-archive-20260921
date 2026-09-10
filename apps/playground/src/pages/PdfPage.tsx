@@ -15,6 +15,7 @@ import {
   PdfViewerDocument,
   renderPageToCanvas,
   type SearchMatch,
+  type PdfOutlineItem,
 } from '../../../../packages/pdf/src/viewer'
 import { PDF_NODE_PREFIX } from '../pdfHostRoutes'
 import { createPdfDemoFixture, PDF_DEMO_FILE_NAME } from '../pdfDemoFixture'
@@ -38,10 +39,11 @@ import {
 } from '../pdfWorkbench'
 import { recordPdfEdit, travelPdfHistory, type PdfHistory } from '../pdfInteraction'
 import { PdfInteractionLayer, type PdfPlacementTool } from './PdfInteractionLayer'
+import { PdfTextLayer } from './PdfTextLayer'
 
 configurePdfWorker(pdfWorkerUrl)
 
-type OutlineItem = { title: string; pageIndex: number | null }
+type OutlineItem = PdfOutlineItem
 type Inspector = 'inspect' | 'pages' | 'mark' | 'draw' | 'forms' | 'stamp' | 'host'
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2]
@@ -54,6 +56,13 @@ const INSPECTORS: { id: Inspector; label: string }[] = [
   { id: 'stamp', label: 'Stamp' },
   { id: 'host', label: 'Advanced' },
 ]
+
+function OutlineList({ items, onSelect }: { items: OutlineItem[]; onSelect: (page: number) => void }) {
+  return <ol className="pdf-result-list">{items.map((item, index) => <li key={`${item.title}-${index}`}>
+    <button type="button" className="workbench-button workbench-button--quiet" disabled={item.pageIndex === null} onClick={() => item.pageIndex !== null && onSelect(item.pageIndex)}>{item.title}{item.pageIndex === null ? '' : ` · ${item.pageIndex}`}</button>
+    {item.children.length > 0 && <OutlineList items={item.children} onSelect={onSelect} />}
+  </li>)}</ol>
+}
 
 export function clampPdfPage(page: number, pageCount: number): number {
   if (pageCount < 1 || !Number.isFinite(page)) return 1
@@ -91,6 +100,7 @@ export default function PdfPage() {
   const viewerRef = useRef<PdfViewerDocument | null>(null)
   const renderQueueRef = useRef<Promise<void>>(Promise.resolve())
   const renderGenerationRef = useRef(0)
+  const searchControllerRef = useRef<AbortController | null>(null)
   const [bytes, setBytes] = useState<Uint8Array | null>(null)
   const [fileName, setFileName] = useState(PDF_DEMO_FILE_NAME)
   const [edited, setEdited] = useState(false)
@@ -119,6 +129,15 @@ export default function PdfPage() {
   const [selection, setSelection] = useState<number[][]>([])
   const [tool, setTool] = useState<PdfPlacementTool>(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => {
+    searchControllerRef.current?.abort()
+    setSearching(false)
+    setSearched(false)
+    setMatches([])
+    setSearchTerm('')
+    return () => { searchControllerRef.current?.abort() }
+  }, [query, bytes])
 
   useEffect(() => { setSelection([]); setTool(null) }, [page, zoom, bytes, inspector])
   useEffect(() => {
@@ -242,7 +261,7 @@ export default function PdfPage() {
       try {
         const loaded = await PdfViewerDocument.load(bytes)
         ownedViewer = loaded
-        if (cancelled) return
+        if (cancelled) { await loaded.destroy(); return }
         viewerRef.current = loaded
         setPageCount(loaded.pageCount)
         setPage((current) => clampPdfPage(current, loaded.pageCount))
@@ -250,7 +269,7 @@ export default function PdfPage() {
         setBusy(null)
         setInfo(`${fileName} · ${loaded.pageCount} page${loaded.pageCount === 1 ? '' : 's'}`)
         const [nextOutline, nextGeometry, nextAnnots, nextFields] = await Promise.all([
-          loaded.getOutline().catch(() => [] as OutlineItem[]),
+          loaded.getOutlineTree().catch(() => [] as OutlineItem[]),
           pdfGeometry(bytes),
           listPdfAnnots(bytes),
           listPdfFormFields(bytes),
@@ -282,6 +301,7 @@ export default function PdfPage() {
   useEffect(() => {
     if (!viewer || pageCount < 1) return
     let cancelled = false
+    const controller = new AbortController()
     const generation = ++renderGenerationRef.current
     const selectedPage = clampPdfPage(page, pageCount)
     setBusy('rendering')
@@ -293,7 +313,7 @@ export default function PdfPage() {
         const extractedText = await viewer.getPageText(selectedPage)
         const canvas = canvasRef.current
         if (!canvas || cancelled || viewerRef.current !== viewer) return
-        await renderPageToCanvas(viewer, selectedPage, canvas, zoom)
+        await renderPageToCanvas(viewer, selectedPage, canvas, zoom, undefined, { signal: controller.signal })
         if (cancelled || generation !== renderGenerationRef.current || viewerRef.current !== viewer) return
         setText(extractedText)
         setInfo(`${fileName} · page ${selectedPage} of ${pageCount} · ${Math.round(size.width)}×${Math.round(size.height)} pt · ${Math.round(zoom * 100)}%`)
@@ -305,7 +325,7 @@ export default function PdfPage() {
         setBusy(null)
       })
     renderQueueRef.current = render
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, [fileName, page, pageCount, viewer, zoom])
 
   const openPdf = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -355,18 +375,21 @@ export default function PdfPage() {
     event.preventDefault()
     const activeViewer = viewerRef.current
     if (!activeViewer || query.trim().length === 0) return
+    searchControllerRef.current?.abort()
+    const controller = new AbortController()
+    searchControllerRef.current = controller
     setSearching(true)
     setError(null)
     try {
-      const nextMatches = await activeViewer.search(query.trim())
-      if (viewerRef.current !== activeViewer) return
+      const nextMatches = await activeViewer.search(query.trim(), { signal: controller.signal })
+      if (controller.signal.aborted || viewerRef.current !== activeViewer) return
       setMatches(nextMatches)
       setSearchTerm(query.trim())
       if (nextMatches[0]) setPage(nextMatches[0].pageIndex)
       setSearched(true)
       setSearching(false)
     } catch (reason: unknown) {
-      if (viewerRef.current !== activeViewer) return
+      if (controller.signal.aborted || viewerRef.current !== activeViewer) return
       setError(`Could not search the PDF: ${errorMessage(reason)}`)
       setSearching(false)
     }
@@ -408,6 +431,7 @@ export default function PdfPage() {
             {!ready && !error && <p className="pdf-empty ds-muted">Loading PDF…</p>}
             <div className="pdf-page-stage">
               <canvas ref={canvasRef} className="pdf-canvas" aria-label={ready ? `Rendered page ${page} of ${pageCount}` : 'PDF page'} />
+              {viewer && <PdfTextLayer viewer={viewer} page={page} zoom={zoom} disabled={locked || inspector === 'mark' || tool !== null} />}
               {viewer && <PdfInteractionLayer key={`${page}-${zoom}`} viewer={viewer} page={page} zoom={zoom} locked={locked} selectText={inspector === 'mark'} tool={tool} matches={matches} queryLength={searchTerm.length} onSelection={setSelection} onPlace={(kind, points) => {
                 setTool(null)
                 void runEdit(() => kind === 'note' ? applyPdfNote(bytes!, page, noteText, points[0]) : applyPdfPlacedDrawing(bytes!, page, kind, points), `Added ${kind} on page ${page}.`)
@@ -445,7 +469,7 @@ export default function PdfPage() {
               {matches.length > 0 && <ol className="pdf-result-list">{matches.map((match, index) => <li key={`${match.pageIndex}-${match.offset}-${index}`}><button type="button" className="workbench-button workbench-button--quiet" onClick={() => setPage(match.pageIndex)}><span>Page {match.pageIndex}</span>{match.snippet || query}</button></li>)}</ol>}
               <p className="ds-muted">Geometry · {geometry ? `${geometry.pageCount} pages` : '—'}{current ? ` · ${Math.round(current.width)}×${Math.round(current.height)} pt · ${current.rotation}°` : ''}</p>
               <span className="ds-eyebrow">Document outline</span>
-              {outline.length === 0 ? <p className="ds-muted">No outline entries.</p> : <ol className="pdf-result-list">{outline.map((item, index) => <li key={`${item.title}-${index}`}><button type="button" className="workbench-button workbench-button--quiet" disabled={item.pageIndex === null} onClick={() => item.pageIndex !== null && setPage(item.pageIndex)}>{item.title}{item.pageIndex === null ? '' : ` · ${item.pageIndex}`}</button></li>)}</ol>}
+              {outline.length === 0 ? <p className="ds-muted">No outline entries.</p> : <OutlineList items={outline} onSelect={setPage} />}
               <span className="ds-eyebrow">Page {page} extracted text</span>
               <p className="ds-muted">{text || 'No extractable text on this page.'}</p>
             </div>

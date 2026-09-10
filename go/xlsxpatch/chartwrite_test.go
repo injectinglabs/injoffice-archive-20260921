@@ -73,7 +73,9 @@ func TestResolveRelPathRefusesNonCanonicalPathSegments(t *testing.T) {
 }
 
 func TestAddChart_FreshWorkbook_RoundTripsThroughReader(t *testing.T) {
-	orig := buildZip(t, fixtureWorkbook(false))
+	entries := fixtureWorkbook(false)
+	entries["xl/worksheets/sheet1.xml"] = `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Quarter</t></is></c><c r="B1" t="inlineStr"><is><t>Revenue</t></is></c><c r="C1" t="inlineStr"><is><t>Costs</t></is></c></row></sheetData></worksheet>`
+	orig := buildZip(t, entries)
 	out, err := AddChart(orig, writeSpec("column"))
 	if err != nil {
 		t.Fatal(err)

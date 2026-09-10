@@ -27,6 +27,28 @@ func main() {
 
 The module can read and write charts and shapes, hydrate/add/update/remove native pivot parts, hydrate and apply print setup, and apply explicit archive part patches. Chart lifecycle calls use chart-part plus drawing-part/`cNvPr` object id as stable identity; update/delete preserve sibling drawing objects and refuse shared parts, unsupported dependency graphs, ambiguous ownership, and stale identities. Shape lifecycle calls use drawing-part plus `cNvPr` object id as stable identity; update/delete replace or remove one top-level anchor, preserve sibling objects and connector bindings, and reject duplicate ids, grouped targets, ambiguous ownership, stale identities, and dangling connector deletes. Group editing remains outside the bounded API. Pivot lifecycle calls use the hydrated pivot-table part as stable identity, preserve shared caches, and reject ambiguous relationship graphs. `ReadPrintSetups` reads the bounded worksheet page setup, print options, margins, centered/raw odd header/footer text, print area, and repeated-title defined names while reporting unsupported native settings. `SetPrintSetup` surgically writes print areas, named paper sizes, portrait/landscape orientation, fit or explicit scale, margins, centering, gridlines, headings, and centered header/footer text. Repeated-title write-back, custom paper, watermarks, and complete header/footer syntax remain outside that bounded writer. Always handle returned errors and hydration warnings; they are part of the fail-closed contract.
 
+## Chart preview caches
+
+`AddChart` and `UpdateChart` populate OOXML series-name, category and numeric
+caches from the current workbook's literal cells. Supported references are
+single-sheet, single-row or single-column ranges of up to 10,000 cells; inline
+and shared strings are supported, including rich-text string concatenation.
+Shared strings resolve through the workbook relationship, never a guessed part path.
+Blank points retain their range index. Scatter categories use numeric caches.
+
+Unsupported references, errors, formula cells (even with cached results),
+shared/array-formula dependents, and numeric category/name labels omit the
+affected cache rather than inventing values. The original range reference is
+retained so a capable consumer can calculate it. An unresolved `NameRef` no
+longer receives a guessed cache from the caller's `Name` field. Numeric labels
+are conservative omissions until effective-style formatting is available: even
+style 0 or an omitted cell style can display a date instead of its raw number.
+
+These are creation/update-time snapshots, not a recalculation engine. Later
+cell edits preserve unrelated chart parts; hosts must call `UpdateChart` for
+affected charts to refresh these caches before preview/delivery. This does not
+claim that every spreadsheet or Slack preview consumer renders charts alike.
+
 ## Native worksheet outlines
 
 `ReadWorksheetOutline` projects a sheet's row/column `outlineLevel`, `hidden`,

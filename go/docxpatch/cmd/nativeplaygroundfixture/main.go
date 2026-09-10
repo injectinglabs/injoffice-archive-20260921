@@ -125,7 +125,7 @@ func tableRow(header bool, firstID, first, secondID, second, thirdID, third stri
 	runProperties := `<w:rPr><w:rFonts w:ascii="DejaVu Sans"/></w:rPr>`
 	if header {
 		rowProperties = `<w:trPr><w:tblHeader/></w:trPr>`
-		shading = `<w:shd w:fill="234F78"/>`
+		shading = `<w:shd w:val="clear" w:fill="234F78"/>`
 		runProperties = `<w:rPr><w:rFonts w:ascii="DejaVu Sans"/><w:b/><w:color w:val="FFFFFF"/></w:rPr>`
 	}
 	cell := func(width int, id, text string) string {

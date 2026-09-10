@@ -31,6 +31,11 @@ func TestPlaygroundFixtureIsMeaningfulDeterministicAndEditable(t *testing.T) {
 	if document.Body.Blocks[4].Table == nil || len(document.Body.Blocks[4].Table.Rows) != 4 {
 		t.Fatalf("decision table was not extracted: %#v", document.Body.Blocks[4])
 	}
+	for _, cell := range document.Body.Blocks[4].Table.Rows[0].Cells {
+		if cell.ShadingRGB == nil || *cell.ShadingRGB != "234F78" {
+			t.Fatal("white header text requires an explicitly modeled blue background")
+		}
+	}
 	title := document.Body.Blocks[0].Paragraph
 	if title == nil || title.EditPolicy.Mode != "read-write" || len(title.Runs) != 1 || title.Runs[0].Text == nil || *title.Runs[0].Text != "Northstar Launch Brief" {
 		t.Fatalf("meaningful editable title missing: %#v", title)

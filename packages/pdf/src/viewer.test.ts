@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { canvasRenderMetrics, configurePdfWorker, PdfViewerDocument } from './viewer.js';
+import { canvasRenderMetrics, configurePdfWorker, PdfViewerDocument, renderPageToCanvas } from './viewer.js';
 
 async function makeDoc(pages: Array<{ width: number; height: number; text: string }>): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -69,6 +69,49 @@ describe('PdfViewerDocument', () => {
     const doc = await load(await makeDoc([{ width: 100, height: 100, text: 'anything' }]));
     expect(await doc.search('   ')).toEqual([]);
   });
+
+  it('reuses extracted text between searches', async () => {
+    const doc = await load(await makeDoc([{ width: 200, height: 100, text: 'hello world' }]));
+    const page = await doc.getPage(1);
+    const extract = vi.spyOn(page, 'getTextContent');
+    await doc.search('hello');
+    await doc.search('world');
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops a cancelled search before reading the next page', async () => {
+    const doc = await load(await makeDoc([{ width: 200, height: 100, text: 'one' }, { width: 200, height: 100, text: 'two' }]));
+    const controller = new AbortController();
+    const read = vi.spyOn(doc, 'getPageText').mockImplementation(async () => {
+      controller.abort();
+      return 'one';
+    });
+    await expect(doc.search('one', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(read).toHaveBeenCalledTimes(1);
+    await expect(doc.search('two', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects fractional and non-finite page indices', async () => {
+    const doc = await load(await makeDoc([{ width: 100, height: 100, text: 'one' }]));
+    for (const page of [NaN, Infinity, 1.5]) await expect(doc.getPage(page)).rejects.toThrow(/out of range/);
+  });
+
+  it('preserves bookmark nesting and resolves zero-based numeric destinations', async () => {
+    const doc = await load(await makeDoc([{ width: 100, height: 100, text: 'one' }]));
+    const proxy = (doc as unknown as { proxy: pdfjsLib.PDFDocumentProxy }).proxy;
+    vi.spyOn(proxy, 'getOutline').mockResolvedValue([
+      { title: 'Chapter', dest: [0], items: [{ title: 'Section', dest: [0], items: [] }] },
+      { title: 'Invalid target', dest: [99], items: [] },
+    ] as unknown as Awaited<ReturnType<typeof proxy.getOutline>>);
+    expect(await doc.getOutlineTree()).toEqual([
+      { title: 'Chapter', pageIndex: 1, children: [{ title: 'Section', pageIndex: 1, children: [] }] },
+      { title: 'Invalid target', pageIndex: null, children: [] },
+    ]);
+    expect(await doc.getOutline()).toEqual([
+      { title: 'Chapter', pageIndex: 1 }, { title: 'Section', pageIndex: 1 }, { title: 'Invalid target', pageIndex: null },
+    ]);
+  });
 });
 
 describe('configurePdfWorker', () => {
@@ -111,5 +154,35 @@ describe('canvasRenderMetrics', () => {
   it('rejects invalid viewport dimensions and pixel ratios', () => {
     expect(() => canvasRenderMetrics(0, 300, 1)).toThrow(/viewport dimensions/);
     expect(() => canvasRenderMetrics(200, 300, Number.NaN)).toThrow(/pixel ratio/);
+  });
+
+  it('caps raster area and dimensions while preserving CSS zoom', () => {
+    for (const [width, height, budget] of [[20000, 30000, 16000000], [1000000, 1, 100], [10.1, 10.1, 110], [10000, 1, 1]]) {
+      const metrics = canvasRenderMetrics(width, height, 3, budget);
+      expect(metrics.pixelWidth * metrics.pixelHeight).toBeLessThanOrEqual(budget);
+      expect(Math.max(metrics.pixelWidth, metrics.pixelHeight)).toBeLessThanOrEqual(16384);
+      expect(metrics.cssWidth).toBe(width);
+      expect(metrics.cssHeight).toBe(height);
+    }
+    expect(() => canvasRenderMetrics(200, 300, 1, 0)).toThrow(/pixel budget/);
+  });
+});
+
+describe('render cancellation', () => {
+  it('cancels the active PDF.js task and releases the abort listener', async () => {
+    const controller = new AbortController();
+    let reject!: (reason: Error) => void;
+    const task = { promise: new Promise<void>((_resolve, fail) => { reject = fail; }), cancel: vi.fn(() => reject(new Error('cancelled'))) };
+    const page = { getViewport: () => ({ width: 100, height: 200 }), render: vi.fn(() => task) };
+    const doc = { getPage: async () => page } as unknown as PdfViewerDocument;
+    const canvas = { getContext: () => ({}), style: {} } as unknown as HTMLCanvasElement;
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const rendering = renderPageToCanvas(doc, 1, canvas, 1, 2, { signal: controller.signal });
+    await Promise.resolve();
+    controller.abort();
+    await expect(rendering).rejects.toThrow('cancelled');
+    expect(task.cancel).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(canvas.width).toBe(200);
   });
 });

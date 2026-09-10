@@ -5,10 +5,54 @@ import {
   type NativeDocxParagraphV1,
   type NativeDocxRunV1,
   type NativeDocxStoryV1,
+  type NativeDocxTableV1,
+  type NativeDocxTableCellV1,
 } from '../../../packages/docs/src/nativeContract'
 
 export const DOCX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 export const DOCX_PREVIEW_BLOCK_LIMIT = 200
+
+export type PreviewTableCell = { cell: NativeDocxTableCellV1; column: number; rowSpan: number; orphanContinuation: boolean }
+
+/** HTML projection only. Merge only identical grid intervals; never discard
+ * unexpected continuation content, or join through an intervening row. */
+export function nativeDocxTableRows(table: NativeDocxTableV1): PreviewTableCell[][] {
+  let active = new Map<string, PreviewTableCell>()
+  return table.rows.map((row) => {
+    const next = new Map<string, PreviewTableCell>()
+    const visible: PreviewTableCell[] = []
+    let column = 0
+    for (const cell of row.cells) {
+      const key = `${column}:${cell.grid_span}`
+      const origin = active.get(key)
+      const hasContent = cell.paragraphs.some((paragraph) => paragraph.runs.some((run) =>
+        run.kind === 'drawing' || run.kind === 'reference' || nativeDocxRunText(run).trim().length > 0))
+      if (cell.vertical_merge === 'continue' && origin && !hasContent) {
+        origin.rowSpan += 1
+        next.set(key, origin)
+      } else {
+        const projected = { cell, column, rowSpan: 1, orphanContinuation: cell.vertical_merge === 'continue' }
+        visible.push(projected)
+        if (cell.vertical_merge === 'restart') next.set(key, projected)
+      }
+      column += cell.grid_span
+    }
+    active = next
+    return visible
+  })
+}
+
+/** OOXML highlight names aren't CSS colors (notably darkYellow). */
+export function nativeDocxHighlight(value: string | undefined): string | undefined {
+  const colors: Record<string, string> = {
+    black: '#000000', blue: '#0000ff', cyan: '#00ffff', green: '#00ff00',
+    magenta: '#ff00ff', red: '#ff0000', yellow: '#ffff00', white: '#ffffff',
+    darkBlue: '#000080', darkCyan: '#008080', darkGreen: '#008000',
+    darkMagenta: '#800080', darkRed: '#800000', darkYellow: '#808000',
+    darkGray: '#808080', lightGray: '#c0c0c0',
+  }
+  return value && Object.hasOwn(colors, value) ? colors[value] : undefined
+}
 
 export type NativeDocxPreviewStats = {
   blocks: number

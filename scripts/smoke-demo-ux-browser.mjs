@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, sep } from 'node:path'
+import { PDFDocument, PDFName, PDFNumber, StandardFonts } from 'pdf-lib'
 import { launchChromeForCDP, terminateProcess } from './chrome-cdp-startup.mjs'
 import { startShowcaseServer } from './showcase-smoke-server.mjs'
 import { startShowcaseDevServer } from './showcase-smoke-dev-server.mjs'
@@ -38,6 +39,25 @@ try {
   await cdp.send('Page.navigate', { url: `${url.replace(/#.*$/, '')}#/pdf?feature=editor` })
   await ready()
   await evaluate(`${pdf}.scrollIntoView({ block: 'start' })`)
+  await textLayerReady()
+  await assert(`(() => {
+    const span = ${pdf}.querySelector('.pdf-selectable-text span');
+    const selection = window.getSelection(); selection.selectAllChildren(span);
+    const copied = selection.toString(); selection.removeAllRanges();
+    return copied.length > 0 && copied === span.textContent;
+  })()`, 'native PDF text selection supports copying')
+  await button('Rotate 90°')
+  await ready()
+  await textLayerReady()
+  await assert(`${pdf}.querySelector('.pdf-selectable-text').dataset.mainRotation === '90'`, 'text layer follows page rotation')
+  await button('Undo')
+  await ready()
+  await evaluate(`(() => { const select = ${pdf}.querySelector('[aria-label="Zoom"]'); select.value = '2'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+  await ready()
+  await textLayerReady()
+  await screenshot('pdf-selectable-text-zoom.png')
+  await evaluate(`(() => { const select = ${pdf}.querySelector('[aria-label="Zoom"]'); select.value = '1'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+  await ready()
 
   // Tabs support a single tab stop, arrow keys, Home/End and linked panels.
   await evaluate(`document.querySelector('#pdf-tab-pages').focus()`)
@@ -116,8 +136,40 @@ try {
   await evaluate(`(() => { const transfer = new DataTransfer(); transfer.items.add(new File(['not a PDF'], 'broken.pdf', { type: 'application/pdf' })); const input = ${pdf}.querySelector('[aria-label="Open a PDF file"]'); input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true })); })()`)
   await poll(() => evaluate(`${pdf}.innerText.includes('Could not read the selected PDF')`), 'invalid upload error')
   await assert(`Number(${pdf}.querySelector('[aria-label="Page number"]').max) === ${pageCount} && ${pdf}.dataset.demoDirty === 'true' && [...${pdf}.querySelectorAll('button')].some(b => b.textContent.trim() === 'Undo' && !b.disabled)`, 'invalid upload preserves working document and undo')
+  // /UserUnit changes physical page geometry independently of viewer zoom.
+  const unitDoc = await PDFDocument.create()
+  const unitPage = unitDoc.addPage([200, 300])
+  unitPage.node.set(PDFName.of('UserUnit'), PDFNumber.of(2))
+  unitPage.drawText('Scaled PDF coordinates', { x: 20, y: 240, size: 12, font: await unitDoc.embedFont(StandardFonts.Helvetica) })
+  const unitBytes = [...await unitDoc.save()]
+  // Pass fixture bytes as a CDP value, never interpolate them into source code.
+  const documentHandle = await cdp.send('Runtime.evaluate', { expression: 'document' })
+  const objectId = documentHandle.result.objectId
+  if (!objectId) throw new Error('Browser document handle unavailable')
+  try {
+    const uploaded = await cdp.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: `function(bytes) {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([new Uint8Array(bytes)], 'user-unit.pdf', { type: 'application/pdf' }));
+        const input = this.querySelector('[data-demo-surface="pdf"] [aria-label="Open a PDF file"]');
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }`,
+      arguments: [{ value: unitBytes }],
+      returnByValue: true,
+    })
+    if (uploaded.exceptionDetails) throw new Error(uploaded.exceptionDetails.text)
+  } finally {
+    await cdp.send('Runtime.releaseObject', { objectId })
+  }
+  await poll(() => evaluate(`${pdf}.querySelector('.native-status').textContent.includes('user-unit.pdf')`), 'UserUnit PDF opened')
+  await ready()
+  await textLayerReady()
+  await assert(`${pdf}.querySelector('.pdf-selectable-text').style.getPropertyValue('--total-scale-factor') === '2'`, 'text layer includes PDF user unit')
+  await screenshot('pdf-user-unit.png')
   if (errors.length) throw new Error(`Browser exceptions: ${errors.join('\n')}`)
-  console.log(JSON.stringify({ result: 'PASS', checks: ['tab keyboard navigation', 'passage markup', 'undo/redo', 'pointer drawing', 'keyboard drawing', 'search highlighting', 'page deletion recovery', 'invalid upload preserves edits'], screenshots: artifacts }, null, 2))
+  console.log(JSON.stringify({ result: 'PASS', checks: ['native text selection', 'text geometry at rotation and zoom', 'PDF user unit geometry', 'tab keyboard navigation', 'passage markup', 'undo/redo', 'pointer drawing', 'keyboard drawing', 'search highlighting', 'page deletion recovery', 'invalid upload preserves edits'], screenshots: artifacts }, null, 2))
 } catch (error) {
   console.error(`Screenshots: ${artifacts}`)
   if (cdp) {
@@ -146,6 +198,23 @@ async function poll(check, label, timeout = 30000) {
   throw new Error(`Timed out: ${label}`)
 }
 async function ready() { await delay(100); await poll(() => evaluate(`${pdf}?.querySelector('.native-status')?.dataset.state === 'ready'`), 'PDF ready') }
+async function textLayerReady() {
+  await poll(() => evaluate(`(() => {
+    const layer = ${pdf}.querySelector('.pdf-selectable-text');
+    return layer && !layer.dataset.disabled && layer.querySelector('span')?.getBoundingClientRect().width > 0;
+  })()`), 'selectable PDF text ready')
+  await assert(`(() => {
+    const layer = ${pdf}.querySelector('.pdf-selectable-text');
+    const canvas = ${pdf}.querySelector('canvas').getBoundingClientRect();
+    const bounds = layer.getBoundingClientRect();
+    return Math.abs(bounds.left - canvas.left) < 2 && Math.abs(bounds.top - canvas.top) < 2 &&
+      Math.abs(bounds.width - canvas.width) < 2 && Math.abs(bounds.height - canvas.height) < 2 &&
+      [...layer.querySelectorAll('span')].filter(span => span.textContent.trim()).every(span => {
+        const r = span.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.left >= canvas.left - 2 && r.right <= canvas.right + 2 && r.top >= canvas.top - 2 && r.bottom <= canvas.bottom + 2;
+      });
+  })()`, 'PDF text geometry stays aligned with canvas at rotation and zoom')
+}
 async function tab(id) { await evaluate(`document.querySelector('#pdf-tab-${id}').click()`); await delay(50) }
 async function button(text) {
   await poll(() => evaluate(`(() => { const b = [...${pdf}.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)}); if (!b || b.disabled) return false; b.click(); return true; })()`), `button ${text}`)

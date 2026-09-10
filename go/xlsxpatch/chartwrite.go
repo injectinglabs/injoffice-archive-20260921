@@ -28,10 +28,11 @@ import (
 // WriteSeries is one series to write: display name plus the cell references
 // its data binds to, in "Sheet!$A$1:$A$5" form.
 type WriteSeries struct {
-	Name          string
-	NameRef       string // optional; when set, wins over Name as the tx strRef
-	CategoriesRef string // optional
-	ValuesRef     string
+	Name                                 string
+	NameRef                              string // optional; when set, wins over Name as the tx strRef
+	CategoriesRef                        string // optional
+	ValuesRef                            string
+	nameCache, categoryCache, valueCache string // derived only from source workbook bytes
 }
 
 // ChartAnchor places the chart over the grid in cell coordinates (0-indexed,
@@ -93,6 +94,7 @@ func AddChart(orig []byte, spec ChartWriteSpec) ([]byte, error) {
 		return nil, fmt.Errorf("xlsxpatch: worksheet part %q unreadable", sheetPart)
 	}
 
+	spec = chartSpecWithCaches(read, spec)
 	patch := Patch{Replace: map[string][]byte{}, Add: map[string][]byte{}}
 
 	chartPart := nextFreePart(zr, "xl/charts/chart", ".xml")
@@ -565,7 +567,7 @@ func serTxXML(s WriteSeries, idx int) string {
 		name = fmt.Sprintf("Series %d", idx+1)
 	}
 	if s.NameRef != "" {
-		return fmt.Sprintf(`<c:tx><c:strRef><c:f>%s</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>%s</c:v></c:pt></c:strCache></c:strRef></c:tx>`, esc(s.NameRef), esc(name))
+		return fmt.Sprintf(`<c:tx><c:strRef><c:f>%s</c:f>%s</c:strRef></c:tx>`, esc(s.NameRef), s.nameCache)
 	}
 	return fmt.Sprintf(`<c:tx><c:v>%s</c:v></c:tx>`, esc(name))
 }
@@ -577,14 +579,14 @@ func serXML(s WriteSeries, idx int, scatter bool) string {
 	b.WriteString(serTxXML(s, idx))
 	if scatter {
 		if s.CategoriesRef != "" {
-			fmt.Fprintf(&b, `<c:xVal><c:numRef><c:f>%s</c:f></c:numRef></c:xVal>`, esc(s.CategoriesRef))
+			fmt.Fprintf(&b, `<c:xVal><c:numRef><c:f>%s</c:f>%s</c:numRef></c:xVal>`, esc(s.CategoriesRef), s.categoryCache)
 		}
-		fmt.Fprintf(&b, `<c:yVal><c:numRef><c:f>%s</c:f></c:numRef></c:yVal>`, esc(s.ValuesRef))
+		fmt.Fprintf(&b, `<c:yVal><c:numRef><c:f>%s</c:f>%s</c:numRef></c:yVal>`, esc(s.ValuesRef), s.valueCache)
 	} else {
 		if s.CategoriesRef != "" {
-			fmt.Fprintf(&b, `<c:cat><c:strRef><c:f>%s</c:f></c:strRef></c:cat>`, esc(s.CategoriesRef))
+			fmt.Fprintf(&b, `<c:cat><c:strRef><c:f>%s</c:f>%s</c:strRef></c:cat>`, esc(s.CategoriesRef), s.categoryCache)
 		}
-		fmt.Fprintf(&b, `<c:val><c:numRef><c:f>%s</c:f></c:numRef></c:val>`, esc(s.ValuesRef))
+		fmt.Fprintf(&b, `<c:val><c:numRef><c:f>%s</c:f>%s</c:numRef></c:val>`, esc(s.ValuesRef), s.valueCache)
 	}
 	b.WriteString(`</c:ser>`)
 	return b.String()

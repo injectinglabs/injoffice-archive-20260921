@@ -110,6 +110,10 @@ func UpdateChart(orig []byte, identity ChartIdentity, spec ChartWriteSpec) ([]by
 	if spec.SheetName != graph.sheetName {
 		return nil, fmt.Errorf("xlsxpatch: update chart: identity belongs to worksheet %q, not %q", graph.sheetName, spec.SheetName)
 	}
+	spec = chartSpecWithCaches(func(name string) (string, bool) {
+		data, ok := graph.parts[name]
+		return string(data), ok
+	}, spec)
 	replacement := []byte(anchorXMLWithObjectID(spec, graph.target.chartRelID, identity.ObjectID))
 	drawing := graph.parts[identity.DrawingPart]
 	updatedDrawing := make([]byte, 0, len(drawing)-graph.target.span.end+graph.target.span.start+len(replacement))

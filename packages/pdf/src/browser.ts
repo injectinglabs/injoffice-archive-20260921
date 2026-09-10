@@ -21,5 +21,7 @@ export {
   PdfViewerDocument,
   renderPageToCanvas,
   type CanvasRenderMetrics,
+  type PdfOutlineItem,
+  type PdfRenderOptions,
   type SearchMatch,
 } from './viewer.js'

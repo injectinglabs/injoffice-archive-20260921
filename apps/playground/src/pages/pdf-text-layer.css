@@ -1,0 +1,43 @@
+/* Geometry variables are populated by the installed PDF.js TextLayer. Keep
+   these scoped to the PDF workbench, rather than importing the full viewer UI. */
+.pdf-selectable-text {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  forced-color-adjust: none;
+  text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  transform-origin: 0 0;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.pdf-selectable-text[data-disabled] { pointer-events: none; visibility: hidden; }
+.pdf-selectable-text :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pdf-selectable-text > :not(.markedContent),
+.pdf-selectable-text .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.pdf-selectable-text .markedContent { display: contents; }
+.pdf-selectable-text ::selection { background: rgb(32 94 184 / 30%); }
+.pdf-selectable-text[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.pdf-selectable-text[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.pdf-selectable-text[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }

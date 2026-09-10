@@ -8,6 +8,22 @@ export interface SearchMatch {
   snippet: string;
 }
 
+export interface PdfOutlineItem {
+  title: string;
+  pageIndex: number | null;
+  children: PdfOutlineItem[];
+}
+
+export interface PdfRenderOptions {
+  signal?: AbortSignal;
+  /** Maximum backing-store pixels (default 16 million, about 64 MB RGBA). */
+  maxPixels?: number;
+}
+
+function checkAbort(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
+
 export interface CanvasRenderMetrics {
   /** Backing-store dimensions used for raster fidelity. */
   pixelWidth: number;
@@ -23,19 +39,23 @@ export interface CanvasRenderMetrics {
  * Resolves CSS and backing-store sizes for a pdf.js viewport. Exported so
  * browser hosts can qualify high-DPI behavior without requiring a DOM canvas.
  */
-export function canvasRenderMetrics(width: number, height: number, pixelRatio = 1): CanvasRenderMetrics {
+export function canvasRenderMetrics(width: number, height: number, pixelRatio = 1, maxPixels = 16_000_000): CanvasRenderMetrics {
   if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
     throw new Error('PDF viewport dimensions must be positive finite numbers');
   }
   if (!Number.isFinite(pixelRatio) || pixelRatio <= 0) {
     throw new Error('PDF canvas pixel ratio must be a positive finite number');
   }
+  if (!Number.isSafeInteger(maxPixels) || maxPixels < 1) throw new Error('PDF canvas pixel budget must be a positive safe integer');
+  // Limit both area and individual dimensions; keep CSS zoom unchanged.
+  const ratio = Math.min(pixelRatio, Math.sqrt(maxPixels) / Math.sqrt(width) / Math.sqrt(height), Math.min(16_384, maxPixels) / width, Math.min(16_384, maxPixels) / height);
+  const limited = ratio < pixelRatio || Math.ceil(width * ratio) * Math.ceil(height * ratio) > maxPixels;
   return {
-    pixelWidth: Math.ceil(width * pixelRatio),
-    pixelHeight: Math.ceil(height * pixelRatio),
+    pixelWidth: Math.max(1, limited ? Math.floor(width * ratio) : Math.ceil(width * ratio)),
+    pixelHeight: Math.max(1, limited ? Math.floor(height * ratio) : Math.ceil(height * ratio)),
     cssWidth: width,
     cssHeight: height,
-    transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
+    transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0],
   };
 }
 
@@ -61,6 +81,8 @@ export function configurePdfWorker(workerSrc: string | URL): void {
  * host-side (DOM canvas in the browser), see `renderPageToCanvas`.
  */
 export class PdfViewerDocument {
+  private readonly textCache = new Map<number, string>();
+  private cachedCharacters = 0;
   private constructor(
     private readonly proxy: PDFDocumentProxy,
     private readonly task: ReturnType<typeof pdfjsLib.getDocument>,
@@ -80,7 +102,7 @@ export class PdfViewerDocument {
   }
 
   async getPage(pageIndex: number): Promise<PDFPageProxy> {
-    if (pageIndex < 1 || pageIndex > this.pageCount) {
+    if (!Number.isInteger(pageIndex) || pageIndex < 1 || pageIndex > this.pageCount) {
       throw new Error(`page ${pageIndex} is out of range for a ${this.pageCount}-page document`);
     }
     return this.proxy.getPage(pageIndex);
@@ -93,44 +115,70 @@ export class PdfViewerDocument {
   }
 
   async getPageText(pageIndex: number): Promise<string> {
+    const cached = this.textCache.get(pageIndex);
+    if (cached !== undefined) return cached;
     const page = await this.getPage(pageIndex);
     const content = await page.getTextContent();
-    return content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
+    const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
+    // Bound retained text independently of document length. Larger pages remain searchable.
+    if (!this.textCache.has(pageIndex) && text.length <= 2_000_000) {
+      while (this.textCache.size >= 256 || this.cachedCharacters + text.length > 2_000_000) {
+        const oldest = this.textCache.keys().next().value!;
+        this.cachedCharacters -= this.textCache.get(oldest)!.length;
+        this.textCache.delete(oldest);
+      }
+      this.textCache.set(pageIndex, text);
+      this.cachedCharacters += text.length;
+    }
+    return text;
   }
 
   async getOutline(): Promise<Array<{ title: string; pageIndex: number | null }>> {
+    const flatten = (items: PdfOutlineItem[]): Array<{ title: string; pageIndex: number | null }> =>
+      items.flatMap(({ title, pageIndex, children }) => [{ title, pageIndex }, ...flatten(children)]);
+    return flatten(await this.getOutlineTree());
+  }
+
+  /** Hierarchical bookmarks; getOutline retains its flat compatibility API. */
+  async getOutlineTree(): Promise<PdfOutlineItem[]> {
     const outline = await this.proxy.getOutline();
     if (!outline) return [];
-    const flatten = async (
+    const visit = async (
       items: Awaited<ReturnType<PDFDocumentProxy['getOutline']>>,
-    ): Promise<Array<{ title: string; pageIndex: number | null }>> => {
-      const out: Array<{ title: string; pageIndex: number | null }> = [];
+    ): Promise<PdfOutlineItem[]> => {
+      const out: PdfOutlineItem[] = [];
       for (const item of items ?? []) {
         let pageIndex: number | null = null;
         if (item.dest) {
           try {
             const dest = typeof item.dest === 'string' ? await this.proxy.getDestination(item.dest) : item.dest;
             const ref = dest?.[0];
-            if (ref) pageIndex = (await this.proxy.getPageIndex(ref)) + 1;
+            if (typeof ref === 'number') pageIndex = ref + 1;
+            else if (ref) pageIndex = (await this.proxy.getPageIndex(ref)) + 1;
+            if (pageIndex !== null && (!Number.isInteger(pageIndex) || pageIndex < 1 || pageIndex > this.pageCount)) pageIndex = null;
           } catch {
             pageIndex = null;
           }
         }
-        out.push({ title: item.title, pageIndex });
-        out.push(...(await flatten(item.items)));
+        out.push({ title: item.title, pageIndex, children: await visit(item.items) });
       }
       return out;
     };
-    return flatten(outline);
+    return visit(outline);
   }
 
   /** Case-insensitive substring search across every page's extracted text. */
-  async search(query: string): Promise<SearchMatch[]> {
+  async search(query: string, options: { signal?: AbortSignal } = {}): Promise<SearchMatch[]> {
+    checkAbort(options.signal);
     if (query.trim().length === 0) return [];
     const needle = query.toLowerCase();
     const matches: SearchMatch[] = [];
     for (let pageIndex = 1; pageIndex <= this.pageCount; pageIndex++) {
+      // Cached reads resolve as microtasks; periodically let browser input abort us.
+      if (pageIndex % 16 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      checkAbort(options.signal);
       const text = await this.getPageText(pageIndex);
+      checkAbort(options.signal);
       const haystack = text.toLowerCase();
       let from = 0;
       while (true) {
@@ -144,6 +192,8 @@ export class PdfViewerDocument {
   }
 
   async destroy(): Promise<void> {
+    this.textCache.clear();
+    this.cachedCharacters = 0;
     await this.task.destroy();
   }
 }
@@ -160,15 +210,26 @@ export async function renderPageToCanvas(
   canvas: HTMLCanvasElement,
   scale = 1,
   pixelRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
+  options: PdfRenderOptions = {},
 ): Promise<void> {
+  checkAbort(options.signal);
   const page = await doc.getPage(pageIndex);
+  checkAbort(options.signal);
   const viewport = page.getViewport({ scale });
   const context = canvas.getContext('2d');
   if (!context) throw new Error('canvas 2d context unavailable');
-  const metrics = canvasRenderMetrics(viewport.width, viewport.height, pixelRatio);
+  const metrics = canvasRenderMetrics(viewport.width, viewport.height, pixelRatio, options.maxPixels);
   canvas.width = metrics.pixelWidth;
   canvas.height = metrics.pixelHeight;
   canvas.style.width = `${metrics.cssWidth}px`;
   canvas.style.height = `${metrics.cssHeight}px`;
-  await page.render({ canvas, canvasContext: context, viewport, transform: metrics.transform }).promise;
+  const task = page.render({ canvas, canvasContext: context, viewport, transform: metrics.transform });
+  const cancel = () => task.cancel();
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    await task.promise;
+    checkAbort(options.signal);
+  } finally {
+    options.signal?.removeEventListener('abort', cancel);
+  }
 }

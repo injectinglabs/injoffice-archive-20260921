@@ -7,6 +7,8 @@ export {
   PdfViewerDocument,
   renderPageToCanvas,
   type CanvasRenderMetrics,
+  type PdfOutlineItem,
+  type PdfRenderOptions,
   type SearchMatch,
 } from './viewer.js';
 export { applyTextEdits, editBlock, editText, type BlockEditSpec, type SurgicalEditSpec, type TextEditFailure, type TextEditSpec, type TextEditsResult } from './textEdit/index.js';
