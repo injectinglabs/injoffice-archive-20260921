@@ -1,0 +1,13 @@
+.ds .pdf-reader { display: flex; width: 100%; min-width: 0; height: min(76vh, 960px); min-height: 320px; background: var(--ds-chrome); }
+.ds .pdf-thumbnail-rail { flex: 0 0 132px; overflow-y: auto; padding: 8px; border-right: 1px solid var(--ds-line); }
+.ds .pdf-thumbnail-rail button { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; margin-bottom: 8px; padding: 8px 4px; border: 2px solid transparent; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; }
+.ds .pdf-thumbnail-rail button[aria-current="page"] { border-color: var(--ds-select); background: var(--ds-paper); }
+.ds .pdf-thumbnail-rail button:focus-visible, .ds .pdf-continuous-scroll:focus-visible { outline: 2px solid var(--ds-select); outline-offset: -2px; }
+.ds .pdf-thumbnail-image, .ds .pdf-thumbnail-placeholder { display: flex; align-items: center; justify-content: center; width: 100px; height: 130px; }
+.ds .pdf-thumbnail-placeholder { background: var(--ds-paper); }
+.ds .pdf-thumbnail-image canvas { max-width: 100px; max-height: 130px; }
+.ds .pdf-continuous-scroll { flex: 1; min-width: 0; overflow: auto; padding: 16px; overflow-anchor: none; }
+.ds .pdf-continuous-scroll article { position: relative; margin: 0 auto 20px; background: #fff; box-shadow: 0 1px 5px #0002; }
+.ds .pdf-continuous-scroll canvas { display: block; max-width: none; }
+.ds .pdf-page-placeholder { display: block; padding: 24px; color: #666; }
+@media (max-width: 600px) { .ds .pdf-thumbnail-rail { flex-basis: 72px; padding: 4px; } .ds .pdf-thumbnail-image, .ds .pdf-thumbnail-placeholder { width: 52px; height: 70px; } .ds .pdf-thumbnail-image canvas { max-width: 52px; max-height: 70px; } .ds .pdf-continuous-scroll { padding: 8px; } }

@@ -40,6 +40,7 @@ import {
 import { recordPdfEdit, travelPdfHistory, type PdfHistory } from '../pdfInteraction'
 import { PdfInteractionLayer, type PdfPlacementTool } from './PdfInteractionLayer'
 import { PdfTextLayer } from './PdfTextLayer'
+import { PdfContinuousView } from './PdfContinuousView'
 
 configurePdfWorker(pdfWorkerUrl)
 
@@ -108,6 +109,7 @@ export default function PdfPage() {
   const [page, setPage] = useState(1)
   const [pageCount, setPageCount] = useState(0)
   const [zoom, setZoom] = useState(1)
+  const [continuous, setContinuous] = useState(false)
   const [info, setInfo] = useState('Preparing the bundled sample…')
   const [text, setText] = useState('')
   const [outline, setOutline] = useState<OutlineItem[]>([])
@@ -300,6 +302,13 @@ export default function PdfPage() {
 
   useEffect(() => {
     if (!viewer || pageCount < 1) return
+    if (continuous) {
+      setBusy(null)
+      setInfo(`${fileName} · page ${page} of ${pageCount} · continuous reading · ${Math.round(zoom * 100)}%`)
+      let cancelled = false
+      void viewer.getPageText(page).then(value => { if (!cancelled) setText(value) }).catch(() => { if (!cancelled) setText('') })
+      return () => { cancelled = true }
+    }
     let cancelled = false
     const controller = new AbortController()
     const generation = ++renderGenerationRef.current
@@ -326,7 +335,7 @@ export default function PdfPage() {
       })
     renderQueueRef.current = render
     return () => { cancelled = true; controller.abort() }
-  }, [fileName, page, pageCount, viewer, zoom])
+  }, [continuous, fileName, page, pageCount, viewer, zoom])
 
   const openPdf = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
@@ -416,6 +425,7 @@ export default function PdfPage() {
         <DsField label="Zoom">
           <DsSelect aria-label="Zoom" value={zoom} disabled={!ready} onChange={(event) => setZoom(Number(event.target.value))}>{ZOOM_STEPS.map((step) => <option key={step} value={step}>{Math.round(step * 100)}%</option>)}</DsSelect>
         </DsField>
+        <DsButton disabled={!ready || busy === 'editing'} aria-pressed={continuous} onClick={() => { setTool(null); setSelection([]); setContinuous(value => !value); if (!continuous) setInspector('inspect') }}>{continuous ? 'Single page' : 'Continuous reading'}</DsButton>
         <DsButton variant="outlined" className="workbench-button" disabled={!bytes || busy === 'loading'} onClick={() => downloadPdf()}>Download {edited ? 'edited PDF' : 'PDF'}</DsButton>
         <DsButton disabled={locked || !history.past.length} onClick={() => travel('undo')}>Undo</DsButton>
         <DsButton disabled={locked || !history.future.length} onClick={() => travel('redo')}>Redo</DsButton>
@@ -426,7 +436,7 @@ export default function PdfPage() {
       {error && <DsCallout tone="refuse" title="PDF error">{error}</DsCallout>}
       {tool && <p className="pdf-placement-hint" role="status">{tool === 'note' ? 'Click the page to place your note.' : `Drag on the page to draw ${tool === 'ink' ? 'an ink stroke' : `a ${tool}`}.`} Keyboard: Tab to the page, arrow keys to position, Enter to place each endpoint. <DsButton onClick={() => setTool(null)}>Cancel drawing</DsButton></p>}
       <div className="split ds-split">
-        <div className="split-main pages pdf-pages ds-split-main" aria-busy={busy === 'loading' || busy === 'rendering' || busy === 'editing'}>
+        {continuous && viewer ? <div className="split-main ds-split-main"><PdfContinuousView key={fileName + ':' + pageCount} viewer={viewer} page={page} zoom={zoom} onPageChange={setPage} /></div> : <div className="split-main pages pdf-pages ds-split-main" aria-busy={busy === 'loading' || busy === 'rendering' || busy === 'editing'}>
           <article className="ds-pdf-sheet">
             {!ready && !error && <p className="pdf-empty ds-muted">Loading PDF…</p>}
             <div className="pdf-page-stage">
@@ -438,16 +448,17 @@ export default function PdfPage() {
               }} />}
             </div>
           </article>
-        </div>
+        </div>}
         <aside className="split-side pdf-inspector workbench-inspector ds-split-side" aria-label="PDF operations">
           <div className="view-switcher" role="tablist" aria-label="PDF tool panels">
             {INSPECTORS.map((item) => (
-              <button key={item.id} id={`pdf-tab-${item.id}`} type="button" role="tab" className="ds-pick" aria-selected={inspector === item.id} aria-controls="pdf-operation-panel" tabIndex={inspector === item.id ? 0 : -1} onClick={() => setInspector(item.id)} onKeyDown={event => {
+              <button key={item.id} id={`pdf-tab-${item.id}`} type="button" role="tab" className="ds-pick" aria-selected={inspector === item.id} aria-controls="pdf-operation-panel" tabIndex={inspector === item.id ? 0 : -1} onClick={() => { setInspector(item.id); if (item.id !== 'inspect') setContinuous(false) }} onKeyDown={event => {
                 const index = INSPECTORS.findIndex(entry => entry.id === item.id)
                 const next = event.key === 'ArrowRight' ? (index + 1) % INSPECTORS.length : event.key === 'ArrowLeft' ? (index + INSPECTORS.length - 1) % INSPECTORS.length : event.key === 'Home' ? 0 : event.key === 'End' ? INSPECTORS.length - 1 : -1
                 if (next < 0) return
                 event.preventDefault()
                 setInspector(INSPECTORS[next]!.id)
+                if (INSPECTORS[next]!.id !== 'inspect') setContinuous(false)
                 document.getElementById(`pdf-tab-${INSPECTORS[next]!.id}`)?.focus()
               }}>{item.label}</button>
             ))}
@@ -465,7 +476,7 @@ export default function PdfPage() {
                   <DsButton type="submit" className="workbench-button" disabled={!ready || searching || query.trim().length === 0}>{searching ? 'Finding…' : 'Find'}</DsButton>
                 </div>
               </form>
-              {searched && <p className="ds-muted" role="status">{matches.length} match{matches.length === 1 ? '' : 'es'}. Matching text passages are highlighted on the page.</p>}
+              {searched && <p className="ds-muted" role="status">{matches.length} match{matches.length === 1 ? '' : 'es'}. {continuous ? 'Select a result to jump to its page. Switch to Single page to see passage highlights.' : 'Matching text passages are highlighted on the page.'}</p>}
               {matches.length > 0 && <ol className="pdf-result-list">{matches.map((match, index) => <li key={`${match.pageIndex}-${match.offset}-${index}`}><button type="button" className="workbench-button workbench-button--quiet" onClick={() => setPage(match.pageIndex)}><span>Page {match.pageIndex}</span>{match.snippet || query}</button></li>)}</ol>}
               <p className="ds-muted">Geometry · {geometry ? `${geometry.pageCount} pages` : '—'}{current ? ` · ${Math.round(current.width)}×${Math.round(current.height)} pt · ${current.rotation}°` : ''}</p>
               <span className="ds-eyebrow">Document outline</span>

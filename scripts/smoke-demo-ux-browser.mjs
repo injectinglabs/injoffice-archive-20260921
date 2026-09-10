@@ -168,8 +168,59 @@ try {
   await textLayerReady()
   await assert(`${pdf}.querySelector('.pdf-selectable-text').style.getPropertyValue('--total-scale-factor') === '2'`, 'text layer includes PDF user unit')
   await screenshot('pdf-user-unit.png')
+  await button('Continuous reading')
+  await poll(() => evaluate(`${pdf}.querySelector('[data-read-page="1"] [data-render-state="ready"]') !== null`), 'continuous page ready')
+  await assert(`${pdf}.querySelector('[data-read-page="1"] .pdf-selectable-text').style.getPropertyValue('--total-scale-factor') === '2'`, 'continuous text includes user unit')
+  await screenshot('pdf-continuous-user-unit.png')
+  // Exercise a longer, mixed-size PDF to verify navigation and bounded rasters.
+  const longDoc = await PDFDocument.create()
+  const longFont = await longDoc.embedFont(StandardFonts.Helvetica)
+  for (let index = 1; index <= 24; index++) {
+    const next = longDoc.addPage(index % 2 ? [612, 792] : [792, 612])
+    next.drawText(`Reading page ${index}`, { x: 40, y: 500, size: 20, font: longFont })
+  }
+  const longBytes = [...await longDoc.save()]
+  const longHandle = await cdp.send('Runtime.evaluate', { expression: 'document' })
+  try {
+    const uploaded = await cdp.send('Runtime.callFunctionOn', {
+      objectId: longHandle.result.objectId,
+      functionDeclaration: `function(bytes) {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([new Uint8Array(bytes)], 'continuous-reading.pdf', { type: 'application/pdf' }));
+        const input = this.querySelector('[data-demo-surface="pdf"] [aria-label="Open a PDF file"]');
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }`, arguments: [{ value: longBytes }], returnByValue: true,
+    })
+    if (uploaded.exceptionDetails) throw new Error(uploaded.exceptionDetails.text)
+  } finally { await cdp.send('Runtime.releaseObject', { objectId: longHandle.result.objectId }) }
+  await poll(() => evaluate(`${pdf}.querySelector('.native-status').textContent.includes('continuous-reading.pdf')`), 'long PDF opened')
+  await ready()
+  await evaluate(`${pdf}.querySelector('[aria-label="Go to page 12"]').click()`)
+  await poll(() => evaluate(`${pdf}.querySelector('[data-read-page="12"] [data-render-state="ready"]') !== null`), 'thumbnail jumps to loaded page')
+  await assert(`${pdf}.querySelector('.pdf-thumbnail-rail [aria-current="page"]').getAttribute('aria-label') === 'Go to page 12'`, 'thumbnail identifies current page')
+  await assert(`${pdf}.querySelectorAll('.pdf-continuous-scroll canvas').length <= 3 && ${pdf}.querySelectorAll('.pdf-thumbnail-rail canvas').length <= 5`, 'bounded full-size and thumbnail canvases')
+  await assert(`(() => { const canvas = ${pdf}.querySelector('[data-read-page="12"] canvas'); return canvas.width * canvas.height <= 4000000 && canvas.getBoundingClientRect().width > canvas.getBoundingClientRect().height; })()`, 'mixed page geometry and backing-store budget')
+  await evaluate(`(() => { const root = ${pdf}.querySelector('.pdf-continuous-scroll'); const next = root.querySelector('[data-read-page="13"]'); root.scrollTop += next.getBoundingClientRect().top - root.getBoundingClientRect().top - 16; })()`)
+  await poll(() => evaluate(`${pdf}.querySelector('[aria-label="Page number"]').value === '13'`), 'scroll updates page navigation')
+  await poll(() => evaluate(`${pdf}.querySelector('[data-read-page="13"] [data-render-state="ready"]') !== null`), 'scrolled page ready')
+  await assert(`(() => { const rail = ${pdf}.querySelector('.pdf-thumbnail-rail'); const item = rail.querySelector('[aria-current="page"]'); const r = rail.getBoundingClientRect(); const b = item.getBoundingClientRect(); return b.top >= r.top - 2 && b.bottom <= r.bottom + 2; })()`, 'selected thumbnail remains in rail viewport')
+  await screenshot('pdf-continuous-reading.png')
+  await evaluate(`(() => { const select = ${pdf}.querySelector('[aria-label="Zoom"]'); select.value = '2'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+  await evaluate(`${pdf}.querySelector('[aria-label="Go to page 20"]').click(); ${pdf}.querySelector('[aria-label="Go to page 4"]').click()`)
+  await poll(() => evaluate(`${pdf}.querySelector('[data-read-page="4"] [data-render-state="ready"]') !== null`), 'rapid navigation and zoom settle')
+  await assert(`${pdf}.querySelectorAll('.pdf-continuous-scroll canvas').length <= 3`, 'rapid navigation retains canvas bound')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
+  await delay(150)
+  await assert(`(() => { const r = ${pdf}.querySelector('.pdf-reader').getBoundingClientRect(); return r.width > 100 && r.width <= innerWidth && ${pdf}.querySelector('.pdf-continuous-scroll').clientWidth > 100; })()`, 'continuous reader remains usable on mobile')
+  await assert(`(() => { const rail = ${pdf}.querySelector('.pdf-thumbnail-rail'); const r = rail.getBoundingClientRect(); const b = rail.querySelector('[aria-current="page"]').getBoundingClientRect(); return b.top >= r.top - 2 && b.bottom <= r.bottom + 2; })()`, 'selected thumbnail stays visible after mobile resize')
+  await screenshot('pdf-continuous-mobile.png')
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
+  await tab('mark')
+  await ready()
+  await assert(`${pdf}.querySelector('.pdf-reader') === null && ${pdf}.querySelector('.pdf-page-stage canvas') !== null`, 'editing restores single-page interaction')
   if (errors.length) throw new Error(`Browser exceptions: ${errors.join('\n')}`)
-  console.log(JSON.stringify({ result: 'PASS', checks: ['native text selection', 'text geometry at rotation and zoom', 'PDF user unit geometry', 'tab keyboard navigation', 'passage markup', 'undo/redo', 'pointer drawing', 'keyboard drawing', 'search highlighting', 'page deletion recovery', 'invalid upload preserves edits'], screenshots: artifacts }, null, 2))
+  console.log(JSON.stringify({ result: 'PASS', checks: ['native text selection', 'text geometry at rotation and zoom', 'PDF user unit geometry', 'tab keyboard navigation', 'passage markup', 'undo/redo', 'pointer drawing', 'keyboard drawing', 'search highlighting', 'page deletion recovery', 'invalid upload preserves edits', 'continuous reading and thumbnails', 'bounded page canvas allocation', 'mixed page navigation', 'return to single-page editing'], screenshots: artifacts }, null, 2))
 } catch (error) {
   console.error(`Screenshots: ${artifacts}`)
   if (cdp) {
