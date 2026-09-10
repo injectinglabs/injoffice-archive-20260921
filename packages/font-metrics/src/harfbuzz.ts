@@ -448,6 +448,51 @@ export function inspectHarfBuzzFontMetricsV1(request: HarfBuzzFontMetricsRequest
   return Object.freeze(snapshotMetrics({ ...preflight.requiredMetrics, ...preflight.optionalMetrics }))
 }
 
+export type HarfBuzzOutlineCommandV1 =
+  | { kind: 'move_to' | 'line_to'; x: number; y: number }
+  | { kind: 'quadratic_to'; control_x: number; control_y: number; x: number; y: number }
+  | { kind: 'cubic_to'; control_1_x: number; control_1_y: number; control_2_x: number; control_2_y: number; x: number; y: number }
+  | { kind: 'close_path' }
+
+/** Content-addressed, bounded outlines from the same pinned runtime as shaping.
+ * Construct once per face, not once per glyph. No platform font substitution.
+ */
+export function createHarfBuzzOutlineProviderV1(request: HarfBuzzFontMetricsRequestV1) {
+  const bytes = Uint8Array.from(request.bytes)
+  const metrics = inspectHarfBuzzFontMetricsV1({ ...request, bytes })
+  const face = new hb.Face(new hb.Blob(bytes), request.collectionIndex ?? 0)
+  const font = new hb.Font(face)
+  font.setScale(metrics.unitsPerEm, metrics.unitsPerEm)
+  const outlineScale = 2 ** Math.floor(Math.log2(1_000_000 / metrics.unitsPerEm))
+  let path: HarfBuzzOutlineCommandV1[] = []
+  const append = (command: HarfBuzzOutlineCommandV1) => {
+    if (path.length >= 65_536) throw new RangeError('glyph outline exceeds the command budget')
+    for (const value of Object.values(command)) if (typeof value === 'number' && (!Number.isFinite(value) || Math.abs(value) > 1_000_000_000)) throw new RangeError('glyph outline has invalid coordinates')
+    path.push(command)
+  }
+  const draw = new hb.DrawFuncs()
+  draw.setMoveToFunc((x, y) => append({ kind: 'move_to', x, y }))
+  draw.setLineToFunc((x, y) => append({ kind: 'line_to', x, y }))
+  draw.setQuadraticToFunc((control_x, control_y, x, y) => append({ kind: 'quadratic_to', control_x, control_y, x, y }))
+  draw.setCubicToFunc((control_1_x, control_1_y, control_2_x, control_2_y, x, y) => append({ kind: 'cubic_to', control_1_x, control_1_y, control_2_x, control_2_y, x, y }))
+  draw.setClosePathFunc(() => append({ kind: 'close_path' }))
+  return {
+    outline(glyphId: number): { units_per_em: number; path: HarfBuzzOutlineCommandV1[] } {
+      if (!Number.isSafeInteger(glyphId) || glyphId < 0 || glyphId > 65_535) throw new RangeError('glyph id is outside the bounded outline range')
+      path = []
+      if (!font.drawGlyphOrFail(glyphId, draw)) throw new TypeError('font refused the requested glyph outline')
+      // TrueType implied on-curve midpoints can be half design units. Preserve
+      // those exactly by scaling BOTH the integer wire grid and units-per-em;
+      // rounding coordinates here would silently alter the font's contours.
+      const scale = outlineScale
+      const coordinates = path.flatMap((command) => Object.values(command).filter((value): value is number => typeof value === 'number'))
+      if (coordinates.some((value) => !Number.isSafeInteger(value * scale) || Math.abs(value * scale) > 1_000_000_000)) throw new RangeError('glyph coordinates cannot be represented on the bounded exact integer grid')
+      const normalized = path.map((command) => Object.fromEntries(Object.entries(command).map(([key, value]) => [key, typeof value === 'number' ? value * scale || 0 : value])) as HarfBuzzOutlineCommandV1)
+      return { units_per_em: metrics.unitsPerEm * scale, path: normalized }
+    },
+  }
+}
+
 function isFixedWhitespace(text: string, start: number, end: number): boolean {
   for (let offset = start; offset < end;) {
     const codePoint = text.codePointAt(offset)!

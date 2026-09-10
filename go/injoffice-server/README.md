@@ -56,3 +56,35 @@ with `POST /v1/collab/session`, stream `collab.*` frames from
 
 Two browsers can share one artifact from the playground: start this server,
 then `npm run dev` from the repository root and open `#/collab` twice.
+
+## Opt-in native DOCX pages
+
+Native DOCX page preview is disabled by default. To enable it locally, build
+the workspace packages and `@injoffice/docx-page-paint-worker` using Node 22,
+then pass the absolute compiled worker path:
+
+```sh
+go run ./cmd/injoffice-server -docx-preview-worker /absolute/injoffice/apps/docx-page-paint-worker/dist/worker.js
+```
+
+Set the playground's existing `VITE_INJOFFICE_API_BASE` to this helper. Opening
+a DOCX still does not upload it: the separate **Upload to helper and render
+native pages** button names the destination and explicitly submits the current
+bytes to `POST /v1/docx/page-preview`. The endpoint does not persist the upload.
+The SVG viewer validates the returned page-paint schema and source package
+digest, mounts one page at a time, and clears stale pages after edits/reopen.
+It is a read-only glyph preview, not a selectable Word editor.
+
+The server reconstructs layout, settings, embedded font assets and referenced
+PNG bytes from the submitted archive. The pinned HarfBuzz worker shapes,
+paginates, outlines and validates native page paint. Missing fonts, unsupported
+layout and unavailable providers refuse rendering; the separately labeled
+approximate content preview remains available without weakening edit safety.
+
+This route limits packages to 8 MiB, permits one compilation at a time, checks
+cancellation between extraction passes, and limits the subprocess to 30 seconds
+(within a 45-second request context), 64 MiB framed output and a 512 MiB V8 heap.
+These are not OS-level total-memory isolation: WebAssembly and Go allocations
+are separate. The browser streams at most 16 MiB and bounds displayed geometry.
+Keep the default loopback listener. This helper has no authentication and is
+not a public multi-tenant rendering service.

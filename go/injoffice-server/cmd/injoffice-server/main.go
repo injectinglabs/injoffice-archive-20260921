@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -84,7 +85,12 @@ func run(args []string) int {
 	fs.SetOutput(os.Stderr)
 	addr := fs.String("addr", envOr("INJOFFICE_ADDR", defaultAddr), "listen address (host:port)")
 	dir := fs.String("artifacts", envOr("INJOFFICE_ARTIFACTS", defaultArtifacts), "directory for opaque artifact objects")
+	previewWorker := fs.String("docx-preview-worker", "", "opt-in absolute path to the compiled local DOCX page-paint worker")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *previewWorker != "" && !filepath.IsAbs(*previewWorker) {
+		fmt.Fprintln(os.Stderr, "injoffice-server: docx-preview-worker must be an absolute local path")
 		return 2
 	}
 	store, err := fsstore.Open(*dir)
@@ -95,7 +101,7 @@ func run(args []string) int {
 	fmt.Fprintf(os.Stderr, "injoffice-server: listening on http://%s artifacts=%s (no auth)\n", *addr, *dir)
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           newHandler(store),
+		Handler:           newHandlerWithPreview(store, officehttp.DOCXPreviewOptions{WorkerPath: *previewWorker}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		// WriteTimeout stays 0 so the collab SSE stream can idle with keepalives.
@@ -109,7 +115,11 @@ func run(args []string) int {
 }
 
 func newHandler(store xlsxhttp.Store) http.Handler {
-	office := officehttp.NewHandler(store)
+	return newHandlerWithPreview(store, officehttp.DOCXPreviewOptions{})
+}
+
+func newHandlerWithPreview(store xlsxhttp.Store, preview officehttp.DOCXPreviewOptions) http.Handler {
+	office := officehttp.NewHandlerWithDOCXPreview(store, preview)
 	rooms := collabhttp.New(collab.NewHub(), store)
 	artifacts := artifacthttp.New(store)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

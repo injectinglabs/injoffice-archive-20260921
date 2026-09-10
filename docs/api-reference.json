@@ -4883,6 +4883,57 @@
               "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; }): Promise<NativeDocxPagePaintPreparedV1>"
             }
           ]
+        },
+        {
+          "subpath": "./native-page-paint-output",
+          "file": "nativePagePaintOutputV1.d.ts",
+          "symbols": [
+            {
+              "name": "decodeNativeDocxPagePaintV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPagePaintV1Result"
+            },
+            {
+              "name": "DecodeNativeDocxPagePaintV1Result",
+              "kind": "type",
+              "signature": "export type DecodeNativeDocxPagePaintV1Result ="
+            },
+            {
+              "name": "DOCX_PAGE_PAINT_LIMITS",
+              "kind": "const",
+              "signature": "export declare const DOCX_PAGE_PAINT_LIMITS: Readonly<"
+            },
+            {
+              "name": "DOCX_PAGE_PAINT_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_PAGE_PAINT_PROTOCOL = \"injoffice.docx.page-paint\""
+            },
+            {
+              "name": "DOCX_PAGE_PAINT_VERSION",
+              "kind": "const",
+              "signature": "export declare const DOCX_PAGE_PAINT_VERSION: 1"
+            },
+            {
+              "name": "NativeDocxPagePaintCommandV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
+            },
+            {
+              "name": "NativeDocxPagePaintV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPagePaintV1 = NativeDocxPagePaintSuccessV1 | NativeDocxPagePaintRefusedV1"
+            },
+            {
+              "name": "NativeDocxPaintPageV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxPaintPageV1"
+            },
+            {
+              "name": "NativeDocxPaintPathCommandV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPaintPathCommandV1 ="
+            }
+          ]
         }
       ]
     },
@@ -5579,6 +5630,11 @@
           "file": "harfbuzz.d.ts",
           "symbols": [
             {
+              "name": "createHarfBuzzOutlineProviderV1",
+              "kind": "function",
+              "signature": "export declare function createHarfBuzzOutlineProviderV1(request: HarfBuzzFontMetricsRequestV1):"
+            },
+            {
               "name": "createHarfBuzzTextShaperV1",
               "kind": "function",
               "signature": "export declare function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): HarfBuzzTextShaperV1"
@@ -5632,6 +5688,11 @@
               "name": "HARFBUZZJS_PACKAGE_VERSION",
               "kind": "const",
               "signature": "export declare const HARFBUZZJS_PACKAGE_VERSION: '1.6.0'"
+            },
+            {
+              "name": "HarfBuzzOutlineCommandV1",
+              "kind": "type",
+              "signature": "export type HarfBuzzOutlineCommandV1 ="
             },
             {
               "name": "HarfBuzzShaperOptionsV1",

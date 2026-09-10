@@ -12,7 +12,13 @@ import (
 // NewHandler serves POST /v1/{xlsx,docx,pptx}/{extract,mutations}.
 // store may be nil; artifact_id is then refused.
 func NewHandler(store xlsxhttp.Store) http.Handler {
+	return NewHandlerWithDOCXPreview(store, DOCXPreviewOptions{})
+}
+
+func NewHandlerWithDOCXPreview(store xlsxhttp.Store, preview DOCXPreviewOptions) http.Handler {
 	mux := http.NewServeMux()
+	gate := make(chan struct{}, 1)
+	mux.HandleFunc(DOCXPreviewPath, func(w http.ResponseWriter, r *http.Request) { handleDOCXPreview(w, r, preview, gate) })
 	xlsxhttp.Register(mux, store)
 	mux.HandleFunc(DOCXExtractPath, func(w http.ResponseWriter, r *http.Request) {
 		handleDOCXExtract(w, r, store)

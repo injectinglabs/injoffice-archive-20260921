@@ -61,6 +61,11 @@ jobs:
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault
           SHOWCASE_OUTPUT=artifacts/showcase-browser/pdf-ux node scripts/smoke-demo-ux-browser.mjs --built
+      - name: Native DOCX page preview in Chrome
+        timeout-minutes: 5
+        env:
+          SHOWCASE_OUTPUT: artifacts/showcase-browser/docx-native
+        run: node scripts/smoke-docx-native-preview-browser.mjs
       - name: Upload showcase browser diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

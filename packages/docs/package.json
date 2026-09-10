@@ -21,11 +21,15 @@
       "types": "./dist/nativePagePaintCompilerV1.d.ts",
       "import": "./dist/index.js"
     },
+    "./native-page-paint-output": {
+      "types": "./dist/nativePagePaintOutputV1.d.ts",
+      "import": "./dist/nativePagePaintOutputV1.js"
+    },
     "./native-docx-v1.schema.json": "./schema/native-docx-v1.schema.json"
   },
   "files": ["dist", "schema", "README.md"],
   "injoffice": {
-    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts" },
+    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts", "nativePagePaintOutputV1": "src/nativePagePaintOutputV1.ts" },
     "legalFiles": ["NOTICE"]
   },
   "publishConfig": { "access": "public" },

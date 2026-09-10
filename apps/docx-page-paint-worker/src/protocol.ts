@@ -7,7 +7,7 @@ import {
   type NativeDocxPagePaintCompleteInputV1,
   type NativeDocxPagePaintPrepareInputV1,
 } from '@injoffice/docs/native-page-paint-compiler'
-import { createHarfBuzzTextShaperV1, type HarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
+import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, type HarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
 
 export const DOCX_PAGE_PAINT_WORKER_PROTOCOL = 'injoffice.docx.page-paint-worker'
 export const DOCX_PAGE_PAINT_WORKER_VERSION = 1 as const
@@ -31,7 +31,7 @@ export interface NativeDocxPagePaintWorkerRequestV1 {
   protocol: typeof DOCX_PAGE_PAINT_WORKER_PROTOCOL
   version: typeof DOCX_PAGE_PAINT_WORKER_VERSION
   id: string
-  op: 'prepare' | 'complete' | 'ping'
+  op: 'prepare' | 'complete' | 'render' | 'ping'
   input?: unknown
 }
 
@@ -128,6 +128,25 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown)
     if (value.op === 'prepare') {
       const input = prepareInput(value.input)
       return { ...base, ok: true, result: await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper }) }
+    }
+    if (value.op === 'render') {
+      const input = prepareInput(value.input)
+      if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('render requires the pinned outline provider')
+      const prepared = await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper })
+      const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
+      const results = prepared.outline_requests.map((request) => {
+        const asset = input.font_assets.find((asset) => asset.face_id === request.face.face_id && asset.content_digest === request.face.content_digest && (asset.collection_index ?? undefined) === request.face.collection_index)
+        if (!asset) throw new TypeError('outline face does not exact-join an authoritative font')
+        let provider = providers.get(asset.face_id)
+        if (!provider) {
+          provider = createHarfBuzzOutlineProviderV1({ bytes: asset.bytes, contentDigest: asset.content_digest, ...(asset.collection_index === null ? {} : { collectionIndex: asset.collection_index }) })
+          providers.set(asset.face_id, provider)
+        }
+        const outline = provider.outline(request.glyph_id)
+        return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em }
+      })
+      const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: results })
+      return { ...base, ok: true, result: { page_paint_output: completed.page_paint_output, canonical_output_sha256: completed.canonical_output_sha256, canonical_output_validated: completed.canonical_output_validated } }
     }
     if (value.op === 'complete') return { ...base, ok: true, result: await completeNativeDocxPagePaintV1(value.input as NativeDocxPagePaintCompleteInputV1) }
     throw new TypeError('worker operation is unsupported')

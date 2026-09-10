@@ -11,6 +11,7 @@ import {
 import '../design-system/live-create-edit.css'
 import './docs-workspace.css'
 import { extractDocxPreviewImages } from '../docxPreviewImages'
+import { NativeDocxPages } from '../components/NativeDocxPages'
 import {
   DOCX_MEDIA_TYPE,
   nativeDocxHighlight,
@@ -475,6 +476,7 @@ export default function DocsPage() {
       <PreviewImages.Provider value={previewImages}>
       <div className="native-workspace docx-workspace ds-split">
         <section ref={previewRef} className="native-main docx-main ds-split-main" aria-label="Document preview">
+          {SERVER_FALLBACK_CONFIGURED && authoritativeBytes && document && <NativeDocxPages bytes={authoritativeBytes} packageDigest={document.source.package_sha256} apiBase={API_BASE} />}
           {!document || !preview ? (
             <div className="native-empty">
               <div>

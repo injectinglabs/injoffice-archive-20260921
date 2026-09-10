@@ -380,3 +380,11 @@ const layout = paginate(
 ```
 
 The package intentionally contains no editor framework or DOM measurement layer. The legacy `paginate(BlockBox[])` helper remains available unchanged and isolated from native pagination.
+
+## Browser-safe native page output
+
+Use `@injoffice/docs/native-page-paint-output` to validate transported page-paint
+output in a browser. This output-only entry exports `decodeNativeDocxPagePaintV1`,
+the protocol/version/limits and output types without loading Node font providers,
+HarfBuzz, bidi or pagination. It uses the exact same strict output decoder as the
+server compiler. Full request/source replay remains a compiler-side operation.
