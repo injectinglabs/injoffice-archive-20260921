@@ -220,6 +220,51 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     expect(formatNativeSheetCellDisplayV2.toString()).not.toMatch(/\bIntl\b|\bnew Date\b/)
   })
 
+  it('formats common fixed, grouped, percentage and explicit currency values exactly', () => {
+    const cases = [
+      ['1234.565', '#,##0.00', '1,234.57'],
+      ['-999.995', '#,##0.00', '-1,000.00'],
+      ['1000000', '#,##0', '1,000,000'],
+      ['0.125', '0%', '13%'],
+      ['-0.125', '0%', '-13%'],
+      ['1.23455e-2', '0.00%', '1.23%'],
+      ['0.00005', '0.00%', '0.01%'],
+      ['-0.00001', '0.00%', '0.00%'],
+      ['1.2345678', '0.000000', '1.234568'],
+      ['1234.5', '"$"#,##0.00', '$1,234.50'],
+      ['-12.5', '"€ "0.00', '-€ 12.50'],
+      ['12.5', '0.00" £"', '12.50 £'],
+    ]
+    for (const [lexical, format, text] of cases) expect(formatNativeSheetCellDisplayV2('number', lexical!, format)).toEqual({ status: 'ready', text })
+  })
+
+  it('refuses unsupported number formats instead of silently painting raw values', () => {
+    for (const format of ['0.00E+00', '# ?/?', '#,##0,', '#,##0.00;[Red](#,##0.00)', '_($* #,##0.00_)', '[$$-409]#,##0.00', '0.####', '0.0000000', '0%%', '"$"0%', '"USD"0.00']) {
+      expect(formatNativeSheetCellDisplayV2('number', '1234.5', format).status, format).toBe('refused')
+    }
+    expect(formatNativeSheetCellDisplayV2('number', '1e9999', '0.00%').status).toBe('refused')
+  })
+
+  it('uses formatted strings in native glyph plans and reports unsupported formats per cell', () => {
+    const workbook = displayFixture()
+    const percent = addStyle(workbook, '0.00%')
+    const currency = addStyle(workbook, '"$"#,##0.00')
+    const unsupported = addStyle(workbook, '0.00E+00')
+    for (const [column, style, lexical] of [[15, percent, '0.125'], [16, currency, '1234.5'], [17, unsupported, '1.2']] as const) {
+      const cell = workbook.sheets[0]!.cells.find((candidate) => candidate.column === column)!
+      cell.style_id = style
+      cell.value = { kind: 'number', storage: 'number', lexical, rich: false }
+      delete cell.formula
+    }
+    sealStyles(workbook)
+    const { model, geometry } = setup(workbook as unknown as NativeWorkbookV2, { row: 0, column: 0, end_row: 0, end_column: 17 })
+    const plan = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
+    expect(plan.cells.find((cell) => cell.cell_ref === 'P1')?.display_text).toBe('12.50%')
+    expect(plan.cells.find((cell) => cell.cell_ref === 'Q1')?.display_text).toBe('$1,234.50')
+    expect(plan.unsupported).toContainEqual(expect.objectContaining({ cell_ref: 'R1', code: 'CELL_STYLE_UNSUPPORTED' }))
+    expect(plan.glyphs.some((glyph) => glyph.cell_ref === 'R1')).toBe(false)
+  })
+
   it('paints boolean TRUE/FALSE, error lexicals, and locale-independent dates as glyph paths', () => {
     const workbook = displayFixture()
     const { model, geometry } = setup(workbook as unknown as NativeWorkbookV2, { row: 0, column: 0, end_row: 0, end_column: 17 })

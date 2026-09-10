@@ -205,7 +205,14 @@ The qualified subset is fail-closed and viewport-bounded:
 - error cells as the producer-issued error lexical (`#DIV/0!`, `#N/A`, …)
   when it is printable ASCII
 - date/numeric display for exact OOXML `y`/`m`/`d`/`h`/`s` tokens plus `General`,
-  `0`, and `0.00`, applied without `Date`, `Intl`, host locale, or host timezone;
+  fixed decimals (`0` through six decimal places), optional `#,##0` grouping,
+  percentages (`0%`, `0.00%`), and explicitly quoted currency prefixes/suffixes
+  (`"$"#,##0.00`, `0.00" €"`), applied without `Date`, `Intl`, host locale, or host timezone;
+  decimal scaling/rounding uses bounded integer arithmetic, including percentages.
+  Separators are deterministic comma grouping and decimal point, not a claim of
+  host-locale display parity. Accounting padding, colors/conditions, multi-section
+  formats, fractions, scientific notation, scaling commas and implicit currencies
+  remain refused rather than displaying raw numbers as if formatting succeeded;
   `General` numbers keep their stored lexical; named months/days (`mmmm`,
   `dddd`) paint only from an explicit OOXML `[$-…]` calendar/locale that has a
   producer table; system `[$-F800]` / host-locale names stay refused

@@ -91,7 +91,7 @@ export type NativeSheetCellPaintDisplayKindV2 =
   | 'date-display'
 
 /** Exact producer-issued format strings this slice can apply without locale, Intl, or host TZ. */
-export const NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2 = Object.freeze(['General', '0', '0.00', 'yyyy-mm-dd', 'yyyy/mm/dd'] as const)
+export const NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2 = Object.freeze(['General', '0', '0.00', '#,##0', '#,##0.00', '0%', '0.00%', '"$"#,##0.00', 'yyyy-mm-dd', 'yyyy/mm/dd'] as const)
 export type NativeSheetCellPaintNumberFormatV2 = (typeof NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2)[number]
 
 export type NativeSheetCellDisplayFormatResultV2 =
@@ -1077,8 +1077,10 @@ export function formatNativeSheetCellDisplayV2(
   const format = numberFormat ?? 'General'
   if (kind === 'number') {
     if (format === 'General') return { status: 'ready', text: lexical }
-    if (format === '0' || format === '0.00') {
-      const text = formatFixedDecimalLexical(lexical, format === '0' ? 0 : 2)
+    const numeric = classifyFixedNumberFormat(format)
+    if (numeric) {
+      const fixed = formatFixedDecimalLexical(lexical, numeric.fractionDigits, numeric.percent ? 2 : 0)
+      const text = fixed === undefined ? undefined : decorateFixedNumber(fixed, numeric)
       if (text === undefined) return { status: 'refused', code: 'CELL_STYLE_UNSUPPORTED', message: 'bounded numeric format cannot be applied to this lexical' }
       return { status: 'ready', text }
     }
@@ -1096,7 +1098,26 @@ export function formatNativeSheetCellDisplayV2(
     return { status: 'ready', text }
   }
   if (classified.status === 'unusable' || kind === 'date') return { status: 'refused', code: 'CELL_DATE_DISPLAY', message: 'date display would require locale/number-format invention' }
-  return { status: 'ready', text: lexical }
+  return { status: 'refused', code: 'CELL_STYLE_UNSUPPORTED', message: 'number format is outside the qualified display subset; the original value remains preserved' }
+}
+
+type FixedNumberFormat = { fractionDigits: number; grouped: boolean; percent: boolean; prefix: string; suffix: string }
+
+/** Deliberately one section: no colors, conditions, locale selection, accounting
+ * padding, fill characters, scaling commas, fractions or exponent formatting.
+ * Only explicit currency literals are accepted; no host currency is inferred. */
+function classifyFixedNumberFormat(format: string): FixedNumberFormat | undefined {
+  if (format.length > 64) return undefined
+  const match = /^(?:"([$£€¥] ?)")?(0|#,##0)(?:\.(0{1,6}))?(%)?(?:"( ?[$£€¥])")?$/.exec(format)
+  if (!match || (match[1] && match[5]) || (match[4] && (match[1] || match[5]))) return undefined
+  return { prefix: match[1] ?? '', suffix: match[5] ?? '', grouped: match[2] === '#,##0', fractionDigits: match[3]?.length ?? 0, percent: match[4] === '%' }
+}
+
+function decorateFixedNumber(fixed: string, format: FixedNumberFormat): string {
+  const negative = fixed.startsWith('-')
+  const [whole, fraction] = (negative ? fixed.slice(1) : fixed).split('.')
+  const grouped = format.grouped ? whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : whole!
+  return `${negative ? '-' : ''}${format.prefix}${grouped}${fraction === undefined ? '' : `.${fraction}`}${format.percent ? '%' : ''}${format.suffix}`
 }
 
 const EN_US_GREGORIAN_MONTHS_FULL = Object.freeze(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'])
@@ -1409,10 +1430,12 @@ function daysInMonth(year: number, month: number): number {
   return [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!
 }
 
-function formatFixedDecimalLexical(lexical: string, fractionDigits: number): string | undefined {
+function formatFixedDecimalLexical(lexical: string, fractionDigits: number, decimalShift = 0): string | undefined {
   const parsed = parseDecimalLexical(lexical)
   if (!parsed) return undefined
   let { coefficient, scale } = parsed
+  // Percent is an exact decimal shift, not binary floating-point multiplication.
+  scale -= decimalShift
   if (scale < fractionDigits) {
     const shift = fractionDigits - scale
     if (shift > 32) return undefined

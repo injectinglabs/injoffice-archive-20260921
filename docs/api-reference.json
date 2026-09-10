@@ -10888,7 +10888,7 @@
             {
               "name": "NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2",
               "kind": "const",
-              "signature": "export declare const NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2: readonly [\"General\", \"0\", \"0.00\", \"yyyy-mm-dd\", \"yyyy/mm/dd\"]"
+              "signature": "export declare const NATIVE_SHEET_CELL_PAINT_NUMBER_FORMATS_V2: readonly [\"General\", \"0\", \"0.00\", \"#,##0\", \"#,##0.00\", \"0%\", \"0.00%\", \"\\\"$\\\"#,##0.00\", \"yyyy-mm-dd\", \"yyyy/mm/dd\"]"
             },
             {
               "name": "NATIVE_SHEET_CELL_PAINT_V2_LIMITS",
