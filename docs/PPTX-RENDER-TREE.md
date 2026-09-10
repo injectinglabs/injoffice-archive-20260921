@@ -58,6 +58,24 @@ The Canvas2D command adapter is deliberately generic: the website supplies its
 own context and implements command execution. The package never creates a
 drawing element or imports UI/runtime frameworks.
 
+## Picture source rectangles
+
+Positive DrawingML `a:srcRect` insets now travel through the native contract,
+RenderTree image node and image paint command as optional `crop`. The four
+integers are source-edge insets in 1/1000-percent units, not destination EMU or
+pixel coordinates. Opposing sums must be below 100000. Image adapters must use
+the corresponding fractional source rectangle when sampling the original image;
+silently ignoring `crop` displays different content. Uncropped commands are
+unchanged. Outsets and degenerate rectangles stay preserve-only and produce a
+placeholder rather than an uncropped substitute. No asset bytes or digest change.
+See [DrawingML SourceRectangle semantics](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.sourcerectangle).
+
+`node scripts/smoke-pptx-crop-browser.mjs` exercises the actual playground
+component in Chrome: a four-quadrant PNG remains four quadrants without crop,
+while two source-rectangle crops each fill the entire destination with the
+expected quadrant color. This is a deterministic geometry/pixel oracle, not a
+PowerPoint reference screenshot or evidence of broader text/layout parity.
+
 ## Native text boundary
 
 The compiler calls the `@injoffice/font-metrics/layout` manifest, resolver, load,

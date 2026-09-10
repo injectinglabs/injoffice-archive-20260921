@@ -1,6 +1,7 @@
 import type {
   NativeCompatibilityStatus,
   NativeDiagnosticSeverity,
+  NativePictureCrop,
   NativeShapePreset,
   NativeTextAlign,
 } from '@injoffice/pptx-native'
@@ -217,6 +218,8 @@ export interface RenderImageNode extends RenderNodeBase {
   readonly kind: 'image'
   readonly role: 'picture' | 'chartPreview'
   readonly assetId: string
+  /** Exact DrawingML source-edge insets; adapters must crop before scaling. */
+  readonly crop?: Readonly<NativePictureCrop>
   readonly contentType: string
   readonly sha256: string
   readonly byteLength: number

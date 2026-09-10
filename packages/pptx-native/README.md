@@ -1,5 +1,12 @@
 # @injoffice/pptx-native
 
+Pictures may carry optional `crop` with all four source-edge insets (`left`,
+`top`, `right`, `bottom`) in DrawingML 1/1000-percent units. Each is an integer
+from 0 through 99999 and opposing sums must be below 100000. Omitted crop means
+the full source image. The native extractor now qualifies positive source crops;
+negative/outset and empty rectangles remain preserve-only. Cropping does not
+rewrite image bytes or grant any new image mutation capability.
+
 The dependency-free, versioned native PPTX JSON contract shared by InjOffice's Go
 parser/patcher and future pure TypeScript RenderTree. It contains no renderer,
 React, Konva, DOM, ZIP, storage, or IPC code.

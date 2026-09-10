@@ -284,6 +284,9 @@ function validateElement(
   }
 
   if (element.kind === 'picture') {
+    if (element.crop && (element.crop.left + element.crop.right >= 100_000 || element.crop.top + element.crop.bottom >= 100_000)) {
+      add(issues, `${path}.crop`, 'native.pictureCrop', 'opposing crop insets must leave a positive source rectangle')
+    }
     const asset = assets.get(element.assetId)
     if (!asset) add(issues, `${path}.assetId`, 'native.assetReference', 'references an unknown asset id')
     else if (!asset.contentType.startsWith('image/')) add(issues, `${path}.assetId`, 'native.assetType', 'picture assets must have an image content type')

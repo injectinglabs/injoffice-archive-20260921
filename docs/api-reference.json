@@ -9049,6 +9049,11 @@
               "signature": "export interface NativePassthroughRef"
             },
             {
+              "name": "NativePictureCrop",
+              "kind": "type",
+              "signature": "export interface NativePictureCrop"
+            },
+            {
               "name": "NativePictureElement",
               "kind": "type",
               "signature": "export interface NativePictureElement extends NativeElementBase"
@@ -9206,7 +9211,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"09fa7ef6a0c7f05a466bab3071bcaea4f4a48f9d61cb08c068bd6c4ff853102f\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"6530f53ed29b92bc559769858692e96247335833ff16637d1b02a99b99ce29e3\""
             },
             {
               "name": "provenanceValues",

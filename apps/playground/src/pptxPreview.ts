@@ -21,6 +21,7 @@ export function previewIssue(element: NativeElement, assets: NativeAsset[]): str
   if (element.kind === 'table') return 'Table preserved; table preview unavailable'
   if (element.kind === 'chart' && !previewImage(assets.find((asset) => asset.id === element.chart.previewAssetId))) return 'Chart preserved; no embedded preview image'
   if (element.kind === 'picture' && !previewImage(assets.find((asset) => asset.id === element.assetId))) return 'Image preserved; supported preview bytes unavailable'
+  if (element.kind === 'picture' && element.compatibility.diagnostics.some((diagnostic) => diagnostic.code === 'pptx.picture-crop-unavailable')) return 'Image preserved; source crop cannot be previewed'
   if (element.kind === 'shape' && !element.preset) return 'Shape preserved; geometry unavailable'
   return undefined
 }

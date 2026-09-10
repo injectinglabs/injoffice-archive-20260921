@@ -20,6 +20,28 @@ function fixture(path: string): unknown {
 }
 
 describe('native PPTX contract', () => {
+  it('validates exact picture crop edges and refuses invalid or empty source rectangles', () => {
+    for (const crop of [
+      { left: 0, top: 0, right: 0, bottom: 0 },
+      { left: 12500, top: 25000, right: 37500, bottom: 0 },
+      { left: 99999, top: 0, right: 0, bottom: 99999 },
+    ]) {
+      const deck = fixture('valid/parsed-full.json') as NativePptxDeck
+      const picture = deck.slides[0]!.elements.find((item) => item.kind === 'picture')!
+      if (picture.kind !== 'picture') throw new Error('fixture requires a picture')
+      picture.crop = crop
+      expect(validateNativePptx(deck).ok).toBe(true)
+      for (const invalid of [
+        { ...crop, left: -1 }, { ...crop, top: 0.5 }, { ...crop, right: 100000 },
+        { ...crop, left: 50000, right: 50000 }, { ...crop, top: 99999, bottom: 1 },
+        { left: 0, top: 0, right: 0 }, { ...crop, unknown: 1 },
+      ]) {
+        Object.assign(picture, { crop: invalid })
+        expect(validateNativePptx(deck).ok, JSON.stringify(invalid)).toBe(false)
+      }
+    }
+  })
+
   it('accepts the shared authored and parsed fixtures', () => {
     for (const name of readdirSync(resolve(fixtureRoot, 'valid')).filter((item) => item.endsWith('.json'))) {
       expect(validateNativePptx(fixture(`valid/${name}`)), name).toEqual({ ok: true, value: fixture(`valid/${name}`) })

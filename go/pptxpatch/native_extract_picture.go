@@ -71,7 +71,8 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	if err != nil {
 		return NativeElement{}, err
 	}
-	relationshipID, linkRelationshipID, err := validateNativePictureBlipFill(blipFill, dialect, &gaps)
+	var crop *NativePictureCrop
+	relationshipID, linkRelationshipID, err := validateNativePictureBlipFill(blipFill, dialect, &gaps, &crop)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -113,7 +114,7 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	relID := relationshipID
 	element := NativeElement{
 		Kind: NativeElementKindPicture, ID: elementID, Provenance: NativeProvenanceParsed,
-		Transform: transform, AssetID: &assetID, Passthrough: []NativePassthroughRef{}, Children: nil,
+		Transform: transform, AssetID: &assetID, Crop: crop, Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, RelationshipID: &relID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
 	}
@@ -186,7 +187,7 @@ func validateNativePictureNonVisual(node *nativeXMLNode, dialect nativeExtractDi
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet) (string, string, error) {
+func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet, crop **NativePictureCrop) (string, string, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.picture-fill-unavailable", "picture fill attributes are not modeled in native PPTX v1")
 	}
@@ -236,12 +237,14 @@ func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDia
 		gaps.add("pptx.picture-external-link-unavailable", "linked picture semantics are preserved but not modeled in native PPTX v1")
 	}
 	if sourceRect != nil {
-		cropped, rectErr := validateNativePictureSourceRect(sourceRect)
+		insets, rectErr := validateNativePictureSourceRect(sourceRect)
 		if rectErr != nil {
 			return "", "", rectErr
 		}
-		if cropped {
-			gaps.add("pptx.picture-crop-unavailable", "nonzero picture crop is preserved but cannot be represented in native PPTX v1")
+		if insets[0] < 0 || insets[1] < 0 || insets[2] < 0 || insets[3] < 0 || insets[0]+insets[2] >= 100_000 || insets[1]+insets[3] >= 100_000 {
+			gaps.add("pptx.picture-crop-unavailable", "outset or degenerate picture crops are preserved but not modeled")
+		} else if insets != [4]int64{} {
+			*crop = &NativePictureCrop{Left: &insets[0], Top: &insets[1], Right: &insets[2], Bottom: &insets[3]}
 		}
 	}
 	if tile != nil {
@@ -264,26 +267,26 @@ func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDia
 	return embed, link, nil
 }
 
-func validateNativePictureSourceRect(node *nativeXMLNode) (bool, error) {
+func validateNativePictureSourceRect(node *nativeXMLNode) ([4]int64, error) {
+	var insets [4]int64
 	if err := requireOnlyNativeAttrs(node, xml.Name{Local: "l"}, xml.Name{Local: "t"}, xml.Name{Local: "r"}, xml.Name{Local: "b"}); err != nil {
-		return false, fmt.Errorf("pptxpatch: native extract: unsupported picture crop metadata: %w", err)
+		return insets, fmt.Errorf("pptxpatch: native extract: unsupported picture crop metadata: %w", err)
 	}
 	if len(node.Children) != 0 || !onlyNativeXMLSpace(node.Text) {
-		return false, fmt.Errorf("pptxpatch: native extract: picture source rectangle must be empty")
+		return insets, fmt.Errorf("pptxpatch: native extract: picture source rectangle must be empty")
 	}
-	nonzero := false
-	for _, name := range []string{"l", "t", "r", "b"} {
+	for index, name := range []string{"l", "t", "r", "b"} {
 		value, ok := exactNativeAttr(node, "", name)
 		if !ok {
 			continue
 		}
 		parsed, err := parseCanonicalNativeInt(value, -100_000, 100_000)
 		if err != nil {
-			return false, fmt.Errorf("pptxpatch: native extract: invalid picture crop %s", name)
+			return insets, fmt.Errorf("pptxpatch: native extract: invalid picture crop %s", name)
 		}
-		nonzero = nonzero || parsed != 0
+		insets[index] = parsed
 	}
-	return nonzero, nil
+	return insets, nil
 }
 
 func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet) (NativeTransform, error) {

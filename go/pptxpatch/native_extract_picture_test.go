@@ -122,7 +122,7 @@ func TestExtractNativePPTXPictureCropRotationAndEffectsArePreserveOnly(t *testin
 
 	deck, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{
 		xfrmAttrs:   ` rot="60000" flipH="true"`,
-		sourceRect:  `<a:srcRect l="10000" t="0" r="0" b="0"/>`,
+		sourceRect:  `<a:srcRect l="-10000" t="0" r="0" b="0"/>`,
 		blipContent: `<a:alphaBiLevel thresh="50000"/>`,
 	}), nativeTestExtractOptions())
 	if err != nil {
@@ -139,6 +139,78 @@ func TestExtractNativePPTXPictureCropRotationAndEffectsArePreserveOnly(t *testin
 	for _, code := range []string{"pptx.picture-crop-unavailable", "pptx.picture-transform-unavailable", "pptx.picture-effects-unavailable"} {
 		if !codes[code] {
 			t.Fatalf("missing picture fidelity diagnostic %q: %#v", code, picture.Compatibility.Diagnostics)
+		}
+	}
+}
+
+func TestExtractNativePPTXPicturePositiveCropRetainsExactSource(t *testing.T) {
+	t.Parallel()
+	for _, strict := range []bool{false, true} {
+		data := "\x89PNG\r\n\x1a\nexact-cropped-image"
+		input := nativePictureFixture(t, nativePictureFixtureOptions{strict: strict, imageData: data, sourceRect: `<a:srcRect l="12500" t="25000" r="37500"/>`})
+		before := nativeSHA256(input)
+		deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		picture := nativeFixturePicture(t, deck.Slides[0])
+		if picture.Compatibility.Status != NativeCompatibilityStatusEditable || len(picture.Passthrough) != 0 {
+			t.Fatalf("qualified crop became opaque: %#v", picture)
+		}
+		crop := picture.Crop
+		if crop == nil || *crop.Left != 12500 || *crop.Top != 25000 || *crop.Right != 37500 || *crop.Bottom != 0 {
+			t.Fatalf("source crop not retained exactly: %#v", crop)
+		}
+		if deck.Assets[0].SHA256 != nativeSHA256([]byte(data)) || *deck.Assets[0].ByteLength != int64(len(data)) || nativeSHA256(input) != before {
+			t.Fatal("crop changed source package or image bytes")
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+			t.Fatalf("invalid crop contract: %#v", issues)
+		}
+	}
+}
+
+func TestExtractNativePPTXPictureOutsetAndDegenerateCropsStayOpaque(t *testing.T) {
+	t.Parallel()
+	for _, rectangle := range []string{`l="-1"`, `t="-1"`, `r="-1"`, `b="-1"`, `l="50000" r="50000"`, `t="99999" b="1"`, `l="100000"`} {
+		deck, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{sourceRect: `<a:srcRect ` + rectangle + `/>`}), nativeTestExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		picture := nativeFixturePicture(t, deck.Slides[0])
+		if picture.Crop != nil || picture.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+			t.Fatalf("unsupported crop %s was approximated: %#v", rectangle, picture)
+		}
+	}
+}
+
+func TestNativePPTXPictureCropContractRejectsMalformedInsets(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{sourceRect: `<a:srcRect l="12500"/>`}), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := MarshalNativePPTXJSON(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeNativePPTXJSON(payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, replacement := range []string{`"left":-1`, `"left":100000`, `"left":0.5`, `"left":50000,"right":50000`, `"unknown":12500`, `"left":null`} {
+		malformed := strings.Replace(string(payload), `"left":12500`, replacement, 1)
+		if malformed == string(payload) {
+			t.Fatal("crop test did not mutate payload")
+		}
+		if _, err := DecodeNativePPTXJSON([]byte(malformed)); err == nil {
+			t.Fatalf("accepted malformed crop: %s", replacement)
+		}
+	}
+	for _, edges := range [][4]int64{{-1, 0, 0, 0}, {100000, 0, 0, 0}, {50000, 0, 50000, 0}, {0, 99999, 0, 1}} {
+		picture := &deck.Slides[0].Elements[0]
+		picture.Crop = &NativePictureCrop{Left: &edges[0], Top: &edges[1], Right: &edges[2], Bottom: &edges[3]}
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatalf("accepted invalid opposing insets: %v", edges)
 		}
 	}
 }

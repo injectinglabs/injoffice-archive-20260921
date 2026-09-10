@@ -388,6 +388,7 @@ func TestNativeContractGeneratedBindingShapesMatchGo(t *testing.T) {
 		"NativeTextRun":         reflect.TypeOf(NativeTextRun{}),
 		"NativeParagraph":       reflect.TypeOf(NativeParagraph{}),
 		"NativeTextBodyLayout":  reflect.TypeOf(NativeTextBodyLayout{}),
+		"NativePictureCrop":     reflect.TypeOf(NativePictureCrop{}),
 		"NativeStroke":          reflect.TypeOf(NativeStroke{}),
 		"NativeAnimation":       reflect.TypeOf(NativeAnimation{}),
 		"NativeTransition":      reflect.TypeOf(NativeTransition{}),

@@ -303,6 +303,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if !asset && element.AssetID != nil {
 			v.add(p+".assetId", "native.elementUnion", "is not allowed for this element kind")
 		}
+		if !asset && element.Crop != nil {
+			v.add(p+".crop", "native.elementUnion", "is not allowed for this element kind")
+		}
 		if !table && element.Table != nil {
 			v.add(p+".table", "native.elementUnion", "is not allowed for this element kind")
 		}
@@ -360,6 +363,21 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	case NativeElementKindPicture:
 		commonForbidden(false, false, false, false, false, true, false, false, false, false)
+		if crop := element.Crop; crop != nil {
+			valid := true
+			for _, side := range []struct {
+				name  string
+				value *int64
+			}{{"left", crop.Left}, {"top", crop.Top}, {"right", crop.Right}, {"bottom", crop.Bottom}} {
+				if side.value == nil || *side.value < 0 || *side.value >= 100_000 {
+					v.add(p+".crop."+side.name, "native.pictureCrop", "requires an integer inset from 0 through 99999")
+					valid = false
+				}
+			}
+			if valid && (*crop.Left+*crop.Right >= 100_000 || *crop.Top+*crop.Bottom >= 100_000) {
+				v.add(p+".crop", "native.pictureCrop", "opposing crop insets must leave a positive source rectangle")
+			}
+		}
 		if element.AssetID == nil {
 			v.add(p+".assetId", "schema.required", "is required")
 		} else if asset, ok := v.assets[*element.AssetID]; !ok {

@@ -187,9 +187,19 @@ export interface NativeConnectorElement extends NativeElementBase {
   flipH?: boolean
 }
 
+/** DrawingML source-edge insets in 1/1000 percent (100000 = full image).
+ * Opposing inset sums must be less than 100000. No image bytes are rewritten. */
+export interface NativePictureCrop {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export interface NativePictureElement extends NativeElementBase {
   kind: 'picture'
   assetId: string
+  crop?: NativePictureCrop
 }
 
 export interface NativeTableElement extends NativeElementBase {

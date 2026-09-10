@@ -24,6 +24,7 @@ describe('PPTX approximate preview policy', () => {
   })
   it('keeps missing content explicit and never relaxes refused object policy', () => {
     expect(previewIssue(element({}), [asset()])).toBeUndefined()
+    expect(previewIssue(element({ compatibility: { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.picture-crop-unavailable', message: 'outset crop' }] } }), [asset()])).toContain('crop cannot be previewed')
     expect(previewIssue(element({}), [])).toContain('unavailable')
     expect(previewIssue(element({ kind: 'chart', chart: {} }), [])).toContain('no embedded preview')
     expect(previewIssue(element({ kind: 'group', children: [] }), [])).toContain('Grouped content')
@@ -56,6 +57,20 @@ describe('PPTX approximate preview policy', () => {
     expect(html).toContain('overflow:visible')
     expect(html).not.toContain('overflow-wrap:anywhere')
     expect(html).not.toContain('<script>')
+    expect(JSON.stringify(deck)).toBe(before)
+  })
+  it('crops the original raster through a bounded SVG source viewport without changing bytes', () => {
+    const deck: NativePptxDeck = {
+      contractVersion: 'pptx-native/v1', documentId: 'crop-preview', origin: 'authored',
+      size: { cx: 100, cy: 100 }, assets: [asset()], compatibility: { status: 'editable', diagnostics: [] },
+      slides: [{ id: 'slide', provenance: 'authored', passthrough: [], compatibility: { status: 'editable', diagnostics: [] }, elements: [element({ crop: { left: 12500, top: 25000, right: 37500, bottom: 0 } })] }],
+    }
+    const before = JSON.stringify(deck)
+    const html = renderToStaticMarkup(createElement(PptxFilePreview, { deck }))
+    expect(html).toContain('viewBox="12500 25000 50000 75000"')
+    expect(html).toContain('overflow="hidden"')
+    expect(html).toContain('width="100000" height="100000" preserveAspectRatio="none"')
+    expect(html).toContain('href="data:image/png;base64,YWJj"')
     expect(JSON.stringify(deck)).toBe(before)
   })
 })

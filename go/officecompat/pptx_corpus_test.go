@@ -327,10 +327,14 @@ func assertPPTXFixtureCoverage(t *testing.T, fixtureID string, deck pptxpatch.Na
 		if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 2 || deck.Slides[0].Elements[0].Compatibility.Status != pptxpatch.NativeCompatibilityStatusRefused || deck.Slides[0].Elements[1].Compatibility.Status != pptxpatch.NativeCompatibilityStatusPreserveOnly {
 			t.Fatalf("unsupported content was approximated or lost: %+v", deck.Slides)
 		}
-		for _, code := range []string{"pptx.autoshape-geometry-unavailable", "pptx.autoshape-effects-unavailable", "pptx.picture-crop-unavailable", "pptx.picture-effects-unavailable"} {
+		for _, code := range []string{"pptx.autoshape-geometry-unavailable", "pptx.autoshape-effects-unavailable", "pptx.picture-transform-unavailable", "pptx.picture-effects-unavailable"} {
 			if !pptxDeckHasDiagnostic(deck, code) {
 				t.Fatalf("missing explicit fidelity diagnostic %q", code)
 			}
+		}
+		crop := deck.Slides[0].Elements[1].Crop
+		if crop == nil || *crop.Left != 10000 || *crop.Top != 0 || *crop.Right != 0 || *crop.Bottom != 0 || pptxDeckHasDiagnostic(deck, "pptx.picture-crop-unavailable") {
+			t.Fatalf("qualified positive crop was lost or refused: %+v", crop)
 		}
 		shapeRequest := findPPTXCapabilityRequest(captured, "pptx.autoshape-refused")
 		pictureRequest := findPPTXCapabilityRequest(captured, "pptx.picture-preserve-only")

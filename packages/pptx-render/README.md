@@ -111,6 +111,20 @@ the tree models vertical line progression.
 
 ## Fail-closed rendering
 
+Pictures retain exact positive DrawingML source crop insets as optional `crop`
+on image nodes and image paint commands. Each inset uses 1/1000 percent
+(`100000` is the full source dimension); opposing sums are strictly below
+`100000`. Hosts must use the source rectangle
+`(width*left/100000, height*top/100000,
+width*(100000-left-right)/100000, height*(100000-top-bottom)/100000)`
+when drawing the original decoded image into the destination rectangle. Do not
+round to source pixels before sampling or ignore `crop`. Asset bytes, digests,
+destination geometry, transforms and z-order remain unchanged. Negative/outset
+and degenerate crops remain preserve-only and paint as visible placeholders.
+This additive v2 field requires crop-aware image adapters for cropped inputs;
+uncropped image commands are unchanged. The playground's native-file SVG preview
+uses the same normalized source viewport.
+
 - Refused elements become visible placeholder nodes.
 - Refused AutoShapes need no fabricated preset: element-scoped refusals compile
   to durable-ID placeholders, while an independent slide-level refusal still

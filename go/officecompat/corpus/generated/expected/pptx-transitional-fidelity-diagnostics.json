@@ -155,16 +155,6 @@
           "severity": "warning"
         },
         {
-          "code": "pptx.picture-crop-unavailable",
-          "message": "nonzero picture crop is preserved but cannot be represented in native PPTX v1",
-          "scope": {
-            "elementId": "element-669c6b195d27863e9bd22c93",
-            "partName": "relocated/slides/slide-a.xml",
-            "slideId": "slide-941fe56d9a028963577039e8"
-          },
-          "severity": "warning"
-        },
-        {
           "code": "pptx.picture-transform-unavailable",
           "message": "nonzero picture rotation is preserved but cannot be represented in native PPTX v1",
           "scope": {
@@ -332,16 +322,6 @@
               "severity": "warning"
             },
             {
-              "code": "pptx.picture-crop-unavailable",
-              "message": "nonzero picture crop is preserved but cannot be represented in native PPTX v1",
-              "scope": {
-                "elementId": "element-669c6b195d27863e9bd22c93",
-                "partName": "relocated/slides/slide-a.xml",
-                "slideId": "slide-941fe56d9a028963577039e8"
-              },
-              "severity": "warning"
-            },
-            {
               "code": "pptx.picture-transform-unavailable",
               "message": "nonzero picture rotation is preserved but cannot be represented in native PPTX v1",
               "scope": {
@@ -489,16 +469,6 @@
                   "severity": "warning"
                 },
                 {
-                  "code": "pptx.picture-crop-unavailable",
-                  "message": "nonzero picture crop is preserved but cannot be represented in native PPTX v1",
-                  "scope": {
-                    "elementId": "element-669c6b195d27863e9bd22c93",
-                    "partName": "relocated/slides/slide-a.xml",
-                    "slideId": "slide-941fe56d9a028963577039e8"
-                  },
-                  "severity": "warning"
-                },
-                {
                   "code": "pptx.picture-transform-unavailable",
                   "message": "nonzero picture rotation is preserved but cannot be represented in native PPTX v1",
                   "scope": {
@@ -510,6 +480,12 @@
                 }
               ],
               "status": "preserveOnly"
+            },
+            "crop": {
+              "bottom": 0,
+              "left": 10000,
+              "right": 0,
+              "top": 0
             },
             "id": "element-669c6b195d27863e9bd22c93",
             "kind": "picture",

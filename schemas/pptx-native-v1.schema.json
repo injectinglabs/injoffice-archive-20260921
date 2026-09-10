@@ -478,6 +478,18 @@
         "compatibility": { "$ref": "#/$defs/compatibility" }
       }
     },
+    "pictureCrop": {
+      "x-binding-name": "NativePictureCrop",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "top", "right", "bottom"],
+      "properties": {
+        "left": { "type": "integer", "minimum": 0, "maximum": 99999 },
+        "top": { "type": "integer", "minimum": 0, "maximum": 99999 },
+        "right": { "type": "integer", "minimum": 0, "maximum": 99999 },
+        "bottom": { "type": "integer", "minimum": 0, "maximum": 99999 }
+      }
+    },
     "pictureElement": {
       "x-binding-name": "NativePictureElement",
       "type": "object",
@@ -490,6 +502,7 @@
         "name": { "type": "string", "maxLength": 1024 },
         "transform": { "$ref": "#/$defs/transform" },
         "assetId": { "$ref": "#/$defs/nativeId" },
+        "crop": { "$ref": "#/$defs/pictureCrop" },
         "animation": { "$ref": "#/$defs/animation" },
         "source": { "$ref": "#/$defs/sourceAnchor" },
         "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },

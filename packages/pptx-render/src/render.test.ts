@@ -155,6 +155,34 @@ function findNode<T extends RenderNode['kind']>(tree: Awaited<ReturnType<typeof 
 }
 
 describe('native PPTX RenderTree', () => {
+  it('retains exact source crop through immutable image nodes and paint commands without rewriting assets', async () => {
+    const deck = structuredClone(parsedFull)
+    const picture = deck.slides[0]!.elements.find((item) => item.kind === 'picture')!
+    if (picture.kind !== 'picture') throw new Error('fixture requires a picture')
+    picture.crop = { left: 12500, top: 25000, right: 37500, bottom: 0 }
+    const source = JSON.stringify(deck)
+    const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout() })
+    const image = findNode(tree, 'image', picture.id)
+    const asset = deck.assets.find((item) => item.id === picture.assetId)!
+    expect(image).toMatchObject({ crop: picture.crop, sha256: asset.sha256, byteLength: asset.byteLength })
+    expect(Object.isFrozen(image.crop)).toBe(true)
+    const surface = createRecordingPaintSurface()
+    paintSlideRenderTree(tree, surface)
+    expect(surface.finish()).toContainEqual(expect.objectContaining({ kind: 'image', sourceElementId: picture.id, crop: picture.crop, rect: image.bounds }))
+    expect(JSON.stringify(deck)).toBe(source)
+    expect(stringifySlideRenderTree(await compileNativePptxSlide(deck, 0, { textLayout: textLayout() }))).toBe(stringifySlideRenderTree(tree))
+  })
+  it('does not paint an uncropped image when the extractor reports an unsupported source crop', async () => {
+    const deck = structuredClone(parsedFull)
+    const picture = deck.slides[0]!.elements.find((item) => item.kind === 'picture')!
+    picture.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.picture-crop-unavailable', message: 'outset crop preserved' }] }
+    const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout() })
+    expect(findNode(tree, 'placeholder', picture.id)).toMatchObject({ label: 'Unsupported picture crop preserved' })
+    const surface = createRecordingPaintSurface()
+    paintSlideRenderTree(tree, surface)
+    expect(surface.finish().some((command) => command.kind === 'image' && command.sourceElementId === picture.id)).toBe(false)
+  })
+
   it('compiles rich native content in stable z-order with explicit assets, clips, groups, tables, and chart preview', async () => {
     const tree = await compileNativePptxSlide(parsedFull, 'slide-a', { textLayout: textLayout() })
     expect(tree.nodes.map((node) => [node.zIndex, node.sourceElementId, node.kind])).toEqual([

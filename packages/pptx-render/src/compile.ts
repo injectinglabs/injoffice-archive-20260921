@@ -1802,10 +1802,14 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         headArrow: element.headArrow ?? false, tailArrow: element.tailArrow ?? false,
       }
     case 'picture': {
+      if (element.compatibility.diagnostics.some((diagnostic) => diagnostic.code === 'pptx.picture-crop-unavailable')) {
+        return { kind: 'placeholder', ...base, reason: 'preserveOnly', label: 'Unsupported picture crop preserved' }
+      }
       const asset = referenceAsset(element.assetId, element.id, state)
       const image: RenderImageNode = {
         kind: 'image', ...base, role: 'picture', assetId: asset.id, contentType: asset.contentType, sha256: asset.sha256,
         byteLength: asset.byteLength, resolutionSource: asset.dataBase64 === undefined ? 'host' : 'sourceDeck',
+        ...(element.crop ? { crop: { ...element.crop } } : {}),
       }
       return image
     }

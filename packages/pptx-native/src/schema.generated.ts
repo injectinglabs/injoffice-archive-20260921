@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "09fa7ef6a0c7f05a466bab3071bcaea4f4a48f9d61cb08c068bd6c4ff853102f" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "6530f53ed29b92bc559769858692e96247335833ff16637d1b02a99b99ce29e3" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -213,12 +213,28 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "token"
     ]
   },
+  "NativePictureCrop": {
+    "schemaName": "pictureCrop",
+    "properties": [
+      "bottom",
+      "left",
+      "right",
+      "top"
+    ],
+    "required": [
+      "bottom",
+      "left",
+      "right",
+      "top"
+    ]
+  },
   "NativePictureElement": {
     "schemaName": "pictureElement",
     "properties": [
       "animation",
       "assetId",
       "compatibility",
+      "crop",
       "id",
       "kind",
       "name",
@@ -1475,6 +1491,39 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "pictureCrop": {
+      "x-binding-name": "NativePictureCrop",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left",
+        "top",
+        "right",
+        "bottom"
+      ],
+      "properties": {
+        "left": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        },
+        "right": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        },
+        "bottom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        }
+      }
+    },
     "pictureElement": {
       "x-binding-name": "NativePictureElement",
       "type": "object",
@@ -1507,6 +1556,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "assetId": {
           "$ref": "#/$defs/nativeId"
+        },
+        "crop": {
+          "$ref": "#/$defs/pictureCrop"
         },
         "animation": {
           "$ref": "#/$defs/animation"

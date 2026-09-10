@@ -173,6 +173,15 @@ type NativeOpaqueChart struct {
 // NativeElement is the Go binding for the schema's discriminated union.
 // Validate enforces which fields are required and permitted for each Kind;
 // DecodeNativePPTXJSON additionally rejects every unknown JSON property.
+// NativePictureCrop retains DrawingML source-edge insets (100000 = full image).
+// Required pointers distinguish authored zero insets from missing JSON fields.
+type NativePictureCrop struct {
+	Left   *int64 `json:"left"`
+	Top    *int64 `json:"top"`
+	Right  *int64 `json:"right"`
+	Bottom *int64 `json:"bottom"`
+}
+
 type NativeElement struct {
 	Kind           NativeElementKind      `json:"kind"`
 	ID             string                 `json:"id"`
@@ -189,6 +198,7 @@ type NativeElement struct {
 	TailArrow      *bool                  `json:"tailArrow,omitempty"`
 	FlipH          *bool                  `json:"flipH,omitempty"`
 	AssetID        *string                `json:"assetId,omitempty"`
+	Crop           *NativePictureCrop     `json:"crop,omitempty"`
 	Table          *NativeTable           `json:"table,omitempty"`
 	Chart          *NativeOpaqueChart     `json:"chart,omitempty"`
 	ChildTransform *NativeTransform       `json:"childTransform,omitempty"`

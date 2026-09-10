@@ -35,6 +35,7 @@ export default function PptxFilePreview({ deck }: { deck: NativePptxDeck }) {
       : element.kind === 'chart' ? previewImage(deck.assets.find((asset) => asset.id === element.chart.previewAssetId)) : undefined
     const text = element.kind === 'text' || element.kind === 'shape' ? element.paragraphs : []
     const body = element.kind === 'text' || element.kind === 'shape' ? element.textBody : undefined
+    const crop = element.kind === 'picture' ? element.crop : undefined
     return <g key={element.id} transform={`translate(${x * size.scale} ${y * size.scale})`}>
       <title>{element.name || element.kind}{issue ? `: ${issue}` : ''}</title>
       {issue ? <>
@@ -43,7 +44,9 @@ export default function PptxFilePreview({ deck }: { deck: NativePptxDeck }) {
       </> : <>
         {element.kind === 'shape' && element.preset && <g transform={`scale(${size.scale})`} fill={previewColor(element.fill, 'none')} stroke={previewColor(element.stroke?.color, 'none')} strokeWidth={element.stroke?.widthEmu ?? 0}>{geometry(presetPath(element.preset, cx, cy))}</g>}
         {element.kind === 'connector' && <line x1={element.flipH ? cx * size.scale : 0} y1="0" x2={element.flipH ? 0 : cx * size.scale} y2={cy * size.scale} stroke={previewColor(element.stroke?.color, '#141816')} strokeWidth={Math.max(1, (element.stroke?.widthEmu ?? 9525) * size.scale)} />}
-        {raster && <image href={raster} width={cx * size.scale} height={cy * size.scale} preserveAspectRatio="none" />}
+        {raster && (crop
+          ? <svg width={cx * size.scale} height={cy * size.scale} viewBox={`${crop.left} ${crop.top} ${100_000 - crop.left - crop.right} ${100_000 - crop.top - crop.bottom}`} preserveAspectRatio="none" overflow="hidden"><image href={raster} width="100000" height="100000" preserveAspectRatio="none" /></svg>
+          : <image href={raster} width={cx * size.scale} height={cy * size.scale} preserveAspectRatio="none" />)}
         {text.length > 0 && <foreignObject width={cx * size.scale} height={cy * size.scale} style={{ overflow: body ? 'visible' : 'hidden' }}>
           <div style={{ height: '100%', boxSizing: 'border-box', overflow: body ? 'visible' : 'hidden', color: '#141816', display: 'flex', flexDirection: 'column', justifyContent: body?.verticalAnchor === 'center' ? 'center' : body?.verticalAnchor === 'bottom' ? 'flex-end' : 'flex-start', padding: `${(body?.topInsetEmu ?? 0) * size.scale}px ${(body?.rightInsetEmu ?? 0) * size.scale}px ${(body?.bottomInsetEmu ?? 0) * size.scale}px ${(body?.leftInsetEmu ?? 0) * size.scale}px` }}>
             {text.map((paragraph, paragraphIndex) => <p key={paragraphIndex} style={{ margin: 0, flexShrink: 0, lineHeight: 1.2, whiteSpace: body?.wrap === 'none' ? 'pre' : 'pre-wrap', overflowWrap: 'normal', textAlign: paragraph.align === 'center' ? 'center' : paragraph.align === 'right' ? 'right' : 'left' }}>
