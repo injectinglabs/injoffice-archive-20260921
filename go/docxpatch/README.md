@@ -128,6 +128,12 @@ paragraph-style run properties, and direct `pPr/rPr`) so a native line engine
 can measure blank, hidden-only, and control-only paragraphs without inventing
 text or a platform font default.
 
+Extraction admits direct paragraph-mark Latin font names, size, bold/italic,
+RTL/hidden state, RGB color, and language when their source structure is exact.
+Paragraphs with these properties remain preservation-only for editing. Duplicate
+properties, character-style references, unknown attributes/children, and other
+mark effects still refuse native layout rather than inheriting guessed values.
+
 The output exposes explicit Latin fonts, half-point sizes, RGB colors,
 language, bidi/RTL/hidden state, supported highlights/underlines, paragraph
 alignment/spacing/indent/keep/page-break/widow state, and ordinary decimal,

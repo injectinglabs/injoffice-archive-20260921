@@ -1906,7 +1906,7 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			extractor.addUnsupported("FOREIGN_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "Foreign namespace paragraph property is preserved verbatim")
 			continue
 		}
-		if child.Name.Local == "pStyle" || child.Name.Local == "numPr" || child.Name.Local == "jc" || child.Name.Local == "spacing" || child.Name.Local == "ind" || child.Name.Local == "keepNext" || child.Name.Local == "keepLines" || child.Name.Local == "pageBreakBefore" || child.Name.Local == "widowControl" || child.Name.Local == "bidi" || child.Name.Local == "sectPr" {
+		if child.Name.Local == "pStyle" || child.Name.Local == "numPr" || child.Name.Local == "jc" || child.Name.Local == "spacing" || child.Name.Local == "ind" || child.Name.Local == "keepNext" || child.Name.Local == "keepLines" || child.Name.Local == "pageBreakBefore" || child.Name.Local == "widowControl" || child.Name.Local == "bidi" || child.Name.Local == "sectPr" || child.Name.Local == "rPr" {
 			if seenSingleton[child.Name.Local] {
 				unsafe = true
 				extractor.addUnsupported("DUPLICATE_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "Duplicate modeled paragraph-property singletons are preserved but not treated as editable or pagination-safe")
@@ -1979,6 +1979,18 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_SPACING", "paragraph-properties", paragraphID, partName, child, "Paragraph spacing is invalid, automatic, line-unit based, or has structure outside the exact resolved-layout subset")
 			}
+		case "rPr":
+			// Paragraph-mark metrics are owned by the resolved-layout projection,
+			// including empty paragraphs. Admit only a closed direct-formatting
+			// subset; do not make the paragraph writable or apply mark properties
+			// to its body runs.
+			preserveOnly = true
+			if !nativeExactParagraphMarkProperties(child, extractor.wordNS) {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_PARAGRAPH_MARK_PROPERTIES", "paragraph-properties", paragraphID, partName, child, "Paragraph-mark formatting has unknown, duplicate, or noncanonical source structure")
+			} else if _, invalid := extractor.extractRunProperties(partName, paragraphID, child); invalid {
+				unsafe = true
+			}
 		case "ind":
 			preserveOnly = true
 			if !nativeExactResolvedParagraphIndent(child, extractor.wordNS) {
@@ -2017,6 +2029,32 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 		extractor.addUnsupported("PARTIAL_PARAGRAPH_PROPERTIES", "paragraph-properties", paragraphID, partName, node, "Only the conservative v1 paragraph-property subset is exposed")
 	}
 	return properties, unsafe || preserveOnly, nil
+}
+
+func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool {
+	if !nativeExactContainer(node) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, property := range node.Children {
+		if property.Name.Space != wordNS || seen[property.Name.Local] {
+			return false
+		}
+		seen[property.Name.Local] = true
+		switch property.Name.Local {
+		case "rFonts":
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}) {
+				return false
+			}
+		case "sz", "b", "i", "rtl", "vanish", "color", "lang":
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func nativeExactResolvedParagraphSpacing(node *nativeXMLNode, wordNS string) bool {
