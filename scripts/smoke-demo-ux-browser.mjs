@@ -205,6 +205,8 @@ try {
   await poll(() => evaluate(`${pdf}.querySelector('[aria-label="Page number"]').value === '13'`), 'scroll updates page navigation')
   await poll(() => evaluate(`${pdf}.querySelector('[data-read-page="13"] [data-render-state="ready"]') !== null`), 'scrolled page ready')
   await assert(`(() => { const rail = ${pdf}.querySelector('.pdf-thumbnail-rail'); const item = rail.querySelector('[aria-current="page"]'); const r = rail.getBoundingClientRect(); const b = item.getBoundingClientRect(); return b.top >= r.top - 2 && b.bottom <= r.bottom + 2; })()`, 'selected thumbnail remains in rail viewport')
+  await assert(`(() => { const host = ${pdf}.querySelector('.pdf-reader-host').getBoundingClientRect(); const r = ${pdf}.querySelector('.pdf-reader').getBoundingClientRect(); return r.top >= host.top && r.bottom <= host.bottom && r.height > 200; })()`, 'reader fits its clipping parent without nested outer scrolling')
+  await thumbnailVisible()
   await screenshot('pdf-continuous-reading.png')
   await evaluate(`(() => { const select = ${pdf}.querySelector('[aria-label="Zoom"]'); select.value = '2'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
   await evaluate(`${pdf}.querySelector('[aria-label="Go to page 20"]').click(); ${pdf}.querySelector('[aria-label="Go to page 4"]').click()`)
@@ -214,6 +216,7 @@ try {
   await delay(150)
   await assert(`(() => { const r = ${pdf}.querySelector('.pdf-reader').getBoundingClientRect(); return r.width > 100 && r.width <= innerWidth && ${pdf}.querySelector('.pdf-continuous-scroll').clientWidth > 100; })()`, 'continuous reader remains usable on mobile')
   await assert(`(() => { const rail = ${pdf}.querySelector('.pdf-thumbnail-rail'); const r = rail.getBoundingClientRect(); const b = rail.querySelector('[aria-current="page"]').getBoundingClientRect(); return b.top >= r.top - 2 && b.bottom <= r.bottom + 2; })()`, 'selected thumbnail stays visible after mobile resize')
+  await thumbnailVisible()
   await screenshot('pdf-continuous-mobile.png')
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
   await tab('mark')
@@ -287,6 +290,22 @@ async function screenshot(name) {
   await evaluate(`window.scrollBy(0, -70)`)
   const image = await cdp.send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(resolve(artifacts, name), Buffer.from(image.data, 'base64'))
+}
+async function thumbnailVisible() {
+  await evaluate(`${pdf}.querySelector('.pdf-reader').scrollIntoView({ block: 'center' })`)
+  await delay(100)
+  const visible = await evaluate(`(() => {
+    const selected = ${pdf}.querySelector('.pdf-thumbnail-rail [aria-current="page"]');
+    const item = selected.getBoundingClientRect();
+    let top = 64, bottom = innerHeight;
+    for (let parent = selected.parentElement; parent; parent = parent.parentElement) {
+      if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) {
+        const bounds = parent.getBoundingClientRect(); top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
+      }
+    }
+    return { ok: item.top >= top - 2 && item.bottom <= bottom + 2, top, bottom, itemTop: item.top, itemBottom: item.bottom, reader: ${pdf}.querySelector('.pdf-reader').getBoundingClientRect().toJSON(), page: selected.textContent };
+  })()`)
+  if (!visible.ok) throw new Error(`Selected thumbnail is clipped: ${JSON.stringify(visible)}`)
 }
 function findChrome() {
   for (const candidate of [process.env.CHROME_PATH, process.env.CHROME_BIN, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].filter(Boolean)) {

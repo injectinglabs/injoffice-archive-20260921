@@ -436,7 +436,7 @@ export default function PdfPage() {
       {error && <DsCallout tone="refuse" title="PDF error">{error}</DsCallout>}
       {tool && <p className="pdf-placement-hint" role="status">{tool === 'note' ? 'Click the page to place your note.' : `Drag on the page to draw ${tool === 'ink' ? 'an ink stroke' : `a ${tool}`}.`} Keyboard: Tab to the page, arrow keys to position, Enter to place each endpoint. <DsButton onClick={() => setTool(null)}>Cancel drawing</DsButton></p>}
       <div className="split ds-split">
-        {continuous && viewer ? <div className="split-main ds-split-main"><PdfContinuousView key={fileName + ':' + pageCount} viewer={viewer} page={page} zoom={zoom} onPageChange={setPage} /></div> : <div className="split-main pages pdf-pages ds-split-main" aria-busy={busy === 'loading' || busy === 'rendering' || busy === 'editing'}>
+        {continuous && viewer ? <div className="split-main ds-split-main pdf-reader-host"><PdfContinuousView key={fileName + ':' + pageCount} viewer={viewer} page={page} zoom={zoom} onPageChange={setPage} /></div> : <div className="split-main pages pdf-pages ds-split-main" aria-busy={busy === 'loading' || busy === 'rendering' || busy === 'editing'}>
           <article className="ds-pdf-sheet">
             {!ready && !error && <p className="pdf-empty ds-muted">Loading PDF…</p>}
             <div className="pdf-page-stage">
