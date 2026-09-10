@@ -15,7 +15,7 @@ describe('guided demo recipes', () => {
   it('guides agent tasks through the mock-only controls and expandable evidence', () => {
     const instructions = DEMO_RECIPES.agent.steps.map((step) => step.instruction).join(' ')
     expect(instructions).toContain('Customize this task')
-    expect(instructions).toContain('Run agent')
+    expect(instructions).toContain('Preview change')
     expect(instructions).toContain('Technical details → Try the safety boundaries')
     expect(instructions).not.toContain('Keep “Built-in mock agent')
   })

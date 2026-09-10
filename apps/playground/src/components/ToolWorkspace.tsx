@@ -51,7 +51,7 @@ function FeatureContent({ tool, feature, initialHash, onRetry }: { tool: AgentTo
 
 function startingFeature(tool: AgentTool, hash?: string) {
   const route = resolveToolWorkspace(hash ?? (typeof location === 'undefined' ? '' : location.hash))
-  return route?.tool === tool ? route.feature : 'editor'
+  return route?.tool === tool ? route.feature : 'agent'
 }
 
 function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: string }) {
@@ -64,10 +64,10 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
   const panelElements = useRef(new Map<string, HTMLElement>())
   const panelHeights = useRef<Record<string, number>>({})
   const [retryKeys, setRetryKeys] = useState<Record<string, number>>({})
-  const lastInGroup = useRef<Record<string, string>>({})
-  const groups = [...new Set(definition.features.map((item) => item.group))]
+  const examplesRef = useRef<HTMLDetailsElement>(null)
+  const taskButtonRef = useRef<HTMLButtonElement>(null)
+  const groups = [...new Set(definition.features.filter(item => item.id !== 'agent').map((item) => item.group))]
   const current = definition.features.find((item) => item.id === active) ?? definition.features[0]!
-  const groupFeatures = definition.features.filter((item) => item.group === current.group)
   const activate = useCallback((feature: string, hash: string) => {
     // A room deep link belongs to the feature's first activation, not the
     // workspace's earlier editor visit. Never overwrite a retained session.
@@ -88,6 +88,8 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
       window.dispatchEvent(new CustomEvent('injoffice:workspace-view', { detail: { tool } }))
       window.location.hash = href
     }
+    if (examplesRef.current) examplesRef.current.open = false
+    taskButtonRef.current?.focus({ preventScroll: true })
   }
 
   useEffect(() => {
@@ -100,7 +102,6 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
   }, [activate, tool])
 
   useEffect(() => {
-    lastInGroup.current[current.group] = current.id
     if (!['editor', 'native', 'pptx-native', 'collab', 'charts', 'pptx-render'].includes(current.id)) return
     // Canvas-backed editors need their now-visible dimensions after layout.
     const frame = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
@@ -109,28 +110,24 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
 
   return <div className="tool-workspace ds" data-tool-workspace={tool} data-workspace-active={current.id}>
     <header className="tool-workspace__navigation">
-      <div className="tool-workspace__tabs" role="tablist" aria-label={`${definition.title} capabilities`} onKeyDown={(event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-        event.preventDefault()
-        const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-        const index = tabs.indexOf(document.activeElement as HTMLButtonElement)
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length
-        tabs[next]?.focus()
-        tabs[next]?.click()
-      }}>
-        {groups.map((group, index) => {
-          const selected = current.group === group
-          const target = selected ? current.id : lastInGroup.current[group] ?? definition.features.find((item) => item.group === group)!.id
-          return <button key={group} id={`${instanceId}-group-${index}`} type="button" role="tab" data-workspace-group={group} data-workspace-feature={target} aria-selected={selected} aria-controls={`${instanceId}-panel-${target}`} tabIndex={selected ? 0 : -1} onClick={() => choose(target)}>{group}</button>
-        })}
-      </div>
-      <div className="tool-workspace__view">
-        {groupFeatures.length > 1 ? <label htmlFor={`${instanceId}-feature`}>View<select id={`${instanceId}-feature`} data-workspace-view value={current.id} onChange={(event) => choose(event.target.value)}>{groupFeatures.map((feature) => <option key={feature.id} value={feature.id}>{feature.label}</option>)}</select></label> : <strong>{current.label}</strong>}
-        <p>{current.description}</p>
-      </div>
-      <p className="tool-workspace__sample-note">Each view has its own sample and state; edits do not transfer between views. Opened views stay available when you switch, including pending approvals.</p>
+      <nav className="tool-workspace__primary" aria-label={`${definition.title} examples`}>
+        <button ref={taskButtonRef} type="button" className="tool-workspace__task" data-workspace-feature="agent" aria-pressed={current.id === 'agent'} aria-controls={`${instanceId}-panel-agent`} onClick={() => choose('agent')}>Guided document task</button>
+        <details ref={examplesRef} className="tool-workspace__examples" onKeyDown={event => {
+          if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus() }
+        }}>
+          <summary>More examples{current.id !== 'agent' && <span className="tool-workspace__selected">: {current.label}</span>}</summary>
+          <div className="tool-workspace__example-list">
+            <p className="tool-workspace__sample-note">Each view has its own sample and state; edits do not transfer between views. Opened views stay available when you switch, including pending approvals.</p>
+            {groups.map(group => <section key={group} aria-label={group}>
+              <h3>{group}</h3>
+              {definition.features.filter(feature => feature.group === group && feature.id !== 'agent').map(feature => <button key={feature.id} type="button" data-workspace-feature={feature.id} aria-pressed={current.id === feature.id} aria-controls={`${instanceId}-panel-${feature.id}`} onClick={() => choose(feature.id)}><strong>{feature.label}</strong><span>{feature.description}</span></button>)}
+            </section>)}
+          </div>
+        </details>
+      </nav>
+      {current.id !== 'agent' && <p className="tool-workspace__example-description">{current.description} This example uses a separate sample.</p>}
     </header>
-    {definition.features.filter((feature) => visited.includes(feature.id)).map((feature) => <section key={feature.id} ref={(element) => { if (element) panelElements.current.set(feature.id, element); else panelElements.current.delete(feature.id) }} id={`${instanceId}-panel-${feature.id}`} role="tabpanel" tabIndex={feature.id === current.id ? 0 : -1} aria-labelledby={`${instanceId}-group-${groups.indexOf(feature.group)}`} data-workspace-panel={feature.id} data-workspace-retain-layout={tool === 'sheets' && (feature.id === 'editor' || feature.id === 'collab') ? 'true' : undefined} hidden={feature.id !== current.id} inert={feature.id !== current.id} aria-hidden={feature.id !== current.id ? true : undefined} style={tool === 'sheets' && feature.id !== current.id && (feature.id === 'editor' || feature.id === 'collab') ? { height: panelHeights.current[feature.id] ?? 740 } : undefined} className="tool-workspace__panel">
+    {definition.features.filter((feature) => visited.includes(feature.id)).map((feature) => <section key={feature.id} ref={(element) => { if (element) panelElements.current.set(feature.id, element); else panelElements.current.delete(feature.id) }} id={`${instanceId}-panel-${feature.id}`} aria-label={`${definition.title}: ${feature.label}`} data-workspace-panel={feature.id} data-workspace-retain-layout={tool === 'sheets' && (feature.id === 'editor' || feature.id === 'collab') ? 'true' : undefined} hidden={feature.id !== current.id} inert={feature.id !== current.id} aria-hidden={feature.id !== current.id ? true : undefined} style={tool === 'sheets' && feature.id !== current.id && (feature.id === 'editor' || feature.id === 'collab') ? { height: panelHeights.current[feature.id] ?? 740 } : undefined} className="tool-workspace__panel">
       <FeatureContent key={`${feature.id}-${retryKeys[feature.id] ?? 0}`} tool={tool} feature={feature} initialHash={featureHashes.current[feature.id]} onRetry={() => setRetryKeys((previous) => ({ ...previous, [feature.id]: (previous[feature.id] ?? 0) + 1 }))} />
     </section>)}
   </div>

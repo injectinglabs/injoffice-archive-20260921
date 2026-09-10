@@ -61,7 +61,7 @@ export function preloadWorkspaceOnIntent(surface: Surface): void {
 export function workspaceProofDemo(hash: string): DemoDefinition {
   const route = resolveToolWorkspace(hash)
   const workspace = TOOL_WORKSPACES.find(item => item.tool === route?.tool) ?? TOOL_WORKSPACES[0]!
-  const feature = workspace.features.find(item => item.id === route?.feature) ?? workspace.features[0]!
+  const feature = workspace.features.find(item => item.id === (route?.feature ?? 'agent'))!
   const demo = DEMO_BY_SURFACE.get(feature.source) ?? DEMO_BY_SURFACE.get(workspace.tool)!
   const recipe = workspace.tool === 'sheets' ? sheetsViewRecipes[feature.id] ?? demo.recipe : demo.recipe
   return { ...demo, recipe, description: feature.description, title: `${workspace.title}: ${feature.label}` }

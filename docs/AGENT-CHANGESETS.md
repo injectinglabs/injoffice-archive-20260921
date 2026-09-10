@@ -60,7 +60,7 @@ This layer is not:
 
 ## Playground proof
 
-The demo has four workspaces: Sheets, Docs, Slides, and PDF. Choose the AI tab inside a tool, or open `#/<tool>?feature=agent`; legacy `#/agent?format=<tool>` bookmarks select that same view. Navigation never applies or approves a change. Guided controls expose one supported edit per format: select a task, review the difference, explicitly approve, and download verified output. Capability discovery, bounded inspection, proposal payloads, validation, and tool calls remain in collapsed technical details; refusal and fault scenarios are secondary safety controls.
+The demo has four workspaces: Sheets, Docs, Slides, and PDF. The document assistant is the primary view beside its own inspected file preview. Open `#/<tool>?feature=agent`; legacy `#/agent?format=<tool>` bookmarks select that same view. Navigation never applies or approves a change. Guided controls expose one supported edit per format: select a task, review the difference, explicitly approve, and download verified output. Capability discovery, bounded inspection, proposal payloads, validation, and tool calls remain in collapsed technical details; refusal and fault scenarios are secondary safety controls.
 
 The demo is labelled **Simulated agent · real document operations**. It needs no model service, API key, or endpoint configuration. It uses a same-origin mock endpoint in development and the identical deterministic generator in-browser on static builds. There is no live-provider or local-rule mode selector, and configured provider environment variables do not cause the demo to call a model. See the [mock transport and standalone integrator host](AGENT-PROPOSAL-HOST.md) for the separate proposal contract example.
 

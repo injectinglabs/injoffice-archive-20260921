@@ -46,17 +46,6 @@ function ToolNavigation({ surface, remembered }: { surface: Surface; remembered:
   </nav>
 }
 
-function RuntimePill({ demo, sidecar }: { demo: DemoDefinition; sidecar: SidecarState }) {
-  const needsSidecar = demo.runtime.includes('sidecar')
-  const label = needsSidecar && sidecar === 'connected' ? 'Local sidecar connected' : demo.runtime
-  return (
-    <span className={`runtime-pill${needsSidecar ? ` runtime-pill--${sidecar}` : ''}`} title={`Runtime: ${label}`}>
-      <i aria-hidden="true" />
-      {label}
-    </span>
-  )
-}
-
 function ColorSchemeToggle({ scheme, onScheme }: { scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
   return (
     <div className="scheme-toggle" role="group" aria-label="Color scheme">
@@ -79,11 +68,16 @@ function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; schem
           <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={32} height={32} />
           <span><strong>InjOffice</strong></span>
         </a>
-        <div className={`sidecar-status sidecar-status--${sidecar}`} role="status">
-          <i aria-hidden="true" />
-          {sidecar === 'checking' ? 'Checking server' : sidecar === 'connected' ? 'Browser + server ready' : 'Browser engines ready'}
-        </div>
         <div className="app-header-actions">
+          <details className="runtime-information">
+            <summary>About this demo</summary>
+            <div>
+              <strong>Your files stay in this browser by default.</strong>
+              <p>Guided tasks use a simulated agent, with real file edits and verification. No language model is contacted.</p>
+              <p role="status">{sidecar === 'checking' ? 'Checking optional server connection…' : sidecar === 'connected' ? 'Optional server connected. Server-backed examples are available.' : 'Optional server not connected. Browser-local examples do not require it.'}</p>
+              <p>Server modes are separate and explicitly selected. Document previews show supported content, not full Office fidelity.</p>
+            </div>
+          </details>
           <ColorSchemeToggle scheme={scheme} onScheme={onScheme} />
           <a className="github-link" href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">GitHub<span aria-hidden="true">↗</span></a>
         </div>
@@ -174,7 +168,6 @@ function SourceProofDrawer({
 
 function DemoSection({
   demo,
-  sidecar,
   proofOpen,
   onOpenProof,
   section,
@@ -183,7 +176,6 @@ function DemoSection({
   initialHash,
 }: {
   demo: DemoDefinition
-  sidecar: SidecarState
   proofOpen: boolean
   onOpenProof: (button: HTMLButtonElement) => void
   section: ScrollSection
@@ -267,18 +259,15 @@ function DemoSection({
     >
       <header className={`page-heading demo-context-header demo-page-header page-heading--${demo.accent}`}>
         <div className="page-heading-copy">
-          <nav className="demo-breadcrumb" aria-label="Breadcrumb">
-            <span>Showcase</span><span aria-hidden="true">/</span><span>{title}</span>
-          </nav>
-          <div className="demo-chips" aria-label="Demo tags">
-            <span className="demo-chip">{demo.formats.join(' + ')}</span>
-          </div>
           <div className="demo-title-line">
             <Heading id={`demo-title-${section.key}`} tabIndex={-1}>{title}</Heading>
           </div>
           <p>{description}</p>
         </div>
         <div className="demo-context-actions">
+          <details className="demo-options">
+          <summary>Options</summary>
+          <div>
           <button
             className="demo-reset-trigger"
             type="button"
@@ -288,6 +277,8 @@ function DemoSection({
             Reset demo
           </button>
           {loadState === 'ready' && <button className="demo-reset-trigger" type="button" onClick={closeDemo}>Close demo</button>}
+          </div>
+          </details>
           <button
             className="source-proof-trigger"
             type="button"
@@ -301,10 +292,6 @@ function DemoSection({
         </div>
       </header>
       <section className="demo-preview" aria-label={`${title} preview`}>
-        <header className="demo-preview__bar">
-          <span>Preview</span>
-          <RuntimePill demo={demo} sidecar={sidecar} />
-        </header>
         <div className="demo-stage" data-accent={demo.accent} aria-label={`${title} interactive demo`} onPointerDownCapture={touch} onKeyDownCapture={touch} onInputCapture={touch} onClickCapture={touch}>
           {loadState === 'ready' ? <SectionBoundary key={revision} onRetry={() => setRevision(value => value + 1)}>
             <Suspense fallback={<div className="demo-loading" role="status">Opening {title}…</div>}>
@@ -426,7 +413,8 @@ export default function App() {
       const header = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 48
       const rail = document.querySelector('.app-sidebar')?.getBoundingClientRect()
       const top = window.innerWidth <= 760 ? Math.max(header, rail?.bottom ?? 0) : header
-      const key = anchorTarget.current ?? activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32)
+      const atEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+      const key = anchorTarget.current ?? activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32, atEnd)
       const section = SCROLL_SECTIONS.find(item => item.key === key)
       if (!section) return
       const nextHash = sectionHashes.current.get(section.key) ?? section.href
@@ -508,7 +496,6 @@ export default function App() {
             key={section.key}
             section={section}
             demo={section.demo!}
-            sidecar={sidecar}
             requested={requestedKey === section.key}
             requestVersion={requestVersion}
             initialHash={sectionHashes.current.get(section.key) ?? section.href}

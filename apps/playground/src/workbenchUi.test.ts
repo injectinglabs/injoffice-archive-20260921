@@ -81,7 +81,7 @@ describe('playground workbench design system', () => {
     expect(app).not.toContain('AGENT_TOOLS')
     expect(app).not.toContain('DEMO_GROUPS')
     expect(app).toContain('const title = demo.title')
-    expect(app).toContain('className="demo-breadcrumb" aria-label="Breadcrumb"')
+    expect(app).not.toContain('className="demo-breadcrumb"')
     expect(app).toContain('className="demo-context-actions"')
     expect(app).toContain('className="demo-preview"')
     expect(app).toContain('SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection')

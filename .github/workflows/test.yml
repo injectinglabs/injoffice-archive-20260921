@@ -56,6 +56,7 @@ jobs:
         run: |
           node --test scripts/showcase-smoke-server.test.mjs
           npm run test:showcase-browser -- --built
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/document-first node scripts/smoke-document-first-browser.mjs
           SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
           SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault

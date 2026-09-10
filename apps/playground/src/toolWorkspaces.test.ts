@@ -25,7 +25,7 @@ describe('four tool workspace catalogue', () => {
     }
     expect(workspaceHref('docs')).toBe('#/docs')
     expect(workspaceHref('docs', 'charts')).toBe('#/docs')
-    expect(resolveToolWorkspace('#/docs?feature=charts')).toEqual({ tool: 'docs', feature: 'editor' })
+    expect(resolveToolWorkspace('#/docs?feature=charts')).toEqual({ tool: 'docs', feature: 'agent' })
     expect(resolveToolWorkspace('#/sheets?feature=agent&view=native')).toEqual({ tool: 'sheets', feature: 'agent' })
   })
 
@@ -69,10 +69,19 @@ describe('four tool workspace catalogue', () => {
     expect(source).toContain('data-workspace-retain-layout=')
   })
 
-  it('uses instance-scoped accessible group tabs and labelled feature selectors', () => {
+  it('uses a primary task and an accessible disclosure for secondary examples', () => {
     const source = readFileSync(new URL('./components/ToolWorkspace.tsx', import.meta.url), 'utf8')
     expect(source).toContain('const instanceId = useId()')
-    for (const marker of ['role="tablist"', 'role="tab"', 'role="tabpanel"', 'aria-selected={selected}', 'aria-controls=', 'aria-labelledby=', 'data-workspace-group=', 'data-workspace-feature=', 'data-workspace-view', "'ArrowLeft', 'ArrowRight', 'Home', 'End'"]) expect(source).toContain(marker)
+    for (const marker of ['Guided document task', '<summary>More examples', 'aria-controls=', 'aria-label=', 'data-workspace-feature=', "event.key === 'Escape'", 'taskButtonRef.current?.focus({ preventScroll: true })']) expect(source).toContain(marker)
+    expect(source).not.toContain('role="tablist"')
+    expect(source).not.toContain('<select')
+  })
+
+  it('opens the same-document assistant by default while preserving explicit editor links', () => {
+    for (const { tool } of TOOL_WORKSPACES) {
+      expect(resolveToolWorkspace(`#/${tool}`)).toEqual({ tool, feature: 'agent' })
+      expect(resolveToolWorkspace(`#/${tool}?feature=editor`)).toEqual({ tool, feature: 'editor' })
+    }
   })
 
   it('emits internal navigation intent only when a hash change will consume it', () => {

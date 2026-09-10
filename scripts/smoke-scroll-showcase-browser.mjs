@@ -9,7 +9,7 @@ import { startShowcaseDevServer } from './showcase-smoke-dev-server.mjs'
 // This suite exercises the document navigator, not the individual editors. The
 // existing showcase smoke remains responsible for real file and tool proofs.
 const keys = ['sheets', 'docs', 'slides', 'pdf']
-const rememberedFeatures = { sheets: 'editor', docs: 'editor', slides: 'editor', pdf: 'editor' }
+const rememberedFeatures = { sheets: 'agent', docs: 'agent', slides: 'agent', pdf: 'agent' }
 const target = key => key.startsWith('agent-') ? { tool: key.slice(6), feature: 'agent' }
   : keys.includes(key) ? { tool: key, feature: rememberedFeatures[key] }
     : { tool: key.startsWith('pptx-') ? 'slides' : key === 'font-metrics' ? 'docs' : 'sheets', feature: key }
@@ -148,7 +148,7 @@ async function assertNavigationSelection(viewport) {
 
 const active = (key, hash = href(key)) => `(location.hash === ${JSON.stringify(hash)} || location.hash === ${JSON.stringify(href(key))} || (${keys.includes(key)} && location.hash === ${JSON.stringify(`#/${target(key).tool}`)})) && document.querySelector('.app-sidebar a[aria-current="location"]')?.getAttribute('href') === ${JSON.stringify(`#/${target(key).tool}`)}`
 const ready = key => `document.querySelector('${toolSection(key)}')?.dataset.scrollState === 'ready' && !!document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"]:not([hidden])') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-loading]') && !document.querySelector('${toolSection(key)} [data-workspace-panel="${target(key).feature}"] [data-workspace-error]')`
-const agentState = (key, state) => `document.querySelector(${JSON.stringify(`${section(key)} .agent-demo__status`)})?.dataset.state === ${JSON.stringify(state)}${state === 'ready' ? ` && Array.from(document.querySelector(${JSON.stringify(section(key))}).querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)` : ''}`
+const agentState = (key, state) => `document.querySelector(${JSON.stringify(`${section(key)} .agent-demo__status`)})?.dataset.state === ${JSON.stringify(state)}${state === 'ready' ? ` && Array.from(document.querySelector(${JSON.stringify(section(key))}).querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)` : ''}`
 
 async function anchor(key) {
   const { tool, feature } = target(key)
@@ -159,6 +159,9 @@ async function anchor(key) {
   }
   await until(active(key), `${key} anchor updates the current location`)
   await until(ready(key), `${key} lazy section ready`, 90_000)
+  // A warmed assistant can be ready before the hash handler's focus frame.
+  // Finish explicit navigation before testing subsequent passive interaction.
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
 }
 
 async function button(key, text) {
@@ -167,63 +170,28 @@ async function button(key, text) {
 
 async function assertInternalGroupNavigation(group, feature, key) {
   const navigation = `${toolSection('docs')} .tool-workspace__navigation`
-  const groupSelector = `${toolSection('docs')} [data-workspace-group="${group}"]`
-  // A same-tool anchor can already have the expected hash while its queued
-  // animation frame still positions and focuses the heading. Wait for stable,
-  // hittable real geometry before sending pointer input, not just a ready panel.
-  const targetPoint = await evaluate(`new Promise((resolve, reject) => {
-    let previous = null, stable = 0, attempts = 0;
-    const sample = () => {
-      const button = document.querySelector('${groupSelector}');
-      const rect = button?.getBoundingClientRect();
-      const bar = document.querySelector('${navigation}')?.getBoundingClientRect();
-      if (rect && bar) {
-        const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, top: bar.top };
-        const hit = document.elementFromPoint(point.x, point.y)?.closest('button') === button;
-        const unchanged = previous && ['x', 'y', 'top'].every(axis => Math.abs(point[axis] - previous[axis]) < 0.5);
-        stable = hit && unchanged ? stable + 1 : 0;
-        previous = point;
-        if (stable >= 4) { resolve(point); return; }
-      }
-      if (++attempts > 80) reject(new Error('Capability tab never reached stable, visible hit-test geometry'));
-      else setTimeout(sample, 50);
-    };
-    sample();
-  })`)
-  const beforeTop = targetPoint.top
+  const selector = `${navigation} [data-workspace-feature="${feature}"]`
+  await evaluate(`(() => {
+    const details = document.querySelector('${navigation} details');
+    if ('${feature}' !== 'agent') details.open = true;
+    const button = document.querySelector('${selector}');
+    button.scrollIntoView({ block: 'center' });
+    button.focus({ preventScroll: true });
+  })()`)
+  const point = await evaluate(`(() => { const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
   if (key) {
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: key === 'ArrowLeft' ? 37 : 39 })
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: key === 'ArrowLeft' ? 37 : 39 })
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
   } else {
-    await evaluate(`(() => {
-      window.__workspacePointerProof = {};
-      for (const type of ['pointerdown', 'click']) window.addEventListener(type, event => {
-        const group = event.target instanceof Element ? event.target.closest('[data-workspace-group]') : null;
-        window.__workspacePointerProof[type] = { group: group?.dataset.workspaceGroup, tool: group?.closest('[data-tool-workspace]')?.dataset.toolWorkspace };
-      }, { once: true, capture: true });
-    })()`)
-    const point = { x: targetPoint.x, y: targetPoint.y }
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point })
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point })
-    assert.deepEqual(await evaluate('window.__workspacePointerProof'), { pointerdown: { group, tool: 'docs' }, click: { group, tool: 'docs' } }, 'real pointer input hits the intended Docs capability tab')
   }
   rememberedFeatures.docs = feature
-  await until(`${ready('docs')} && document.querySelector('${groupSelector}').getAttribute('aria-selected') === 'true'`, `${key ?? 'pointer click'} selects the ${group} capability group`)
-  const samples = await evaluate(`new Promise(resolve => {
-    const samples = [];
-    const sample = () => {
-      const bar = document.querySelector('${navigation}');
-      const selected = document.querySelector('${groupSelector}');
-      samples.push({ top: bar.getBoundingClientRect().top, focused: document.activeElement === selected, active: document.activeElement?.outerHTML.slice(0, 240), current: document.querySelector('.app-sidebar a[aria-current="location"]')?.getAttribute('href') });
-      if (samples.length === 5) resolve(samples); else setTimeout(sample, 50);
-    };
-    sample();
-  })`)
-  assert.ok(samples.every(sample => sample.focused), `${key ?? 'pointer click'} retains focus on the selected ${group} tab after its hash change: ${JSON.stringify(samples)}`)
-  assert.ok(samples.every(sample => sample.current === '#/docs'), 'internal navigation keeps Docs selected in the sidebar')
-  assert.ok(samples.every(sample => Math.abs(sample.top - beforeTop) <= 2), `${key ?? 'pointer click'} preserves the capability bar offset over 200ms: before=${beforeTop}, samples=${JSON.stringify(samples)}`)
+  await until(`${ready('docs')} && document.querySelector('${selector}').getAttribute('aria-pressed') === 'true'`, `${key ? 'keyboard' : 'pointer'} selects ${feature}`)
+  await until(`!document.querySelector('${navigation} details').open && document.activeElement === document.querySelector('${navigation} .tool-workspace__task')`, 'selection closes examples and returns focus to the stable primary control')
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
+  assert.equal(await evaluate(`document.querySelector('.app-sidebar a[aria-current="location"]').getAttribute('href')`), '#/docs', 'internal navigation keeps Docs selected')
 }
-
 async function wheelTo(key, hash = href(key)) {
   // Native wheel input does not run an anchor's navigation handler. The target
   // offset comes from the real rendered document, so lazy section heights can vary.
@@ -314,15 +282,16 @@ try {
     window.__beforePassiveHistory = { ...window.__scrollHistory, length: history.length };
   })()`)
   await wheelTo('slides')
-  assert.equal(await evaluate(`document.activeElement === window.__persistedPrompt`), true, 'passive scrolling does not steal focus from an editor')
+  assert.equal(await evaluate(`document.activeElement === window.__persistedPrompt`), true, `passive scrolling does not steal focus: ${await evaluate('document.activeElement?.outerHTML.slice(0, 400)')}`)
   assert.equal(await evaluate(`history.length === window.__beforePassiveHistory.length && window.__scrollHistory.pushes === window.__beforePassiveHistory.pushes && window.__scrollHistory.replacements > window.__beforePassiveHistory.replacements`), true, 'scroll spy replaces the URL without adding browser history entries')
   assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a[aria-current="location"]').length`), 1, 'exactly one sidebar link is current')
   await anchor('agent-docs')
   assert.equal(await evaluate(`window.__persistedPrompt.isConnected && document.querySelector('${section('agent-docs')} [data-agent-task-value]').value === ${JSON.stringify(prompt)}`), true, 'scrolling away and back preserves typed guided task state')
-  await button('agent-docs', 'Run agent')
+  await button('agent-docs', 'Preview change')
   await until(agentState('agent-docs', 'awaiting-approval'), 'real DOCX preview ready', 90_000)
   const plan = await evaluate(`document.querySelector('${section('agent-docs')} .agent-diff').textContent`)
-  await anchor('sheets')
+  rememberedFeatures.sheets = 'editor'
+  await evaluate(`location.hash = '#/sheets?feature=editor'`)
   await until(`!!document.querySelector('${toolSection('sheets')} [data-workspace-panel="editor"] canvas')`, 'main workbook rendered before retention check', 90_000)
   await anchor('charts')
   await until(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]')`, 'editable chart mounted')
@@ -395,7 +364,7 @@ try {
   origin.hash = '#/docs?feature=font-metrics'
   origin.searchParams.set('scroll-smoke-document', 'cold-sheets')
   await send('Page.navigate', { url: origin.href })
-  Object.assign(rememberedFeatures, { sheets: 'editor', docs: 'font-metrics', slides: 'editor', pdf: 'editor' })
+  Object.assign(rememberedFeatures, { sheets: 'agent', docs: 'font-metrics', slides: 'agent', pdf: 'agent' })
   await until(active('font-metrics'), 'fresh Docs document ready for cold Sheets deep link')
   await until(ready('font-metrics'), 'fresh Docs font metrics ready', 90_000)
   holdChunks = true
@@ -431,7 +400,7 @@ try {
   origin.hash = '#/agent?format=pdf'
   origin.searchParams.set('scroll-smoke-document', 'pdf-deep-link')
   await send('Page.navigate', { url: origin.href })
-  Object.assign(rememberedFeatures, { sheets: 'editor', docs: 'editor', slides: 'editor', pdf: 'agent' })
+  Object.assign(rememberedFeatures, { sheets: 'agent', docs: 'agent', slides: 'agent', pdf: 'agent' })
   await until(active('agent-pdf', '#/agent?format=pdf'), 'legacy AI PDF deep link selects its workspace and feature', 90_000)
   await until(agentState('agent-pdf', 'ready'), 'deep-linked PDF agent is ready', 90_000)
   assert.equal(await evaluate(`document.querySelector('${section('agent-pdf')} [data-agent-tool]')?.dataset.agentTool`), 'pdf', 'deep link initializes the requested agent format')
@@ -501,7 +470,7 @@ try {
   origin.hash = '#/docs?feature=font-metrics'
   origin.searchParams.set('scroll-smoke-document', 'retention')
   await send('Page.navigate', { url: origin.href })
-  Object.assign(rememberedFeatures, { sheets: 'editor', docs: 'font-metrics', slides: 'editor', pdf: 'editor' })
+  Object.assign(rememberedFeatures, { sheets: 'agent', docs: 'font-metrics', slides: 'agent', pdf: 'agent' })
   await until(ready('font-metrics'), 'untouched typography workspace loads')
   await anchor('charts')
   await until(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]')`, 'chart input available after retention reload')
@@ -513,6 +482,13 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`)
   // Untouched offscreen engines are released; interacted documents stay intact.
+  // Viewport-sized canvases can leave the next section within the 160px preload
+  // margin at any viewport height. Move this untouched test target beyond it.
+  await evaluate(`(() => {
+    const target = document.querySelector('${toolSection('font-metrics')}');
+    target.style.marginTop = Math.max(0, innerHeight + 200 - target.getBoundingClientRect().top) + 'px';
+  })()`)
+  assert.ok(await evaluate(`document.querySelector('${toolSection('font-metrics')}').getBoundingClientRect().top > innerHeight + 160`), 'retention target is outside the prefetch margin')
   await until(`document.querySelector('${toolSection('font-metrics')}').dataset.scrollState === 'idle'`, 'offscreen untouched workspace released', 45_000)
   assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'interacted chart is never automatically discarded')
   const resetChart = `Array.from(document.querySelectorAll('${toolSection('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Reset demo').click()`

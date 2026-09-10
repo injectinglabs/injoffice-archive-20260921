@@ -13,7 +13,7 @@ let chrome, socket, staticServer
 let proposalMock, restoreProposalEnv
 let sequence = 0
 let scopeKey = 'sheets'
-let scopeFeature = 'editor'
+let scopeFeature = 'agent'
 const workspaceFeatures = {
   sheets: ['editor', 'native', 'tools', 'charts', 'pivots', 'shapes', 'connectors', 'formulas', 'agent', 'collab', 'history'],
   docs: ['editor', 'agent', 'collab', 'history', 'font-metrics'],
@@ -23,9 +23,9 @@ const workspaceFeatures = {
 function destination(path) {
   const [surface, query = ''] = path.split('?')
   const params = new URLSearchParams(query)
-  if (!surface || surface === 'overview') return { tool: 'sheets', feature: 'editor' }
+  if (!surface || surface === 'overview') return { tool: 'sheets', feature: 'agent' }
   if (surface === 'agent') return { tool: params.get('format') ?? 'sheets', feature: 'agent' }
-  if (surface in workspaceFeatures) return { tool: surface, feature: params.get('feature') ?? params.get('view') ?? 'editor' }
+  if (surface in workspaceFeatures) return { tool: surface, feature: params.get('feature') ?? params.get('view') ?? 'agent' }
   return { tool: surface.startsWith('pptx-') ? 'slides' : surface === 'font-metrics' ? 'docs' : 'sheets', feature: surface }
 }
 let acceptReset = false
@@ -96,7 +96,7 @@ const resetDemo = async () => {
   try { await click('.demo-reset-trigger') } finally { acceptReset = false }
 }
 const clickButton = (label) => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`)
-const agentReady = `document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`
+const agentReady = `document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`
 const agentWrites = () => evaluate(`Number(document.querySelector('[data-agent-native-writes]')?.textContent)`)
 const setGuidedField = (selector, value) => evaluate(`(() => {
   const input = document.querySelector(${JSON.stringify(selector)});
@@ -114,17 +114,17 @@ async function prepareAgentRequest(request, target) {
   await clickButton('Reload sample')
   await until(agentReady, 'real XLSX sample reload', 90_000)
   await setAgentRequest(request)
-  await clickButton('Run agent')
+  await clickButton('Preview change')
   await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'editable request produces a reviewable plan', 90_000)
   assert.ok((await evaluate(`document.querySelector('.agent-diff')?.textContent`)).includes(target), `request resolves real target ${target}`)
   assert.match(await evaluate(`document.querySelector('[data-agent-trace]')?.textContent`), /office\.read/, 'trace includes a real bounded read')
   assert.equal(await agentWrites(), 0, 'planning does not write native bytes')
   assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'each mock proposal requires fresh human approval')
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'mock endpoint cannot authorize its own proposed edit')
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Apply approved change').disabled`), true, 'mock endpoint cannot authorize its own proposed edit')
 }
 async function approveAgentCommit() {
   await click('.agent-approval input[type=checkbox]')
-  await clickButton('Commit approved change')
+  await clickButton('Apply approved change')
 }
 // Public chart/workbook APIs: an installed float is not proof that it has data.
 const sheetChartState = `(() => {
@@ -185,7 +185,7 @@ try {
     origin.hash = entry
     origin.searchParams.set('showcase-entry', entry || 'empty')
     await send('Page.navigate', { url: origin.href })
-    await until(`location.hash === '#/sheets' && document.querySelector('.app-shell')?.dataset.surface === 'sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]') && !!document.querySelector('[data-demo-surface="sheets"] canvas')`, `${entry || 'empty URL'} opens the first workbook editor directly`, 90_000)
+    await until(`location.hash === '#/sheets' && document.querySelector('.app-shell')?.dataset.surface === 'sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]') && !!document.querySelector('[data-agent-prepare]:not(:disabled)')`, `${entry || 'empty URL'} opens the first workbook editor directly`, 90_000)
     assert.equal(await evaluate(`history.length === window.__entryHistory.length && window.__entryHistory.pushes === 0 && window.__entryHistory.replacements >= 1`), true, `${entry || 'empty URL'} normalizes by replacing history, not adding an intro step`)
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-scroll-section]')).map(section => section.dataset.scrollSection)`), Object.keys(workspaceFeatures), 'only the four document workspaces exist')
     assert.equal(await evaluate(`!!document.querySelector('.overview-page, .tool-example, [data-workspace-entry]') || document.querySelector('.app-main').textContent.includes('Explore the four document tools')`), false, 'the introductory section and cards are absent')
@@ -198,19 +198,19 @@ try {
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('.app-main a')).some(link => link.textContent.trim() === 'All demos')`), false, 'there is no link back to a removed introduction')
   await click('.app-sidebar a[href="#/pdf"]')
   scopeKey = 'pdf'
-  scopeFeature = 'editor'
+  scopeFeature = 'agent'
   await until(`document.querySelector('.app-shell')?.dataset.surface === 'pdf' && !!smokePanel && !document.querySelector('.demo-loading')`, 'sidebar opens the real PDF workspace')
   await route('charts')
   assert.equal(await evaluate(`document.querySelector('.app-brand').getAttribute('href')`), '#/sheets', 'brand targets the first tool directly')
   await click('.app-brand')
   scopeKey = 'sheets'
-  scopeFeature = 'editor'
+  scopeFeature = 'agent'
   await until(`location.hash === '#/sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]')`, 'brand opens the first editor instead of the remembered Charts view', 90_000)
   for (const entry of ['#/overview', '#/unknown', '']) {
     await route('charts')
     await evaluate(`window.__warmHistory = { length: history.length, pushes: window.__entryHistory.pushes, replacements: window.__entryHistory.replacements }; location.hash = ${JSON.stringify(entry)}`)
     scopeKey = 'sheets'
-    scopeFeature = 'editor'
+    scopeFeature = 'agent'
     await until(`location.hash === '#/sheets' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]')`, `warm ${entry || 'empty hash'} restores the first editor`, 90_000)
     assert.equal(await evaluate(`history.length === window.__warmHistory.length + 1 && window.__entryHistory.pushes === window.__warmHistory.pushes && window.__entryHistory.replacements > window.__warmHistory.replacements`), true, 'warm fallback replaces the requested hash without creating a second navigation entry')
   }
@@ -252,12 +252,12 @@ try {
     for (const feature of features) {
       await route(`${tool}?feature=${feature}`)
       assert.equal(await evaluate(`smokePanel?.hidden === false && smokeSection.querySelectorAll('[data-workspace-panel]:not([hidden])').length === 1`), true, `${tool}/${feature} is the only visible feature panel`)
-      assert.ok(await evaluate(`document.querySelectorAll('[data-workspace-group]').length > 0 && document.querySelectorAll('[data-workspace-feature]').length > 0`), `${tool} exposes grouped feature controls`)
-      assert.equal(await evaluate(`smokeSection.querySelector('[data-workspace-view]')?.value ?? smokeSection.querySelector('[data-workspace-group][aria-selected="true"]')?.dataset.workspaceFeature ?? smokeSection.querySelector('[data-workspace-group][aria-pressed="true"]')?.dataset.workspaceFeature`), feature, `${tool}/${feature} is reflected in internal navigation`)
+      assert.ok(await evaluate(`!!smokeSection.querySelector('.tool-workspace__examples summary') && document.querySelectorAll('[data-workspace-feature]').length > 0`), `${tool} exposes secondary examples in a disclosure`)
+      assert.equal(await evaluate(`smokeSection.querySelector('[data-workspace-feature][aria-pressed="true"]')?.dataset.workspaceFeature`), feature, `${tool}/${feature} is reflected in internal navigation`)
     }
   }
   // Preserve old links as redirects into their appropriate comprehensive tool.
-  for (const surface of ['pivots', 'shapes', 'connectors', 'formulas', 'history', 'font-metrics', 'pptx-authored', 'pptx-native', 'pptx-render', 'sheets']) await route(surface)
+  for (const surface of ['pivots', 'shapes', 'connectors', 'formulas', 'history', 'font-metrics', 'pptx-authored', 'pptx-native', 'pptx-render', 'sheets?feature=editor']) await route(surface)
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'seeded sheet chart')
   await until(`(${sheetChartState})?.series.length > 0 && (${sheetChartState})?.numericCells.length === 5`, 'seeded chart has a numeric series')
   const originalChart = await evaluate(sheetChartState)
@@ -267,7 +267,7 @@ try {
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'reset restores workbook')
   await until(`(${sheetChartState})?.firstValue === ${JSON.stringify(originalChart.firstValue)} && (${sheetChartState})?.series.length > 0`, 'reset restores seeded chart data')
   assert.deepEqual(await evaluate(sheetChartState), originalChart, 'reset restores the complete numeric chart source')
-  for (let i = 0; i < 2; i++) { await route('charts'); await route('sheets'); await until(`document.querySelector('[data-demo-surface="sheets"] canvas')`, 'preserved sheet') }
+  for (let i = 0; i < 2; i++) { await route('charts'); await route('sheets?feature=editor'); await until(`document.querySelector('[data-demo-surface="sheets"] canvas')`, 'preserved sheet') }
   await route('sheets?view=native')
   await until(`!!document.querySelector('.native-toolbar')`, 'same-surface deep link switches mode')
   await route('collab')
@@ -275,17 +275,17 @@ try {
   for (const tool of ['sheets', 'docs', 'slides', 'pdf']) {
     const fileFormat = { sheets: 'xlsx', docs: 'docx', slides: 'pptx', pdf: 'pdf' }[tool]
     await route(`agent?format=${tool}`)
-    await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} AI deep link`, 90_000)
+    await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} AI deep link`, 90_000)
     const boundary = await evaluate(`document.querySelector('[data-agent-boundary]')?.textContent`)
     const defaultRequest = await evaluate(`document.querySelector('[data-agent-request]').value`)
-    assert.match(await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`), /Simulated agent · real document operations/i, `${tool} distinguishes mocked proposal from real file proof`)
-    assert.match(boundary, new RegExp(`Real ${fileFormat}.*verification.*No language model`, 'i'), `${tool} discloses real operations and no LLM`)
+    assert.match(await evaluate(`document.querySelector('[data-agent-mock]')?.textContent`), /Simulated agent. Real file edits. No LLM./i, `${tool} distinguishes mocked proposal from real file proof`)
+    assert.match(boundary, /Simulated agent.*Real file edits.*No LLM/i, `${tool} discloses real operations and no LLM`)
     assert.equal(await evaluate(`!!document.querySelector('[data-agent-guided-task]') && !document.querySelector('[data-agent-technical]').open && !document.querySelector('[data-agent-safety-details]').open`), true, `${tool} starts with a guided task and collapsed technical details`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-proposal-source]') === null`), true, `${tool} defaults to the bundled mock`)
     const guidedSelector = tool === 'pdf' ? '[data-agent-task-degrees]' : '[data-agent-task-value]'
     if (tool !== 'pdf') {
       await setGuidedField(guidedSelector, tool === 'sheets' ? 'Review' : '')
-      await until(`document.querySelector('[data-agent-task-error]') && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').disabled`, `${tool} rejects an unchanged status or empty replacement`)
+      await until(`document.querySelector('[data-agent-task-error]') && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Preview change').disabled`, `${tool} rejects an unchanged status or empty replacement`)
       assert.equal(await agentWrites(), 0, `${tool} invalid task cannot write`)
     }
     const guidedValue = { sheets: 'Blocked', docs: 'Northstar Guided Launch Brief', slides: 'Northstar guided launch review', pdf: '180' }[tool]
@@ -301,10 +301,10 @@ try {
       assert.equal(await evaluate(`document.querySelector('[data-agent-live-consent]') === null`), true, 'default mock requires no external-provider consent')
       assert.equal(proposalRequests.length, 0, 'loading the mock demo does not request a proposal')
     }
-    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Preview change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} preview and validation`, 90_000)
     assert.ok((await evaluate(`document.querySelector('.agent-diff').textContent`)).includes(guidedValue), `${tool} preview reflects the edited guided value`)
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').disabled`), true, 'commit requires explicit approval')
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Apply approved change').disabled`), true, 'commit requires explicit approval')
     assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'proposal does not preapprove itself')
     assert.equal(await agentWrites(), 0, `${tool} preview does not write the source`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, `${tool} proposal cannot release a download`)
@@ -328,16 +328,16 @@ try {
     if (tool === 'docs') {
       await click('.agent-approval input[type=checkbox]')
       await setGuidedField('[data-agent-task-value]', '')
-      await until(`!document.querySelector('.agent-diff') && !document.querySelector('.agent-approval input').checked && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').disabled`, 'editing a reviewed task revokes approval and removes the stale preview')
+      await until(`!document.querySelector('.agent-diff') && !document.querySelector('.agent-approval input').checked && Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Preview change').disabled`, 'editing a reviewed task revokes approval and removes the stale preview')
       assert.equal(await agentWrites(), 0, 'editing a reviewed task does not write')
       await setGuidedField('[data-agent-task-value]', guidedValue)
       await until(agentReady, 'corrected guided task ready')
-      await clickButton('Run agent')
+      await clickButton('Preview change')
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'corrected task gets a fresh review', 90_000)
       assert.equal(await evaluate(`document.querySelector('.agent-approval input').checked`), false, 'correcting a task does not restore old approval')
     }
     await click('.agent-approval input[type=checkbox]')
-    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Commit approved change').click()`)
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Apply approved change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'verified'`, `${tool} approved commit verifies`, 90_000)
     await until(`!!document.querySelector('[data-agent-download]')`, `${tool} verified bytes released`)
     const fileProof = await evaluate(`(async () => {
@@ -382,7 +382,7 @@ try {
       await clickButton('Reload sample')
       await until(agentReady, 'sample reload before unsupported mock request', 90_000)
       await setAgentRequest('Write a poem about this workbook')
-      await clickButton('Run agent')
+      await clickButton('Preview change')
       await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'error'`, 'unsupported mock prompt is rejected honestly', 90_000)
       assert.match(await evaluate(`document.querySelector('.tool-error[role=alert]')?.textContent`), /mock|support|try|workstream/i, 'mock failure explains its bounded request support')
       assert.equal(await agentWrites(), 0, 'unsupported mock prompt never writes native bytes')
@@ -417,9 +417,9 @@ try {
       assert.equal(await agentWrites(), 1, `${tool} retry does not write again`)
       const prepareAgain = async () => {
         await clickButton('Reload sample')
-        await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} sample reloaded`, 90_000)
+        await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} sample reloaded`, 90_000)
         assert.equal(await evaluate(`document.querySelector('[data-agent-request]').value`), defaultRequest, `${tool} reload restores its real-file request`)
-        await clickButton('Run agent')
+        await clickButton('Preview change')
         await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} fresh proposal reviewed`, 90_000)
       }
       await prepareAgain()
@@ -442,14 +442,14 @@ try {
     }
     await openAgentDetails('data-agent-safety-details')
     await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Refusal proof').click()`)
-    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} refusal ready`, 90_000)
-    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Run agent').click()`)
+    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} refusal ready`, 90_000)
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Preview change').click()`)
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'refused'`, `${tool} unsupported operation refused`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('.agent-approval input')`), true, 'refusal does not allow approval')
     assert.equal(await agentWrites(), 0, `${tool} unsupported proposal never reaches the writer`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'refusal does not expose a previous output')
     await resetDemo()
-    await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
+    await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('[data-agent-download]') && !document.querySelector('.agent-diff') && !Array.from(document.querySelectorAll('.agent-tool-log li[data-state=done]')).some(item => /office\\.(plan|commit)/.test(item.textContent)) && document.querySelector('.agent-approval input').checked === false`), true, 'reset clears outputs, plans, commits, and approval; initial capability discovery is allowed')
   }
   assert.deepEqual(liveRequests, [], 'guided demo never fetches live configuration or proposals')
@@ -463,7 +463,7 @@ try {
   await click('.source-proof-trigger')
   assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '0', 'new AI format starts its own guide progress')
   await click('.source-proof-close')
-  await route('sheets')
+  await route('sheets?feature=editor')
   await evaluate(`window.scrollTo({ top: 0, behavior: 'instant' })`)
   for (const width of [1200, 1024, 768]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
@@ -475,7 +475,7 @@ try {
   await screenshot('four-tools-mobile')
   await route('agent?format=sheets')
   await until(agentReady, 'mobile AI sample ready', 90_000)
-  await clickButton('Run agent')
+  await clickButton('Preview change')
   await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, 'mobile AI preview prepared', 90_000)
   await openAgentDetails('data-agent-technical')
   await evaluate(`document.querySelector('[data-agent-trace]').open = true`)
@@ -499,8 +499,8 @@ try {
   await screenshot('agent-mobile-expanded-trace')
   for (const tool of ['docs', 'slides', 'pdf']) {
     await route(`agent?format=${tool}`)
-    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Run agent' && !button.disabled)`, `${tool} mobile sample ready`, 90_000)
-    await clickButton('Run agent')
+    await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} mobile sample ready`, 90_000)
+    await clickButton('Preview change')
     await until(`document.querySelector('.agent-demo__status')?.dataset.state === 'awaiting-approval'`, `${tool} mobile preview ready`, 90_000)
     await openAgentDetails('data-agent-technical')
   await evaluate(`document.querySelector('[data-agent-trace]').open = true`)

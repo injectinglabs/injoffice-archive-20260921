@@ -35,7 +35,7 @@ try {
   await cdp.send('Runtime.enable')
   await cdp.send('Page.enable')
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
-  await cdp.send('Page.navigate', { url: `${url.replace(/#.*$/, '')}#/pdf` })
+  await cdp.send('Page.navigate', { url: `${url.replace(/#.*$/, '')}#/pdf?feature=editor` })
   await ready()
   await evaluate(`${pdf}.scrollIntoView({ block: 'start' })`)
 

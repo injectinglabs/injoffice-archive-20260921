@@ -13,7 +13,7 @@ describe('four public tool examples', () => {
   })
 
   it('selects the actual active feature guide/source through canonical and legacy URLs', () => {
-    expect(workspaceProofDemo('#/sheets').recipe.id).toBe('sheets-live-editor')
+    expect(workspaceProofDemo('#/sheets?feature=editor').recipe.id).toBe('sheets-live-editor')
     expect(workspaceProofDemo('#/sheets?feature=tools').recipe.id).toBe('sheets-package-tools')
     expect(workspaceProofDemo('#/sheets?feature=native').recipe.id).toBe('sheets-native-round-trip')
     expect(workspaceProofDemo('#/charts').surface).toBe('charts')

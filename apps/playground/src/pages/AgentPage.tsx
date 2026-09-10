@@ -389,17 +389,17 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
   const shownArtifact = preview?.artifact ?? scenario.artifact
   const shownContent = verification?.ok && receipt?.content ? receipt.content : shownArtifact.content
   const status = !sessionInput && state !== 'error' ? 'Loading the bundled sample and browser engine…' : state === 'ready'
-    ? 'Ready to inspect a bounded document selection.'
+    ? 'Choose a change, then preview it in the document.'
     : state === 'preparing'
-      ? 'Inspecting and validating the proposed operations.'
+      ? 'Reading the file and checking your proposed change…'
       : state === 'awaiting-approval'
-        ? 'Preflight passed. The source artifact is still unchanged.'
+        ? 'Review the highlighted change. Your original file is unchanged.'
         : state === 'refused'
           ? 'Refused before write. No output was produced.'
           : state === 'committing'
-            ? 'Applying the approved change set atomically.'
+            ? 'Applying your approved change and checking the saved file…'
             : state === 'verified'
-              ? `Verified ${receipt?.revision}. The output matches its receipt.`
+              ? 'The saved file passed verification. Your download is ready.'
               : state === 'unverified' ? 'Write completed; verification failed. No verified download is available.'
               : 'The workflow stopped. See the error details below; reload the sample to try again.'
   const fileType = format.toUpperCase()
@@ -429,15 +429,25 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
   return (
     <div className="ds">
     <section className="tool-page" data-demo-surface="agent" data-agent-tool={tool} data-demo-busy={state === 'preparing' || state === 'committing' || safetyBusy} aria-label={toolMeta.title}>
-      <header className="agent-task-intro" data-agent-mock>
-        <h2>Simulated agent · real document operations</h2>
-        <p data-agent-boundary>{boundary}</p>
-        <p>Choose a task for the sample file. Review what will change, then approve the edit and download the verified result.</p>
-      </header>
-      <ol className="agent-task-progress" data-agent-progress aria-label="Document task progress">
-        {taskSteps.map((step, index) => <li key={step.label} data-state={step.state} aria-current={step.state === 'active' ? 'step' : undefined}><span aria-hidden="true">{step.state === 'done' ? '✓' : index + 1}</span><div><strong>{step.label}</strong><small>{step.detail}</small></div></li>)}
-      </ol>
-      <section className="agent-task-editor" aria-label="Choose a document task">
+      <div className="agent-demo__workspace ds-split">
+        <section className="agent-demo__document ds-split-main" aria-labelledby={artifactTitleId}>
+          <header>
+            <div><span>{verification?.ok ? 'Verified document' : preview ? 'Proposed change · not saved yet' : 'Sample document'}</span><h2 id={artifactTitleId}>{scenario.artifact.name}</h2></div>
+          </header>
+          <div className={`agent-artifact agent-artifact--${format}`}>
+            {sessionInput ? <ArtifactView format={format} content={shownContent} highlighted={Boolean(preview && validation?.ok)} /> : <p role="status">{state === 'error' ? 'Sample unavailable. Reload to retry.' : 'Opening the sample…'}</p>}
+          </div>
+          <footer>
+            <p className="agent-approval-note">{format === 'pdf' ? 'PDF page metadata comes from parsing the actual file bytes. This is not a rendered page.' : format === 'xlsx' ? 'The table is a bounded workbook projection, not a rendered Excel page.' : 'This is extracted document text, not a full-fidelity page or slide rendering.'}</p>
+          </footer>
+        </section>
+
+        <aside className="agent-demo__inspector ds-split-side" aria-label="Document assistant">
+          <header className="agent-task-intro" data-agent-mock>
+            <h2>Document assistant</h2>
+            <p data-agent-boundary>Simulated agent. Real file edits. No LLM.</p>
+          </header>
+          <section className="agent-task-editor" aria-label="Choose a document task">
         {!fixedTool && <DsSegment
           label="Office tool"
           value={tool}
@@ -446,29 +456,12 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
         />}
         {mode === 'safe' && advancedRequest ? <div className="agent-advanced-notice" role="status"><strong>Advanced request active</strong><p>{prompt || 'Enter a bounded request in Technical details below.'}</p><small>Task fields are paused. This exact request will be proposed by the deterministic mock.</small></div> : mode === 'safe' && proposalContext && sessionInput ? <GuidedAgentTaskForm key={`${reload}-${mode}`} tool={tool} context={proposalContext} defaultRequest={sessionInput.scenario.prompt} disabled={taskDisabled} onRequestChange={updateRequest} /> : <p>{mode === 'refusal' ? 'Safety test: propose an unsupported operation and confirm that it is refused before any write.' : 'Reading the sample to find the available task targets…'}</p>}
         <div className="agent-demo__toolbar workbench-toolbar ds-workstrip" role="toolbar" aria-label="Agent workflow controls">
-        <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (mode === 'safe' && state !== 'verified' && state !== 'unverified' && state !== 'error' && (!proposalContext || !prompt.trim()))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Run agent'}</DsButton>
+        <DsButton data-agent-prepare variant="filled" className="workbench-button workbench-button--primary" disabled={(!sessionInput && state !== 'error') || state === 'preparing' || state === 'committing' || safetyBusy || (sourceChanged && state === 'awaiting-approval') || (mode === 'safe' && state !== 'verified' && state !== 'unverified' && state !== 'error' && (!proposalContext || !prompt.trim()))} onClick={() => state === 'verified' || state === 'unverified' || state === 'error' ? reloadSample() : void prepare()}>{state === 'verified' || state === 'unverified' || state === 'error' ? 'Reload sample' : 'Preview change'}</DsButton>
         <span className="agent-demo__status" data-state={state} role="status" aria-live="polite">{status}</span>
         </div>
       </section>
 
-      <div className="agent-demo__workspace ds-split">
-        <section className="agent-demo__document ds-split-main" aria-labelledby={artifactTitleId}>
-          <header>
-            <div><span>{verification?.ok ? 'Reopened output projection' : `Isolated ${preview ? 'preview' : 'source'}`}</span><h2 id={artifactTitleId}>{scenario.artifact.name}</h2></div>
-          </header>
-          <div className={`agent-artifact agent-artifact--${format}`}>
-            {sessionInput ? <ArtifactView format={format} content={shownContent} highlighted={Boolean(preview && validation?.ok)} /> : <p role="status">{state === 'error' ? 'Sample unavailable. Reload to retry.' : 'Opening the sample…'}</p>}
-          </div>
-          <footer>
-            <strong>Agent request</strong>
-            <p>{mode === 'safe' ? prompt : scenario.prompt}</p>
-            <small>{boundary}</small>
-            <p className="agent-approval-note">{format === 'pdf' ? 'PDF page metadata comes from parsing the actual file bytes.' : format === 'xlsx' ? 'The table is a bounded workbook projection, not a rendered Excel page.' : 'This is extracted document text, not a full-fidelity page or slide rendering.'}</p>
-          </footer>
-        </section>
-
-        <aside className="agent-demo__inspector ds-split-side" aria-label="Agent evidence inspector">
-          <section className="ds-panel">
+          <section className="ds-panel" hidden={!diff && !validation}>
             <header><div><h2>{mode === 'safe' ? `Proposed ${fileType} change` : scenario.summary}</h2></div></header>
             {diff?.changes.length ? (
               <div className="agent-diff">
@@ -486,19 +479,19 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
               {validation.issues.map((issue, index) => <div key={`${issue.code}:${issue.path}:${index}`}><strong>{issue.code}</strong><code>{issue.path}</code><p>{issue.message}</p></div>)}
             </section>
           ) : (
-            <section className="agent-approval ds-panel">
+            <section className="agent-approval ds-panel" hidden={!validation?.ok}>
               <header><div><h2>Review and approve</h2></div></header>
               {state === 'verified' ? <DsChip tone="green">Applied</DsChip> : null}
               <label className="ds-check">
                 <input type="checkbox" checked={approved} disabled={state !== 'awaiting-approval'} onChange={(event) => setApproved(event.target.checked)} />
-                I reviewed this exact diff and approve one atomic commit.
+                I reviewed this exact change and approve saving it.
               </label>
-              <DsButton variant={state === 'verified' ? 'green' : 'filled'} className="workbench-button workbench-button--primary" disabled={!approved || state !== 'awaiting-approval' || safetyBusy} onClick={() => void commit()}>Commit approved change</DsButton>
+              <DsButton data-agent-commit variant={state === 'verified' ? 'green' : 'filled'} className="workbench-button workbench-button--primary" disabled={!approved || state !== 'awaiting-approval' || safetyBusy} onClick={() => void commit()}>Apply approved change</DsButton>
               <p className="agent-approval-note">The original file is unchanged until you approve. Editing the task clears this approval.</p>
             </section>
           )}
 
-          <section className="agent-evidence ds-panel">
+          <section className="agent-evidence ds-panel" hidden={!receipt && state !== 'committing'}>
             <header><div><h2>{verification?.ok ? `${fileType} output verified` : 'Verify and download'}</h2></div>{verification?.ok && <DsChip tone="green">Pass</DsChip>}</header>
             <p>{verification?.ok ? 'The edited file was reopened and checked. Your verified download is ready.' : state === 'unverified' ? 'The write completed, but its result could not be verified. Download is blocked; reload the sample to start again.' : 'After approval, the real file is edited and reopened for verification. Only a verified result can be downloaded.'}</p>
             {state === 'verified' && verification?.ok && downloadURL && <a data-agent-download className="workbench-button ds-btn ds-btn--filled" href={downloadURL} download={`${scenario.artifact.name.replace(/\.[^.]+$/, '')}-approved.${format}`}>Download verified .{format}</a>}
@@ -510,6 +503,10 @@ function AgentWorkflow({ tool, fixedTool }: { tool: AgentTool; fixedTool: boolea
       </div>
       <details data-agent-technical className="agent-technical">
         <summary>Technical details</summary>
+        <p className="agent-request-help">{boundary}</p>
+        <ol className="agent-task-progress" data-agent-progress aria-label="Document task progress">
+          {taskSteps.map((step, index) => <li key={step.label} data-state={step.state} aria-current={step.state === 'active' ? 'step' : undefined}><span aria-hidden="true">{step.state === 'done' ? '✓' : index + 1}</span><div><strong>{step.label}</strong><small>{step.detail}</small></div></li>)}
+        </ol>
         <div className="agent-request">
           <label className="ds-check"><input type="checkbox" data-agent-advanced-request checked={advancedRequest} disabled={taskDisabled || mode !== 'safe'} onChange={(event) => { reset(); setAdvancedRequest(event.target.checked) }} />Use an advanced request instead of task fields</label>
           <label htmlFor={promptId}>Bounded mock request</label>

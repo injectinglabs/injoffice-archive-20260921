@@ -37,6 +37,10 @@ describe('four-tool continuous showcase', () => {
 })
 
 describe('scroll section active probe', () => {
+  it('selects a short final section when the visitor reaches the document end', () => {
+    expect(activeSectionKey([{ key: 'slides', top: -900 }, { key: 'pdf', top: 90 }], 80, true)).toBe('pdf')
+    expect(activeSectionKey([{ key: 'slides', top: -900 }, { key: 'pdf', top: Infinity }], 80, true)).toBe('slides')
+  })
   const sections = [{ key: 'overview', top: -800 }, { key: 'sheets', top: 80 }, { key: 'docs', top: 1200 }]
   it('selects the last section crossing the probe without moving focus or mutating coordinates', () => {
     expect(activeSectionKey(sections, 79)).toBe('overview')

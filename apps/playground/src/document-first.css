@@ -1,0 +1,89 @@
+/* Document-first shell. Keep the working file prominent; implementation details
+   are disclosures, not competing status banners. Existing theme tokens own color. */
+.app-shell .demo-context-header { padding: 18px 0 12px; gap: 12px; align-items: center; }
+.app-shell[data-navigation="scroll"] .demo-title-line :is(h1, h2) { font-size: 24px; line-height: 1.2; letter-spacing: -.025em; }
+.app-shell .demo-context-header .page-heading-copy > p { font-size: 14px; margin: 6px 0 0; max-width: 65ch; }
+.app-shell .demo-context-actions { align-items: center; gap: 8px; }
+.app-shell .demo-preview { border-radius: 8px; }
+.app-shell :is(.runtime-information, .demo-options) { position: relative; font-size: 14px; }
+.app-shell :is(.runtime-information, .demo-options) > summary { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--ink-soft); }
+.app-shell :is(.runtime-information, .demo-options) > summary:hover { background: var(--chrome); }
+.app-shell :is(.runtime-information, .demo-options) > summary:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+.app-shell :is(.runtime-information, .demo-options) > div { position: absolute; top: 100%; right: 0; width: min(340px, calc(100vw - 40px)); padding: 18px; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); background: var(--paper); box-shadow: var(--shadow-float); z-index: 50; }
+.app-shell .runtime-information p { font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+.app-shell .demo-options > div { width: 160px; display: grid; gap: 8px; }
+.app-shell .source-proof-trigger { font-size: 14px; }
+
+.app-shell .ds.tool-workspace > .tool-workspace__navigation { padding: 10px 16px; }
+.app-shell .tool-workspace__primary { display: flex; align-items: start; gap: 12px; flex-wrap: wrap; }
+.app-shell .tool-workspace__task,
+.app-shell .tool-workspace__examples > summary { padding: 10px 12px; border: 0; border-radius: 6px; color: var(--ink-soft); background: transparent; font: inherit; font-size: 14px; cursor: pointer; }
+.app-shell .tool-workspace__task[aria-pressed="true"] { background: var(--action-soft); color: var(--action-ink); font-weight: 600; }
+.app-shell .tool-workspace__examples { flex: 1 1 220px; min-width: 0; }
+.app-shell .tool-workspace__examples > summary { width: fit-content; max-width: 100%; }
+.app-shell .tool-workspace__examples > summary:hover { background: var(--chrome); }
+.app-shell .tool-workspace__selected { color: var(--ink); }
+.app-shell .tool-workspace__example-list { padding: 12px 0 4px; max-height: min(480px, 60vh); overflow-y: auto; }
+.app-shell .tool-workspace__example-list > section { margin-top: 18px; }
+.app-shell .tool-workspace__example-list h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.app-shell .tool-workspace__example-list button { display: block; width: 100%; padding: 10px 12px; text-align: left; background: var(--paper); border: 0; border-radius: 6px; color: var(--ink); cursor: pointer; }
+.app-shell .tool-workspace__example-list button:hover { background: var(--chrome); }
+.app-shell .tool-workspace__example-list button[aria-pressed="true"] { background: var(--action-soft); }
+.app-shell .tool-workspace__example-list :is(strong, span) { display: block; font-size: 14px; line-height: 1.5; }
+.app-shell .tool-workspace__example-list span { color: var(--mute); max-width: 76ch; }
+.app-shell .tool-workspace__sample-note,
+.app-shell .tool-workspace__example-description { margin: 8px 0 0; color: var(--mute); font-size: 14px; line-height: 1.6; max-width: 76ch; }
+
+/* One inspected artifact, one adjacent assistant. Source order also makes sense
+   when the columns stack on small screens. No visual reordering of focusables. */
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 370px); align-items: start; overflow: visible; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document { padding: 20px; min-width: 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document > header { padding: 0 0 16px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document > header span { font-size: 14px; text-transform: none; letter-spacing: 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document h2 { font-size: 17px; line-height: 1.4; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact { min-height: 360px; padding: 16px; border-radius: 4px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document > footer { padding: 12px 0 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__document > footer p { color: var(--mute); }
+.app-shell .ds [data-demo-surface="agent"] .agent-diff :is(code, del, ins) { font-size: 14px; line-height: 1.6; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__inspector { padding: 0; min-width: 0; border-left: 1px solid var(--rule); border-top: 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-task-intro { display: block; padding: 20px 20px 0; margin: 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-task-intro h2 { font-size: 18px; line-height: 1.4; }
+.app-shell .ds [data-demo-surface="agent"] .agent-task-intro p { font-size: 14px; color: var(--mute); margin: 6px 0 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-task-editor { padding: 18px 20px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__status { font-size: 14px; line-height: 1.6; }
+.app-shell .ds [data-demo-surface="agent"] .agent-guided-task__fields { grid-template-columns: minmax(0, 1fr); }
+.app-shell .ds [data-demo-surface="agent"] :is(.agent-guided-task label, .agent-guided-task select, .agent-guided-task input, .agent-guided-task__current, .agent-guided-task__help, .agent-guided-task__error, .agent-approval-note, .agent-request-help, .agent-demo__empty, .agent-demo__inspector p, .ds-check, .agent-artifact__pdf p) { font-size: 14px; line-height: 1.6; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__inspector > section { border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 18px 20px; box-shadow: none; }
+.app-shell .ds [data-demo-surface="agent"] .agent-demo__inspector > section[hidden] { display: none; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact__doc { display: flow-root; width: 100%; max-width: 600px; height: auto; min-height: 0; aspect-ratio: auto; margin: 0 auto; padding: 28px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact__doc p { font-size: 14px; line-height: 1.65; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact__slide { width: 100%; padding: 24px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact__pdf { padding: 24px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-artifact__pdf > span { font-size: 14px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-technical { margin: 0; border: 0; border-top: 1px solid var(--rule); border-radius: 0; }
+.app-shell .ds [data-demo-surface="agent"] .agent-technical > .agent-request-help { padding: 0 20px; }
+.app-shell .ds [data-demo-surface="agent"] .agent-task-progress small { font-size: 13px; }
+
+@media (max-width: 1100px) {
+  .app-shell .ds [data-demo-surface="agent"] .agent-demo__workspace { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .ds [data-demo-surface="agent"] .agent-demo__inspector { border-left: 0; border-top: 1px solid var(--rule); }
+}
+@media (max-width: 760px) {
+  .app-shell .app-header-inner { min-height: 52px; height: auto; flex-wrap: nowrap; padding: 8px; gap: 6px; }
+  .app-shell .app-header-actions { margin-left: auto; gap: 4px; }
+  .app-shell .runtime-information > summary { font-size: 0; padding: 8px; white-space: nowrap; }
+  .app-shell .runtime-information > summary::after { content: 'About'; font-size: 14px; }
+  .app-shell .scheme-toggle { flex-wrap: nowrap; }
+  .app-shell .demo-context-header { align-items: start; }
+  .app-shell .demo-context-header .page-heading-copy > p { display: none; }
+  .app-shell .demo-context-actions { flex-wrap: wrap; }
+  .app-shell .runtime-information > div { position: fixed; top: 64px; right: 16px; }
+  .app-shell .ds [data-demo-surface="agent"] .agent-demo__document { padding: 12px; }
+  .app-shell .ds [data-demo-surface="agent"] .agent-artifact { padding: 8px; min-height: 240px; }
+  .app-shell .ds [data-demo-surface="agent"] :is(.agent-artifact__doc, .agent-artifact__slide, .agent-artifact__pdf) { padding: 16px; }
+}
+@media (max-width: 480px) {
+  .app-shell .app-brand > span { display: none; }
+  .app-shell .app-brand { padding: 0; gap: 0; }
+}

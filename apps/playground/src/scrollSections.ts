@@ -15,6 +15,7 @@ export function sectionForHash(hash: string): ScrollSection {
 }
 
 /** Coordinates are relative to the viewport. Reading never moves focus or scroll. */
-export function activeSectionKey(sections: readonly { key: string; top: number }[], probe: number): string | undefined {
+export function activeSectionKey(sections: readonly { key: string; top: number }[], probe: number, atEnd = false): string | undefined {
+  if (atEnd) return sections.filter(section => Number.isFinite(section.top)).at(-1)?.key
   return sections.filter(section => section.top <= probe).at(-1)?.key ?? sections[0]?.key
 }

@@ -10,7 +10,7 @@ const shapes: ToolWorkspaceFeature = { id: 'shapes', label: 'Shape gallery', gro
 const fonts: ToolWorkspaceFeature = { id: 'font-metrics', label: 'Typography and layout', group: 'More tools', source: 'font-metrics', description: 'Inspect layout contracts and the explicit Node boundary for font resolution and shaping.' }
 
 export const TOOL_WORKSPACES: readonly ToolWorkspaceDefinition[] = [
-  { tool: 'sheets', title: 'Sheets', description: 'Edit workbooks, analyze data, try a guided agent task, and explore collaboration in one workspace.', features: [
+  { tool: 'sheets', title: 'Sheets', description: 'Update a launch tracker. Review the change and download a verified workbook.', features: [
     { id: 'editor', label: 'Workbook editor', group: 'Edit', source: 'sheets', description: 'Edit the interactive sample workbook in your browser.' },
     { id: 'native', label: 'XLSX file round trip', group: 'Edit', source: 'sheets', description: 'Open real XLSX bytes, apply a bounded change, verify, and download.' },
     { id: 'tools', label: 'Workbook package samples', group: 'Edit', source: 'sheets', description: 'Explore sparklines and outlines. Print uses a sample callback, and exchange uses a demonstration codec—not real printing or XLSX import.' },
@@ -21,11 +21,11 @@ export const TOOL_WORKSPACES: readonly ToolWorkspaceDefinition[] = [
     { id: 'connectors', label: 'Data connectors', group: 'Analyze', source: 'connectors', description: 'Normalize sample JSON and CSV into bound ranges.' },
     collab, history, shapes,
   ] },
-  { tool: 'docs', title: 'Docs', description: 'Edit document text, review a guided agent change, and explore document collaboration and layout.', features: [
+  { tool: 'docs', title: 'Docs', description: 'Revise a launch brief. Approve the exact text change before saving.', features: [
     { id: 'editor', label: 'Document editor', group: 'Edit', source: 'docs', description: 'Open and update DOCX text, then download the real file. The preview is not Word pagination.' },
     agent, collab, history, fonts,
   ] },
-  { tool: 'slides', title: 'Slides', description: 'Create presentations, edit native PPTX files, and explore agent tasks, collaboration, and rendering.', features: [
+  { tool: 'slides', title: 'Slides', description: 'Update a presentation. Review the changed text and download the verified deck.', features: [
     { id: 'editor', label: 'Presentation editor', group: 'Edit', source: 'slides', description: 'Build a DeckSpec sample with themes, layout checks, transitions, and a live canvas; this view does not emit PPTX file bytes.' },
     { id: 'pptx-native', label: 'Native PPTX editing', group: 'Edit', source: 'pptx-native', description: 'Edit guarded text or an exact supported shape in real PPTX bytes, then verify and download.' },
     { id: 'pptx-authored', label: 'PPTX authoring', group: 'Edit', source: 'pptx-authored', description: 'Compile a sample DeckSpec into strict native JSON presentation objects, not emitted PPTX file bytes.' },
@@ -33,16 +33,16 @@ export const TOOL_WORKSPACES: readonly ToolWorkspaceDefinition[] = [
     { id: 'pptx-render', label: 'PPTX rendering', group: 'More tools', source: 'pptx-render', description: 'Inspect deterministic render trees and renderer-independent paint commands.' },
     fonts,
   ] },
-  { tool: 'pdf', title: 'PDF', description: 'Annotate, fill forms, organize pages, try a guided agent rotation, and explore collaborative review.', features: [
+  { tool: 'pdf', title: 'PDF', description: 'Rotate a review page. Approve the change and download the verified PDF.', features: [
     { id: 'editor', label: 'PDF editor', group: 'Edit', source: 'pdf', description: 'Open, annotate, organize, and download a PDF. Advanced server tools remain explicitly separate.' },
     agent, collab, fonts,
   ] },
 ]
 
-export function workspaceHref(tool: AgentTool, feature = 'editor'): string {
+export function workspaceHref(tool: AgentTool, feature = 'agent'): string {
   const definition = TOOL_WORKSPACES.find((item) => item.tool === tool)!
-  const selected = definition.features.some((item) => item.id === feature) ? feature : 'editor'
-  return selected === 'editor' ? `#/${tool}` : `#/${tool}?feature=${encodeURIComponent(selected)}`
+  const selected = definition.features.some((item) => item.id === feature) ? feature : 'agent'
+  return selected === 'agent' ? `#/${tool}` : `#/${tool}?feature=${encodeURIComponent(selected)}`
 }
 
 /** Keep shell and mounted views in sync even before an old URL is replaced. */
@@ -56,8 +56,8 @@ export function resolveToolWorkspace(hash: string): { tool: AgentTool; feature: 
   const query = new URLSearchParams(hash.split('?')[1]?.split('#')[0] ?? '')
   const direct = TOOL_WORKSPACES.find((item) => item.tool === path)
   if (direct) {
-    const requested = query.get('feature') ?? (direct.tool === 'sheets' ? query.get('view') : null) ?? 'editor'
-    return { tool: direct.tool, feature: direct.features.some((item) => item.id === requested) ? requested : 'editor' }
+    const requested = query.get('feature') ?? (direct.tool === 'sheets' ? query.get('view') : null) ?? 'agent'
+    return { tool: direct.tool, feature: direct.features.some((item) => item.id === requested) ? requested : 'agent' }
   }
   if (path === 'native') return { tool: 'sheets', feature: 'native' }
   if (path === 'agent' || path === 'collab') return { tool: parseAgentTool(hash), feature: path }
