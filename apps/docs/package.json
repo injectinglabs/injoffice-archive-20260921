@@ -1,0 +1,32 @@
+{
+  "name": "@injoffice/documentation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "node scripts/generate.mjs && vitepress dev . --port 3200 --strictPort",
+    "build": "node scripts/generate.mjs && vitepress build .",
+    "preview": "vitepress preview . --port 3200 --strictPort",
+    "typecheck": "tsc -p examples/tsconfig.json --noEmit",
+    "test": "node scripts/generate.mjs && tsc -p examples/tsconfig.json && node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@injoffice/agent-tools": "0.1.0",
+    "@injoffice/agent-office": "0.1.0",
+    "@injoffice/charts": "0.1.0",
+    "@injoffice/pivots": "0.1.0",
+    "@injoffice/docs": "0.1.0",
+    "@injoffice/docx-wasm": "0.1.0",
+    "@injoffice/sheets": "0.1.0",
+    "@injoffice/xlsx-wasm": "0.1.0",
+    "@injoffice/pptx-wasm": "0.1.0",
+    "@injoffice/pptx-authored": "0.1.0",
+    "@injoffice/slides": "0.1.0",
+    "@injoffice/pdf": "0.1.0",
+    "pdf-lib": "^1.17.1",
+    "typescript": "7.0.2",
+    "vitepress": "1.6.4"
+  },
+  "engines": { "node": ">=22" }
+}

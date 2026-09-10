@@ -1,0 +1,6 @@
+.vitepress/cache/
+.vitepress/dist/
+.examples-dist/
+reference/generated/
+public/logo.svg
+public/llms.txt

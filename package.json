@@ -8,6 +8,10 @@
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "npm run dev -w apps/playground",
+    "docs:dev": "npm run dev -w apps/docs",
+    "docs:build": "npm run build -w apps/docs",
+    "docs:preview": "npm run preview -w apps/docs",
+    "test:docs-browser": "node scripts/smoke-docs-browser.mjs",
     "build": "npm run build --workspaces --if-present",
     "postbuild": "node scripts/fix-declaration-specifiers.mjs",
     "generate:xlsx-contract": "node scripts/generate-xlsx-native-contract.mjs",
@@ -46,6 +50,9 @@
     "test": "npm run check:unicode13 && npm run check:typescript-version && npm run test --workspaces --if-present && npm run test:native-office-completion && npm run test:dependency-integrity && npm run test:release-packages && npm run test:declaration-specifiers && npm run test:chrome-cdp-startup"
   },
   "overrides": {
+    "vitepress": {
+      "vite": "6.4.3"
+    },
     "@univerjs/core": {
       "nanoid": "5.1.16"
     }

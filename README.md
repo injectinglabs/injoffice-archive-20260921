@@ -22,6 +22,14 @@ The original OOXML bytes remain the authority. The supported path is XLSX-first 
 
 React, Konva, DOM/HTML layout, screenshots, and Univer must not decide file identity or pass/fail semantics.
 
+## Documentation
+
+Developer guides, TypeScript examples, and source-derived package/Go references
+live in the separate [documentation app](apps/docs/README.md). Run
+`npm run docs:dev` for documentation on port 3200; `npm run dev` still starts
+the interactive demo on port 3100. The documentation site does not bundle the
+demo or execute document engines. See its [quickstart](apps/docs/getting-started/quickstart.md).
+
 ## Packages
 
 Twenty-six TypeScript packages under `packages/`:
@@ -59,6 +67,7 @@ Private workspace apps (not published):
 
 | App | Purpose |
 |---|---|
+| `apps/docs` | Standalone developer documentation, tested TypeScript examples, and source-derived references. |
 | `apps/playground` | Browser engine proofs, browser-local native XLSX, DOCX, and PPTX round trips, and collaboration demos. |
 | `apps/docx-page-paint-worker` | Native DOCX page-paint worker |
 

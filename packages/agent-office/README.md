@@ -37,8 +37,10 @@ The [playground Sheets example](../../apps/playground/README.md#agent-integratio
 connects the public XLSX adapter to a native browser Worker and dispatches actual
 JSON tools. It demonstrates editable deterministic requests, exact-plan host
 approval, source-revision conflicts, idempotent retries, and committed-output
-verification. The other three playground agent formats are lifecycle simulations;
-they should not be mistaken for native-byte integrations. Model-generated
+verification. The DOCX and PPTX examples also use native browser Workers to
+mutate and re-extract real file bytes. The PDF example uses local page operations
+and fresh output parsing. All four use deterministic simulated proposals, not an
+LLM; the supported document operations and downloaded bytes are real. Model-generated
 confirmation values never substitute for the host's authenticated approval state.
 
 ## Honest boundaries
