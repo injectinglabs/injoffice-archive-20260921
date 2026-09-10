@@ -2,6 +2,7 @@ import { PPTX_NATIVE_RESOURCE_LIMITS, PPTX_NATIVE_SCHEMA } from './schema.genera
 import type {
   NativeCompatibility,
   NativeElement,
+  NativeParagraph,
   NativePptxDeck,
   NativeSourceAnchor,
   NativeTableCell,
@@ -269,6 +270,7 @@ function validateElement(
   let worst = element.compatibility.status
 
   if (element.kind === 'text' || element.kind === 'shape') {
+    validateParagraphMarkers(element.paragraphs, `${path}.paragraphs`, issues)
     for (const paragraph of element.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
   }
@@ -304,6 +306,7 @@ function validateElement(
         if (hasParagraphs !== hasTextBody) add(issues, cellPath, 'native.tableTextAuthority', 'paragraphs and textBody must be supplied together')
         if (cell.paragraphs && cell.textBody) {
           authoritativeCells++
+          validateParagraphMarkers(cell.paragraphs, `${path}.table.rows[${rowIndex}][${columnIndex}].paragraphs`, issues)
           for (const paragraph of cell.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
           if (cell.align !== undefined) add(issues, `${cellPath}.align`, 'native.tableTextAuthority', 'legacy align is not allowed with authoritative cell paragraphs')
           if (!tableCellTextMatches(cell.text, cell.paragraphs)) add(issues, `${cellPath}.text`, 'native.tableTextAuthority', 'must equal the newline-joined authoritative paragraph text')
@@ -357,6 +360,14 @@ function validateElement(
     }
   }
   return worst
+}
+
+function validateParagraphMarkers(paragraphs: readonly NativeParagraph[], path: string, issues: NativeValidationIssue[]): void {
+  for (const [i, paragraph] of paragraphs.entries()) {
+    if (paragraph.bulletCharacter !== undefined && (paragraph.bullet !== true || [...paragraph.bulletCharacter].length !== 1 || /[\u0000-\u001f\u007f-\u009f]/u.test(paragraph.bulletCharacter))) {
+      add(issues, `${path}[${i}].bulletCharacter`, 'native.bulletCharacter', 'requires one authored non-control character and bullet=true')
+    }
+  }
 }
 
 function exactSafeTrackTotal(tracks: readonly number[]): number | undefined {

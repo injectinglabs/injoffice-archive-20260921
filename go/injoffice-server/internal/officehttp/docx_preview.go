@@ -71,7 +71,7 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 	if fonts == nil {
 		fonts = []docxpatch.NativeDOCXPagePaintFontAssetV1{}
 	}
-	// Only package-referenced PNG bytes enter the compiler; its authoritative
+	// Only package-referenced PNG/JPEG bytes enter the compiler; its authoritative
 	// media join independently checks part names, content digests and geometry.
 	encoded, err := json.Marshal(doc)
 	if err != nil {
@@ -81,13 +81,13 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 	if err = json.Unmarshal(encoded, &value); err != nil {
 		return nil, err
 	}
-	names := map[string]bool{}
+	names := map[string]string{}
 	var walk func(any)
 	walk = func(value any) {
 		switch v := value.(type) {
 		case map[string]any:
-			if name, ok := v["media_part"].(string); ok && v["content_type"] == "image/png" {
-				names[name] = true
+			if name, ok := v["media_part"].(string); ok && (v["content_type"] == "image/png" || v["content_type"] == "image/jpeg") {
+				names[name] = v["content_type"].(string)
 			}
 			for _, child := range v {
 				walk(child)
@@ -109,7 +109,7 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !names[part.Name] {
+		if names[part.Name] == "" {
 			continue
 		}
 		reader, err := part.Open()
@@ -125,7 +125,7 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 		if len(content) > 8*1024*1024 || total > 32*1024*1024 || len(media) >= 256 {
 			return nil, errors.New("preview media exceeds its byte budget")
 		}
-		media = append(media, map[string]any{"part_name": part.Name, "content_type": "image/png", "content_digest": fmt.Sprintf("sha256:%x", sha256.Sum256(content)), "bytes_base64": base64.StdEncoding.EncodeToString(content)})
+		media = append(media, map[string]any{"part_name": part.Name, "content_type": names[part.Name], "content_digest": fmt.Sprintf("sha256:%x", sha256.Sum256(content)), "bytes_base64": base64.StdEncoding.EncodeToString(content)})
 	}
 	return map[string]any{"protocol": "injoffice.docx.page-paint-compiler", "version": 1, "source_revision": "injoffice-docx-preview-v1", "outline_provider": map[string]string{"provider_id": "injoffice.harfbuzz-outline", "provider_revision": "v1"}, "document": doc, "resolved_layout": layout, "pagination_settings": settings, "font_inventory_json": string(inventoryJSON), "font_assets": fonts, "media_assets": media}, nil
 }

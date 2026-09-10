@@ -1,5 +1,17 @@
 # @injoffice/pptx-native
 
+Text extraction resolves a bounded local DrawingML style cascade: list default,
+matching list level, paragraph properties, then explicit run properties. Only
+modeled typeface/size/bold/italic/solid color and paragraph alignment/list metadata
+participate. Theme tokens still resolve through the relationship-bound theme.
+Source XML bytes are never rewritten to materialize these rendering properties.
+
+Paragraphs may retain an authored `bulletCharacter` (one Unicode scalar, with
+`bullet: true`) and bounded `marginLeftEmu` / `indentEmu`. The approximate file
+preview uses those values instead of inventing a generic bullet. Exact native
+RenderTree still refuses marker/indent geometry until qualified. Auto-numbering,
+bullet font overrides and unmodeled spacing are not silently flattened.
+
 Pictures may carry optional `crop` with all four source-edge insets (`left`,
 `top`, `right`, `bottom`) in DrawingML 1/1000-percent units. Each is an integer
 from 0 through 99999 and opposing sums must be below 100000. Omitted crop means

@@ -319,33 +319,50 @@ it atomically because v1 has no qualified scale, baseline, and advance metric.
 The qualified native-image slice is equally renderer-neutral and
 self-contained: the compiler exact-joins each drawing's internal relationship
 and preserved relationship-part digest to one preserved media part, verifies
-caller-supplied bytes against that part's byte length and SHA-256, parses bounded static PNG
+caller-supplied bytes against that part's byte length and SHA-256, parses bounded static PNG/JPEG
 dimensions, and carries canonical base64 bytes as an output resource. Inline
 image commands retain the exact DrawingML EMU extent projected through the
 integer-only `10/127` milli-point ratio, an explicit full-source crop, and an
 explicit identity transform. Prepared and completed compiler envelopes expose
 canonical hashes for the complete validated request and output.
 
-Images are restricted to embedded static PNG pictures in `wp:inline` with zero
+Images are restricted to embedded static PNG or baseline JFIF JPEG pictures in `wp:inline` with zero
 distances/effect extents, identity `a:xfrm`, full-source crop, exact integer
 milli-point geometry, and bounded bytes/pixels. It refuses anchors/floating
 placement, wrapping, remote or external relationships, vectors and other
 raster formats, animation, crop/rotation/flip/effects, mismatched extents, and
-media digest drift. Selected header/footer inline PNG runs use the same
+media digest drift. JPEG support is deliberately bounded to one baseline 8-bit
+grayscale/YCbCr interleaved scan with internal tables and JFIF APP0, following
+[ITU-T T.871](https://www.itu.int/rec/T-REC-T.871). EXIF, ICC, Adobe transforms,
+progressive/multiple scans and ambiguous color metadata remain refused. The
+validator checks marker structure, not entropy decoding; the viewer decodes the
+preserved bytes and the browser smoke verifies generated red/blue JPEG pixels.
+Selected header/footer inline PNG/JPEG runs use the same
 digest-bound asset join and `paint_inline_image` command as body pictures. V1
 also emits RTL/mixed-bidi fragments and bounded U+0020-justified lines in
 visual paint order, requiring no paint-time text reversal or measurement. It
 also emits RTL/mixed-bidi fragments, exact list-marker glyphs, and bounded
 U+0020-justified lines in visual paint order, requiring no paint-time text
 reversal or measurement. It refuses distributed-character justification,
-underline/highlight paint, header/footer tables, shapes, references, fields
-(including cached PAGE results),
-and unsupported note content. Native note marker fragments must exactly equal
-the paginator-assigned decimal label. It also refuses
+underline paint, header/footer tables, shapes, references, fields
+(including cached PAGE results), and unsupported note content. Native note marker
+fragments must exactly equal the paginator-assigned decimal label. It also refuses
 system or unaddressed faces, missing glyphs, invalid/mismatched provider output,
 unclosed or overflowing paths, incomplete pages, and all resource overflows.
 Any such condition returns one `status: 'refused'` output with `pages: []`; no
 previously accumulated page or command escapes.
+
+Text-run highlighting emits the additive `fill_text_highlight` paint command.
+Consumers must replay these filled rectangles in command order before the line's
+glyph paths; do not assume every non-image command is a glyph. Background width
+comes from each shaped visual fragment's advance (including ordinary spaces),
+and height from its qualified font ascent/descent. This deterministic native
+metric policy is not a claim of Word-pixel parity. The compiler and strict
+request decoder bind every rectangle to the source highlight color, run,
+fragment, placement and geometry, and reject missing/reordered decorations.
+The 16 OOXML named colors and `none` are supported for text runs; zero-advance
+fragments produce no background. Highlighted tabs/other controls and list-marker
+backgrounds remain refused. Underline support and edit authority are unchanged.
 
 Stored output should first pass `decodeNativeDocxPagePaintV1`, then
 `decodeNativeDocxPagePaintForRequestV1` for exact request/page/line/glyph/style

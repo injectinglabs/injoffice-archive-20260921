@@ -1515,8 +1515,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
   let y = 0
   for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
     const paragraph = paragraphs[paragraphIndex]!
-    if (context.layout && (paragraph.align === undefined || paragraph.level !== 0 || paragraph.bullet !== false)) {
-      throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable', 'native layout requires explicit alignment and refuses bullets or nonzero list levels until marker and inherited paragraph semantics are modeled')
+    if (context.layout && (paragraph.align === undefined || paragraph.level !== 0 || paragraph.bullet !== false || (paragraph.marginLeftEmu ?? 0) !== 0 || (paragraph.indentEmu ?? 0) !== 0)) {
+      throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable', 'native layout requires explicit alignment and refuses bullets, nonzero list levels, margins or indents until their line geometry is qualified')
     }
     if (context.layout && state.nativeTextInheritanceUnresolved && paragraph.runs.some(nativeRunLacksExplicitFont)) {
       throw new TextBodyLayoutRefusal('text.inheritanceUnavailable', 'native layout refuses runs that still need unresolved presentation/layout/master/theme fonts')

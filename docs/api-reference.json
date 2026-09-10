@@ -3626,6 +3626,11 @@
               "signature": "export interface NativeDocxFillTableCellCommandV1"
             },
             {
+              "name": "NativeDocxFillTextHighlightCommandV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxFillTextHighlightCommandV1"
+            },
+            {
               "name": "NativeDOCXFontFaceV1",
               "kind": "interface",
               "signature": "export interface NativeDOCXFontFaceV1"
@@ -3783,7 +3788,7 @@
             {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintCompletedV1",
@@ -4914,9 +4919,14 @@
               "signature": "export declare const DOCX_PAGE_PAINT_VERSION: 1"
             },
             {
+              "name": "NativeDocxFillTextHighlightCommandV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxFillTextHighlightCommandV1"
+            },
+            {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintV1",
@@ -9211,7 +9221,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"6530f53ed29b92bc559769858692e96247335833ff16637d1b02a99b99ce29e3\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"db4f9fd5877294a9b0c353c2c0cbbd2330b0e3414486f7bbde9720ce57cf3eca\""
             },
             {
               "name": "provenanceValues",

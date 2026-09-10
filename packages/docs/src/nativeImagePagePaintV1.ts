@@ -1,7 +1,8 @@
 /**
  * Exact, bounded media boundary for native DOCX page-paint v1.
  *
- * Only embedded, identity-transformed inline PNG pictures are qualified. The
+ * Embedded, identity-transformed inline PNG and baseline JFIF JPEG pictures
+ * are qualified. The
  * package extractor remains the relationship authority; this module exact-joins
  * its drawing projection to preserved package-part fingerprints and caller-
  * supplied bytes. It never fetches, decodes for layout, or accepts a renderer's
@@ -12,6 +13,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import type { NativeDocxDocumentV1, NativeDocxDrawingV1 } from './nativeContract.js'
 import { asciiLowerNative as asciiLower, asciiUpperNative, compareNativeCodeUnits } from './nativeDeterminism.js'
+import { nativeBaselineJpegDimensions } from './nativeJpegV1.js'
 
 export const DOCX_INLINE_IMAGE_LIMITS = Object.freeze({
   maxAssets: 256,
@@ -32,7 +34,7 @@ export interface NativeDocxAuthoritativeMediaAssetV1 {
 export interface NativeDocxPagePaintMediaAssetV1 {
   id: string
   part_name: string
-  content_type: 'image/png'
+  content_type: 'image/png' | 'image/jpeg'
   content_digest: `sha256:${string}`
   byte_length: number
   width_px: number
@@ -48,7 +50,7 @@ export interface NativeDocxQualifiedInlineImageV1 {
   relationship_id: string
   relationship_part: string
   relationship_sha256: `sha256:${string}`
-  content_type: 'image/png'
+  content_type: 'image/png' | 'image/jpeg'
   content_digest: `sha256:${string}`
   byte_length: number
   width_emu: number
@@ -212,10 +214,11 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }
   }
   if (!drawing.relationship_id || !drawing.media_part || !drawing.content_type) return { ok: false, code: 'invalid-image', message: 'Inline picture lacks an exact embedded relationship/media identity' }
-  if (asciiLower(drawing.content_type) !== 'image/png') return { ok: false, code: 'unsupported-image', message: 'Only embedded PNG media is supported; vector, animated, and other raster formats are refused' }
+  const contentType = asciiLower(drawing.content_type)
+  if (contentType !== 'image/png' && contentType !== 'image/jpeg') return { ok: false, code: 'unsupported-image', message: 'Only embedded static PNG or baseline JFIF JPEG media is supported' }
   const part = uniquePreservedPart(document, drawing.media_part)
-  if (!part || canonicalPart(part.part_name) !== canonicalPart(drawing.media_part) || asciiLower(part.content_type) !== 'image/png' || !SHA256.test(part.sha256) || !Number.isSafeInteger(part.byte_length) || part.byte_length <= 0) {
-    return { ok: false, code: 'invalid-image', message: 'Inline picture does not exact-join one preserved content-addressed PNG part' }
+  if (!part || canonicalPart(part.part_name) !== canonicalPart(drawing.media_part) || asciiLower(part.content_type) !== contentType || !SHA256.test(part.sha256) || !Number.isSafeInteger(part.byte_length) || part.byte_length <= 0) {
+    return { ok: false, code: 'invalid-image', message: 'Inline picture does not exact-join one preserved content-addressed raster part' }
   }
   const relPartName = relationshipPart(drawing.anchor.part_name)
   const relPart = uniquePreservedPart(document, relPartName)
@@ -233,7 +236,7 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       relationship_id: drawing.relationship_id,
       relationship_part: relPart.part_name,
       relationship_sha256: relPart.sha256 as `sha256:${string}`,
-      content_type: 'image/png',
+      content_type: contentType,
       content_digest: part.sha256 as `sha256:${string}`,
       byte_length: part.byte_length,
       width_emu: drawing.width_emu,
@@ -270,13 +273,13 @@ export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocu
     if (value.bytes.byteLength === 0 || value.bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes || total + value.bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxTotalBytes) throw new RangeError('authoritative media bytes exceed the bounded page-paint budget')
     const owned = Uint8Array.from(value.bytes)
     if (digest(owned) !== value.content_digest) throw new TypeError('authoritative media bytes do not match their content digest')
-    const dimensions = pngDimensions(owned)
-    if (!dimensions) throw new TypeError('authoritative media is not a supported static, structurally complete PNG')
-    if (dimensions.width > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.width * dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixels) throw new RangeError('authoritative PNG dimensions exceed the bounded decode budget')
+    const dimensions = image.content_type === 'image/png' ? pngDimensions(owned) : nativeBaselineJpegDimensions(owned)
+    if (!dimensions) throw new TypeError('authoritative media is not a supported static, structurally complete PNG or baseline JFIF JPEG')
+    if (dimensions.width > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.width * dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixels) throw new RangeError('authoritative raster dimensions exceed the bounded decode budget')
     output.push({
       id: image.asset_id,
       part_name: image.part_name,
-      content_type: 'image/png',
+      content_type: image.content_type,
       content_digest: image.content_digest,
       byte_length: owned.byteLength,
       width_px: dimensions.width,
@@ -315,11 +318,11 @@ export function decodeNativeDocxPagePaintResourceListV1(value: unknown): NativeD
     if (typeof asset.part_name !== 'string' || !validPartName(asset.part_name) || typeof asset.content_type !== 'string' || typeof asset.content_digest !== 'string' || typeof asset.bytes_base64 !== 'string' || asset.bytes_base64.length > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes * 2) throw new TypeError('page-paint media asset identity is malformed')
     const bytes = unbase64(asset.bytes_base64)
     if (!bytes || asset.byte_length !== bytes.byteLength) throw new TypeError('page-paint media asset bytes are not canonical or length-bound')
-    if (asset.content_type !== 'image/png' || !SHA256.test(asset.content_digest) || digest(bytes) !== asset.content_digest || asset.id !== imageAssetID(asset.content_digest, asset.part_name)) throw new TypeError('page-paint media asset content identity is invalid')
+    if (!['image/png', 'image/jpeg'].includes(asset.content_type) || !SHA256.test(asset.content_digest) || digest(bytes) !== asset.content_digest || asset.id !== imageAssetID(asset.content_digest, asset.part_name)) throw new TypeError('page-paint media asset content identity is invalid')
     const partKey = canonicalPart(asset.part_name)
     if (seenParts.has(partKey) || seenIDs.has(asset.id as string)) throw new TypeError('page-paint media asset identity is duplicated')
-    const dimensions = pngDimensions(bytes)
-    if (!dimensions || asset.width_px !== dimensions.width || asset.height_px !== dimensions.height) throw new TypeError('page-paint media asset dimensions do not match its PNG bytes')
+    const dimensions = asset.content_type === 'image/png' ? pngDimensions(bytes) : nativeBaselineJpegDimensions(bytes)
+    if (!dimensions || asset.width_px !== dimensions.width || asset.height_px !== dimensions.height) throw new TypeError('page-paint media asset dimensions do not match its raster bytes')
     if (bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes || total + bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxTotalBytes || dimensions.width > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixelDimension || dimensions.width * dimensions.height > DOCX_INLINE_IMAGE_LIMITS.maxPixels) throw new RangeError('page-paint media resource exceeds its byte or pixel budget')
     total += bytes.byteLength
     seenParts.add(partKey)

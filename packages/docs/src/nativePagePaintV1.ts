@@ -61,6 +61,7 @@ import {
   type NativeDocxPagePaintMediaAssetV1,
 } from './nativeImagePagePaintV1.js'
 import type { NativeDocxResolvedNumberingSourceV1, NativeDocxResolvedRunPropertiesV1 } from './nativeResolvedLayout.js'
+import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 
 export interface NativeDocxPagePaintRequestV1 {
   protocol: typeof DOCX_PAGE_PAINT_REQUEST_PROTOCOL
@@ -202,7 +203,20 @@ export interface NativeDocxPaintInlineImageCommandV1 {
   transform: { rotation_degrees: 0; flip_horizontal: false; flip_vertical: false }
 }
 
-export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1
+export interface NativeDocxFillTextHighlightCommandV1 {
+  kind: 'fill_text_highlight'
+  id: string
+  line_id: string
+  fragment_id: string
+  source_id: string
+  x_millipoints: number
+  y_millipoints: number
+  width_millipoints: number
+  height_millipoints: number
+  fill_rgb: string
+}
+
+export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1
 
 export interface NativeDocxPaintLineV1 {
   placed_line_id: string
@@ -811,7 +825,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
   for (const page of layout.pages) {
     const tableCommands = tableCommandsIndex.get(page.id)
     if (!tableCommands) return { ok: true, value: refusal(provenance, 'identity-mismatch', documentID, 'Table geometry could not exact-join paginated cell lines') }
-    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
+    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
     const paintLines: NativeDocxPaintLineV1[] = []
     const headerFooterPage = headerFooterByPageID.get(page.id)
     if (!headerFooterPage) return { ok: true, value: refusal(provenance, 'incomplete-page', page.id, 'Header/footer layout does not exactly cover the paginated page') }
@@ -837,6 +851,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
       const baselineY = placed.y_millipoints + line.ascent_millipoints
       if (!Number.isSafeInteger(baselineY) || Math.abs(baselineY) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints) return { ok: true, value: refusal(provenance, 'resource-limit', line.id, 'Line baseline exceeds the bounded paint coordinate range') }
       const firstCommand = contentCommands.length
+      const highlights: NativeDocxFillTextHighlightCommandV1[] = []
       if (noteStory?.note_role === 'separator' && noteStory.lines[0]?.id === placed.id) {
         if (noteStory.lines.length !== 1 || line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'Instruction-only note separator must paint exactly one derived rule and no text or glyph commands') }
         const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id)
@@ -899,7 +914,10 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
           }
         }
         coveredFragmentIDs.add(fragment.id)
-        if (properties.underline && properties.underline !== 'none' || properties.highlight && properties.highlight !== 'none') return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, 'Underline and highlight paint are outside page-paint v1') }
+        if (properties.underline && properties.underline !== 'none') return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, 'Underline paint is outside page-paint v1') }
+        const highlight = nativeTextHighlightCommandV1(properties.highlight, fragment, placed.id, line.id, fragmentX, baselineY)
+        if (!highlight.ok) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, highlight.message) }
+        if (highlight.command) highlights.push(highlight.command)
         if (fragment.glyphs.length === 0) {
           fragmentX += fragment.advance_inline_millipoints
           if (!Number.isSafeInteger(fragmentX)) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Fragment cursor exceeds safe integer coordinates') }
@@ -984,6 +1002,13 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
         if (!Number.isSafeInteger(fragmentX)) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Fragment cursor exceeds safe integer coordinates') }
       }
       if (fragmentX !== placed.x_millipoints + line.advance_inline_millipoints) return { ok: true, value: refusal(provenance, 'identity-mismatch', line.id, 'Fragment advances must exactly sum to the shaped line advance') }
+      // Backgrounds precede every glyph on this line so italic overhangs cannot
+      // be covered by the next fragment's background. Avoid unbounded spread.
+      if (highlights.length) {
+        const foreground = contentCommands.splice(firstCommand)
+        for (const command of highlights) contentCommands.push(command)
+        for (const command of foreground) contentCommands.push(command)
+      }
       paintLines.push({
         placed_line_id: placed.id,
         line_id: line.id,
@@ -1077,6 +1102,8 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const expectedGlyphs: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; glyphIndex: number; glyphID: number; face?: NativeDocxContentAddressedFaceV1; fontSize?: number; fill: string }> = []
       const expectedImages: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; drawingID: string; assetID: string; x: number; y: number; width: number; height: number }> = []
       const expectedSeparators: Array<{ pageIndex: number; command: NativeDocxStrokeNoteSeparatorCommandV1 }> = []
+      const expectedHighlights: Array<{ pageIndex: number; command: NativeDocxFillTextHighlightCommandV1 }> = []
+      const highlightIDsByPlacement = new Map<string, string[]>()
       const headerFooterByPageID = headerFooter.status === 'placed' ? new Map<string, NativeDocxHeaderFooterPageLayoutV1>(headerFooter.pages.map((entry) => [entry.page_id, entry])) : new Map<string, NativeDocxHeaderFooterPageLayoutV1>()
       const qualifiedTables = qualifyNativeDocxTablesV1(request.value.pagination_request.document, request.value.pagination_request.resolved_layout)
       const expectedTableByPageID = qualifiedTables.status === 'qualified'
@@ -1100,9 +1127,16 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             if (separator) expectedSeparators.push({ pageIndex, command: separator })
           }
           let fragmentX = placed.x_millipoints
+          const highlightIDs: string[] = []
+          highlightIDsByPlacement.set(`${pageIndex}\0${placed.id}`, highlightIDs)
           line?.fragments.forEach((fragment) => {
             const resolved = resolvedRuns.get(fragment.source_id)
             const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placed.paragraph_id)?.numbering?.marker_properties : resolved?.properties
+            if (fragment.source_kind !== 'image') {
+              const highlight = nativeTextHighlightCommandV1(properties?.highlight, fragment, placed.id, line.id, fragmentX, placed.y_millipoints + line.ascent_millipoints)
+              if (!highlight.ok) add(issues, 'BROKEN_REFERENCE', '/output/pages', highlight.message)
+              else if (highlight.command) { expectedHighlights.push({ pageIndex, command: highlight.command }); highlightIDs.push(highlight.command.id) }
+            }
             const manifestFace = fragment.face_id ? manifestFaces.get(fragment.face_id) : undefined
             const face = manifestFace?.source.contentDigest ? { face_id: manifestFace.faceId, content_digest: manifestFace.source.contentDigest, ...(manifestFace.source.collectionIndex !== undefined ? { collection_index: manifestFace.source.collectionIndex } : {}) } : undefined
             fragment.glyphs.forEach((glyph, glyphIndex) => expectedGlyphs.push({ pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, glyphIndex, glyphID: glyph.glyph_id, face, fontSize: properties?.font_size_half_points === undefined ? undefined : properties.font_size_half_points * 500, fill: properties?.color ?? '000000' }))
@@ -1118,6 +1152,8 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const actualGlyphs = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command, commandIndex) => command.kind === 'fill_glyph_path' ? [{ page, pageIndex, commandIndex, command }] : []))
       const actualImages = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command, commandIndex) => command.kind === 'paint_inline_image' ? [{ page, pageIndex, commandIndex, command }] : []))
       const actualSeparators = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'stroke_note_separator' ? [{ pageIndex, command }] : []))
+      const actualHighlights = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'fill_text_highlight' ? [{ pageIndex, command }] : []))
+      if (!sameWire(actualHighlights, expectedHighlights)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'highlights must exactly cover source run colors and shaped font-metric rectangles')
       if (actualGlyphs.length !== expectedGlyphs.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every shaped glyph once')
       if (actualImages.length !== expectedImages.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every qualified inline image once')
       if (!sameWire(actualSeparators, expectedSeparators)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly derive one deterministic rule from each placed ordinary note separator')
@@ -1133,6 +1169,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           const indexedStory = placed ? noteStoryByPlacedLineID.get(placed.id) : undefined
           const separatorStory = indexedStory?.note_role === 'separator' ? indexedStory : undefined
           const expectedCommandIDs = [
+            ...(placed ? highlightIDsByPlacement.get(`${pageIndex}\0${placed.id}`) ?? [] : []),
             ...(separatorStory && placed ? [paintNoteSeparatorCommandID(placed.id)] : []),
             ...(shaped?.fragments.flatMap((fragment) => fragment.source_kind === 'image' ? [paintImageCommandID(placed!.id, fragment.id)] : fragment.glyphs.map((_, glyphIndex) => paintCommandID(placed!.id, fragment.id, glyphIndex))) ?? []),
           ]

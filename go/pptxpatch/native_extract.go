@@ -202,6 +202,7 @@ type nativeExtractor struct {
 	tokenStager             *nativePassthroughTokenStager
 	groupProjectionSeen     bool
 	theme                   nativeResolvedTheme
+	slideDependencies       nativeSlideDependencyGraph
 }
 
 type nativeStagedPassthroughToken struct {
@@ -1443,6 +1444,7 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 		return NativeSlide{}, err
 	}
 	extractor.theme = theme
+	extractor.slideDependencies = graph
 	for _, unsupported := range graph.unsupported {
 		if err := extractor.markSlideUnsupported(&slide, unsupported.part, unsupported.objectID, unsupported.fingerprint, unsupported.payload, unsupported.code, unsupported.message); err != nil {
 			return NativeSlide{}, err
@@ -1671,6 +1673,11 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 }
 
 func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, slideID, fingerprint string, zIndex int, dialect nativeExtractDialect) (NativeElement, error) {
+	resolved, inheritedPlaceholder, inheritanceErr := extractor.resolveNativePlaceholder(node, dialect)
+	if inheritanceErr != nil {
+		return NativeElement{}, inheritanceErr
+	}
+	node = resolved
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		return NativeElement{}, err
 	}
@@ -1835,10 +1842,15 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	}
 	element := NativeElement{
 		Kind: NativeElementKindText, ID: elementID, Provenance: NativeProvenanceParsed,
-		Transform: transform, Paragraphs: paragraphPointer, TextBody: textBody,
+		Placeholder: inheritedPlaceholder,
+		Transform:   transform, Paragraphs: paragraphPointer, TextBody: textBody,
 		Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: part, ObjectID: objectID, FingerprintSHA256: elementFingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
+	}
+	if inheritedPlaceholder != nil {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.inherited-placeholder-preview", Message: "title/body placeholder geometry and styles resolve through the exact layout/master relationship chain; inherited targets remain preserve-only", Scope: &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &part}})
 	}
 	if name != "" {
 		element.Name = stringPointer(name)
@@ -1892,6 +1904,11 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 	if txBody == nil {
 		return []NativeParagraph{}, nil
 	}
+	resolvedBody, styleErr := resolveNativeLocalTextStyles(txBody, dialect, extractor.theme)
+	if styleErr != nil {
+		return nil, styleErr
+	}
+	txBody = resolvedBody
 	if err := requireOnlyNativeAttrs(txBody); err != nil {
 		return nil, err
 	}
@@ -1947,7 +1964,7 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 		for _, child := range paragraphNode.Children {
 			switch child.Name {
 			case xml.Name{Space: dialect.drawing, Local: "pPr"}:
-				if err := requireOnlyNativeAttrs(child, xml.Name{Local: "algn"}, xml.Name{Local: "lvl"}); err != nil {
+				if err := requireOnlyNativeAttrs(child, xml.Name{Local: "algn"}, xml.Name{Local: "lvl"}, xml.Name{Local: "marL"}, xml.Name{Local: "indent"}); err != nil {
 					return nil, fmt.Errorf("pptxpatch: native extract: unmodeled paragraph metadata: %w", err)
 				}
 				if err := requireOnlyNativeChildren(child,
@@ -1966,7 +1983,28 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 					}
 				}
 				if buChar != nil {
-					return nil, fmt.Errorf("pptxpatch: native extract: bullet character semantics are not representable in v1")
+					if requireOnlyNativeAttrs(buChar, xml.Name{Local: "char"}) != nil || requireOnlyNativeChildren(buChar) != nil {
+						return nil, unsupportedNativeTextContent("unmodeled bullet character metadata")
+					}
+					marker, ok := exactNativeAttr(buChar, "", "char")
+					if !ok || utf8.RuneCountInString(marker) != 1 || strings.IndexFunc(marker, unicode.IsControl) >= 0 {
+						return nil, unsupportedNativeTextContent("bullet requires one non-control authored character")
+					}
+					paragraph.Bullet = boolPointer(true)
+					paragraph.BulletCharacter = &marker
+				}
+				for _, field := range []struct {
+					name   string
+					target **int64
+					min    int64
+				}{{"marL", &paragraph.MarginLeftEmu, 0}, {"indent", &paragraph.IndentEmu, -51206400}} {
+					if value, ok := exactNativeAttr(child, "", field.name); ok {
+						parsed, err := parseCanonicalNativeInt(value, field.min, 51206400)
+						if err != nil {
+							return nil, err
+						}
+						*field.target = &parsed
+					}
 				}
 				if value, ok := exactNativeAttr(child, "", "algn"); ok {
 					align, alignErr := nativeTextAlign(value)

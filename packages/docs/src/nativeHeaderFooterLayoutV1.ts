@@ -210,7 +210,7 @@ function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story
     if (block.paragraph) for (const run of block.paragraph.runs) {
       if (run.drawing) {
         const image = qualifyNativeDocxInlineImageV1(input.document, run.id, run.drawing)
-        if (!image.ok) diagnostics.push(diagnostic('selected-story-shape', run.id, `Selected header/footer drawing is outside the exact inline PNG subset: ${image.message}`))
+        if (!image.ok) diagnostics.push(diagnostic('selected-story-shape', run.id, `Selected header/footer drawing is outside the exact inline raster subset: ${image.message}`))
       }
       if (run.reference) diagnostics.push(diagnostic('selected-story-reference', run.id, 'Selected header/footer note/comment references have no exact display advance'))
       if (run.control && run.control !== 'tab' && run.control !== 'line-break') diagnostics.push(diagnostic('selected-paragraph-unsupported', run.id, `Selected header/footer ${run.control} control is not supported`))

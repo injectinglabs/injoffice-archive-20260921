@@ -3,6 +3,14 @@ Copyright 2026 Injecting Inc.
 
 This product includes software developed at Injecting Inc.
 
+The generated rendering qualification corpus may embed the installed
+dejavu-fonts-ttf DejaVu Sans font in temporary DOCX fixtures. Original fixture
+definitions and test code are Apache-2.0; the font bytes are not relicensed.
+DejaVu changes are public domain; underlying Bitstream Vera and applicable
+Arev glyphs retain their copyright and font-license terms. The corpus runner
+copies the installed font package's complete LICENSE beside its output as
+DEJAVU-FONTS-LICENSE.txt. Retain that notice when sharing generated fixtures.
+
 `@injoffice/xlsx-wasm`, `@injoffice/docx-wasm`, and `@injoffice/pptx-wasm` contain the Go
 JavaScript/WebAssembly runtime and WebAssembly binaries produced by the Go
 toolchain. Go is copyright The Go Authors and distributed under a BSD-style

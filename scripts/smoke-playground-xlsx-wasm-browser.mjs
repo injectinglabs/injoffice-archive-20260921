@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { extname, resolve, sep } from 'node:path'
@@ -8,7 +8,8 @@ const root = resolve(import.meta.dirname, '..')
 const dist = resolve(root, 'apps/playground/dist')
 const base = '/injoffice-smoke/'
 const profile = mkdtempSync(resolve(tmpdir(), 'injoffice-office-browser-'))
-const screenshots = mkdtempSync(resolve(tmpdir(), 'injoffice-rendering-review-'))
+const screenshots = process.env.SHOWCASE_OUTPUT ? resolve(process.env.SHOWCASE_OUTPUT) : mkdtempSync(resolve(tmpdir(), 'injoffice-rendering-review-'))
+mkdirSync(screenshots, { recursive: true })
 const requests = []
 const browserRequests = []
 const pageErrors = []

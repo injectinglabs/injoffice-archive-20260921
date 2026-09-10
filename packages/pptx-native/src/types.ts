@@ -89,6 +89,10 @@ export interface NativeParagraph {
   align?: NativeTextAlign
   level?: number
   bullet?: boolean
+  /** One authored Unicode marker. Native exact marker/font layout may still refuse. */
+  bulletCharacter?: string
+  marginLeftEmu?: number
+  indentEmu?: number
 }
 
 /** Exact v1 horizontal text-frame slice with materialized OOXML defaults. */

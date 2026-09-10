@@ -43,6 +43,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   PathCubicV1: ['kind', 'control_1_x_millipoints', 'control_1_y_millipoints', 'control_2_x_millipoints', 'control_2_y_millipoints', 'x_millipoints', 'y_millipoints'],
   PathCloseV1: ['kind'],
   GlyphCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'glyph_index', 'face', 'glyph_id', 'font_size_millipoints', 'fill_rgb', 'fill_rule', 'outline_kind', 'path'],
+  HighlightCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   CellFillCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   BorderCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'edge', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   NoteSeparatorCommandV1: ['kind', 'id', 'line_id', 'story_id', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
@@ -490,6 +491,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       const commandPath = `${path}/commands/${commandIndex}`
       const kind = isObject(commandValue) ? commandValue.kind : undefined
       const fields = kind === 'fill_glyph_path' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GlyphCommandV1
+        : kind === 'fill_text_highlight' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.HighlightCommandV1
         : kind === 'paint_inline_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageCommandV1
           : kind === 'fill_table_cell' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.CellFillCommandV1
             : kind === 'stroke_table_border' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BorderCommandV1
@@ -532,6 +534,13 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       }
       const fragmentID = stringValue(command.fragment_id, `${commandPath}/fragment_id`, issues, ID, 1024)
       stringValue(command.source_id, `${commandPath}/source_id`, issues)
+      if (kind === 'fill_text_highlight') {
+        if (commandID && fragmentID && commandPlacementID && commandID !== `paint:${commandPlacementID}:${fragmentID}:highlight`) add(issues, 'INVALID_VALUE', `${commandPath}/id`, 'highlight id must derive from its placed line and fragment')
+        for (const key of ['x_millipoints', 'y_millipoints'] as const) integer(command[key], `${commandPath}/${key}`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        for (const key of ['width_millipoints', 'height_millipoints'] as const) integer(command[key], `${commandPath}/${key}`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        stringValue(command.fill_rgb, `${commandPath}/fill_rgb`, issues, RGB, 6)
+        return
+      }
       if (kind === 'fill_glyph_path') {
         glyphs += 1
         const glyphIndex = integer(command.glyph_index, `${commandPath}/glyph_index`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxGlyphs)
@@ -560,7 +569,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       }
     })
     if (commands.length > DOCX_PAGE_PAINT_LIMITS.maxGlyphs) add(issues, 'LIMIT_EXCEEDED', `${path}/commands`, `commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxGlyphs}`)
-    const actualCommandIDs = commands.flatMap((command) => isObject(command) && (command.kind === 'fill_glyph_path' || command.kind === 'paint_inline_image' || command.kind === 'stroke_note_separator') && typeof command.id === 'string' ? [command.id] : [])
+    const actualCommandIDs = commands.flatMap((command) => isObject(command) && (command.kind === 'fill_glyph_path' || command.kind === 'fill_text_highlight' || command.kind === 'paint_inline_image' || command.kind === 'stroke_note_separator') && typeof command.id === 'string' ? [command.id] : [])
     if (actualCommandIDs.length !== referencedCommandIDs.length || actualCommandIDs.some((id, index) => id !== referencedCommandIDs[index])) add(issues, 'BROKEN_REFERENCE', `${path}/lines`, 'line command ids must exactly cover page commands in replay order')
     if (page.kind === 'parity-blank' && (commands.length > 0 || lines.length > 0)) add(issues, 'INVALID_UNION', path, 'parity-blank pages cannot contain lines or paint commands')
     if (!pageID) return
@@ -575,4 +584,3 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
     ? { ok: true, value: { ...(snapshot as NativeDocxPagePaintRefusedV1), resources: [] } }
     : { ok: true, value: { ...(snapshot as NativeDocxPagePaintSuccessV1), resources } }
 }
-

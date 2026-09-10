@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import type { NativeFontManifest } from '@injoffice/font-metrics/layout'
-import { createHarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
+import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
 import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, type NativeDocxRunV1 } from './nativeContract.js'
 import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
@@ -363,6 +363,53 @@ function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV
   return input
 }
 describe('native DOCX page-paint compiler v1', () => {
+  it('paints text highlight behind real glyphs and rejects color/geometry/coverage tampering', async () => {
+    const input = fixture()
+    ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.properties = { highlight: 'yellow' }
+    ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.text = 'AA'
+    ;(input.resolved_layout as NativeDocxResolvedLayoutInputV1).runs[0]!.properties.highlight = 'yellow'
+    const paragraph = (input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!
+    paragraph.anchor.end_byte = 240
+    paragraph.runs.push({ ...structuredClone(paragraph.runs[0]!), id: 'run:plain', properties: {}, text: 'A', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:t[1]', 200, 230) })
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    resolved.runs.push({ ...structuredClone(resolved.runs[0]!), run_id: 'run:plain', properties: { ...resolved.runs[0]!.properties, highlight: 'none' } })
+    rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids.push('run:plain'); inventory.references[0]!.scope_ids.sort() })
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => ({ status: 'outlined' as const, ...request, ...provider.outline(request.glyph_id) })) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    if (completed.page_paint_output.status !== 'painted') throw new Error('highlight refused')
+    const page = completed.page_paint_output.pages[0]!
+    const fragment = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!
+    expect(page.commands[0]).toMatchObject({ kind: 'fill_text_highlight', fill_rgb: 'FFFF00', x_millipoints: page.lines[0]!.x_millipoints, y_millipoints: page.lines[0]!.baseline_y_millipoints - fragment.ascent_millipoints, width_millipoints: fragment.advance_inline_millipoints, height_millipoints: fragment.ascent_millipoints - fragment.descent_millipoints })
+    expect(page.commands.map((command) => command.kind)).toEqual(['fill_text_highlight', 'fill_text_highlight', 'fill_glyph_path', 'fill_glyph_path', 'fill_glyph_path'])
+    expect(page.commands.at(-1)).toMatchObject({ source_id: 'run:plain' })
+    for (const patch of [{ fill_rgb: 'FF0000' }, { x_millipoints: 1 }, { width_millipoints: 1 }, { source_id: 'run:other' }]) {
+      const tampered = structuredClone(completed.page_paint_output)
+      Object.assign(tampered.pages[0]!.commands[0]!, patch)
+      expect(decodeNativeDocxPagePaintForRequestV1(tampered, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(false)
+    }
+    const missing = structuredClone(completed.page_paint_output)
+    missing.pages[0]!.commands.shift(); missing.pages[0]!.lines[0]!.command_ids.shift()
+    expect(decodeNativeDocxPagePaintForRequestV1(missing, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(false)
+    const reordered = structuredClone(completed.page_paint_output)
+    reordered.pages[0]!.commands.reverse(); reordered.pages[0]!.lines[0]!.command_ids.reverse()
+    expect(decodeNativeDocxPagePaintForRequestV1(reordered, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(false)
+  })
+  it('keeps highlight backgrounds behind neighboring overhanging glyph ink', async () => {
+    const input = fixture()
+    ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.text = 'AA'
+    ;(input.resolved_layout as NativeDocxResolvedLayoutInputV1).runs[0]!.properties.highlight = 'cyan'
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => ({ status: 'outlined' as const, ...request, units_per_em: 2048, path: [{ kind: 'move_to' as const, x: 0, y: 0 }, { kind: 'line_to' as const, x: 3000, y: 0 }, { kind: 'line_to' as const, x: 3000, y: 1000 }, { kind: 'close_path' as const }] })) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    if (completed.page_paint_output.status !== 'painted') throw new Error('highlight refused')
+    const commands = completed.page_paint_output.pages[0]!.commands
+    expect(commands.map((command) => command.kind)).toEqual(['fill_text_highlight', 'fill_text_highlight', 'fill_glyph_path', 'fill_glyph_path'])
+    const background = commands[0]!, glyph = commands[2]!
+    if (background.kind !== 'fill_text_highlight' || glyph.kind !== 'fill_glyph_path') throw new Error('missing commands')
+    expect(glyph.path.some((point) => 'x_millipoints' in point && point.x_millipoints > background.x_millipoints + background.width_millipoints)).toBe(true)
+  })
   it('deterministically joins real HarfBuzz shaping, pagination, and all-or-nothing page paint', async () => {
     const first = await prepareNativeDocxPagePaintV1(fixture())
     const second = await prepareNativeDocxPagePaintV1(fixture())

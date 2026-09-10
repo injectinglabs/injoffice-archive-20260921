@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -612,6 +613,17 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 		}
 		if paragraph.Level != nil && (*paragraph.Level < 0 || *paragraph.Level > 8) {
 			v.add(pp+".level", "schema.range", "must be between 0 and 8")
+		}
+		if paragraph.BulletCharacter != nil {
+			if paragraph.Bullet == nil || !*paragraph.Bullet || utf8.RuneCountInString(*paragraph.BulletCharacter) != 1 || strings.IndexFunc(*paragraph.BulletCharacter, unicode.IsControl) >= 0 {
+				v.add(pp+".bulletCharacter", "native.bulletCharacter", "requires one authored character and bullet=true")
+			}
+		}
+		if paragraph.MarginLeftEmu != nil && (*paragraph.MarginLeftEmu < 0 || *paragraph.MarginLeftEmu > 51206400) {
+			v.add(pp+".marginLeftEmu", "schema.range", "invalid paragraph margin")
+		}
+		if paragraph.IndentEmu != nil && (*paragraph.IndentEmu < -51206400 || *paragraph.IndentEmu > 51206400) {
+			v.add(pp+".indentEmu", "schema.range", "invalid paragraph indent")
 		}
 		if len(paragraph.Runs) > nativeMaxRunsPerParagraph {
 			v.add(pp+".runs", "schema.maxItems", fmt.Sprintf("must contain at most %d runs", nativeMaxRunsPerParagraph))

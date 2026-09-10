@@ -73,7 +73,7 @@ func TestChangedPixelsFail(t *testing.T) {
 func TestInvalidManifestCases(t *testing.T) {
 	for name, mutate := range map[string]func(*manifest){
 		"empty":       func(m *manifest) { m.Cases = nil },
-		"version":     func(m *manifest) { m.Version = 2 },
+		"version":     func(m *manifest) { m.Version = 3 },
 		"duplicate":   func(m *manifest) { m.Cases = append(m.Cases, m.Cases[0]) },
 		"digest":      func(m *manifest) { m.Cases[0].SourceSHA256 = "wrong" },
 		"no pages":    func(m *manifest) { m.Cases[0].Pages = nil },

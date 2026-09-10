@@ -155,6 +155,15 @@ function findNode<T extends RenderNode['kind']>(tree: Awaited<ReturnType<typeof 
 }
 
 describe('native PPTX RenderTree', () => {
+  it('preserves strict refusal for marker layout and inherited paragraph margins', async () => {
+    for (const override of [{ bullet: true, bulletCharacter: '▪' }, { marginLeftEmu: 300000 }, { indentEmu: -100000 }]) {
+      const element = nativeTextElement('styled-paragraph', 'Hello', nativeTextBody())
+      Object.assign(element.paragraphs[0]!, override)
+      const tree = await compileNativePptxSlide(authoredDeck([element]), 0, { textLayout: textLayout() })
+      expect(findNode(tree, 'text', element.id).textBody).toMatchObject({ fidelity: 'nativeUnavailable', status: 'refused', paragraphs: [] })
+      expect(tree.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'text.paragraphSemanticsUnavailable' })]))
+    }
+  })
   it('retains exact source crop through immutable image nodes and paint commands without rewriting assets', async () => {
     const deck = structuredClone(parsedFull)
     const picture = deck.slides[0]!.elements.find((item) => item.kind === 'picture')!

@@ -73,4 +73,18 @@ describe('PPTX approximate preview policy', () => {
     expect(html).toContain('href="data:image/png;base64,YWJj"')
     expect(JSON.stringify(deck)).toBe(before)
   })
+  it('uses the authored bullet, resolved font and paragraph offsets only in the labeled approximate view', () => {
+    const deck: NativePptxDeck = {
+      contractVersion: 'pptx-native/v1', documentId: 'style-preview', origin: 'authored', size: { cx: 960, cy: 540 }, assets: [], compatibility: { status: 'editable', diagnostics: [] },
+      slides: [{ id: 'slide', provenance: 'authored', passthrough: [], compatibility: { status: 'editable', diagnostics: [] }, elements: [element({ kind: 'text', paragraphs: [{ bullet: true, bulletCharacter: '▪', marginLeftEmu: 12, indentEmu: -4, runs: [{ text: 'Author list', fontFamily: 'DejaVu Sans', fontSizeHundredthPt: 1200, color: '2F6FED', bold: true, italic: true }] }] })] }],
+    }
+    const html = renderToStaticMarkup(createElement(PptxFilePreview, { deck }))
+    expect(html).toContain('▪ ')
+    expect(html).toContain('<span style="color:#2F6FED;font-weight:700;font-style:italic">▪ </span>')
+    expect(html).not.toContain('• ')
+    expect(html).toContain('padding-left:12px')
+    expect(html).toContain('text-indent:-4px')
+    expect(html).toContain('font-family:DejaVu Sans')
+    expect(html).toContain('Approximate file preview')
+  })
 })

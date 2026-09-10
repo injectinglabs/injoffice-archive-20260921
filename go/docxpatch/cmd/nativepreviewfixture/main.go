@@ -8,8 +8,12 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/injectinglabs/injoffice/go/docxpatch"
 )
@@ -20,6 +24,10 @@ const pns = "http://schemas.openxmlformats.org/package/2006/relationships"
 const fontKey = "{00112233-4455-6677-8899-AABBCCDDEEFF}"
 
 func build(font []byte) ([]byte, error) {
+	return buildWithJPEG(font, false)
+}
+
+func buildWithJPEG(font []byte, withJPEG bool) ([]byte, error) {
 	if len(font) < 32 || len(font) > 8*1024*1024 {
 		return nil, fmt.Errorf("font must be 32 bytes–8 MiB")
 	}
@@ -34,7 +42,11 @@ func build(font []byte) ([]byte, error) {
 		if pageBreak {
 			br = `<w:pageBreakBefore/>`
 		}
-		return `<w:p><w:pPr>` + br + `<w:jc w:val="left"/><w:spacing w:before="0" w:after="120"/></w:pPr><w:r><w:rPr>` + runProps + `</w:rPr><w:t>` + text + `</w:t></w:r></w:p>`
+		highlight := ""
+		if withJPEG && text == "Native document preview" {
+			highlight = `<w:highlight w:val="yellow"/>`
+		}
+		return `<w:p><w:pPr>` + br + `<w:jc w:val="left"/><w:spacing w:before="0" w:after="120"/><w:rPr>` + runProps + `</w:rPr></w:pPr><w:r><w:rPr>` + runProps + highlight + `</w:rPr><w:t>` + text + `</w:t></w:r></w:p>`
 	}
 	parts := map[string][]byte{}
 	parts["[Content_Types].xml"] = []byte(`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/><Override PartName="/word/fonts/regular.odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/></Types>`)
@@ -46,6 +58,35 @@ func build(font []byte) ([]byte, error) {
 	parts["word/fontTable.xml"] = []byte(`<w:fonts xmlns:w="` + wns + `" xmlns:r="` + rns + `"><w:font w:name="DejaVu Sans"><w:embedRegular r:id="regular" w:fontKey="` + fontKey + `" w:subsetted="false"/></w:font></w:fonts>`)
 	parts["word/_rels/fontTable.xml.rels"] = []byte(`<Relationships xmlns="` + pns + `"><Relationship Id="regular" Type="` + rns + `/font" Target="fonts/regular.odttf"/></Relationships>`)
 	parts["word/fonts/regular.odttf"] = stored
+	parts["word/document.xml"] = []byte(strings.Replace(string(parts["word/document.xml"]), `<w:body>`, `<w:body><w:p><w:pPr><w:rPr>`+runProps+`</w:rPr></w:pPr></w:p>`, 1))
+	if withJPEG {
+		pixels := image.NewRGBA(image.Rect(0, 0, 16, 8))
+		for y := 0; y < 8; y++ {
+			for x := 0; x < 16; x++ {
+				if x < 8 {
+					pixels.Set(x, y, color.RGBA{220, 40, 40, 255})
+				} else {
+					pixels.Set(x, y, color.RGBA{30, 80, 220, 255})
+				}
+			}
+		}
+		var encoded bytes.Buffer
+		if err := jpeg.Encode(&encoded, pixels, &jpeg.Options{Quality: 95}); err != nil {
+			return nil, err
+		}
+		// Go emits baseline JPEG without APP0. Attest the JFIF YCbCr convention
+		// explicitly; no external image, EXIF, ICC or orientation metadata.
+		jfif := []byte{0xff, 0xe0, 0, 16, 'J', 'F', 'I', 'F', 0, 1, 2, 0, 0, 1, 0, 1, 0, 0}
+		media := append([]byte{0xff, 0xd8}, jfif...)
+		media = append(media, encoded.Bytes()[2:]...)
+		parts["word/media/bands.jpg"] = media
+		parts["[Content_Types].xml"] = []byte(strings.Replace(string(parts["[Content_Types].xml"]), "</Types>", `<Default Extension="jpg" ContentType="image/jpeg"/></Types>`, 1))
+		parts["word/_rels/document.xml.rels"] = []byte(strings.Replace(string(parts["word/_rels/document.xml.rels"]), "</Relationships>", `<Relationship Id="rImage" Type="`+rns+`/image" Target="media/bands.jpg"/></Relationships>`, 1))
+		drawing := `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1828800" cy="457200"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="1" name="JPEG bands" descr="Red and blue JPEG bands"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="JPEG bands"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImage"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm/><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+		document := strings.Replace(string(parts["word/document.xml"]), `<w:body>`, `<w:body>`+drawing, 1)
+		document = strings.Replace(document, `<w:document `, `<w:document xmlns:r="`+rns+`" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" `, 1)
+		parts["word/document.xml"] = []byte(document)
+	}
 	var output bytes.Buffer
 	writer := zip.NewWriter(&output)
 	names := make([]string, 0, len(parts))
@@ -88,6 +129,7 @@ func build(font []byte) ([]byte, error) {
 func main() {
 	fontPath := flag.String("font", "", "path to licensed embeddable DejaVuSans.ttf")
 	out := flag.String("out", "", "new temporary DOCX output path")
+	withJPEG := flag.Bool("jpeg", false, "include generated baseline JFIF JPEG bands")
 	flag.Parse()
 	if *fontPath == "" || *out == "" {
 		fmt.Fprintln(os.Stderr, "-font and -out are required")
@@ -96,7 +138,7 @@ func main() {
 	font, err := os.ReadFile(*fontPath)
 	if err == nil {
 		var data []byte
-		data, err = build(font)
+		data, err = buildWithJPEG(font, *withJPEG)
 		if err == nil {
 			err = os.WriteFile(*out, data, 0600)
 		}

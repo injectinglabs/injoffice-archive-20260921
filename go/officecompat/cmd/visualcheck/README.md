@@ -17,7 +17,7 @@ renderer versions and image budgets; zero tolerances require identical pixels.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "cases": [{
     "id": "budget-chart",
     "format": "xlsx",
@@ -25,6 +25,9 @@ renderer versions and image budgets; zero tolerances require identical pixels.
     "sourceSha256": "REPLACE_WITH_REVIEWED_SOURCE_SHA256",
     "referenceRenderer": "Excel VERSION / OS / fonts / export settings",
     "candidateRenderer": "InjOffice COMMIT / browser / fonts / scale",
+    "referenceKind": "external-office-export",
+    "referenceLicense": "REPLACE_WITH_OWNERSHIP_OR_REDISTRIBUTION_LICENSE",
+    "referenceProvenance": "REPLACE_WITH_EXPORT_DATE_OWNER_APP_BUILD_OS_FONTS_AND_SETTINGS",
     "limits": {
       "maxEncodedBytes": 16777216,
       "maxWidth": 4096,
@@ -70,3 +73,13 @@ renderer versions and image budgets; zero tolerances require identical pixels.
 No externally reviewed Office reference images are bundled with this command.
 The CLI and its synthetic tests establish the comparison workflow, not a claim
 that the real-world visual corpus has already passed.
+
+Version 2 requires explicit reference kind, license/ownership and provenance.
+Kinds are `analytical-oracle`, `self-regression`, and `external-office-export`.
+Version 1 remains readable but reports its reference kind as `unclassified`.
+Metadata is descriptive, not authenticated evidence of the application used.
+
+The executable generated corpus lives in `qualification/rendering` at the
+repository root. Its PDF pixel oracle produces real reference/candidate PNGs
+and invokes this command with exact tolerances; the other cases retain their
+scoped browser and contract assertions without claiming Office-export parity.

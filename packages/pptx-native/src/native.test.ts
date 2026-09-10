@@ -20,6 +20,19 @@ function fixture(path: string): unknown {
 }
 
 describe('native PPTX contract', () => {
+  it('retains bounded authored markers and refuses contradictory or malformed bullet metadata', () => {
+    const deck = fixture('valid/parsed-full.json') as NativePptxDeck
+    const element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+    if (element.kind !== 'text') throw new Error('text fixture missing')
+    const paragraph = element.paragraphs[0]!
+    Object.assign(paragraph, { bullet: true, bulletCharacter: '▪', marginLeftEmu: 300000, indentEmu: -100000 })
+    expect(validateNativePptx(deck).ok).toBe(true)
+    for (const marker of ['🙂', '•']) { paragraph.bulletCharacter = marker; expect(validateNativePptx(deck).ok).toBe(true) }
+    for (const invalid of [ { bullet: false, bulletCharacter: '▪' }, { bullet: true, bulletCharacter: 'ab' }, { bullet: true, bulletCharacter: '\u0085' }, { bullet: true, bulletCharacter: '▪', marginLeftEmu: -1 }, { bullet: true, bulletCharacter: '▪', marginLeftEmu: 0, indentEmu: 51206401 } ]) {
+      Object.assign(paragraph, invalid)
+      expect(validateNativePptx(deck).ok).toBe(false)
+    }
+  })
   it('validates exact picture crop edges and refuses invalid or empty source rectangles', () => {
     for (const crop of [
       { left: 0, top: 0, right: 0, bottom: 0 },

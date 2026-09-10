@@ -24,15 +24,18 @@ type manifest struct {
 }
 
 type visualCase struct {
-	ID                string                       `json:"id"`
-	Format            string                       `json:"format"`
-	Source            string                       `json:"source"`
-	SourceSHA256      string                       `json:"sourceSha256"`
-	ReferenceRenderer string                       `json:"referenceRenderer"`
-	CandidateRenderer string                       `json:"candidateRenderer"`
-	Limits            officecompat.VisualLimits    `json:"limits"`
-	Tolerance         officecompat.VisualTolerance `json:"tolerance"`
-	Pages             []pagePair                   `json:"pages"`
+	ID                  string                       `json:"id"`
+	Format              string                       `json:"format"`
+	Source              string                       `json:"source"`
+	SourceSHA256        string                       `json:"sourceSha256"`
+	ReferenceRenderer   string                       `json:"referenceRenderer"`
+	CandidateRenderer   string                       `json:"candidateRenderer"`
+	ReferenceKind       string                       `json:"referenceKind,omitempty"`
+	ReferenceLicense    string                       `json:"referenceLicense,omitempty"`
+	ReferenceProvenance string                       `json:"referenceProvenance,omitempty"`
+	Limits              officecompat.VisualLimits    `json:"limits"`
+	Tolerance           officecompat.VisualTolerance `json:"tolerance"`
+	Pages               []pagePair                   `json:"pages"`
 }
 
 type pagePair struct {
@@ -49,12 +52,15 @@ type pageResult struct {
 }
 
 type caseResult struct {
-	ID                string       `json:"id"`
-	Format            string       `json:"format"`
-	SourceSHA256      string       `json:"sourceSha256"`
-	ReferenceRenderer string       `json:"referenceRenderer"`
-	CandidateRenderer string       `json:"candidateRenderer"`
-	Pages             []pageResult `json:"pages"`
+	ID                  string       `json:"id"`
+	Format              string       `json:"format"`
+	SourceSHA256        string       `json:"sourceSha256"`
+	ReferenceRenderer   string       `json:"referenceRenderer"`
+	CandidateRenderer   string       `json:"candidateRenderer"`
+	ReferenceKind       string       `json:"referenceKind"`
+	ReferenceLicense    string       `json:"referenceLicense,omitempty"`
+	ReferenceProvenance string       `json:"referenceProvenance,omitempty"`
+	Pages               []pageResult `json:"pages"`
 }
 
 type result struct {
@@ -100,11 +106,11 @@ func run(path string) (result, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return result{}, fmt.Errorf("manifest must contain one JSON value")
 	}
-	if spec.Version != 1 || len(spec.Cases) == 0 || len(spec.Cases) > 256 {
-		return result{}, fmt.Errorf("manifest requires version 1 and 1–256 cases")
+	if (spec.Version != 1 && spec.Version != 2) || len(spec.Cases) == 0 || len(spec.Cases) > 256 {
+		return result{}, fmt.Errorf("manifest requires version 1 or 2 and 1–256 cases")
 	}
 	base := filepath.Dir(path)
-	report := result{Version: 1, Passed: true, Cases: []caseResult{}}
+	report := result{Version: spec.Version, Passed: true, Cases: []caseResult{}}
 	seen := map[string]bool{}
 	totalPages := 0
 	for _, c := range spec.Cases {
@@ -112,6 +118,23 @@ func run(path string) (result, error) {
 			return result{}, fmt.Errorf("cases require unique IDs and explicit renderer versions")
 		}
 		seen[c.ID] = true
+		if spec.Version == 2 {
+			switch c.ReferenceKind {
+			case "analytical-oracle", "self-regression", "external-office-export":
+			default:
+				return result{}, fmt.Errorf("%s: version 2 requires an explicit reference kind", c.ID)
+			}
+			if strings.TrimSpace(c.ReferenceLicense) == "" || strings.TrimSpace(c.ReferenceProvenance) == "" {
+				return result{}, fmt.Errorf("%s: version 2 requires reference rights and provenance", c.ID)
+			}
+			if c.ReferenceKind != "self-regression" && c.ReferenceRenderer == c.CandidateRenderer {
+				return result{}, fmt.Errorf("%s: independent reference cannot use the candidate renderer identity", c.ID)
+			}
+		} else {
+			// Legacy manifests did not declare reference independence. Never infer
+			// an Office qualification claim from free-form renderer labels.
+			c.ReferenceKind = "unclassified"
+		}
 		switch c.Format {
 		case "docx", "xlsx", "pptx", "pdf":
 		default:
@@ -131,7 +154,7 @@ func run(path string) (result, error) {
 		if !matchesHash(source, c.SourceSHA256) {
 			return result{}, fmt.Errorf("%s: source digest mismatch", c.ID)
 		}
-		entry := caseResult{ID: c.ID, Format: c.Format, SourceSHA256: c.SourceSHA256, ReferenceRenderer: c.ReferenceRenderer, CandidateRenderer: c.CandidateRenderer, Pages: []pageResult{}}
+		entry := caseResult{ID: c.ID, Format: c.Format, SourceSHA256: c.SourceSHA256, ReferenceRenderer: c.ReferenceRenderer, CandidateRenderer: c.CandidateRenderer, ReferenceKind: c.ReferenceKind, ReferenceLicense: c.ReferenceLicense, ReferenceProvenance: c.ReferenceProvenance, Pages: []pageResult{}}
 		for i, p := range c.Pages {
 			page := pageResult{Page: i + 1}
 			ref, refErr := readRelative(base, p.Reference, int64(c.Limits.MaxEncodedBytes))

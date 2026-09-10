@@ -76,7 +76,7 @@ digest, mounts one page at a time, and clears stale pages after edits/reopen.
 It is a read-only glyph preview, not a selectable Word editor.
 
 The server reconstructs layout, settings, embedded font assets and referenced
-PNG bytes from the submitted archive. The pinned HarfBuzz worker shapes,
+PNG or qualified baseline JFIF JPEG bytes from the submitted archive. The pinned HarfBuzz worker shapes,
 paginates, outlines and validates native page paint. Missing fonts, unsupported
 layout and unavailable providers refuse rendering; the separately labeled
 approximate content preview remains available without weakening edit safety.

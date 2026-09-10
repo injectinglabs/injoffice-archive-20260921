@@ -1,9 +1,33 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { NativeDocxPages, NativeDocxImage, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse } from './NativeDocxPages'
+import { NativeDocxPages, NativeDocxImage, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse } from './NativeDocxPages'
 
 describe('native document page viewer', () => {
+  const resources = [{ content_type: 'image/jpeg', bytes_base64: 'AA==', width_px: 2, height_px: 1 }] as Parameters<typeof decodeNativeDocxImages>[0]
+  it('requires successful decoding with exact source dimensions', async () => {
+    const released: string[] = []
+    vi.stubGlobal('Image', class { naturalWidth = 2; naturalHeight = 1; set src(value: string) { released.push(value) }; decode() { return Promise.resolve() } })
+    try {
+      await expect(decodeNativeDocxImages(resources, new AbortController().signal)).resolves.toBeUndefined()
+      expect(released.at(-1)).toBe('')
+      await expect(decodeNativeDocxImages([{ ...resources[0]!, width_px: 3 }], new AbortController().signal)).rejects.toThrow(/dimensions/)
+    } finally { vi.unstubAllGlobals() }
+  })
+  it('refuses browser decoder failures rather than reporting painted pages', async () => {
+    vi.stubGlobal('Image', class { src = ''; decode() { return Promise.reject(new Error('bad entropy')) } })
+    try { await expect(decodeNativeDocxImages(resources, new AbortController().signal)).rejects.toThrow(/could not be decoded/) }
+    finally { vi.unstubAllGlobals() }
+  })
+  it('bounds stalled decoding and cancels stale work', async () => {
+    vi.stubGlobal('Image', class { src = ''; decode() { return new Promise<void>(() => {}) } })
+    try {
+      await expect(decodeNativeDocxImages(resources, new AbortController().signal, 5)).rejects.toThrow(/time budget/)
+      const controller = new AbortController(), promise = decodeNativeDocxImages(resources, controller.signal)
+      controller.abort()
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+    } finally { vi.unstubAllGlobals() }
+  })
   it('does not upload on render and names the actual destination', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
     try {

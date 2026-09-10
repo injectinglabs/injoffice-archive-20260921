@@ -22,6 +22,10 @@ The original OOXML bytes remain the authority. The supported path is XLSX-first 
 
 React, Konva, DOM/HTML layout, screenshots, and Univer must not decide file identity or pass/fail semantics.
 
+The playground's PPTX file preview is explicitly approximate. It displays supported source picture crops, authored character bullets, paragraph margins/indents, and modeled local default/list-level/run styles, including relationship-resolved theme fonts and colors. Browser fonts, wrapping, line height, and bullet positioning are not PowerPoint-equivalent; exact native paint still refuses unqualified text and marker geometry.
+
+For top-level title/body placeholders, a bounded read-only projection resolves a unique slide-to-layout match by `idx` and layout-to-master match by type, complete transforms, body properties, and supported master/list styles. These inherited targets remain `preserveOnly`. Ambiguous or missing matches, grouped/other placeholder types, partial transforms, ancestor paragraph templates, and unsupported inherited paint/visibility remain outside this subset. This does not render whole-master artwork or establish general slide-master fidelity; original package bytes remain unchanged.
+
 ## Documentation
 
 Developer guides, TypeScript examples, and source-derived package/Go references

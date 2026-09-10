@@ -75,7 +75,12 @@ validated natural metric box directly.
 Refused native bodies report `fidelity: nativeUnavailable`; only successfully
 qualified layout reports `fidelity: native`.
 
-Native bodies also require explicit alignment, list level zero, and no bullet.
+Native bodies also require explicit alignment, list level zero, no bullet, and
+zero/absent paragraph margin and indent. The extractor now retains authored
+marker/indent metadata and resolves local list/paragraph/run style defaults,
+but marker shaping and indentation are not promoted to exact layout by that
+data extraction alone. The separately labeled approximate file preview uses
+the retained marker and paragraph offsets.
 Self-contained resolved typeface/size runs layout while leftover
 layout/master/theme diagnostics stay preserve-only; missing fonts or unresolved
 `+mj-`/`+mn-` tokens become `text.inheritanceUnavailable` rather than host
