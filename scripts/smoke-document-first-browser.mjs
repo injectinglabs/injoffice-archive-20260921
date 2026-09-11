@@ -58,6 +58,15 @@ try {
       await until(`${root} && !${root}.hidden && ${root}.querySelector('[data-agent-prepare]:not(:disabled)')`)
       await delay(200)
       assert.equal(await evaluate(`(() => {
+        const links = [...document.querySelectorAll('.app-sidebar [data-workspace-feature]')];
+        const panels = [...document.querySelectorAll('[data-scroll-section="${tool}"] [data-workspace-panel]')];
+        const expected = document.querySelectorAll('.app-sidebar [aria-label="${tool === 'pdf' ? 'PDF' : tool[0].toUpperCase() + tool.slice(1)} examples"] [data-workspace-feature]');
+        return links.length === 28 && panels.length === expected.length
+          && !document.querySelector('.tool-workspace__examples')
+          && panels.every((panel, index) => !panel.hidden && !panel.inert
+            && !!panel.querySelector('h3') && (index === 0 || panel.getBoundingClientRect().top >= panels[index - 1].getBoundingClientRect().bottom));
+      })()`), true, `All examples are indexed and stacked without hidden panels at ${tool}/${width}`)
+      assert.equal(await evaluate(`(() => {
         const header = document.querySelector('.app-header-inner');
         const actions = header.querySelector('.app-header-actions');
         const edge = header.getBoundingClientRect().right - parseFloat(getComputedStyle(header).paddingRight);

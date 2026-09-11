@@ -7,7 +7,7 @@ describe('direct four-tool demo', () => {
   it('removes the introduction and obsolete navigation instead of hiding them', () => {
     expect(existsSync(new URL('./pages/OverviewPage.tsx', import.meta.url))).toBe(false)
     for (const removed of ['OverviewPage', 'demo-overview', 'Explore the four document tools', 'All demos', "surfaceHref('overview')"]) expect(source).not.toContain(removed)
-    expect(source).toContain('WORKSPACE_DEMOS.map')
+    expect(source).toContain('TOOL_WORKSPACES.map')
     expect(source).toContain("const Heading = demo.surface === 'sheets' ? 'h1' : 'h2'")
   })
 

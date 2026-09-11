@@ -13,26 +13,6 @@
 .app-shell .demo-options > div { width: 160px; display: grid; gap: 8px; }
 .app-shell .source-proof-trigger { font-size: 14px; }
 
-.app-shell .ds.tool-workspace > .tool-workspace__navigation { padding: 10px 16px; }
-.app-shell .tool-workspace__primary { display: flex; align-items: start; gap: 12px; flex-wrap: wrap; }
-.app-shell .tool-workspace__task,
-.app-shell .tool-workspace__examples > summary { padding: 10px 12px; border: 0; border-radius: 6px; color: var(--ink-soft); background: transparent; font: inherit; font-size: 14px; cursor: pointer; }
-.app-shell .tool-workspace__task[aria-pressed="true"] { background: var(--action-soft); color: var(--action-ink); font-weight: 600; }
-.app-shell .tool-workspace__examples { flex: 1 1 220px; min-width: 0; }
-.app-shell .tool-workspace__examples > summary { width: fit-content; max-width: 100%; }
-.app-shell .tool-workspace__examples > summary:hover { background: var(--chrome); }
-.app-shell .tool-workspace__selected { color: var(--ink); }
-.app-shell .tool-workspace__example-list { padding: 12px 0 4px; max-height: min(480px, 60vh); overflow-y: auto; }
-.app-shell .tool-workspace__example-list > section { margin-top: 18px; }
-.app-shell .tool-workspace__example-list h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
-.app-shell .tool-workspace__example-list button { display: block; width: 100%; padding: 10px 12px; text-align: left; background: var(--paper); border: 0; border-radius: 6px; color: var(--ink); cursor: pointer; }
-.app-shell .tool-workspace__example-list button:hover { background: var(--chrome); }
-.app-shell .tool-workspace__example-list button[aria-pressed="true"] { background: var(--action-soft); }
-.app-shell .tool-workspace__example-list :is(strong, span) { display: block; font-size: 14px; line-height: 1.5; }
-.app-shell .tool-workspace__example-list span { color: var(--mute); max-width: 76ch; }
-.app-shell .tool-workspace__sample-note,
-.app-shell .tool-workspace__example-description { margin: 8px 0 0; color: var(--mute); font-size: 14px; line-height: 1.6; max-width: 76ch; }
-
 /* One inspected artifact, one adjacent assistant. Source order also makes sense
    when the columns stack on small screens. No visual reordering of focusables. */
 .app-shell .ds [data-demo-surface="agent"] .agent-demo__workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 370px); align-items: start; overflow: visible; }

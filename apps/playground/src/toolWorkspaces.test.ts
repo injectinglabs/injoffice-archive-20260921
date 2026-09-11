@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SURFACES } from './route'
-import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceHref } from './toolWorkspaces'
+import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceExamples, workspaceHref } from './toolWorkspaces'
 
 describe('four tool workspace catalogue', () => {
   it('has four tools, small primary groups, and complete existing surface coverage', () => {
@@ -45,10 +45,12 @@ describe('four tool workspace catalogue', () => {
     expect(resolveToolWorkspace(hash)).toBeNull()
   })
 
-  it('retains only visited feature panels and keeps failures local', () => {
+  it('lists every example, lazily retains its content, and keeps failures local', () => {
     const source = readFileSync(new URL('./components/ToolWorkspace.tsx', import.meta.url), 'utf8')
     expect(source).toContain('visited.includes(feature.id)')
-    expect(source).toContain('hidden={feature.id !== current.id}')
+    expect(source).toContain('examples.map((feature) => <section')
+    expect(source).toContain('new IntersectionObserver')
+    expect(source).not.toContain('hidden={feature.id !== current.id}')
     expect(source).toContain('previous.includes(feature) ? previous : [...previous, feature]')
     expect(source).toContain('data-workspace-error')
     expect(source).toContain('data-workspace-retry')
@@ -64,15 +66,23 @@ describe('four tool workspace catalogue', () => {
     expect(source).toContain('route?.tool === tool && route.feature === feature ? hash : undefined')
     expect(source).toContain('activate(route.feature, window.location.hash)')
     expect(source).toContain('initialHash={featureHashes.current[feature.id]}')
-    expect(source).toContain('inert={feature.id !== current.id}')
-    expect(source).toContain('aria-hidden={feature.id !== current.id ? true : undefined}')
-    expect(source).toContain('data-workspace-retain-layout=')
+    expect(source).not.toContain('inert={feature.id !== current.id}')
+    for (const workspace of TOOL_WORKSPACES) {
+      expect(workspaceExamples(workspace)[0]?.id).toBe('agent')
+      expect(workspaceExamples(workspace)).toHaveLength(workspace.features.length)
+      expect(new Set(workspaceExamples(workspace).map(feature => feature.id)).size).toBe(workspace.features.length)
+    }
   })
 
-  it('uses a primary task and an accessible disclosure for secondary examples', () => {
+  it('uses a sidebar index and named, sequential sections without an examples dropdown', () => {
     const source = readFileSync(new URL('./components/ToolWorkspace.tsx', import.meta.url), 'utf8')
     expect(source).toContain('const instanceId = useId()')
-    for (const marker of ['Guided document task', '<summary>More examples', 'aria-controls=', 'aria-label=', 'data-workspace-feature=', "event.key === 'Escape'", 'taskButtonRef.current?.focus({ preventScroll: true })']) expect(source).toContain(marker)
+    expect(source).toContain('aria-labelledby=')
+    expect(source).toContain('tabIndex={-1}')
+    expect(source).not.toContain('More examples')
+    const shell = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    expect(shell).toContain('workspaceExamples(workspace).map(feature => <li')
+    expect(shell).toContain('href={workspaceHref(workspace.tool, feature.id)}')
     expect(source).not.toContain('role="tablist"')
     expect(source).not.toContain('<select')
   })
@@ -84,8 +94,10 @@ describe('four tool workspace catalogue', () => {
     }
   })
 
-  it('emits internal navigation intent only when a hash change will consume it', () => {
+  it('listens to passive scrolling without writing navigation history from panels', () => {
     const source = readFileSync(new URL('./components/ToolWorkspace.tsx', import.meta.url), 'utf8')
-    expect(source).toMatch(/if \(window\.location\.hash !== href\) \{\s+window\.dispatchEvent\(new CustomEvent\('injoffice:workspace-view'/)
+    expect(source).toContain("window.addEventListener('injoffice:workspace-scroll', sync)")
+    expect(source).toContain("window.removeEventListener('injoffice:workspace-scroll', sync)")
+    expect(source).not.toContain('window.location.hash =')
   })
 })

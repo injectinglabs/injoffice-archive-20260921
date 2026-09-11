@@ -10,8 +10,8 @@ import {
 import GuidedRecipe from './components/GuidedRecipe'
 import DemoSource from './components/DemoSource'
 import type { DemoDefinition } from './demoRegistry'
-import { WORKSPACE_DEMOS, preloadWorkspace, preloadWorkspaceOnIntent, workspaceProofDemo } from './workspaceRegistry'
-import { resolveToolWorkspace } from './toolWorkspaces'
+import { preloadWorkspace, preloadWorkspaceOnIntent, workspaceProofDemo } from './workspaceRegistry'
+import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceExamples, workspaceHref } from './toolWorkspaces'
 import { surfaceHref, type Surface } from './route'
 import { SCROLL_SECTIONS, sectionForHash, workspaceNavigationHash, activeSectionKey, type ScrollSection } from './scrollSections'
 import { createDemoRetention } from './demoRetention'
@@ -20,25 +20,31 @@ function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
 }
 
-function ToolNavigation({ surface, remembered }: { surface: Surface; remembered: Map<string, string> }) {
+function ToolNavigation({ surface, hash, remembered }: { surface: Surface; hash: string; remembered: Map<string, string> }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (isModifiedClick(event)) return
     const href = event.currentTarget.getAttribute('href')
-    if (href && sectionForHash(location.hash).href === href) {
-      event.preventDefault()
-      window.dispatchEvent(new HashChangeEvent('hashchange'))
-    } else if (href) {
-      const previous = remembered.get(sectionForHash(href).key)
-      if (previous) { event.preventDefault(); window.location.hash = previous }
-    }
+    if (!href) return
+    const destination = !event.currentTarget.dataset.workspaceFeature
+      ? remembered.get(sectionForHash(href).key) ?? href : href
+    event.preventDefault()
+    if (location.hash === destination) window.dispatchEvent(new HashChangeEvent('hashchange'))
+    else window.location.hash = destination
   }
-  return <nav className="tool-nav" id="demo-navigation" aria-label="InjOffice tools">
-    {WORKSPACE_DEMOS.map(demo => <a key={demo.surface} href={surfaceHref(demo.surface)}
-      aria-current={surface === demo.surface ? 'location' : undefined}
-      onPointerEnter={() => preloadWorkspaceOnIntent(demo.surface)}
-      onPointerDown={() => preloadWorkspaceOnIntent(demo.surface)}
-      onFocus={() => preloadWorkspaceOnIntent(demo.surface)}
-      onClick={onClick}>{demo.navTitle}</a>)}
+  return <nav className="tool-nav" id="demo-navigation" tabIndex={-1} aria-label="InjOffice tools">
+    {TOOL_WORKSPACES.map(workspace => <section className="tool-nav-examples" key={workspace.tool} aria-label={`${workspace.title} examples`}>
+      <a className="tool-nav-title" href={surfaceHref(workspace.tool)}
+      aria-current={surface === workspace.tool ? 'location' : undefined}
+      onPointerEnter={() => preloadWorkspaceOnIntent(workspace.tool)}
+      onPointerDown={() => preloadWorkspaceOnIntent(workspace.tool)}
+      onFocus={() => preloadWorkspaceOnIntent(workspace.tool)}
+      onClick={onClick}>{workspace.title}</a>
+      <ul>{workspaceExamples(workspace).map(feature => <li key={feature.id}>
+        <a href={workspaceHref(workspace.tool, feature.id)} data-workspace-feature={feature.id}
+          aria-current={surface === workspace.tool && resolveToolWorkspace(hash)?.feature === feature.id ? 'true' : undefined}
+          onClick={onClick}>{feature.label}</a>
+      </li>)}</ul>
+    </section>)}
   </nav>
 }
 
@@ -65,6 +71,12 @@ function AppHeader({ scheme, onScheme }: { scheme: ColorScheme; onScheme: (next:
           <span><strong>InjOffice</strong></span>
         </a>
         <div className="app-header-actions">
+          <a className="examples-index-link" href="#demo-navigation" onClick={event => {
+            event.preventDefault()
+            const navigation = document.getElementById('demo-navigation')
+            navigation?.scrollIntoView({ block: 'start' })
+            navigation?.focus({ preventScroll: true })
+          }}>Examples</a>
           <ColorSchemeToggle scheme={scheme} onScheme={onScheme} />
           <a className="github-link" href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">GitHub<span aria-hidden="true">↗</span></a>
         </div>
@@ -121,7 +133,7 @@ function SourceProofDrawer({
       document.body.style.overflow = previousOverflow
       background.forEach((element, index) => { element.inert = inertStates[index] })
       document.removeEventListener('keydown', onKeyDown)
-      returnFocusRef.current?.focus()
+      returnFocusRef.current?.focus({ preventScroll: true })
     }
   }, [open, onClose, returnFocusRef])
 
@@ -319,24 +331,19 @@ export default function App() {
   const sectionHashes = useRef(new Map<string, string>())
   const navigating = useRef(false)
   const anchorTarget = useRef<string | null>(null)
-  const anchorViewTop = useRef<number | null>(null)
-  const viewIntent = useRef<{ key: string; top: number } | null>(null)
   const handledHash = useRef(workspaceNavigationHash(location.hash))
   const pinAnchor = useCallback(() => {
     if (!anchorTarget.current) return
     const element = document.getElementById(`demo-${anchorTarget.current}`)
-    if (anchorViewTop.current !== null) {
-      const controls = element?.querySelector('.tool-workspace__navigation')
-      if (controls) {
-        const delta = controls.getBoundingClientRect().top - anchorViewTop.current
-        if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'instant' })
-      }
-    } else element?.scrollIntoView({ block: 'start', behavior: 'instant' })
+    const target = resolveToolWorkspace(sectionHashes.current.get(anchorTarget.current) ?? '')
+    const example = target && document.getElementById(`example-${target.tool}-${target.feature}`)
+    const destination = example || element
+    destination?.scrollIntoView({ block: 'start', behavior: 'instant' })
   }, [])
 
   useEffect(() => {
     // Scroll the rail only; scrollIntoView here would move the document too.
-    const link = document.querySelector<HTMLElement>('.tool-nav a[aria-current="location"]')
+    const link = document.querySelector<HTMLElement>('.tool-nav a[aria-current="true"]') ?? document.querySelector<HTMLElement>('.tool-nav a[aria-current="location"]')
     const rail = document.querySelector<HTMLElement>('.app-sidebar')
     if (!link || !rail) return
     const item = link.getBoundingClientRect(), bounds = rail.getBoundingClientRect()
@@ -348,21 +355,11 @@ export default function App() {
 
   useEffect(() => {
     let frame = 0
-    const internalView = (event: Event) => {
-      const tool = (event as CustomEvent<{ tool?: string }>).detail?.tool
-      const section = SCROLL_SECTIONS.find(item => item.key === tool)
-      const controls = section && document.getElementById(`demo-${section.key}`)?.querySelector('.tool-workspace__navigation')
-      if (section && controls) viewIntent.current = { key: section.key, top: controls.getBoundingClientRect().top }
-    }
     const navigate = (focus = true) => {
       const destination = workspaceNavigationHash(location.hash)
       if (location.hash !== destination) history.replaceState(history.state, '', destination)
       const section = sectionForHash(location.hash)
-      const intent = viewIntent.current
-      viewIntent.current = null
-      const changingView = focus && intent?.key === section.key
       anchorTarget.current = section.key
-      anchorViewTop.current = changingView ? intent.top : null
       handledHash.current = location.hash || section.href
       sectionHashes.current.set(section.key, location.hash || section.href)
       setRequestedKey(section.key)
@@ -374,17 +371,17 @@ export default function App() {
       frame = requestAnimationFrame(() => {
         const element = document.getElementById(`demo-${section.key}`)
         pinAnchor()
-        if (focus && !changingView) element?.querySelector<HTMLElement>('h1, h2')?.focus({ preventScroll: true })
+        const target = resolveToolWorkspace(location.hash)
+        const example = target && document.getElementById(`example-${target.tool}-${target.feature}`)
+        if (focus) (example || element)?.querySelector<HTMLElement>('h1, h2, h3')?.focus({ preventScroll: true })
         navigating.current = false
       })
     }
     const sync = () => navigate()
-    window.addEventListener('injoffice:workspace-view', internalView)
     window.addEventListener('hashchange', sync)
     navigate(false)
     return () => {
       window.removeEventListener('hashchange', sync)
-      window.removeEventListener('injoffice:workspace-view', internalView)
       cancelAnimationFrame(frame)
     }
   }, [pinAnchor])
@@ -397,16 +394,22 @@ export default function App() {
       // scroll/resize frame overwrite that explicit navigation intent.
       if (navigating.current || location.hash !== handledHash.current || document.body.style.overflow === 'hidden') return
       const header = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 48
-      const rail = document.querySelector('.app-sidebar')?.getBoundingClientRect()
-      const top = window.innerWidth <= 760 ? Math.max(header, rail?.bottom ?? 0) : header
+      const top = header
       const atEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
       const key = anchorTarget.current ?? activeSectionKey(SCROLL_SECTIONS.map(section => ({ key: section.key, top: document.getElementById(`demo-${section.key}`)?.getBoundingClientRect().top ?? Infinity })), top + 32, atEnd)
       const section = SCROLL_SECTIONS.find(item => item.key === key)
       if (!section) return
-      const nextHash = sectionHashes.current.get(section.key) ?? section.href
+      const previousHash = sectionHashes.current.get(section.key) ?? section.href
+      const panels = Array.from(document.querySelectorAll<HTMLElement>(`[data-scroll-section="${section.key}"] [data-workspace-panel]`))
+      const feature = activeSectionKey(panels.map(panel => ({ key: panel.dataset.workspacePanel!, top: panel.getBoundingClientRect().top })), top + 32, atEnd)
+      const previousTarget = resolveToolWorkspace(previousHash)
+      const nextHash = anchorTarget.current || !feature || previousTarget?.feature === feature
+        ? previousHash : workspaceHref(section.key as 'sheets' | 'docs' | 'slides' | 'pdf', feature)
+      sectionHashes.current.set(section.key, nextHash)
       if (location.hash !== nextHash) history.replaceState(history.state, '', nextHash)
       handledHash.current = nextHash
       setRoute(previous => previous.hash === nextHash ? previous : { surface: section.surface, hash: nextHash })
+      window.dispatchEvent(new Event('injoffice:workspace-scroll'))
     }
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
     window.addEventListener('scroll', schedule, { passive: true })
@@ -419,7 +422,7 @@ export default function App() {
       }
       schedule()
     }
-    const releaseAnchor = () => { anchorTarget.current = null; anchorViewTop.current = null }
+    const releaseAnchor = () => { anchorTarget.current = null }
     const intentEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
     intentEvents.forEach(event => window.addEventListener(event, releaseAnchor, { passive: true }))
     const observer = new ResizeObserver(onLayout)
@@ -461,7 +464,7 @@ export default function App() {
       <AppHeader scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
-        <ToolNavigation surface={surface} remembered={sectionHashes.current} />
+        <ToolNavigation surface={surface} hash={hash} remembered={sectionHashes.current} />
       </aside>
       <main className="app-main" id="main-content" tabIndex={-1} data-workbench-surface={surface} aria-busy={false}>
         {SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection

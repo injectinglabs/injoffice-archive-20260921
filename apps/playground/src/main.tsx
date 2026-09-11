@@ -6,6 +6,7 @@ import './workbench.css'
 import './design-system/tokens.css'
 import './design-system/components.css'
 import './document-first.css'
+import './components/ToolWorkspace.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

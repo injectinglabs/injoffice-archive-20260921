@@ -193,8 +193,8 @@ try {
   await evaluate(`document.querySelector('.scheme-toggle button:first-child').click()`)
   await until(`document.documentElement.dataset.theme === 'light'`, 'light theme')
   await screenshot('four-tools-desktop')
-  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar a').length`), 4, 'sidebar has only four tool links')
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar a')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'sidebar routes match tool workspaces')
+  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar [data-workspace-feature]').length`), 28, 'sidebar lists all examples')
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar .tool-nav-title')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'sidebar groups match tool workspaces')
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('.app-main a')).some(link => link.textContent.trim() === 'All demos')`), false, 'there is no link back to a removed introduction')
   await click('.app-sidebar a[href="#/pdf"]')
   scopeKey = 'pdf'
@@ -251,9 +251,9 @@ try {
   for (const [tool, features] of Object.entries(workspaceFeatures)) {
     for (const feature of features) {
       await route(`${tool}?feature=${feature}`)
-      assert.equal(await evaluate(`smokePanel?.hidden === false && smokeSection.querySelectorAll('[data-workspace-panel]:not([hidden])').length === 1`), true, `${tool}/${feature} is the only visible feature panel`)
-      assert.ok(await evaluate(`!!smokeSection.querySelector('.tool-workspace__examples summary') && document.querySelectorAll('[data-workspace-feature]').length > 0`), `${tool} exposes secondary examples in a disclosure`)
-      assert.equal(await evaluate(`smokeSection.querySelector('[data-workspace-feature][aria-pressed="true"]')?.dataset.workspaceFeature`), feature, `${tool}/${feature} is reflected in internal navigation`)
+      assert.equal(await evaluate(`smokePanel?.hidden === false && smokeSection.querySelectorAll('[data-workspace-panel]:not([hidden])').length === ${features.length}`), true, `${tool}/${feature} is part of the continuous examples page`)
+      assert.ok(await evaluate(`!smokeSection.querySelector('.tool-workspace__examples') && document.querySelectorAll('.app-sidebar [data-workspace-feature]').length === 28`), `${tool} exposes every example in the sidebar`)
+      assert.equal(await evaluate(`document.querySelector('.app-sidebar [data-workspace-feature][aria-current="true"]')?.dataset.workspaceFeature`), feature, `${tool}/${feature} is reflected in sidebar navigation`)
     }
   }
   // Preserve old links as redirects into their appropriate comprehensive tool.
@@ -471,7 +471,11 @@ try {
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
   await until(`document.documentElement.scrollWidth <= 390`, 'mobile first tool has no horizontal overflow')
-  assert.ok(await evaluate(`document.querySelector('.app-sidebar').getBoundingClientRect().height < 160`), 'mobile navigation does not retain a desktop-height blank area')
+  assert.ok(await evaluate(`(() => {
+    const rail = document.querySelector('.app-sidebar'), nav = rail.querySelector('.tool-nav');
+    return getComputedStyle(nav).display === 'grid' && getComputedStyle(rail).position === 'relative'
+      && Math.abs(rail.getBoundingClientRect().height - nav.getBoundingClientRect().height) < 2;
+  })()`), 'mobile index wraps all examples with no reserved blank area')
   await screenshot('four-tools-mobile')
   await route('agent?format=sheets')
   await until(agentReady, 'mobile AI sample ready', 90_000)

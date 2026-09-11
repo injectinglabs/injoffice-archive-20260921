@@ -1,8 +1,7 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type ErrorInfo, type ReactNode } from 'react'
 import type { AgentTool } from '../route'
-import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceHref, workspaceNavigationHash, type ToolWorkspaceFeature } from '../toolWorkspaces'
+import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceExamples, workspaceNavigationHash, type ToolWorkspaceFeature } from '../toolWorkspaces'
 import '../design-system/live-create-edit.css'
-import './ToolWorkspace.css'
 
 async function loadFeature(tool: AgentTool, feature: ToolWorkspaceFeature, initialHash?: string): Promise<{ default: ComponentType }> {
   if (feature.id === 'agent') { const { default: Page } = await import('../pages/AgentPage'); return { default: () => <Page fixedTool={tool} /> } }
@@ -44,7 +43,7 @@ class FeatureBoundary extends Component<{ children: ReactNode; onRetry: () => vo
 
 function FeatureContent({ tool, feature, initialHash, onRetry }: { tool: AgentTool; feature: ToolWorkspaceFeature; initialHash?: string; onRetry: () => void }) {
   // Explicit retry remounts this component, creating a fresh lazy loader instead
-  // of reusing React.lazy's cached rejected promise. Ordinary tab switches retain it.
+  // of reusing React.lazy's cached rejected promise. Scrolling retains it.
   const Page = useMemo(() => lazy(() => loadFeature(tool, feature, initialHash)), [tool, feature, initialHash])
   return <FeatureBoundary onRetry={onRetry}><Suspense fallback={<div className="tool-workspace__loading" data-workspace-loading role="status">Opening {feature.label.toLowerCase()}…</div>}><Page /></Suspense></FeatureBoundary>
 }
@@ -62,11 +61,8 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
   const [visited, setVisited] = useState(() => [startingFeature(tool, initialHash)])
   const featureHashes = useRef<Record<string, string | undefined>>({ [startingFeature(tool, initialHash)]: resolveToolWorkspace(entryHash)?.tool === tool ? entryHash : undefined })
   const panelElements = useRef(new Map<string, HTMLElement>())
-  const panelHeights = useRef<Record<string, number>>({})
   const [retryKeys, setRetryKeys] = useState<Record<string, number>>({})
-  const examplesRef = useRef<HTMLDetailsElement>(null)
-  const taskButtonRef = useRef<HTMLButtonElement>(null)
-  const groups = [...new Set(definition.features.filter(item => item.id !== 'agent').map((item) => item.group))]
+  const examples = workspaceExamples(definition)
   const current = definition.features.find((item) => item.id === active) ?? definition.features[0]!
   const activate = useCallback((feature: string, hash: string) => {
     // A room deep link belongs to the feature's first activation, not the
@@ -75,22 +71,9 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
       const route = resolveToolWorkspace(hash)
       featureHashes.current[feature] = route?.tool === tool && route.feature === feature ? hash : undefined
     }
-    for (const [id, element] of panelElements.current) {
-      if (!element.hidden) panelHeights.current[id] = Math.max(740, element.getBoundingClientRect().height)
-    }
     setActive(feature)
     setVisited((previous) => previous.includes(feature) ? previous : [...previous, feature])
   }, [tool])
-  const choose = (feature: string) => {
-    const href = workspaceHref(tool, feature)
-    activate(feature, href)
-    if (window.location.hash !== href) {
-      window.dispatchEvent(new CustomEvent('injoffice:workspace-view', { detail: { tool } }))
-      window.location.hash = href
-    }
-    if (examplesRef.current) examplesRef.current.open = false
-    taskButtonRef.current?.focus({ preventScroll: true })
-  }
 
   useEffect(() => {
     const sync = () => {
@@ -98,8 +81,25 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
       if (route?.tool === tool) activate(route.feature, window.location.hash)
     }
     window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
+    window.addEventListener('injoffice:workspace-scroll', sync)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      window.removeEventListener('injoffice:workspace-scroll', sync)
+    }
   }, [activate, tool])
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries.filter(entry => entry.isIntersecting).map(entry => (entry.target as HTMLElement).dataset.workspacePanel!)
+      if (!visible.length) return
+      for (const feature of visible) {
+        if (!(feature in featureHashes.current)) featureHashes.current[feature] = undefined
+      }
+      setVisited(previous => [...new Set([...previous, ...visible])])
+    }, { rootMargin: '160px 0px' })
+    for (const element of panelElements.current.values()) observer.observe(element)
+    return () => observer.disconnect()
+  }, [tool])
 
   useEffect(() => {
     if (!['editor', 'native', 'pptx-native', 'collab', 'charts', 'pptx-render'].includes(current.id)) return
@@ -109,26 +109,17 @@ function ToolWorkspace({ tool, initialHash }: { tool: AgentTool; initialHash?: s
   }, [current.group, current.id])
 
   return <div className="tool-workspace ds" data-tool-workspace={tool} data-workspace-active={current.id}>
-    <header className="tool-workspace__navigation">
-      <nav className="tool-workspace__primary" aria-label={`${definition.title} examples`}>
-        <button ref={taskButtonRef} type="button" className="tool-workspace__task" data-workspace-feature="agent" aria-pressed={current.id === 'agent'} aria-controls={`${instanceId}-panel-agent`} onClick={() => choose('agent')}>Guided document task</button>
-        <details ref={examplesRef} className="tool-workspace__examples" onKeyDown={event => {
-          if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus() }
-        }}>
-          <summary>More examples{current.id !== 'agent' && <span className="tool-workspace__selected">: {current.label}</span>}</summary>
-          <div className="tool-workspace__example-list">
-            <p className="tool-workspace__sample-note">Each view has its own sample and state; edits do not transfer between views. Opened views stay available when you switch, including pending approvals.</p>
-            {groups.map(group => <section key={group} aria-label={group}>
-              <h3>{group}</h3>
-              {definition.features.filter(feature => feature.group === group && feature.id !== 'agent').map(feature => <button key={feature.id} type="button" data-workspace-feature={feature.id} aria-pressed={current.id === feature.id} aria-controls={`${instanceId}-panel-${feature.id}`} onClick={() => choose(feature.id)}><strong>{feature.label}</strong><span>{feature.description}</span></button>)}
-            </section>)}
-          </div>
-        </details>
-      </nav>
-      {current.id !== 'agent' && <p className="tool-workspace__example-description">{current.description} This example uses a separate sample.</p>}
-    </header>
-    {definition.features.filter((feature) => visited.includes(feature.id)).map((feature) => <section key={feature.id} ref={(element) => { if (element) panelElements.current.set(feature.id, element); else panelElements.current.delete(feature.id) }} id={`${instanceId}-panel-${feature.id}`} aria-label={`${definition.title}: ${feature.label}`} data-workspace-panel={feature.id} data-workspace-retain-layout={tool === 'sheets' && (feature.id === 'editor' || feature.id === 'collab') ? 'true' : undefined} hidden={feature.id !== current.id} inert={feature.id !== current.id} aria-hidden={feature.id !== current.id ? true : undefined} style={tool === 'sheets' && feature.id !== current.id && (feature.id === 'editor' || feature.id === 'collab') ? { height: panelHeights.current[feature.id] ?? 740 } : undefined} className="tool-workspace__panel">
-      <FeatureContent key={`${feature.id}-${retryKeys[feature.id] ?? 0}`} tool={tool} feature={feature} initialHash={featureHashes.current[feature.id]} onRetry={() => setRetryKeys((previous) => ({ ...previous, [feature.id]: (previous[feature.id] ?? 0) + 1 }))} />
+    <p className="tool-workspace__sample-note">Each view has its own sample and state; edits do not transfer between views. Examples load as you reach them and keep your changes while you explore.</p>
+    {examples.map((feature) => <section key={feature.id} ref={(element) => { if (element) panelElements.current.set(feature.id, element); else panelElements.current.delete(feature.id) }} id={`example-${tool}-${feature.id}`} aria-labelledby={`${instanceId}-heading-${feature.id}`} data-workspace-panel={feature.id} className="tool-workspace__panel">
+      <header className="tool-workspace__heading">
+        <h3 id={`${instanceId}-heading-${feature.id}`} tabIndex={-1}>{feature.label}</h3>
+        <p>{feature.description}</p>
+      </header>
+      <div className="tool-workspace__content">
+        {visited.includes(feature.id)
+          ? <FeatureContent key={`${feature.id}-${retryKeys[feature.id] ?? 0}`} tool={tool} feature={feature} initialHash={featureHashes.current[feature.id]} onRetry={() => setRetryKeys((previous) => ({ ...previous, [feature.id]: (previous[feature.id] ?? 0) + 1 }))} />
+          : <div className="tool-workspace__loading" data-workspace-loading><p>This example loads as you reach it.</p><button type="button" className="ds-btn ds-btn--outlined" onClick={() => activate(feature.id, window.location.hash)}>Load {feature.label.toLowerCase()}</button></div>}
+      </div>
     </section>)}
   </div>
 }

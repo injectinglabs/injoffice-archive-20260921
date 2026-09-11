@@ -64,12 +64,13 @@ describe('playground navigation continuity', () => {
     }
   })
 
-  it('keeps internal feature changes from moving focus or jumping to the section heading', () => {
-    expect(appSource).toContain('focus && !changingView')
-    expect(appSource).toContain("window.addEventListener('injoffice:workspace-view', internalView)")
-    expect(appSource).toContain('anchorViewTop.current = changingView ? intent.top : null')
+  it('navigates to exact examples and preserves the destination through lazy layout changes', () => {
+    expect(appSource).toContain('`example-${target.tool}-${target.feature}`')
+    expect(appSource).toContain("if (focus) (example || element)?.querySelector<HTMLElement>('h1, h2, h3')?.focus({ preventScroll: true })")
+    expect(appSource).toContain("new Event('injoffice:workspace-scroll')")
     expect(appSource).toContain('anchorTarget.current ?? activeSectionKey')
     expect(appSource).toContain('remembered.get(sectionForHash(href).key)')
+    expect(appSource).toContain("if (location.hash === destination) window.dispatchEvent(new HashChangeEvent('hashchange'))")
   })
 
   it('pre-optimizes dependencies imported only by lazy routes in development', () => {
@@ -81,7 +82,8 @@ describe('playground navigation continuity', () => {
     expect(updater).toContain('activeSectionKey(')
     expect(updater).toContain("history.replaceState(history.state, '', nextHash)")
     expect(updater).toContain('sectionHashes.current.get(section.key)')
-    expect(updater).not.toMatch(/pushState|\.focus\(|scrollIntoView|dispatchEvent|location\.hash\s*=/)
+    expect(updater).not.toMatch(/pushState|\.focus\(|scrollIntoView|HashChangeEvent|location\.hash\s*=/)
+    expect(updater).toContain("new Event('injoffice:workspace-scroll')")
     expect(appSource).toContain("window.addEventListener('scroll', schedule, { passive: true })")
     expect(appSource).toContain('new ResizeObserver(onLayout)')
     expect(appSource).toContain('requestAnimationFrame(update)')

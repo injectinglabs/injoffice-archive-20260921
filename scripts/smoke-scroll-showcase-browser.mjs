@@ -169,15 +169,14 @@ async function button(key, text) {
 }
 
 async function assertInternalGroupNavigation(group, feature, key) {
-  const navigation = `${toolSection('docs')} .tool-workspace__navigation`
+  const navigation = '.app-sidebar [aria-label="Docs examples"]'
   const selector = `${navigation} [data-workspace-feature="${feature}"]`
   await evaluate(`(() => {
-    const details = document.querySelector('${navigation} details');
-    if ('${feature}' !== 'agent') details.open = true;
     const button = document.querySelector('${selector}');
     button.scrollIntoView({ block: 'center' });
     button.focus({ preventScroll: true });
   })()`)
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
   const point = await evaluate(`(() => { const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
   if (key) {
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' })
@@ -187,8 +186,8 @@ async function assertInternalGroupNavigation(group, feature, key) {
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point })
   }
   rememberedFeatures.docs = feature
-  await until(`${ready('docs')} && document.querySelector('${selector}').getAttribute('aria-pressed') === 'true'`, `${key ? 'keyboard' : 'pointer'} selects ${feature}`)
-  await until(`!document.querySelector('${navigation} details').open && document.activeElement === document.querySelector('${navigation} .tool-workspace__task')`, 'selection closes examples and returns focus to the stable primary control')
+  await until(`${ready('docs')} && document.querySelector('${selector}').getAttribute('aria-current') === 'true'`, `${key ? 'keyboard' : 'pointer'} selects ${feature}`)
+  await until(`document.activeElement === document.querySelector('#example-docs-${feature} h3')`, `sidebar selection focuses the example heading (was ${await evaluate('document.activeElement?.outerHTML.slice(0, 300)')})`)
   await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
   assert.equal(await evaluate(`document.querySelector('.app-sidebar a[aria-current="location"]').getAttribute('href')`), '#/docs', 'internal navigation keeps Docs selected')
 }
@@ -196,7 +195,7 @@ async function wheelTo(key, hash = href(key)) {
   // Native wheel input does not run an anchor's navigation handler. The target
   // offset comes from the real rendered document, so lazy section heights can vary.
   const distance = await evaluate(`(() => {
-    const target = document.querySelector(${JSON.stringify(toolSection(key))});
+    const target = document.querySelector(${JSON.stringify(`${toolSection(key)} [data-workspace-panel="${target(key).feature}"]`)}) ?? document.querySelector(${JSON.stringify(toolSection(key))});
     const margin = parseFloat(getComputedStyle(target).scrollMarginTop) || 100;
     return target.getBoundingClientRect().top - margin;
   })()`)
@@ -240,7 +239,8 @@ try {
   await until(active('font-metrics'), 'direct Docs feature is the current sidebar location')
   await until(ready('font-metrics'), 'direct Docs feature is ready', 90_000)
   assert.equal(await evaluate(`!document.querySelector('.overview-page, [data-workspace-entry]') && !Array.from(document.querySelectorAll('.app-main a')).some(link => link.textContent.trim() === 'All demos')`), true, 'there is no introductory page or obsolete All demos link')
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar a')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'only four comprehensive tool links appear in navigation')
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.app-sidebar .tool-nav-title')).map(link => link.getAttribute('href'))`), ['#/sheets', '#/docs', '#/slides', '#/pdf'], 'examples are grouped under the four tools')
+  assert.equal(await evaluate(`document.querySelectorAll('.app-sidebar [data-workspace-feature]').length`), 28, 'all examples are visible in the sidebar index')
   await screenshot('scroll-docs-direct-desktop')
   await assertNavigationSelection('desktop')
 
@@ -298,8 +298,8 @@ try {
   assert.equal(await evaluate(`(() => {
     const panel = document.querySelector('${toolSection('sheets')} [data-workspace-panel="editor"]');
     const rect = panel.getBoundingClientRect();
-    return panel.hidden && panel.inert && panel.getAttribute('aria-hidden') === 'true' && getComputedStyle(panel).visibility === 'hidden' && rect.width > 0 && rect.height > 0;
-  })()`), true, 'retained workbook stays measurable for its canvas but inert and hidden from assistive technology')
+    return !panel.hidden && !panel.inert && getComputedStyle(panel).visibility === 'visible' && rect.width > 0 && rect.height > 0;
+  })()`), true, 'the workbook remains in document flow with a measurable canvas while visiting another example')
   await evaluate(`(() => {
     const input = document.querySelector('${section('charts')} input[aria-label="Jan revenue"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '999');
@@ -319,7 +319,7 @@ try {
   rememberedFeatures.docs = 'editor'
   await evaluate(`location.hash = '#/docs?feature=editor'`)
   await until(ready('docs'), 'primary Docs editor opens without destroying the agent')
-  assert.equal(await evaluate(`document.querySelector('${section('agent-docs')}').hidden`), true, 'inactive agent feature is retained but hidden')
+  assert.equal(await evaluate(`document.querySelector('${section('agent-docs')}').hidden`), false, 'the agent example remains in the page alongside the editor')
   await anchor('agent-docs')
   assert.equal(await evaluate(agentState('agent-docs', 'awaiting-approval')), true, 'feature changes preserve the pending proposal')
   assert.equal(await evaluate(`document.querySelector('${section('agent-docs')} .agent-diff').textContent`), plan, 'returning from the native editor preserves the exact agent diff')
@@ -332,10 +332,10 @@ try {
   assert.equal(await evaluate(`document.querySelector('${section('agent-docs')} .agent-diff').textContent`), plan, 'pointer and keyboard group changes retain the exact reviewed proposal')
   assert.equal(await evaluate(`Number(document.querySelector('${section('agent-docs')} [data-agent-native-writes]').textContent)`), 0, 'internal group navigation never authorizes a document write')
 
-  // Re-selecting the current hash still returns to the section heading.
+  // Re-selecting the current hash still returns to the example heading.
   await evaluate(`window.scrollBy({ top: 320, behavior: 'instant' })`)
   await anchor('docs')
-  await until(`(() => { const element = document.querySelector('${toolSection('docs')}'); const top = element.getBoundingClientRect().top; const margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 100; return Math.abs(top - margin) < 40; })()`, 'same tool anchor returns to its heading without changing the selected feature')
+  await until(`(() => { const element = document.querySelector('${section('agent-docs')}'); const top = element.getBoundingClientRect().top; const margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 100; return Math.abs(top - margin) < 40; })()`, 'same tool anchor returns to its example heading without changing the selected feature')
   await screenshot('scroll-pending-approval-desktop')
 
   // Explicit anchors add navigable entries; scroll updates alone do not.
@@ -426,7 +426,7 @@ try {
     await evaluate(`document.documentElement.style.overflowAnchor = 'none'`)
     await anchor('agent-docs')
     const docsAligned = `(() => {
-      const element = document.querySelector('${toolSection('agent-docs')}');
+      const element = document.querySelector('${section('agent-docs')}');
       return Math.abs(element.getBoundingClientRect().top - parseFloat(getComputedStyle(element).scrollMarginTop)) < 4;
     })()`
     await until(docsAligned, 'warm DOCX anchor reaches its heading before delayed growth')
@@ -458,8 +458,8 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
   await anchor('agent-pdf')
   assert.equal(await evaluate(`document.documentElement.scrollWidth <= 390`), true, 'mobile document has no horizontal overflow')
-  assert.equal(await evaluate(`(() => { const navigator = document.querySelector('.app-sidebar'); const bounds = navigator.getBoundingClientRect(); return bounds.top >= -1 && bounds.top < 200 && bounds.bottom > 0 && bounds.bottom < innerHeight; })()`), true, 'mobile section navigator stays in the viewport')
-  assert.equal(await evaluate(`(() => { const link = document.querySelector('.app-sidebar a[aria-current="location"]'); const bounds = link.getBoundingClientRect(); return bounds.left >= -1 && bounds.right <= innerWidth + 1 && bounds.top >= -1 && bounds.bottom <= innerHeight; })()`), true, 'the current mobile section link is visible')
+  await evaluate(`document.querySelector('.examples-index-link').click()`)
+  assert.equal(await evaluate(`document.activeElement.id === 'demo-navigation' && getComputedStyle(document.querySelector('.tool-nav')).display === 'grid'`), true, 'mobile header returns to the fully listed examples index')
   await assertNavigationSelection('mobile')
   await screenshot('scroll-navigation-mobile')
   await anchor('charts')

@@ -39,6 +39,11 @@ export const TOOL_WORKSPACES: readonly ToolWorkspaceDefinition[] = [
   ] },
 ]
 
+/** Match the default document task first, followed by every other example. */
+export function workspaceExamples(definition: ToolWorkspaceDefinition): readonly ToolWorkspaceFeature[] {
+  return [...definition.features.filter(feature => feature.id === 'agent'), ...definition.features.filter(feature => feature.id !== 'agent')]
+}
+
 export function workspaceHref(tool: AgentTool, feature = 'agent'): string {
   const definition = TOOL_WORKSPACES.find((item) => item.tool === tool)!
   const selected = definition.features.some((item) => item.id === feature) ? feature : 'agent'
