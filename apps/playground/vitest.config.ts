@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { pdfAssets } from './pdfAssets.ts'
 
 export default defineConfig({
+  plugins: [pdfAssets()],
   resolve: {
     alias: {
       '@injoffice/agent-office/xlsx': fileURLToPath(new URL('../../packages/agent-office/src/xlsx.ts', import.meta.url)),

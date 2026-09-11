@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { pdfAssets } from './pdfAssets.ts'
 
 const pkgSrc = (name: string) => fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url))
 const pkgFile = (name: string, file: string) => fileURLToPath(new URL(`../../packages/${name}/src/${file}`, import.meta.url))
@@ -45,7 +46,7 @@ function pdfNodeHostPlugin(
 }
 
 export default defineConfig(async ({ command }) => {
-  const plugins: Plugin[] = [react()]
+  const plugins: Plugin[] = [react(), pdfAssets()]
   if (command === 'serve') {
     const { handlePdfNodeRequest } = await import('./pdfNodeHost.ts')
     const { handleAgentProposalRequest } = await import('./agentProposalHost.ts')

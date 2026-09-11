@@ -21,6 +21,35 @@ export interface PdfRenderOptions {
   maxPixels?: number;
 }
 
+/** Host-owned, version-matched PDF.js resources. No CDN or upload is implied. */
+export interface PdfLoadOptions {
+  /** Directory containing PDF.js packed .bcmap files; include a trailing slash. */
+  cMapUrl?: string;
+  /** Directory containing PDF.js standard font data; include a trailing slash. */
+  standardFontDataUrl?: string;
+  /** Directory containing PDF.js image/color decoder resources; include a trailing slash. */
+  wasmUrl?: string;
+  /** Explicitly opt into/out of host system-font substitution; default is PDF.js's policy. */
+  useSystemFonts?: boolean;
+}
+
+function loadParameters(bytes: Uint8Array, options: PdfLoadOptions) {
+  const resources: PdfLoadOptions = {};
+  for (const key of ['cMapUrl', 'standardFontDataUrl', 'wasmUrl'] as const) {
+    const value = options[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'string' || !value.trim() || value !== value.trim() || !value.endsWith('/')) {
+      throw new Error(`${key} must be a non-empty resource directory ending in /`);
+    }
+    resources[key] = value;
+  }
+  if (options.useSystemFonts !== undefined) {
+    if (typeof options.useSystemFonts !== 'boolean') throw new Error('useSystemFonts must be a boolean');
+    resources.useSystemFonts = options.useSystemFonts;
+  }
+  return { data: bytes.slice(), ...resources, ...(resources.cMapUrl ? { cMapPacked: true } : {}) };
+}
+
 function checkAbort(signal?: AbortSignal): void {
   signal?.throwIfAborted();
 }
@@ -89,13 +118,19 @@ export class PdfViewerDocument {
     private readonly task: ReturnType<typeof pdfjsLib.getDocument>,
   ) {}
 
-  static async load(bytes: Uint8Array): Promise<PdfViewerDocument> {
+  static async load(bytes: Uint8Array, options: PdfLoadOptions = {}): Promise<PdfViewerDocument> {
     // pdfjs-dist transfers/detaches a `data` buffer it's handed — copy first so
     // callers can safely keep using their own `bytes` afterward (e.g. locate a
     // rect via the viewer, then pass the same bytes to applyTextEdits).
-    const task = pdfjsLib.getDocument({ data: bytes.slice() });
-    const proxy = await task.promise;
-    return new PdfViewerDocument(proxy, task);
+    const task = pdfjsLib.getDocument(loadParameters(bytes, options));
+    try {
+      const proxy = await task.promise;
+      return new PdfViewerDocument(proxy, task);
+    } catch (error) {
+      // Failed parsing must not retain a worker. Preserve the original error.
+      await task.destroy().catch(() => undefined);
+      throw error;
+    }
   }
 
   get pageCount(): number {

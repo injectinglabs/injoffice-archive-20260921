@@ -61,6 +61,13 @@ reproduced in `/LICENSE-UNICODE.txt`.
 MIT License, for PNG decode/encode in `image/decodePng.ts` and
 `ocr/encodePng.ts`.
 
+The playground build copies character maps, standard fonts and decoder assets
+from the installed pdfjs-dist package. These third-party assets retain their
+own terms; they are not relicensed as InjOffice code. Their complete upstream
+license files are copied alongside them under assets/pdfjs-<version>/ in the
+cmaps, standard_fonts and wasm directories. Retain these files when deploying
+or redistributing the playground assets.
+
 `packages/pdf/src/ocr` (vision-LLM OCR — page rasterization and the
 invisible-text-layer splice) is InjOffice code.
 

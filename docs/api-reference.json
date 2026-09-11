@@ -8057,6 +8057,11 @@
               "signature": "export interface PdfDocumentInfo"
             },
             {
+              "name": "PdfLoadOptions",
+              "kind": "type",
+              "signature": "export interface PdfLoadOptions"
+            },
+            {
               "name": "PdfOutlineItem",
               "kind": "type",
               "signature": "export interface PdfOutlineItem"
@@ -8341,6 +8346,11 @@
               "name": "PdfDocumentInfo",
               "kind": "interface",
               "signature": "export interface PdfDocumentInfo"
+            },
+            {
+              "name": "PdfLoadOptions",
+              "kind": "type",
+              "signature": "export interface PdfLoadOptions"
             },
             {
               "name": "PdfOutlineItem",

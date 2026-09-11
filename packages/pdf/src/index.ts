@@ -8,6 +8,7 @@ export {
   renderPageToCanvas,
   type CanvasRenderMetrics,
   type PdfOutlineItem,
+  type PdfLoadOptions,
   type PdfRenderOptions,
   type SearchMatch,
 } from './viewer.js';

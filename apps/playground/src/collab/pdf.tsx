@@ -17,6 +17,7 @@ import {
   rgb,
 } from 'pdf-lib'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { getPdfLoadOptions } from 'virtual:injoffice-pdf-resources'
 import {
   PdfPresenceManager,
   PresenceStack,
@@ -370,7 +371,7 @@ export function CollabPdfPanel() {
 
     void (async () => {
       try {
-        const loaded = await PdfViewerDocument.load(bytes)
+        const loaded = await PdfViewerDocument.load(bytes, getPdfLoadOptions())
         ownedViewer = loaded
         if (cancelled) return
         viewerRef.current = loaded

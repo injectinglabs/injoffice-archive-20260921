@@ -44,7 +44,7 @@
     "@injoffice/font-metrics": "0.1.0",
     "harfbuzzjs": "^1.6.0",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.2.108",
+    "pdfjs-dist": "^6.3.289",
     "pngjs": "^7.0.0",
     "subset-font": "^2.7.0"
   },

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { getPdfLoadOptions } from 'virtual:injoffice-pdf-resources'
 import {
   DsButton,
   DsCallout,
@@ -261,7 +262,7 @@ export default function PdfPage() {
 
     void (async () => {
       try {
-        const loaded = await PdfViewerDocument.load(bytes)
+        const loaded = await PdfViewerDocument.load(bytes, getPdfLoadOptions())
         ownedViewer = loaded
         if (cancelled) { await loaded.destroy(); return }
         viewerRef.current = loaded
@@ -348,7 +349,7 @@ export default function PdfPage() {
       const nextBytes = new Uint8Array(await file.arrayBuffer())
       if (nextBytes.length === 0) throw new Error('the selected file is empty')
       // Keep the current document and undo stack until the replacement is usable.
-      const candidate = await PdfViewerDocument.load(nextBytes)
+      const candidate = await PdfViewerDocument.load(nextBytes, getPdfLoadOptions())
       try { await candidate.getPage(1) } finally { await candidate.destroy() }
       setFileName(file.name || 'document.pdf')
       setEdited(false)

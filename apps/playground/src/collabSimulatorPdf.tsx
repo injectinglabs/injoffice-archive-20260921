@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { getPdfLoadOptions } from 'virtual:injoffice-pdf-resources'
 import {
   PdfPresenceManager,
   type DocSyncEngine,
@@ -94,7 +95,7 @@ function SimulatedPdfEditor({
     viewerRef.current = null
     setViewer(null)
     setPageCount(0)
-    void PdfViewerDocument.load(bytes).then((loaded) => {
+    void PdfViewerDocument.load(bytes, getPdfLoadOptions()).then((loaded) => {
       ownedViewer = loaded
       if (cancelled) return
       viewerRef.current = loaded
