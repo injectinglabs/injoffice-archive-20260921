@@ -19,6 +19,15 @@ function input(){
  return {deck,slide_index:0,package_sha256:'a'.repeat(64),font_manifest_path:manifest}
 }
 describe('actual source-font native PPTX worker',()=>{
+ it('keeps an element-scoped text refusal visible without hiding neighboring text',async()=>{
+  const request=input(),slide=request.deck.slides[0],good=slide.elements[0],refused=structuredClone(good)
+  refused.id='element:unsupported-text';refused.paragraphs=[];delete refused.textBody
+  refused.compatibility={status:'refused',diagnostics:[{severity:'refusal',code:'pptx.text-content-unavailable',message:'Unsupported bullet font',scope:{slideId:slide.id,elementId:refused.id}}]}
+  slide.elements=[refused,good];slide.compatibility={status:'refused',diagnostics:refused.compatibility.diagnostics};request.deck.compatibility=structuredClone(slide.compatibility)
+  const result=await compilePptxPreview(request),paint=JSON.stringify(result.nodes)
+  expect(paint).toContain('Unsupported text');expect(paint).toContain('contentRun');expect(paint).not.toContain('Slide rendering refused')
+  expect(result.diagnostics.join(' ')).toContain('Unsupported bullet font')
+ })
  it('keeps old boolean-only endpoints visibly unqualified while replaying typed sources',async()=>{
   const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8')),connector=source.slides[0].elements.find((e:{kind:string})=>e.kind==='connector');request.deck.slides[0].elements=[connector];connector.tailArrow=true
   const legacy=await compilePptxPreview(request);expect(JSON.stringify(legacy.nodes)).toContain('Arrowhead unavailable');expect(JSON.stringify(legacy.nodes)).not.toContain('connectorArrow')

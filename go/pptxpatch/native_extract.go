@@ -1744,7 +1744,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err := requireOnlyNativeAttrs(spPr); err != nil {
 		return NativeElement{}, err
 	}
-	if err := requireOnlyNativeChildren(spPr, xml.Name{Space: dialect.drawing, Local: "xfrm"}); err != nil {
+	if err := validateNativeTextBoxShapeProperties(spPr, dialect); err != nil {
 		return NativeElement{}, err
 	}
 	xfrm, err := nativeSingleton(spPr, dialect.drawing, "xfrm", true)
