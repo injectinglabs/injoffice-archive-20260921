@@ -2,7 +2,7 @@ export const NATIVE_WASM_WORKER_PROTOCOL = 'injoffice.native-wasm-worker' as con
 export const NATIVE_WASM_WORKER_VERSION = 1 as const
 
 export type NativeWasmFormat = 'xlsx' | 'docx' | 'pptx'
-export type NativeWasmOperation = 'init' | 'extract' | 'apply'
+export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'apply'
 
 export interface NativeWasmAssets {
   wasmUrl: string
@@ -46,6 +46,8 @@ export interface NativeWasmOperationOptions {
 
 export interface NativeWasmClient {
   extract(bytes: Uint8Array, options?: NativeWasmOperationOptions): Promise<string>
+  /** Optional read-only supplemental projection; unsupported engines may refuse. */
+  inspect(bytes: Uint8Array, options?: NativeWasmOperationOptions): Promise<string>
   apply(
     original: Uint8Array,
     payload: string | Uint8Array,
@@ -78,6 +80,7 @@ type RequestBase = {
 export type NativeWasmWorkerRequest =
   | (RequestBase & { op: 'init'; assets: NativeWasmAssets })
   | (RequestBase & { op: 'extract'; bytes: ArrayBuffer })
+  | (RequestBase & { op: 'inspect'; bytes: ArrayBuffer })
   | (RequestBase & {
     op: 'apply'
     original: ArrayBuffer
@@ -90,6 +93,7 @@ type ResponseBase = RequestBase & { ok: boolean }
 export type NativeWasmWorkerResponse =
   | (ResponseBase & { op: 'init'; ok: true })
   | (ResponseBase & { op: 'extract'; ok: true; result: { contractJson: string } })
+  | (ResponseBase & { op: 'inspect'; ok: true; result: { contractJson: string } })
   | (ResponseBase & { op: 'apply'; ok: true; result: { bytes: ArrayBuffer } })
   | (ResponseBase & { ok: false; error: { code: string; message: string; fatal: boolean } })
 
@@ -156,7 +160,7 @@ function validateResponse(
     return value as NativeWasmWorkerResponse
   }
   if (value.ok !== true) throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker response has an invalid status.', true)
-  if (expected.op === 'extract') {
+  if (expected.op === 'extract' || expected.op === 'inspect') {
     if (!isRecord(value.result) || !hasExactKeys(value.result, ['contractJson']) || typeof value.result.contractJson !== 'string') {
       throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker returned invalid extraction JSON.', true)
     }
@@ -201,13 +205,21 @@ class NativeWasmClientImpl implements NativeWasmClient {
   }
 
   async extract(bytes: Uint8Array, options: NativeWasmOperationOptions = {}): Promise<string> {
+    return this.readJSON('extract', bytes, options)
+  }
+
+  async inspect(bytes: Uint8Array, options: NativeWasmOperationOptions = {}): Promise<string> {
+    return this.readJSON('inspect', bytes, options)
+  }
+
+  private async readJSON(op: 'extract' | 'inspect', bytes: Uint8Array, options: NativeWasmOperationOptions): Promise<string> {
     if (this.disposed) throw new NativeWasmError('TERMINATED', 'Native WASM client was terminated.', true)
     if (options.signal?.aborted) throw abortError(options.signal)
     const copy = copyBytes(bytes)
     return this.enqueue(async () => {
       await this.ensureInitialized(options.signal)
-      const response = await this.request({ op: 'extract', bytes: copy.buffer }, [copy.buffer], options.signal)
-      if (response.ok !== true || response.op !== 'extract') throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker returned the wrong extraction response.', true)
+      const response = await this.request({ op, bytes: copy.buffer }, [copy.buffer], options.signal)
+      if (response.ok !== true || response.op !== op) throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker returned the wrong read-only response.', true)
       return response.result.contractJson
     }, options.signal)
   }

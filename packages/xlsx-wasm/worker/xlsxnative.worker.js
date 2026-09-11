@@ -139,8 +139,9 @@ onmessage = async (event) => {
   try {
     await boot
     if (runtimeFailure) throw runtimeFailure
-    if (request.op === 'extract') {
-      const contractJson = unwrap(self.xlsxnative.extract(new Uint8Array(request.bytes)), 'json')
+    if (request.op === 'extract' || request.op === 'inspect') {
+      if (typeof self.xlsxnative[request.op] !== 'function') throw new NativeBindingError('Supplemental inspection is unavailable in this engine version', false)
+      const contractJson = unwrap(self.xlsxnative[request.op](new Uint8Array(request.bytes)), 'json')
       respond(request, { ok: true, result: { contractJson } })
       return
     }

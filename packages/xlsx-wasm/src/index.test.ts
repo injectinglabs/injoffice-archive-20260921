@@ -50,13 +50,14 @@ class FakeWorker implements NativeWasmWorker {
   private readonly messageListeners = new Set<(event: NativeWasmMessageEvent) => void>()
   private readonly errorListeners = new Set<(event: NativeWasmWorkerErrorEvent) => void>()
 
-  constructor(private readonly extractJson = fixtureJson) {}
+  constructor(private readonly extractJson = fixtureJson, private readonly inspectJson = '{}') {}
 
   postMessage(value: unknown, _transfer: ArrayBuffer[]): void {
     const request = value as NativeWasmWorkerRequest
     this.requests.push(request)
     if (request.op === 'init') this.respond(success(request))
     else if (request.op === 'extract') this.respond(success(request, { contractJson: this.extractJson }))
+    else if (request.op === 'inspect') this.respond(success(request, { contractJson: this.inspectJson }))
     else this.respond(success(request, { bytes: new Uint8Array([4, 5, 6]).buffer }))
   }
 
@@ -107,6 +108,14 @@ describe('XLSX WASM package client', () => {
       wasmUrl: 'https://cdn.example/engine.wasm',
       goRuntimeUrl: 'https://cdn.example/go.js',
     })
+  })
+
+  it('validates supplemental inspection against the caller source revision', async () => {
+    const hash=`sha256:${'a'.repeat(64)}`, projection={protocol:'injoffice.xlsx.preview-objects',version:1,package_sha256:hash,tables:[],charts:[]}
+    const worker=new FakeWorker(fixtureJson,JSON.stringify(projection)),client=createXlsxWasmClient({workerFactory:()=>worker})
+    expect(await client.inspectObjects(new Uint8Array([1]),hash)).toEqual(projection)
+    await expect(client.inspectObjects(new Uint8Array([1]),`sha256:${'b'.repeat(64)}`)).rejects.toThrow('stale')
+    expect(worker.requests.map(r=>r.op)).toEqual(['init','inspect','inspect']);client.terminate()
   })
 
   it('is lazy, validates extract v2, and sends a validated CAS-bound transaction', async () => {

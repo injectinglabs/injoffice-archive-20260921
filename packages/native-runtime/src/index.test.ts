@@ -68,6 +68,22 @@ const createWorker = (handler?: (worker: FakeWorker, request: NativeWasmWorkerRe
     else worker.respond(success(request, { bytes: new Uint8Array([7, 8, 9]).buffer }))
   }))
 
+it('runs source bytes through a distinct bounded read-only inspection operation', async () => {
+ const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{"objects":[]}'})))
+ const client=createNativeWasmClient({format:'xlsx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ const bytes=new Uint8Array([1,2,3]);expect(await client.inspect(bytes)).toBe('{"objects":[]}')
+ expect(worker.messages.map(v=>v.message.op)).toEqual(['init','inspect']);expect(bytes).toEqual(new Uint8Array([1,2,3]));client.terminate()
+})
+
+it('cancels inspection and rejects extraction responses masquerading as inspection', async () => {
+ let requested!:()=>void;const sent=new Promise<void>(resolve=>requested=resolve)
+ const worker=createWorker((w,r)=>{if(r.op==='init')w.respond(success(r));else requested()})
+ const client=createNativeWasmClient({format:'xlsx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ const controller=new AbortController(),bytes=new Uint8Array([7]);const pending=client.inspect(bytes,{signal:controller.signal});await sent
+ const request=worker.messages.at(-1)!;expect((request.message as {bytes:ArrayBuffer}).bytes).not.toBe(bytes.buffer);expect(request.transfer).toEqual([(request.message as {bytes:ArrayBuffer}).bytes]);controller.abort();await expect(pending).rejects.toMatchObject({name:'AbortError'});expect(bytes[0]).toBe(7);client.terminate()
+ const badWorker=createWorker((w,r)=>w.respond(r.op==='init'?success(r):{...success(r,{contractJson:'{}'}),op:'extract'}));const bad=createNativeWasmClient({format:'xlsx',workerFactory:()=>badWorker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}});await expect(bad.inspect(bytes)).rejects.toMatchObject({code:'RESPONSE_MISMATCH',fatal:true});bad.terminate()
+})
+
 const options = (factory: () => NativeWasmWorker, operationTimeoutMs = 100) => ({
   format: 'xlsx' as const,
   workerFactory: factory,

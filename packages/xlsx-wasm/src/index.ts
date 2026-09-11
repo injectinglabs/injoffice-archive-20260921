@@ -12,6 +12,8 @@ import {
   WorkbookMutationValidationError,
   assertNativeWorkbookV2,
   decodeNativeWorkbookV2,
+  decodeNativeWorkbookObjectsV1,
+  type NativeWorkbookObjectsV1,
   decodeWorkbookMutationBatch,
   type NativeWorkbookV2,
   type SupportedWorkbookMutation,
@@ -59,6 +61,7 @@ export interface XlsxWasmOperationOptions {
 }
 
 export interface XlsxWasmClient {
+  inspectObjects(bytes: Uint8Array, packageSHA256: string, options?: XlsxWasmOperationOptions): Promise<NativeWorkbookObjectsV1>
   extract(bytes: Uint8Array, options?: XlsxWasmOperationOptions): Promise<NativeWorkbookV2>
   apply(
     original: Uint8Array,
@@ -152,6 +155,13 @@ class XlsxWasmClientImpl implements XlsxWasmClient {
   extract(bytes: Uint8Array, options: XlsxWasmOperationOptions = {}): Promise<NativeWorkbookV2> {
     assertPackageSize(bytes, this.maxPackageBytes)
     return this.extractValidated(bytes, options)
+  }
+
+  async inspectObjects(bytes: Uint8Array, packageSHA256: string, options: XlsxWasmOperationOptions = {}): Promise<NativeWorkbookObjectsV1> {
+    assertPackageSize(bytes, this.maxPackageBytes)
+    const json = await this.native.inspect(bytes, options)
+    if (json.length > 8 * 1024 * 1024) throw new RangeError('Workbook object projection exceeds 8 MiB')
+    return decodeNativeWorkbookObjectsV1(JSON.parse(json), packageSHA256)
   }
 
   apply(

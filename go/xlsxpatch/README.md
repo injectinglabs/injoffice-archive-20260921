@@ -371,3 +371,18 @@ updates replace only the owned part. Unknown versions, fields, owners, targets,
 or relationship graphs fail closed, while unrelated custom XML and package
 parts remain byte-identical. This is an InjOffice round-trip extension, not a
 claim of Excel Power Query or external-connection interoperability.
+# Supplemental read-only object preview
+
+`InspectNativeWorkbookObjectsV1` uses native ZIP/OPC validation and returns
+`injoffice.xlsx.preview-objects` v1 bound to the exact package SHA-256. The same
+projection is available through `POST /v1/xlsx/preview-objects` and the optional
+XLSX WASM `inspect` binding. It never evaluates formulas, follows hyperlinks, or
+modifies package bytes; existing mutation permissions are unchanged.
+
+Qualified chart **data** is limited to explicitly clustered 2D column/bar plots
+with complete bounded saved numeric caches. Other types remain visible as
+unsupported. Cache values may be stale. This is not an Office chart renderer:
+source axes, theme, category labels, chart titles, and placement are not replayed.
+Table metadata is supplemental evidence, not a claim of table-style fidelity.
+Limits include 64 object parts, 2 MiB per object XML, 32 series per chart, 1,024
+points per series, 65,536 cumulative cache points, and 8 MiB output JSON.

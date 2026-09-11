@@ -6,6 +6,7 @@ const workerSource = readFileSync(new URL('../worker/xlsxnative.worker.js', impo
 
 type Binding = {
   extract(bytes: Uint8Array): unknown
+  inspect?(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
 }
 
@@ -59,10 +60,16 @@ function createWorkerHarness(binding: Binding) {
     isClosed: () => closed,
     init: () => send({ ...base, id: 'init-1', op: 'init', assets: { wasmUrl: '/engine.wasm', goRuntimeUrl: '/wasm_exec.js' } }),
     extract: (id: string) => send({ ...base, id, op: 'extract', bytes: new Uint8Array([1]).buffer }),
+    inspect: (id: string) => send({ ...base, id, op: 'inspect', bytes: new Uint8Array([1]).buffer }),
   }
 }
 
 describe('XLSX WASM worker binding envelopes', () => {
+  it('inspects without extraction/mutation calls and refuses old engines recoverably', async () => {
+    const binding={extract:()=>({ok:true,value:'{}'}),apply:()=>{throw new Error('must not mutate')}}
+    const old=createWorkerHarness(binding);await old.init();expect(await old.inspect('old')).toMatchObject({ok:false,error:{fatal:false}});expect(old.isClosed()).toBe(false)
+    const current=createWorkerHarness({...binding,inspect:()=>({ok:true,value:'{"version":1}'})});await current.init();expect(await current.inspect('new')).toMatchObject({ok:true,result:{contractJson:'{"version":1}'}})
+  })
   it('propagates a recovered Go panic as fatal and closes the worker', async () => {
     const worker = createWorkerHarness({
       extract: () => ({ ok: false, error: 'xlsxnative panic: boom', fatal: true }),

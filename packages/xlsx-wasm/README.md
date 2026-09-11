@@ -113,3 +113,15 @@ cover the worker protocol and refusal paths.
 The package contains `wasm_exec.js` from the same Go toolchain that compiled
 `xlsxnative.wasm`. The Go runtime is distributed under its BSD license, which
 is included in the package.
+# Read-only object inspection
+
+`client.inspectObjects(bytes, workbook.source.package_sha256)` returns a bounded,
+source-revision-bound supplemental projection. It does not change the native
+workbook or authorize mutations. The matching engine must provide the optional
+`inspect` binding; older engines refuse this operation without remote fallback.
+
+The first chart-data subset is one explicit 2D clustered column/bar plot with
+complete saved numeric caches. Values may be stale; inspection never evaluates
+formulas or fetches external links. Chart styling, categories, drawing placement,
+and Office fidelity are not implied. Table metadata is reported, but built-in
+table-style rendering remains unqualified.

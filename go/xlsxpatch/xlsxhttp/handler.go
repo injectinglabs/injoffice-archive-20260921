@@ -16,13 +16,14 @@ import (
 )
 
 const (
-	ExtractPath      = "/v1/xlsx/extract"
-	MutationsPath    = "/v1/xlsx/mutations"
-	XLSXContentType  = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	HeaderRevision   = "X-InjOffice-Revision"
-	HeaderPackageSHA = "X-InjOffice-Package-SHA256"
-	HeaderArtifactID = "X-InjOffice-Artifact-Id"
-	multipartMemory  = 32 << 20
+	ExtractPath        = "/v1/xlsx/extract"
+	PreviewObjectsPath = "/v1/xlsx/preview-objects"
+	MutationsPath      = "/v1/xlsx/mutations"
+	XLSXContentType    = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	HeaderRevision     = "X-InjOffice-Revision"
+	HeaderPackageSHA   = "X-InjOffice-Package-SHA256"
+	HeaderArtifactID   = "X-InjOffice-Artifact-Id"
+	multipartMemory    = 32 << 20
 )
 
 // Store is an optional artifact backend. IDs are opaque tokens minted by
@@ -88,7 +89,7 @@ func ApplyNativeMutation(original, payload []byte, outerExpectedRevision string)
 	return result.Package, nil
 }
 
-// NewHandler serves POST /v1/xlsx/extract and POST /v1/xlsx/mutations.
+// NewHandler serves native extract, read-only preview objects, and mutations.
 // store may be nil; artifact_id is then refused.
 func NewHandler(store Store) http.Handler {
 	mux := http.NewServeMux()
@@ -96,8 +97,33 @@ func NewHandler(store Store) http.Handler {
 	return WithLocalHelperHeaders(mux)
 }
 
-// Register mounts the XLSX extract/mutation routes on mux without CORS.
+// Register mounts the XLSX extract/inspection/mutation routes without CORS.
 func Register(mux *http.ServeMux, store Store) {
+	mux.HandleFunc(PreviewObjectsPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			WriteError(w, http.StatusMethodNotAllowed, errors.New("POST required"))
+			return
+		}
+		data, _, err := ReadExtractRequest(w, r, store, XLSXEnvelope())
+		if err != nil {
+			WriteBodyError(w, err)
+			return
+		}
+		projection, err := xlsxpatch.InspectNativeWorkbookObjectsV1(data)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+		encoded, err := json.Marshal(projection)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(encoded)
+	})
 	mux.HandleFunc(ExtractPath, func(w http.ResponseWriter, r *http.Request) {
 		handleExtract(w, r, store)
 	})

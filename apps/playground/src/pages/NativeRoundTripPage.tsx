@@ -27,6 +27,7 @@ import {
   type XlsxRoundTripRuntime,
 } from '../xlsxRoundTripRuntime'
 import { nativeCellPreview } from '../nativeCellPreview'
+import { NativeWorkbookObjects } from '../components/NativeWorkbookObjects'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-fixture/launch-readiness-plan.xlsx`
@@ -415,6 +416,7 @@ export default function NativeRoundTripPage() {
                 </table>
               </div>
               <p className="ds-muted">Formula cells show saved results, which may be stale; this preview does not recalculate. Warning markers identify raw values or missing saved results.</p>
+              {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
               {previewWarnings.length > 0 && <details className="ds-muted">
                 <summary>{previewWarnings.length} preview cell warnings</summary>
                 <ul>{previewWarnings.slice(0, 12).map(({ ref, warning }) => <li key={ref}><strong>{ref}:</strong> {warning}</li>)}</ul>

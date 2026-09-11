@@ -18,6 +18,7 @@ const transaction = adaptWorkbookMutationBatchV1(workbook, buildCellMutation(wor
 describe('XLSX round-trip runtimes', () => {
   it('keeps the browser path entirely inside the injected WASM client', async () => {
     const client: XlsxWasmClient = {
+      inspectObjects: vi.fn(async () => ({protocol:'injoffice.xlsx.preview-objects' as const,version:1 as const,package_sha256:workbook.source.package_sha256,tables:[],charts:[]})),
       extract: vi.fn(async () => workbook),
       apply: vi.fn(async () => new Uint8Array([4, 5, 6])),
       terminate: vi.fn(),
@@ -29,6 +30,8 @@ describe('XLSX round-trip runtimes', () => {
     await expect(runtime.apply({ original, workbook, transaction })).resolves.toEqual({ bytes: new Uint8Array([4, 5, 6]) })
     expect(client.extract).toHaveBeenCalledWith(original)
     expect(client.apply).toHaveBeenCalledWith(original, workbook, transaction)
+    await runtime.inspectObjects!(original,workbook.source.package_sha256)
+    expect(client.inspectObjects).toHaveBeenCalledWith(original,workbook.source.package_sha256)
     runtime.terminate()
     expect(client.terminate).toHaveBeenCalledOnce()
   })
@@ -36,6 +39,7 @@ describe('XLSX round-trip runtimes', () => {
   it('does not introduce a remote retry when browser extraction fails', async () => {
     const refusal = new Error('native refusal')
     const client: XlsxWasmClient = {
+      inspectObjects: vi.fn(),
       extract: vi.fn(async () => { throw refusal }),
       apply: vi.fn(),
       terminate: vi.fn(),

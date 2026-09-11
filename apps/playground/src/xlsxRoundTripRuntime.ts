@@ -3,8 +3,9 @@ import {
   type XlsxNativeMutationTransactionV1,
   type XlsxWasmClient,
 } from '@injoffice/xlsx-wasm'
-import type { NativeWorkbookV2 } from '@injoffice/sheets/browser'
+import { decodeNativeWorkbookObjectsV1, type NativeWorkbookV2, type NativeWorkbookObjectsV1 } from '@injoffice/sheets/browser'
 import { decodeNativeWorkbook } from './nativeRoundTrip'
+import { readNativePreviewResponse } from './components/NativeDocxPages'
 
 export type XlsxRoundTripMode = 'browser' | 'server'
 
@@ -28,6 +29,7 @@ export interface XlsxApplyResult {
 }
 
 export interface XlsxRoundTripRuntime {
+  inspectObjects?(bytes: Uint8Array, packageSHA256: string): Promise<NativeWorkbookObjectsV1>
   extract(bytes: Uint8Array): Promise<XlsxExtractResult>
   apply(input: XlsxApplyInput): Promise<XlsxApplyResult>
   terminate(): void
@@ -37,6 +39,7 @@ export function createBrowserXlsxRoundTripRuntime(
   client: XlsxWasmClient = createXlsxWasmClient(),
 ): XlsxRoundTripRuntime {
   return {
+    inspectObjects: (bytes, hash) => client.inspectObjects(bytes, hash),
     async extract(bytes) {
       return { workbook: await client.extract(bytes), artifactId: '' }
     },
@@ -58,6 +61,12 @@ export function createServerXlsxRoundTripRuntime(
     throw new Error('Server fallback requires an explicit nonempty VITE_INJOFFICE_API_BASE.')
   }
   return {
+    async inspectObjects(bytes, hash) {
+      const response = await fetcher(`${base}/v1/xlsx/preview-objects`, {method:'POST',headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},body:copyArrayBuffer(bytes),credentials:'omit',redirect:'error'})
+      const body = await readNativePreviewResponse(response, 8 * 1024 * 1024)
+      if (!response.ok) throw responseError(response, JSON.stringify(body))
+      return decodeNativeWorkbookObjectsV1(body, hash)
+    },
     async extract(bytes) {
       const response = await fetcher(`${base}/v1/xlsx/extract`, {
         method: 'POST',

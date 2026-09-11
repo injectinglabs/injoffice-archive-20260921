@@ -7058,7 +7058,7 @@
             {
               "name": "NativeWasmOperation",
               "kind": "type",
-              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'apply'"
+              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'apply'"
             },
             {
               "name": "NativeWasmOperationOptions",
@@ -10998,6 +10998,11 @@
               "signature": "export declare function createNativeSheetGeometryRecordingSurfaceV2(maxCommands?: number): NativeSheetGeometryRecordingSurfaceV2"
             },
             {
+              "name": "decodeNativeWorkbookObjectsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeWorkbookObjectsV1(input: unknown, packageSHA256: string): NativeWorkbookObjectsV1"
+            },
+            {
               "name": "DecodeNativeWorkbookResult",
               "kind": "type",
               "signature": "DecodeNativeWorkbookResult"
@@ -11096,6 +11101,11 @@
               "name": "isNativeMaximumDigitWidthAuthorityV2",
               "kind": "function",
               "signature": "export declare function isNativeMaximumDigitWidthAuthorityV2(value: unknown): value is NativeMaximumDigitWidthAuthorityV2"
+            },
+            {
+              "name": "layoutNativeCachedChartV1",
+              "kind": "function",
+              "signature": "export declare function layoutNativeCachedChartV1(chart: NativeChartPreviewV1):"
             },
             {
               "name": "MAX_WORKBOOK_MUTATIONS",
@@ -11251,6 +11261,21 @@
               "name": "NativeBorderStyleV2",
               "kind": "type",
               "signature": "NativeBorderStyleV2"
+            },
+            {
+              "name": "NativeCachedChartMarkV1",
+              "kind": "type",
+              "signature": "NativeCachedChartMarkV1"
+            },
+            {
+              "name": "NativeChartPreviewV1",
+              "kind": "type",
+              "signature": "NativeChartPreviewV1"
+            },
+            {
+              "name": "NativeChartSeriesPreviewV1",
+              "kind": "type",
+              "signature": "NativeChartSeriesPreviewV1"
             },
             {
               "name": "NativeFormulaType",
@@ -11698,6 +11723,11 @@
               "signature": "NativeStyleUnsupportedCodeV2"
             },
             {
+              "name": "NativeTablePreviewV1",
+              "kind": "type",
+              "signature": "NativeTablePreviewV1"
+            },
+            {
               "name": "NativeValueKind",
               "kind": "type",
               "signature": "NativeValueKind"
@@ -11836,6 +11866,11 @@
               "name": "NativeWorkbookNormalStyleV2",
               "kind": "type",
               "signature": "NativeWorkbookNormalStyleV2"
+            },
+            {
+              "name": "NativeWorkbookObjectsV1",
+              "kind": "type",
+              "signature": "NativeWorkbookObjectsV1"
             },
             {
               "name": "NativeWorkbookPassthroughPartV1",
@@ -12214,6 +12249,11 @@
               "signature": "export declare function assertNativeWorkbookV2(input: unknown): asserts input is NativeWorkbookV2"
             },
             {
+              "name": "decodeNativeWorkbookObjectsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeWorkbookObjectsV1(input: unknown, packageSHA256: string): NativeWorkbookObjectsV1"
+            },
+            {
               "name": "decodeNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function decodeNativeWorkbookV2(source: string): DecodeNativeWorkbookV2Result"
@@ -12229,14 +12269,44 @@
               "signature": "export declare function formatNativeSheetCellDisplayV2(kind: 'number' | 'date', lexical: string, numberFormat: string | undefined, date1904?: boolean): NativeSheetCellDisplayFormatResultV2"
             },
             {
+              "name": "layoutNativeCachedChartV1",
+              "kind": "function",
+              "signature": "export declare function layoutNativeCachedChartV1(chart: NativeChartPreviewV1):"
+            },
+            {
+              "name": "NativeCachedChartMarkV1",
+              "kind": "type",
+              "signature": "NativeCachedChartMarkV1"
+            },
+            {
+              "name": "NativeChartPreviewV1",
+              "kind": "type",
+              "signature": "NativeChartPreviewV1"
+            },
+            {
+              "name": "NativeChartSeriesPreviewV1",
+              "kind": "type",
+              "signature": "NativeChartSeriesPreviewV1"
+            },
+            {
               "name": "NativeSheetCellDisplayFormatResultV2",
               "kind": "type",
               "signature": "NativeSheetCellDisplayFormatResultV2"
             },
             {
+              "name": "NativeTablePreviewV1",
+              "kind": "type",
+              "signature": "NativeTablePreviewV1"
+            },
+            {
               "name": "NativeWorkbookCellV2",
               "kind": "type",
               "signature": "export interface NativeWorkbookCellV2"
+            },
+            {
+              "name": "NativeWorkbookObjectsV1",
+              "kind": "type",
+              "signature": "NativeWorkbookObjectsV1"
             },
             {
               "name": "NativeWorkbookSheetV2",
