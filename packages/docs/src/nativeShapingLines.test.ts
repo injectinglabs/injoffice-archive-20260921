@@ -1283,6 +1283,32 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'paint-diagnostic-preserved', source_diagnostic_code: 'THEME_COLOR_PRESERVED' })]))
   })
 
+  it('allows exact latent style behavior metadata only at its bound document scope', async () => {
+    for (const variant of ['qualified', 'old-code', 'run-scope', 'wrong-part', 'wrong-path', 'active-style'] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'Latent metadata does not format text')
+      const resolved = resolvedLayout(document)
+      resolved.source_parts.styles_part = 'word/styles.xml'
+      resolved.diagnostics.push({
+        code: variant === 'old-code' ? 'LATENT_STYLES_PRESERVED' : variant === 'active-style' ? 'MISSING_PARAGRAPH_STYLE' : 'LATENT_STYLE_BEHAVIOR_PRESERVED',
+        severity: 'unsupported', preservation: 'preserve-verbatim',
+        scope_id: variant === 'run-scope' ? 'run:intro:text' : document.document_id,
+        part_name: variant === 'wrong-part' ? 'word/document.xml' : 'word/styles.xml',
+        path: variant === 'wrong-path' ? '/w:styles[1]/w:style[1]' : '/w:styles[1]/w:latentStyles[1]',
+        message: 'UI metadata is preserved',
+      })
+      const before = JSON.stringify(resolved)
+      const result = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders([]))
+      expect(result.ok, variant).toBe(true)
+      if (!result.ok) continue
+      if (variant === 'qualified') {
+        expect(result.value.paragraphs.length).toBeGreaterThan(0)
+        expect(result.value.diagnostics).toEqual([])
+      } else expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'unresolved-layout-diagnostic' })]))
+      expect(JSON.stringify(resolved)).toBe(before)
+    }
+  })
+
   it('emits pagination-policy diagnostics without attempting pagination', async () => {
     const document = nativeDocument()
     makeTextOnly(document, 'policy')

@@ -534,6 +534,7 @@ func (resolver *nativeLayoutResolver) loadStyles(partName string) error {
 		return fmt.Errorf("docxpatch: native style resolution: styles part exceeds %d top-level entries", NativeDOCXMaxCollectionItems)
 	}
 	seenDocDefaults := false
+	seenLatentStyles := false
 	for _, child := range root.Children {
 		if child.Name.Space != resolver.wordNS {
 			resolver.addDiagnostic("FOREIGN_STYLES_MARKUP", resolver.doc.DocumentID, partName, child, "Foreign styles metadata is preserved and not interpreted")
@@ -620,12 +621,83 @@ func (resolver *nativeLayoutResolver) loadStyles(partName string) error {
 				}
 			}
 		case "latentStyles":
-			resolver.addDiagnostic("LATENT_STYLES_PRESERVED", resolver.doc.DocumentID, partName, child, "Latent style metadata is preserved but does not alter the explicit cascade")
+			if seenLatentStyles {
+				return fmt.Errorf("docxpatch: native style resolution: duplicate latentStyles")
+			}
+			seenLatentStyles = true
+			if nativeLatentStyleBehaviorOnly(child, resolver.wordNS) {
+				resolver.addDiagnostic("LATENT_STYLE_BEHAVIOR_PRESERVED", resolver.doc.DocumentID, partName, child, "Exact latent style UI/locking metadata is preserved; it supplies no formatting and does not authorize edits")
+			} else {
+				resolver.addDiagnostic("LATENT_STYLES_PRESERVED", resolver.doc.DocumentID, partName, child, "Unqualified latent style metadata is preserved and not interpreted")
+			}
 		default:
 			resolver.addDiagnostic("UNMODELED_STYLES_MARKUP", resolver.doc.DocumentID, partName, child, "Styles metadata outside the conservative cascade is preserved verbatim")
 		}
 	}
 	return nil
+}
+
+// ISO/IEC 29500-1 17.7.4.5: latent styles contain behavior, not formatting.
+// Recognize only the exact metadata grammar; unknown extensions stay blocking.
+// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.latentstyles
+func nativeLatentStyleBehaviorOnly(node *nativeXMLNode, wordNS string) bool {
+	check := func(n *nativeXMLNode, root bool) bool {
+		if !nativeXMLWhitespaceOnly(n.Text) {
+			return false
+		}
+		seen := map[xml.Name]bool{}
+		for _, attr := range n.Attrs {
+			if nativeSettingsNamespaceDeclaration(attr) {
+				continue
+			}
+			if attr.Name.Space != wordNS || seen[attr.Name] {
+				return false
+			}
+			seen[attr.Name] = true
+			key := attr.Name.Local
+			if root {
+				switch key {
+				case "defLockedState", "defSemiHidden", "defUnhideWhenUsed", "defQFormat":
+					if _, valid := nativeLexicalOnOff(attr.Value); !valid {
+						return false
+					}
+				case "count", "defUIPriority":
+					if _, err := strconv.ParseUint(attr.Value, 10, 32); err != nil {
+						return false
+					}
+				default:
+					return false
+				}
+			} else {
+				switch key {
+				case "locked", "semiHidden", "unhideWhenUsed", "qFormat":
+					if _, valid := nativeLexicalOnOff(attr.Value); !valid {
+						return false
+					}
+				case "uiPriority":
+					if _, err := strconv.ParseUint(attr.Value, 10, 32); err != nil {
+						return false
+					}
+				case "name":
+					if strings.TrimSpace(attr.Value) == "" {
+						return false
+					}
+				default:
+					return false
+				}
+			}
+		}
+		return root || seen[xml.Name{Space: wordNS, Local: "name"}]
+	}
+	if !check(node, true) || len(node.Children) > NativeDOCXMaxCollectionItems {
+		return false
+	}
+	for _, child := range node.Children {
+		if child.Name != (xml.Name{Space: wordNS, Local: "lsdException"}) || len(child.Children) != 0 || !check(child, false) {
+			return false
+		}
+	}
+	return true
 }
 
 func (resolver *nativeLayoutResolver) loadFonts(partName string) error {

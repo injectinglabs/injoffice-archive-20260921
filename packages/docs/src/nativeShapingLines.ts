@@ -44,6 +44,7 @@ import {
   resolveNativeBidiParagraphV1,
 } from '@injoffice/font-metrics/bidi'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import {
   DOCX_NATIVE_LIMITS,
@@ -1928,6 +1929,7 @@ async function shapeParagraph(context: NativeShapingContext, story: NativeDocxSt
 function blockingDiagnostics(resolved: NativeDocxResolvedLayoutInputV1, paragraphIDs: Set<string>, runIDs: Set<string>, tableIDs: Set<string>): Map<string, NativeDocxResolvedLayoutInputV1['diagnostics']> {
   const result = new Map<string, NativeDocxResolvedLayoutInputV1['diagnostics']>()
   for (const diagnostic of resolved.diagnostics) {
+    if (isRenderNeutralLayoutDiagnostic(diagnostic, resolved)) continue
     if ((PAINT_ONLY_RESOLUTION_DIAGNOSTICS.has(diagnostic.code) && (paragraphIDs.has(diagnostic.scope_id) || runIDs.has(diagnostic.scope_id))) || (TABLE_ONLY_RESOLUTION_DIAGNOSTICS.has(diagnostic.code) && tableIDs.has(diagnostic.scope_id))) continue
     const diagnostics = result.get(diagnostic.scope_id) ?? []
     diagnostics.push(diagnostic)

@@ -3,10 +3,59 @@ package docxpatch
 import (
 	"bytes"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestNativeLatentStyleBehaviorIsRenderNeutralButPreserved(t *testing.T) {
+	metadata := `<w:latentStyles w:defLockedState="1" w:defUIPriority="99" w:count="2"><w:lsdException w:name="Heading 2" w:locked="false" w:semiHidden="0" w:unhideWhenUsed="true" w:qFormat="1" w:uiPriority="2"/></w:latentStyles>`
+	styles := `<w:styles xmlns:w="` + wordMLTransitional + `">%s<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:rPr><w:sz w:val="24"/></w:rPr></w:style></w:styles>`
+	baseline, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(resolvedStylesTestParts(strings.Replace(styles, "%s", "", 1)))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := resolvedStylesTestParts(strings.Replace(styles, "%s", metadata, 1))
+	data := buildNativeDOCX(t, nativeEntries(parts))
+	before := append([]byte(nil), data...)
+	resolved, err := ResolveNativeDocumentLayoutV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, before) {
+		t.Fatal("resolution changed source bytes")
+	}
+	if !reflect.DeepEqual(baseline.Runs[0].Properties, resolved.Runs[0].Properties) || !reflect.DeepEqual(baseline.Paragraphs[0].Properties, resolved.Paragraphs[0].Properties) {
+		t.Fatal("latent metadata changed formatting")
+	}
+	if len(resolved.Diagnostics) != 1 || resolved.Diagnostics[0].Code != "LATENT_STYLE_BEHAVIOR_PRESERVED" || resolved.Diagnostics[0].Severity != "unsupported" || resolved.Diagnostics[0].Preservation != "preserve-verbatim" {
+		t.Fatalf("lost preservation diagnostic: %#v", resolved.Diagnostics)
+	}
+	for name, markup := range map[string]string{
+		"unknown attribute": `<w:latentStyles w:layout="1"/>`,
+		"foreign attribute": `<w:latentStyles xmlns:x="urn:foreign" x:count="1"/>`,
+		"invalid boolean":   `<w:latentStyles w:defLockedState="maybe"/>`,
+		"invalid number":    `<w:latentStyles w:count="-1"/>`,
+		"missing name":      `<w:latentStyles><w:lsdException w:locked="1"/></w:latentStyles>`,
+		"nested formatting": `<w:latentStyles><w:lsdException w:name="Heading 2"><w:rPr/></w:lsdException></w:latentStyles>`,
+		"foreign child":     `<w:latentStyles><x:lsdException xmlns:x="urn:foreign" x:name="Heading 2"/></w:latentStyles>`,
+		"text":              `<w:latentStyles>unmodeled</w:latentStyles>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(resolvedStylesTestParts(strings.Replace(styles, "%s", markup, 1)))))
+			if err != nil {
+				return
+			} // Namespace spoofing may reject before classification.
+			if len(got.Diagnostics) == 0 || got.Diagnostics[0].Code != "LATENT_STYLES_PRESERVED" {
+				t.Fatalf("unqualified metadata became neutral: %#v", got.Diagnostics)
+			}
+		})
+	}
+	if _, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(resolvedStylesTestParts(strings.Replace(styles, "%s", metadata+metadata, 1))))); err == nil {
+		t.Fatal("duplicate latentStyles accepted")
+	}
+}
 
 func TestResolveNativeDocumentLayoutV1CascadePrecedenceAndToggles(t *testing.T) {
 	parts := map[string]string{

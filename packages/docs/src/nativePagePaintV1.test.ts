@@ -264,6 +264,48 @@ async function painted(request = fixture(), provider = new FixtureProvider()) {
 }
 
 describe('native DOCX page-paint v1', () => {
+  it('bounds upstream refusal reasons and keeps valid atomic output', async () => {
+    const request = fixture()
+    const settings = request.pagination_request.pagination_settings
+    settings.profile = 'unsupported'
+    settings.diagnostics = Array.from({ length: 12 }, (_, index) => ({
+      code: 'PAGINATION_SETTING_UNSUPPORTED' as const, severity: 'unsupported' as const, preservation: 'preserve-verbatim' as const,
+      part_name: settings.settings_part!, path: '/w:settings[1]', message: `Unsupported setting ${index}`,
+    }))
+    const layout = paginateNativeDocxV1(request.pagination_request)
+    expect(layout.ok, JSON.stringify(layout)).toBe(true)
+    if (!layout.ok) return
+    request.paginated_layout = layout.value
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(layout.value)
+    const provider = new FixtureProvider()
+    const result = await compileNativeDocxPagePaintV1(request, provider)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.status).toBe('refused')
+    expect(result.value.pages).toEqual([])
+    expect(result.value.resources).toEqual([])
+    expect(result.value.diagnostics).toHaveLength(10)
+    expect(result.value.diagnostics[1]!.message).toContain('PAGINATION_SETTING_UNSUPPORTED')
+    expect(result.value.diagnostics.at(-1)!.message).toContain('4 additional pagination reasons omitted')
+    expect(result.value.diagnostics.every((entry) => entry.message.length <= 4096)).toBe(true)
+    expect(decodeNativeDocxPagePaintV1(result.value).ok).toBe(true)
+    expect(provider.calls).toBe(0)
+  })
+
+  it('paints with qualified latent metadata without removing preservation evidence', async () => {
+    const request = fixture()
+    const resolved = request.pagination_request.resolved_layout
+    resolved.source_parts.styles_part = 'word/styles.xml'
+    resolved.diagnostics.push({ code: 'LATENT_STYLE_BEHAVIOR_PRESERVED', severity: 'unsupported', scope_id: resolved.document_id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:latentStyles[1]', preservation: 'preserve-verbatim', message: 'Exact UI metadata retained' })
+    const before = JSON.stringify(request.pagination_request.document)
+    const result = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(result.ok && result.value.status).toBe('painted')
+    expect(resolved.diagnostics).toHaveLength(1)
+    expect(JSON.stringify(request.pagination_request.document)).toBe(before)
+    resolved.diagnostics[0]!.code = 'LATENT_STYLES_PRESERVED'
+    const unknown = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(unknown.ok && unknown.value.status).toBe('refused')
+  })
   it('bounds paginated-layout hashing and keeps object-key order irrelevant', () => {
     const layout = fixture().paginated_layout
     const reordered = Object.fromEntries(Object.entries(structuredClone(layout)).reverse()) as typeof layout
@@ -635,6 +677,8 @@ describe('native DOCX page-paint v1', () => {
     const drawingProvider = new FixtureProvider()
     const drawingResult = await compileNativeDocxPagePaintV1(drawingRequest, drawingProvider)
     expect(drawingResult.ok && drawingResult.value.status === 'refused' ? drawingResult.value.diagnostics[0]?.code : undefined).toBe('upstream-refused')
+    expect(drawingResult.ok && drawingResult.value.diagnostics.slice(1)).toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining(refusedLayout.value.diagnostics[0]!.code) })]))
+    if (drawingResult.ok) expect(decodeNativeDocxPagePaintV1(drawingResult.value).ok).toBe(true)
     expect(drawingResult.ok && drawingResult.value.pages).toEqual([])
     expect(drawingProvider.calls).toBe(0)
   })

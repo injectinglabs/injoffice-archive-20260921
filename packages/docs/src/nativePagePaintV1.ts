@@ -18,6 +18,7 @@ import {
 } from './nativePagePaintWireV1.js'
 import { validateNativeDocxBodyPageFieldSourceV1 } from './nativeBodyPageFieldsV1.js'
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
+import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
 export {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL, DOCX_PAGE_PAINT_REQUEST_VERSION,
@@ -846,13 +847,25 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
   const pagination = request.pagination_request
   const layout = request.paginated_layout
   const documentID = pagination.document.document_id
-  if (layout.status !== 'paginated') return { ok: true, value: refusal(provenance, 'upstream-refused', documentID, 'Native pagination refused; no visual projection was emitted') }
+  if (layout.status !== 'paginated') {
+    const result = refusal(provenance, 'upstream-refused', documentID, 'Native pagination refused; no visual projection was emitted')
+    // Keep the v1 wire schema and atomic refusal, but expose actionable source
+    // reasons. Bound the expansion independently of the upstream corpus size.
+    const reasons = layout.diagnostics.filter((entry) => entry.severity !== 'deferred')
+    result.diagnostics.push(...reasons.slice(0, 8).map((entry) => refusal(
+      provenance, 'upstream-refused', entry.scope_id,
+      `Pagination ${entry.code}${entry.source_code ? ` / ${entry.source_code}` : ''}: ${entry.source_message ?? entry.message}`,
+    ).diagnostics[0]!))
+    if (reasons.length > 8) result.diagnostics.push(refusal(provenance, 'upstream-refused', documentID, `${reasons.length - 8} additional pagination reasons omitted; inspect the prepared paginated_layout diagnostics`).diagnostics[0]!)
+    return { ok: true, value: result }
+  }
   if (headerFooter.status === 'refused') return { ok: true, value: refusal(provenance, 'unsupported-source', headerFooter.diagnostics[0]?.scope_id ?? documentID, headerFooter.diagnostics[0]?.message ?? 'Native header/footer layout refused') }
   const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
   const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => entry.code !== 'page-control-deferred' || entry.source_id !== undefined)
-  if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || pagination.resolved_layout.diagnostics.length > 0) {
-    const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? pagination.resolved_layout.diagnostics[0]
-    return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires diagnostic-free shaping/resolution and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }
+  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout))
+  if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
+    const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]
+    return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires no blocking shaping/resolution diagnostics and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }
   }
   const qualifiedTables = qualifyNativeDocxTablesV1(pagination.document, pagination.resolved_layout, pagination.shaped_lines)
   if (qualifiedTables.status !== 'qualified') return { ok: true, value: refusal(provenance, 'unsupported-source', qualifiedTables.diagnostics[0]!.scope_id, qualifiedTables.diagnostics[0]!.message) }
