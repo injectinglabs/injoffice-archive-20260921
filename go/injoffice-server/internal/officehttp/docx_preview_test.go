@@ -1,6 +1,7 @@
 package officehttp
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -146,7 +147,67 @@ func TestDOCXPreviewRealWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandlerWithDOCXPreview(nil, DOCXPreviewOptions{WorkerPath: worker})
+	t.Run("embedded", func(t *testing.T) { assertDOCXPreviewPainted(t, data, DOCXPreviewOptions{WorkerPath: worker}) })
+	fontPath := os.Getenv("INJOFFICE_TEST_DOCX_HOST_FONT")
+	if fontPath == "" {
+		return
+	}
+	t.Run("host", func(t *testing.T) {
+		font, err := os.ReadFile(fontPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := json.Marshal(map[string]any{"version": 1, "faces": []any{map[string]any{"family": "DejaVu Sans", "weight": 400, "style": "normal", "path": fontPath, "sha256": fmt.Sprintf("sha256:%x", sha256.Sum256(font))}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestPath := filepath.Join(t.TempDir(), "fonts.json")
+		if err := os.WriteFile(manifestPath, manifest, 0600); err != nil {
+			t.Fatal(err)
+		}
+		archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		writer := zip.NewWriter(&out)
+		for _, part := range archive.File {
+			if strings.HasPrefix(part.Name, "word/fonts/") || part.Name == "word/_rels/fontTable.xml.rels" {
+				continue
+			}
+			reader, err := part.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			content, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if part.Name == "word/fontTable.xml" {
+				content = []byte(`<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:font w:name="DejaVu Sans"/></w:fonts>`)
+			}
+			if part.Name == "[Content_Types].xml" {
+				content = bytes.ReplaceAll(content, []byte(`<Override PartName="/word/fonts/regular.odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>`), nil)
+			}
+			entry, err := writer.Create(part.Name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := entry.Write(content); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		assertDOCXPreviewPainted(t, out.Bytes(), DOCXPreviewOptions{WorkerPath: worker, FontManifestPath: manifestPath})
+	})
+}
+
+func assertDOCXPreviewPainted(t *testing.T, data []byte, options DOCXPreviewOptions) {
+	t.Helper()
+	handler := NewHandlerWithDOCXPreview(nil, options)
 	request := httptest.NewRequest(http.MethodPost, DOCXPreviewPath, bytes.NewReader(data))
 	request.Header.Set("Content-Type", DOCXContentType)
 	response := httptest.NewRecorder()

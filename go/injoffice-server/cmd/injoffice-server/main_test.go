@@ -36,6 +36,17 @@ func TestPPTXPreviewFlagsRequireAbsolutePair(t *testing.T) {
 	}
 }
 
+func TestDOCXFontFlagsRequireEnabledWorkerAndAbsolutePath(t *testing.T) {
+	for _, args := range [][]string{
+		{"-docx-font-manifest", "/operator/fonts.json"},
+		{"-docx-preview-worker", "/operator/worker.js", "-docx-font-manifest", "fonts.json"},
+	} {
+		if got := run(args); got != 2 {
+			t.Fatalf("invalid configuration returned %d", got)
+		}
+	}
+}
+
 func readHappyTree(t *testing.T) []byte {
 	t.Helper()
 	path := filepath.Join("..", "..", "..", "xlsxpatch", "testdata", "excel-authored", "happy-tree.xlsx")

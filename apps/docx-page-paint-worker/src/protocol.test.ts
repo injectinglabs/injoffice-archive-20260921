@@ -50,6 +50,13 @@ describe('native DOCX page-paint worker protocol', () => {
       protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: DOCX_PAGE_PAINT_WORKER_VERSION, id: 'prepare:unknown', op: 'prepare', input: { ...base, caller_override: true },
     })
     expect(unknown).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED', message: expect.stringContaining('exact canonical compiler input') } })
+    for (const field of ['host_font_manifest_path', 'fonts']) {
+      const pathOverride = await dispatchNativeDocxPagePaintWorkerRequestV1({
+        protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: DOCX_PAGE_PAINT_WORKER_VERSION,
+        id: 'prepare:path-override', op: 'prepare', input: { ...base, [field]: '/caller/chosen/fonts.json' },
+      })
+      expect(pathOverride).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED', message: expect.stringContaining('exact canonical compiler input') } })
+    }
 
     let touched = false
     const hostile: Record<string, unknown> = {}

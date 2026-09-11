@@ -43,6 +43,7 @@ import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSqu
 import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1 } from './nativeTablePagePaintV1.js'
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { decodeNativeDOCXFontInventoryV1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
+export { decodeNativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import {
   DOCX_PAGINATION_REQUEST_PROTOCOL,
   DOCX_PAGINATION_REQUEST_VERSION,
@@ -110,6 +111,13 @@ export interface NativeDocxPagePaintPrepareInputV1 {
   font_inventory_json: string
   font_assets: readonly NativeDocxAuthoritativeFontAssetV1[]
   media_assets: readonly NativeDocxAuthoritativeMediaAssetV1[]
+}
+
+/** Explicit host-owned font resources for read-only layout. No system lookup or
+ * substitution is performed. Embedded document faces cannot be overridden. */
+export interface NativeDocxHostFontsV1 {
+  manifest: NativeFontManifest
+  resolver: NativeFontResolver
 }
 
 export interface NativeDocxPagePaintPreparedV1 {
@@ -352,6 +360,7 @@ async function attestResolvedFontReferencesBeforeBidi(
   references: NativeDOCXFontInventoryV1['references'],
 ): Promise<void> {
   const loadedFaces = new Set<string>()
+  let totalBytes = 0
   for (const reference of references) {
     const run: TextRunInput = Object.freeze({
       version: NATIVE_TEXT_LAYOUT_VERSION,
@@ -363,13 +372,16 @@ async function attestResolvedFontReferencesBeforeBidi(
       direction: 'ltr',
     })
     const resolution = await resolver.resolve(Object.freeze({ manifest, run }))
-    if (!resolution || typeof resolution !== 'object' || 'status' in resolution && resolution.status === 'refused' || !('face' in resolution)) throw new TypeError('every authored font reference must resolve through the attested embedded-font provider before bidi')
+    if (!resolution || typeof resolution !== 'object' || 'status' in resolution && resolution.status === 'refused' || !('face' in resolution)) throw new TypeError('every authored font reference must resolve through the attested font provider before bidi')
     const face = resolution.face
     const manifestFace = manifest.faces.find((candidate) => candidate.faceId === face.faceId)
     if (!manifestFace || face.sourceKind === 'system' || !face.contentDigest || manifestFace.source.contentDigest !== face.contentDigest || face.weight !== reference.weight || face.style !== reference.style || face.stretch !== 100) throw new TypeError('pre-bidi font resolution does not exact-join one content-addressed manifest face')
     if (loadedFaces.has(face.faceId)) continue
     const resource = await resolver.load(face)
-    if (!resource || typeof resource !== 'object' || 'status' in resource && resource.status === 'refused' || !('bytes' in resource) || !(resource.bytes instanceof Uint8Array) || !('face' in resource) || !sameFace(resource.face, face) || `sha256:${bytesToHex(sha256(resource.bytes))}` !== face.contentDigest) throw new TypeError('pre-bidi font load does not exact-join the attested content-addressed resource')
+    if (!resource || typeof resource !== 'object' || 'status' in resource && resource.status === 'refused' || !('bytes' in resource) || !(resource.bytes instanceof Uint8Array) || !('face' in resource) || !sameFace(resource.face, face)) throw new TypeError('pre-bidi font load does not exact-join the attested content-addressed resource')
+    if (resource.bytes.byteLength > MAX_FONT_BYTES || totalBytes + resource.bytes.byteLength > MAX_UNIQUE_FONT_BYTES) throw new RangeError('font resources exceed the bounded compiler budget')
+    if (`sha256:${bytesToHex(sha256(resource.bytes))}` !== face.contentDigest) throw new TypeError('pre-bidi font load does not exact-join the attested content-addressed resource')
+    totalBytes += resource.bytes.byteLength
     loadedFaces.add(face.faceId)
   }
 }
@@ -385,8 +397,10 @@ function validateInventoryPackagePartJoins(inventory: NativeDOCXFontInventoryV1,
   }
   join(binding.main_relationships_part, binding.main_relationships_sha256, 'application/vnd.openxmlformats-package.relationships+xml')
   join(binding.part_name, binding.sha256, 'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml')
-  if (!binding.font_relationships_part || !binding.font_relationships_sha256) throw new TypeError('font inventory has incomplete font relationship-part evidence')
-  join(binding.font_relationships_part, binding.font_relationships_sha256, 'application/vnd.openxmlformats-package.relationships+xml')
+  if (binding.font_relationships_part !== undefined || binding.font_relationships_sha256 !== undefined) {
+    if (!binding.font_relationships_part || !binding.font_relationships_sha256) throw new TypeError('font inventory has incomplete font relationship-part evidence')
+    join(binding.font_relationships_part, binding.font_relationships_sha256, 'application/vnd.openxmlformats-package.relationships+xml')
+  } else if (inventory.families.some((family) => family.faces.length > 0)) throw new TypeError('embedded fonts require relationship-part evidence')
   for (const family of inventory.families) for (const face of family.faces) join(face.source.asset_part, face.source.stored_sha256, face.source.asset_content_type, face.source.stored_byte_length)
 }
 
@@ -433,7 +447,7 @@ export function collectNativeDocxPagePaintOutlineRequestsV1(requestValue: unknow
   return [...unique.entries()].sort(([left], [right]) => compareNativeCodeUnits(left, right)).map(([, value]) => value)
 }
 
-export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1 }): Promise<NativeDocxPagePaintPreparedV1> {
+export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }): Promise<NativeDocxPagePaintPreparedV1> {
   if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'document,font_assets,font_inventory_json,media_assets,outline_provider,pagination_settings,protocol,resolved_layout,source_revision,version' || input.protocol !== DOCX_PAGE_PAINT_COMPILER_PROTOCOL || input.version !== DOCX_PAGE_PAINT_COMPILER_VERSION || !PROVIDER_ID.test(input.source_revision) || !input.outline_provider || typeof input.outline_provider !== 'object' || Object.keys(input.outline_provider).sort().join(',') !== 'provider_id,provider_revision' || !PROVIDER_ID.test(input.outline_provider.provider_id) || !PROVIDER_ID.test(input.outline_provider.provider_revision)) throw new TypeError('native page-paint compiler input identity is invalid')
   const document = decodeNativeDocxDocument(input.document)
   if (!document.ok) failIssues('native document is invalid', document.issues)
@@ -448,15 +462,27 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
     || inventory.document_id !== settings.value.document_id || inventory.revision !== settings.value.revision || inventory.package_sha256 !== settings.value.package_sha256 || inventory.main_part !== settings.value.main_part) throw new TypeError('font inventory does not exact-join the document, resolved layout, pagination settings, package, main part, and source revision')
   if (JSON.stringify(inventory.references) !== JSON.stringify(resolvedFontReferences(resolved.value))) throw new TypeError('font inventory references do not exactly and completely cover the resolved document scopes')
   validateInventoryPackagePartJoins(inventory, document.value, settings.value)
-  if (!inventory.native_text_manifest) throw new TypeError('font inventory has no exact native text manifest')
-  const manifest = validateFontManifest(inventory.native_text_manifest)
+  if (!inventory.native_text_manifest && !runtime?.fonts) throw new TypeError('document has no embedded fonts; configure explicit host fonts for native preview')
+  const manifest = validateFontManifest(runtime?.fonts?.manifest ?? inventory.native_text_manifest)
   if (!manifest.ok) throw new TypeError('font inventory native text manifest is invalid')
+  if (runtime?.fonts) {
+    if (manifest.value.revision !== document.value.revision || manifest.value.fallbackChains.length !== 0 || !PROVIDER_ID.test(runtime.fonts.resolver.providerId) || !PROVIDER_ID.test(runtime.fonts.resolver.providerRevision)) throw new TypeError('host font provider must bind this revision without fallback chains')
+    if (inventory.native_text_manifest) createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+    else if (input.font_assets.length !== 0) throw new TypeError('document font assets lack an embedded manifest')
+    const embedded = inventory.native_text_manifest?.faces ?? []
+    for (const face of embedded) {
+      if (!manifest.value.faces.some((candidate) => canonicalWireSha256(candidate) === canonicalWireSha256(face))) throw new TypeError('host fonts cannot override an embedded document face')
+    }
+    for (const face of manifest.value.faces) {
+      if (face.source.kind === 'document' ? !embedded.some((candidate) => canonicalWireSha256(candidate) === canonicalWireSha256(face)) : face.source.kind !== 'host' || !face.source.contentDigest) throw new TypeError('host manifest contains an unattested or non-host face')
+    }
+  }
   for (const reference of inventory.references) {
     const matches = manifest.value.faces.filter((face) => face.weight === reference.weight && face.style === reference.style && face.stretch === 100 && [face.family, ...(face.aliases ?? [])].some((name) => asciiEqual(name, reference.family)))
     if (matches.length !== 1) throw new TypeError('every authored font reference must have exactly one attested manifest face and resource before shaping')
   }
   const references = resolvedFontReferences(resolved.value)
-  const resolver = createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+  const resolver = runtime?.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
   const mediaAssets = prepareNativeDocxPagePaintMediaAssetsV1(document.value, input.media_assets)
   const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
   if (!isCanonicalHarfBuzzTextShaperV1(shaper, input.source_revision)) throw new TypeError('HarfBuzz shaper provenance does not attest the exact pinned runtime and requested engine source revision')

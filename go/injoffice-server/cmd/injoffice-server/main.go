@@ -86,6 +86,7 @@ func run(args []string) int {
 	addr := fs.String("addr", envOr("INJOFFICE_ADDR", defaultAddr), "listen address (host:port)")
 	dir := fs.String("artifacts", envOr("INJOFFICE_ARTIFACTS", defaultArtifacts), "directory for opaque artifact objects")
 	previewWorker := fs.String("docx-preview-worker", "", "opt-in absolute path to the compiled local DOCX page-paint worker")
+	docxFonts := fs.String("docx-font-manifest", "", "optional absolute operator-owned exact-font manifest for DOCX preview")
 	pptxWorker := fs.String("pptx-preview-worker", "", "opt-in absolute path to the local PPTX preview worker")
 	pptxFonts := fs.String("pptx-font-manifest", "", "absolute operator-owned exact-font manifest for PPTX preview")
 	if err := fs.Parse(args); err != nil {
@@ -93,6 +94,10 @@ func run(args []string) int {
 	}
 	if *previewWorker != "" && !filepath.IsAbs(*previewWorker) {
 		fmt.Fprintln(os.Stderr, "injoffice-server: docx-preview-worker must be an absolute local path")
+		return 2
+	}
+	if *docxFonts != "" && (*previewWorker == "" || !filepath.IsAbs(*docxFonts)) {
+		fmt.Fprintln(os.Stderr, "injoffice-server: docx-font-manifest requires an enabled worker and an absolute local path")
 		return 2
 	}
 	if (*pptxWorker == "") != (*pptxFonts == "") || *pptxWorker != "" && (!filepath.IsAbs(*pptxWorker) || !filepath.IsAbs(*pptxFonts)) {
@@ -107,7 +112,7 @@ func run(args []string) int {
 	fmt.Fprintf(os.Stderr, "injoffice-server: listening on http://%s artifacts=%s (no auth)\n", *addr, *dir)
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           newHandlerWithPreviews(store, officehttp.DOCXPreviewOptions{WorkerPath: *previewWorker}, officehttp.PPTXPreviewOptions{WorkerPath: *pptxWorker, FontManifestPath: *pptxFonts}),
+		Handler:           newHandlerWithPreviews(store, officehttp.DOCXPreviewOptions{WorkerPath: *previewWorker, FontManifestPath: *docxFonts}, officehttp.PPTXPreviewOptions{WorkerPath: *pptxWorker, FontManifestPath: *pptxFonts}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		// WriteTimeout stays 0 so the collab SSE stream can idle with keepalives.

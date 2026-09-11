@@ -81,6 +81,23 @@ paginates, outlines and validates native page paint. Missing fonts, unsupported
 layout and unavailable providers refuse rendering; the separately labeled
 approximate content preview remains available without weakening edit safety.
 
+For documents without embedded fonts, optionally pass
+`-docx-font-manifest /absolute/fonts.json` alongside `-docx-preview-worker`.
+The manifest is operator-owned configuration, never an HTTP request field:
+
+```json
+{"version":1,"faces":[{"family":"DejaVu Sans","weight":400,"style":"normal","path":"/absolute/DejaVuSans.ttf","sha256":"sha256:<64 lowercase hex digits>"}]}
+```
+
+Use separate entries for normal/bold (400/700) and normal/italic faces.
+Only exact referenced family/style matches are loaded; embedded document faces
+take precedence. Missing fonts and digest mismatches refuse rendering instead
+of substituting a system font. The current host provider accepts standalone
+TTF/OTF files, at most 32 configured faces, 16 MiB per file and 64 MiB total
+including embedded resources. Operators must have permission to use the fonts;
+this configuration does not bundle or redistribute them. Host fonts affect only
+the read-only native preview, not document bytes or mutation permissions.
+
 This route limits packages to 8 MiB, permits one compilation at a time, checks
 cancellation between extraction passes, and limits the subprocess to 30 seconds
 (within a 45-second request context), 64 MiB framed output and a 512 MiB V8 heap.

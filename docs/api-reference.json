@@ -3797,6 +3797,11 @@
               "signature": "export type NativeDocxHeaderFooterRegionV1 = 'header' | 'footer'"
             },
             {
+              "name": "NativeDocxHostFontsV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHostFontsV1"
+            },
+            {
               "name": "NativeDocxInlineImageQualificationV1",
               "kind": "type",
               "signature": "export type NativeDocxInlineImageQualificationV1 ="
@@ -4509,7 +4514,7 @@
             {
               "name": "prepareNativeDocxPagePaintV1",
               "kind": "function",
-              "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; }): Promise<NativeDocxPagePaintPreparedV1>"
+              "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxPagePaintPreparedV1>"
             },
             {
               "name": "prepareNativeRasterResourceV1",
@@ -4934,6 +4939,11 @@
               "signature": "export declare function createNativeDocxEmbeddedFontResolverV1(inventory: NativeDOCXFontInventoryV1, assetsValue: readonly NativeDocxAuthoritativeFontAssetV1[]): NativeFontResolver"
             },
             {
+              "name": "decodeNativeDOCXFontInventoryV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDOCXFontInventoryV1(json: string): NativeDOCXFontInventoryV1"
+            },
+            {
               "name": "DOCX_EMBEDDED_FONT_RESOLVER_ID",
               "kind": "const",
               "signature": "export declare const DOCX_EMBEDDED_FONT_RESOLVER_ID = \"injoffice.docx.embedded-fonts\""
@@ -4964,6 +4974,11 @@
               "signature": "NativeDocxAuthoritativeMediaAssetV1"
             },
             {
+              "name": "NativeDocxHostFontsV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHostFontsV1"
+            },
+            {
               "name": "NativeDocxPagePaintCompletedV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPagePaintCompletedV1"
@@ -4986,7 +5001,7 @@
             {
               "name": "prepareNativeDocxPagePaintV1",
               "kind": "function",
-              "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; }): Promise<NativeDocxPagePaintPreparedV1>"
+              "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxPagePaintPreparedV1>"
             }
           ]
         },

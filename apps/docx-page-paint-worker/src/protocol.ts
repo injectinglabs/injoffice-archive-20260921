@@ -8,6 +8,7 @@ import {
   type NativeDocxPagePaintPrepareInputV1,
 } from '@injoffice/docs/native-page-paint-compiler'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, type HarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
+import {loadHostFonts} from './hostFonts.js'
 
 export const DOCX_PAGE_PAINT_WORKER_PROTOCOL = 'injoffice.docx.page-paint-worker'
 export const DOCX_PAGE_PAINT_WORKER_VERSION = 1 as const
@@ -119,7 +120,7 @@ function workerShaper(sourceRevision: string): HarfBuzzTextShaperV1 {
   return runtimeShaper
 }
 
-export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown): Promise<NativeDocxPagePaintWorkerResponseV1> {
+export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown, hostFontManifestPath?: string): Promise<NativeDocxPagePaintWorkerResponseV1> {
   const candidateID = record(value) && typeof value.id === 'string' && REQUEST_ID.test(value.id) ? value.id : 'invalid'
   const base = { protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: DOCX_PAGE_PAINT_WORKER_VERSION, id: candidateID } as const
   try {
@@ -127,20 +128,24 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown)
     if (value.op === 'ping') return { ...base, ok: true, result: { status: 'ready' } }
     if (value.op === 'prepare') {
       const input = prepareInput(value.input)
-      return { ...base, ok: true, result: await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper }) }
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath) : undefined
+      return { ...base, ok: true, result: await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper, fonts }) }
     }
     if (value.op === 'render') {
       const input = prepareInput(value.input)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('render requires the pinned outline provider')
-      const prepared = await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper })
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath) : undefined
+      const prepared = await prepareNativeDocxPagePaintV1(input, { createShaper: workerShaper, fonts })
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const results = prepared.outline_requests.map((request) => {
         const asset = input.font_assets.find((asset) => asset.face_id === request.face.face_id && asset.content_digest === request.face.content_digest && (asset.collection_index ?? undefined) === request.face.collection_index)
-        if (!asset) throw new TypeError('outline face does not exact-join an authoritative font')
-        let provider = providers.get(asset.face_id)
+        const host = fonts?.resources.get(request.face.face_id)
+        const resource = asset ?? (host && host.face.contentDigest === request.face.content_digest && host.face.collectionIndex === request.face.collection_index ? {face_id:host.face.faceId,bytes:host.bytes,content_digest:request.face.content_digest,collection_index:host.face.collectionIndex??null} : undefined)
+        if (!resource) throw new TypeError('outline face does not exact-join an authoritative font')
+        let provider = providers.get(resource.face_id)
         if (!provider) {
-          provider = createHarfBuzzOutlineProviderV1({ bytes: asset.bytes, contentDigest: asset.content_digest, ...(asset.collection_index === null ? {} : { collectionIndex: asset.collection_index }) })
-          providers.set(asset.face_id, provider)
+          provider = createHarfBuzzOutlineProviderV1({ bytes: resource.bytes, contentDigest: resource.content_digest, ...(resource.collection_index === null ? {} : { collectionIndex: resource.collection_index }) })
+          providers.set(resource.face_id, provider)
         }
         const outline = provider.outline(request.glyph_id)
         return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em }

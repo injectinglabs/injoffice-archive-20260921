@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import type { NativeFontManifest } from '@injoffice/font-metrics/layout'
-import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1 } from '@injoffice/font-metrics/harfbuzz'
+import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
+import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, inspectHarfBuzzFontMetricsV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
 import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, type NativeDocxRunV1 } from './nativeContract.js'
 import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
@@ -366,6 +366,57 @@ function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV
   return input
 }
 describe('native DOCX page-paint compiler v1', () => {
+  function hostFixture() {
+    const input = fixture()
+    const original = JSON.parse(input.font_inventory_json) as NativeDOCXFontInventoryV1
+    const manifest = structuredClone(original.native_text_manifest!)
+    manifest.faces[0]!.source.kind = 'host'
+    const candidate = manifest.faces[0]!
+    const face: ResolvedFontFace = { faceId: candidate.faceId, family: candidate.family, weight: 400, style: 'normal', stretch: 100, sourceKind: 'host', resourceId: candidate.source.resourceId, contentDigest: FONT_DIGEST, resolution: 'exact', matchedFamily: candidate.family }
+    const metrics = inspectHarfBuzzFontMetricsV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const resolver: NativeFontResolver = {
+      providerId: 'test.host-fonts', providerRevision: 'v1',
+      resolve: () => ({ status: 'resolved', face, attemptedFaceIds: [face.faceId], decisions: [] }),
+      load: () => ({ face, bytes: Uint8Array.from(FONT_BYTES), metrics }),
+    }
+    input.font_assets = []
+    const document = input.document as NativeDocxDocumentV1
+    document.passthrough_parts = document.passthrough_parts.filter(p => p.part_name !== 'word/_rels/fontTable.xml.rels' && !p.part_name.startsWith('word/fonts/'))
+    rewriteInventory(input, inventory => {
+      inventory.families.forEach(f => { f.faces = [] })
+      delete inventory.font_table!.font_relationships_part
+      delete inventory.font_table!.font_relationships_sha256
+      delete inventory.native_text_manifest
+      delete inventory.native_text_manifest_sha256
+    })
+    return { input, fonts: { manifest, resolver } }
+  }
+
+  it('renders a non-embedded-font document with explicit content-addressed host fonts', async () => {
+    const { input, fonts } = hostFixture()
+    const before = JSON.stringify(input)
+    const prepared = await prepareNativeDocxPagePaintV1(input, { fonts })
+    expect(prepared.outline_requests.length).toBeGreaterThan(0)
+    expect(prepared.providers.resolver_id).toBe('test.host-fonts')
+    expect(JSON.stringify(input)).toBe(before)
+    await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow(/configure explicit host fonts/)
+  })
+
+  it('refuses stale, missing, corrupt, and overriding host font evidence', async () => {
+    const stale = hostFixture(); stale.fonts.manifest.revision = 'rev:other'
+    await expect(prepareNativeDocxPagePaintV1(stale.input, { fonts: stale.fonts })).rejects.toThrow(/revision/)
+    const missing = hostFixture(); missing.fonts.manifest.faces = []
+    await expect(prepareNativeDocxPagePaintV1(missing.input, { fonts: missing.fonts })).rejects.toThrow(/manifest|face/)
+    const corrupt = hostFixture(), load = corrupt.fonts.resolver.load
+    corrupt.fonts.resolver.load = async face => {
+      const resource = await load(face)
+      if ('bytes' in resource) resource.bytes[100] ^= 1
+      return resource
+    }
+    await expect(prepareNativeDocxPagePaintV1(corrupt.input, { fonts: corrupt.fonts })).rejects.toThrow(/exact-join/)
+    const override = hostFixture()
+    await expect(prepareNativeDocxPagePaintV1(fixture(), { fonts: override.fonts })).rejects.toThrow(/override an embedded/)
+  })
   it.each(['single', 'double', 'words'] as const)('paints font-bound %s underlines and rejects decoration tampering', async (style) => {
     const input = fixture()
     ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.properties = { underline: style }
