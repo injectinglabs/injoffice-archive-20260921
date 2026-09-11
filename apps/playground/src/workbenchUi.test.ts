@@ -82,7 +82,7 @@ describe('playground workbench design system', () => {
     expect(app).not.toContain('DEMO_GROUPS')
     expect(app).toContain('const title = demo.title')
     expect(app).not.toContain('className="demo-breadcrumb"')
-    expect(app).toContain('className="demo-context-actions"')
+    expect(app).not.toContain('className="demo-context-actions"')
     expect(app).toContain('className="demo-preview"')
     expect(app).toContain('SCROLL_SECTIONS.filter(section => section.demo).map(section => <DemoSection')
     expect(app).toContain('activeSectionKey')
@@ -94,18 +94,11 @@ describe('playground workbench design system', () => {
     expect(css).not.toContain('.app-shell[data-navigation="collapsed"]')
   })
 
-  it('provides an accessible source and proof drawer from demo metadata', () => {
-    expect(app).toContain('function SourceProofDrawer')
-    expect(app).toContain('<GuidedRecipe recipe={demo.recipe}')
-    expect(app).toContain('<DemoSource source={demo.recipe.sources[0]}')
-    expect(app).toContain('aria-haspopup="dialog"')
-    expect(app).toContain('role="dialog"')
-    expect(app).toContain('aria-modal="true"')
-    expect(app).toContain("event.key === 'Escape'")
-    expect(app).toContain("event.key !== 'Tab'")
-    expect(app).toContain('returnFocusRef.current?.focus({ preventScroll: true })')
-    expect(css).toContain('.source-proof-drawer')
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.source-proof-drawer \{ animation: none; \}/)
+  it('removes guide and source UI while retaining the repository link', () => {
+    for (const removed of ['SourceProofDrawer', 'GuidedRecipe', 'DemoSource', 'source-proof', 'demo-options']) expect(app).not.toContain(removed)
+    expect(css).not.toContain('.source-proof-drawer')
+    expect(css).not.toContain('.demo-source')
+    expect(app).toContain('className="github-link"')
   })
 
   it('drives Univer dark mode from the playground color scheme', () => {

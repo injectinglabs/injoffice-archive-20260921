@@ -33,14 +33,17 @@ describe('document-first presentation', () => {
     expect(page).toContain('hidden={!receipt && state !== \'committing\'}')
   })
 
-  it('keeps the header free of demo disclosures and retains workspace options', () => {
+  it('keeps the header free of demo disclosures and removes demo reset/close options', () => {
     const shell = read('./App.tsx')
     for (const retired of ['demo-breadcrumb', 'demo-chips', 'demo-preview__bar', 'RuntimePill', 'Browser engines ready']) expect(shell).not.toContain(retired)
     expect(shell).not.toContain('About this demo')
     expect(shell).not.toContain('runtime-information')
     expect(shell).not.toContain('Checking optional server connection')
     expect(shell).not.toContain('sidecar-status--')
-    expect(shell).toContain('<summary>Options</summary>')
+    for (const removed of ['<summary>Options</summary>', 'demo-options', 'demo-reset-trigger', 'Reset demo', 'Close demo', 'const resetDemo', 'const closeDemo']) expect(shell).not.toContain(removed)
+    expect(shell).not.toContain('Guide &amp; source')
+    expect(shell).toContain('retention.touch()')
+    expect(shell).toContain('<SectionBoundary key={revision}')
   })
 
   it('keeps compact screen support and readable disclosures explicit', () => {

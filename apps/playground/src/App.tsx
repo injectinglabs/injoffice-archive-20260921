@@ -1,4 +1,4 @@
-import { Component, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type MouseEvent, type ReactNode, type RefObject } from 'react'
+import { Component, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type MouseEvent, type ReactNode } from 'react'
 import {
   applyColorScheme,
   currentColorScheme,
@@ -7,10 +7,8 @@ import {
   readStoredColorScheme,
   type ColorScheme,
 } from './colorScheme'
-import GuidedRecipe from './components/GuidedRecipe'
-import DemoSource from './components/DemoSource'
 import type { DemoDefinition } from './demoRegistry'
-import { preloadWorkspace, preloadWorkspaceOnIntent, workspaceProofDemo } from './workspaceRegistry'
+import { preloadWorkspace, preloadWorkspaceOnIntent } from './workspaceRegistry'
 import { resolveToolWorkspace, TOOL_WORKSPACES, workspaceExamples, workspaceHref } from './toolWorkspaces'
 import { surfaceHref, type Surface } from './route'
 import { SCROLL_SECTIONS, sectionForHash, workspaceNavigationHash, activeSectionKey, type ScrollSection } from './scrollSections'
@@ -85,98 +83,14 @@ function AppHeader({ scheme, onScheme }: { scheme: ColorScheme; onScheme: (next:
   )
 }
 
-function SourceProofDrawer({
-  demo,
-  open,
-  onClose,
-  returnFocusRef,
-}: {
-  demo: DemoDefinition
-  open: boolean
-  onClose: () => void
-  returnFocusRef: RefObject<HTMLButtonElement | null>
-}) {
-  const drawerRef = useRef<HTMLElement>(null)
-  const closeRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const previousOverflow = document.body.style.overflow
-    const background = Array.from(document.querySelectorAll<HTMLElement>('.app-header, .app-sidebar, .app-main > :not(.source-proof-layer)'))
-    const inertStates = background.map((element) => element.inert)
-    background.forEach((element) => { element.inert = true })
-    document.body.style.overflow = 'hidden'
-    closeRef.current?.focus()
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        onClose()
-        return
-      }
-      if (event.key !== 'Tab' || !drawerRef.current) return
-      const controls = Array.from(drawerRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')).filter((element) => element.getClientRects().length > 0)
-      if (controls.length === 0) return
-      const first = controls[0]
-      const last = controls[controls.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      background.forEach((element, index) => { element.inert = inertStates[index] })
-      document.removeEventListener('keydown', onKeyDown)
-      returnFocusRef.current?.focus({ preventScroll: true })
-    }
-  }, [open, onClose, returnFocusRef])
-
-  return (
-    <div className="source-proof-layer" hidden={!open}>
-      <button className="source-proof-backdrop" type="button" tabIndex={-1} aria-label="Close source and proof" onClick={onClose} />
-      <aside
-        className="source-proof-drawer"
-        id="source-proof-drawer"
-        ref={drawerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="source-proof-title"
-      >
-        <header>
-          <div>
-            <span>{demo.packageName}</span>
-            <h2 id="source-proof-title">Guide &amp; source</h2>
-          </div>
-          <button ref={closeRef} className="source-proof-close" type="button" aria-label="Close source and proof" onClick={onClose}>×</button>
-        </header>
-        <div className="source-proof-body">
-          <p className="source-proof-runtime">{demo.title} · {demo.runtime}</p>
-          <GuidedRecipe recipe={demo.recipe} accent={demo.accent} className="guided-recipe--drawer" />
-          <DemoSource source={demo.recipe.sources[0]} />
-        </div>
-      </aside>
-    </div>
-  )
-}
-
 function DemoSection({
   demo,
-  proofOpen,
-  onOpenProof,
   section,
   requested,
   requestVersion,
   initialHash,
 }: {
   demo: DemoDefinition
-  proofOpen: boolean
-  onOpenProof: (button: HTMLButtonElement) => void
   section: ScrollSection
   requested: boolean
   requestVersion: number
@@ -187,36 +101,14 @@ function DemoSection({
   const sectionRef = useRef<HTMLElement>(null)
   const attempt = useRef(0)
   const loading = useRef(false)
-  const touched = useRef(false)
-  const explicitlyClosed = useRef(false)
   const [retention] = useState(() => createDemoRetention(() => {
     attempt.current++
     loading.current = false
     setLoadState('idle')
   }))
-  const touch = () => { touched.current = true; retention.touch() }
-  const busy = () => Boolean(sectionRef.current?.querySelector('[data-demo-busy="true"]'))
-  const resetDemo = () => {
-    if (busy()) { window.alert('Wait for the current operation to finish before resetting this demo.'); return }
-    if (touched.current && !window.confirm('Reset this demo? Your current edits and progress will be lost. Download any files you want to keep first.')) return
-    touched.current = false
-    retention.reset()
-    setRevision(value => value + 1)
-  }
-  const closeDemo = () => {
-    if (busy()) { window.alert('Wait for the current operation to finish before closing this demo.'); return }
-    if (touched.current && !window.confirm('Close this demo? Your current edits and progress will be lost. Download any files you want to keep first.')) return
-    explicitlyClosed.current = true
-    touched.current = false
-    retention.setLoaded(false)
-    retention.reset()
-    attempt.current++
-    loading.current = false
-    setLoadState('idle')
-  }
+  const touch = () => retention.touch()
   const load = useCallback(() => {
     if (loading.current) return
-    explicitlyClosed.current = false
     loading.current = true
     const id = ++attempt.current
     setLoadState('loading')
@@ -236,7 +128,7 @@ function DemoSection({
     const observer = new IntersectionObserver(entries => {
       const visible = entries.some(entry => entry.isIntersecting)
       retention.setVisible(visible)
-      if (visible && loadState === 'idle' && !explicitlyClosed.current) load()
+      if (visible && loadState === 'idle') load()
     }, { rootMargin: '160px 0px' })
     observer.observe(element)
     return () => observer.disconnect()
@@ -262,32 +154,6 @@ function DemoSection({
             <Heading id={`demo-title-${section.key}`} tabIndex={-1}>{title}</Heading>
           </div>
           <p>{description}</p>
-        </div>
-        <div className="demo-context-actions">
-          <details className="demo-options">
-          <summary>Options</summary>
-          <div>
-          <button
-            className="demo-reset-trigger"
-            type="button"
-            disabled={loadState !== 'ready'}
-            onClick={resetDemo}
-          >
-            Reset demo
-          </button>
-          {loadState === 'ready' && <button className="demo-reset-trigger" type="button" onClick={closeDemo}>Close demo</button>}
-          </div>
-          </details>
-          <button
-            className="source-proof-trigger"
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={proofOpen}
-            aria-controls="source-proof-drawer"
-            onClick={event => onOpenProof(event.currentTarget)}
-          >
-            Guide &amp; source
-          </button>
         </div>
       </header>
       <section className="demo-preview" aria-label={`${title} preview`}>
@@ -322,12 +188,8 @@ export default function App() {
   const [route, setRoute] = useState(() => ({ surface: sectionForHash(location.hash).surface, hash: workspaceNavigationHash(location.hash) }))
   const { surface, hash } = route
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
-  const [proofSection, setProofSection] = useState<(ScrollSection & { featureHash: string }) | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
   const [requestedKey, setRequestedKey] = useState(() => sectionForHash(location.hash).key)
   const [requestVersion, setRequestVersion] = useState(0)
-  const detailsButtonRef = useRef<HTMLButtonElement>(null)
-  const closeDetails = useCallback(() => setDetailsOpen(false), [])
   const sectionHashes = useRef(new Map<string, string>())
   const navigating = useRef(false)
   const anchorTarget = useRef<string | null>(null)
@@ -365,7 +227,6 @@ export default function App() {
       setRequestedKey(section.key)
       setRequestVersion(value => value + 1)
       setRoute({ surface: section.surface, hash: location.hash || section.href })
-      setDetailsOpen(false)
       navigating.current = true
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
@@ -474,10 +335,7 @@ export default function App() {
             requested={requestedKey === section.key}
             requestVersion={requestVersion}
             initialHash={sectionHashes.current.get(section.key) ?? section.href}
-            proofOpen={detailsOpen && proofSection?.key === section.key}
-            onOpenProof={button => { detailsButtonRef.current = button; setProofSection({ ...section, featureHash: sectionHashes.current.get(section.key) ?? section.href }); setDetailsOpen(true) }}
           />)}
-        {proofSection?.demo ? <SourceProofDrawer key={`${proofSection.key}:${resolveToolWorkspace(proofSection.featureHash)?.feature}`} demo={workspaceProofDemo(proofSection.featureHash)} open={detailsOpen} onClose={closeDetails} returnFocusRef={detailsButtonRef} /> : null}
       </main>
       </div>
     </div>

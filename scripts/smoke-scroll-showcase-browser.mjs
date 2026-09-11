@@ -26,7 +26,6 @@ let chrome, socket, server
 let chunkFailures = 0
 const reloadDialogs = []
 let allowReloadDialog = false
-let allowResetDialog = false
 let holdChunks = false
 const heldChunks = []
 const expectedChunkErrors = []
@@ -63,7 +62,7 @@ function onMessage({ data }) {
     }
   } else if (message.method === 'Page.javascriptDialogOpening') {
     reloadDialogs.push(message.params)
-    void send('Page.handleJavaScriptDialog', { accept: message.params.type === 'confirm' && ((allowReloadDialog && /unsaved.*lost/i.test(message.params.message)) || (allowResetDialog && /edits.*lost/i.test(message.params.message))) })
+    void send('Page.handleJavaScriptDialog', { accept: message.params.type === 'confirm' && allowReloadDialog && /unsaved.*lost/i.test(message.params.message) })
   }
 }
 
@@ -123,13 +122,13 @@ async function assertNavigationSelection(viewport) {
       // Exercise real keyboard navigation back to the selected link so that
       // removing its selection stripe cannot silently remove its focus ring.
       await new Promise(resolve => setTimeout(resolve, 750))
-      await evaluate(`document.querySelector('.app-sidebar a[aria-current="location"]').focus({ preventScroll: true })`)
+      await evaluate(`window.__keyboardNavigationLink = document.querySelector('.app-sidebar a[aria-current="location"]'); window.__keyboardNavigationLink.focus({ preventScroll: true })`)
       for (const modifiers of [8, 0]) {
         await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers })
         await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers })
       }
       const focusProof = await evaluate(`(() => {
-        const selected = document.querySelector('.app-sidebar a[aria-current="location"]');
+        const selected = window.__keyboardNavigationLink;
         const style = getComputedStyle(selected);
         return { selected: selected.outerHTML, active: document.activeElement?.outerHTML.slice(0, 500),
           focused: document.activeElement === selected, visible: selected.matches(':focus-visible'),
@@ -491,25 +490,13 @@ try {
   assert.ok(await evaluate(`document.querySelector('${toolSection('font-metrics')}').getBoundingClientRect().top > innerHeight + 160`), 'retention target is outside the prefetch margin')
   await until(`document.querySelector('${toolSection('font-metrics')}').dataset.scrollState === 'idle'`, 'offscreen untouched workspace released', 45_000)
   assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'interacted chart is never automatically discarded')
-  const resetChart = `Array.from(document.querySelectorAll('${toolSection('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Reset demo').click()`
-  await evaluate(resetChart)
-  assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'cancel reset preserves edits')
-  allowResetDialog = true
-  await evaluate(resetChart)
-  allowResetDialog = false
-  await until(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]')?.value === ${JSON.stringify(sampleChartRevenue)}`, 'confirmed reset remounts the chart with the exact original sample')
-  await evaluate(`Array.from(document.querySelectorAll('${toolSection('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Close demo').click()`)
-  await until(`document.querySelector('${toolSection('charts')}').dataset.scrollState === 'idle' && !document.querySelector('${section('charts')} input')`, 'close releases the mounted workspace')
-  await evaluate(`document.querySelector('${toolSection('charts')} .demo-section-placeholder button').click()`)
-  await until(ready('charts'), 'closed demo can be reopened')
-  allowResetDialog = true
-  await evaluate(`Array.from(document.querySelectorAll('${toolSection('charts')} .demo-context-actions button')).find(button => button.textContent.trim() === 'Close demo').click()`)
-  allowResetDialog = false
+  assert.equal(await evaluate(`!!document.querySelector('.demo-options, .demo-reset-trigger')`), false, 'demo reset/close menu is absent')
   await anchor('sheets')
-  await until(ready('charts'), 'same sidebar destination reopens a closed demo')
+  await until(ready('charts'), 'same sidebar destination keeps the edited example available')
+  assert.equal(await evaluate(`document.querySelector('${section('charts')} input[aria-label="Jan revenue"]').value`), '999', 'reselecting the tool preserves edits')
   assert.deepEqual(liveProposals, [], 'scroll demo never calls a real model endpoint')
   assert.deepEqual(errors, [], 'no uncaught errors or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tools in one document without an intro', 'direct Docs feature start', 'four sidebar links', 'lazy feature initialization', 'sidebar scroll spy', 'passive scroll replaces history', 'passive scroll preserves focus', 'pointer and arrow-key groups retain focus and toolbar position', 'retained hidden workbook remains inert and keyboard-inaccessible', 'feature changes retain native edits and exact pending approval', 'same tool anchor returns to heading', 'Back and Forward across features', 'legacy format-specific deep links', 'independent mounted agent formats', 'untouched workspace release and guarded resets', 'sticky mobile navigator', 'mobile overflow', 'no real model calls'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tools in one document without an intro', 'direct Docs feature start', '28 sidebar examples', 'lazy feature initialization', 'sidebar scroll spy', 'passive scroll replaces history', 'passive scroll preserves focus', 'sidebar pointer and keyboard navigation focuses example headings', 'retained workbook stays measurable in document flow', 'feature changes retain native edits and exact pending approval', 'same tool anchor returns to heading', 'Back and Forward across features', 'legacy format-specific deep links', 'independent mounted agent formats', 'untouched workspace release and edited state retention', 'wrapped mobile examples index', 'mobile overflow', 'no real model calls'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     try {

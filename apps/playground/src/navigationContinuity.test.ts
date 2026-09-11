@@ -45,12 +45,11 @@ describe('playground navigation continuity', () => {
     expect(sectionSource).toContain('<Suspense fallback=')
   })
 
-  it('makes walkthroughs discoverable and scopes the drawer to the active feature', () => {
-    expect(appSource).toContain('Guide &amp; source')
-    expect(appSource).toContain('resolveToolWorkspace(proofSection.featureHash)?.feature')
-    expect(appSource).toContain('demo={workspaceProofDemo(proofSection.featureHash)}')
-    expect(appSource).toContain('featureHash: sectionHashes.current.get(section.key)')
-    expect(appSource).not.toContain('OverviewPage')
+  it('removes the guide drawer without removing the examples', () => {
+    expect(appSource).not.toContain('Guide &amp; source')
+    expect(appSource).not.toContain('SourceProofDrawer')
+    expect(appSource).not.toContain('workspaceProofDemo')
+    expect(appSource).toContain('workspaceExamples(workspace)')
   })
 
   it('clears the desktop sidebar basis when navigation becomes a mobile row', () => {

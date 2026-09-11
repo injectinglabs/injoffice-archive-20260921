@@ -57,6 +57,7 @@ try {
       const root = `document.querySelector('[data-scroll-section="${tool}"] [data-workspace-panel="agent"]')`
       await until(`${root} && !${root}.hidden && ${root}.querySelector('[data-agent-prepare]:not(:disabled)')`)
       await delay(200)
+      assert.equal(await evaluate(`!!document.querySelector('.demo-options, .demo-reset-trigger, .source-proof-trigger, .source-proof-layer')`), false, 'demo-level Options and Guide & source are removed')
       assert.equal(await evaluate(`(() => {
         const links = [...document.querySelectorAll('.app-sidebar [data-workspace-feature]')];
         const panels = [...document.querySelectorAll('[data-scroll-section="${tool}"] [data-workspace-panel]')];

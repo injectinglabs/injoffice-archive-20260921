@@ -1,9 +1,6 @@
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { GuidedRecipe } from './components/GuidedRecipe'
 import { DEMOS } from './demoRegistry'
 import { DEMO_RECIPES } from './demoRecipes'
 import { SURFACES } from './route'
@@ -60,17 +57,4 @@ describe('guided demo recipes', () => {
     }
   })
 
-  it('renders an accessible first step, progress, sources, and continuation links', () => {
-    const demo = DEMOS.find((item) => item.surface === 'sheets')!
-    const markup = renderToStaticMarkup(createElement(GuidedRecipe, { recipe: demo.recipe, accent: demo.accent }))
-
-    expect(markup).toContain('guided-recipe--mint')
-    expect(markup).toContain('role="progressbar"')
-    expect(markup).toContain('aria-valuenow="0"')
-    expect(markup).toContain('aria-current="step"')
-    expect(markup).toContain(demo.recipe.steps[0].instruction)
-    expect(markup).toContain(demo.recipe.sources[0].href)
-    expect(markup).toContain('href="#/formulas"')
-    expect(markup).toContain('Mark done &amp; continue')
-  })
 })

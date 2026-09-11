@@ -28,7 +28,6 @@ function destination(path) {
   if (surface in workspaceFeatures) return { tool: surface, feature: params.get('feature') ?? params.get('view') ?? 'agent' }
   return { tool: surface.startsWith('pptx-') ? 'slides' : surface === 'font-metrics' ? 'docs' : 'sheets', feature: surface }
 }
-let acceptReset = false
 const pending = new Map()
 const errors = []
 const heldRequests = []
@@ -46,7 +45,7 @@ function onMessage({ data }) {
   } else if (message.method === 'Runtime.exceptionThrown') {
     errors.push(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text)
   } else if (message.method === 'Page.javascriptDialogOpening') {
-    void send('Page.handleJavaScriptDialog', { accept: acceptReset && message.params.type === 'confirm' && /Reset this demo\?.*edits.*lost/.test(message.params.message) })
+    void send('Page.handleJavaScriptDialog', { accept: false })
   } else if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
     errors.push(message.params.args.map((arg) => arg.value ?? arg.description).join(' '))
   } else if (message.method === 'Fetch.requestPaused') {
@@ -69,12 +68,12 @@ async function evaluate(expression) {
   // Multiple editors now remain mounted. Every editor assertion and action is
   // scoped to the selected feature, never a retained hidden editor's DOM.
   // Shell and the one shared source drawer remain document-wide.
-  const globalSelectors = ['.app-', '.scheme-toggle', '.overview-page', '.tool-example', '[data-workspace-entry]', '.source-proof-layer', '.source-proof-close', '.guided-recipe', '.demo-source', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
+  const globalSelectors = ['.app-', '.scheme-toggle', '.overview-page', '.tool-example', '[data-workspace-entry]', '[role="dialog"]', '[role=progressbar]', '[data-scroll-section]']
   const scopedExpression = expression.replaceAll('document.querySelectorAll(', 'testQueryAll(').replaceAll('document.querySelector(', 'testQuery(')
   const result = await send('Runtime.evaluate', { expression: `{
     const smokeSection = document.querySelector(${JSON.stringify(`[data-scroll-section="${scopeKey}"]`)});
     const smokePanel = smokeSection?.querySelector(${JSON.stringify(`[data-workspace-panel="${scopeFeature}"]:not([hidden])`)});
-    const smokeRoot = selector => ${JSON.stringify(globalSelectors)}.some(prefix => selector.startsWith(prefix)) ? document : ['.demo-reset-trigger', '.demo-context-actions', '.source-proof-trigger', '.demo-stage', '.demo-back', '[data-workspace-'].some(prefix => selector.startsWith(prefix)) ? smokeSection : ${scopeFeature === null} ? smokeSection : smokePanel;
+    const smokeRoot = selector => ${JSON.stringify(globalSelectors)}.some(prefix => selector.startsWith(prefix)) ? document : ['.demo-stage', '.demo-back', '[data-workspace-'].some(prefix => selector.startsWith(prefix)) ? smokeSection : ${scopeFeature === null} ? smokeSection : smokePanel;
     const testQuery = selector => smokeRoot(selector)?.querySelector(selector) ?? null;
     const testQueryAll = selector => smokeRoot(selector)?.querySelectorAll(selector) ?? [];
     ${scopedExpression}
@@ -91,9 +90,9 @@ async function until(expression, label, timeout = 30_000) {
   throw new Error(`Timed out: ${label}`)
 }
 const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`)
-const resetDemo = async () => {
-  acceptReset = true
-  try { await click('.demo-reset-trigger') } finally { acceptReset = false }
+const reloadDemo = async () => {
+  await send('Page.reload')
+  await until(`smokeSection?.dataset.scrollState === 'ready' && !!smokePanel && !smokePanel.querySelector('[data-workspace-loading]')`, 'fresh page is ready', 90_000)
 }
 const clickButton = (label) => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`)
 const agentReady = `document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`
@@ -232,21 +231,7 @@ try {
   await send('Fetch.disable')
   await until(`smokeSection?.dataset.scrollState === 'ready' && !!smokePanel && !smokePanel.querySelector('.demo-loading, [data-workspace-loading], [data-workspace-error]')`, 'cold feature completes', 90_000)
   await route('charts')
-  await click('.source-proof-trigger')
-  await until(`document.activeElement?.classList.contains('source-proof-close')`, 'modal initial focus')
-  assert.equal(await evaluate(`!!document.querySelector('.demo-stage').closest('[inert]')`), true, 'preview background is inert')
-  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', modifiers: 8 })
-  assert.equal(await evaluate(`document.querySelector('[role="dialog"]').contains(document.activeElement)`), true, 'Shift+Tab stays inside the guide')
-  await click('.guided-recipe__complete')
-  await until(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow') === '1'`, 'checklist step')
-  await click('.demo-source summary')
-  await until(`document.querySelector('.demo-source pre')?.textContent.includes('export default')`, 'actual source loaded')
-  await screenshot('source-and-guide')
-  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' })
-  await until(`(!document.querySelector('.source-proof-layer') || document.querySelector('.source-proof-layer').hidden) && document.activeElement?.classList.contains('source-proof-trigger')`, 'Escape restores focus')
-  await click('.source-proof-trigger')
-  assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '1')
-  await click('.source-proof-close')
+  assert.equal(await evaluate(`!!document.querySelector('.app-shell').querySelector('.source-proof-trigger, .source-proof-layer, .demo-options, .demo-reset-trigger')`), false, 'demo management and guide UI are removed')
   await screenshot('focused-chart')
   for (const [tool, features] of Object.entries(workspaceFeatures)) {
     for (const feature of features) {
@@ -263,7 +248,7 @@ try {
   const originalChart = await evaluate(sheetChartState)
   await evaluate(`(() => { const host = window.__injoffice; const spec = host.charts.list()[0]; host.univerAPI.getActiveWorkbook().getSheetBySheetId(spec.range.sheetId).getRange(5, 1).setValue(999); })()`)
   await until(`(${sheetChartState})?.firstValue === 999`, 'overview chart source is editable')
-  await resetDemo()
+  await reloadDemo()
   await until(`document.querySelector('[data-demo-surface="sheets"] canvas') && window.__injoffice?.charts?.list().length > 0`, 'reset restores workbook')
   await until(`(${sheetChartState})?.firstValue === ${JSON.stringify(originalChart.firstValue)} && (${sheetChartState})?.series.length > 0`, 'reset restores seeded chart data')
   assert.deepEqual(await evaluate(sheetChartState), originalChart, 'reset restores the complete numeric chart source')
@@ -448,21 +433,12 @@ try {
     assert.equal(await evaluate(`!document.querySelector('.agent-approval input')`), true, 'refusal does not allow approval')
     assert.equal(await agentWrites(), 0, `${tool} unsupported proposal never reaches the writer`)
     assert.equal(await evaluate(`document.querySelector('[data-agent-download]') === null`), true, 'refusal does not expose a previous output')
-    await resetDemo()
+    await reloadDemo()
     await until(`document.querySelector('[data-agent-tool=${tool}]') && document.querySelector('.agent-demo__status')?.dataset.state === 'ready' && Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Preview change' && !button.disabled)`, `${tool} reset reloads the source`, 90_000)
     assert.equal(await evaluate(`!document.querySelector('[data-agent-download]') && !document.querySelector('.agent-diff') && !Array.from(document.querySelectorAll('.agent-tool-log li[data-state=done]')).some(item => /office\\.(plan|commit)/.test(item.textContent)) && document.querySelector('.agent-approval input').checked === false`), true, 'reset clears outputs, plans, commits, and approval; initial capability discovery is allowed')
   }
   assert.deepEqual(liveRequests, [], 'guided demo never fetches live configuration or proposals')
   if (proposalMock) assert.equal(proposalMock.requests.length, 0, 'all workflows leave even a configured provider untouched')
-  await route('agent?format=sheets')
-  await click('.source-proof-trigger')
-  await click('.guided-recipe__complete')
-  await until(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow') === '1'`, 'AI guide progress recorded')
-  await route('agent?format=docs')
-  await until(`(!document.querySelector('.source-proof-layer') || document.querySelector('.source-proof-layer').hidden) && document.querySelector('[data-agent-tool=docs]')`, 'same-surface format switch closes stale guide')
-  await click('.source-proof-trigger')
-  assert.equal(await evaluate(`document.querySelector('[role=progressbar]').getAttribute('aria-valuenow')`), '0', 'new AI format starts its own guide progress')
-  await click('.source-proof-close')
   await route('sheets?feature=editor')
   await evaluate(`window.scrollTo({ top: 0, behavior: 'instant' })`)
   for (const width of [1200, 1024, 768]) {
@@ -522,15 +498,11 @@ try {
   }
   await route('charts')
   await screenshot('focused-chart-mobile')
-  await click('.source-proof-trigger')
-  assert.equal(await evaluate(`(() => { const panel = document.querySelector('.guided-recipe'); const footer = panel.querySelector('footer'); return footer.getBoundingClientRect().bottom <= panel.getBoundingClientRect().bottom + 1 })()`), true, 'mobile guide footer is not clipped')
-  await screenshot('guide-mobile')
-  await click('.source-proof-close')
   await evaluate(`document.querySelector('.scheme-toggle button:last-child').click()`)
   await until(`document.documentElement.dataset.theme === 'dark'`, 'dark theme')
   await screenshot('focused-chart-dark')
   assert.deepEqual(errors, [], 'uncaught or console errors')
-  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['exactly four tool sections and sidebar links with no intro', 'empty and legacy overview URLs replace history and open Sheets', 'brand opens the first editor', 'all retained feature panels accessible', 'legacy links open the correct tool feature', 'continuous workspace navigation', 'cold-feature isolation', 'modal focus/inert', 'checklist persistence', 'source loading', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and resets', 'AI format-specific guides', 'numeric chart source and reset', 'same-workspace deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
+  console.log(JSON.stringify({ status: 'passed', mode: process.argv.includes('--dev') ? 'development' : process.argv.includes('--built') ? 'built' : 'existing-server', screenshots: output, checks: ['four tool sections and 28 indexed examples without management menus', 'empty and legacy overview URLs replace history and open Sheets', 'brand opens the first editor', 'all retained feature panels accessible', 'legacy links open the correct tool feature', 'continuous workspace navigation', 'cold-feature isolation', 'four AI approvals and refusals', 'default zero-configuration mock with honest labels and no upstream calls', 'mock transport and unsupported-prompt recovery', 'editable agent requests and public tool trace', 'idempotent native commit retry', 'stale approval refusal', 'post-write verification failure', 'AI proof boundaries and reload isolation', 'numeric chart source and reload', 'same-workspace deep link', 'mobile layout', 'dark theme'], errors }, null, 2))
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     await screenshot('failure')

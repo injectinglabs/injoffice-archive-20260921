@@ -3,15 +3,7 @@
 .app-shell .demo-context-header { padding: 18px 0 12px; gap: 12px; align-items: center; }
 .app-shell[data-navigation="scroll"] .demo-title-line :is(h1, h2) { font-size: 24px; line-height: 1.2; letter-spacing: -.025em; }
 .app-shell .demo-context-header .page-heading-copy > p { font-size: 14px; margin: 6px 0 0; max-width: 65ch; }
-.app-shell .demo-context-actions { align-items: center; gap: 8px; }
 .app-shell .demo-preview { border-radius: 8px; }
-.app-shell .demo-options { position: relative; font-size: 14px; }
-.app-shell .demo-options > summary { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--ink-soft); }
-.app-shell .demo-options > summary:hover { background: var(--chrome); }
-.app-shell .demo-options > summary:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
-.app-shell .demo-options > div { position: absolute; top: 100%; right: 0; width: min(340px, calc(100vw - 40px)); padding: 18px; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); background: var(--paper); box-shadow: var(--shadow-float); z-index: 50; }
-.app-shell .demo-options > div { width: 160px; display: grid; gap: 8px; }
-.app-shell .source-proof-trigger { font-size: 14px; }
 
 /* One inspected artifact, one adjacent assistant. Source order also makes sense
    when the columns stack on small screens. No visual reordering of focusables. */
@@ -54,7 +46,6 @@
   .app-shell .scheme-toggle { flex-wrap: nowrap; }
   .app-shell .demo-context-header { align-items: start; }
   .app-shell .demo-context-header .page-heading-copy > p { display: none; }
-  .app-shell .demo-context-actions { flex-wrap: wrap; }
   .app-shell .ds [data-demo-surface="agent"] .agent-demo__document { padding: 12px; }
   .app-shell .ds [data-demo-surface="agent"] .agent-artifact { padding: 8px; min-height: 240px; }
   .app-shell .ds [data-demo-surface="agent"] :is(.agent-artifact__doc, .agent-artifact__slide, .agent-artifact__pdf) { padding: 16px; }
