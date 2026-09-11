@@ -79,6 +79,7 @@ export interface NativeDocxRunPropertiesV1 {
   bold?: boolean
   italic?: boolean
   underline?: 'none' | 'single' | 'double' | 'words'
+  vertical_alignment?: 'baseline' | 'subscript' | 'superscript'
   color?: string
   highlight?: string
   language?: string
@@ -97,6 +98,10 @@ export interface NativeDocxDrawingV1 {
   placement: 'inline' | 'floating'
   width_emu: number
   height_emu: number
+  rotation_degrees?: 0 | 90 | 180 | 270
+  flip_horizontal?: boolean
+  flip_vertical?: boolean
+  source_crop?: { left: number; top: number; right: number; bottom: number }
   x_emu?: number
   y_emu?: number
   horizontal_relative_from?: string
@@ -118,6 +123,8 @@ export interface NativeDocxRunV1 {
   anchor: NativeDocxSourceAnchorV1
   properties?: NativeDocxRunPropertiesV1
   text?: string
+  /** Source PAGE/NUMPAGES instruction; cached text is not a rendering authority. */
+  page_field?: 'PAGE' | 'NUMPAGES'
   control?: 'tab' | 'line-break' | 'page-break' | 'column-break' | 'soft-hyphen'
   reference?: NativeDocxReferenceV1
   drawing?: NativeDocxDrawingV1
@@ -359,10 +366,11 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   EditPolicyV1: ['mode', 'allowed_operations', 'refusal'],
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
-  RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy'],
+  RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop'],
+  DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
-  RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'control', 'reference', 'drawing'],
+  RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'control', 'reference', 'drawing'],
   NumberingReferenceV1: ['num_id', 'level', 'abstract_num_id'],
   ParagraphPropertiesV1: ['paragraph_style_id', 'numbering', 'alignment', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
   ParagraphV1: ['id', 'anchor', 'edit_policy', 'properties', 'runs'],
@@ -584,6 +592,7 @@ function validateRunProperties(value: unknown, path: string, issues: NativeDocxV
   booleanValue(entry.bold, `${path}/bold`, issues, false)
   booleanValue(entry.italic, `${path}/italic`, issues, false)
   if (entry.underline !== undefined) enumValue(entry.underline, `${path}/underline`, ['none', 'single', 'double', 'words'], issues)
+  if (entry.vertical_alignment !== undefined) enumValue(entry.vertical_alignment, `${path}/vertical_alignment`, ['baseline', 'subscript', 'superscript'], issues)
   optionalString(entry.color, `${path}/color`, issues, COLOR)
   optionalString(entry.highlight, `${path}/highlight`, issues)
   optionalString(entry.language, `${path}/language`, issues)
@@ -616,6 +625,19 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
   const placement = enumValue(entry.placement, `${path}/placement`, ['inline', 'floating'], issues)
   integer(entry.width_emu, `${path}/width_emu`, issues, 1)
   integer(entry.height_emu, `${path}/height_emu`, issues, 1)
+  if (entry.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(entry.rotation_degrees as number)) add(issues, 'INVALID_VALUE', `${path}/rotation_degrees`, 'must equal 0, 90, 180 or 270')
+  booleanValue(entry.flip_horizontal, `${path}/flip_horizontal`, issues, false)
+  booleanValue(entry.flip_vertical, `${path}/flip_vertical`, issues, false)
+  if (entry.source_crop !== undefined) {
+    const crop = object(entry.source_crop, `${path}/source_crop`, DOCX_NATIVE_V1_BINDING_FIELDS.DrawingCropV1, issues)
+    if (crop) {
+      for (const key of ['left','top','right','bottom'] as const) {
+        const value = integer(crop[key], `${path}/source_crop/${key}`, issues, 0)
+        if (value !== undefined && value !== null && value > 99000) add(issues, 'OUT_OF_RANGE', `${path}/source_crop/${key}`, 'crop must retain at least one percent per axis')
+      }
+      if (typeof crop.left === 'number' && typeof crop.right === 'number' && crop.left + crop.right > 99000 || typeof crop.top === 'number' && typeof crop.bottom === 'number' && crop.top + crop.bottom > 99000) add(issues, 'OUT_OF_RANGE', `${path}/source_crop`, 'crop must retain at least one percent per axis')
+    }
+  }
   integer(entry.x_emu, `${path}/x_emu`, issues, Number.MIN_SAFE_INTEGER, false)
   integer(entry.y_emu, `${path}/y_emu`, issues, Number.MIN_SAFE_INTEGER, false)
   optionalString(entry.horizontal_relative_from, `${path}/horizontal_relative_from`, issues)
@@ -633,6 +655,11 @@ function validateRun(value: unknown, path: string, issues: NativeDocxValidationI
   trackId(entry.id, `${path}/id`, issues, ids)
   const runAnchor = validateAnchor(entry.anchor, `${path}/anchor`, issues, ownerPart, parentAnchor)
   if (entry.properties !== undefined) validateRunProperties(entry.properties, `${path}/properties`, issues)
+  if (entry.page_field !== undefined) {
+    enumValue(entry.page_field, `${path}/page_field`, ['PAGE', 'NUMPAGES'], issues)
+    if (kind !== 'text') add(issues, 'INVALID_UNION', `${path}/page_field`, 'page field requires a text run')
+    if (entry.text !== '') add(issues, 'INVALID_VALUE', `${path}/text`, 'page-field source text must be empty; cached text is not authoritative')
+  }
   const payloads = ['text', 'control', 'reference', 'drawing'].filter((key) => entry[key] !== undefined)
   if (payloads.length !== 1 || payloads[0] !== kind) add(issues, 'INVALID_UNION', path, 'run kind must match exactly one payload')
   if (kind === 'text') {

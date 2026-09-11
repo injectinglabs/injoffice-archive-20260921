@@ -542,7 +542,7 @@ function unsupportedDocumentReason(document: NativeDocxDocumentV1): { path: stri
   for (const story of stories) {
     for (const block of story.blocks) {
       if (block.kind !== 'paragraph') return { path: '/document', message: 'tables and non-paragraph story blocks are outside the v1 transaction adapter' }
-      const unsupportedRun = block.paragraph?.runs.find((run) => run.kind !== 'text')
+      const unsupportedRun = block.paragraph?.runs.find((run) => run.kind !== 'text' || run.page_field !== undefined || run.properties?.vertical_alignment && run.properties.vertical_alignment !== 'baseline')
       if (unsupportedRun) return { path: '/document', message: `${unsupportedRun.kind} inline nodes are outside the v1 transaction adapter` }
     }
   }

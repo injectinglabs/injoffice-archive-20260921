@@ -2147,6 +2147,31 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 			}
 			runs = append(runs, extracted...)
 			unsafe = unsafe || runUnsafe
+		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "fldSimple"}):
+			unsafe = true // Field results are never editable text.
+			instruction, present := nativeAttr(child, extractor.wordNS, "instr")
+			instruction = strings.Trim(instruction, " \t\r\n")
+			instructionAttrs := 0
+			for _, attr := range child.Attrs {
+				if attr.Name == (xml.Name{Space: extractor.wordNS, Local: "instr"}) {
+					instructionAttrs++
+				}
+			}
+			if !present || instructionAttrs != 1 || (instruction != "PAGE" && instruction != "NUMPAGES") || !nativeExactContainer(child, xml.Name{Space: extractor.wordNS, Local: "instr"}) || len(child.Children) != 1 || child.Children[0].Name != (xml.Name{Space: extractor.wordNS, Local: "r"}) {
+				extractor.addUnsupported("FIELD_SEMANTICS", "fields", paragraphID, partName, child, "Only an unlocked simple decimal PAGE or NUMPAGES field with one text result run is modeled")
+				continue
+			}
+			extracted, runUnsafe, err := extractor.extractRunNode(partName, paragraphID, child.Children[0])
+			if err != nil {
+				return nil, false, err
+			}
+			if runUnsafe || len(extracted) != 1 || extracted[0].Kind != "text" || !nativeExactContainer(child.Children[0]) || len(directNativeChildren(child.Children[0], extractor.wordNS, "rPr")) > 1 {
+				extractor.addUnsupported("FIELD_SEMANTICS", "fields", paragraphID, partName, child, "Page-field result must be one exact text run; nested fields and controls are refused")
+				continue
+			}
+			extracted[0].PageField = instruction
+			extracted[0].Text = nativeString("") // Ignore stale cache, including nonnumeric values.
+			runs = append(runs, extracted[0])
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "hyperlink"}):
 			unsafe = true
 			extractor.addUnsupported("HYPERLINK_SEMANTICS", "hyperlinks", paragraphID, partName, child, "Visible hyperlink text is exposed, while relationship and field semantics remain preserve-only")
@@ -2415,14 +2440,15 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		return refuse("AMBIGUOUS_PICTURE", "Only a single native DrawingML picture payload is modeled", graphicData)
 	}
 	picture := pictures[0]
-	if len(nativeDescendants(picture, aNS, "srcRect")) > 0 {
-		return refuse("PICTURE_CROP_PRESERVED", "Cropped pictures remain preserve-only until crop geometry is modeled", picture)
+	crop, cropOK := nativePictureSourceCrop(picture, aNS, picNS)
+	if !cropOK {
+		return refuse("PICTURE_CROP_PRESERVED", "Picture crop must be one exact source rectangle retaining at least one percent per axis", picture)
 	}
 	if !nativeExactPictureNonVisual(picture, aNS, picNS) {
 		return refuse("PICTURE_NONVISUAL_PRESERVED", "Picture nonvisual properties with missing, hidden, or unmodeled semantics remain preserve-only", picture)
 	}
-	if !nativePictureIdentityTransform(picture, aNS, picNS, width, height) {
-		return refuse("PICTURE_TRANSFORM_PRESERVED", "Only identity picture transforms whose DrawingML extent matches the inline extent are projected", picture)
+	if !nativePictureBoundedTransform(picture, aNS, picNS, width, height) {
+		return refuse("PICTURE_TRANSFORM_PRESERVED", "Only flips and quarter turns with exact rotated DrawingML/inline extents are projected", picture)
 	}
 	blips := nativeDescendants(picture, aNS, "blip")
 	if len(blips) != 1 || !nativeExactLeaf(blips[0], xml.Name{Space: extractor.relNS, Local: "embed"}, xml.Name{Local: "cstate"}) {
@@ -2443,7 +2469,22 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		ID: extractor.objectID("drawing", partName, node, ""), Anchor: extractor.anchor(partName, node),
 		RelationshipID: nativeString(relID), MediaPart: nativeString(mediaPart), ContentType: nativeString(contentType),
 		Placement: "inline", WidthEMU: nativeInt64(width), HeightEMU: nativeInt64(height),
+		SourceCrop: crop,
 		EditPolicy: nativeReadOnlyPolicy("EXTRACT_ONLY", "Native picture extraction does not yet expose guarded drawing replacement"),
+	}
+	xfrm := firstDirectNativeChild(firstDirectNativeChild(picture, picNS, "spPr"), aNS, "xfrm")
+	if rotation, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok {
+		angle, _ := strconv.ParseInt(rotation, 10, 64) // bounded lexical values qualified above
+		degrees := angle / 60000
+		drawing.RotationDegrees = nativeInt64(degrees)
+	}
+	if flip, ok := nativeUnqualifiedAttr(xfrm, "flipH"); ok {
+		value := flip == "1" || flip == "true"
+		drawing.FlipHorizontal = &value
+	}
+	if flip, ok := nativeUnqualifiedAttr(xfrm, "flipV"); ok {
+		value := flip == "1" || flip == "true"
+		drawing.FlipVertical = &value
 	}
 	if value, ok := nativeUnqualifiedAttr(docPr, "name"); ok && value != "" {
 		drawing.Name = nativeString(value)
@@ -2566,14 +2607,45 @@ func nativeExactPictureNonVisual(picture *nativeXMLNode, aNS, picNS string) bool
 	return true
 }
 
-func nativePictureIdentityTransform(picture *nativeXMLNode, aNS, picNS string, width, height int64) bool {
+func nativePictureSourceCrop(picture *nativeXMLNode, aNS, picNS string) (*NativeDrawingCropV1, bool) {
+	crops := nativeDescendants(picture, aNS, "srcRect")
+	if len(crops) == 0 {
+		return nil, true
+	}
+	fill := firstDirectNativeChild(picture, picNS, "blipFill")
+	if fill == nil || len(crops) != 1 {
+		return nil, false
+	}
+	direct := directNativeChildren(fill, aNS, "srcRect")
+	if len(direct) != 1 || direct[0] != crops[0] || !nativeExactLeaf(crops[0], xml.Name{Local: "l"}, xml.Name{Local: "t"}, xml.Name{Local: "r"}, xml.Name{Local: "b"}) {
+		return nil, false
+	}
+	values := [4]int64{}
+	for index, name := range []string{"l", "t", "r", "b"} {
+		if _, present := nativeUnqualifiedAttr(crops[0], name); !present {
+			continue
+		}
+		value, ok := nativeInt64Attr(crops[0], "", name)
+		if !ok || value < 0 || value > 99000 {
+			return nil, false
+		}
+		values[index] = value
+	}
+	if values[0]+values[2] > 99000 || values[1]+values[3] > 99000 {
+		return nil, false
+	}
+	return &NativeDrawingCropV1{Left: nativeInt64(values[0]), Top: nativeInt64(values[1]), Right: nativeInt64(values[2]), Bottom: nativeInt64(values[3])}, true
+}
+
+func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, width, height int64) bool {
 	if !nativeExactContainer(picture) || len(picture.Children) != 3 || len(directNativeChildren(picture, picNS, "nvPicPr")) != 1 || len(directNativeChildren(picture, picNS, "blipFill")) != 1 || len(directNativeChildren(picture, picNS, "spPr")) != 1 {
 		return false
 	}
 	blipFill := firstDirectNativeChild(picture, picNS, "blipFill")
 	blips := directNativeChildren(blipFill, aNS, "blip")
 	stretches := directNativeChildren(blipFill, aNS, "stretch")
-	if !nativeExactContainer(blipFill) || len(blipFill.Children) != 2 || len(blips) != 1 || len(stretches) != 1 || len(blips[0].Children) != 0 || !nativeExactContainer(stretches[0]) || len(stretches[0].Children) != 1 {
+	crops := directNativeChildren(blipFill, aNS, "srcRect")
+	if !nativeExactContainer(blipFill) || len(crops) > 1 || len(blipFill.Children) != 2+len(crops) || len(blips) != 1 || len(stretches) != 1 || len(blips[0].Children) != 0 || !nativeExactContainer(stretches[0]) || len(stretches[0].Children) != 1 {
 		return false
 	}
 	fillRect := firstDirectNativeChild(stretches[0], aNS, "fillRect")
@@ -2594,19 +2666,26 @@ func nativePictureIdentityTransform(picture *nativeXMLNode, aNS, picNS string, w
 		return false
 	}
 	xfrm := xfrms[0]
+	seenTransformAttrs := map[string]bool{}
 	for _, attr := range xfrm.Attrs {
 		if attr.Name.Space != "" || (attr.Name.Local != "rot" && attr.Name.Local != "flipH" && attr.Name.Local != "flipV") {
 			return false
 		}
-		if attr.Name.Local == "rot" && attr.Value != "0" || (attr.Name.Local == "flipH" || attr.Name.Local == "flipV") && attr.Value != "0" && attr.Value != "false" {
+		if seenTransformAttrs[attr.Name.Local] {
+			return false
+		}
+		seenTransformAttrs[attr.Name.Local] = true
+		if attr.Name.Local == "rot" && attr.Value != "0" && attr.Value != "5400000" && attr.Value != "10800000" && attr.Value != "16200000" || (attr.Name.Local == "flipH" || attr.Name.Local == "flipV") && attr.Value != "0" && attr.Value != "false" && attr.Value != "1" && attr.Value != "true" {
 			return false
 		}
 	}
 	if !nativeXMLWhitespaceOnly(xfrm.Text) {
 		return false
 	}
+	rotation, _ := nativeUnqualifiedAttr(xfrm, "rot")
+	quarterTurn := rotation == "5400000" || rotation == "16200000"
 	if len(xfrm.Children) == 0 {
-		return true
+		return !quarterTurn // a quarter turn needs explicit original extents
 	}
 	if len(xfrm.Children) != 2 {
 		return false
@@ -2620,6 +2699,9 @@ func nativePictureIdentityTransform(picture *nativeXMLNode, aNS, picNS string, w
 	y, okY := nativeInt64Attr(off, "", "y")
 	cx, okCX := nativePositiveInt64Attr(ext, "", "cx")
 	cy, okCY := nativePositiveInt64Attr(ext, "", "cy")
+	if quarterTurn {
+		return okX && okY && x == 0 && y == 0 && okCX && okCY && cy == width && cx == height
+	}
 	return okX && okY && x == 0 && y == 0 && okCX && okCY && cx == width && cy == height
 }
 
@@ -2705,9 +2787,24 @@ func nativeDrawingWrap(container *nativeXMLNode, wpNS string) (string, bool) {
 	return value, value != ""
 }
 
+func nativeVerticalAlignmentValue(node *nativeXMLNode, wordNS string) (string, bool) {
+	if !nativeExactLeaf(node, xml.Name{Space: wordNS, Local: "val"}) {
+		return "", false
+	}
+	count, value := 0, ""
+	for _, attr := range node.Attrs {
+		if attr.Name == (xml.Name{Space: wordNS, Local: "val"}) {
+			count++
+			value = attr.Value
+		}
+	}
+	return value, count == 1 && (value == "baseline" || value == "subscript" || value == "superscript")
+}
+
 func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID string, node *nativeXMLNode) (*NativeRunPropertiesV1, bool) {
 	properties := &NativeRunPropertiesV1{}
 	unsafe := false
+	preserveOnly := false
 	for _, child := range node.Children {
 		if child.Name.Space != extractor.wordNS {
 			unsafe = true
@@ -2787,8 +2884,14 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 				unsafe = true
 			}
 		case "vertAlign":
-			unsafe = true
-			extractor.addUnsupported("VERTICAL_ALIGNMENT_UNSUPPORTED", "run-properties", paragraphID, partName, child, "Vertical alignment is preserved for Word but native shaping has no qualified scale, baseline, or advance metric")
+			preserveOnly = true
+			value, ok := nativeVerticalAlignmentValue(child, extractor.wordNS)
+			if ok {
+				properties.VerticalAlignment = nativeString(value)
+			} else {
+				unsafe = true
+				extractor.addUnsupported("VERTICAL_ALIGNMENT_UNSUPPORTED", "run-properties", paragraphID, partName, child, "Vertical alignment requires an exact baseline, subscript or superscript value")
+			}
 		default:
 			unsafe = true
 			extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "This run property is preserved verbatim")
@@ -2797,7 +2900,7 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 	if unsafe {
 		extractor.addUnsupported("PARTIAL_RUN_PROPERTIES", "run-properties", paragraphID, partName, node, "Only the conservative v1 run-property subset is exposed")
 	}
-	return properties, unsafe
+	return properties, unsafe || preserveOnly
 }
 
 func nativeOnOff(node *nativeXMLNode, namespace string) (bool, bool) {

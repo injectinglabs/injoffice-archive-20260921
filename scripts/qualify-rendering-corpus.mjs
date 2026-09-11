@@ -10,9 +10,10 @@ const commands = Object.freeze({
   'pdf-browser': ['scripts/smoke-demo-ux-browser.mjs', '--built'],
   'docx-native': ['scripts/smoke-docx-native-preview-browser.mjs'],
   'pptx-crop': ['scripts/smoke-pptx-crop-browser.mjs', '--styles'],
+  'pptx-native': ['scripts/smoke-pptx-native-preview-browser.mjs'],
   'office-real-files': ['scripts/smoke-playground-xlsx-wasm-browser.mjs'],
 })
-const formats = { 'pdf-geometry': ['pdf'], 'pdf-browser': ['pdf'], 'docx-native': ['docx'], 'pptx-crop': ['pptx'], 'office-real-files': ['xlsx', 'docx', 'pptx'] }
+const formats = { 'pdf-geometry': ['pdf'], 'pdf-browser': ['pdf'], 'docx-native': ['docx'], 'pptx-crop': ['pptx'], 'pptx-native': ['pptx'], 'office-real-files': ['xlsx', 'docx', 'pptx'] }
 
 export function validateRenderingCorpus(value) {
   if (!value || value.version !== 1 || value.license !== 'Apache-2.0' || value.externalOfficeReferenceCount !== 0 || !Array.isArray(value.cases)) throw new Error('Generated corpus requires version, license and explicit zero external Office references')

@@ -66,6 +66,73 @@ func TestNativePlaceholderRelationshipInheritance(t *testing.T) {
 	}
 }
 
+func TestNativeAncestorPromptTextIsNotSlideContent(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		input := nativePlaceholderFixture(t, strict, func(parts map[string]string) {
+			for _, part := range []string{"relocated/layouts/layout.xml", "relocated/masters/master.xml"} {
+				parts[part] = strings.Replace(parts[part], `<a:p/>`, `<a:p><a:pPr/><a:r><a:rPr/><a:t>Master authoring prompt</a:t></a:r><a:endParaRPr/></a:p>`, 1)
+			}
+		})
+		before := append([]byte(nil), input...)
+		deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err != nil || len(deck.Slides[0].Elements) != 1 {
+			t.Fatalf("unstyled prompt refused: %v %+v", err, deck.Slides[0].Compatibility)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.Paragraphs == nil || *element.Transform.X != 914400 || *(*element.Paragraphs)[0].MarginLeftEmu != 400000 {
+			t.Fatal("prompt changed inherited source geometry/style")
+		}
+		for _, p := range *element.Paragraphs {
+			for _, r := range p.Runs {
+				if r.Text != nil && strings.Contains(*r.Text, "Master authoring prompt") {
+					t.Fatal("ancestor prompt leaked into slide content")
+				}
+			}
+		}
+		if !bytes.Equal(input, before) {
+			t.Fatal("source package changed")
+		}
+	}
+}
+
+func TestNativeAncestorPromptUnknownStylesRemainRefused(t *testing.T) {
+	for _, prompt := range []string{
+		`<a:p><a:pPr algn="r"/><a:r><a:t>Prompt</a:t></a:r></a:p>`,
+		`<a:p><a:r><a:rPr sz="1000"/><a:t>Prompt</a:t></a:r></a:p>`,
+		`<a:p><a:r><a:t>Prompt</a:t><a:t>Duplicate</a:t></a:r></a:p>`,
+		`<a:p><a:fld id="field"><a:t>Prompt</a:t></a:fld></a:p>`,
+		`<a:p><a:endParaRPr b="1"/></a:p>`,
+	} {
+		input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
+			part := "relocated/layouts/layout.xml"
+			parts[part] = strings.Replace(parts[part], `<a:p/>`, prompt, 1)
+		})
+		deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err == nil && len(deck.Slides[0].Elements) != 0 {
+			t.Fatalf("unknown prompt styling projected: %s", prompt)
+		}
+	}
+}
+
+func TestNativeAncestorPromptKeepsExplicitNestedListCascade(t *testing.T) {
+	input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
+		for _, part := range []string{"relocated/layouts/layout.xml", "relocated/masters/master.xml"} {
+			parts[part] = strings.ReplaceAll(parts[part], "lvl1pPr", "lvl3pPr")
+			parts[part] = strings.Replace(parts[part], `<a:p/>`, `<a:p><a:r><a:t>Authoring prompt only</a:t></a:r></a:p>`, 1)
+		}
+		part := "relocated/slides/slide-a.xml"
+		parts[part] = strings.Replace(parts[part], `lvl="0"`, `lvl="2"`, 1)
+	})
+	deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+	if err != nil || len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("nested inheritance failed: %v", err)
+	}
+	p := (*deck.Slides[0].Elements[0].Paragraphs)[0]
+	if *p.Level != 2 || *p.MarginLeftEmu != 400000 || *p.BulletCharacter != "▪" || *p.Runs[0].FontSizeHundredthPt != 2400 {
+		t.Fatalf("wrong nested cascade: %+v", p)
+	}
+}
+
 func TestNativeTitlePlaceholderLocalOverrideAndSourceAnchor(t *testing.T) {
 	var sourceShape string
 	input := nativePlaceholderFixture(t, false, func(parts map[string]string) {

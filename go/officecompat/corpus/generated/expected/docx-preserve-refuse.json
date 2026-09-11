@@ -313,9 +313,9 @@
           "xml_sha256": "sha256:0ee78a9c161a029a1b8a3e4df6b7cf5b9869ec3310dcb012b367fdbae73618f0"
         },
         "capability": "drawings",
-        "code": "PICTURE_CROP_PRESERVED",
-        "id": "unsupported:a25b4bd9b3b07687ba63ef8b",
-        "message": "Cropped pictures remain preserve-only until crop geometry is modeled",
+        "code": "PICTURE_NONVISUAL_PRESERVED",
+        "id": "unsupported:f4caff303bff81984613c1e6",
+        "message": "Picture nonvisual properties with missing, hidden, or unmodeled semantics remain preserve-only",
         "preservation": "refuse-mutation",
         "scope_id": "paragraph:a3f01c186401b8c209d2452f"
       },

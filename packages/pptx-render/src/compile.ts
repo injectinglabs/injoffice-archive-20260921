@@ -74,6 +74,7 @@ interface Budget {
 }
 
 interface CompileState {
+  readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly deck: NativePptxDeck
   readonly slide: NativeSlide
   readonly options: CompileSlideOptions
@@ -1290,7 +1291,7 @@ function singleConsumableSeparator(
   )
 }
 
-function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number): Generator<WrapLineRange> {
+function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number, continuationWidth = width): Generator<WrapLineRange> {
   if (shaped.length === 0) {
     yield { startRunIndex: 0, startClusterIndex: 0, endRunIndex: 0, endClusterIndex: 0 }
     return
@@ -1322,6 +1323,7 @@ function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: num
           ...(breakConsumedRunIndex === undefined ? {} : { consumedSeparatorRunIndex: breakConsumedRunIndex, consumedSeparatorClusterIndex: breakConsumedClusterIndex }),
         }
         lineStartRunIndex = breakNextRunIndex
+        width = continuationWidth
         lineStartClusterIndex = breakNextClusterIndex
         cursor.runIndex = lineStartRunIndex
         cursor.clusterIndex = lineStartClusterIndex
@@ -1508,16 +1510,23 @@ function nativeRunLacksExplicitFont(run: NativeTextRun): boolean {
 }
 
 async function compileParagraphs(paragraphs: readonly NativeParagraph[], context: TextContainerContext, state: CompileState): Promise<readonly RenderParagraphNode[]> {
-  if (context.layout && context.layout.verticalAnchor !== 'top') {
+  if (context.layout && !state.lineLayoutPolicy && context.layout.verticalAnchor !== 'top') {
     throw new TextBodyLayoutRefusal('text.verticalAnchorUnavailable', 'native center/bottom text anchoring requires an Office-qualified line-box rule')
   }
   const result: RenderParagraphNode[] = []
   let y = 0
   for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
     const paragraph = paragraphs[paragraphIndex]!
-    if (context.layout && (paragraph.align === undefined || paragraph.level !== 0 || paragraph.bullet !== false || (paragraph.marginLeftEmu ?? 0) !== 0 || (paragraph.indentEmu ?? 0) !== 0)) {
+    if (context.layout && !state.lineLayoutPolicy && (paragraph.align === undefined || paragraph.level !== 0 || paragraph.bullet !== false || (paragraph.marginLeftEmu ?? 0) !== 0 || (paragraph.indentEmu ?? 0) !== 0)) {
       throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable', 'native layout requires explicit alignment and refuses bullets, nonzero list levels, margins or indents until their line geometry is qualified')
     }
+    const measuredParagraph = Boolean(context.layout && state.lineLayoutPolicy)
+    const margin = measuredParagraph ? paragraph.marginLeftEmu ?? 0 : 0
+    const indent = measuredParagraph ? paragraph.indentEmu ?? 0 : 0
+    if (measuredParagraph && (paragraph.align===undefined || paragraph.bullet===undefined || paragraph.level===undefined || (paragraph.level!==0&&(paragraph.marginLeftEmu===undefined||paragraph.indentEmu===undefined)))) throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','measured paragraphs need explicit alignment/list semantics and explicit offsets at nonzero levels')
+    const firstTextOffset=margin+(paragraph.bullet?0:indent)
+    const firstWidth=context.bounds.cx-firstTextOffset,continuationWidth=context.bounds.cx-margin
+    if(measuredParagraph&&(!Number.isSafeInteger(firstWidth)||!Number.isSafeInteger(continuationWidth)||firstWidth<=0||continuationWidth<=0))throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','paragraph margins leave no positive text line width')
     if (context.layout && state.nativeTextInheritanceUnresolved && paragraph.runs.some(nativeRunLacksExplicitFont)) {
       throw new TextBodyLayoutRefusal('text.inheritanceUnavailable', 'native layout refuses runs that still need unresolved presentation/layout/master/theme fonts')
     }
@@ -1532,6 +1541,14 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       }, state))
     }
     const direction = shaped[0]?.direction ?? state.textDefaults.direction
+    if(measuredParagraph&&(margin!==0||indent!==0||paragraph.bullet)&&(direction!=='ltr'||(paragraph.bullet&&paragraph.align!=='left')))throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','measured marker/indent placement requires horizontal LTR and left-aligned bullets')
+    let shapedMarker:ShapedRunResult|undefined
+    if(measuredParagraph&&paragraph.bullet){
+      if(!paragraph.bulletCharacter||!paragraph.runs[0])throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','native bullet needs one explicit authored character and a source font run')
+      const markerRun={...paragraph.runs[0],text:paragraph.bulletCharacter}
+      shapedMarker=await shapeRun(markerRun,{slideId:state.slide.id,elementId:context.elementId,elementKind:context.elementKind,paragraphIndex,runIndex:0,text:paragraph.bulletCharacter},state)
+      if(shapedMarker.direction!=='ltr'||shapedMarker.run.status!=='shaped'||indent+shapedMarker.run.advanceInlineEmu>0)throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','authored hanging indent does not fit the exact shaped marker before the text origin')
+    }
     const directions = new Set(shaped.map((item) => item.direction))
     if (directions.size > 1) {
       if (context.layout) throw new TextBodyLayoutRefusal('text.wrapUnavailable', 'native text-body layout refuses mixed-direction runs until paragraph bidi metadata is modeled')
@@ -1555,7 +1572,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     }
     const squareWrap = context.layout?.wrap === 'square'
     const lineRanges: Iterable<WrapLineRange> = squareWrap
-      ? squareWrappedLineRanges(shaped, context.bounds.cx)
+      ? squareWrappedLineRanges(shaped, firstWidth, continuationWidth)
       : [{ startRunIndex: 0, startClusterIndex: 0, endRunIndex: shaped.length, endClusterIndex: 0 }]
     const fragmentProgress: FragmentProgress[] | undefined = squareWrap
       ? shaped.map(() => ({ clusterIndex: 0, glyphIndex: 0, glyphPenXEmu: 0, glyphPenYEmu: 0 }))
@@ -1567,12 +1584,13 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       const lineShaped = squareWrap ? lineRunFragments(shaped, lineRange, fragmentProgress!, state, path) : shaped
       const advance = lineShaped.reduce((sum, item) => sum + item.run.advanceInlineEmu, 0)
       if (!Number.isSafeInteger(advance)) throw new RenderCompileError('render.textMetric', path, 'line advance exceeds integer precision')
-      const metricRuns = lineShaped.length > 0 ? lineShaped : shaped
+      const contentMetrics = lineShaped.length > 0 ? lineShaped : shaped
+      const metricRuns = lineIndex===0&&shapedMarker ? [...contentMetrics,shapedMarker] : contentMetrics
       if (context.layout && metricRuns.length === 0) {
         throw new TextBodyLayoutRefusal('text.metricsUnavailable', 'an empty native paragraph has no digest-bound font metrics for its line box')
       }
       const firstMetric = metricRuns[0]
-      if (context.layout && firstMetric && metricRuns.some((item) =>
+      if (context.layout && !state.lineLayoutPolicy && firstMetric && metricRuns.some((item) =>
         item.ascentMilliPoints !== firstMetric.ascentMilliPoints ||
         item.descentMilliPoints !== firstMetric.descentMilliPoints ||
         item.lineGapMilliPoints !== firstMetric.lineGapMilliPoints
@@ -1582,7 +1600,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       let ascentMilliPoints = firstMetric?.ascentMilliPoints ?? 0
       let descentMilliPoints = firstMetric?.descentMilliPoints ?? 0
       let lineGapMilliPoints = firstMetric?.lineGapMilliPoints ?? 0
-      if (!context.layout) {
+      if (!context.layout || state.lineLayoutPolicy) {
         for (let metricIndex = 1; metricIndex < metricRuns.length; metricIndex++) {
           const item = metricRuns[metricIndex]!
           if (item.ascentMilliPoints > ascentMilliPoints) ascentMilliPoints = item.ascentMilliPoints
@@ -1605,7 +1623,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(milliPointsToEmu(lineGapMilliPoints, path), path, state.budget)
       checkCoordinate(lineHeight, path, state.budget, true)
       const align = paragraph.align ?? 'left'
-      const lineStart = alignOffset(align, context.bounds.cx, advance)
+      const textOffset=lineIndex===0?firstTextOffset:margin
+      const lineStart = textOffset+alignOffset(align, context.bounds.cx-textOffset, advance)
       let cursor = direction === 'rtl' ? lineStart + advance : lineStart
       const runs = lineShaped.map((item, fragmentIndex) => {
         takeTextFragment(state, `${path}.runs[${fragmentIndex}]`)
@@ -1629,10 +1648,13 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
           endUtf16: cluster.endUtf16,
         }]
       }
+      let marker:RenderTextRunNode|undefined
+      if(lineIndex===0&&shapedMarker){takeTextFragment(state,`${path}.marker`);checkCoordinate(margin+indent,path,state.budget);marker={...shapedMarker.run,sourceRole:'paragraphBullet',x:margin+indent,baselineY:y+ascent}}
       result.push({
         kind: 'paragraph', sourceElementId: context.elementId, paragraphIndex, lineIndex,
         align, direction, level: paragraph.level ?? 0, bullet: paragraph.bullet ?? false,
         x: lineStart, y, widthEmu: advance, heightEmu: lineHeight, runs,
+        ...(marker?{marker}:{}),
         ...(consumedSoftSeparators === undefined ? {} : { consumedSoftSeparators }),
       })
       if (context.layout === undefined && (advance > context.bounds.cx || y + lineHeight > context.bounds.cy)) {
@@ -1650,7 +1672,13 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     }
   }
   const offsetX = context.bounds.x
-  const offsetY = context.bounds.y
+  const remainder = context.bounds.cy - y
+  if (!Number.isSafeInteger(remainder)) throw new RenderCompileError('render.textMetric', `$.elements.${context.elementId}.textBody`, 'text anchor remainder exceeds integer precision')
+  // The named policy intentionally specifies floor for half-EMU centers and
+  // signed offsets for overflowing blocks. No browser/Office heuristic enters.
+  const anchorOffset = state.lineLayoutPolicy && context.layout?.verticalAnchor === 'center' ? Math.floor(remainder / 2)
+    : state.lineLayoutPolicy && context.layout?.verticalAnchor === 'bottom' ? remainder : 0
+  const offsetY = context.bounds.y + anchorOffset
   checkCoordinate(offsetX, `$.elements.${context.elementId}.textBody`, state.budget)
   checkCoordinate(offsetY, `$.elements.${context.elementId}.textBody`, state.budget)
   return result.map((paragraph) => {
@@ -1665,7 +1693,9 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(baselineY, `$.elements.${context.elementId}.textBody`, state.budget)
       return { ...run, x, baselineY }
     })
-    return { ...paragraph, x: paragraphX, y: paragraphY, runs }
+    let marker:RenderTextRunNode|undefined
+    if(paragraph.marker){const x=paragraph.marker.x+offsetX,baselineY=paragraph.marker.baselineY+offsetY;checkCoordinate(x,`$.elements.${context.elementId}.marker`,state.budget);checkCoordinate(baselineY,`$.elements.${context.elementId}.marker`,state.budget);marker={...paragraph.marker,x,baselineY}}
+    return { ...paragraph, x: paragraphX, y: paragraphY, runs, ...(marker?{marker}:{}) }
   })
 }
 
@@ -1674,9 +1704,12 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
   takeNode(state, path)
   try {
     const compiled = await compileParagraphs(paragraphs, context, state)
+    const deterministic = Boolean(context.layout && state.lineLayoutPolicy)
+    if (deterministic) state.diagnostics.push({severity:'warning',code:'text.deterministicLayout',message:'Measured native glyphs use InjOffice max-run-natural-v1 line boxes and anchor offsets; this policy is not an Office visual-equivalence claim.',slideId:state.slide.id,elementId:context.elementId})
     return {
       kind: 'textBody', sourceElementId: context.elementId, bounds: context.bounds,
-      fidelity: context.layout ? 'native' : 'legacyUnavailable',
+      fidelity: deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
+      ...(deterministic ? {lineLayoutPolicy: state.lineLayoutPolicy} : {}),
       wrap: context.layout?.wrap, verticalAnchor: context.layout?.verticalAnchor, autoFit: context.layout?.autoFit,
       horizontalOverflow: context.layout?.horizontalOverflow, verticalOverflow: context.layout?.verticalOverflow,
       status: 'laidOut', paragraphs: compiled,
@@ -1853,6 +1886,8 @@ function canonicalize(value: unknown): unknown {
 
 /** Compile one validated native slide into a deterministic, immutable integer-EMU tree. */
 export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: number | string, options: CompileSlideOptions): Promise<SlideRenderTree> {
+  const lineLayoutPolicy = options.lineLayoutPolicy
+  if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)
   let deck: NativePptxDeck
   try {
@@ -1900,6 +1935,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   checkCoordinate(deck.size.cx, '$.size.cx', budget, true)
   checkCoordinate(deck.size.cy, '$.size.cy', budget, true)
   const state: CompileState = {
+    lineLayoutPolicy,
     deck,
     slide: nativeSlide,
     options,

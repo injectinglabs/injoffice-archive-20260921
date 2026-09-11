@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { NativeDocxPages, NativeDocxImage, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse } from './NativeDocxPages'
+import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse } from './NativeDocxPages'
 
 describe('native document page viewer', () => {
   const resources = [{ content_type: 'image/jpeg', bytes_base64: 'AA==', width_px: 2, height_px: 1 }] as Parameters<typeof decodeNativeDocxImages>[0]
@@ -45,6 +45,34 @@ describe('native document page viewer', () => {
     const markup = renderToStaticMarkup(createElement(NativeDocxImage, { command: { kind: 'paint_inline_image', id: 'image:1', line_id: 'line:1', fragment_id: 'fragment:1', source_id: 'run:1', asset_id: 'asset:1', x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, source_crop: { left: 0, top: 0, right: 0, bottom: 0, unit: 'one-hundred-thousandth' }, transform: { rotation_degrees: 0, flip_horizontal: false, flip_vertical: false } }, base64: 'AA==' }))
     expect(markup).toContain('preserveAspectRatio="none"')
     expect(markup).toContain('width="200" height="100"')
+  })
+  it('replays all source flips and half-turns as exact box-preserving matrices', () => {
+    for (const rotation_degrees of [0, 180] as const) for (const flip_horizontal of [false, true]) for (const flip_vertical of [false, true]) {
+      const sx = flip_horizontal !== (rotation_degrees === 180) ? -1 : 1
+      const sy = flip_vertical !== (rotation_degrees === 180) ? -1 : 1
+      const markup = renderToStaticMarkup(createElement(NativeDocxImage, { command: { kind: 'paint_inline_image', id: 'image:1', line_id: 'line:1', fragment_id: 'fragment:1', source_id: 'run:1', drawing_id: 'drawing:1', asset_id: 'asset:1', x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, source_crop: { left: 0, top: 0, right: 0, bottom: 0, unit: 'one-hundred-thousandth' }, transform: { rotation_degrees, flip_horizontal, flip_vertical } }, base64: 'AA==' }))
+      expect(markup).toContain(`transform="matrix(${sx} 0 0 ${sy} ${sx < 0 ? 220 : 0} ${sy < 0 ? 140 : 0})"`)
+      expect(markup).toContain('width="200" height="100"')
+    }
+  })
+  it('maps every oriented source corner to the exact attested box for all quarter turns and flips', () => {
+    for (const rotation_degrees of [0, 90, 180, 270] as const) for (const flip_horizontal of [false, true]) for (const flip_vertical of [false, true]) {
+      const geometry = nativeDocxImageOrientation({ x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, transform: { rotation_degrees, flip_horizontal, flip_vertical } } as Parameters<typeof nativeDocxImageOrientation>[0])
+      const [a,b,c,d,e,f] = geometry.matrix as [number, number, number, number, number, number]
+      for (const u of [0,1]) for (const v of [0,1]) {
+        const sourceX = 10 + u * geometry.width, sourceY = 20 + v * geometry.height
+        const reflectedU = flip_horizontal ? 1-u : u, reflectedV = flip_vertical ? 1-v : v
+        const expected = rotation_degrees === 90 ? [1-reflectedV,reflectedU] : rotation_degrees === 180 ? [1-reflectedU,1-reflectedV] : rotation_degrees === 270 ? [reflectedV,1-reflectedU] : [reflectedU,reflectedV]
+        expect([a*sourceX+c*sourceY+e,b*sourceX+d*sourceY+f]).toEqual([10+expected[0]!*200,20+expected[1]!*100])
+      }
+    }
+  })
+  it('clips the original source rectangle before applying image orientation', () => {
+    const markup = renderToStaticMarkup(createElement(NativeDocxImage, { command: { kind: 'paint_inline_image', id: 'image:1', line_id: 'line:1', fragment_id: 'fragment:1', source_id: 'run:1', drawing_id: 'drawing:1', asset_id: 'asset:1', x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, source_crop: { left: 50000, top: 0, right: 0, bottom: 0, unit: 'one-hundred-thousandth' }, transform: { rotation_degrees: 90, flip_horizontal: false, flip_vertical: false } }, base64: 'AA==' }))
+    expect(markup).toContain('viewBox="50000 0 50000 100000"')
+    expect(markup).toContain('overflow="hidden"')
+    expect(markup).toContain('width="100" height="200"')
+    expect(markup).toContain('<image x="0" y="0" width="100000" height="100000"')
   })
   it('bounds decoded PNG pixels independently of compressed response bytes', () => {
     expect(nativeDocxImagesWithinBudget([{ width_px: 10000, height_px: 10000 }])).toBe(false)

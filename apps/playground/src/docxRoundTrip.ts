@@ -49,7 +49,7 @@ function visitStory(story: NativeDocxStoryV1, storyLabel: string, targets: Edita
   const visit = (paragraph: NativeDocxParagraphV1, location: string) => {
     if (paragraph.edit_policy.mode !== 'read-write' || !paragraph.edit_policy.allowed_operations.includes('text.replace')) return
     paragraph.runs.forEach((run, runIndex) => {
-      if (run.kind !== 'text' || run.text === undefined || run.properties?.hidden) return
+      if (run.kind !== 'text' || run.text === undefined || run.properties?.hidden || run.page_field !== undefined || run.properties?.vertical_alignment && run.properties.vertical_alignment !== 'baseline') return
       targets.push({
         key: targetKey(run.anchor.part_name, run.id),
         label: `${storyLabel} · ${location} · run ${runIndex + 1}`,

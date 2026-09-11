@@ -8,7 +8,7 @@ node --test scripts/qualify-rendering-corpus.test.mjs
 node scripts/qualify-rendering-corpus.mjs
 ```
 
-The runner executes all five required cases and writes `artifacts/rendering-corpus/report.json`,
+The runner executes all six required cases and writes `artifacts/rendering-corpus/report.json`,
 logs and screenshots. A failure returns nonzero. Use `--case pdf-geometry` for a
 focused check; its report explicitly marks the generated suite incomplete.
 Node 22+, Go and Chrome are required. Local servers use isolated ports and
@@ -28,6 +28,9 @@ temporary profiles; no running user application or external service is needed.
   The crop branch uses a native model; the styles branch extracts an original
   PPTX file and checks authored text styles and bullets in the browser.
   These layout checks do not establish PowerPoint typography equivalence.
+- Native PPTX: an explicitly uploaded source passes Go extraction, the isolated
+  exact-font helper and browser SVG glyph replay, including mixed-size vertical
+  anchors and visible missing-font refusal. Operator fonts stay server-local.
 - XLSX/DOCX/PPTX: bundled real files pass browser-WASM extraction, editing and
   re-extraction with source-bound readback checks.
 

@@ -23,6 +23,19 @@ import (
 
 const happyTreeSHA = "c08f0bb099770a475556af8a78d9d6e46296e9791bf9af56c70571c1fa3cb513"
 
+func TestPPTXPreviewFlagsRequireAbsolutePair(t *testing.T) {
+	for _, args := range [][]string{
+		{"-pptx-preview-worker", "/operator/worker.js"},
+		{"-pptx-font-manifest", "/operator/fonts.json"},
+		{"-pptx-preview-worker", "worker.js", "-pptx-font-manifest", "/operator/fonts.json"},
+		{"-pptx-preview-worker", "/operator/worker.js", "-pptx-font-manifest", "fonts.json"},
+	} {
+		if got := run(args); got != 2 {
+			t.Fatalf("invalid configuration returned %d", got)
+		}
+	}
+}
+
 func readHappyTree(t *testing.T) []byte {
 	t.Helper()
 	path := filepath.Join("..", "..", "..", "xlsxpatch", "testdata", "excel-authored", "happy-tree.xlsx")

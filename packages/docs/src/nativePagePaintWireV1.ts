@@ -44,6 +44,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   PathCloseV1: ['kind'],
   GlyphCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'glyph_index', 'face', 'glyph_id', 'font_size_millipoints', 'fill_rgb', 'fill_rule', 'outline_kind', 'path'],
   HighlightCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
+  UnderlineCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'stroke_index', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   CellFillCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   BorderCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'edge', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   NoteSeparatorCommandV1: ['kind', 'id', 'line_id', 'story_id', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
@@ -263,6 +264,7 @@ export function paintNoteSeparatorCommandID(placedLineID: string): string {
 
 export function placedLineIDMatches(placedLineID: string, shapedLineID: string): boolean {
   if (placedLineID === `placed:${shapedLineID}`) return true
+  if (placedLineID.startsWith(`placed:${shapedLineID}:table-header:page:`)) return true
   const suffix = `:${shapedLineID}`
   if (!placedLineID.endsWith(suffix)) return false
   const prefix = placedLineID.slice(0, -suffix.length)
@@ -455,6 +457,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       if (lineID && pageLineIDs.has(lineID)) add(issues, 'DUPLICATE_ID', `${linePath}/line_id`, 'line id is duplicated on the page')
       if (lineID) pageLineIDs.add(lineID)
       if (placedID && lineID && !placedLineIDMatches(placedID, lineID)) add(issues, 'INVALID_VALUE', `${linePath}/placed_line_id`, 'placed line id must derive from its body, header/footer, or note placement and shaped line id')
+      if (placedID && lineID && placedID.startsWith(`placed:${lineID}:table-header:`) && placedID !== `placed:${lineID}:table-header:${pageID}`) add(issues, 'BROKEN_REFERENCE', `${linePath}/placed_line_id`, 'repeated table header must derive from this exact page identity')
       stringValue(line.paragraph_id, `${linePath}/paragraph_id`, issues)
       const lineSectionID = stringValue(line.section_id, `${linePath}/section_id`, issues)
       const region = line.region === 'body' || line.region === 'header' || line.region === 'footer' || line.region === 'footnote' || line.region === 'endnote' ? line.region : undefined
@@ -492,6 +495,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       const kind = isObject(commandValue) ? commandValue.kind : undefined
       const fields = kind === 'fill_glyph_path' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GlyphCommandV1
         : kind === 'fill_text_highlight' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.HighlightCommandV1
+        : kind === 'stroke_text_underline' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.UnderlineCommandV1
         : kind === 'paint_inline_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageCommandV1
           : kind === 'fill_table_cell' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.CellFillCommandV1
             : kind === 'stroke_table_border' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BorderCommandV1
@@ -534,6 +538,15 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       }
       const fragmentID = stringValue(command.fragment_id, `${commandPath}/fragment_id`, issues, ID, 1024)
       stringValue(command.source_id, `${commandPath}/source_id`, issues)
+      if (kind === 'stroke_text_underline') {
+        const strokeIndex = integer(command.stroke_index, `${commandPath}/stroke_index`, issues, 0, 1)
+        if (commandID && fragmentID && commandPlacementID && commandID !== `paint:${commandPlacementID}:${fragmentID}:underline:${strokeIndex}`) add(issues, 'INVALID_VALUE', `${commandPath}/id`, 'underline id must derive from placement, fragment and stroke')
+        for (const key of ['x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints'] as const) integer(command[key], `${commandPath}/${key}`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        integer(command.width_millipoints, `${commandPath}/width_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        if (typeof command.x1_millipoints === 'number' && typeof command.x2_millipoints === 'number' && command.x1_millipoints >= command.x2_millipoints || command.y1_millipoints !== command.y2_millipoints) add(issues, 'INVALID_VALUE', commandPath, 'underline must be a positive-width horizontal rule')
+        stringValue(command.stroke_rgb, `${commandPath}/stroke_rgb`, issues, RGB, 6)
+        return
+      }
       if (kind === 'fill_text_highlight') {
         if (commandID && fragmentID && commandPlacementID && commandID !== `paint:${commandPlacementID}:${fragmentID}:highlight`) add(issues, 'INVALID_VALUE', `${commandPath}/id`, 'highlight id must derive from its placed line and fragment')
         for (const key of ['x_millipoints', 'y_millipoints'] as const) integer(command[key], `${commandPath}/${key}`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
@@ -563,13 +576,16 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         integer(command.width_millipoints, `${commandPath}/width_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
         integer(command.height_millipoints, `${commandPath}/height_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
         const crop = exactObject(command.source_crop, `${commandPath}/source_crop`, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageCropV1, issues)
-        if (crop && (crop.left !== 0 || crop.top !== 0 || crop.right !== 0 || crop.bottom !== 0 || crop.unit !== 'one-hundred-thousandth')) add(issues, 'INVALID_VALUE', `${commandPath}/source_crop`, 'v1 image crop must be the explicit full source rectangle')
+        if (crop) {
+          for (const key of ['left','top','right','bottom'] as const) integer(crop[key], `${commandPath}/source_crop/${key}`, issues, 0, 99000)
+          if (crop.unit !== 'one-hundred-thousandth' || (crop.left as number)+(crop.right as number)>99000 || (crop.top as number)+(crop.bottom as number)>99000) add(issues, 'INVALID_VALUE', `${commandPath}/source_crop`, 'source crop must retain at least one percent per axis in exact integer units')
+        }
         const transform = exactObject(command.transform, `${commandPath}/transform`, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageTransformV1, issues)
-        if (transform && (transform.rotation_degrees !== 0 || transform.flip_horizontal !== false || transform.flip_vertical !== false)) add(issues, 'INVALID_VALUE', `${commandPath}/transform`, 'v1 image transform must be explicit identity')
+        if (transform && (![0, 90, 180, 270].includes(transform.rotation_degrees as number) || typeof transform.flip_horizontal !== 'boolean' || typeof transform.flip_vertical !== 'boolean')) add(issues, 'INVALID_VALUE', `${commandPath}/transform`, 'image transform must specify quarter-turn rotation and explicit flip booleans')
       }
     })
     if (commands.length > DOCX_PAGE_PAINT_LIMITS.maxGlyphs) add(issues, 'LIMIT_EXCEEDED', `${path}/commands`, `commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxGlyphs}`)
-    const actualCommandIDs = commands.flatMap((command) => isObject(command) && (command.kind === 'fill_glyph_path' || command.kind === 'fill_text_highlight' || command.kind === 'paint_inline_image' || command.kind === 'stroke_note_separator') && typeof command.id === 'string' ? [command.id] : [])
+    const actualCommandIDs = commands.flatMap((command) => isObject(command) && (command.kind === 'fill_glyph_path' || command.kind === 'fill_text_highlight' || command.kind === 'stroke_text_underline' || command.kind === 'paint_inline_image' || command.kind === 'stroke_note_separator') && typeof command.id === 'string' ? [command.id] : [])
     if (actualCommandIDs.length !== referencedCommandIDs.length || actualCommandIDs.some((id, index) => id !== referencedCommandIDs[index])) add(issues, 'BROKEN_REFERENCE', `${path}/lines`, 'line command ids must exactly cover page commands in replay order')
     if (page.kind === 'parity-blank' && (commands.length > 0 || lines.length > 0)) add(issues, 'INVALID_UNION', path, 'parity-blank pages cannot contain lines or paint commands')
     if (!pageID) return

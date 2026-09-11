@@ -86,11 +86,17 @@ func run(args []string) int {
 	addr := fs.String("addr", envOr("INJOFFICE_ADDR", defaultAddr), "listen address (host:port)")
 	dir := fs.String("artifacts", envOr("INJOFFICE_ARTIFACTS", defaultArtifacts), "directory for opaque artifact objects")
 	previewWorker := fs.String("docx-preview-worker", "", "opt-in absolute path to the compiled local DOCX page-paint worker")
+	pptxWorker := fs.String("pptx-preview-worker", "", "opt-in absolute path to the local PPTX preview worker")
+	pptxFonts := fs.String("pptx-font-manifest", "", "absolute operator-owned exact-font manifest for PPTX preview")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *previewWorker != "" && !filepath.IsAbs(*previewWorker) {
 		fmt.Fprintln(os.Stderr, "injoffice-server: docx-preview-worker must be an absolute local path")
+		return 2
+	}
+	if (*pptxWorker == "") != (*pptxFonts == "") || *pptxWorker != "" && (!filepath.IsAbs(*pptxWorker) || !filepath.IsAbs(*pptxFonts)) {
+		fmt.Fprintln(os.Stderr, "injoffice-server: pptx-preview-worker and pptx-font-manifest must both be absolute local paths")
 		return 2
 	}
 	store, err := fsstore.Open(*dir)
@@ -101,7 +107,7 @@ func run(args []string) int {
 	fmt.Fprintf(os.Stderr, "injoffice-server: listening on http://%s artifacts=%s (no auth)\n", *addr, *dir)
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           newHandlerWithPreview(store, officehttp.DOCXPreviewOptions{WorkerPath: *previewWorker}),
+		Handler:           newHandlerWithPreviews(store, officehttp.DOCXPreviewOptions{WorkerPath: *previewWorker}, officehttp.PPTXPreviewOptions{WorkerPath: *pptxWorker, FontManifestPath: *pptxFonts}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		// WriteTimeout stays 0 so the collab SSE stream can idle with keepalives.
@@ -119,7 +125,11 @@ func newHandler(store xlsxhttp.Store) http.Handler {
 }
 
 func newHandlerWithPreview(store xlsxhttp.Store, preview officehttp.DOCXPreviewOptions) http.Handler {
-	office := officehttp.NewHandlerWithDOCXPreview(store, preview)
+	return newHandlerWithPreviews(store, preview, officehttp.PPTXPreviewOptions{})
+}
+
+func newHandlerWithPreviews(store xlsxhttp.Store, preview officehttp.DOCXPreviewOptions, pptxPreview officehttp.PPTXPreviewOptions) http.Handler {
+	office := officehttp.NewHandlerWithPreviews(store, preview, pptxPreview)
 	rooms := collabhttp.New(collab.NewHub(), store)
 	artifacts := artifacthttp.New(store)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

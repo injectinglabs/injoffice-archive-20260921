@@ -721,9 +721,9 @@ func TestExtractNativeDocumentDrawingMLFloatingAndCropRefusal(t *testing.T) {
 		}
 	})
 
-	t.Run("crop remains preserve-only", func(t *testing.T) {
+	t.Run("out-of-bounds crop remains preserve-only", func(t *testing.T) {
 		parts := transitionalNativeParts()
-		parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<pic:blipFill><a:blip`, `<pic:blipFill><a:srcRect l="1000"/><a:blip`, 1)
+		parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<pic:blipFill><a:blip`, `<pic:blipFill><a:srcRect l="100000"/><a:blip`, 1)
 		doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
 		if err != nil {
 			t.Fatal(err)

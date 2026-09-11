@@ -269,6 +269,14 @@ async function qualifyDocx() {
   }
   const paginated = requireOk(paginateNativeDocxV1(paginationRequest), 'DOCX pagination')
   if (paginated.status !== 'paginated') throw new Error(`DOCX pagination refused: ${JSON.stringify(paginated)}`)
+  // Adjacent table cells are distinct vertical flows, even at the same Y.
+  // This identity is intentionally part of the reproducibility golden.
+  const sourceCell = document.body.blocks[1].table.rows[0].cells[0]
+  for (const page of paginated.pages) {
+    for (const entry of [...page.lines, ...page.paragraph_slices]) {
+      assert.equal(entry.table_cell_id, entry.paragraph_id === tableParagraph.id ? sourceCell.id : undefined)
+    }
+  }
   const tableProjection = qualifyNativeDocxTablesV1(document, resolvedLayout)
   assert.equal(tableProjection.status, 'qualified')
   const mediaAssets = prepareNativeDocxPagePaintMediaAssetsV1(document, [{ part_name: 'word/media/image1.png', content_type: 'image/png', content_digest: PNG_DIGEST, bytes: PNG_BYTES }])
@@ -300,6 +308,8 @@ async function qualifyDocx() {
   assert.deepEqual({ status: refused.status, resources: refused.resources, pages: refused.pages }, { status: 'refused', resources: [], pages: [] })
   const overLimit = decodeNativeDocxJson(' '.repeat(DOCX_NATIVE_LIMITS.maxJsonBytes + 1))
   assert.deepEqual(overLimit, { ok: false, issues: [{ code: 'LIMIT_EXCEEDED', path: '', message: `JSON payload exceeds ${DOCX_NATIVE_LIMITS.maxJsonBytes} bytes` }] })
+
+  if (process.argv.includes('--inspect-docx')) return { paginated, pagePaintRequest, painted }
 
   return {
     extraction: { canonical_sha256: sha256(canonical), reversed_keys_equal: true },

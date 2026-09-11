@@ -16,9 +16,14 @@ func NewHandler(store xlsxhttp.Store) http.Handler {
 }
 
 func NewHandlerWithDOCXPreview(store xlsxhttp.Store, preview DOCXPreviewOptions) http.Handler {
+	return NewHandlerWithPreviews(store, preview, PPTXPreviewOptions{})
+}
+
+func NewHandlerWithPreviews(store xlsxhttp.Store, preview DOCXPreviewOptions, pptxPreview PPTXPreviewOptions) http.Handler {
 	mux := http.NewServeMux()
 	gate := make(chan struct{}, 1)
 	mux.HandleFunc(DOCXPreviewPath, func(w http.ResponseWriter, r *http.Request) { handleDOCXPreview(w, r, preview, gate) })
+	mux.HandleFunc(PPTXPreviewPath, func(w http.ResponseWriter, r *http.Request) { handlePPTXPreview(w, r, pptxPreview, gate) })
 	xlsxhttp.Register(mux, store)
 	mux.HandleFunc(DOCXExtractPath, func(w http.ResponseWriter, r *http.Request) {
 		handleDOCXExtract(w, r, store)

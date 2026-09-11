@@ -7,6 +7,15 @@ second source of truth.
 
 ## Version 1 guarantees
 
+The additive `RunV1.page_field` metadata represents qualified simple decimal
+`PAGE` / `NUMPAGES` instructions. Such runs are text-kind with **empty source
+text**, not the cached field result, and their paragraph remains read-only.
+Consumers with older strict decoders must upgrade together with the Go engine.
+The native page-paint compiler emits bounded per-page shaping variants after
+body pagination; content-only previews should label unresolved fields rather
+than display a guessed number. See the [page-field rendering profile](../packages/docs/README.md)
+for the exact supported subset and remaining refusals.
+
 - Every document, story, block, paragraph, run, table row/cell, drawing,
   section, comment, and unsupported record has a durable InjOffice identity.
 - Every modeled OOXML object retains a part-qualified source anchor with byte

@@ -139,6 +139,8 @@ export interface NativeDocxPageBodyBoxV1 {
 }
 
 export interface NativeDocxPlacedLineV1 {
+  table_cell_id?: string
+  repeated_table_header?: true
   id: string
   line_id: string
   paragraph_id: string
@@ -153,6 +155,8 @@ export interface NativeDocxPlacedLineV1 {
 }
 
 export interface NativeDocxParagraphSliceV1 {
+  table_cell_id?: string
+  repeated_table_header?: true
   id: string
   paragraph_id: string
   section_id: string
@@ -513,6 +517,8 @@ function validateAuthoritativeParagraphBidi(
         continue
       }
       let paragraphStart: number = runStart
+      const scriptKind = resolved.properties.vertical_alignment
+      if ((scriptKind && scriptKind !== 'baseline' ? scriptKind : undefined) !== fragment.script_transform?.kind || fragment.script_transform && nativeRun.kind !== 'text') issues.push(issue('BROKEN_REFERENCE', `${basePath}/lines/${lineIndex}/fragments/${visualIndex}/script_transform`, 'script transform must exactly match authored vertical alignment on a text run'))
       let coveredLength = 0
       let exact = false
       if (nativeRun.kind === 'drawing') {
@@ -1260,7 +1266,7 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   context.previousAfter = paragraph.spacing_after_millipoints
 }
 
-function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTableV1, geometry: NativeDocxTableRowGeometryV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
+function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTableV1, geometry: NativeDocxTableRowGeometryV1, shaped: Map<string, NativeDocxShapedParagraphV1>, repeated = false): void {
   const page = context.currentPage
   const column = currentColumn(context)
   const section = context.currentSection
@@ -1301,12 +1307,14 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
           refuse(context, 'line-geometry-invalid', line.id, 'Cell line escapes its exact qualified content box')
           return
         }
-        placed.push({ id: `placed:${line.id}`, line_id: line.id, paragraph_id: paragraph.paragraph_id, section_id: section.id, column_id: targetColumn.id, column_ordinal: targetColumn.ordinal, source_line_ordinal: line.ordinal, x_millipoints: x, y_millipoints: y, width_millipoints: line.advance_inline_millipoints, height_millipoints: line.line_height_millipoints })
+        placed.push({ table_cell_id: cell.cell_id, ...(repeated ? { repeated_table_header: true as const } : {}), id: repeated ? `placed:${line.id}:table-header:${target.id}` : `placed:${line.id}`, line_id: line.id, paragraph_id: paragraph.paragraph_id, section_id: section.id, column_id: targetColumn.id, column_ordinal: targetColumn.ordinal, source_line_ordinal: line.ordinal, x_millipoints: x, y_millipoints: y, width_millipoints: line.advance_inline_millipoints, height_millipoints: line.line_height_millipoints })
         localY += line.line_height_millipoints
       }
       const sliceOrdinal = context.sliceCountForParagraph?.get(paragraph.paragraph_id) ?? 0
       context.sliceCountForParagraph?.set(paragraph.paragraph_id, sliceOrdinal + 1)
       target.paragraph_slices.push({
+        table_cell_id: cell.cell_id,
+        ...(repeated ? { repeated_table_header: true as const } : {}),
         id: `slice:${paragraph.paragraph_id}:${sliceOrdinal}`, paragraph_id: paragraph.paragraph_id, section_id: section.id, column_id: targetColumn.id, column_ordinal: targetColumn.ordinal, slice_ordinal: sliceOrdinal,
         first_line_ordinal: 0, last_line_ordinal: paragraph.lines.length - 1, line_ids: placed.map((line) => line.line_id),
         top_millipoints: placed[0]?.y_millipoints ?? checkedSum(target.body_box.y_millipoints, rowTop, localY)!,
@@ -1328,8 +1336,13 @@ function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTab
   const rows = layoutNativeDocxTableRowsV1(table, context.request.shaped_lines)
   if (!rows) { refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs'); return }
   let index = 0
+  const headerCount = table.table.rows.findIndex((row) => !row.repeat_header)
+  const headers = headerCount < 0 ? rows.length : headerCount
+  const headerHeight = rows.slice(0, headers).reduce((sum, row) => sum + row.height_millipoints, 0)
   while (index < rows.length && !context.refused) {
-    const group = nativeDocxTableRowGroupSizeV1(table, index)
+    // Keep the initial header prefix with the first body row; never emit an
+    // orphan header page or repeatedly retry a body row that cannot fit.
+    const group = index === 0 && headers > 0 ? Math.min(rows.length, headers + 1) : nativeDocxTableRowGroupSizeV1(table, index)
     let groupHeight = 0
     for (let offset = 0; offset < group; offset += 1) {
       groupHeight = checkedSum(groupHeight, rows[index + offset]!.height_millipoints) ?? Number.MAX_SAFE_INTEGER
@@ -1339,7 +1352,14 @@ function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTab
       refuse(context, 'line-geometry-invalid', rows[index]!.row_id, 'Merged table rows exceed the exact section column')
       return
     }
-    if (groupHeight > remainingHeight(context)) startNextFlowColumn(context)
+    if (groupHeight > remainingHeight(context)) {
+      if (index > 0 && headers > 0 && headerHeight + groupHeight > column.height_millipoints) {
+        refuse(context, 'line-geometry-invalid', rows[index]!.row_id, 'Repeated headers and the next indivisible row cannot fit on an empty page')
+        return
+      }
+      startNextFlowColumn(context)
+      if (index > 0) for (let header = 0; header < headers && !context.refused; header += 1) placeTableRow(context, table, rows[header]!, shaped, true)
+    }
     if (!currentColumn(context) || groupHeight > remainingHeight(context)) {
       refuse(context, 'line-geometry-invalid', rows[index]!.row_id, 'Indivisible merged table rows cannot fit on an empty section column')
       return
@@ -1688,7 +1708,9 @@ export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPagi
     const shapedParagraph = shaped.get(paragraph.id)
     return shapedParagraph ? shapedParagraph.lines.map((line) => ({ paragraph, line, sectionID: paragraphSections.get(paragraph.id) })) : []
   })
-  const actualLines = output.pages.flatMap((page, pageIndex) => page.lines.map((line) => ({ page, pageIndex, line })))
+  // Exact replay above validates every repeated placement. The independent
+  // source coverage audit below counts original body lines only.
+  const actualLines = output.pages.flatMap((page, pageIndex) => page.lines.filter((line) => !line.repeated_table_header).map((line) => ({ page, pageIndex, line })))
   const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout)
   const cellContentX = new Map<string, number>()
   if (qualified.status === 'qualified') for (const table of qualified.tables) for (const row of table.rows) for (const cell of row.cells) for (const paragraph of cell.cell.paragraphs) cellContentX.set(paragraph.id, cell.content_x_millipoints)

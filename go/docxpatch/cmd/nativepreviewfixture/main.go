@@ -28,6 +28,29 @@ func build(font []byte) ([]byte, error) {
 }
 
 func buildWithJPEG(font []byte, withJPEG bool) ([]byte, error) {
+	return buildWithUnderline(font, withJPEG, "")
+}
+
+func buildWithUnderline(font []byte, withJPEG bool, underline string) ([]byte, error) {
+	return buildWithDecorations(font, withJPEG, false, underline)
+}
+
+func buildWithFields(font []byte, withJPEG, withFields bool) ([]byte, error) {
+	return buildWithDecorations(font, withJPEG, withFields, "")
+}
+
+func buildWithDecorations(font []byte, withJPEG, withFields bool, underline string) ([]byte, error) {
+	return buildWithAllDecorations(font, withJPEG, withFields, false, underline)
+}
+
+func buildWithScripts(font []byte, withJPEG, withFields, withScripts bool) ([]byte, error) {
+	return buildWithAllDecorations(font, withJPEG, withFields, withScripts, "")
+}
+
+func buildWithAllDecorations(font []byte, withJPEG, withFields, withScripts bool, underline string) ([]byte, error) {
+	if underline != "" && underline != "single" && underline != "double" && underline != "words" {
+		return nil, fmt.Errorf("unsupported underline style")
+	}
 	if len(font) < 32 || len(font) > 8*1024*1024 {
 		return nil, fmt.Errorf("font must be 32 bytes–8 MiB")
 	}
@@ -45,6 +68,9 @@ func buildWithJPEG(font []byte, withJPEG bool) ([]byte, error) {
 		highlight := ""
 		if withJPEG && text == "Native document preview" {
 			highlight = `<w:highlight w:val="yellow"/>`
+		}
+		if underline != "" && text == "Native document preview" {
+			highlight += `<w:u w:val="` + underline + `"/>`
 		}
 		return `<w:p><w:pPr>` + br + `<w:jc w:val="left"/><w:spacing w:before="0" w:after="120"/><w:rPr>` + runProps + `</w:rPr></w:pPr><w:r><w:rPr>` + runProps + highlight + `</w:rPr><w:t>` + text + `</w:t></w:r></w:p>`
 	}
@@ -86,6 +112,32 @@ func buildWithJPEG(font []byte, withJPEG bool) ([]byte, error) {
 		document := strings.Replace(string(parts["word/document.xml"]), `<w:body>`, `<w:body>`+drawing, 1)
 		document = strings.Replace(document, `<w:document `, `<w:document xmlns:r="`+rns+`" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" `, 1)
 		parts["word/document.xml"] = []byte(document)
+	}
+	if withScripts {
+		run := func(text, alignment string) string {
+			extra := ""
+			if alignment != "" {
+				extra = `<w:vertAlign w:val="` + alignment + `"/>`
+			}
+			return `<w:r><w:rPr>` + runProps + extra + `</w:rPr><w:t xml:space="preserve">` + text + `</w:t></w:r>`
+		}
+		formula := `<w:p><w:pPr><w:spacing w:before="0" w:after="120"/></w:pPr>` + run("H", "") + run("2", "subscript") + run("O + x", "") + run("2", "superscript") + `</w:p>`
+		parts["word/document.xml"] = []byte(strings.Replace(string(parts["word/document.xml"]), paragraph("Second page", true), formula+paragraph("Second page", true), 1))
+	}
+	if withFields {
+		field := func(instruction string) string {
+			return `<w:fldSimple w:instr=" ` + instruction + ` "><w:r><w:rPr>` + runProps + `</w:rPr><w:t>999</w:t></w:r></w:fldSimple>`
+		}
+		for _, region := range []string{"header", "footer"} {
+			tag := "hdr"
+			if region == "footer" {
+				tag = "ftr"
+			}
+			parts["word/"+region+"1.xml"] = []byte(`<w:` + tag + ` xmlns:w="` + wns + `"><w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Page </w:t></w:r>` + field("PAGE") + `<w:r><w:t xml:space="preserve"> of </w:t></w:r>` + field("NUMPAGES") + `</w:p></w:` + tag + `>`)
+			parts["[Content_Types].xml"] = []byte(strings.Replace(string(parts["[Content_Types].xml"]), "</Types>", `<Override PartName="/word/`+region+`1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.`+region+`+xml"/></Types>`, 1))
+			parts["word/_rels/document.xml.rels"] = []byte(strings.Replace(string(parts["word/_rels/document.xml.rels"]), "</Relationships>", `<Relationship Id="`+region+`" Type="`+rns+`/`+region+`" Target="`+region+`1.xml"/></Relationships>`, 1))
+			parts["word/document.xml"] = []byte(strings.Replace(string(parts["word/document.xml"]), `<w:sectPr>`, `<w:sectPr><w:`+region+`Reference xmlns:r="`+rns+`" w:type="default" r:id="`+region+`"/>`, 1))
+		}
 	}
 	var output bytes.Buffer
 	writer := zip.NewWriter(&output)
@@ -130,6 +182,9 @@ func main() {
 	fontPath := flag.String("font", "", "path to licensed embeddable DejaVuSans.ttf")
 	out := flag.String("out", "", "new temporary DOCX output path")
 	withJPEG := flag.Bool("jpeg", false, "include generated baseline JFIF JPEG bands")
+	underline := flag.String("underline", "", "title underline: single, double, or words")
+	withFields := flag.Bool("page-fields", false, "include source-bound PAGE/NUMPAGES with stale caches in header and footer")
+	withScripts := flag.Bool("scripts", false, "include H2O + x2 using font-metric subscript and superscript")
 	flag.Parse()
 	if *fontPath == "" || *out == "" {
 		fmt.Fprintln(os.Stderr, "-font and -out are required")
@@ -138,7 +193,7 @@ func main() {
 	font, err := os.ReadFile(*fontPath)
 	if err == nil {
 		var data []byte
-		data, err = buildWithJPEG(font, *withJPEG)
+		data, err = buildWithAllDecorations(font, *withJPEG, *withFields, *withScripts, *underline)
 		if err == nil {
 			err = os.WriteFile(*out, data, 0600)
 		}

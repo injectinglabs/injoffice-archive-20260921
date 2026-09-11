@@ -299,13 +299,23 @@ selected static header/footer paragraphs with natural shaped line height, plus
 qualified footnote/endnote paragraphs with natural shaped line height, plus a
 bounded body-table subset:
 explicit fixed dxa width and grid, left alignment/indent, four cell margins,
-indivisible non-repeating rows, direct cell paragraphs, table-level single/RGB
+indivisible rows, direct cell paragraphs, table-level single/RGB
 borders, and clear RGB cell shading. Horizontal `grid_span`, vertical restart/continue
 merges, `atLeast`/`exact` row heights, and simple whole-table styles that project
 onto those same border/fill commands are included. Merged rows paginate as one
 atomic group and shared edges are emitted once in deterministic table-fill →
-line-content → border order. It refuses autofit/percentage/missing widths, repeated
-headers, cell-border conflicts, nested content, numbered cells, conditional
+line-content → border order. A contiguous leading `repeat_header` row prefix
+repeats on each continuation page, with the initial prefix kept together with
+the first body row. Each later page must fit the complete header prefix plus
+the next indivisible row; otherwise the whole preview refuses. Repeating-header
+tables currently refuse vertical merges, rather than splitting ambiguous merge
+groups across the header/body boundary. Source-bound cell IDs distinguish the
+parallel text flows of adjacent cells; repeated line placements have unique
+page-derived IDs and are validated by exact pagination replay, not accepted as
+arbitrary duplicate body content. Generated two-column DOCX browser fixtures
+verify this bounded behavior, not Word pixel equivalence.
+It refuses autofit/percentage/missing widths, non-prefix repeating headers,
+cell-border conflicts, nested content, numbered cells, conditional
 `tblStylePr` effects, and any table-descendant resolution diagnostic. Selected story
 lines must fit between the exact header/footer edge distance and the body box.
 The planner independently inherits reference kinds, keeps parity fillers blank,
@@ -322,21 +332,30 @@ and preserved relationship-part digest to one preserved media part, verifies
 caller-supplied bytes against that part's byte length and SHA-256, parses bounded static PNG/JPEG
 dimensions, and carries canonical base64 bytes as an output resource. Inline
 image commands retain the exact DrawingML EMU extent projected through the
-integer-only `10/127` milli-point ratio, an explicit full-source crop, and an
-explicit identity transform. Prepared and completed compiler envelopes expose
+integer-only `10/127` milli-point ratio, an explicit source crop rectangle, and an
+explicit source-bound orientation transform. Prepared and completed compiler envelopes expose
 canonical hashes for the complete validated request and output.
 
 Images are restricted to embedded static PNG or baseline JFIF JPEG pictures in `wp:inline` with zero
-distances/effect extents, identity `a:xfrm`, full-source crop, exact integer
+distances/effect extents, extent-preserving `a:xfrm` (quarter-turn rotation and
+horizontal/vertical flips), bounded source crop, exact integer
 milli-point geometry, and bounded bytes/pixels. It refuses anchors/floating
 placement, wrapping, remote or external relationships, vectors and other
-raster formats, animation, crop/rotation/flip/effects, mismatched extents, and
+raster formats, animation, negative/extending crop, arbitrary rotation, effects, mismatched extents, and
 media digest drift. JPEG support is deliberately bounded to one baseline 8-bit
 grayscale/YCbCr interleaved scan with internal tables and JFIF APP0, following
 [ITU-T T.871](https://www.itu.int/rec/T-REC-T.871). EXIF, ICC, Adobe transforms,
 progressive/multiple scans and ambiguous color metadata remain refused. The
 validator checks marker structure, not entropy decoding; the viewer decodes the
 preserved bytes and the browser smoke verifies generated red/blue JPEG pixels.
+Quarter turns require explicit unrotated DrawingML extents whose swapped bounds
+exactly match `wp:extent`; missing or inconsistent extents refuse before painting.
+Reflections apply in source axes before clockwise rotation. Integer SVG matrices
+and original raster pixel fixtures verify all orientations without Office screenshots.
+Source crops use integer one-hundred-thousandths, default omitted sides to zero,
+and must retain at least 1% of the original image on both axes (at most 100×
+scale). The viewer clips this source rectangle before reflecting/rotating into
+the unchanged layout box; it does not rewrite or resample the original media.
 Selected header/footer inline PNG/JPEG runs use the same
 digest-bound asset join and `paint_inline_image` command as body pictures. V1
 also emits RTL/mixed-bidi fragments and bounded U+0020-justified lines in
@@ -344,8 +363,8 @@ visual paint order, requiring no paint-time text reversal or measurement. It
 also emits RTL/mixed-bidi fragments, exact list-marker glyphs, and bounded
 U+0020-justified lines in visual paint order, requiring no paint-time text
 reversal or measurement. It refuses distributed-character justification,
-underline paint, header/footer tables, shapes, references, fields
-(including cached PAGE results), and unsupported note content. Native note marker
+underline paint, header/footer tables, shapes, references, fields outside the
+page-number subset below, and unsupported note content. Native note marker
 fragments must exactly equal the paginator-assigned decimal label. It also refuses
 system or unaddressed faces, missing glyphs, invalid/mismatched provider output,
 unclosed or overflowing paths, incomplete pages, and all resource overflows.
@@ -362,7 +381,61 @@ request decoder bind every rectangle to the source highlight color, run,
 fragment, placement and geometry, and reject missing/reordered decorations.
 The 16 OOXML named colors and `none` are supported for text runs; zero-advance
 fragments produce no background. Highlighted tabs/other controls and list-marker
-backgrounds remain refused. Underline support and edit authority are unchanged.
+backgrounds remain refused. Edit authority is unchanged.
+
+Underlined runs support `single`, `double`, `words`, and `none` through explicit
+`stroke_text_underline` commands after the line's glyphs. Geometry uses the
+content-addressed font's underline position and thickness; missing metrics
+refuse instead of using browser decoration defaults. Double underlines have one
+stroke-width of clear separation, and `words` omits whitespace fragments.
+Source/style, fragment, font metrics, placement and command order are checked
+again by the request decoder. Other underline styles and custom underline
+colors remain outside this bounded profile. This is a deterministic metric
+policy, not a claim of Word-pixel parity.
+
+Simple decimal `PAGE` and `NUMPAGES` fields in ordinary header/footer paragraphs
+are resolved from the final native body pagination. The Go extractor recognizes
+only an unlocked `w:fldSimple` with an exact `PAGE` or `NUMPAGES` instruction and
+one supported text result run. It discards the cached result, records
+`page_field`, and keeps the paragraph read-only. The raw story-root XML anchor
+digest covers the instruction and cached bytes; the package digest binds the
+complete source. These are integrity joins within the trusted extraction
+pipeline, not signatures from an external authority.
+
+The compiler re-shapes complete header/footer text for each final page, including
+surrounding text and authored alignment. Optional `page_field_variants` in the
+paint request must exactly cover final page order; their source text is checked
+against deterministic decimal substitution. Their full shaping data is included
+in the shaped-lines integrity digest. Native glyphs paint `Page 1 of 2` and
+`Page 2 of 2` even if the source cache says `999`. No cached value is rendered or
+made editable. Low-level consumers must pass the compiler's variants through
+to header/footer layout and paint, not reuse the empty source field as text.
+
+This bounded profile allows at most 64 pages and 100,000 cumulative variant
+fragments (`DOCX_PAGE_FIELD_LIMITS`). Body/note/comment fields, header/footer
+tables, complex `fldChar` fields, nested fields, switches (including
+`MERGEFORMAT`), locked/dirty fields, section numbering formats/restarts, and all
+other field instructions remain refused. Field-dependent body pagination needs
+a separate convergence contract; this implementation makes no Word-pixel parity
+claim. See the [OOXML simple-field definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.simplefield?view=openxml-3.0.1).
+
+Text-run `w:vertAlign` values `subscript` and `superscript` use an explicit
+font-metric simulation profile. Native shaping reads the embedded font's
+[OS/2 script size and offset metrics](https://learn.microsoft.com/en-us/typography/opentype/spec/os2),
+scales horizontal advances and vertical metrics independently, and carries a
+digest-bound `script_transform` on each affected fragment. Page paint applies
+the same horizontal/vertical outline scale and baseline offsets; no CSS text
+measurement or fixed percentage is used. The output's `font_size_millipoints`
+continues to identify the authored run size; the compiled glyph paths are the
+rendering authority, not an instruction to re-shape at that size.
+
+This is a deterministic use of the font's recommended simulation metrics, not
+a claim that Microsoft Word uses the same policy. Missing/truncated/invalid
+OS/2 metrics, non-reducing scales, script paragraph marks, list/note markers,
+controls, and combinations with underline or highlighting remain refused.
+Direct script paragraphs remain read-only; `baseline` explicitly resets an
+inherited vertical alignment. OpenType `sups`/`subs` glyph substitutions, custom
+`w:position` offsets, and mathematical equation layout are separate capabilities.
 
 Stored output should first pass `decodeNativeDocxPagePaintV1`, then
 `decodeNativeDocxPagePaintForRequestV1` for exact request/page/line/glyph/style

@@ -265,6 +265,7 @@ describe('native DOCX ProseMirror transaction adapter v1', () => {
         document.notes = [note]
       },
       (document: any) => { document.unsupported = [{ id: 'unsupported:x', code: 'FIELD_SEMANTICS', capability: 'fields', scope_id: document.body.id, preservation: 'refuse-mutation', message: 'field' }] },
+      (document: any) => { const run = document.headers[0].blocks[0].paragraph.runs[0]; run.page_field = 'PAGE'; run.text = '' },
       (document: any) => { document.unsupported = [{ id: 'unsupported:x', code: 'WRAPPED_RUN_MARKUP', capability: 'tracked-changes', scope_id: document.body.id, preservation: 'refuse-mutation', message: 'tracked' }] },
       (document: any) => { document.headers[0].blocks[0].paragraph.runs[0].kind = 'drawing'; document.headers[0].blocks[0].paragraph.runs[0].text = undefined; document.headers[0].blocks[0].paragraph.runs[0].drawing = { id: 'drawing:x', anchor: document.headers[0].blocks[0].paragraph.runs[0].anchor, placement: 'inline', width_emu: 1, height_emu: 1, edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'NO', message: 'no', preservation: 'refuse-mutation' } } } },
       (document: any) => { const source = document.body.blocks[0].paragraph.runs[0]; document.body.blocks[0].paragraph.runs.push({ kind: 'control', id: 'run:control', anchor: structuredClone(source.anchor), properties: {}, control: 'tab' }) },

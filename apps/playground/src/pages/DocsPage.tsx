@@ -86,6 +86,7 @@ function RunView({ run }: { run: NativeDocxRunV1 }) {
   const [failedImage, setFailedImage] = useState('')
   if (run.kind === 'text') {
     if (run.properties?.hidden) return null
+    if (run.page_field) return <span className="docx-control" title="Resolved from pagination in the native page preview">[{run.page_field === 'PAGE' ? 'page number' : 'total pages'}]</span>
     const target = selection.targets.find((candidate) => candidate.runId === run.id && candidate.partName === run.anchor.part_name)
     if (target) return <button type="button" className="docx-editable-run" data-run-key={target.key} style={runStyle(run)} aria-pressed={selection.selected === target.key} aria-label={`Edit ${target.label}: ${run.text || 'empty text'}`} aria-controls="docx-replacement-text" disabled={selection.busy} onClick={() => selection.choose(target)}>{run.text || '\u00a0'}</button>
     return <span style={runStyle(run)}>{run.text}</span>

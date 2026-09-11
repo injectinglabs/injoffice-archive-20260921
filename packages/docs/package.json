@@ -9,6 +9,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./native-raster": {
+      "types": "./dist/nativeImagePagePaintV1.d.ts",
+      "import": "./dist/nativeImagePagePaintV1.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
@@ -29,7 +33,7 @@
   },
   "files": ["dist", "schema", "README.md"],
   "injoffice": {
-    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts", "nativePagePaintOutputV1": "src/nativePagePaintOutputV1.ts" },
+    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts", "nativePagePaintOutputV1": "src/nativePagePaintOutputV1.ts", "nativeImagePagePaintV1": "src/nativeImagePagePaintV1.ts" },
     "legalFiles": ["NOTICE"]
   },
   "publishConfig": { "access": "public" },

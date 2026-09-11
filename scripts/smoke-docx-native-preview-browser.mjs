@@ -26,7 +26,7 @@ try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
   const fixture = resolve(scratch, 'native-two-pages.docx')
-  await command('go', ['run', './cmd/nativepreviewfixture', '-font', resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'), '-out', fixture, '-jpeg'], resolve(root, 'go/docxpatch'))
+  await command('go', ['run', './cmd/nativepreviewfixture', '-font', resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'), '-out', fixture, '-jpeg', '-page-fields', '-scripts', '-underline', 'double'], resolve(root, 'go/docxpatch'))
   const originalHash = hash(readFileSync(fixture))
   const binary = resolve(scratch, process.platform === 'win32' ? 'injoffice-server.exe' : 'injoffice-server')
   await command('go', ['build', '-o', binary, './cmd/injoffice-server'], resolve(root, 'go/injoffice-server'))
@@ -56,7 +56,9 @@ try {
         const digest = await crypto.subtle.digest('SHA-256', bytes);
         window.__nativeDocxPosts.push({ url: String(input), hash: [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, '0')).join('') });
       }
-      return originalFetch(input, init);
+      const response = await originalFetch(input, init);
+      if (init?.method === 'POST' && String(input).endsWith('/v1/docx/page-preview')) window.__nativeDocxPaint = (await response.clone().json()).page_paint_output;
+      return response;
     };
   }` })
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
@@ -69,14 +71,24 @@ try {
   await poll(() => evaluate(`${native}?.querySelector('svg[aria-label="Native document page 1"] path') !== null && ${native}?.textContent.includes('2 native pages')`), 'real font-shaped native pages', 45000)
   await assert(`window.__nativeDocxPosts.length === 1 && window.__nativeDocxPosts[0].hash === ${JSON.stringify(originalHash)}`, 'preview uploads exact original bytes only after consent')
   await assert(`${native}.querySelectorAll('svg').length === 1 && ${native}.querySelector('svg').getBoundingClientRect().height > 100`, 'one bounded native page is mounted')
+  // DejaVu Sans maps decimal 1/2/9 to glyphs 20/21/28. The generated source
+  // caches 999; its actual native header/footer must instead paint 1 of 2 / 2 of 2.
+  await assert(`window.__nativeDocxPaint.pages.every((page, index) => ['header','footer'].every(region => { const ids=page.lines.filter(line=>line.region===region).flatMap(line=>line.command_ids); const digits=page.commands.filter(command=>ids.includes(command.id)&&command.kind==='fill_glyph_path'&&[20,21,28].includes(command.glyph_id)).map(command=>command.glyph_id); return JSON.stringify(digits)===JSON.stringify([20+index,21]); }))`, 'PAGE/NUMPAGES derive per-page glyphs, never stale 999 cache')
+  await assert(`${native}.querySelectorAll('svg path').length === window.__nativeDocxPaint.pages[0].commands.filter(command=>command.kind==='fill_glyph_path').length`, 'all native field glyph paths mount on page one')
+  await assert(`(() => { const page=window.__nativeDocxPaint.pages[0]; const ids=page.lines.filter(line=>line.region==='body').flatMap(line=>line.command_ids); const scripts=page.commands.filter(command=>ids.includes(command.id)&&command.kind==='fill_glyph_path'&&command.glyph_id===21); const header=page.commands.find(command=>!ids.includes(command.id)&&command.kind==='fill_glyph_path'&&command.glyph_id===21); const bounds=command=>{const points=command.path.filter(point=>'y_millipoints'in point).map(point=>point.y_millipoints);return {top:Math.min(...points),bottom:Math.max(...points)}}; if(scripts.length!==2||!header)return false;const sub=bounds(scripts[0]),superScript=bounds(scripts[1]),normal=bounds(header);return sub.top>superScript.top&&sub.bottom>superScript.bottom&&sub.bottom-sub.top<normal.bottom-normal.top&&superScript.bottom-superScript.top<normal.bottom-normal.top; })()`, 'native subscript and superscript glyphs have smaller outlines and distinct font-metric baselines')
   await poll(async () => await evaluate(`(() => { const image = ${native}?.querySelector('svg image'); return !!image && image.getAttribute('href')?.startsWith('data:image/jpeg;base64,') && image.getAttribute('preserveAspectRatio') === 'none' })()`), 'native JPEG image and source-defined aspect ratio')
+  await assert(`(() => { const lines = [...${native}.querySelectorAll('line[data-native-underline]')]; return lines.length > 0 && lines.length % 2 === 0 && lines.every(line => Number(line.getAttribute('x2')) > Number(line.getAttribute('x1')) && Number(line.getAttribute('stroke-width')) > 0 && line.getAttribute('y1') === line.getAttribute('y2')) })()`, 'native double underline uses bounded font-metric strokes')
   await assert(`(async () => { const image = new Image(); image.src = ${native}.querySelector('svg image').getAttribute('href'); await image.decode(); const canvas = document.createElement('canvas'); canvas.width=16; canvas.height=8; const context=canvas.getContext('2d'); context.drawImage(image,0,0); const left=context.getImageData(2,4,1,1).data; const right=context.getImageData(13,4,1,1).data; return image.naturalWidth===16 && image.naturalHeight===8 && left[0]>left[2]+80 && right[2]>right[0]+80 })()`, 'JPEG pixels decode to the generated red/blue pattern')
   await screenshot('docx-native-page-one.png')
-  await assert(`(() => { const svg = ${native}.querySelector('svg'); const background = svg.querySelector('rect[data-native-highlight]'); const glyph = svg.querySelector('path'); return background?.getAttribute('fill') === '#FFFF00' && Number(background.getAttribute('width')) > 0 && Number(background.getAttribute('height')) > 0 && (background.compareDocumentPosition(glyph) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 })()`, 'source-bound native highlight precedes glyph painting')
+  await assert(`(() => { const svg = ${native}.querySelector('svg'); const background = svg.querySelector('rect[data-native-highlight]'); const glyph = [...svg.querySelectorAll('path')].find(node => background && (background.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)); return background?.getAttribute('fill') === '#FFFF00' && Number(background.getAttribute('width')) > 0 && Number(background.getAttribute('height')) > 0 && !!glyph })()`, 'source-bound native highlight precedes its body glyph painting after the header')
   await click('Next native page')
   await poll(() => evaluate(`${native}?.querySelector('svg[aria-label="Native document page 2"] path') !== null`), 'next native page')
   await assert(`${native}.querySelectorAll('svg').length === 1`, 'navigation keeps a single mounted SVG')
+  await assert(`${native}.querySelectorAll('svg path').length === window.__nativeDocxPaint.pages[1].commands.filter(command=>command.kind==='fill_glyph_path').length`, 'all native field glyph paths mount on page two')
   await screenshot('docx-native-page-two.png')
+  await evaluate(`${native}.querySelector('svg').lastElementChild.scrollIntoView({ block: 'center' })`)
+  await screenshot('docx-native-page-two-footer.png')
+  await evaluate(`${native}.querySelector('h3').scrollIntoView({ block: 'start' })`)
   await click('Previous native page')
   await poll(() => evaluate(`${native}?.querySelector('svg[aria-label="Native document page 1"] path') !== null`), 'previous native page')
   await assert(`${docs}?.dataset.demoDirty !== 'true' && window.__nativeDocxPosts.every(request => request.url.endsWith('/v1/docx/page-preview'))`, 'preview never mutates the document')
@@ -102,19 +114,101 @@ try {
   await assert(`window.__nativeDocxPosts.length === 2 && window.__nativeDocxPosts[1].hash === ${JSON.stringify(pngHash)} && ${docs}?.dataset.demoDirty !== 'true'`, 'PNG preview sends only unchanged original bytes')
   if (hash(readFileSync(pngFixture)) !== pngHash) throw new Error('PNG source fixture changed')
   await screenshot('docx-native-png.png')
+  const tableFixture = resolve(scratch, 'native-repeating-table.docx')
+  const tableExport = spawnSync('go', ['test', '-count=1', '-run', '^TestNativePreviewRepeatingTableBrowserFixture$', '.'], { cwd: resolve(root, 'go/docxpatch/cmd/nativepreviewfixture'), env: { ...process.env, INJOFFICE_TABLE_FIXTURE_OUTPUT: tableFixture, INJOFFICE_TABLE_FIXTURE_FONT: resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf') }, encoding: 'utf8', timeout: 60000 })
+  if (tableExport.status !== 0) throw new Error(`Table fixture export failed: ${tableExport.stderr}\n${tableExport.stdout}`)
+  const tableHash = hash(readFileSync(tableFixture))
+  await upload(tableFixture)
+  await poll(() => evaluate(`${native}?.textContent.includes('Nothing is uploaded') && ${native}?.querySelector('svg') === null`), 'table source replacement clears old pages')
+  await assert(`window.__nativeDocxPosts.length === 2`, 'table preview needs new explicit consent')
+  await click('Upload to helper and render native pages')
+  await poll(() => evaluate(`${native}?.textContent.includes('4 native pages') && ${native}?.querySelector('svg path') !== null`), 'real two-column repeating table native pages', 45000)
+  const tableGeometry = `(() => { const svg = ${native}.querySelector('svg'); const headers=[...svg.querySelectorAll('rect[fill="#DDEEFF"]')]; return headers.length===2 && headers.every(rect=>Number(rect.getAttribute('y'))===72000&&Number(rect.getAttribute('height'))===36000&&Number(rect.getAttribute('width'))===234000) && Number(headers[0].getAttribute('x'))===72000 && Number(headers[1].getAttribute('x'))===306000 && svg.querySelectorAll('path').length>30 && svg.querySelectorAll('line').length>=8 })()`
+  await assert(tableGeometry, 'initial fixed-grid header cells have exact source dimensions and glyphs')
+  await screenshot('docx-native-table-first.png')
+  for (let page = 2; page <= 4; page += 1) {
+    await click('Next native page')
+    await poll(() => evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${page}"]') !== null`), `table continuation page ${page}`)
+    await assert(tableGeometry, `page ${page} repeats both source header cells and preserves body glyphs`)
+  }
+  await screenshot('docx-native-table-last.png')
+  await assert(`window.__nativeDocxPosts.length===3 && window.__nativeDocxPosts[2].hash===${JSON.stringify(tableHash)} && ${docs}?.dataset.demoDirty !== 'true' && ${native}.querySelectorAll('svg').length===1`, 'table navigation retains exact original source and bounded page mounting')
+  if (hash(readFileSync(tableFixture)) !== tableHash) throw new Error('Table source fixture changed')
+  const transformedFixture = resolve(scratch, 'native-transformed-image.docx')
+  const transformExport = spawnSync('go', ['test', '-count=1', '-run', '^TestNativePreviewTransformedImageBrowserFixture$', '.'], { cwd: resolve(root, 'go/docxpatch/cmd/nativepreviewfixture'), env: { ...process.env, INJOFFICE_TRANSFORM_FIXTURE_OUTPUT: transformedFixture, INJOFFICE_TRANSFORM_FIXTURE_FONT: resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf') }, encoding: 'utf8', timeout: 60000 })
+  if (transformExport.status !== 0) throw new Error(`Transform fixture export failed: ${transformExport.stderr}\n${transformExport.stdout}`)
+  const transformedHash = hash(readFileSync(transformedFixture))
+  await upload(transformedFixture)
+  await poll(() => evaluate(`${native}?.textContent.includes('Nothing is uploaded') && ${native}?.querySelector('svg') === null`), 'image transform source replacement clears old pages')
+  await assert(`window.__nativeDocxPosts.length === 3`, 'transformed image preview needs explicit consent')
+  await click('Upload to helper and render native pages')
+  await poll(() => evaluate(`${native}?.textContent.includes('2 native pages') && ${native}?.querySelector('svg image') !== null`), 'source-transformed native image', 45000)
+  await assert(`(async () => {
+    const node=${native}.querySelector('svg image'); const x=Number(node.getAttribute('x')), y=Number(node.getAttribute('y')), w=Number(node.getAttribute('width')), h=Number(node.getAttribute('height'));
+    if(node.getAttribute('transform')!==('matrix(-1 0 0 1 '+(2*x+w)+' 0)'))return false;
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width','16');svg.setAttribute('height','8');svg.setAttribute('viewBox',[x,y,w,h].join(' '));svg.appendChild(node.cloneNode(true));
+    const raster=new Image();raster.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await raster.decode();
+    const canvas=document.createElement('canvas');canvas.width=16;canvas.height=8;const ctx=canvas.getContext('2d');ctx.drawImage(raster,0,0);const left=ctx.getImageData(2,4,1,1).data,right=ctx.getImageData(13,4,1,1).data;
+    return left[2]>left[0]+80&&right[0]>right[2]+80&&left[3]===255&&right[3]===255;
+  })()`, 'actual SVG raster pixels apply source half-turn plus vertical flip inside the unchanged box')
+  await assert(`window.__nativeDocxPosts.length===4 && window.__nativeDocxPosts[3].hash===${JSON.stringify(transformedHash)} && ${docs}?.dataset.demoDirty !== 'true'`, 'orientation preview sends only unchanged source bytes')
+  if (hash(readFileSync(transformedFixture)) !== transformedHash) throw new Error('Transformed image source changed')
+  await screenshot('docx-native-transformed-image.png')
+  let finalPreviewPosts = 4
+  for (const angle of [90, 270]) {
+    const quarterFixture = resolve(scratch, `native-quarter-${angle}.docx`)
+    const exported = spawnSync('go', ['test', '-count=1', '-run', '^TestNativePreviewTransformedImageBrowserFixture$', '.'], { cwd: resolve(root, 'go/docxpatch/cmd/nativepreviewfixture'), env: { ...process.env, INJOFFICE_TRANSFORM_FIXTURE_OUTPUT: quarterFixture, INJOFFICE_TRANSFORM_FIXTURE_FONT: resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'), INJOFFICE_TRANSFORM_ANGLE: String(angle) }, encoding: 'utf8', timeout: 60000 })
+    if (exported.status !== 0) throw new Error(`Quarter-turn fixture failed: ${exported.stderr}\n${exported.stdout}`)
+    const sourceHash = hash(readFileSync(quarterFixture))
+    await upload(quarterFixture)
+    await poll(() => evaluate(`${native}?.textContent.includes('Nothing is uploaded') && ${native}?.querySelector('svg') === null`), 'quarter-turn source replacement')
+    await assert(`window.__nativeDocxPosts.length===${finalPreviewPosts}`, 'quarter-turn preview requires fresh consent')
+    await click('Upload to helper and render native pages')
+    await poll(() => evaluate(`${native}?.textContent.includes('2 native pages') && ${native}?.querySelector('svg image') !== null`), `native ${angle}-degree image`, 45000)
+    await assert(`(async () => {
+      const node=${native}.querySelector('svg image'),x=Number(node.getAttribute('x')),y=Number(node.getAttribute('y'));
+      if(Number(node.getAttribute('width'))!==144000||Number(node.getAttribute('height'))!==36000)return false;
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width','8');svg.setAttribute('height','16');svg.setAttribute('viewBox',[x,y,36000,144000].join(' '));svg.appendChild(node.cloneNode(true));
+      const raster=new Image();raster.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await raster.decode();const canvas=document.createElement('canvas');canvas.width=8;canvas.height=16;const ctx=canvas.getContext('2d');ctx.drawImage(raster,0,0);const top=ctx.getImageData(4,2,1,1).data,bottom=ctx.getImageData(4,13,1,1).data;
+      return ${angle === 90 ? 'top[0]>top[2]+80&&bottom[2]>bottom[0]+80' : 'top[2]>top[0]+80&&bottom[0]>bottom[2]+80'}&&top[3]===255&&bottom[3]===255;
+    })()`, `${angle}-degree source rotation has correct raster colors inside the exact swapped layout bounds`)
+    finalPreviewPosts += 1
+    await assert(`window.__nativeDocxPosts.length===${finalPreviewPosts} && window.__nativeDocxPosts[${finalPreviewPosts-1}].hash===${JSON.stringify(sourceHash)} && ${docs}?.dataset.demoDirty !== 'true'`, 'quarter-turn preview keeps source bytes unchanged')
+    await screenshot(`docx-native-quarter-${angle}.png`)
+  }
+  const cropFixture = resolve(scratch, 'native-cropped-quarter-image.docx')
+  const cropExport = spawnSync('go', ['test', '-count=1', '-run', '^TestNativePreviewTransformedImageBrowserFixture$', '.'], { cwd: resolve(root, 'go/docxpatch/cmd/nativepreviewfixture'), env: { ...process.env, INJOFFICE_TRANSFORM_FIXTURE_OUTPUT: cropFixture, INJOFFICE_TRANSFORM_FIXTURE_FONT: resolve(root, 'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'), INJOFFICE_TRANSFORM_ANGLE: '90', INJOFFICE_TRANSFORM_CROP: 'left-half' }, encoding: 'utf8', timeout: 60000 })
+  if (cropExport.status !== 0) throw new Error(`Crop fixture failed: ${cropExport.stderr}\n${cropExport.stdout}`)
+  const cropHash = hash(readFileSync(cropFixture))
+  await upload(cropFixture)
+  await poll(() => evaluate(`${native}?.textContent.includes('Nothing is uploaded') && ${native}?.querySelector('svg') === null`), 'crop source replacement')
+  await assert(`window.__nativeDocxPosts.length===${finalPreviewPosts}`, 'crop preview requires fresh consent')
+  await click('Upload to helper and render native pages')
+  await poll(() => evaluate(`${native}?.textContent.includes('2 native pages') && ${native}?.querySelector('svg[data-native-crop] image') !== null`), 'native cropped and rotated image', 45000)
+  await assert(`(async () => {
+    const node=${native}.querySelector('svg[data-native-crop]'),x=Number(node.getAttribute('x')),y=Number(node.getAttribute('y'));
+    if(node.getAttribute('viewBox')!=='50000 0 50000 100000'||node.getAttribute('overflow')!=='hidden')return false;
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width','8');svg.setAttribute('height','16');svg.setAttribute('viewBox',[x,y,36000,144000].join(' '));svg.appendChild(node.cloneNode(true));
+    const raster=new Image();raster.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await raster.decode();const canvas=document.createElement('canvas');canvas.width=8;canvas.height=16;const ctx=canvas.getContext('2d');ctx.drawImage(raster,0,0);
+    return [2,6,10,14].every(y=>{const pixel=ctx.getImageData(4,y,1,1).data;return pixel[2]>pixel[0]+80&&pixel[3]===255});
+  })()`, 'source crop removes red pixels before quarter-turn rotation without escaping the layout box')
+  finalPreviewPosts += 1
+  await assert(`window.__nativeDocxPosts.length===${finalPreviewPosts} && window.__nativeDocxPosts[${finalPreviewPosts-1}].hash===${JSON.stringify(cropHash)} && ${docs}?.dataset.demoDirty !== 'true'`, 'crop preview leaves source bytes unchanged')
+  if (hash(readFileSync(cropFixture)) !== cropHash) throw new Error('Crop source changed')
+  await screenshot('docx-native-cropped-quarter.png')
   // This existing real DOCX has no embedded qualified font assets. It must
   // retain its approximate content view rather than invent native glyphs.
   const unsupported = resolve(scratch, 'unsupported-font.docx')
   writeFileSync(unsupported, Buffer.from(readFileSync(resolve(root, 'apps/playground/public/native-docx/northstar-launch-brief.docx.b64'), 'utf8').trim(), 'base64'))
   await upload(unsupported)
   await poll(() => evaluate(`${native}?.textContent.includes('Nothing is uploaded') && ${native}?.querySelector('svg') === null`), 'source replacement clears stale pages')
-  await assert(`window.__nativeDocxPosts.length === 2`, 'replacement document also requires explicit consent')
+  await assert(`window.__nativeDocxPosts.length === ${finalPreviewPosts}`, 'replacement document also requires explicit consent')
   await click('Upload to helper and render native pages')
   await poll(() => evaluate(`${native}?.textContent.includes('original file is unchanged')`), 'unsupported document explicitly refused', 45000)
   await assert(`${native}.querySelector('svg') === null && document.querySelectorAll('.docx-editable-run').length > 0 && ${docs}?.dataset.demoDirty !== 'true'`, 'refusal retains approximate editable content and original source')
   await screenshot('docx-native-refusal.png')
   if (errors.length) throw new Error(`Browser exceptions: ${errors.join('\n')}`)
-  console.log(JSON.stringify({ result: 'PASS', checks: ['explicit upload consent', 'real embedded-font shaping and pagination', 'paragraph-mark formatting and empty paragraph', 'native SVG glyphs', 'native text highlight behind glyphs', 'native JPEG pixels and source extents', 'native PNG pixels and source extents', 'image decode failure clears native success', 'bounded page navigation', 'original source unchanged', 'source replacement clears stale output', 'unsupported rendering refusal'], screenshots: artifacts }, null, 2))
+  console.log(JSON.stringify({ result: 'PASS', checks: ['explicit upload consent', 'real embedded-font shaping and pagination', 'paragraph-mark formatting and empty paragraph', 'native SVG glyphs', 'native PAGE/NUMPAGES in both header and footer, stale cache ignored', 'native subscript/superscript outlines and baselines', 'native font-metric double underline', 'native text highlight behind glyphs', 'native JPEG pixels and source extents', 'native PNG pixels and source extents', 'real two-column repeating table across four pages', 'source image flips and all quarter turns verified in raster pixels', 'source crop before rotation verified in raster pixels', 'image decode failure clears native success', 'bounded page navigation', 'original source unchanged', 'source replacement clears stale output', 'unsupported rendering refusal'], screenshots: artifacts }, null, 2))
 } catch (error) {
   console.error(`Native DOCX screenshots: ${artifacts}\nHelper diagnostics: ${helperLog}`)
   if (cdp) {

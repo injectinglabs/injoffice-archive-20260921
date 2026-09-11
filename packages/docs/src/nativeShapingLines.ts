@@ -71,6 +71,7 @@ import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { resolveNativeDocxParagraphBidiPlanV1, type NativeDocxParagraphBidiPlanV1 } from './nativeBidiPlanV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { compareNativeValidationIssues } from './nativeDeterminism.js'
+import { readNativeDocxScriptTransformV1, nativeDocxScriptScaleV1, nativeDocxScriptShiftV1, type NativeDocxScriptTransformV1 } from './nativeScriptLayoutV1.js'
 
 export const DOCX_SHAPED_LINES_PROTOCOL = 'injoffice.docx.shaped-lines'
 export const DOCX_SHAPED_LINES_VERSION = 1 as const
@@ -155,6 +156,7 @@ export interface NativeDocxPositionedGlyphV1 {
 }
 
 export interface NativeDocxLineFragmentV1 {
+  script_transform?: NativeDocxScriptTransformV1
   id: string
   source_kind: 'run' | 'list-marker' | 'tab' | 'image'
   /** Native run id for authored text/controls; paragraph id for a list marker. */
@@ -174,6 +176,9 @@ export interface NativeDocxLineFragmentV1 {
   ascent_millipoints: number
   descent_millipoints: number
   line_gap_millipoints: number
+  /** Scaled metrics from the resolved font's post table, only for decorated text. */
+  underline_position_millipoints?: number
+  underline_thickness_millipoints?: number
   glyphs: NativeDocxPositionedGlyphV1[]
 }
 
@@ -340,6 +345,7 @@ interface SourceSpan {
 }
 
 interface FragmentAtom {
+  scriptTransform?: NativeDocxScriptTransformV1
   sourceKind: 'run' | 'list-marker' | 'tab' | 'image'
   sourceID: string
   startUtf16: number
@@ -1258,7 +1264,22 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
       return []
     }
     context.atomCount += shapedSegment.clusters.length
-    return shapedSegment.clusters.map((cluster, index) => clusterAtom(shapedSegment, cluster, index, span, sourceKind, sourceID))
+    const atoms = shapedSegment.clusters.map((cluster, index) => clusterAtom(shapedSegment, cluster, index, span, sourceKind, sourceID))
+    const alignment = properties.vertical_alignment
+    if (alignment && alignment !== 'baseline') {
+      if (sourceKind !== 'run' || properties.underline && properties.underline !== 'none' || properties.highlight && properties.highlight !== 'none') throw new TypeError('Script transforms currently require undecorated text runs, not markers, underline or highlight')
+      const transform = readNativeDocxScriptTransformV1(resource, alignment)
+      if (nativeDocxScriptScaleV1(run.fontSizeMilliPoints,transform,'x') < 1 || nativeDocxScriptScaleV1(run.fontSizeMilliPoints,transform,'y') < 1) throw new TypeError('Script font size is below the native integer metric resolution')
+      const dx = nativeDocxScriptShiftV1(run.fontSizeMilliPoints,transform,'x'), dy = nativeDocxScriptShiftV1(run.fontSizeMilliPoints,transform,'y')
+      for (const atom of atoms) {
+        atom.scriptTransform = transform
+        atom.glyphs = atom.glyphs.map((glyph) => ({ ...glyph, advance_x_millipoints: nativeDocxScriptScaleV1(glyph.advance_x_millipoints,transform,'x'), advance_y_millipoints: nativeDocxScriptScaleV1(glyph.advance_y_millipoints,transform,'y'), offset_x_millipoints: nativeDocxScriptScaleV1(glyph.offset_x_millipoints,transform,'x')+dx, offset_y_millipoints: nativeDocxScriptScaleV1(glyph.offset_y_millipoints,transform,'y')+dy }))
+        atom.advance = atom.glyphs.reduce((sum,glyph)=>sum+glyph.advance_x_millipoints,0)
+        const ascent=Math.max(0,nativeDocxScriptScaleV1(atom.metrics.ascentMilliPoints,transform,'y')+dy), descent=Math.min(0,nativeDocxScriptScaleV1(atom.metrics.descentMilliPoints,transform,'y')+dy), gap=nativeDocxScriptScaleV1(atom.metrics.lineGapMilliPoints,transform,'y')
+        atom.metrics = { ...atom.metrics, ascentMilliPoints:ascent, descentMilliPoints:descent, lineGapMilliPoints:gap, lineHeightMilliPoints:ascent-descent+gap }
+      }
+    }
+    return atoms
   } catch (error) {
     addDiagnostic(context, { code: 'provider-failure', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: `Injected native text provider failed: ${boundedProviderError(error)}` })
     return []
@@ -1267,6 +1288,10 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
 
 async function resolveParagraphMarkMetrics(context: NativeShapingContext, paragraph: NativeDocxResolvedParagraphV1, direction: 'ltr' | 'rtl'): Promise<ScaledLineMetrics | null> {
   const properties = paragraph.paragraph_mark_properties
+  if (properties.vertical_alignment && properties.vertical_alignment !== 'baseline') {
+    addDiagnostic(context, { code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Script-sized paragraph marks require a separate blank-line metric policy' })
+    return null
+  }
   if (!properties.font_family) {
     addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Resolved paragraph-mark font is absent; blank-line metrics were refused instead of guessing a Word default' })
     return null
@@ -1679,6 +1704,9 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
       glyphs[glyphs.length - 1]!.advance_x_millipoints += expansion
     }
     context.fragmentCount += 1
+    const underline = atom.sourceKind === 'list-marker'
+      ? context.paragraphs.get(paragraphID)?.numbering?.marker_properties.underline
+      : context.runs.get(atom.sourceID)?.properties.underline
     return {
       id: `fragment:${paragraphID}:${ordinal}:${visualIndex}`,
       source_kind: atom.sourceKind,
@@ -1692,12 +1720,15 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
       script: atom.script,
       language: atom.language,
       ...(atom.faceID ? { face_id: atom.faceID } : {}),
+      ...(atom.scriptTransform ? { script_transform: atom.scriptTransform } : {}),
       whitespace: atom.whitespace,
       advance_inline_millipoints: atomWidths[logicalIndex]! + expansion,
       justification_expansion_millipoints: expansion,
       ascent_millipoints: atom.metrics.ascentMilliPoints,
       descent_millipoints: atom.metrics.descentMilliPoints,
       line_gap_millipoints: atom.metrics.lineGapMilliPoints,
+      ...(underline && underline !== 'none' && atom.metrics.underlinePositionMilliPoints !== undefined && atom.metrics.underlineThicknessMilliPoints !== undefined
+        ? { underline_position_millipoints: atom.metrics.underlinePositionMilliPoints, underline_thickness_millipoints: atom.metrics.underlineThicknessMilliPoints } : {}),
       glyphs,
     }
   })

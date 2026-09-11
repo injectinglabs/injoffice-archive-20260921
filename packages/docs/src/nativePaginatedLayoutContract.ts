@@ -28,9 +28,9 @@ export const DOCX_PAGINATED_LAYOUT_V1_BINDING_FIELDS = {
   BodyBoxV1: ['x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
   ColumnV1: ['id', 'section_id', 'ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
   HeaderFooterReferenceV1: ['kind', 'story_id', 'relationship_id'],
-  PlacedLineV1: ['id', 'line_id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
+  PlacedLineV1: ['id', 'line_id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'repeated_table_header', 'table_cell_id'],
   PlacedNoteStoryV1: ['id', 'story_id', 'story_kind', 'note_role', 'native_story_id', 'relationship_id', 'ordinal', 'reference_run_id', 'number', 'section_id', 'column_id', 'column_ordinal', 'top_millipoints', 'height_millipoints', 'lines'],
-  ParagraphSliceV1: ['id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'slice_ordinal', 'first_line_ordinal', 'last_line_ordinal', 'line_ids', 'top_millipoints', 'height_millipoints', 'space_before_millipoints', 'continued_from_previous_page', 'continues_on_next_page', 'continued_from_previous_column', 'continues_in_next_column'],
+  ParagraphSliceV1: ['id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'slice_ordinal', 'first_line_ordinal', 'last_line_ordinal', 'line_ids', 'top_millipoints', 'height_millipoints', 'space_before_millipoints', 'continued_from_previous_page', 'continues_on_next_page', 'continued_from_previous_column', 'continues_in_next_column', 'repeated_table_header', 'table_cell_id'],
   PageV1: ['id', 'ordinal', 'section_id', 'section_ids', 'section_page_ordinal', 'kind', 'parity_reason', 'parity_before_section_id', 'width_millipoints', 'height_millipoints', 'body_box', 'columns', 'header_refs', 'footer_refs', 'paragraph_slices', 'lines', 'note_stories'],
   SectionV1: ['section_id', 'starts_at_block_id', 'break_type', 'column_ids', 'page_ids'],
   PaginatedLayoutV1: ['protocol', 'version', 'status', 'provenance', 'diagnostics', 'sections', 'pages'],
@@ -222,6 +222,7 @@ interface PageValidation {
 }
 
 interface SliceValidation {
+  repeated?: boolean
   paragraphID: string
   sliceOrdinal?: number
   first?: number
@@ -299,7 +300,7 @@ function validatePage(
     if (height !== undefined && y !== undefined && columnHeight !== undefined && y + columnHeight > height) add(issues, 'OUT_OF_RANGE', columnPath, 'column exceeds page height')
   })
   for (const key of ['header_refs', 'footer_refs'] as const) array(entry[key], `${path}/${key}`, DOCX_NATIVE_LIMITS.maxCollectionItems, issues).forEach((reference, index) => validateReference(reference, `${path}/${key}/${index}`, issues))
-  const pageLines = new Map<string, { paragraphID?: string; sectionID?: string; columnID?: string; columnOrdinal?: number; ordinal?: number; y?: number; height?: number }>()
+  const pageLines = new Map<string, { cellID?: string; repeated?: boolean; paragraphID?: string; sectionID?: string; columnID?: string; columnOrdinal?: number; ordinal?: number; y?: number; height?: number }>()
   const pageLineOrder: string[] = []
   const previousLineBottoms = new Map<string, number>()
   array(entry.lines, `${path}/lines`, DOCX_PAGINATION_LIMITS.maxLinePlacements, issues).forEach((lineValue, index) => {
@@ -317,19 +318,24 @@ function validatePage(
     const y = integer(line.y_millipoints, `${linePath}/y_millipoints`, 0, DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints, issues)
     const lineWidth = integer(line.width_millipoints, `${linePath}/width_millipoints`, 0, DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints, issues)
     const lineHeight = integer(line.height_millipoints, `${linePath}/height_millipoints`, 1, DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints, issues)
-    if (placedID && lineID && placedID !== `placed:${lineID}`) add(issues, 'INVALID_VALUE', `${linePath}/id`, 'placed line id must derive from the shaped line id')
+    const repeated = line.repeated_table_header === true
+    const cellID = line.table_cell_id === undefined ? undefined : stringValue(line.table_cell_id, `${linePath}/table_cell_id`, issues, ID, 1024)
+    if (repeated && !cellID) add(issues, 'REQUIRED', `${linePath}/table_cell_id`, 'repeated table header requires a cell identity')
+    if (line.repeated_table_header !== undefined && !repeated) add(issues, 'INVALID_VALUE', `${linePath}/repeated_table_header`, 'when present must equal true')
+    if (placedID && lineID && placedID !== (repeated ? `placed:${lineID}:table-header:${id}` : `placed:${lineID}`)) add(issues, 'INVALID_VALUE', `${linePath}/id`, 'placed line id must derive from the shaped line and repeated-header page identity')
     if (placedID && lineIDs.has(placedID)) add(issues, 'DUPLICATE_ID', `${linePath}/id`, 'placed line id is duplicated')
     if (placedID) lineIDs.add(placedID)
     if (lineIDs.size > DOCX_PAGINATION_LIMITS.maxLinePlacements) add(issues, 'LIMIT_EXCEEDED', `${linePath}/id`, `placed lines exceed ${DOCX_PAGINATION_LIMITS.maxLinePlacements}`)
     if (lineID && pageLines.has(lineID)) add(issues, 'DUPLICATE_ID', `${linePath}/line_id`, 'shaped line is placed more than once on this page')
     if (lineID) {
-      pageLines.set(lineID, { paragraphID, sectionID: lineSectionID, columnID, columnOrdinal, ordinal: sourceOrdinal, y, height: lineHeight })
+      pageLines.set(lineID, { cellID, repeated, paragraphID, sectionID: lineSectionID, columnID, columnOrdinal, ordinal: sourceOrdinal, y, height: lineHeight })
       pageLineOrder.push(lineID)
     }
     if (y !== undefined && lineHeight !== undefined) {
-      const previousLineBottom = columnID ? previousLineBottoms.get(columnID) : undefined
+      const flowID = columnID ? JSON.stringify([columnID, cellID ?? null]) : undefined
+      const previousLineBottom = flowID ? previousLineBottoms.get(flowID) : undefined
       if (previousLineBottom !== undefined && y < previousLineBottom) add(issues, 'INVALID_VALUE', `${linePath}/y_millipoints`, 'column lines must be vertically source-ordered without overlap')
-      if (columnID) previousLineBottoms.set(columnID, y + lineHeight)
+      if (flowID) previousLineBottoms.set(flowID, y + lineHeight)
     }
     const owningColumn = columnID ? pageColumns.get(columnID) : undefined
     if (!owningColumn || owningColumn.sectionID !== lineSectionID || owningColumn.ordinal !== columnOrdinal) add(issues, 'BROKEN_REFERENCE', `${linePath}/column_id`, 'placed line must reference its exact page section column')
@@ -344,6 +350,9 @@ function validatePage(
     const slice = object(sliceValue, slicePath, DOCX_PAGINATED_LAYOUT_V1_BINDING_FIELDS.ParagraphSliceV1, issues)
     if (!slice) return
     const paragraphID = stringValue(slice.paragraph_id, `${slicePath}/paragraph_id`, issues)
+    const repeated = slice.repeated_table_header === true
+    const cellID = slice.table_cell_id === undefined ? undefined : stringValue(slice.table_cell_id, `${slicePath}/table_cell_id`, issues, ID, 1024)
+    if (slice.repeated_table_header !== undefined && !repeated) add(issues, 'INVALID_VALUE', `${slicePath}/repeated_table_header`, 'when present must equal true')
     const sliceSectionID = stringValue(slice.section_id, `${slicePath}/section_id`, issues)
     const sliceColumnID = stringValue(slice.column_id, `${slicePath}/column_id`, issues, ID, 1024)
     const sliceColumnOrdinal = integer(slice.column_ordinal, `${slicePath}/column_ordinal`, 0, 44, issues)
@@ -371,9 +380,11 @@ function validatePage(
     ids.forEach((lineID, lineIndex) => {
       if (!lineID) return
       pageSliceLineOrder.push(lineID)
-      if (referencedLineIDs.has(lineID)) add(issues, 'DUPLICATE_ID', `${slicePath}/line_ids/${lineIndex}`, 'a shaped line may belong to exactly one paragraph slice globally')
-      referencedLineIDs.add(lineID)
+      if (repeated ? !referencedLineIDs.has(lineID) : referencedLineIDs.has(lineID)) add(issues, 'DUPLICATE_ID', `${slicePath}/line_ids/${lineIndex}`, 'a repeated header must follow one original shaped-line placement; other lines cannot repeat')
+      if (!repeated) referencedLineIDs.add(lineID)
       const line = pageLines.get(lineID)
+      if (line && line.repeated !== repeated) add(issues, 'BROKEN_REFERENCE', slicePath, 'slice and placed line must agree on repeated-header identity')
+      if (line && line.cellID !== cellID) add(issues, 'BROKEN_REFERENCE', slicePath, 'slice and placed line must agree on their table cell identity')
       if (!line) add(issues, 'BROKEN_REFERENCE', `${slicePath}/line_ids/${lineIndex}`, 'slice line id must reference a line on the same page')
       if (line && paragraphID && line.paragraphID !== paragraphID) add(issues, 'BROKEN_REFERENCE', `${slicePath}/line_ids/${lineIndex}`, 'slice line must belong to its paragraph')
       if (line && (line.sectionID !== sliceSectionID || line.columnID !== sliceColumnID || line.columnOrdinal !== sliceColumnOrdinal)) add(issues, 'BROKEN_REFERENCE', `${slicePath}/line_ids/${lineIndex}`, 'slice lines must share the exact section and column identity')
@@ -386,13 +397,14 @@ function validatePage(
     })
     if (sliceHeight !== undefined && sliceHeight !== summedHeight) add(issues, 'INVALID_VALUE', `${slicePath}/height_millipoints`, 'slice height must equal its placed-line heights')
     if (top !== undefined && sliceHeight !== undefined) {
-      const previousSliceBottom = sliceColumnID ? previousSliceBottoms.get(sliceColumnID) : undefined
+      const flowID = sliceColumnID ? JSON.stringify([sliceColumnID, cellID ?? null]) : undefined
+      const previousSliceBottom = flowID ? previousSliceBottoms.get(flowID) : undefined
       if (previousSliceBottom !== undefined && top < previousSliceBottom) add(issues, 'INVALID_VALUE', `${slicePath}/top_millipoints`, 'paragraph slices must be vertically source-ordered without overlap')
-      if (sliceColumnID) previousSliceBottoms.set(sliceColumnID, top + sliceHeight)
+      if (flowID) previousSliceBottoms.set(flowID, top + sliceHeight)
     }
     if (paragraphID) {
       const records = paragraphSlices.get(paragraphID) ?? []
-      records.push({ paragraphID, sliceOrdinal, first, last, continued, continues, continuedColumn, continuesColumn, columnOrdinal: sliceColumnOrdinal, pageOrdinal: expectedOrdinal, path: slicePath })
+      records.push({ repeated, paragraphID, sliceOrdinal, first, last, continued, continues, continuedColumn, continuesColumn, columnOrdinal: sliceColumnOrdinal, pageOrdinal: expectedOrdinal, path: slicePath })
       paragraphSlices.set(paragraphID, records)
     }
   })
@@ -611,6 +623,11 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
     const previous = records[index - 1]
     const next = records[index + 1]
     if (record.sliceOrdinal !== index) add(issues, 'INVALID_VALUE', `${record.path}/slice_ordinal`, 'paragraph slice ordinals must be globally contiguous from zero')
+    if (record.repeated) {
+      const original = records[0]
+      if (index === 0 || original?.repeated || record.first !== 0 || record.last !== original?.last || record.pageOrdinal <= (previous?.pageOrdinal ?? record.pageOrdinal) || record.continued || record.continues || record.continuedColumn || record.continuesColumn) add(issues, 'INVALID_VALUE', record.path, 'repeated headers must repeat one complete original paragraph on a later page without continuation flags')
+      return
+    }
     if (index === 0) {
       if (record.first !== 0) add(issues, 'INVALID_VALUE', `${record.path}/first_line_ordinal`, 'first paragraph slice must begin at shaped line zero')
       if (record.continued !== false) add(issues, 'INVALID_VALUE', `${record.path}/continued_from_previous_page`, 'first paragraph slice cannot continue from a previous page')
@@ -621,8 +638,8 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
       const columnTransition = previous !== undefined && record.pageOrdinal === previous.pageOrdinal && record.columnOrdinal !== previous.columnOrdinal
       if (record.continued !== pageTransition || record.continuedColumn !== columnTransition) add(issues, 'INVALID_VALUE', record.path, 'later paragraph slice must identify its exact preceding page or column transition')
     }
-    const nextPage = next !== undefined && next.pageOrdinal > record.pageOrdinal
-    const nextColumn = next !== undefined && next.pageOrdinal === record.pageOrdinal && next.columnOrdinal !== record.columnOrdinal
+    const nextPage = next !== undefined && !next.repeated && next.pageOrdinal > record.pageOrdinal
+    const nextColumn = next !== undefined && !next.repeated && next.pageOrdinal === record.pageOrdinal && next.columnOrdinal !== record.columnOrdinal
     if (record.continues !== nextPage || record.continuesColumn !== nextColumn) add(issues, 'INVALID_VALUE', record.path, 'paragraph continuation flags must identify the exact next page or column transition')
   }))
   if (status === 'paginated' && (sectionList.length === 0 || pageList.length === 0)) add(issues, 'REQUIRED', '', 'paginated layout requires at least one section and page')

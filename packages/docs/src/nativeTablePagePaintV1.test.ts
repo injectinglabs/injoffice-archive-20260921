@@ -7,6 +7,7 @@ import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION, type NativeDocxS
 import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION } from './nativePaginationSettings.js'
 import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
+import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 const anchor = (path: string, start: number, end: number) => ({ part_name: 'word/document.xml', path, start_byte: start, end_byte: end, xml_sha256: HASH })
@@ -57,7 +58,83 @@ function fixture(bodyHeight = 10_000): NativeDocxPaginationRequestV1 {
   }
 }
 
+function appendRow(request: NativeDocxPaginationRequestV1, ordinal: number): void {
+  const table = request.document.body.blocks[0]!.table!
+  const row = structuredClone(table.rows[1]!)
+  row.id = `row:${ordinal}`; row.repeat_header = false; row.cells[0]!.id = `cell:${ordinal}`
+  row.cells[0]!.paragraphs[0]!.id = `paragraph:cell:${ordinal}`
+  table.rows.push(row)
+  request.resolved_layout.paragraphs.push({ ...structuredClone(request.resolved_layout.paragraphs[1]!), paragraph_id: `paragraph:cell:${ordinal}` })
+  const shaped = structuredClone(request.shaped_lines.paragraphs[1]!)
+  shaped.paragraph_id = `paragraph:cell:${ordinal}`; shaped.lines[0]!.id = `line:paragraph:cell:${ordinal}:0`
+  request.shaped_lines.paragraphs.push(shaped)
+}
+
 describe('bounded native DOCX table page-paint geometry', () => {
+  it('repeats a leading header exactly once on each continuation page with unique placement identities', () => {
+    const request = fixture(14_000)
+    const table = request.document.body.blocks[0]!.table!
+    table.rows[0]!.repeat_header = true
+    const row = structuredClone(table.rows[1]!)
+    row.id = 'row:3'; row.cells[0]!.id = 'cell:3'; row.cells[0]!.paragraphs[0]!.id = 'paragraph:cell:3'
+    table.rows.push(row)
+    request.resolved_layout.paragraphs.push({ ...structuredClone(request.resolved_layout.paragraphs[1]!), paragraph_id: 'paragraph:cell:3' })
+    const shaped = structuredClone(request.shaped_lines.paragraphs[1]!)
+    shaped.paragraph_id = 'paragraph:cell:3'; shaped.lines[0]!.id = 'line:paragraph:cell:3:0'
+    request.shaped_lines.paragraphs.push(shaped)
+    const result = paginateNativeDocxV1(request)
+    expect(result.ok && result.value.status === 'paginated' ? result.value.pages.map((page) => page.lines.map((line) => line.paragraph_id)) : result).toEqual([['paragraph:cell:1', 'paragraph:cell:2'], ['paragraph:cell:1', 'paragraph:cell:3']])
+    if (!result.ok || result.value.status !== 'paginated') throw new Error('pagination refused')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, request)).toMatchObject({ ok: true })
+    expect(new Set(result.value.pages.flatMap((page) => page.lines.map((line) => line.id))).size).toBe(4)
+    expect(result.value.pages[1]!.lines[0]).toMatchObject({ repeated_table_header: true, y_millipoints: 1_500 })
+    for (const mutate of [
+      (value: typeof result.value) => { value.pages[1]!.lines[0]!.y_millipoints += 1 },
+      (value: typeof result.value) => { delete value.pages[1]!.lines[0]!.repeated_table_header },
+      (value: typeof result.value) => { value.pages[1]!.lines.shift(); value.pages[1]!.paragraph_slices.shift() },
+    ]) {
+      const changed = structuredClone(result.value); mutate(changed)
+      expect(decodeNativeDocxPaginatedLayoutForRequest(changed, request).ok).toBe(false)
+    }
+  })
+
+  it('refuses orphan headers, non-prefix headers and repeating vertical merges atomically', () => {
+    for (const configure of [
+      (request: NativeDocxPaginationRequestV1) => { request.document.body.blocks[0]!.table!.rows[0]!.repeat_header = true },
+      (request: NativeDocxPaginationRequestV1) => { request.document.body.blocks[0]!.table!.rows[1]!.repeat_header = true },
+      (request: NativeDocxPaginationRequestV1) => { const row = request.document.body.blocks[0]!.table!.rows[0]!; row.repeat_header = true; row.cells[0]!.vertical_merge = 'restart' },
+    ]) {
+      const request = fixture(10_000); configure(request)
+      expect(paginateNativeDocxV1(request)).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+    }
+  })
+
+  it('keeps a multi-row header prefix with the next body row and replays all header rows', () => {
+    const request = fixture(21_000)
+    appendRow(request, 3); appendRow(request, 4)
+    const table = request.document.body.blocks[0]!.table!
+    table.rows[0]!.repeat_header = true; table.rows[1]!.repeat_header = true
+    const result = paginateNativeDocxV1(request)
+    expect(result.ok && result.value.status === 'paginated' ? result.value.pages.map((page) => page.lines.map((line) => line.paragraph_id)) : result).toEqual([
+      ['paragraph:cell:1', 'paragraph:cell:2', 'paragraph:cell:3'],
+      ['paragraph:cell:1', 'paragraph:cell:2', 'paragraph:cell:4'],
+    ])
+    if (!result.ok) throw new Error('pagination failed')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, request).ok).toBe(true)
+    const wrongCell = structuredClone(result.value)
+    wrongCell.pages[1]!.lines[0]!.table_cell_id = 'cell:wrong'
+    wrongCell.pages[1]!.paragraph_slices[0]!.table_cell_id = 'cell:wrong'
+    expect(decodeNativeDocxPaginatedLayoutForRequest(wrongCell, request).ok).toBe(false)
+  })
+
+  it('refuses a later body row that fits alone but not together with its repeated headers', () => {
+    const request = fixture(21_000)
+    appendRow(request, 3)
+    const table = request.document.body.blocks[0]!.table!
+    table.rows[0]!.repeat_header = true
+    table.rows[2]!.height_twips = 400; table.rows[2]!.height_rule = 'exact'
+    expect(paginateNativeDocxV1(request)).toMatchObject({ ok: true, value: { status: 'refused', pages: [], diagnostics: [expect.objectContaining({ message: expect.stringContaining('Repeated headers and the next indivisible row') })] } })
+  })
   it('derives a source-ordered 2x2 grid without guessing widths or shared cells', () => {
     const request = fixture()
     const table = request.document.body.blocks[0]!.table!

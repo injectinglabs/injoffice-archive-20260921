@@ -222,8 +222,12 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     rows += table.rows.length
     if (rows > DOCX_TABLE_PAGE_PAINT_LIMITS.maxRows) return { status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'table-resource-limit', scope_id: table.id, message: `Rows exceed ${DOCX_TABLE_PAGE_PAINT_LIMITS.maxRows}` }] }
     const openMerge: Array<{ cellID: string; span: number } | undefined> = Array.from({ length: grid.length })
+    let bodyStarted = false
+    const repeating = table.rows.some((row) => row.repeat_header)
     for (const [rowOrdinal, row] of table.rows.entries()) {
-      if (row.repeat_header) return fail(row.id, 'Repeated table headers are explicitly outside page-paint v1')
+      if (row.repeat_header && bodyStarted) return fail(row.id, 'Repeated headers must be a contiguous leading row prefix')
+      if (!row.repeat_header) bodyStarted = true
+      if (repeating && row.cells.some((cell) => cell.vertical_merge !== 'none')) return fail(row.id, 'Vertical merges in repeating-header tables require a separate pagination contract')
       if (row.cant_split !== true) return fail(row.id, 'Every qualified row must explicitly prohibit page splitting')
       if ((row.height_twips === undefined) !== (row.height_rule === undefined)) return fail(row.id, 'Row height requires both height_twips and height_rule')
       if (row.height_twips !== undefined && (row.height_rule !== 'atLeast' && row.height_rule !== 'exact' || !Number.isSafeInteger(row.height_twips) || row.height_twips < 0 || row.height_twips > MAX_SAFE_TWIPS)) return fail(row.id, 'Row height rule is outside the exact atLeast/exact subset')

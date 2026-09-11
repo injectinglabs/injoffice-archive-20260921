@@ -97,3 +97,14 @@ payload's `expectedSourceRevision` to be the corresponding `rev-<digest>`.
 Successful edits additionally require an actual semantic OOXML change and
 preserve the presentation/slide/element topology plus the exact bidirectional
 unsupported diagnostic and passthrough inventory.
+
+### Read-only placeholder inheritance
+
+Top-level title/body placeholders resolve one unique relationship-bound layout
+index and master type. Complete geometry, body properties, and explicit list
+levels cascade into a read-only projection; original slide runs and source
+fingerprints are retained. Unstyled ancestor authoring prompts are accepted but
+never copied into the slide. Local paragraph/run overrides still win, including
+explicit nested list levels. Formatting attached to ancestor prompt paragraphs
+or runs, competing matches, grouped placeholders, and unmodeled master artwork
+remain outside this subset. This is not whole-master or PowerPoint fidelity.

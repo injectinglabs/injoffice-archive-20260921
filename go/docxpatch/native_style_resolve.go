@@ -110,6 +110,7 @@ type NativeResolvedRunPropertiesV1 struct {
 	Bold              *bool   `json:"bold,omitempty"`
 	Italic            *bool   `json:"italic,omitempty"`
 	Underline         *string `json:"underline,omitempty"`
+	VerticalAlignment *string `json:"vertical_alignment,omitempty"`
 	Color             *string `json:"color,omitempty"`
 	Highlight         *string `json:"highlight,omitempty"`
 	Language          *string `json:"language,omitempty"`
@@ -318,16 +319,17 @@ type nativeBoolProperty struct {
 }
 
 type nativeRunProperties struct {
-	fontFamily *string
-	fontSize   *int
-	bold       nativeBoolProperty
-	italic     nativeBoolProperty
-	underline  *string
-	color      *string
-	highlight  *string
-	language   *string
-	rtl        nativeBoolProperty
-	hidden     nativeBoolProperty
+	fontFamily        *string
+	fontSize          *int
+	bold              nativeBoolProperty
+	italic            nativeBoolProperty
+	underline         *string
+	verticalAlignment *string
+	color             *string
+	highlight         *string
+	language          *string
+	rtl               nativeBoolProperty
+	hidden            nativeBoolProperty
 }
 
 type nativeParagraphProperties struct {
@@ -1516,6 +1518,9 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 		if !rawOwnerFound && run.Properties != nil {
 			applyNativeRunProperties(&r, nativeRunPropertiesFromContract(run.Properties), false)
 		}
+		if run.Kind != "text" && r.verticalAlignment != nil && *r.verticalAlignment != "baseline" {
+			resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", run.ID, run.Anchor.PartName, nil, "Script transforms on note markers and controls remain unqualified")
+		}
 		result.Runs = append(result.Runs, NativeResolvedRunV1{
 			RunID: run.ID, ParagraphID: paragraph.ID, CharacterStyle: characterStyle,
 			AppliedParagraphStyles: append([]string{}, applied...), AppliedCharacterStyles: characterApplied,
@@ -1812,7 +1817,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("SCRIPT_LANGUAGE_PRESERVED", scopeID, partName, child, "East-Asia/bidi language metadata is preserved for script shaping")
 			}
 		case "vertAlign":
-			resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", scopeID, partName, child, "Vertical alignment is preserved for Word but native shaping has no qualified scale, baseline, or advance metric")
+			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)
+			if ok {
+				properties.verticalAlignment = nativeString(value)
+			} else {
+				resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", scopeID, partName, child, "Vertical alignment requires an exact baseline, subscript or superscript value")
+			}
 		default:
 			resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "This run property is preserved and not guessed")
 		}
@@ -2064,7 +2074,7 @@ func nativeParagraphPropertiesFromContract(properties *NativeParagraphProperties
 func nativeRunPropertiesFromContract(properties *NativeRunPropertiesV1) nativeRunProperties {
 	result := nativeRunProperties{
 		fontFamily: properties.FontFamily, fontSize: properties.FontSizeHalfPoint,
-		underline: properties.Underline, color: properties.Color, highlight: properties.Highlight,
+		underline: properties.Underline, verticalAlignment: properties.VerticalAlignment, color: properties.Color, highlight: properties.Highlight,
 		language: properties.Language,
 	}
 	if properties.Bold != nil {
@@ -2153,6 +2163,9 @@ func applyNativeNumberingProperties(target *nativeNumberingProperties, layer nat
 }
 
 func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProperties, styleToggle bool) {
+	if layer.verticalAlignment != nil {
+		target.verticalAlignment = nativeString(*layer.verticalAlignment)
+	}
 	if layer.fontFamily != nil {
 		target.fontFamily = nativeString(*layer.fontFamily)
 	}
@@ -2219,7 +2232,7 @@ func nativeExportParagraphProperties(properties nativeParagraphProperties) Nativ
 func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRunPropertiesV1 {
 	result := NativeResolvedRunPropertiesV1{
 		FontFamily: properties.fontFamily, FontSizeHalfPoint: properties.fontSize,
-		Underline: properties.underline, Color: properties.color, Highlight: properties.highlight,
+		Underline: properties.underline, VerticalAlignment: properties.verticalAlignment, Color: properties.color, Highlight: properties.highlight,
 		Language: properties.language,
 	}
 	if properties.bold.present {
@@ -2579,6 +2592,9 @@ func validateNativeResolvedRunProperties(properties NativeResolvedRunPropertiesV
 	}
 	if properties.Underline != nil && *properties.Underline != "none" && *properties.Underline != "single" && *properties.Underline != "double" && *properties.Underline != "words" {
 		return fmt.Errorf("invalid underline")
+	}
+	if properties.VerticalAlignment != nil && *properties.VerticalAlignment != "baseline" && *properties.VerticalAlignment != "subscript" && *properties.VerticalAlignment != "superscript" {
+		return fmt.Errorf("invalid vertical alignment")
 	}
 	if properties.Color != nil && (*properties.Color == "auto" || !nativeColor.MatchString(*properties.Color)) {
 		return fmt.Errorf("invalid explicit color")

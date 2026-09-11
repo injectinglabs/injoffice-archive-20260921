@@ -1,0 +1,6 @@
+{
+  "name": "@injoffice/pptx-page-paint-worker", "version": "0.1.0", "private": true, "type": "module", "engines": {"node": ">=22"},
+  "dependencies": {"@injoffice/docs":"0.1.0","@injoffice/pptx-native":"0.1.0","@injoffice/pptx-render":"0.1.0","@injoffice/font-metrics":"0.1.0"},
+  "devDependencies": {"@types/node":"^22.0.0","typescript":"7.0.2","vitest":"^4.1.8"},
+  "scripts": {"prebuild":"node ../../scripts/fix-declaration-specifiers.mjs","build":"tsc -p tsconfig.build.json","typecheck":"tsc --noEmit","test":"vitest run"}
+}

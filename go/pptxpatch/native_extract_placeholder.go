@@ -10,6 +10,47 @@ type nativePlaceholderIdentity struct {
 	kind  string
 }
 
+// Ancestor placeholder text is an authoring prompt, not slide content. Admit
+// unstyled prompts without copying their text into the source slide. Formatting
+// on prompt paragraphs/runs remains refused until its level cascade is modeled.
+func validateNativePlaceholderPrompt(paragraph *nativeXMLNode, dialect nativeExtractDialect) error {
+	if requireOnlyNativeAttrs(paragraph) != nil || requireOnlyNativeChildren(paragraph, xml.Name{Space: dialect.drawing, Local: "pPr"}, xml.Name{Space: dialect.drawing, Local: "r"}, xml.Name{Space: dialect.drawing, Local: "endParaRPr"}) != nil || !onlyNativeXMLSpace(paragraph.Text) {
+		return fmt.Errorf("pptxpatch: unmodeled ancestor placeholder prompt")
+	}
+	for _, name := range []string{"pPr", "endParaRPr"} {
+		property, err := nativeSingleton(paragraph, dialect.drawing, name, false)
+		if err != nil {
+			return err
+		}
+		if property != nil && (requireOnlyNativeAttrs(property) != nil || requireOnlyNativeChildren(property) != nil || !onlyNativeXMLSpace(property.Text)) {
+			return fmt.Errorf("pptxpatch: ancestor placeholder paragraph styling remains outside inheritance subset")
+		}
+	}
+	for _, run := range paragraph.Children {
+		if run.Name.Local != "r" {
+			continue
+		}
+		if requireOnlyNativeAttrs(run) != nil || requireOnlyNativeChildren(run, xml.Name{Space: dialect.drawing, Local: "rPr"}, xml.Name{Space: dialect.drawing, Local: "t"}) != nil || !onlyNativeXMLSpace(run.Text) {
+			return fmt.Errorf("pptxpatch: unmodeled ancestor placeholder run")
+		}
+		properties, err := nativeSingleton(run, dialect.drawing, "rPr", false)
+		if err != nil {
+			return err
+		}
+		if properties != nil && (requireOnlyNativeAttrs(properties) != nil || requireOnlyNativeChildren(properties) != nil || !onlyNativeXMLSpace(properties.Text)) {
+			return fmt.Errorf("pptxpatch: ancestor placeholder run styling remains outside inheritance subset")
+		}
+		text, err := nativeSingleton(run, dialect.drawing, "t", true)
+		if err != nil {
+			return err
+		}
+		if requireOnlyNativeAttrs(text) != nil || len(text.Children) != 0 {
+			return fmt.Errorf("pptxpatch: unmodeled ancestor placeholder prompt text")
+		}
+	}
+	return nil
+}
+
 func nativeTextPlaceholder(node *nativeXMLNode, dialect nativeExtractDialect) (*nativePlaceholderIdentity, error) {
 	identity, err := nativePlaceholderMetadata(node, dialect)
 	if err != nil || identity == nil {
@@ -222,8 +263,10 @@ func (extractor *nativeExtractor) resolveNativePlaceholder(node *nativeXMLNode, 
 		}
 		if shape != node {
 			for _, paragraph := range body.Children {
-				if paragraph.Name == (xml.Name{Space: dialect.drawing, Local: "p"}) && (requireOnlyNativeAttrs(paragraph) != nil || requireOnlyNativeChildren(paragraph) != nil) {
-					return nil, nil, fmt.Errorf("pptxpatch: ancestor placeholder paragraph styling remains outside inheritance subset")
+				if paragraph.Name == (xml.Name{Space: dialect.drawing, Local: "p"}) {
+					if err := validateNativePlaceholderPrompt(paragraph, dialect); err != nil {
+						return nil, nil, err
+					}
 				}
 			}
 		}

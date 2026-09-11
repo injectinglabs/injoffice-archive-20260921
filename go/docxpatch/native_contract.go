@@ -70,11 +70,19 @@ type NativeRunPropertiesV1 struct {
 	Bold              *bool   `json:"bold,omitempty"`
 	Italic            *bool   `json:"italic,omitempty"`
 	Underline         *string `json:"underline,omitempty"`
+	VerticalAlignment *string `json:"vertical_alignment,omitempty"`
 	Color             *string `json:"color,omitempty"`
 	Highlight         *string `json:"highlight,omitempty"`
 	Language          *string `json:"language,omitempty"`
 	RTL               *bool   `json:"rtl,omitempty"`
 	Hidden            *bool   `json:"hidden,omitempty"`
+}
+
+type NativeDrawingCropV1 struct {
+	Left   *int64 `json:"left"`
+	Top    *int64 `json:"top"`
+	Right  *int64 `json:"right"`
+	Bottom *int64 `json:"bottom"`
 }
 
 type NativeDrawingV1 struct {
@@ -88,6 +96,10 @@ type NativeDrawingV1 struct {
 	Placement              string               `json:"placement"`
 	WidthEMU               *int64               `json:"width_emu"`
 	HeightEMU              *int64               `json:"height_emu"`
+	RotationDegrees        *int64               `json:"rotation_degrees,omitempty"`
+	FlipHorizontal         *bool                `json:"flip_horizontal,omitempty"`
+	FlipVertical           *bool                `json:"flip_vertical,omitempty"`
+	SourceCrop             *NativeDrawingCropV1 `json:"source_crop,omitempty"`
 	XEMU                   *int64               `json:"x_emu,omitempty"`
 	YEMU                   *int64               `json:"y_emu,omitempty"`
 	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
@@ -108,6 +120,7 @@ type NativeRunV1 struct {
 	Anchor     NativeSourceAnchorV1   `json:"anchor"`
 	Properties *NativeRunPropertiesV1 `json:"properties,omitempty"`
 	Text       *string                `json:"text,omitempty"`
+	PageField  string                 `json:"page_field,omitempty"`
 	Control    string                 `json:"control,omitempty"`
 	Reference  *NativeReferenceV1     `json:"reference,omitempty"`
 	Drawing    *NativeDrawingV1       `json:"drawing,omitempty"`
@@ -926,6 +939,15 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 }
 
 func (v *nativeValidator) run(run *NativeRunV1, path, ownerPart string, parentAnchor *nativeAnchorBounds) {
+	if run.PageField != "" {
+		v.oneOf(run.PageField, path+"/page_field", "PAGE", "NUMPAGES")
+		if run.Kind != "text" {
+			v.add("INVALID_UNION", path+"/page_field", "page field requires a text run")
+		}
+		if run.Text == nil || *run.Text != "" {
+			v.add("INVALID_VALUE", path+"/text", "page-field source text must be empty; cached text is not authoritative")
+		}
+	}
 	v.id(run.ID, path+"/id")
 	runAnchor := v.anchor(&run.Anchor, path+"/anchor", ownerPart, parentAnchor)
 	payloads := 0
@@ -987,6 +1009,9 @@ func (v *nativeValidator) run(run *NativeRunV1, path, ownerPart string, parentAn
 		if properties.Underline != nil {
 			v.oneOf(*properties.Underline, path+"/properties/underline", "none", "single", "double", "words")
 		}
+		if properties.VerticalAlignment != nil {
+			v.oneOf(*properties.VerticalAlignment, path+"/properties/vertical_alignment", "baseline", "subscript", "superscript")
+		}
 		if properties.Color != nil && !nativeColor.MatchString(*properties.Color) {
 			v.add("INVALID_VALUE", path+"/properties/color", "must be auto or uppercase RRGGBB")
 		}
@@ -1005,6 +1030,26 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 	v.oneOf(drawing.Placement, path+"/placement", "inline", "floating")
 	v.positive(drawing.WidthEMU, path+"/width_emu")
 	v.positive(drawing.HeightEMU, path+"/height_emu")
+	if drawing.RotationDegrees != nil && *drawing.RotationDegrees != 0 && *drawing.RotationDegrees != 90 && *drawing.RotationDegrees != 180 && *drawing.RotationDegrees != 270 {
+		v.add("INVALID_VALUE", path+"/rotation_degrees", "bounded inline transforms support only quarter turns")
+	}
+	if crop := drawing.SourceCrop; crop != nil {
+		for _, field := range []struct {
+			name  string
+			value *int64
+		}{{"left", crop.Left}, {"top", crop.Top}, {"right", crop.Right}, {"bottom", crop.Bottom}} {
+			v.nonnegative(field.value, path+"/source_crop/"+field.name)
+			if field.value != nil && *field.value > 99000 {
+				v.add("OUT_OF_RANGE", path+"/source_crop/"+field.name, "crop must retain at least one percent per axis")
+			}
+		}
+		if crop.Left != nil && crop.Right != nil && *crop.Left >= 0 && *crop.Left <= 99000 && *crop.Right >= 0 && *crop.Right <= 99000 && *crop.Left+*crop.Right > 99000 {
+			v.add("OUT_OF_RANGE", path+"/source_crop", "horizontal crop must retain at least one percent")
+		}
+		if crop.Top != nil && crop.Bottom != nil && *crop.Top >= 0 && *crop.Top <= 99000 && *crop.Bottom >= 0 && *crop.Bottom <= 99000 && *crop.Top+*crop.Bottom > 99000 {
+			v.add("OUT_OF_RANGE", path+"/source_crop", "vertical crop must retain at least one percent")
+		}
+	}
 	v.optionalSafe(drawing.XEMU, path+"/x_emu")
 	v.optionalSafe(drawing.YEMU, path+"/y_emu")
 	if drawing.Wrap != nil {

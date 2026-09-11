@@ -54,7 +54,7 @@ export function createRecordingPaintSurface(maxCommands: number = PPTX_RENDER_LI
 
 function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: PaintSurface): void {
   for (const paragraph of paragraphs) {
-    for (const run of paragraph.runs) {
+    for (const run of paragraph.marker ? [paragraph.marker,...paragraph.runs] : paragraph.runs) {
       if (run.status === 'refused') {
         surface.push({
           kind: 'placeholder', sourceElementId: run.sourceElementId,

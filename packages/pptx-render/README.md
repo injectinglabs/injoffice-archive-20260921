@@ -72,6 +72,17 @@ fragments. Mixed metrics visibly refuse as `text.metricsUnavailable`; center/bot
 anchoring likewise refuses as `text.verticalAnchorUnavailable` until an
 Office-qualified leading and text-block-height rule exists. Top anchoring uses the
 validated natural metric box directly.
+Hosts may explicitly select `lineLayoutPolicy: 'max-run-natural-v1'` on
+`compileNativePptxSlide`. This measured, deterministic policy takes each line's
+maximum ascent, minimum descent, and maximum line gap from digest-bound shaped
+fragments, shares the resulting baseline across those fragments, and sums line
+boxes for vertical anchoring. Center offsets floor half-EMU remainders; bottom
+offsets use the full remainder, including negative offsets for overflowing text.
+Outputs carry `fidelity: 'deterministicNative'`, the policy identifier, and an
+explicit warning: these rules do not establish Office pixel equivalence.
+Omitting the option preserves the existing strict refusals. Unknown policies,
+unresolved fonts, unsupported bidi/wrapping, and malformed provider metrics still
+refuse; this option does not authorize font substitution or file mutation.
 Refused native bodies report `fidelity: nativeUnavailable`; only successfully
 qualified layout reports `fidelity: native`.
 
@@ -81,6 +92,16 @@ marker/indent metadata and resolves local list/paragraph/run style defaults,
 but marker shaping and indentation are not promoted to exact layout by that
 data extraction alone. The separately labeled approximate file preview uses
 the retained marker and paragraph offsets.
+The explicit `max-run-natural-v1` policy also supports source-defined margins,
+positive first-line indents and hanging character bullets. Markers are shaped
+from the first source run's exact face and rendered once, at `margin + indent`,
+on the first line's measured baseline. Content starts at `margin`; continuation
+lines retain that margin. Non-list first lines add their source indent to the
+text origin. Wrapping uses each line's resulting available width. Marker runs
+carry `sourceRole: 'paragraphBullet'`; their UTF-16 offsets refer to the authored
+marker, never to the content run. Explicit offsets are required for nonzero
+list levels. RTL/centered bullets, absent markers, or an indent too small for the
+measured marker still refuse. No numbering, tab stop, or indentation is invented.
 Self-contained resolved typeface/size runs layout while leftover
 layout/master/theme diagnostics stay preserve-only; missing fonts or unresolved
 `+mj-`/`+mn-` tokens become `text.inheritanceUnavailable` rather than host

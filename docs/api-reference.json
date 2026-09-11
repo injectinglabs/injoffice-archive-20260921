@@ -3042,6 +3042,67 @@
       "description": "Docs track: pagination, header/footer tokens, and comment-anchor mapping — pure core plus a thin TipTap/ProseMirror shell.",
       "exports": [
         {
+          "subpath": "./native-raster",
+          "file": "nativeImagePagePaintV1.d.ts",
+          "symbols": [
+            {
+              "name": "collectNativeDocxQualifiedInlineImagesV1",
+              "kind": "function",
+              "signature": "export declare function collectNativeDocxQualifiedInlineImagesV1(document: NativeDocxDocumentV1): NativeDocxInlineImageQualificationV1[]"
+            },
+            {
+              "name": "decodeNativeDocxPagePaintMediaAssetsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocumentV1, value: unknown): NativeDocxPagePaintMediaAssetV1[]"
+            },
+            {
+              "name": "decodeNativeDocxPagePaintResourceListV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPagePaintResourceListV1(value: unknown): NativeDocxPagePaintMediaAssetV1[]"
+            },
+            {
+              "name": "DOCX_INLINE_IMAGE_LIMITS",
+              "kind": "const",
+              "signature": "export declare const DOCX_INLINE_IMAGE_LIMITS: Readonly<"
+            },
+            {
+              "name": "NativeDocxAuthoritativeMediaAssetV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxAuthoritativeMediaAssetV1"
+            },
+            {
+              "name": "NativeDocxInlineImageQualificationV1",
+              "kind": "type",
+              "signature": "export type NativeDocxInlineImageQualificationV1 ="
+            },
+            {
+              "name": "NativeDocxPagePaintMediaAssetV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxPagePaintMediaAssetV1"
+            },
+            {
+              "name": "NativeDocxQualifiedInlineImageV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxQualifiedInlineImageV1"
+            },
+            {
+              "name": "prepareNativeDocxPagePaintMediaAssetsV1",
+              "kind": "function",
+              "signature": "export declare function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocumentV1, values: readonly NativeDocxAuthoritativeMediaAssetV1[]): NativeDocxPagePaintMediaAssetV1[]"
+            },
+            {
+              "name": "prepareNativeRasterResourceV1",
+              "kind": "function",
+              "signature": "export declare function prepareNativeRasterResourceV1(partName: string, contentType: 'image/png' | 'image/jpeg', bytes: Uint8Array): NativeDocxPagePaintMediaAssetV1"
+            },
+            {
+              "name": "qualifyNativeDocxInlineImageV1",
+              "kind": "function",
+              "signature": "export declare function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, runID: string, drawing: NativeDocxDrawingV1): NativeDocxInlineImageQualificationV1"
+            }
+          ]
+        },
+        {
           "subpath": ".",
           "file": "index.d.ts",
           "symbols": [
@@ -3299,6 +3360,11 @@
               "name": "DOCX_NATIVE_VERSION",
               "kind": "const",
               "signature": "export declare const DOCX_NATIVE_VERSION: 1"
+            },
+            {
+              "name": "DOCX_PAGE_FIELD_LIMITS",
+              "kind": "const",
+              "signature": "export declare const DOCX_PAGE_FIELD_LIMITS:"
             },
             {
               "name": "DOCX_PAGE_PAINT_COMPILER_PROTOCOL",
@@ -3776,6 +3842,11 @@
               "signature": "export interface NativeDocxPageColumnV1"
             },
             {
+              "name": "NativeDocxPageFieldVariantV1",
+              "kind": "type",
+              "signature": "NativeDocxPageFieldVariantV1"
+            },
+            {
               "name": "NativeDocxPageGeometryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPageGeometryV1"
@@ -3788,7 +3859,7 @@
             {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintCompletedV1",
@@ -3868,7 +3939,7 @@
             {
               "name": "nativeDocxPagePaintShapedLinesSha256V1",
               "kind": "function",
-              "signature": "export declare function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1): string"
+              "signature": "export declare function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[]): string"
             },
             {
               "name": "NativeDocxPagePaintSuccessV1",
@@ -4156,6 +4227,11 @@
               "signature": "export interface NativeDocxRunV1"
             },
             {
+              "name": "NativeDocxScriptTransformV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxScriptTransformV1"
+            },
+            {
               "name": "nativeDocxSectionsShareExactPageV1",
               "kind": "function",
               "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1): boolean"
@@ -4234,6 +4310,11 @@
               "name": "NativeDocxStrokeTableBorderCommandV1",
               "kind": "interface",
               "signature": "export interface NativeDocxStrokeTableBorderCommandV1"
+            },
+            {
+              "name": "NativeDocxStrokeTextUnderlineCommandV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxStrokeTextUnderlineCommandV1"
             },
             {
               "name": "NativeDocxTableBordersV1",
@@ -4414,6 +4495,11 @@
               "name": "prepareNativeDocxPagePaintV1",
               "kind": "function",
               "signature": "export declare function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; }): Promise<NativeDocxPagePaintPreparedV1>"
+            },
+            {
+              "name": "prepareNativeRasterResourceV1",
+              "kind": "function",
+              "signature": "export declare function prepareNativeRasterResourceV1(partName: string, contentType: 'image/png' | 'image/jpeg', bytes: Uint8Array): NativeDocxPagePaintMediaAssetV1"
             },
             {
               "name": "qualifyNativeDocxInlineImageV1",
@@ -4926,7 +5012,7 @@
             {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintV1",
@@ -4942,6 +5028,11 @@
               "name": "NativeDocxPaintPathCommandV1",
               "kind": "type",
               "signature": "export type NativeDocxPaintPathCommandV1 ="
+            },
+            {
+              "name": "NativeDocxStrokeTextUnderlineCommandV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxStrokeTextUnderlineCommandV1"
             }
           ]
         }

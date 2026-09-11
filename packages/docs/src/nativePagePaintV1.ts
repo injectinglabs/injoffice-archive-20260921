@@ -62,6 +62,9 @@ import {
 } from './nativeImagePagePaintV1.js'
 import type { NativeDocxResolvedNumberingSourceV1, NativeDocxResolvedRunPropertiesV1 } from './nativeResolvedLayout.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
+import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
+import { nativeDocxScriptScaleV1, validateNativeDocxScriptTransformV1 } from './nativeScriptLayoutV1.js'
+import { validateNativeDocxPageFieldVariantsV1, type NativeDocxPageFieldVariantV1 } from './nativePageFieldsV1.js'
 
 export interface NativeDocxPagePaintRequestV1 {
   protocol: typeof DOCX_PAGE_PAINT_REQUEST_PROTOCOL
@@ -71,6 +74,7 @@ export interface NativeDocxPagePaintRequestV1 {
   /** The exact manifest named by shaped-lines provenance, including face digests. */
   font_manifest: NativeFontManifest
   media_assets: NativeDocxPagePaintMediaAssetV1[]
+  page_field_variants?: NativeDocxPageFieldVariantV1[]
   integrity: { font_manifest_sha256: string; shaped_lines_sha256: string; paginated_layout_sha256: string; table_projection_sha256: string; media_assets_sha256: string }
   outline_provider: { provider_id: string; provider_revision: string }
 }
@@ -199,8 +203,8 @@ export interface NativeDocxPaintInlineImageCommandV1 {
   y_millipoints: number
   width_millipoints: number
   height_millipoints: number
-  source_crop: { left: 0; top: 0; right: 0; bottom: 0; unit: 'one-hundred-thousandth' }
-  transform: { rotation_degrees: 0; flip_horizontal: false; flip_vertical: false }
+  source_crop: { left: number; top: number; right: number; bottom: number; unit: 'one-hundred-thousandth' }
+  transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
 }
 
 export interface NativeDocxFillTextHighlightCommandV1 {
@@ -216,7 +220,22 @@ export interface NativeDocxFillTextHighlightCommandV1 {
   fill_rgb: string
 }
 
-export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1
+export interface NativeDocxStrokeTextUnderlineCommandV1 {
+  kind: 'stroke_text_underline'
+  id: string
+  line_id: string
+  fragment_id: string
+  source_id: string
+  stroke_index: 0 | 1
+  x1_millipoints: number
+  y1_millipoints: number
+  x2_millipoints: number
+  y2_millipoints: number
+  width_millipoints: number
+  stroke_rgb: string
+}
+
+export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1
 
 export interface NativeDocxPaintLineV1 {
   placed_line_id: string
@@ -342,8 +361,8 @@ export function nativeDocxPagePaintFontManifestSha256V1(manifest: NativeFontMani
 }
 
 /** Canonical content attestation for the complete shaped-lines projection carried by page-paint v1. */
-export function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1): string {
-  return canonicalWireSha256(shapedLines)
+export function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[]): string {
+  return canonicalWireSha256(pageFieldVariants ? { shaped_lines: shapedLines, page_field_variants: pageFieldVariants } : shapedLines)
 }
 
 export function nativeDocxPagePaintMediaAssetsSha256V1(assets: readonly NativeDocxPagePaintMediaAssetV1[]): string {
@@ -376,6 +395,7 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1): NativeDocxHe
     shaped_lines: request.pagination_request.shaped_lines,
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
+    page_field_variants: request.page_field_variants,
   })
 }
 
@@ -412,7 +432,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
   const snapshot = safeClone(value)
   if (snapshot === undefined) return { ok: false, issues: [issue('INVALID_VALUE', '', 'page-paint request must be a cloneable JSON wire value')] }
   const issues: NativeDocxValidationIssue[] = []
-  const root = exactObject(snapshot, '', DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, issues)
+  const root = exactObject(snapshot, '', isObject(snapshot) && 'page_field_variants' in snapshot ? [...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, 'page_field_variants'] : DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, issues)
   if (!root) return { ok: false, issues }
   if (root.protocol !== DOCX_PAGE_PAINT_REQUEST_PROTOCOL) add(issues, 'UNSUPPORTED_PROTOCOL', '/protocol', `must equal ${DOCX_PAGE_PAINT_REQUEST_PROTOCOL}`)
   if (root.version !== DOCX_PAGE_PAINT_REQUEST_VERSION) add(issues, 'UNSUPPORTED_VERSION', '/version', `must equal ${DOCX_PAGE_PAINT_REQUEST_VERSION}`)
@@ -445,7 +465,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
     stringValue(integrity.media_assets_sha256, '/integrity/media_assets_sha256', issues, SHA256, 71)
     stringValue(integrity.paginated_layout_sha256, '/integrity/paginated_layout_sha256', issues, SHA256, 71)
     if (manifest.ok && integrity.font_manifest_sha256 !== nativeDocxPagePaintFontManifestSha256V1(manifest.value)) add(issues, 'BROKEN_REFERENCE', '/integrity/font_manifest_sha256', 'must attest the complete validated font manifest carried by this request')
-    if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines projection carried by this request')
+    if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines, root.page_field_variants as NativeDocxPageFieldVariantV1[] | undefined)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines and page-field variants carried by this request')
     if (pagination.ok) {
       const qualified = qualifyNativeDocxTablesV1(pagination.value.document, pagination.value.resolved_layout)
       const expected = qualified.status === 'qualified' ? qualified.sha256 : nativeDocxTableProjectionSha256V1([])
@@ -459,6 +479,14 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
     stringValue(outlineProvider.provider_id, '/outline_provider/provider_id', issues, PROVIDER_ID, 128)
     stringValue(outlineProvider.provider_revision, '/outline_provider/provider_revision', issues, PROVIDER_ID, 128)
   }
+  let pageFieldVariants: NativeDocxPageFieldVariantV1[] | undefined
+  if (pagination.ok && paginated.ok) {
+    try { pageFieldVariants = validateNativeDocxPageFieldVariantsV1(pagination.value, paginated.value, root.page_field_variants) }
+    catch (error) { add(issues, 'BROKEN_REFERENCE', '/page_field_variants', error instanceof Error ? error.message : 'Invalid page-field variants') }
+  }
+  if (pagination.ok && manifest.ok) for (const shaped of [pagination.value.shaped_lines, ...(pageFieldVariants ?? []).map((variant) => variant.shaped_lines)]) for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) for (const fragment of line.fragments) {
+    if (fragment.script_transform && fragment.script_transform.font_sha256 !== manifest.value.faces.find((face) => face.faceId === fragment.face_id)?.source.contentDigest) add(issues, 'BROKEN_REFERENCE', '/pagination_request/shaped_lines', 'Script metrics must bind the exact content-addressed shaped font face')
+  }
   issues.sort(compareNativeValidationIssues)
   if (issues.length > 0 || !pagination.ok || !paginated.ok || !manifest.ok || !mediaAssets) return { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) }
   return {
@@ -470,6 +498,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
       paginated_layout: paginated.value,
       font_manifest: manifest.value,
       media_assets: mediaAssets,
+      ...(pageFieldVariants ? { page_field_variants: pageFieldVariants } : {}),
       integrity: root.integrity as NativeDocxPagePaintRequestV1['integrity'],
       outline_provider: root.outline_provider as NativeDocxPagePaintRequestV1['outline_provider'],
     },
@@ -596,24 +625,24 @@ function coordinate(origin: number, design: number, fontSize: number, unitsPerEm
   return Number.isSafeInteger(result) && Math.abs(result) <= DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints ? result : undefined
 }
 
-function placePath(path: NativeDocxGlyphDesignPathCommandV1[], originX: number, originY: number, fontSize: number, unitsPerEm: number): NativeDocxPaintPathCommandV1[] | undefined {
+function placePath(path: NativeDocxGlyphDesignPathCommandV1[], originX: number, originY: number, fontSize: number, unitsPerEm: number, fontSizeY = fontSize): NativeDocxPaintPathCommandV1[] | undefined {
   const output: NativeDocxPaintPathCommandV1[] = []
   for (const command of path) {
     if (command.kind === 'close_path') { output.push(command); continue }
     const x = coordinate(originX, command.x, fontSize, unitsPerEm)
-    const y = coordinate(originY, command.y, fontSize, unitsPerEm, true)
+    const y = coordinate(originY, command.y, fontSizeY, unitsPerEm, true)
     if (x === undefined || y === undefined) return undefined
     if (command.kind === 'move_to' || command.kind === 'line_to') output.push({ kind: command.kind, x_millipoints: x, y_millipoints: y })
     else if (command.kind === 'quadratic_to') {
       const controlX = coordinate(originX, command.control_x, fontSize, unitsPerEm)
-      const controlY = coordinate(originY, command.control_y, fontSize, unitsPerEm, true)
+      const controlY = coordinate(originY, command.control_y, fontSizeY, unitsPerEm, true)
       if (controlX === undefined || controlY === undefined) return undefined
       output.push({ kind: 'quadratic_to', control_x_millipoints: controlX, control_y_millipoints: controlY, x_millipoints: x, y_millipoints: y })
     } else {
       const control1X = coordinate(originX, command.control_1_x, fontSize, unitsPerEm)
-      const control1Y = coordinate(originY, command.control_1_y, fontSize, unitsPerEm, true)
+      const control1Y = coordinate(originY, command.control_1_y, fontSizeY, unitsPerEm, true)
       const control2X = coordinate(originX, command.control_2_x, fontSize, unitsPerEm)
-      const control2Y = coordinate(originY, command.control_2_y, fontSize, unitsPerEm, true)
+      const control2Y = coordinate(originY, command.control_2_y, fontSizeY, unitsPerEm, true)
       if (control1X === undefined || control1Y === undefined || control2X === undefined || control2Y === undefined) return undefined
       output.push({ kind: 'cubic_to', control_1_x_millipoints: control1X, control_1_y_millipoints: control1Y, control_2_x_millipoints: control2X, control_2_y_millipoints: control2Y, x_millipoints: x, y_millipoints: y })
     }
@@ -719,7 +748,8 @@ function tableCommandsByPage(
           if (cell.vertical_merge === 'continue') continue
           const x = page.body_box.x_millipoints + cell.x_millipoints
           const height = cell.height_millipoints
-          if (cell.shading_rgb) target.fills.push({ kind: 'fill_table_cell', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:fill`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, x_millipoints: x, y_millipoints: rowY, width_millipoints: cell.width_millipoints, height_millipoints: height, fill_rgb: cell.shading_rgb })
+          const placementSuffix = placement.line.repeated_table_header ? `:repeat:${page.id}` : ''
+          if (cell.shading_rgb) target.fills.push({ kind: 'fill_table_cell', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:fill${placementSuffix}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, x_millipoints: x, y_millipoints: rowY, width_millipoints: cell.width_millipoints, height_millipoints: height, fill_rgb: cell.shading_rgb })
           const source = table.table.borders
           const lastMergeRow = rowIndex + cell.row_span - 1
           const edges: Array<{ edge: NativeDocxStrokeTableBorderCommandV1['edge']; border?: import('./nativeContract.js').NativeDocxTableBorderV1; x1: number; y1: number; x2: number; y2: number }> = [
@@ -729,7 +759,7 @@ function tableCommandsByPage(
             { edge: 'bottom', border: lastMergeRow === rows.length - 1 ? source?.bottom : source?.inside_horizontal, x1: x, y1: rowY + height, x2: x + cell.width_millipoints, y2: rowY + height },
           ]
           for (const edge of edges) if (edge.border?.style === 'single' && edge.border.color_rgb) target.borders.push({
-            kind: 'stroke_table_border', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:${edge.edge}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, edge: edge.edge,
+            kind: 'stroke_table_border', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:${edge.edge}${placementSuffix}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, edge: edge.edge,
             x1_millipoints: edge.x1, y1_millipoints: edge.y1, x2_millipoints: edge.x2, y2_millipoints: edge.y2,
             width_millipoints: edge.border.size_eighth_points * 125, stroke_rgb: edge.border.color_rgb,
           })
@@ -794,7 +824,6 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
   if (!tableCommandsIndex) return { ok: true, value: refusal(provenance, 'resource-limit', documentID, 'Table paint indexing exceeded its bounded work or geometry contract') }
 
   const faces = new Map(request.font_manifest.faces.map((face) => [face.faceId, face]))
-  const paragraphs = new Map(pagination.shaped_lines.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
   const resolvedRuns = new Map(pagination.resolved_layout.runs.map((run) => [run.run_id, run]))
   const nativeParagraphs = nativePaintParagraphs(request)
   const nativeRuns = new Map([...nativeParagraphs.values()].flatMap((paragraph) => paragraph.runs.map((run) => [run.id, run] as const)))
@@ -812,7 +841,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
   const sourceControlCounts = new Map<string, number>()
   const sourceHardBreakCounts = new Map<string, number>()
   const sourceImageCounts = new Map<string, number>()
-  const selectedParagraphIDs = new Set<string>()
+  const selectedParagraphIDs = new Map<string, { paragraphID: string; prefix: string; ordinal: number }>()
   const coveredLineIDs = new Set<string>()
   const coveredFragmentIDs = new Set<string>()
   const pages: NativeDocxPaintPageV1[] = []
@@ -823,9 +852,10 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
   let providerCalls = 0
 
   for (const page of layout.pages) {
+    const pageParagraphs = new Map((request.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? pagination.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
     const tableCommands = tableCommandsIndex.get(page.id)
     if (!tableCommands) return { ok: true, value: refusal(provenance, 'identity-mismatch', documentID, 'Table geometry could not exact-join paginated cell lines') }
-    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
+    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
     const paintLines: NativeDocxPaintLineV1[] = []
     const headerFooterPage = headerFooterByPageID.get(page.id)
     if (!headerFooterPage) return { ok: true, value: refusal(provenance, 'incomplete-page', page.id, 'Header/footer layout does not exactly cover the paginated page') }
@@ -835,23 +865,25 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
     const noteStoryByLineID = new Map(noteStories.flatMap((story) => story.lines.map((line) => [line.id, story] as const)))
     const placedLines: Array<NativeDocxPlacedHeaderFooterLineV1 | NativeDocxPaginatedPageV1['lines'][number]> = [...headerLines, ...page.lines, ...noteStories.flatMap((story) => story.lines), ...footerLines]
     for (const placed of placedLines) {
-      const paragraph = paragraphs.get(placed.paragraph_id)
+      const paragraph = pageParagraphs.get(placed.paragraph_id)
       const line = paragraph?.lines[placed.source_line_ordinal]
       if (!paragraph || !line || line.id !== placed.line_id) return { ok: true, value: refusal(provenance, 'identity-mismatch', placed.line_id, 'Placed line does not exact-join its shaped line') }
       const noteStory = noteStoryByLineID.get(placed.id)
       const expectedStoryKind = 'region' in placed ? placed.region : noteStory?.story_kind ?? 'body'
       const expectedStoryID = 'story_id' in placed ? placed.story_id : noteStory?.story_id
       if (paragraph.story_kind !== expectedStoryKind || expectedStoryID !== undefined && paragraph.story_id !== expectedStoryID) return { ok: true, value: refusal(provenance, 'unsupported-source', paragraph.paragraph_id, 'Painted line does not exact-join its selected body/header/footer/note story') }
-      selectedParagraphIDs.add(paragraph.paragraph_id)
+      const coveragePrefix = request.page_field_variants && 'region' in placed ? `${page.id}:` : ''
+      selectedParagraphIDs.set(coveragePrefix + paragraph.paragraph_id, { paragraphID: paragraph.paragraph_id, prefix: coveragePrefix, ordinal: page.ordinal })
       if (paragraph.alignment === 'distribute') return { ok: true, value: refusal(provenance, 'unsupported-source', paragraph.paragraph_id, 'Distributed character expansion is outside page-paint v1') }
       if (line.line_height_millipoints !== line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline') }
-      if (line.hard_break_after && !coveredLineIDs.has(line.id)) sourceHardBreakCounts.set(line.hard_break_after.source_run_id, (sourceHardBreakCounts.get(line.hard_break_after.source_run_id) ?? 0) + 1)
-      coveredLineIDs.add(line.id)
+      if (line.hard_break_after && !coveredLineIDs.has(coveragePrefix + line.id)) sourceHardBreakCounts.set(coveragePrefix + line.hard_break_after.source_run_id, (sourceHardBreakCounts.get(coveragePrefix + line.hard_break_after.source_run_id) ?? 0) + 1)
+      coveredLineIDs.add(coveragePrefix + line.id)
       let fragmentX = placed.x_millipoints
       const baselineY = placed.y_millipoints + line.ascent_millipoints
       if (!Number.isSafeInteger(baselineY) || Math.abs(baselineY) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints) return { ok: true, value: refusal(provenance, 'resource-limit', line.id, 'Line baseline exceeds the bounded paint coordinate range') }
       const firstCommand = contentCommands.length
       const highlights: NativeDocxFillTextHighlightCommandV1[] = []
+      const underlines: NativeDocxStrokeTextUnderlineCommandV1[] = []
       if (noteStory?.note_role === 'separator' && noteStory.lines[0]?.id === placed.id) {
         if (noteStory.lines.length !== 1 || line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'Instruction-only note separator must paint exactly one derived rule and no text or glyph commands') }
         const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id)
@@ -878,18 +910,19 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
           properties = resolved.properties
           if (fragment.source_kind === 'run') {
             const noteMarker = nativeRun.kind === 'reference' && nativeRun.reference && (nativeRun.reference.kind === 'footnote' || nativeRun.reference.kind === 'endnote') ? noteNumbers.get(nativeRun.reference.target_id) : undefined
-            const exactText = nativeRun.kind === 'text' && nativeRun.text !== undefined && nativeRun.text.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
+            const sourceText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? page.ordinal + 1 : layout.pages.length) : nativeRun.text
+            const exactText = nativeRun.kind === 'text' && sourceText !== undefined && sourceText.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
             const exactMarker = noteMarker !== undefined && fragment.start_utf16 === 0 && fragment.end_utf16 === noteMarker.length && fragment.text === noteMarker
             if (!exactText && !exactMarker) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Run fragment text and UTF-16 range must exactly match native text or its placed note number') }
             if (fragment.text.length > 0 && fragment.glyphs.length === 0) return { ok: true, value: refusal(provenance, 'missing-glyph', fragment.id, 'A non-empty visible run fragment cannot paint without glyphs') }
-            if (!coveredFragmentIDs.has(fragment.id)) {
-              const intervals = sourceIntervals.get(nativeRun.id) ?? []
+            if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) {
+              const intervals = sourceIntervals.get(coveragePrefix + nativeRun.id) ?? []
               intervals.push({ start: fragment.start_utf16, end: fragment.end_utf16 })
-              sourceIntervals.set(nativeRun.id, intervals)
+              sourceIntervals.set(coveragePrefix + nativeRun.id, intervals)
             }
           } else if (fragment.source_kind === 'tab') {
             if (nativeRun.kind !== 'control' || nativeRun.control !== 'tab' || fragment.text !== '\t' || fragment.start_utf16 !== 0 || fragment.end_utf16 !== 0 || fragment.glyphs.length !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Tab fragment must exactly match a glyphless native tab control') }
-            if (!coveredFragmentIDs.has(fragment.id)) sourceControlCounts.set(nativeRun.id, (sourceControlCounts.get(nativeRun.id) ?? 0) + 1)
+            if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) sourceControlCounts.set(coveragePrefix + nativeRun.id, (sourceControlCounts.get(coveragePrefix + nativeRun.id) ?? 0) + 1)
           } else if (fragment.source_kind === 'image') {
             if (nativeRun.kind !== 'drawing' || !nativeRun.drawing || fragment.text !== '' || fragment.start_utf16 !== 0 || fragment.end_utf16 !== 0 || fragment.glyphs.length !== 0 || fragment.face_id !== undefined || fragment.whitespace) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment must exactly match one glyphless native drawing run') }
             const qualified = qualifyNativeDocxInlineImageV1(pagination.document, nativeRun.id, nativeRun.drawing)
@@ -908,13 +941,18 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
             })
             fragmentX += fragment.advance_inline_millipoints
             if (!Number.isSafeInteger(fragmentX)) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Image cursor exceeds safe integer coordinates') }
-            if (!coveredFragmentIDs.has(fragment.id)) sourceImageCounts.set(nativeRun.id, (sourceImageCounts.get(nativeRun.id) ?? 0) + 1)
-            coveredFragmentIDs.add(fragment.id)
+            if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) sourceImageCounts.set(coveragePrefix + nativeRun.id, (sourceImageCounts.get(coveragePrefix + nativeRun.id) ?? 0) + 1)
+            coveredFragmentIDs.add(coveragePrefix + fragment.id)
             continue
           }
         }
-        coveredFragmentIDs.add(fragment.id)
-        if (properties.underline && properties.underline !== 'none') return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, 'Underline paint is outside page-paint v1') }
+        coveredFragmentIDs.add(coveragePrefix + fragment.id)
+        const scriptTransform = fragment.script_transform
+        if (scriptTransform && (!validateNativeDocxScriptTransformV1(scriptTransform) || scriptTransform.kind !== properties.vertical_alignment || scriptTransform.font_sha256 !== (fragment.face_id ? faces.get(fragment.face_id)?.source.contentDigest : undefined))) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.source_id, 'Script transform must exact-join source alignment and content-addressed font') }
+        if (scriptTransform && (properties.underline && properties.underline !== 'none' || properties.highlight && properties.highlight !== 'none')) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, 'Combined script transforms and underline/highlight are not qualified') }
+        const underline = nativeTextUnderlineCommandsV1(properties.underline, properties.color, fragment, placed.id, line.id, fragmentX, baselineY)
+        if (!underline.ok) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, underline.message) }
+        for (const command of underline.commands) underlines.push(command)
         const highlight = nativeTextHighlightCommandV1(properties.highlight, fragment, placed.id, line.id, fragmentX, baselineY)
         if (!highlight.ok) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.source_id, highlight.message) }
         if (highlight.command) highlights.push(highlight.command)
@@ -974,7 +1012,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
           const originX = glyphX + glyph.offset_x_millipoints
           const originY = baselineY - glyph.offset_y_millipoints
           if (!Number.isSafeInteger(originX) || !Number.isSafeInteger(originY)) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Glyph origin exceeds safe integer coordinates') }
-          const path = outline.status === 'empty' ? [] : placePath(outline.path, originX, originY, fontSize, outline.units_per_em)
+          const path = outline.status === 'empty' ? [] : placePath(outline.path, originX, originY, scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'x') : fontSize, outline.units_per_em, scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'y') : fontSize)
           if (!path) return { ok: true, value: refusal(provenance, 'invalid-path', fragment.id, 'Scaled glyph path exceeds bounded integer page coordinates') }
           pathCommandCount += path.length
           if (pathCommandCount > DOCX_PAGE_PAINT_LIMITS.maxPathCommands) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, `Paint path commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxPathCommands}`) }
@@ -1009,6 +1047,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
         for (const command of highlights) contentCommands.push(command)
         for (const command of foreground) contentCommands.push(command)
       }
+      for (const command of underlines) contentCommands.push(command)
       paintLines.push({
         placed_line_id: placed.id,
         line_id: line.id,
@@ -1041,22 +1080,24 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
       commands: [...tableCommands.fills, ...contentCommands, ...tableCommands.borders],
     })
   }
-  for (const paragraphID of selectedParagraphIDs) for (const nativeRun of nativeParagraphs.get(paragraphID)?.runs ?? []) {
+  for (const { paragraphID, prefix, ordinal } of selectedParagraphIDs.values()) for (const nativeRun of nativeParagraphs.get(paragraphID)?.runs ?? []) {
+    const coverageID = prefix + nativeRun.id
     const resolved = resolvedRuns.get(nativeRun.id)
     if (!resolved || resolved.properties.hidden) continue
     if (nativeRun.kind === 'text' && nativeRun.text !== undefined) {
-      const intervals = (sourceIntervals.get(nativeRun.id) ?? []).sort((left, right) => left.start - right.start || left.end - right.end)
+      const intervals = (sourceIntervals.get(coverageID) ?? []).sort((left, right) => left.start - right.start || left.end - right.end)
       let cursor = 0
       for (const interval of intervals) {
         if (interval.start !== cursor || interval.end <= interval.start) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must exactly partition their native text run in logical order') }
         cursor = interval.end
       }
-      if (cursor !== nativeRun.text.length) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must completely cover their native text run') }
-    } else if (nativeRun.kind === 'control' && nativeRun.control === 'tab' && sourceControlCounts.get(nativeRun.id) !== 1) {
+      const expectedText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? ordinal + 1 : layout.pages.length) : nativeRun.text
+      if (cursor !== expectedText.length) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must completely cover their native text run') }
+    } else if (nativeRun.kind === 'control' && nativeRun.control === 'tab' && sourceControlCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native tab must have exactly one visual fragment') }
-    } else if (nativeRun.kind === 'control' && nativeRun.control === 'line-break' && sourceHardBreakCounts.get(nativeRun.id) !== 1) {
+    } else if (nativeRun.kind === 'control' && nativeRun.control === 'line-break' && sourceHardBreakCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native line break must have exactly one hard-break attestation') }
-    } else if (nativeRun.kind === 'drawing' && sourceImageCounts.get(nativeRun.id) !== 1) {
+    } else if (nativeRun.kind === 'drawing' && sourceImageCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native image must have exactly one visual fragment') }
     } else if (nativeRun.kind === 'control' && nativeRun.control === 'soft-hyphen') {
       return { ok: true, value: refusal(provenance, 'unsupported-source', nativeRun.id, 'Conditional soft-hyphen painting is outside page-paint v1') }
@@ -1093,17 +1134,18 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
     if (request.value.paginated_layout.status !== 'paginated') add(issues, 'BROKEN_REFERENCE', '/output/status', 'painted output cannot derive from refused pagination')
     else {
       if (output.value.pages.length !== request.value.paginated_layout.pages.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint pages must exactly cover paginated pages')
-      const shapedParagraphs = new Map(request.value.pagination_request.shaped_lines.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
       const resolvedRuns = new Map(request.value.pagination_request.resolved_layout.runs.map((run) => [run.run_id, run]))
       const nativeStories = [request.value.pagination_request.document.body, ...request.value.pagination_request.document.headers, ...request.value.pagination_request.document.footers, ...request.value.pagination_request.document.notes]
       const nativeRuns = new Map(nativeStories.flatMap((story) => story.blocks.flatMap((block) => block.paragraph?.runs ?? [])).map((run) => [run.id, run]))
       const resolvedParagraphs = new Map(request.value.pagination_request.resolved_layout.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
       const manifestFaces = new Map(request.value.font_manifest.faces.map((face) => [face.faceId, face]))
       const expectedGlyphs: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; glyphIndex: number; glyphID: number; face?: NativeDocxContentAddressedFaceV1; fontSize?: number; fill: string }> = []
-      const expectedImages: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; drawingID: string; assetID: string; x: number; y: number; width: number; height: number }> = []
+      const expectedImages: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; drawingID: string; assetID: string; x: number; y: number; width: number; height: number; transform: NativeDocxPaintInlineImageCommandV1['transform']; crop: NativeDocxPaintInlineImageCommandV1['source_crop'] }> = []
       const expectedSeparators: Array<{ pageIndex: number; command: NativeDocxStrokeNoteSeparatorCommandV1 }> = []
       const expectedHighlights: Array<{ pageIndex: number; command: NativeDocxFillTextHighlightCommandV1 }> = []
       const highlightIDsByPlacement = new Map<string, string[]>()
+      const expectedUnderlines: Array<{ pageIndex: number; command: NativeDocxStrokeTextUnderlineCommandV1 }> = []
+      const underlineIDsByPlacement = new Map<string, string[]>()
       const headerFooterByPageID = headerFooter.status === 'placed' ? new Map<string, NativeDocxHeaderFooterPageLayoutV1>(headerFooter.pages.map((entry) => [entry.page_id, entry])) : new Map<string, NativeDocxHeaderFooterPageLayoutV1>()
       const qualifiedTables = qualifyNativeDocxTablesV1(request.value.pagination_request.document, request.value.pagination_request.resolved_layout)
       const expectedTableByPageID = qualifiedTables.status === 'qualified'
@@ -1113,6 +1155,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const sourceLinesByPageID = new Map<string, Array<NativeDocxPlacedHeaderFooterLineV1 | NativeDocxPlacedLineV1>>()
       const noteStoryByPageLineID = new Map<string, Map<string, NativeDocxPlacedNoteStoryV1>>()
       request.value.paginated_layout.pages.forEach((page, pageIndex) => {
+        const shapedParagraphs = new Map((request.value.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? request.value.pagination_request.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
         const headerFooterPage = headerFooterByPageID.get(page.id)
         const placements = headerFooterPage ? [...headerFooterPage.lines.filter((line) => line.region === 'header'), ...page.lines, ...(page.note_stories ?? []).flatMap((story) => story.lines), ...headerFooterPage.lines.filter((line) => line.region === 'footer')] : [...page.lines, ...(page.note_stories ?? []).flatMap((story) => story.lines)]
         sourceLinesByPageID.set(page.id, placements)
@@ -1129,10 +1172,15 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           let fragmentX = placed.x_millipoints
           const highlightIDs: string[] = []
           highlightIDsByPlacement.set(`${pageIndex}\0${placed.id}`, highlightIDs)
+          const underlineIDs: string[] = []
+          underlineIDsByPlacement.set(`${pageIndex}\0${placed.id}`, underlineIDs)
           line?.fragments.forEach((fragment) => {
             const resolved = resolvedRuns.get(fragment.source_id)
             const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placed.paragraph_id)?.numbering?.marker_properties : resolved?.properties
             if (fragment.source_kind !== 'image') {
+              const underline = nativeTextUnderlineCommandsV1(properties?.underline, properties?.color, fragment, placed.id, line.id, fragmentX, placed.y_millipoints + line.ascent_millipoints)
+              if (!underline.ok) add(issues, 'BROKEN_REFERENCE', '/output/pages', underline.message)
+              else for (const command of underline.commands) { expectedUnderlines.push({ pageIndex, command }); underlineIDs.push(command.id) }
               const highlight = nativeTextHighlightCommandV1(properties?.highlight, fragment, placed.id, line.id, fragmentX, placed.y_millipoints + line.ascent_millipoints)
               if (!highlight.ok) add(issues, 'BROKEN_REFERENCE', '/output/pages', highlight.message)
               else if (highlight.command) { expectedHighlights.push({ pageIndex, command: highlight.command }); highlightIDs.push(highlight.command.id) }
@@ -1143,7 +1191,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             if (fragment.source_kind === 'image') {
               const run = nativeRuns.get(fragment.source_id)
               const qualified = run?.drawing ? qualifyNativeDocxInlineImageV1(request.value.pagination_request.document, run.id, run.drawing) : undefined
-              if (qualified?.ok) expectedImages.push({ pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: fragmentX, y: placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints })
+              if (qualified?.ok) expectedImages.push({ pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: fragmentX, y: placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
             }
             fragmentX += fragment.advance_inline_millipoints
           })
@@ -1154,10 +1202,13 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const actualSeparators = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'stroke_note_separator' ? [{ pageIndex, command }] : []))
       const actualHighlights = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'fill_text_highlight' ? [{ pageIndex, command }] : []))
       if (!sameWire(actualHighlights, expectedHighlights)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'highlights must exactly cover source run colors and shaped font-metric rectangles')
+      const actualUnderlines = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap(command => command.kind === 'stroke_text_underline' ? [{ pageIndex, command }] : []))
+      if (!sameWire(actualUnderlines, expectedUnderlines)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'underlines must exactly cover source style and resolved font metrics')
       if (actualGlyphs.length !== expectedGlyphs.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every shaped glyph once')
       if (actualImages.length !== expectedImages.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every qualified inline image once')
       if (!sameWire(actualSeparators, expectedSeparators)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly derive one deterministic rule from each placed ordinary note separator')
       output.value.pages.forEach((page, pageIndex) => {
+        const shapedParagraphs = new Map((request.value.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? request.value.pagination_request.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
         const source = request.value.paginated_layout.status === 'paginated' ? request.value.paginated_layout.pages[pageIndex] : undefined
         if (!source || page.id !== source.id || page.ordinal !== source.ordinal || page.section_id !== source.section_id || !sameWire(page.section_ids, source.section_ids) || !sameWire(page.columns, source.columns) || page.kind !== source.kind || page.width_millipoints !== source.width_millipoints || page.height_millipoints !== source.height_millipoints || !sameWire(page.body_box, source.body_box) || page.background_rgb !== 'FFFFFF' || !sameWire(page.clip_box, { x_millipoints: 0, y_millipoints: 0, width_millipoints: source.width_millipoints, height_millipoints: source.height_millipoints })) add(issues, 'BROKEN_REFERENCE', `/output/pages/${pageIndex}`, 'paint page section/column identity, background, clip, and geometry must exactly match pagination')
         const sourceLines = source ? sourceLinesByPageID.get(source.id) ?? [] : []
@@ -1172,6 +1223,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             ...(placed ? highlightIDsByPlacement.get(`${pageIndex}\0${placed.id}`) ?? [] : []),
             ...(separatorStory && placed ? [paintNoteSeparatorCommandID(placed.id)] : []),
             ...(shaped?.fragments.flatMap((fragment) => fragment.source_kind === 'image' ? [paintImageCommandID(placed!.id, fragment.id)] : fragment.glyphs.map((_, glyphIndex) => paintCommandID(placed!.id, fragment.id, glyphIndex))) ?? []),
+            ...(placed ? underlineIDsByPlacement.get(`${pageIndex}\0${placed.id}`) ?? [] : []),
           ]
           const expectedRegion = placed && 'region' in placed ? placed.region : placed ? noteStoryByPlacedLineID.get(placed.id)?.story_kind ?? 'body' : 'body'
           const expectedSectionID = placed && 'section_id' in placed ? placed.section_id : source.section_id
@@ -1191,6 +1243,8 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       })
       actualImages.forEach((actual, index) => {
         const expected = expectedImages[index]
+        if (expected && !sameWire(actual.command.transform, expected.transform)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}/transform`, 'image orientation must exactly match the source drawing transform')
+        if (expected && !sameWire(actual.command.source_crop, expected.crop)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}/source_crop`, 'image crop must exactly match the source drawing rectangle')
         if (!expected || actual.pageIndex !== expected.pageIndex || actual.page.id !== expected.pageID || actual.command.line_id !== expected.lineID || actual.command.fragment_id !== expected.fragmentID || actual.command.source_id !== expected.sourceID || actual.command.drawing_id !== expected.drawingID || actual.command.asset_id !== expected.assetID || actual.command.x_millipoints !== expected.x || actual.command.y_millipoints !== expected.y || actual.command.width_millipoints !== expected.width || actual.command.height_millipoints !== expected.height || actual.command.id !== paintImageCommandID(expected.placedLineID, expected.fragmentID)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}`, 'image command must exact-join its page, line, fragment, drawing, media digest identity, and exact geometry')
       })
     }

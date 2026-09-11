@@ -8,6 +8,7 @@
     { "id": "pdf-browser", "formats": ["pdf"], "referenceKind": "contract-invariants", "scope": "Real PDF viewing, selection, rotation, continuous navigation, annotations, pixel budgets and clipping; screenshots are diagnostics, not independent references." },
     { "id": "docx-native", "formats": ["docx"], "referenceKind": "contract-invariants", "scope": "Original embedded-font DOCX, actual Go/Node extraction/shaping/pagination, bounded SVG pages and explicit refusal; no Word-export comparison." },
     { "id": "pptx-crop", "formats": ["pptx"], "referenceKind": "analytical-oracle", "scope": "Native presentation-model image crop replay against original quadrant pixel expectations, plus original real-PPTX extraction and browser style invariants; no PowerPoint typography equivalence claim." },
-    { "id": "office-real-files", "formats": ["xlsx", "docx", "pptx"], "referenceKind": "contract-invariants", "scope": "Real bundled Office files opened, edited and re-extracted through browser WASM; validates source/readback contracts, not pixel parity with Office." }
+    { "id": "office-real-files", "formats": ["xlsx", "docx", "pptx"], "referenceKind": "contract-invariants", "scope": "Real bundled Office files opened, edited and re-extracted through browser WASM; validates source/readback contracts, not pixel parity with Office." },
+    { "id": "pptx-native", "formats": ["pptx"], "referenceKind": "contract-invariants", "scope": "Real PPTX upload with explicit consent, Go extraction, exact operator-font HarfBuzz shaping, mixed-size vertical anchors and browser SVG glyph replay; missing fonts refuse. No PowerPoint-export comparison." }
   ]
 }

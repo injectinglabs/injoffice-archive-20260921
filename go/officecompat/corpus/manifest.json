@@ -83,7 +83,7 @@
       "package": "generated/packages/docx-preserve-refuse.docx",
       "expected": "generated/expected/docx-preserve-refuse.json",
       "sha256": "4804dfeca55c45e6aea689d027208c55ee7d624237e9eb8b0103af96d07109e1",
-      "expectedSha256": "b634f06b7b62a01277c1a741e30fd154042533b353c4c8b198cbdb790847d4c5",
+      "expectedSha256": "a5934520253927b88cea49ea21a11d41a813fcd0318b8dc6ed9786146ec64fb4",
       "bytes": 1963,
       "expandedBytes": 2254,
       "parts": 6,

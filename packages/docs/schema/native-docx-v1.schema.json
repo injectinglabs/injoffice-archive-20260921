@@ -96,11 +96,23 @@
         "bold": { "type": "boolean" },
         "italic": { "type": "boolean" },
         "underline": { "enum": ["none", "single", "double", "words"] },
+        "vertical_alignment": { "enum": ["baseline", "subscript", "superscript"] },
         "color": { "type": "string", "pattern": "^(?:auto|[0-9A-F]{6})$" },
         "highlight": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "language": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "rtl": { "type": "boolean" },
         "hidden": { "type": "boolean" }
+      }
+    },
+    "DrawingCropV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "top", "right", "bottom"],
+      "properties": {
+        "left": { "type": "integer", "minimum": 0, "maximum": 99000 },
+        "top": { "type": "integer", "minimum": 0, "maximum": 99000 },
+        "right": { "type": "integer", "minimum": 0, "maximum": 99000 },
+        "bottom": { "type": "integer", "minimum": 0, "maximum": 99000 }
       }
     },
     "DrawingV1": {
@@ -118,6 +130,10 @@
         "placement": { "enum": ["inline", "floating"] },
         "width_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "height_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "rotation_degrees": { "type": "integer", "enum": [0, 90, 180, 270] },
+        "flip_horizontal": { "type": "boolean" },
+        "flip_vertical": { "type": "boolean" },
+        "source_crop": { "$ref": "#/$defs/DrawingCropV1" },
         "x_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "y_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "horizontal_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
@@ -146,10 +162,12 @@
         "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
         "properties": { "$ref": "#/$defs/RunPropertiesV1" },
         "text": { "type": "string", "maxLength": 1048576 },
+        "page_field": { "enum": ["PAGE", "NUMPAGES"] },
         "control": { "enum": ["tab", "line-break", "page-break", "column-break", "soft-hyphen"] },
         "reference": { "$ref": "#/$defs/ReferenceV1" },
         "drawing": { "$ref": "#/$defs/DrawingV1" }
       },
+      "allOf": [{ "if": { "required": ["page_field"] }, "then": { "properties": { "kind": { "const": "text" }, "text": { "const": "" } }, "required": ["text"] } }],
       "oneOf": [
         { "properties": { "kind": { "const": "text" } }, "required": ["text"], "not": { "anyOf": [{ "required": ["control"] }, { "required": ["reference"] }, { "required": ["drawing"] }] } },
         { "properties": { "kind": { "const": "control" } }, "required": ["control"], "not": { "anyOf": [{ "required": ["text"] }, { "required": ["reference"] }, { "required": ["drawing"] }] } },

@@ -876,7 +876,7 @@ func nativeDOCXTopologyInventory(doc *NativeDocumentV1) []string {
 			if run.Reference != nil {
 				referenceTarget = run.Reference.TargetID
 			}
-			records = append(records, "run|"+runLocation+"|"+run.ID+"|"+run.Kind+"|"+run.Control+"|"+referenceKind+"|"+referenceTarget+"|"+anchorPath(&run.Anchor)+"|"+nativeMutationProjection(run.Properties))
+			records = append(records, "run|"+runLocation+"|"+run.ID+"|"+run.Kind+"|"+run.Control+"|"+referenceKind+"|"+referenceTarget+"|"+anchorPath(&run.Anchor)+"|"+nativeMutationProjection(run.Properties)+"|page-field:"+run.PageField)
 			if run.Drawing != nil {
 				drawing := run.Drawing
 				records = append(records, "drawing|"+runLocation+"|"+drawing.ID+"|"+drawing.Placement+"|"+anchorPath(&drawing.Anchor)+"|"+nativeMutationProjection(struct {

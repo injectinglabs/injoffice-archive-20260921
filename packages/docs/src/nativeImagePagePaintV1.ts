@@ -1,7 +1,8 @@
 /**
  * Exact, bounded media boundary for native DOCX page-paint v1.
  *
- * Embedded, identity-transformed inline PNG and baseline JFIF JPEG pictures
+ * Embedded inline PNG and baseline JFIF JPEG pictures, with extent-preserving
+ * bounded source crop, source-axis flips and exact quarter-turn rotations,
  * are qualified. The
  * package extractor remains the relationship authority; this module exact-joins
  * its drawing projection to preserved package-part fingerprints and caller-
@@ -57,8 +58,8 @@ export interface NativeDocxQualifiedInlineImageV1 {
   height_emu: number
   width_millipoints: number
   height_millipoints: number
-  source_crop: { left: 0; top: 0; right: 0; bottom: 0; unit: 'one-hundred-thousandth' }
-  transform: { rotation_degrees: 0; flip_horizontal: false; flip_vertical: false }
+  source_crop: { left: number; top: number; right: number; bottom: number; unit: 'one-hundred-thousandth' }
+  transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
 }
 
 export type NativeDocxInlineImageQualificationV1 =
@@ -210,6 +211,9 @@ function relationshipPart(ownerPart: string): string {
 }
 
 export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, runID: string, drawing: NativeDocxDrawingV1): NativeDocxInlineImageQualificationV1 {
+  const crop = drawing.source_crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
+  if (!['left','top','right','bottom'].every((key) => Number.isSafeInteger(crop[key as keyof typeof crop]) && crop[key as keyof typeof crop] >= 0 && crop[key as keyof typeof crop] <= 99000) || crop.left + crop.right > 99000 || crop.top + crop.bottom > 99000) return { ok: false, code: 'unsupported-image', message: 'Source crop must retain at least one percent per axis in exact integer units' }
+  if (drawing.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(drawing.rotation_degrees) || drawing.flip_horizontal !== undefined && typeof drawing.flip_horizontal !== 'boolean' || drawing.flip_vertical !== undefined && typeof drawing.flip_vertical !== 'boolean') return { ok: false, code: 'unsupported-image', message: 'Inline image transform requires explicit booleans and quarter-turn rotation' }
   if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined) {
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }
   }
@@ -243,8 +247,8 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       height_emu: drawing.height_emu,
       width_millipoints: width,
       height_millipoints: height,
-      source_crop: { left: 0, top: 0, right: 0, bottom: 0, unit: 'one-hundred-thousandth' },
-      transform: { rotation_degrees: 0, flip_horizontal: false, flip_vertical: false },
+      source_crop: { left: crop.left, top: crop.top, right: crop.right, bottom: crop.bottom, unit: 'one-hundred-thousandth' },
+      transform: { rotation_degrees: drawing.rotation_degrees ?? 0, flip_horizontal: drawing.flip_horizontal ?? false, flip_vertical: drawing.flip_vertical ?? false },
     },
   }
 }
@@ -255,6 +259,16 @@ export function collectNativeDocxQualifiedInlineImagesV1(document: NativeDocxDoc
     const paragraphs = block.paragraph ? [block.paragraph] : block.table ? block.table.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs)) : []
     return paragraphs.flatMap((paragraph) => paragraph.runs.flatMap((run) => run.drawing ? [qualifyNativeDocxInlineImageV1(document, run.id, run.drawing)] : []))
   }))
+}
+
+/** Prepare a source-part-bound static raster for native replay, without a DOCX model. */
+export function prepareNativeRasterResourceV1(partName: string, contentType: 'image/png' | 'image/jpeg', bytes: Uint8Array): NativeDocxPagePaintMediaAssetV1 {
+  if (!validPartName(partName) || !(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes) throw new RangeError('Native raster identity or byte budget is invalid')
+  const owned = Uint8Array.from(bytes)
+  const dimensions = contentType === 'image/png' ? pngDimensions(owned) : contentType === 'image/jpeg' ? nativeBaselineJpegDimensions(owned) : undefined
+  if (!dimensions) throw new TypeError('Native raster must be a complete static PNG or baseline JFIF JPEG')
+  const contentDigest = digest(owned)
+  return decodeNativeDocxPagePaintResourceListV1([{id: imageAssetID(contentDigest, partName), part_name: partName, content_type: contentType, content_digest: contentDigest, byte_length: owned.byteLength, width_px: dimensions.width, height_px: dimensions.height, bytes_base64: base64(owned)}])[0]!
 }
 
 export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocumentV1, values: readonly NativeDocxAuthoritativeMediaAssetV1[]): NativeDocxPagePaintMediaAssetV1[] {

@@ -131,11 +131,15 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 }
 
 func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input map[string]any) (json.RawMessage, error) {
-	payload, err := json.Marshal(map[string]any{"protocol": "injoffice.docx.page-paint-worker", "version": 1, "id": "preview", "op": "render", "input": input})
+	return compilePreviewWorker(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", input, 192*1024*1024, 64*1024*1024)
+}
+
+func compilePreviewWorker(ctx context.Context, workerPath, protocol string, input map[string]any, maxInput, maxOutput int) (json.RawMessage, error) {
+	payload, err := json.Marshal(map[string]any{"protocol": protocol, "version": 1, "id": "preview", "op": "render", "input": input})
 	if err != nil {
 		return nil, err
 	}
-	if len(payload) > 192*1024*1024 {
+	if len(payload) > maxInput {
 		return nil, errors.New("preview request exceeds its frame budget")
 	}
 	frame := make([]byte, 4+len(payload))
@@ -143,7 +147,7 @@ func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input m
 	copy(frame[4:], payload)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, "node", "--max-old-space-size=512", options.WorkerPath)
+	command := exec.CommandContext(ctx, "node", "--max-old-space-size=512", workerPath)
 	command.Stdin = bytes.NewReader(frame)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
@@ -152,15 +156,15 @@ func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input m
 	if err = command.Start(); err != nil {
 		return nil, errors.New("native preview worker could not start")
 	}
-	output, readErr := io.ReadAll(io.LimitReader(stdout, 64*1024*1024+5))
-	if readErr != nil || len(output) > 64*1024*1024+4 {
+	output, readErr := io.ReadAll(io.LimitReader(stdout, int64(maxOutput+5)))
+	if readErr != nil || len(output) > maxOutput+4 {
 		_ = command.Process.Kill()
 	}
 	waitErr := command.Wait()
 	if ctx.Err() != nil {
 		return nil, errors.New("native preview exceeded its time budget")
 	}
-	if readErr != nil || waitErr != nil || len(output) < 4 || int(binary.BigEndian.Uint32(output[:4])) != len(output)-4 {
+	if readErr != nil || waitErr != nil || len(output) < 4 || len(output) > maxOutput+4 || int(binary.BigEndian.Uint32(output[:4])) != len(output)-4 {
 		return nil, errors.New("native preview worker returned an invalid frame")
 	}
 	var response struct {
@@ -173,7 +177,7 @@ func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input m
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err = json.Unmarshal(output[4:], &response); err != nil || response.Protocol != "injoffice.docx.page-paint-worker" || response.Version != 1 || response.ID != "preview" {
+	if err = json.Unmarshal(output[4:], &response); err != nil || response.Protocol != protocol || response.Version != 1 || response.ID != "preview" {
 		return nil, errors.New("native preview worker returned an invalid envelope")
 	}
 	if !response.OK {

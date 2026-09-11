@@ -22,6 +22,7 @@ import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.
 import type { NativeDocxPaginatedLayoutV1, NativeDocxPaginatedPageV1 } from './nativePaginationV1.js'
 import { compareNativeCodeUnits } from './nativeDeterminism.js'
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
+import { validateNativeDocxPageFieldVariantsV1 } from './nativePageFieldsV1.js'
 
 export const DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL = 'injoffice.docx.header-footer-layout'
 export const DOCX_HEADER_FOOTER_LAYOUT_VERSION = 1 as const
@@ -101,6 +102,7 @@ export interface NativeDocxHeaderFooterLayoutInputV1 {
   shaped_lines: NativeDocxShapedLinesV1
   pagination_settings: NativeDocxPaginationSettingsV1
   paginated_layout: NativeDocxPaginatedLayoutV1
+  page_field_variants?: Array<{ page_id: string; shaped_lines: NativeDocxShapedLinesV1 }>
 }
 
 type VariantMap = Partial<Record<NativeDocxHeaderFooterReferenceV1['kind'], NativeDocxHeaderFooterReferenceV1>>
@@ -266,7 +268,7 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
 
 function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
   validateSelectedStory(input, story, diagnostics)
-  const shaped = new Map(input.shaped_lines.paragraphs.map((entry) => [entry.paragraph_id, entry]))
+  const shaped = new Map((input.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? input.shaped_lines).paragraphs.map((entry) => [entry.paragraph_id, entry]))
   const offsets = storyLineOffsets(story, shaped, input.resolved_layout, diagnostics)
   if (!offsets || diagnostics.length > 0) return []
   const storyHeight = offsets.height
@@ -302,6 +304,8 @@ function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocx
 export function layoutNativeDocxHeadersFootersV1(input: NativeDocxHeaderFooterLayoutInputV1): NativeDocxHeaderFooterLayoutV1 {
   const diagnostics: NativeDocxHeaderFooterDiagnosticV1[] = []
   const pages: NativeDocxHeaderFooterPageLayoutV1[] = []
+  try { validateNativeDocxPageFieldVariantsV1({ protocol: 'injoffice.docx.pagination-request', version: 1, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings }, input.paginated_layout, input.page_field_variants) }
+  catch (error) { diagnostics.push(diagnostic('selected-story-field', input.document.document_id, error instanceof Error ? error.message : 'Invalid page-field source')) }
   if (input.paginated_layout.status !== 'paginated') {
     diagnostics.push(diagnostic('selected-story-unsupported', input.document.document_id, 'Header/footer placement requires a complete paginated body'))
   } else {
