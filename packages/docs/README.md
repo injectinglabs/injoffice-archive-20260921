@@ -332,7 +332,25 @@ integral twips; non-integral allocations refuse rather than silently round.
 The policy, source grid, percentage and container identity enter the qualified
 table hash. Cell text is shaped again at the resulting content widths. This is
 flexible percentage sizing of a fixed grid, **not content-based autofit**.
-It refuses autofit/missing widths, non-prefix repeating headers,
+Content-based sizing is a separate `shaped-content-minmax-v1` policy for explicit
+`autofit` tables. A bounded preliminary pass uses the same attested fonts and
+HarfBuzz shaper as the final render. Intrinsic minima come from complete
+space-separated words; maxima come from complete hard-break-delimited lines.
+Widths round upward to integer twips so text minima are never rounded down.
+The table's absolute preferred width is clamped between these intrinsic bounds
+and its owning section; omitted/auto preferred width uses the maximum that fits.
+Remaining width is distributed in proportion to each column's min/max headroom,
+with deterministic largest-remainder allocation and source-order ties.
+Authored grid/cell widths remain source preferences recorded in the policy;
+they are not immutable column widths. Final wrapped glyph clusters independently
+rederive the same allocation during source-bound pagination and paint validation.
+This supports unmerged direct-text cells in one section column, including natural
+row fragmentation and repeated headings. It refuses unsatisfied word minima,
+percentage preferred widths, paragraph indents/justification, tabs, discretionary
+breaks, special spacing controls, RTL paragraphs, numbered/merged cells, and
+unqualified font/source diagnostics. This is genuine font-content sizing under
+an explicit bounded policy, **not a claim of Microsoft's autofit algorithm**.
+Both table policies refuse non-prefix repeating headers,
 cell-border conflicts, nested content, numbered cells, conditional
 `tblStylePr` effects, and any table-descendant resolution diagnostic. Selected story
 lines must fit between the exact header/footer edge distance and the body box.
@@ -341,8 +359,8 @@ and content-addresses its complete selection/placement plan in page-paint
 provenance. Exact left-to-right list-marker fragments are replayed from their
 already-shaped glyphs and numbering provenance.
 
-`vertAlign` remains preserved OOXML only. Native shaping and page paint refuse
-it atomically because v1 has no qualified scale, baseline, and advance metric.
+Text-run `vertAlign` subscript/superscript uses the explicit font-metric profile
+described below; unsupported script metrics or source forms still refuse.
 
 The qualified native-image slice is equally renderer-neutral and
 self-contained: the compiler exact-joins each drawing's internal relationship
@@ -354,11 +372,11 @@ integer-only `10/127` milli-point ratio, an explicit source crop rectangle, and 
 explicit source-bound orientation transform. Prepared and completed compiler envelopes expose
 canonical hashes for the complete validated request and output.
 
-Images are restricted to embedded static PNG or baseline JFIF JPEG pictures in `wp:inline` with zero
+Inline images qualify as embedded static PNG or baseline JFIF JPEG pictures in `wp:inline` with zero
 distances/effect extents, extent-preserving `a:xfrm` (quarter-turn rotation and
 horizontal/vertical flips), bounded source crop, exact integer
-milli-point geometry, and bounded bytes/pixels. It refuses text-wrapping anchors,
-remote or external relationships, vectors and other
+milli-point geometry, and bounded bytes/pixels. Both inline and qualified floating
+images refuse remote or external relationships, vectors and other
 raster formats, animation, negative/extending crop, arbitrary rotation, effects, mismatched extents, and
 media digest drift. JPEG support is deliberately bounded to one baseline 8-bit
 grayscale/YCbCr interleaved scan with internal tables and JFIF APP0, following
@@ -368,7 +386,7 @@ validator checks marker structure, not entropy decoding; the viewer decodes the
 preserved bytes and the browser smoke verifies generated red/blue JPEG pixels.
 
 Body-paragraph `wp:anchor` pictures also qualify with explicit page-relative
-non-negative offsets, `wrapNone`, zero distances/effects, disabled `simplePos`
+non-negative offsets, `wrapNone` or explicit `wrapSquare wrapText="bothSides"`, zero distances/effects, disabled `simplePos`
 and `locked`, and enabled `allowOverlap`/`layoutInCell`. Their source
 `behindDoc` and `relativeHeight` become `floating_layer` and `stacking_order`.
 The anchor consumes no inline width or image-height line space; its actual
@@ -378,7 +396,15 @@ must handle this additive command and respect global page replay order rather
 than concatenating line-owned commands. At most 128 floating pictures qualify;
 orders must be unique per layer, and images
 must fit wholly inside the page. Header/footer/table anchors, alignment-based
-positions, relative sizing, text wrapping and collision avoidance remain refused.
+positions, relative sizing and collision avoidance remain refused.
+Square wrapping is bounded to unrotated page-edge rectangles leaving one text
+interval in single-column body paragraphs with left/start-aligned LTR text and no
+numbering, tables or notes. Source-derived intervals shape complete lines beside
+the image and restore paragraph width below it. Interior islands, fully blocked
+lines, tight/through wrapping and vertical displacement remain refused. Wrapping
+and body page fields share one eight-pass, cycle-detecting pagination solve;
+final paint validation independently replays the exact source exclusions. Neither
+the original package nor its native source text is modified.
 This is a source-contract implementation, not independently established Word
 pixel parity.
 Quarter turns require explicit unrotated DrawingML extents whose swapped bounds
@@ -391,12 +417,11 @@ scale). The viewer clips this source rectangle before reflecting/rotating into
 the unchanged layout box; it does not rewrite or resample the original media.
 Selected header/footer inline PNG/JPEG runs use the same
 digest-bound asset join and `paint_inline_image` command as body pictures. V1
-also emits RTL/mixed-bidi fragments and bounded U+0020-justified lines in
-visual paint order, requiring no paint-time text reversal or measurement. It
 also emits RTL/mixed-bidi fragments, exact list-marker glyphs, and bounded
 U+0020-justified lines in visual paint order, requiring no paint-time text
 reversal or measurement. It refuses distributed-character justification,
-underline paint, header/footer tables, shapes, references, fields outside the
+underline styles outside the metric-bound subset below, header/footer tables,
+shapes, references, fields outside the
 page-number subset below, and unsupported note content. Native note marker
 fragments must exactly equal the paginator-assigned decimal label. It also refuses
 system or unaddressed faces, missing glyphs, invalid/mismatched provider output,
@@ -428,8 +453,9 @@ policy, not a claim of Word-pixel parity.
 
 Simple decimal `PAGE` and `NUMPAGES` fields in ordinary header/footer paragraphs
 are resolved from the final native body pagination. The Go extractor recognizes
-only an unlocked `w:fldSimple` with an exact `PAGE` or `NUMPAGES` instruction and
-one supported text result run. It discards the cached result, records
+an unlocked `w:fldSimple` or a flat paragraph-local five-run
+`begin` / `instrText` / `separate` / result / `end` sequence, with an exact
+`PAGE` or `NUMPAGES` instruction and one supported text result run. It discards the cached result, records
 `page_field`, and keeps the paragraph read-only. The raw story-root XML anchor
 digest covers the instruction and cached bytes; the package digest binds the
 complete source. These are integrity joins within the trusted extraction
@@ -445,12 +471,42 @@ made editable. Low-level consumers must pass the compiler's variants through
 to header/footer layout and paint, not reuse the empty source field as text.
 
 This bounded profile allows at most 64 pages and 100,000 cumulative variant
-fragments (`DOCX_PAGE_FIELD_LIMITS`). Body/note/comment fields, header/footer
-tables, complex `fldChar` fields, nested fields, switches (including
-`MERGEFORMAT`), locked/dirty fields, section numbering formats/restarts, and all
-other field instructions remain refused. Field-dependent body pagination needs
-a separate convergence contract; this implementation makes no Word-pixel parity
+fragments (`DOCX_PAGE_FIELD_LIMITS`). Note/comment fields, header/footer
+tables, other complex `fldChar` sequences, nested fields, unsupported switches,
+locked/dirty fields, non-decimal section numbering formats, and all
+other field instructions remain refused. This implementation makes no Word-pixel parity
 claim. See the [OOXML simple-field definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.simplefield?view=openxml-3.0.1).
+
+Ordinary body-paragraph PAGE/NUMPAGES fields use a bounded whole-body layout
+fixed point: start with decimal `1`, shape and paginate, derive field text from
+the actual page carrying its glyphs, and repeat until the complete state is
+unchanged. Cycles and failure to converge within eight passes refuse. At most
+128 body fields and 64 pages qualify. Across solver passes and subsequent
+header/footer variants, at most 100,000 shaping fragments are processed. Hidden fields, table/note/comment fields
+and fields split across pages refuse. No stale cached result seeds the solve.
+The paint request retains `body_field_source` plus its integrity digest and
+proves that the derived document differs only by final page-derived field text
+and internal `layout_page_field` substitution markers. These markers require
+source replay and are never emitted by source extraction or accepted as compiler
+source input. The original-source digest is also carried in output provenance.
+Read-only paragraph policies and original raw XML/package digests are preserved.
+
+Exact `w:pgNumType` decimal section starts (`0` through `999999`) restart PAGE
+display text without changing physical pagination or NUMPAGES. Unspecified
+starts continue physical page numbering, including parity blanks. A restart
+on a page shared by continuous sections refuses rather than guessing ownership.
+Chapter numbering attributes, other number formats, malformed starts and display
+overflow remain refused. The browser fixture starts at 7 and proves native
+`Page 7 of 2` / `Page 8 of 2` in both stories and the page-eight body field.
+
+Simple and qualified flat complex PAGE/NUMPAGES instructions admit only the
+optional `\* Arabic` and `\* MERGEFORMAT` switches (each at most once, either
+order). Arabic selects decimal digits; MERGEFORMAT preserves the existing
+single result run's exact formatting while discarding its cached text, matching
+[Microsoft's field-format semantics](https://support.microsoft.com/en-us/word/format-field-results).
+Raw instruction bytes remain bound by source digests and field paragraphs stay
+read-only. Other formats, CHARFORMAT, numeric pictures, duplicate switches,
+locked/dirty fields, nested fields and multi-run results still refuse.
 
 Text-run `w:vertAlign` values `subscript` and `superscript` use an explicit
 font-metric simulation profile. Native shaping reads the embedded font's

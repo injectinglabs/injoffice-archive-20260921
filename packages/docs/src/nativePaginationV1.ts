@@ -825,7 +825,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   if (expectedTabInterval === undefined || expectedTabInterval !== shaped.tab_interval_millipoints) {
     refuse(context, 'default-tab-stop-mismatch', document.document_id, `Shaped tab interval ${shaped.tab_interval_millipoints} does not match the attested Word default tab stop ${settings.default_tab_stop_twips} twips`)
   }
-  const qualified = qualifyNativeDocxTablesV1(document, context.request.resolved_layout)
+  const qualified = qualifyNativeDocxTablesV1(document, context.request.resolved_layout, shaped)
   if (qualified.status === 'refused') for (const diagnostic of qualified.diagnostics) refuse(context, 'body-table-unsupported', diagnostic.scope_id, diagnostic.message)
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
@@ -1808,7 +1808,7 @@ export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPagi
   // Exact replay above validates every repeated placement. The independent
   // source coverage audit below counts original body lines only.
   const actualLines = output.pages.flatMap((page, pageIndex) => page.lines.filter((line) => !line.repeated_table_header).map((line) => ({ page, pageIndex, line })))
-  const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout)
+  const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
   const cellContentX = new Map<string, number>()
   if (qualified.status === 'qualified') for (const table of qualified.tables) for (const row of table.rows) for (const cell of row.cells) for (const paragraph of cell.cell.paragraphs) cellContentX.set(paragraph.id, cell.content_x_millipoints)
   if (actualLines.length !== expectedLines.length) add('BROKEN_REFERENCE', '/pages', 'placed lines must exactly cover every shaped body line once')

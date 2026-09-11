@@ -13,6 +13,9 @@ func TestNativePageRelativeFloatingImageSource(t *testing.T) {
 	}{
 		{name: "qualified", pass: true},
 		{"wrapping", "<wp:wrapNone/>", "<wp:wrapSquare/>", false},
+		{"squareBothSides", "<wp:wrapNone/>", `<wp:wrapSquare wrapText="bothSides"/>`, true},
+		{"squareLargest", "<wp:wrapNone/>", `<wp:wrapSquare wrapText="largest"/>`, false},
+		{"duplicateWrap", "<wp:wrapNone/>", `<wp:wrapNone/><wp:wrapSquare wrapText="bothSides"/>`, false},
 		{"relative", "relativeFrom=\"page\"", "relativeFrom=\"paragraph\"", false},
 		{"collision", "allowOverlap=\"1\"", "allowOverlap=\"0\"", false},
 		{"unknown", "locked=\"0\"", "locked=\"0\" hidden=\"1\"", false},

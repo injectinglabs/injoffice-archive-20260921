@@ -3812,6 +3812,11 @@
               "signature": "export interface NativeDocxLineFragmentV1"
             },
             {
+              "name": "NativeDocxLineIntervalPlanV1",
+              "kind": "type",
+              "signature": "export type NativeDocxLineIntervalPlanV1 = Readonly<Record<string, readonly"
+            },
+            {
               "name": "NativeDocxListMarkerGeometryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxListMarkerGeometryV1"
@@ -4529,7 +4534,7 @@
             {
               "name": "qualifyNativeDocxTablesV1",
               "kind": "function",
-              "signature": "export declare function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1): NativeDocxQualifiedTablesV1"
+              "signature": "export declare function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1): NativeDocxQualifiedTablesV1"
             },
             {
               "name": "renderHeaderFooterTemplate",
@@ -4549,7 +4554,7 @@
             {
               "name": "shapeNativeDocxLinesWithParagraphWidthsV1",
               "kind": "function",
-              "signature": "export declare function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>): Promise<ShapeNativeDocxLinesResult>"
+              "signature": "export declare function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult>"
             },
             {
               "name": "twipsToMilliPoints",

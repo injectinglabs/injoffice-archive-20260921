@@ -127,6 +127,8 @@ export interface NativeDocxRunV1 {
   text?: string
   /** Source PAGE/NUMPAGES instruction; cached text is not a rendering authority. */
   page_field?: 'PAGE' | 'NUMPAGES'
+  /** Internal layout substitution marker; requires original-source replay before page paint. */
+  layout_page_field?: 'PAGE' | 'NUMPAGES'
   control?: 'tab' | 'line-break' | 'page-break' | 'column-break' | 'soft-hyphen'
   reference?: NativeDocxReferenceV1
   drawing?: NativeDocxDrawingV1
@@ -185,7 +187,7 @@ export interface NativeDocxTableV1 {
   table_style_id?: string
   width_twips?: number
   width_percent_fiftieths?: number
-  layout?: 'fixed'
+  layout?: 'fixed' | 'autofit'
   alignment?: 'left'
   indent_twips?: number
   grid_widths_twips?: number[]
@@ -281,6 +283,7 @@ export interface NativeDocxSectionV1 {
   break_type: 'continuous' | 'next-page' | 'even-page' | 'odd-page' | 'next-column'
   /** Exact w:titlePg policy. False means the element is absent or explicitly off. */
   title_page: boolean
+  page_number_start?: number
   page: NativeDocxPageGeometryV1
   header_refs: NativeDocxHeaderFooterReferenceV1[]
   footer_refs: NativeDocxHeaderFooterReferenceV1[]
@@ -373,7 +376,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
-  RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'control', 'reference', 'drawing'],
+  RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
   NumberingReferenceV1: ['num_id', 'level', 'abstract_num_id'],
   ParagraphPropertiesV1: ['paragraph_style_id', 'numbering', 'alignment', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
   ParagraphV1: ['id', 'anchor', 'edit_policy', 'properties', 'runs'],
@@ -389,7 +392,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   PageMarginsV1: ['top_twips', 'right_twips', 'bottom_twips', 'left_twips', 'header_twips', 'footer_twips', 'gutter_twips'],
   ColumnV1: ['id', 'ordinal', 'width_twips', 'space_after_twips'],
   PageGeometryV1: ['width_twips', 'height_twips', 'orientation', 'margins', 'columns', 'column_spacing_twips', 'column_layout', 'column_definitions'],
-  SectionV1: ['id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page', 'header_refs', 'footer_refs'],
+  SectionV1: ['id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
   CommentV1: ['id', 'native_comment_id', 'author', 'initials', 'created_at', 'anchor', 'body_story_id'],
   UnsupportedCapabilityV1: ['id', 'code', 'capability', 'scope_id', 'anchor', 'preservation', 'message'],
   DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported'],
@@ -667,6 +670,10 @@ function validateRun(value: unknown, path: string, issues: NativeDocxValidationI
     if (kind !== 'text') add(issues, 'INVALID_UNION', `${path}/page_field`, 'page field requires a text run')
     if (entry.text !== '') add(issues, 'INVALID_VALUE', `${path}/text`, 'page-field source text must be empty; cached text is not authoritative')
   }
+  if (entry.layout_page_field !== undefined) {
+    enumValue(entry.layout_page_field, `${path}/layout_page_field`, ['PAGE', 'NUMPAGES'], issues)
+    if (kind !== 'text' || entry.page_field !== undefined || typeof entry.text !== 'string' || !/^(0|[1-9][0-9]{0,5})$/.test(entry.text)) add(issues, 'INVALID_VALUE', path, 'layout fields require decimal text and no source field marker')
+  }
   const payloads = ['text', 'control', 'reference', 'drawing'].filter((key) => entry[key] !== undefined)
   if (payloads.length !== 1 || payloads[0] !== kind) add(issues, 'INVALID_UNION', path, 'run kind must match exactly one payload')
   if (kind === 'text') {
@@ -752,7 +759,7 @@ function validateTable(value: unknown, path: string, issues: NativeDocxValidatio
     if (percent !== undefined && percent !== null && percent > 5000) add(issues, 'OUT_OF_RANGE', `${path}/width_percent_fiftieths`, 'must be at most 5000 fiftieths of a percent')
     if (entry.width_twips !== undefined) add(issues, 'INVALID_UNION', path, 'table width must use exactly one unit')
   }
-  if (entry.layout !== undefined) enumValue(entry.layout, `${path}/layout`, ['fixed'], issues)
+  if (entry.layout !== undefined) enumValue(entry.layout, `${path}/layout`, ['fixed', 'autofit'], issues)
   if (entry.alignment !== undefined) enumValue(entry.alignment, `${path}/alignment`, ['left'], issues)
   twipsInteger(entry.indent_twips, `${path}/indent_twips`, issues, 0, false)
   if (entry.grid_widths_twips !== undefined) array(entry.grid_widths_twips, `${path}/grid_widths_twips`, issues).forEach((width, index) => twipsInteger(width, `${path}/grid_widths_twips/${index}`, issues, 1))
@@ -848,6 +855,10 @@ function validateSection(value: unknown, path: string, issues: NativeDocxValidat
   if (start) reference(refs, start, `${path}/starts_at_block_id`, 'body-block')
   enumValue(entry.break_type, `${path}/break_type`, ['continuous', 'next-page', 'even-page', 'odd-page', 'next-column'], issues)
   booleanValue(entry.title_page, `${path}/title_page`, issues)
+  if (entry.page_number_start !== undefined) {
+    const start = integer(entry.page_number_start, `${path}/page_number_start`, issues)
+    if (start !== undefined && start > 999999) add(issues, 'INVALID_VALUE', `${path}/page_number_start`, 'must not exceed 999999')
+  }
   const page = object(entry.page, `${path}/page`, DOCX_NATIVE_V1_BINDING_FIELDS.PageGeometryV1, issues)
   if (page) {
     twipsInteger(page.width_twips, `${path}/page/width_twips`, issues, 1)

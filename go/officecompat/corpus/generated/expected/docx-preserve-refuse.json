@@ -231,6 +231,21 @@
       },
       {
         "anchor": {
+          "end_byte": 614,
+          "part_name": "word/document.xml",
+          "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]",
+          "start_byte": 513,
+          "xml_sha256": "sha256:270c2f16f0fa25d0aa6b3c8ab226a27b2946d7a304373f14f019bc7f541047a2"
+        },
+        "capability": "fields",
+        "code": "FIELD_SEMANTICS",
+        "id": "unsupported:2cbbb8d68b7a4dcd3bbf7e49",
+        "message": "Complex page fields require an exact flat begin/instruction/separate/result/end run sequence",
+        "preservation": "refuse-mutation",
+        "scope_id": "paragraph:a3f01c186401b8c209d2452f"
+      },
+      {
+        "anchor": {
           "end_byte": 552,
           "part_name": "word/document.xml",
           "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:fldChar[1]",

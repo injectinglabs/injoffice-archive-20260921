@@ -192,6 +192,8 @@ export interface NativeDocxShapedLineV1 {
   ordinal: number
   available_width_millipoints: number
   inline_offset_millipoints: number
+  /** Source-derived square-wrap left edge, independently checked at page paint. */
+  exclusion_start_millipoints?: number
   advance_inline_millipoints: number
   ascent_millipoints: number
   descent_millipoints: number
@@ -286,6 +288,7 @@ const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+
 const GLUE_RE = /[\u00A0\u202F\u2060]/u
 
 interface NativeShapingContext {
+  lineIntervals?: NativeDocxLineIntervalPlanV1
   request: NativeDocxShapingRequestV1
   providers: NativeProviderSnapshot
   fontManifest: NativeFontManifest
@@ -1752,6 +1755,15 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
   }
 }
 
+export type NativeDocxLineIntervalPlanV1 = Readonly<Record<string, readonly { start_millipoints: number; width_millipoints: number }[]>>
+
+function offeredLineInterval(context: NativeShapingContext, paragraphID: string, ordinal: number, start: number, width: number): { start: number; width: number } {
+  const interval = context.lineIntervals?.[paragraphID]?.[ordinal]
+  if (!interval) return { start, width }
+  const left = Math.max(start, interval.start_millipoints)
+  return { start: left, width: Math.min(start + width, interval.start_millipoints + interval.width_millipoints) - left }
+}
+
 function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atoms: FragmentAtom[], lines: NativeDocxShapedLineV1[], baseWidth: number, start: number, end: number, firstDelta: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreakRunID?: string, firstLineStart?: number): void {
   if (context.lineCount >= DOCX_SHAPED_LINES_LIMITS.maxLines || context.resourceExceeded) {
     context.resourceExceeded = true
@@ -1762,9 +1774,14 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
   if (atoms.length === 0) {
     const first = lines.length === 0
     const ordinaryStart = direction === 'ltr' ? start + (first ? firstDelta : 0) : end
-    const startOffset = first && firstLineStart !== undefined ? firstLineStart : ordinaryStart
-    const width = first && firstLineStart !== undefined ? baseWidth - startOffset - end : baseWidth - start - end - (first ? firstDelta : 0)
+    const ordinaryWidth = first && firstLineStart !== undefined ? baseWidth - firstLineStart - end : baseWidth - start - end - (first ? firstDelta : 0)
+    const { start: startOffset, width } = offeredLineInterval(context, paragraphID, lines.length, first && firstLineStart !== undefined ? firstLineStart : ordinaryStart, ordinaryWidth)
+    if (context.lineIntervals?.[paragraphID]?.[lines.length] && width <= 0) {
+      addDiagnostic(context, { code: 'cluster-overflow', severity: 'unsupported', scope_id: paragraphID, message: 'Source exclusion and paragraph indents leave no positive inline width' })
+      return
+    }
     const line = materializeLine(context, paragraphID, lines.length, [], Math.max(0, width), startOffset, alignment, direction, paragraphMarkMetrics, hardBreakRunID)
+    if (line && startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
     if (line) lines.push(line)
     return
   }
@@ -1776,8 +1793,8 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
     }
     const first = lines.length === 0
     const ordinaryStart = direction === 'ltr' ? start + (first ? firstDelta : 0) : end
-    const startOffset = first && firstLineStart !== undefined ? firstLineStart : ordinaryStart
-    const width = first && firstLineStart !== undefined ? baseWidth - startOffset - end : baseWidth - start - end - (first ? firstDelta : 0)
+    const ordinaryWidth = first && firstLineStart !== undefined ? baseWidth - firstLineStart - end : baseWidth - start - end - (first ? firstDelta : 0)
+    const { start: startOffset, width } = offeredLineInterval(context, paragraphID, lines.length, first && firstLineStart !== undefined ? firstLineStart : ordinaryStart, ordinaryWidth)
     if (width <= 0) {
       addDiagnostic(context, { code: 'cluster-overflow', severity: 'unsupported', scope_id: paragraphID, message: 'Paragraph indents leave no positive inline width' })
       return
@@ -1786,6 +1803,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
     const lineAtoms = atoms.slice(offset, lineEnd)
     const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreakRunID : undefined, lineEnd < atoms.length)
     if (!line) return
+    if (startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
     if (line.advance_inline_millipoints > width) addDiagnostic(context, { code: 'cluster-overflow', severity: 'deferred', scope_id: paragraphID, source_id: lineAtoms[0]?.sourceID, message: 'One cluster exceeds the offered width and remains intact on an overfull line' })
     lines.push(line)
     offset = lineEnd
@@ -1960,7 +1978,15 @@ function tableDiagnosticScopes(table: NativeDocxTableV1): Set<string> {
  * Validate both Go wire projections, verify every durable-id join, and shape
  * source-ordered paragraphs with injected native font providers.
  */
-async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>): Promise<ShapeNativeDocxLinesResult> {
+async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult> {
+  const ownedIntervals = lineIntervals ? deepFreezeWire(structuredClone(lineIntervals)) : undefined
+  let intervalCount = 0
+  for (const intervals of Object.values(ownedIntervals ?? {})) {
+    if (!Array.isArray(intervals)) throw new TypeError('Line intervals must be bounded arrays')
+    for (const interval of intervals) {
+      if (++intervalCount > 4096 || !Number.isSafeInteger(interval.start_millipoints) || interval.start_millipoints < 0 || !Number.isSafeInteger(interval.width_millipoints) || interval.width_millipoints <= 0 || interval.start_millipoints + interval.width_millipoints > DOCX_SHAPED_LINES_LIMITS.maxWidthMilliPoints) throw new RangeError('Source-derived line intervals exceed bounded geometry')
+    }
+  }
   if (!UNICODE_13_TABLES_RUNTIME_MATCH) return { ok: false, issues: [validationIssue('INVALID_VALUE', '', 'pinned Unicode 13 classification tables failed their runtime digest')] }
   const initial = validateRequest(value)
   if (!initial.ok) return initial
@@ -1979,6 +2005,7 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
   const inventory = inventoryDocument(request.document)
   const qualifiedNotes = qualifyNoteNumbers(request.document)
   const context: NativeShapingContext = {
+    lineIntervals: ownedIntervals,
     request,
     providers: providerBoundary.value,
     fontManifest,
@@ -2095,6 +2122,6 @@ export async function shapeNativeDocxLinesV1(value: unknown, providers: NativeDo
 }
 
 /** Internal canonical page-paint seam: reuses one provider/cache/budget context while shaping qualified cell widths. */
-export async function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>): Promise<ShapeNativeDocxLinesResult> {
-  return shapeNativeDocxLinesCoreV1(value, providers, paragraphWidths)
+export async function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult> {
+  return shapeNativeDocxLinesCoreV1(value, providers, paragraphWidths, lineIntervals)
 }

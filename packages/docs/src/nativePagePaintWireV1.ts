@@ -66,7 +66,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   MediaSourceV1: ['sha256'],
   ProvidersV1: ['resolver_id', 'resolver_revision', 'shaper_id', 'shaper_revision', 'bidi_id', 'bidi_revision', 'bidi_unicode_version', 'unicode13_revision', 'outline_id', 'outline_revision'],
   NumberingSourceV1: ['relationships_part', 'relationships_sha256', 'relationship_id', 'relationship_type', 'relationship_target', 'part_name', 'content_type', 'part_sha256', 'model_sha256'],
-  ProvenanceV1: ['document_id', 'revision', 'package_sha256', 'main_part', 'body_story_id', 'numbering_source', 'pagination_settings', 'shaped_lines', 'paginated_layout', 'header_footer_layout', 'table_projection', 'font_manifest', 'media_assets', 'providers'],
+  ProvenanceV1: ['document_id', 'revision', 'package_sha256', 'main_part', 'body_story_id', 'numbering_source', 'body_field_source_sha256', 'pagination_settings', 'shaped_lines', 'paginated_layout', 'header_footer_layout', 'table_projection', 'font_manifest', 'media_assets', 'providers'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'message'],
   OutputV1: ['protocol', 'version', 'status', 'provenance', 'diagnostics', 'resources', 'pages'],
 } as const
@@ -328,10 +328,11 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
   if (!status) add(issues, 'INVALID_VALUE', '/status', 'must be painted or refused')
   const provenance = exactUnionObject(root.provenance, '/provenance', DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvenanceV1, issues)
   if (provenance) {
-    for (const key of DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvenanceV1) if (key !== 'numbering_source' && !(key in provenance)) add(issues, 'REQUIRED', `/provenance/${key}`, 'field is required')
+    for (const key of DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvenanceV1) if (key !== 'numbering_source' && key !== 'body_field_source_sha256' && !(key in provenance)) add(issues, 'REQUIRED', `/provenance/${key}`, 'field is required')
     stringValue(provenance.document_id, '/provenance/document_id', issues)
     stringValue(provenance.revision, '/provenance/revision', issues)
     stringValue(provenance.package_sha256, '/provenance/package_sha256', issues, SHA256, 71)
+    if (provenance.body_field_source_sha256 !== undefined) stringValue(provenance.body_field_source_sha256, '/provenance/body_field_source_sha256', issues, SHA256, 71)
     const mainPart = stringValue(provenance.main_part, '/provenance/main_part', issues, /[^\u0000\r\n]+/, 4_096)
     if (mainPart && !validPartName(mainPart)) add(issues, 'INVALID_VALUE', '/provenance/main_part', 'must be a canonical OPC part name')
     stringValue(provenance.body_story_id, '/provenance/body_story_id', issues)

@@ -55,6 +55,19 @@ func TestNativePreviewRepeatingTableBrowserFixture(t *testing.T) {
 	if os.Getenv("INJOFFICE_TABLE_PERCENT") == "2500" {
 		document = []byte(strings.Replace(string(document), `<w:tblW w:w="9360" w:type="dxa"/>`, `<w:tblW w:w="2500" w:type="pct"/>`, 1))
 	}
+	if os.Getenv("INJOFFICE_TABLE_AUTOFIT") == "true" {
+		text := string(document)
+		text = strings.Replace(text, `<w:tblLayout w:type="fixed"/>`, `<w:tblLayout w:type="autofit"/>`, 1)
+		text = strings.Replace(text, `<w:tblW w:w="9360" w:type="dxa"/>`, `<w:tblW w:w="4000" w:type="dxa"/>`, 1)
+		text = strings.ReplaceAll(text, `<w:trHeight w:val="720" w:hRule="exact"/>`, ``)
+		text = strings.Replace(text, `Repeated heading 1`, `ID`, 1)
+		text = strings.Replace(text, `Repeated heading 2`, `Detailed content`, 1)
+		for row := 1; row < 5; row++ {
+			text = strings.Replace(text, fmt.Sprintf("Body row %d column 1", row), `ID`, 1)
+			text = strings.Replace(text, fmt.Sprintf("Body row %d column 2", row), strings.Repeat(`Longer content `, 3), 1)
+		}
+		document = []byte(text)
+	}
 	if os.Getenv("INJOFFICE_TABLE_SPLIT") == "true" {
 		text := string(document)
 		text = strings.ReplaceAll(text, `<w:cantSplit/><w:trHeight w:val="720" w:hRule="exact"/>`, ``)

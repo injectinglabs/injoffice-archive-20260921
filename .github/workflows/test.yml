@@ -65,6 +65,10 @@ jobs:
         env:
           SHOWCASE_OUTPUT: artifacts/showcase-browser/rendering-corpus
         run: |
+          # These source/refusal fixtures require the locked DejaVu font and
+          # otherwise skip in the Go-only job, which does not install npm deps.
+          test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
+          go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
           node --test scripts/qualify-rendering-corpus.test.mjs
           node scripts/qualify-rendering-corpus.mjs
       - name: Upload rendering qualification evidence

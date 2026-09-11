@@ -2135,12 +2135,26 @@ func nativeExactResolvedParagraphIndent(node *nativeXMLNode, wordNS string) bool
 func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID string, paragraph *nativeXMLNode) ([]NativeRunV1, bool, error) {
 	runs := []NativeRunV1{}
 	unsafe := false
-	for _, child := range paragraph.Children {
+	for childIndex := 0; childIndex < len(paragraph.Children); childIndex++ {
+		child := paragraph.Children[childIndex]
 		if child.Name == (xml.Name{Space: extractor.wordNS, Local: "pPr"}) {
 			continue
 		}
 		switch {
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "r"}):
+			if hasNativeFieldBegin(child, extractor.wordNS) {
+				unsafe = true
+				field, ok, err := extractor.extractFlatPageField(partName, paragraphID, paragraph.Children[childIndex:])
+				if err != nil {
+					return nil, false, err
+				}
+				if ok {
+					runs = append(runs, field)
+					childIndex += 4
+					continue
+				}
+				extractor.addUnsupported("FIELD_SEMANTICS", "fields", paragraphID, partName, child, "Complex page fields require an exact flat begin/instruction/separate/result/end run sequence")
+			}
 			extracted, runUnsafe, err := extractor.extractRunNode(partName, paragraphID, child)
 			if err != nil {
 				return nil, false, err
@@ -2150,14 +2164,14 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "fldSimple"}):
 			unsafe = true // Field results are never editable text.
 			instruction, present := nativeAttr(child, extractor.wordNS, "instr")
-			instruction = strings.Trim(instruction, " \t\r\n")
+			instruction, qualifiedInstruction := nativePageFieldInstruction(instruction)
 			instructionAttrs := 0
 			for _, attr := range child.Attrs {
 				if attr.Name == (xml.Name{Space: extractor.wordNS, Local: "instr"}) {
 					instructionAttrs++
 				}
 			}
-			if !present || instructionAttrs != 1 || (instruction != "PAGE" && instruction != "NUMPAGES") || !nativeExactContainer(child, xml.Name{Space: extractor.wordNS, Local: "instr"}) || len(child.Children) != 1 || child.Children[0].Name != (xml.Name{Space: extractor.wordNS, Local: "r"}) {
+			if !present || instructionAttrs != 1 || !qualifiedInstruction || !nativeExactContainer(child, xml.Name{Space: extractor.wordNS, Local: "instr"}) || len(child.Children) != 1 || child.Children[0].Name != (xml.Name{Space: extractor.wordNS, Local: "r"}) {
 				extractor.addUnsupported("FIELD_SEMANTICS", "fields", paragraphID, partName, child, "Only an unlocked simple decimal PAGE or NUMPAGES field with one text result run is modeled")
 				continue
 			}
@@ -2392,7 +2406,7 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	}
 	container := containers[0]
 	if container.Name.Local == "anchor" && !nativeExactPageAnchor(container, wpNS, aNS) {
-		return refuse("FLOATING_DRAWING_SEMANTICS_PRESERVED", "Only exact page-relative wrapNone anchors with explicit layering and overlap are projected", container)
+		return refuse("FLOATING_DRAWING_SEMANTICS_PRESERVED", "Only exact page-relative wrapNone or bothSides wrapSquare anchors with explicit layering and overlap are projected", container)
 	}
 	if container.Name.Local == "inline" && !nativeExactInlinePictureContainer(container, wpNS, aNS) {
 		return refuse("INLINE_DRAWING_SEMANTICS_PRESERVED", "Inline pictures with unmodeled container attributes or children remain preserve-only", container)
@@ -2791,7 +2805,7 @@ func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
 	projection.Children = nil
 	seen := map[string]bool{}
 	for _, child := range node.Children {
-		if child.Name.Space == wpNS && (child.Name.Local == "simplePos" || child.Name.Local == "positionH" || child.Name.Local == "positionV" || child.Name.Local == "wrapNone") {
+		if child.Name.Space == wpNS && (child.Name.Local == "simplePos" || child.Name.Local == "positionH" || child.Name.Local == "positionV" || child.Name.Local == "wrapNone" || child.Name.Local == "wrapSquare") {
 			if seen[child.Name.Local] {
 				return false
 			}
@@ -2813,6 +2827,14 @@ func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
 				}
 			case "wrapNone":
 				if !nativeExactLeaf(child) {
+					return false
+				}
+			case "wrapSquare":
+				if !nativeExactLeaf(child, xml.Name{Local: "wrapText"}) {
+					return false
+				}
+				value, present := nativeUnqualifiedAttr(child, "wrapText")
+				if !present || value != "bothSides" {
 					return false
 				}
 			}
@@ -3243,6 +3265,9 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 				typeValue, typeOK := nativeAttr(property, extractor.wordNS, "type")
 				if widthOK && width > 0 && typeOK && typeValue == "dxa" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
 					table.WidthTwips = nativeInt64(width)
+				} else if widthOK && width == 0 && typeOK && typeValue == "auto" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
+					// Auto width has no absolute preferred extent; the explicit
+					// autofit layout is qualified by font-shaped content later.
 				} else if widthOK && width > 0 && width <= 5000 && typeOK && typeValue == "pct" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
 					table.WidthPercentFiftieths = nativeInt64(width)
 				} else {
@@ -3250,7 +3275,7 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 				}
 			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblLayout"}) {
 				value, ok := nativeAttr(property, extractor.wordNS, "type")
-				if ok && value == "fixed" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "type"}) {
+				if ok && (value == "fixed" || value == "autofit") && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "type"}) {
 					table.Layout = nativeString(value)
 				} else {
 					unsafe = true
@@ -3425,6 +3450,8 @@ func (extractor *nativeExtractor) extractTableCell(partName, tableID string, nod
 				// that schema default instead of treating it as unmodeled markup.
 				if widthOK && (!typeOK || typeValue == "dxa") && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
 					cell.WidthTwips = nativeInt64(value)
+				} else if widthOK && value == 0 && typeOK && typeValue == "auto" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
+					// No absolute preferred cell width.
 				} else {
 					unsafe = true
 				}
@@ -3493,7 +3520,7 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			extractor.addUnsupported("FOREIGN_SECTION_MARKUP", "sections", id, extractor.mainPart, child, "Foreign section markup is preserved verbatim")
 			continue
 		}
-		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" {
+		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" {
 			if seenSingleton[child.Name.Local] {
 				extractor.addUnsupported("DUPLICATE_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Duplicate modeled section-property singletons make exact pagination geometry ambiguous")
 				continue
@@ -3512,6 +3539,23 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 				section.BreakType = map[string]string{"continuous": "continuous", "evenPage": "even-page", "oddPage": "odd-page", "nextColumn": "next-column", "nextPage": "next-page"}[value]
 			default:
 				extractor.addUnsupported("UNMODELED_SECTION_BREAK", "sections", id, extractor.mainPart, child, "Missing or unknown section break type is preserved; next-page is exposed conservatively")
+			}
+		case "pgNumType":
+			format, _ := nativeAttr(child, extractor.wordNS, "fmt")
+			start, hasStart := nativeAttr(child, extractor.wordNS, "start")
+			valid := nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "fmt"}, xml.Name{Space: extractor.wordNS, Local: "start"}) && (format == "" || format == "decimal")
+			var number int64
+			if hasStart {
+				var err error
+				number, err = strconv.ParseInt(start, 10, 64)
+				valid = valid && err == nil && number >= 0 && number <= 999999 && strconv.FormatInt(number, 10) == start
+			}
+			if !valid {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Page numbering requires bounded decimal start and no chapter/switch attributes")
+				continue
+			}
+			if hasStart {
+				section.PageNumberStart = &number
 			}
 		case "titlePg":
 			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {

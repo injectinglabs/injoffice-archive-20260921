@@ -18,6 +18,10 @@ import {
   type TextRunInput,
 } from '@injoffice/font-metrics/layout'
 import { hasNativeDocxPageFieldsV1, nativeDocxPageFieldDocumentV1, DOCX_PAGE_FIELD_LIMITS, type NativeDocxPageFieldVariantV1 } from './nativePageFieldsV1.js'
+import { solveNativeDocxLayoutFixedPointV1 } from './nativeLayoutFixedPointV1.js'
+import { canonicalWireSha256 } from './nativePagePaintWireV1.js'
+import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
+import { nativeDocxBodyPageFieldRunsV1, nativeDocxBodyPageFieldDocumentV1, nativeDocxBodyPageFieldValuesV1 } from './nativeBodyPageFieldsV1.js'
 import {
   createHarfBuzzTextShaperV1,
   inspectHarfBuzzFontMetricsV1,
@@ -34,6 +38,8 @@ import {
 } from './nativeContract.js'
 import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
+import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
+import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
 import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1 } from './nativeTablePagePaintV1.js'
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { decodeNativeDOCXFontInventoryV1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
@@ -456,22 +462,50 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
   if (!isCanonicalHarfBuzzTextShaperV1(shaper, input.source_revision)) throw new TypeError('HarfBuzz shaper provenance does not attest the exact pinned runtime and requested engine source revision')
   await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references)
   const dimensions = shapingDimensions(document.value, settings.value)
-  const qualifiedTables = qualifyNativeDocxTablesV1(document.value, resolved.value)
+  const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
+  const initialBodyFieldValues = Object.fromEntries(bodyFields.map(run => [run.id, '1']))
+  let layoutFragmentWork = 0
+  let measuredTables: import('./nativeShapingLines.js').NativeDocxShapedLinesV1 | undefined
+  if (document.value.body.blocks.some(block => block.table?.layout === 'autofit')) {
+    // The probe uses the same source, attested fonts and canonical shaper. A
+    // generous bounded width yields intrinsic advances; final qualification
+    // independently derives the same min/max from the final wrapped clusters.
+    const probeWidths = new Map<string, number>()
+    for (const block of document.value.body.blocks) for (const row of block.table?.rows ?? []) for (const cell of row.cells) for (const paragraph of cell.paragraphs) probeWidths.set(paragraph.id, 1_000_000_000)
+    // Body fields outside tables need visible seed text even during the
+    // intrinsic table probe; field values do not influence table content.
+    const probeDocument = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value, initialBodyFieldValues) : document.value
+    const measured = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document: probeDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, shapingParagraphWidths(document.value, probeWidths))
+    if (!measured.ok) failIssues('autofit measurement failed validation', measured.issues)
+    // Page controls are consumed by the final source-bound paginator, not by
+    // intrinsic text measurement. Every other diagnostic remains a refusal.
+    const measurementIssues = measured.value.diagnostics.filter(diagnostic => diagnostic.code !== 'page-control-deferred' || diagnostic.severity !== 'deferred')
+    if (measurementIssues.length) throw new TypeError(`Content autofit measurement refused unqualified source text or exceeded its budget: ${measurementIssues.map(diagnostic => diagnostic.code).join(', ')}`)
+    measuredTables = measured.value
+    layoutFragmentWork += measured.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
+    if (bodyFields.length && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Body-field layout probe exceeds cumulative shaping fragment budget')
+  }
+  const qualifiedTables = qualifyNativeDocxTablesV1(document.value, resolved.value, measuredTables)
+  if (measuredTables && qualifiedTables.status !== 'qualified') throw new TypeError('Content autofit refused unsupported source geometry or unsatisfied intrinsic widths')
   if (document.value.body.blocks.some((block) => block.table !== undefined) && document.value.sections.some((section) => section.page.columns > 1)) {
     throw new TypeError('native page-paint compiler refuses table content when any section uses multi-column flow')
   }
   const paragraphWidths = shapingParagraphWidths(document.value, qualifiedTables.paragraph_widths)
-  const hasPageFields = hasNativeDocxPageFieldsV1(document.value)
+  const squareWrapPresent = hasNativeSquareWrapV1(document.value)
+  const solved = await solveNativeDocxLayoutFixedPointV1({ bodyFieldValues: initialBodyFieldValues, wrapPlan: {} as NativeDocxLineIntervalPlanV1 }, async state => {
+  const fieldDocument = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value,state.bodyFieldValues) : document.value
   const shaped = await shapeNativeDocxLinesWithParagraphWidthsV1({
     protocol: 'injoffice.docx.shaping-request', version: 1,
-    document: document.value, resolved_layout: resolved.value, font_manifest: manifest.value,
+    document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value,
     available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab,
-  }, { resolver, shaper }, paragraphWidths)
+  }, { resolver, shaper }, paragraphWidths, state.wrapPlan)
   if (!shaped.ok) failIssues('native shaping failed validation', shaped.issues)
+  layoutFragmentWork += shaped.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
+  if ((bodyFields.length || squareWrapPresent) && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Field/wrap layout solve exceeds cumulative shaping fragment budget')
   const paginationRequest: NativeDocxPaginationRequestV1 = {
     protocol: DOCX_PAGINATION_REQUEST_PROTOCOL,
     version: DOCX_PAGINATION_REQUEST_VERSION,
-    document: document.value,
+    document: fieldDocument,
     resolved_layout: resolved.value,
     shaped_lines: shaped.value,
     pagination_settings: settings.value,
@@ -482,14 +516,19 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
   if (!paginated.ok) failIssues('native pagination failed validation', paginated.issues)
   const paginationIssues = validateNativeDocxPaginatedLayoutSourceV1(paginated.value, decodedPagination.value)
   if (paginationIssues.length > 0) failIssues('native pagination source join failed', paginationIssues)
+  const wrapPlan = squareWrapPresent ? deriveNativeSquareWrapPlanV1(fieldDocument, resolved.value, shaped.value, paginated.value) : {}
+  return { next: { bodyFieldValues: bodyFields.length ? nativeDocxBodyPageFieldValuesV1(document.value,decodedPagination.value,paginated.value) : {}, wrapPlan }, result: { shaped, decodedPagination, paginated } }
+  })
+  const { shaped, decodedPagination, paginated } = solved.result
+  const hasPageFields = hasNativeDocxPageFieldsV1(decodedPagination.value.document)
   let pageFieldVariants: NativeDocxPageFieldVariantV1[] | undefined
   if (hasPageFields && paginated.value.status === 'paginated') {
     if (paginated.value.pages.length > DOCX_PAGE_FIELD_LIMITS.maxPages) throw new RangeError('Page-field expansion exceeds bounded page count')
     pageFieldVariants = []
-    let fragments = 0
+    let fragments = layoutFragmentWork
     for (const page of paginated.value.pages) {
-      const fieldDocument = nativeDocxPageFieldDocumentV1(document.value, page.ordinal, paginated.value.pages.length)
-      const variant = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, paragraphWidths)
+      const fieldDocument = nativeDocxPageFieldDocumentV1(decodedPagination.value.document, page.ordinal, paginated.value.pages.length, nativeDocxPageNumberV1(decodedPagination.value.document, paginated.value, page.ordinal))
+      const variant = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, paragraphWidths, solved.state.wrapPlan)
       if (!variant.ok) failIssues('page-field shaping failed', variant.issues)
       fragments += variant.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
       if (fragments > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Page-field expansion exceeds cumulative fragment budget')
@@ -504,7 +543,9 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
     font_manifest: manifest.value,
     media_assets: mediaAssets,
     ...(pageFieldVariants ? { page_field_variants: pageFieldVariants } : {}),
+    ...(bodyFields.length ? { body_field_source: document.value } : {}),
     integrity: {
+      ...(bodyFields.length ? { body_field_source_sha256: canonicalWireSha256(document.value) } : {}),
       font_manifest_sha256: nativeDocxPagePaintFontManifestSha256V1(manifest.value),
       shaped_lines_sha256: nativeDocxPagePaintShapedLinesSha256V1(shaped.value, pageFieldVariants),
       table_projection_sha256: qualifiedTables.status === 'qualified' ? qualifiedTables.sha256 : nativeDocxTableProjectionSha256V1([]),

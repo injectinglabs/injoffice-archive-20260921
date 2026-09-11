@@ -26,7 +26,7 @@ export const DOCX_SHAPED_LINES_V1_BINDING_FIELDS = {
   GlyphV1: ['glyph_id', 'advance_x_millipoints', 'advance_y_millipoints', 'offset_x_millipoints', 'offset_y_millipoints'],
   FragmentV1: ['id', 'source_kind', 'source_id', 'start_utf16', 'end_utf16', 'text', 'direction', 'bidi_level', 'logical_order', 'script', 'language', 'face_id', 'whitespace', 'advance_inline_millipoints', 'justification_expansion_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'underline_position_millipoints', 'underline_thickness_millipoints', 'glyphs', 'script_transform'],
   HardBreakV1: ['source_run_id', 'control'],
-  LineV1: ['id', 'ordinal', 'available_width_millipoints', 'inline_offset_millipoints', 'advance_inline_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'line_height_millipoints', 'justified', 'logical_to_visual', 'fragments', 'hard_break_after'],
+  LineV1: ['id', 'ordinal', 'available_width_millipoints', 'inline_offset_millipoints', 'exclusion_start_millipoints', 'advance_inline_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'line_height_millipoints', 'justified', 'logical_to_visual', 'fragments', 'hard_break_after'],
   NumberingSourceV1: ['relationships_part', 'relationships_sha256', 'relationship_id', 'relationship_type', 'relationship_target', 'part_name', 'content_type', 'part_sha256', 'model_sha256'],
   ListMarkerV1: ['marker_id', 'definition_sha256', 'numbering_part_sha256', 'model_sha256', 'num_id', 'abstract_num_id', 'level', 'counter_value', 'text', 'suffix', 'alignment', 'label_start_millipoints', 'label_end_millipoints', 'marker_start_millipoints', 'marker_advance_millipoints', 'text_start_millipoints'],
   ParagraphV1: ['paragraph_id', 'story_id', 'story_kind', 'direction', 'alignment', 'spacing_before_millipoints', 'spacing_after_millipoints', 'indent_start_millipoints', 'indent_end_millipoints', 'first_line_delta_millipoints', 'list_marker', 'block_advance_millipoints', 'lines'],
@@ -338,7 +338,14 @@ function validateLine(value: unknown, path: string, issues: NativeDocxValidation
     }
   }
   if (inlineOffset !== undefined && available !== undefined && lineAdvance !== undefined && paragraphDirection && paragraphAlignment && paragraphIndentStart !== undefined && paragraphIndentEnd !== undefined && firstLineDelta !== undefined && typeof entry.justified === 'boolean') {
-    const base = paragraphDirection === 'ltr' ? paragraphIndentStart + (expectedOrdinal === 0 ? firstLineDelta : 0) : paragraphIndentEnd
+    let base = paragraphDirection === 'ltr' ? paragraphIndentStart + (expectedOrdinal === 0 ? firstLineDelta : 0) : paragraphIndentEnd
+    if (entry.exclusion_start_millipoints !== undefined) {
+      const exclusion = integer(entry.exclusion_start_millipoints, `${path}/exclusion_start_millipoints`, issues, 0, MAX_METRIC)
+      if (exclusion !== undefined) {
+        if (exclusion < base || paragraphDirection !== 'ltr' || !['left', 'start'].includes(paragraphAlignment)) add(issues, 'INVALID_VALUE', `${path}/exclusion_start_millipoints`, 'must be a nonnegative left-aligned LTR exclusion after paragraph indentation')
+        base = exclusion
+      }
+    }
     const alignment = paragraphAlignment === 'both' && entry.justified === false ? 'start' : paragraphAlignment
     const expectedOffset = base + canonicalAlignmentOffset(alignment, paragraphDirection, available, lineAdvance)
     if (inlineOffset !== expectedOffset) add(issues, 'INVALID_VALUE', `${path}/inline_offset_millipoints`, 'must equal the canonical physical/logical alignment offset for paragraph direction and indents')
@@ -376,6 +383,7 @@ function validateParagraph(value: unknown, path: string, issues: NativeDocxValid
   let lineHeightSum = 0
   lines.forEach((line, index) => {
     const lineObject = isObject(line) ? line : null
+    if (lineObject?.exclusion_start_millipoints !== undefined && entry.story_kind !== 'body') add(issues, 'INVALID_VALUE', `${path}/lines/${index}/exclusion_start_millipoints`, 'square-wrap exclusions are supported only in the body story')
     const lineID = lineObject ? stringValue(lineObject.id, `${path}/lines/${index}/id`, [], { pattern: ID, max: 1024 }) : null
     if (lineID && lineIDs.has(lineID)) add(issues, 'DUPLICATE_ID', `${path}/lines/${index}/id`, 'line id is duplicated')
     if (lineID) lineIDs.add(lineID)

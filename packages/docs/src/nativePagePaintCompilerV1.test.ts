@@ -18,9 +18,11 @@ import {
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { paginateNativeDocxV1 } from './nativePaginationV1.js'
+import { qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1 } from './nativePagePaintV1.js'
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
+import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -425,6 +427,35 @@ describe('native DOCX page-paint compiler v1', () => {
       }
     }
   })
+  it.each([undefined,0,7])('converges body PAGE/NUMPAGES with decimal restart %s while preserving the original source and read-only policy', async (start) => {
+    const input=fixture(), document=input.document as NativeDocxDocumentV1, resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    if(start!==undefined) document.sections[0]!.page_number_start=start
+    const first=document.body.blocks[0]!.paragraph!
+    first.runs[0]!.page_field='NUMPAGES';first.runs[0]!.text=''
+    const second=structuredClone(first)
+    second.id='paragraph:second';second.anchor=anchor('/w:document[1]/w:body[1]/w:p[2]',200,290);second.properties.page_break_before=true
+    second.runs[0]!.id='run:second';second.runs[0]!.anchor=anchor('/w:document[1]/w:body[1]/w:p[2]/w:r[1]/w:t[1]',210,280);second.runs[0]!.page_field='PAGE'
+    document.body.blocks.push({kind:'paragraph',id:second.id,paragraph:second})
+    resolved.paragraphs.push({...structuredClone(resolved.paragraphs[0]!),paragraph_id:second.id,properties:{page_break_before:true}})
+    resolved.runs.push({...structuredClone(resolved.runs[0]!),run_id:'run:second',paragraph_id:second.id})
+    rewriteInventory(input,inventory=>{inventory.references[0]!.scope_ids.push(second.id,'run:second');inventory.references[0]!.scope_ids.sort()})
+    const before=JSON.stringify(document),prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request
+    expect(JSON.stringify(document)).toBe(before)
+    expect(request.body_field_source).toEqual(document)
+    expect(request.pagination_request.document.body.blocks.map(block=>block.paragraph!.runs[0]!.text)).toEqual(['2',String((start??1)+1)])
+    expect(request.pagination_request.document.body.blocks.every(block=>block.paragraph!.edit_policy.mode==='read-only')).toBe(true)
+    const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const completed=await completeNativeDocxPagePaintV1({prepared,outline_results:prepared.outline_requests.map(outline=>({status:'outlined' as const,...outline,...provider.outline(outline.glyph_id)}))})
+    expect(completed.page_paint_output.status).toBe('painted')
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,request,request.outline_provider).ok).toBe(true)
+    for(const mutate of [
+      (r:typeof request)=>{delete r.body_field_source},
+      (r:typeof request)=>{delete r.body_field_source; delete r.integrity.body_field_source_sha256},
+      (r:typeof request)=>{r.body_field_source!.body.blocks[0]!.paragraph!.runs[0]!.text='999'},
+      (r:typeof request)=>{r.pagination_request.document.body.blocks[0]!.paragraph!.runs[0]!.text='1'},
+      (r:typeof request)=>{r.body_field_source!.body.anchor.xml_sha256=`sha256:${'0'.repeat(64)}`},
+    ]){const invalid=structuredClone(request);mutate(invalid);expect(decodeNativeDocxPagePaintRequestV1(invalid).ok).toBe(false)}
+  })
   it('derives PAGE/NUMPAGES from final pagination in both repeated header and footer, never cached values', async () => {
     const input = fixture()
     const document = input.document as NativeDocxDocumentV1
@@ -473,7 +504,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(() => nativeDocxPageFieldDocumentV1(stale, 0, 2)).toThrow(/cached results/)
     expect(() => nativeDocxPageFieldDocumentV1(document, 0, 65)).toThrow(/bounded/)
     const bodyField = structuredClone(document); bodyField.body.blocks[0]!.paragraph!.runs[0]!.page_field = 'PAGE'
-    expect(() => nativeDocxPageFieldDocumentV1(bodyField, 0, 2)).toThrow(/only in header/)
+    expect(() => nativeDocxPageFieldDocumentV1(bodyField, 0, 2)).toThrow(/Body fields/)
   })
   it('exact-joins source-attested inline image flips and half-turns without changing layout extents', async () => {
     for (const rotation_degrees of [0, 90, 180, 270] as const) for (const flip_horizontal of [false, true]) for (const flip_vertical of [false, true]) {
@@ -524,6 +555,65 @@ describe('native DOCX page-paint compiler v1', () => {
       expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
     }
   })
+  it('wraps complete source lines around a page-edge square image and restores full width below it', async () => {
+    for (const edge of ['left','right'] as const) {
+      const input=imageFixture(),doc=input.document as NativeDocxDocumentV1,paragraph=doc.body.blocks[0]!.paragraph!,drawing=paragraph.runs[0]!.drawing!
+      paragraph.runs[1]!.text='Square wrapped source text continues after the picture. '.repeat(8)
+      if(edge==='left'){
+        const field=structuredClone(paragraph.runs[1]!)
+        field.id='run:square-field';field.text='';field.page_field='NUMPAGES';field.anchor=anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:fldSimple[1]',150,170)
+        paragraph.runs.push(field)
+        const resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+        resolved.runs.push({...structuredClone(resolved.runs.find(run=>run.run_id===paragraph.runs[1]!.id)!),run_id:field.id})
+        rewriteInventory(input,inventory=>{inventory.references[0]!.scope_ids.push(field.id);inventory.references[0]!.scope_ids.sort()})
+      }
+      Object.assign(drawing,{placement:'floating',x_emu:edge==='left'?914400:5588000,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'square',floating_layer:'front',stacking_order:7})
+      const before=JSON.stringify(input),prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request,layout=request.paginated_layout
+      expect(JSON.stringify(input)).toBe(before)
+      if(layout.status!=='paginated')throw new Error('square source refused')
+      const lines=layout.pages[0]!.lines,overlap=lines.filter(line=>line.y_millipoints<122000),below=lines.filter(line=>line.y_millipoints>=122000)
+      expect(overlap.length).toBeGreaterThan(1);expect(below.length).toBeGreaterThan(0)
+      for(const line of overlap){expect(line.x_millipoints).toBe(edge==='left'?172000:72000);expect(line.width_millipoints).toBeLessThanOrEqual(368000)}
+      for(const line of below)expect(line.x_millipoints).toBe(72000)
+      expect(decodeNativeDocxPagePaintRequestV1(request).ok).toBe(true)
+      if(edge==='left'){
+        expect(request.body_field_source).toEqual(doc)
+        expect(request.pagination_request.document.body.blocks[0]!.paragraph!.runs[2]!.text).toBe(String(layout.pages.length))
+      }
+      const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST}),completed=await completeNativeDocxPagePaintV1({prepared,outline_results:prepared.outline_requests.map(request=>{const outline=provider.outline(request.glyph_id);return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}})})
+      expect(completed.page_paint_output.status).toBe('painted')
+      const tampered=structuredClone(request),changedDrawing=tampered.pagination_request.document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+      if(edge==='left')changedDrawing.width_emu=1397000
+      else changedDrawing.x_emu=5461000
+      expect(decodeNativeDocxPagePaintRequestV1(tampered).ok).toBe(false)
+      for(const story of ['header','footer','footnote','endnote','comment'] as const){
+        const forged=structuredClone(request.pagination_request.shaped_lines),paragraph=forged.paragraphs[0]!
+        paragraph.story_kind=story
+        paragraph.lines[0]!.exclusion_start_millipoints=paragraph.lines[0]!.inline_offset_millipoints
+        expect(decodeNativeDocxShapedLines(forged).ok).toBe(false)
+      }
+    }
+  }, 30_000)
+  it('independently rejects stale square geometry, interior islands, and blocked lines', async () => {
+    const input=imageFixture(),source=input.document as NativeDocxDocumentV1,drawing=source.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    Object.assign(drawing,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'none',floating_layer:'front',stacking_order:7})
+    const prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request,p=request.pagination_request,d=p.document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    d.wrap='square'
+    const plan=deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)
+    expect(plan['paragraph:1']![0]).toEqual({start_millipoints:100000,width_millipoints:368000})
+    expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout,true)).toThrow('source-derived exclusion')
+    expect(decodeNativeDocxPagePaintRequestV1(request).ok).toBe(false)
+    d.x_emu=2540000;expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)).toThrow('two text intervals')
+    d.x_emu=914400;d.width_emu=5943600;expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)).toThrow('fully blocks')
+  })
+  it('explicitly refuses square wrapping combined with fixed or autofit table flow', async () => {
+    for(const layout of ['fixed','autofit'] as const){
+      const input=combinedImageTableFixture(),document=input.document as NativeDocxDocumentV1
+      document.body.blocks[1]!.table!.layout=layout
+      Object.assign(document.body.blocks[0]!.paragraph!.runs[0]!.drawing!,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'square',floating_layer:'front',stacking_order:7})
+      await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow('without tables or notes')
+    }
+  })
   it('refuses ambiguous stacking, non-body anchors and excessive floating counts', () => {
     const input = imageFixture(), document = input.document as NativeDocxDocumentV1
     const paragraph = document.body.blocks[0]!.paragraph!, run = paragraph.runs[0]!, drawing = run.drawing!
@@ -538,7 +628,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(qualifyNativeDocxInlineImageV1(document,run.id,paragraph.runs[0]!.drawing!)).toMatchObject({ ok: false, code: 'resource-limit' })
   })
   it('refuses floating wrapping, unqualified positioning, missing layering and off-page extents', async () => {
-    for (const mutation of [ { wrap: 'square' }, { horizontal_relative_from: 'column' }, { floating_layer: undefined }, { x_emu: -127 }, { x_emu: 1 }, { y_emu: 127000000 } ]) {
+    for (const mutation of [ { wrap: 'tight' }, { horizontal_relative_from: 'column' }, { floating_layer: undefined }, { x_emu: -127 }, { x_emu: 1 }, { y_emu: 127000000 } ]) {
       const input = imageFixture()
       Object.assign((input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!, { placement: 'floating', x_emu: 914400, y_emu: 1270000, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'none', floating_layer: 'front', stacking_order: 7 },mutation)
       let outcome = 'unknown'
@@ -944,6 +1034,80 @@ describe('native DOCX page-paint compiler v1', () => {
     if (completed.page_paint_output.status !== 'painted') return
     expect(completed.page_paint_output.pages[0]!.commands.map((command) => command.kind)).toEqual(['fill_table_cell', 'fill_glyph_path', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border'])
     expect(completed.page_paint_output.provenance.table_projection.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+  it('autofits unequal text columns from real font advances and replays the source-bound width policy', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const table = document.body.blocks[0]!.table!, left = table.rows[0]!.cells[0]!
+    table.layout = 'autofit'; table.width_twips = 4_000; table.grid_widths_twips = [4_680, 4_680]
+    left.width_twips = 4_680; left.paragraphs[0]!.runs[0]!.text = 'ID'
+    const right = structuredClone(left), paragraph = right.paragraphs[0]!, oldParagraph = paragraph.id, oldRun = paragraph.runs[0]!.id
+    right.id += ':right'; paragraph.id += ':right'; paragraph.runs[0]!.id += ':right'; paragraph.runs[0]!.text = 'Longer content '.repeat(12)
+    table.rows[0]!.cells.push(right)
+    resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs.find(p=>p.paragraph_id===oldParagraph)!), paragraph_id: paragraph.id })
+    resolved.runs.push({ ...structuredClone(resolved.runs.find(r=>r.run_id===oldRun)!), paragraph_id:paragraph.id, run_id:paragraph.runs[0]!.id })
+    rewriteInventory(input, inventory=>{inventory.references[0]!.scope_ids.push(paragraph.id,paragraph.runs[0]!.id);inventory.references[0]!.scope_ids.sort()})
+    const original = JSON.stringify(document), prepared = await prepareNativeDocxPagePaintV1(input)
+    const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map(request=>{const outline=provider.outline(request.glyph_id);return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}}) })
+    if(completed.page_paint_output.status!=='painted')throw new Error(JSON.stringify(completed.page_paint_output))
+    const fills=completed.page_paint_output.pages[0]!.commands.filter(command=>command.kind==='fill_table_cell')
+    expect(fills).toHaveLength(2)
+    expect(fills[0]!.width_millipoints).toBeLessThan(fills[1]!.width_millipoints)
+    expect(fills.reduce((sum,fill)=>sum+fill.width_millipoints,0)).toBe(200_000)
+    const finalShaped=prepared.page_paint_request.pagination_request.shaped_lines
+    const qualified=qualifyNativeDocxTablesV1(document,resolved,finalShaped)
+    expect(qualified).toMatchObject({status:'qualified',tables:[{width_policy:{name:'shaped-content-minmax-v1',source_grid_widths_twips:[4680,4680],preferred_width_twips:4000}}]})
+    expect(qualifyNativeDocxTablesV1(document,resolved,{...finalShaped,revision:'stale'})).toMatchObject({status:'refused',tables:[]})
+    expect(prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[1]!.lines.length).toBeGreaterThan(1)
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(true)
+    expect(JSON.stringify(document)).toBe(original)
+    const tampered=structuredClone(completed.page_paint_output)
+    const fill=tampered.pages[0]!.commands.find(command=>command.kind==='fill_table_cell')!
+    if(fill.kind==='fill_table_cell')fill.width_millipoints+=50
+    expect(decodeNativeDocxPagePaintForRequestV1(tampered,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
+    // Auto/omitted preferred widths shrink to intrinsic max content, capped by
+    // the source section; this is not equal-grid scaling in disguise.
+    delete table.width_twips
+    for(const cell of table.rows[0]!.cells)delete cell.width_twips
+    const auto=await prepareNativeDocxPagePaintV1(input)
+    expect(auto.page_paint_request.paginated_layout.status).toBe('paginated')
+    const automatic=qualifyNativeDocxTablesV1(document,resolved,auto.page_paint_request.pagination_request.shaped_lines)
+    expect(automatic.status).toBe('qualified')
+    if(automatic.status==='qualified') {
+      expect(automatic.tables[0]!.width_millipoints).toBeLessThanOrEqual(468_000)
+      expect(automatic.tables[0]!.grid_widths_millipoints[0]).toBeLessThan(automatic.tables[0]!.grid_widths_millipoints[1]!)
+    }
+  })
+  it('composes content autofit with a pagination-dependent body field without changing either source', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const table = document.body.blocks[0]!.table!
+    table.layout = 'autofit'
+    const paragraph = structuredClone(table.rows[0]!.cells[0]!.paragraphs[0]!), oldParagraph = paragraph.id, oldRun = paragraph.runs[0]!.id
+    paragraph.id = 'paragraph:after-autofit'; paragraph.runs[0]!.id = 'run:after-autofit'
+    paragraph.properties.page_break_before = true
+    paragraph.runs[0]!.text = ''; paragraph.runs[0]!.page_field = 'PAGE'
+    document.body.blocks.push({kind:'paragraph',id:paragraph.id,paragraph})
+    resolved.paragraphs.push({...structuredClone(resolved.paragraphs.find(p=>p.paragraph_id===oldParagraph)!),paragraph_id:paragraph.id,properties:{page_break_before:true}})
+    resolved.runs.push({...structuredClone(resolved.runs.find(r=>r.run_id===oldRun)!),paragraph_id:paragraph.id,run_id:paragraph.runs[0]!.id})
+    rewriteInventory(input,inventory=>{inventory.references[0]!.scope_ids.push(paragraph.id,paragraph.runs[0]!.id);inventory.references[0]!.scope_ids.sort()})
+    const before=JSON.stringify(document),prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request
+    expect(JSON.stringify(document)).toBe(before)
+    expect(request.body_field_source).toEqual(document)
+    expect(request.pagination_request.document.body.blocks[1]!.paragraph!.runs[0]!.text).toBe('2')
+    expect(request.paginated_layout.status).toBe('paginated')
+    expect(decodeNativeDocxPagePaintRequestV1(request).ok).toBe(true)
+  })
+  it('refuses unsatisfied content minima and unsupported autofit spacing/merge policies atomically', async () => {
+    for (const mode of ['wide-word', 'indent', 'merge', 'percent'] as const) {
+      const input=tableFixture(), document=input.document as NativeDocxDocumentV1, resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+      const table=document.body.blocks[0]!.table!
+      table.layout='autofit'
+      if(mode==='wide-word')table.rows[0]!.cells[0]!.paragraphs[0]!.runs[0]!.text='W'.repeat(100)
+      if(mode==='indent')resolved.paragraphs[0]!.properties.indent_start_twips=100
+      if(mode==='merge')table.rows[0]!.cells[0]!.vertical_merge='restart'
+      if(mode==='percent'){delete table.width_twips;table.width_percent_fiftieths=2500}
+      await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow(/autofit/i)
+    }
   })
   it('paints source-bound natural row fragments without duplicating glyphs or full-row shading', async () => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1

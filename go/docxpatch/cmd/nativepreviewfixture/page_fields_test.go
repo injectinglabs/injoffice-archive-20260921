@@ -51,7 +51,8 @@ func TestNativePageFieldSource(t *testing.T) {
 	if count != 4 {
 		t.Fatalf("want four PAGE/NUMPAGES fields, got %d", count)
 	}
-	for _, replacement := range []string{`w:instr=" DATE "`, `w:instr=" PAGE \\* ROMAN "`, `w:instr=" PAGE " w:fldLock="true"`, `w:instr=" PAGE " w:instr=" DATE "`} {
+	const authoredInstruction = `w:instr=" PAGE \* Arabic \* MERGEFORMAT "`
+	for _, replacement := range []string{`w:instr=" DATE "`, `w:instr=" PAGE \* ROMAN "`, authoredInstruction + ` w:fldLock="true"`, authoredInstruction + ` w:instr=" DATE "`} {
 		t.Run(replacement, func(t *testing.T) {
 			reader, err := zip.NewReader(bytes.NewReader(source), int64(len(source)))
 			if err != nil {
@@ -59,6 +60,7 @@ func TestNativePageFieldSource(t *testing.T) {
 			}
 			var changed bytes.Buffer
 			writer := zip.NewWriter(&changed)
+			mutated := false
 			for _, file := range reader.File {
 				opened, err := file.Open()
 				if err != nil {
@@ -70,7 +72,15 @@ func TestNativePageFieldSource(t *testing.T) {
 					t.Fatal(err)
 				}
 				if file.Name == "word/header1.xml" {
-					data = []byte(strings.Replace(string(data), `w:instr=" PAGE "`, replacement, 1))
+					original := string(data)
+					if strings.Count(original, authoredInstruction) != 1 {
+						t.Fatal("fixture must contain exactly one targeted PAGE instruction")
+					}
+					data = []byte(strings.Replace(original, authoredInstruction, replacement, 1))
+					mutated = string(data) != original
+					if !mutated {
+						t.Fatal("field mutation did not change header bytes")
+					}
 				}
 				entry, err := writer.Create(file.Name)
 				if err != nil {
@@ -82,6 +92,9 @@ func TestNativePageFieldSource(t *testing.T) {
 			}
 			if err := writer.Close(); err != nil {
 				t.Fatal(err)
+			}
+			if !mutated {
+				t.Fatal("target header was not mutated")
 			}
 			invalid, err := docxpatch.ExtractNativeDocumentV1(changed.Bytes())
 			if err != nil {

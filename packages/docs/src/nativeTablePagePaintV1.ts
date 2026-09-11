@@ -16,6 +16,7 @@ import type {
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
+import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
 
 export const DOCX_TABLE_PAGE_PAINT_LIMITS = {
   maxTables: 1_000,
@@ -43,7 +44,7 @@ export interface NativeDocxQualifiedTableRowV1 {
 }
 
 export interface NativeDocxQualifiedTableV1 {
-  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] }
+  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1
   table: NativeDocxTableV1
   width_millipoints: number
   x_millipoints: number
@@ -221,12 +222,14 @@ function percentTable(table: NativeDocxTableV1, width: number, sectionID: string
  * Qualifies a deliberately narrow exact subset. Any ambiguity refuses the
  * entire table set before shaping or outline-provider work begins.
  */
-export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1): NativeDocxQualifiedTablesV1 {
+export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1): NativeDocxQualifiedTablesV1 {
   const sourceTables = document.body.blocks.flatMap((block) => block.kind === 'table' && block.table ? [block.table] : [])
   if (sourceTables.length === 0) return { status: 'qualified', tables: [], paragraph_widths: new Map(), sha256: nativeDocxTableProjectionSha256V1([]) }
   const fail = (scope_id: string, message: string): NativeDocxQualifiedTablesV1 => ({ status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'unsupported-table-source', scope_id, message }] })
+  if (sourceTables.some(table => table.layout === 'autofit') && (!shaped || shaped.document_id !== document.document_id || shaped.revision !== document.revision || resolved.document_id !== document.document_id || resolved.revision !== document.revision)) return fail(document.document_id, 'Autofit measurements must exact-join the source document and revision')
   if (sourceTables.length > DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables) return { status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'table-resource-limit', scope_id: document.document_id, message: `Tables exceed ${DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables}` }] }
   const resolvedParagraphs = new Map(resolved.paragraphs.map((entry) => [entry.paragraph_id, entry]))
+  const autofitIndexes = shaped ? { paragraphs: new Map(shaped.paragraphs.map(entry => [entry.paragraph_id, entry])), properties: resolvedParagraphs } : undefined
   const resolvedTables = new Map(resolved.tables.map((entry) => [entry.table_id, entry]))
   const tables: NativeDocxQualifiedTableV1[] = []
   const paragraphWidths = new Map<string, number>()
@@ -237,7 +240,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   let activeSection: NativeDocxDocumentV1['sections'][number] | undefined
   for (const block of document.body.blocks) {
     activeSection = sectionsByStart.get(block.id) ?? activeSection
-    if (block.table?.width_percent_fiftieths !== undefined && activeSection) {
+    if ((block.table?.width_percent_fiftieths !== undefined || block.table?.layout === 'autofit') && activeSection) {
       const geometry = qualifyNativeDocxSectionColumnsV1(activeSection)
       if (geometry.ok && geometry.value.columns.length === 1) tableContainers.set(block.table.id, { width: geometry.value.columns[0]!.width_millipoints / 50, sectionID: activeSection.id })
     }
@@ -256,6 +259,12 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     if ((sourceTable.table_style_id || resolvedTable.style_id) && !bordersValid(paintBorders)) return fail(sourceTable.id, 'Simple table style did not project exact table-level border commands')
     let table = paintBorders === sourceTable.borders ? sourceTable : { ...sourceTable, borders: paintBorders }
     let widthPolicy: NativeDocxQualifiedTableV1['width_policy']
+    if (table.layout === 'autofit') {
+      const container = tableContainers.get(table.id)
+      const projected = container ? resolveNativeDocxTableAutofitV1(table, container.width, container.sectionID, resolved, shaped, autofitIndexes) : undefined
+      if (!projected) return fail(table.id, 'Content autofit requires bounded source-joined natural text measurements, unmerged LTR cells and satisfiable min/max widths in one section column')
+      table = projected.table; widthPolicy = projected.policy
+    }
     if (table.width_percent_fiftieths !== undefined) {
       const container = tableContainers.get(table.id)
       const projected = container ? percentTable(table, container.width, container.sectionID) : undefined

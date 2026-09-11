@@ -1,6 +1,7 @@
 import type { NativeDocxDocumentV1, NativeDocxStoryV1 } from './nativeContract.js'
 import { decodeNativeDocxPaginationRequestV1, type NativeDocxPaginationRequestV1, type NativeDocxPaginatedLayoutV1 } from './nativePaginationV1.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
+import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
 
 export interface NativeDocxPageFieldVariantV1 { page_id: string; shaped_lines: NativeDocxShapedLinesV1 }
 export const DOCX_PAGE_FIELD_LIMITS = { maxPages: 64, maxFragments: 100_000 } as const
@@ -9,14 +10,15 @@ function runs(story: NativeDocxStoryV1) {
   return story.blocks.flatMap((block) => block.paragraph?.runs ?? block.table?.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs.flatMap((p) => p.runs))) ?? [])
 }
 
-/** This first field profile intentionally excludes pagination-dependent body text. */
+/** Header/footer expansion; body fields retain markers and are separately source-replayed. */
 export function hasNativeDocxPageFieldsV1(document: NativeDocxDocumentV1): boolean {
-  for (const story of [document.body, ...document.notes, ...document.comment_stories]) if (runs(story).some((run) => run.page_field)) throw new TypeError('PAGE/NUMPAGES fields are qualified only in header/footer stories; body, notes and comments remain refused')
+  for (const story of [...document.notes, ...document.comment_stories]) if (runs(story).some((run) => run.page_field)) throw new TypeError('PAGE/NUMPAGES fields in notes and comments remain refused')
+  for (const run of runs(document.body)) if (run.page_field && !/^[1-9][0-9]{0,5}$/.test(run.text ?? '')) throw new TypeError('Body fields require layout-derived decimal text before header expansion')
   let found = false
   for (const story of [...document.headers, ...document.footers]) for (const run of runs(story)) if (run.page_field) {
     found = true
     if (run.kind !== 'text' || run.text !== '') throw new TypeError('Source page-field text must be empty; cached results are not authoritative')
-    if (!run.anchor.path.includes('/w:fldSimple[')) throw new TypeError('Page-field source must be anchored inside an exact simple field')
+    if (!run.anchor.path.includes('/w:fldSimple[') && !/^.*\/w:p\[\d+\]\/w:r\[\d+\]\/w:t\[\d+\]$/.test(run.anchor.path)) throw new TypeError('Page-field source must be anchored in a simple field or a paragraph-local flat field result text')
     // Modeled header/footer parts are not passthrough parts. Their root anchor
     // hashes the raw source XML containing both instruction and cached result;
     // document.source.package_sha256 binds the complete OPC bytes as well.
@@ -28,12 +30,14 @@ export function hasNativeDocxPageFieldsV1(document: NativeDocxDocumentV1): boole
 }
 
 /** Only substitution permitted by this profile; original document is never mutated. */
-export function nativeDocxPageFieldDocumentV1(document: NativeDocxDocumentV1, ordinal: number, count: number): NativeDocxDocumentV1 {
+export function nativeDocxPageFieldDocumentV1(document: NativeDocxDocumentV1, ordinal: number, count: number, displayNumber?: number): NativeDocxDocumentV1 {
   hasNativeDocxPageFieldsV1(document)
+  if (displayNumber === undefined && document.sections.some(section => section.page_number_start !== undefined)) throw new TypeError('Section restarts require a final pagination-derived display number')
+  if (displayNumber !== undefined && (!Number.isInteger(displayNumber) || displayNumber < 0 || displayNumber > 999999)) throw new RangeError('Display number exceeds bounded decimal profile')
   if (!Number.isInteger(count) || count < 1 || count > DOCX_PAGE_FIELD_LIMITS.maxPages || !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= count) throw new RangeError('Page-field expansion exceeds its bounded page profile')
   const derived = structuredClone(document)
   for (const story of [...derived.headers, ...derived.footers]) for (const run of runs(story)) if (run.page_field) {
-    run.text = String(run.page_field === 'PAGE' ? ordinal + 1 : count)
+    run.text = String(run.page_field === 'PAGE' ? displayNumber ?? ordinal + 1 : count)
     delete run.page_field
   }
   return derived
@@ -49,7 +53,7 @@ export function validateNativeDocxPageFieldVariantsV1(request: NativeDocxPaginat
   return input.map((entry, index) => {
     const page = layout.pages[index]!
     if (!entry || typeof entry !== 'object' || Object.keys(entry).sort().join(',') !== 'page_id,shaped_lines' || entry.page_id !== page.id) throw new TypeError('Page-field variants must use exact final page order and identity')
-    const document = nativeDocxPageFieldDocumentV1(request.document, page.ordinal, layout.pages.length)
+    const document = nativeDocxPageFieldDocumentV1(request.document, page.ordinal, layout.pages.length, nativeDocxPageNumberV1(request.document, layout, page.ordinal))
     const decoded = decodeNativeDocxPaginationRequestV1({ ...request, document, shaped_lines: entry.shaped_lines })
     if (!decoded.ok) throw new TypeError(`Page-field shaping source join failed: ${decoded.issues[0]?.message}`)
     const shaped = decoded.value.shaped_lines

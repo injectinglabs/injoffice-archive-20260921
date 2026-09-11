@@ -289,7 +289,7 @@ describe('native DOCX page-paint v1', () => {
     expect(fields(request.integrity)).toEqual([...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.IntegrityV1].sort())
     expect(fields(request.outline_provider)).toEqual([...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.OutlineProviderV1].sort())
     expect(fields(value)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.OutputV1].sort())
-    expect(fields(value.provenance)).toEqual(DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvenanceV1.filter((key) => key !== 'numbering_source').sort())
+    expect(fields(value.provenance)).toEqual(DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvenanceV1.filter((key) => key !== 'numbering_source' && key !== 'body_field_source_sha256').sort())
     expect(fields(value.provenance.font_manifest)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ManifestV1].sort())
     expect(fields(value.provenance.media_assets)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.MediaSourceV1].sort())
     expect(fields(value.provenance.providers)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ProvidersV1].sort())

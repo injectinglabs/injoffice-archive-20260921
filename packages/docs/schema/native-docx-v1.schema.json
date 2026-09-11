@@ -165,6 +165,7 @@
         "properties": { "$ref": "#/$defs/RunPropertiesV1" },
         "text": { "type": "string", "maxLength": 1048576 },
         "page_field": { "enum": ["PAGE", "NUMPAGES"] },
+        "layout_page_field": { "enum": ["PAGE", "NUMPAGES"], "description": "Internal derived-layout marker requiring original body source replay before paint; never emitted by source extraction." },
         "control": { "enum": ["tab", "line-break", "page-break", "column-break", "soft-hyphen"] },
         "reference": { "$ref": "#/$defs/ReferenceV1" },
         "drawing": { "$ref": "#/$defs/DrawingV1" }
@@ -279,7 +280,7 @@
         "table_style_id": { "$ref": "#/$defs/Identifier" },
         "width_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
         "width_percent_fiftieths": { "type": "integer", "minimum": 1, "maximum": 5000 },
-        "layout": { "const": "fixed" },
+        "layout": { "enum": ["fixed", "autofit"] },
         "alignment": { "const": "left" },
         "indent_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },
         "grid_widths_twips": { "type": "array", "maxItems": 10000, "items": { "type": "integer", "minimum": 1, "maximum": 180143985094819 } },
@@ -399,6 +400,7 @@
         "starts_at_block_id": { "$ref": "#/$defs/Identifier" },
         "break_type": { "enum": ["continuous", "next-page", "even-page", "odd-page", "next-column"] },
         "title_page": { "type": "boolean" },
+        "page_number_start": { "type": "integer", "minimum": 0, "maximum": 999999 },
         "page": { "$ref": "#/$defs/PageGeometryV1" },
         "header_refs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/HeaderFooterReferenceV1" } },
         "footer_refs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/HeaderFooterReferenceV1" } }

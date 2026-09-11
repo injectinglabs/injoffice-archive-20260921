@@ -45,7 +45,7 @@ export interface NativeDocxPagePaintMediaAssetV1 {
 }
 
 export interface NativeDocxQualifiedInlineImageV1 {
-  floating?: { x_millipoints: number; y_millipoints: number; layer: 'behind' | 'front'; stacking_order: number }
+  floating?: { x_millipoints: number; y_millipoints: number; layer: 'behind' | 'front'; stacking_order: number; wrap?: 'square' }
   drawing_id: string
   run_id: string
   asset_id: string
@@ -218,6 +218,7 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
   if (drawing.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(drawing.rotation_degrees) || drawing.flip_horizontal !== undefined && typeof drawing.flip_horizontal !== 'boolean' || drawing.flip_vertical !== undefined && typeof drawing.flip_vertical !== 'boolean') return { ok: false, code: 'unsupported-image', message: 'Inline image transform requires explicit booleans and quarter-turn rotation' }
   let floating: NativeDocxQualifiedInlineImageV1['floating']
   if (drawing.placement === 'floating') {
+    if (drawing.wrap === 'square' && drawing.rotation_degrees !== undefined && drawing.rotation_degrees !== 0) return { ok: false, code: 'unsupported-image', message: 'Square wrapping requires an unrotated source extent; rotated exclusion bounds are unqualified' }
     let bodyParagraph = false, floatingCount = 0, sameOrder = 0
     for (const block of document.body.blocks) for (const run of block.paragraph?.runs ?? []) {
       if (run.drawing?.placement !== 'floating') continue
@@ -227,8 +228,8 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
     }
     const x = drawing.x_emu === 0 ? 0 : emuToMilliPoints(drawing.x_emu!)
     const y = drawing.y_emu === 0 ? 0 : emuToMilliPoints(drawing.y_emu!)
-    if (!bodyParagraph || drawing.horizontal_relative_from !== 'page' || drawing.vertical_relative_from !== 'page' || drawing.wrap !== 'none' || x === undefined || y === undefined || !['behind', 'front'].includes(drawing.floating_layer!) || !Number.isSafeInteger(drawing.stacking_order) || drawing.stacking_order! < 0 || drawing.stacking_order! > 0xffffffff) return { ok: false, code: 'unsupported-image', message: 'Floating images require a body paragraph, exact non-negative page offsets, wrapNone and explicit source layering' }
-    floating = { x_millipoints: x, y_millipoints: y, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order! }
+    if (!bodyParagraph || drawing.horizontal_relative_from !== 'page' || drawing.vertical_relative_from !== 'page' || !['none','square'].includes(drawing.wrap!) || x === undefined || y === undefined || !['behind', 'front'].includes(drawing.floating_layer!) || !Number.isSafeInteger(drawing.stacking_order) || drawing.stacking_order! < 0 || drawing.stacking_order! > 0xffffffff) return { ok: false, code: 'unsupported-image', message: 'Floating images require a body paragraph, exact non-negative page offsets, wrapNone/wrapSquare and explicit source layering' }
+    floating = { x_millipoints: x, y_millipoints: y, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order!, ...(drawing.wrap==='square'?{wrap:'square' as const}:{}) }
     if (sameOrder !== 1) return { ok: false, code: 'unsupported-image', message: 'Floating image stacking orders must be unique within each layer' }
   } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined) {
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }

@@ -16,6 +16,9 @@ import {
   safeClone, preflightWire, sameWire, canonicalPart, paintCommandID,
   paintImageCommandID, paintNoteSeparatorCommandID, decodeNativeDocxPagePaintV1,
 } from './nativePagePaintWireV1.js'
+import { validateNativeDocxBodyPageFieldSourceV1 } from './nativeBodyPageFieldsV1.js'
+import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
+import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
 export {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL, DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS,
@@ -75,7 +78,8 @@ export interface NativeDocxPagePaintRequestV1 {
   font_manifest: NativeFontManifest
   media_assets: NativeDocxPagePaintMediaAssetV1[]
   page_field_variants?: NativeDocxPageFieldVariantV1[]
-  integrity: { font_manifest_sha256: string; shaped_lines_sha256: string; paginated_layout_sha256: string; table_projection_sha256: string; media_assets_sha256: string }
+  body_field_source?: NativeDocxPaginationRequestV1['document']
+  integrity: { font_manifest_sha256: string; shaped_lines_sha256: string; paginated_layout_sha256: string; table_projection_sha256: string; media_assets_sha256: string; body_field_source_sha256?: string }
   outline_provider: { provider_id: string; provider_revision: string }
 }
 
@@ -282,6 +286,7 @@ export interface NativeDocxPaintPageV1 {
 }
 
 export interface NativeDocxPagePaintProvenanceV1 {
+  body_field_source_sha256?: string
   document_id: string
   revision: string
   package_sha256: string
@@ -408,6 +413,7 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1): NativeDocxHe
 function requestProvenance(request: NativeDocxPagePaintRequestV1, outlineID: string, outlineRevision: string, layout: NativeDocxHeaderFooterLayoutV1 = headerFooterLayout(request)): NativeDocxPagePaintProvenanceV1 {
   const pagination = request.pagination_request
   return {
+    ...(request.integrity.body_field_source_sha256 ? { body_field_source_sha256: request.integrity.body_field_source_sha256 } : {}),
     document_id: pagination.document.document_id,
     revision: pagination.document.revision,
     package_sha256: pagination.document.source.package_sha256,
@@ -438,7 +444,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
   const snapshot = safeClone(value)
   if (snapshot === undefined) return { ok: false, issues: [issue('INVALID_VALUE', '', 'page-paint request must be a cloneable JSON wire value')] }
   const issues: NativeDocxValidationIssue[] = []
-  const root = exactObject(snapshot, '', isObject(snapshot) && 'page_field_variants' in snapshot ? [...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, 'page_field_variants'] : DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, issues)
+  const root = exactObject(snapshot, '', [...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.RequestV1, ...['page_field_variants', 'body_field_source'].filter(key => isObject(snapshot) && key in snapshot)], issues)
   if (!root) return { ok: false, issues }
   if (root.protocol !== DOCX_PAGE_PAINT_REQUEST_PROTOCOL) add(issues, 'UNSUPPORTED_PROTOCOL', '/protocol', `must equal ${DOCX_PAGE_PAINT_REQUEST_PROTOCOL}`)
   if (root.version !== DOCX_PAGE_PAINT_REQUEST_VERSION) add(issues, 'UNSUPPORTED_VERSION', '/version', `must equal ${DOCX_PAGE_PAINT_REQUEST_VERSION}`)
@@ -446,6 +452,10 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
   if (!pagination.ok) issues.push(...pagination.issues.map((entry) => ({ ...entry, path: `/pagination_request${entry.path}` })))
   const paginated = decodeNativeDocxPaginatedLayoutForRequest(root.paginated_layout, root.pagination_request)
   if (!paginated.ok) issues.push(...paginated.issues.map((entry) => ({ ...entry, path: `/paginated_layout${entry.path}` })))
+  if (pagination.ok && paginated.ok && paginated.value.status === 'paginated') {
+    try { deriveNativeSquareWrapPlanV1(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines, paginated.value, true) }
+    catch (error) { add(issues, 'BROKEN_REFERENCE', '/paginated_layout', error instanceof Error ? error.message : 'Square-wrap source placement failed') }
+  }
   const manifest = validateFontManifest(root.font_manifest)
   if (!manifest.ok) issues.push(...manifest.issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues).map((entry) => issue(entry.code === 'unknown-field' ? 'UNKNOWN_FIELD' : entry.code === 'reference' ? 'BROKEN_REFERENCE' : 'INVALID_VALUE', `/font_manifest${entry.path === '$' ? '' : entry.path.slice(1).replace(/\./g, '/')}`, entry.message)))
   if (pagination.ok && manifest.ok) {
@@ -463,8 +473,9 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
       add(issues, 'INVALID_VALUE', '/media_assets', error instanceof Error ? error.message : 'media asset inventory is invalid')
     }
   }
-  const integrity = exactObject(root.integrity, '/integrity', DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.IntegrityV1, issues)
+  const integrity = exactObject(root.integrity, '/integrity', [...DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS.IntegrityV1, ...(root.body_field_source !== undefined ? ['body_field_source_sha256'] : [])], issues)
   if (integrity) {
+    if (root.body_field_source !== undefined && integrity.body_field_source_sha256 !== canonicalWireSha256(root.body_field_source)) add(issues,'BROKEN_REFERENCE','/integrity/body_field_source_sha256','must bind the complete original body-field source')
     stringValue(integrity.font_manifest_sha256, '/integrity/font_manifest_sha256', issues, SHA256, 71)
     stringValue(integrity.shaped_lines_sha256, '/integrity/shaped_lines_sha256', issues, SHA256, 71)
     stringValue(integrity.table_projection_sha256, '/integrity/table_projection_sha256', issues, SHA256, 71)
@@ -473,7 +484,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
     if (manifest.ok && integrity.font_manifest_sha256 !== nativeDocxPagePaintFontManifestSha256V1(manifest.value)) add(issues, 'BROKEN_REFERENCE', '/integrity/font_manifest_sha256', 'must attest the complete validated font manifest carried by this request')
     if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines, root.page_field_variants as NativeDocxPageFieldVariantV1[] | undefined)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines and page-field variants carried by this request')
     if (pagination.ok) {
-      const qualified = qualifyNativeDocxTablesV1(pagination.value.document, pagination.value.resolved_layout)
+      const qualified = qualifyNativeDocxTablesV1(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines)
       const expected = qualified.status === 'qualified' ? qualified.sha256 : nativeDocxTableProjectionSha256V1([])
       if (integrity.table_projection_sha256 !== expected) add(issues, 'BROKEN_REFERENCE', '/integrity/table_projection_sha256', 'must attest the exact qualified table projection or the canonical empty projection for an upstream refusal')
     }
@@ -486,6 +497,11 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
     stringValue(outlineProvider.provider_revision, '/outline_provider/provider_revision', issues, PROVIDER_ID, 128)
   }
   let pageFieldVariants: NativeDocxPageFieldVariantV1[] | undefined
+  let bodyFieldSource: NativeDocxPaginationRequestV1['document'] | undefined
+  if (pagination.ok && paginated.ok) {
+    try { bodyFieldSource = validateNativeDocxBodyPageFieldSourceV1(root.body_field_source,pagination.value,paginated.value) }
+    catch (error) { add(issues,'BROKEN_REFERENCE','/body_field_source',error instanceof Error ? error.message : 'Invalid body-field source') }
+  }
   if (pagination.ok && paginated.ok) {
     try { pageFieldVariants = validateNativeDocxPageFieldVariantsV1(pagination.value, paginated.value, root.page_field_variants) }
     catch (error) { add(issues, 'BROKEN_REFERENCE', '/page_field_variants', error instanceof Error ? error.message : 'Invalid page-field variants') }
@@ -505,6 +521,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
       font_manifest: manifest.value,
       media_assets: mediaAssets,
       ...(pageFieldVariants ? { page_field_variants: pageFieldVariants } : {}),
+      ...(bodyFieldSource ? { body_field_source: bodyFieldSource } : {}),
       integrity: root.integrity as NativeDocxPagePaintRequestV1['integrity'],
       outline_provider: root.outline_provider as NativeDocxPagePaintRequestV1['outline_provider'],
     },
@@ -837,7 +854,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? pagination.resolved_layout.diagnostics[0]
     return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires diagnostic-free shaping/resolution and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }
   }
-  const qualifiedTables = qualifyNativeDocxTablesV1(pagination.document, pagination.resolved_layout)
+  const qualifiedTables = qualifyNativeDocxTablesV1(pagination.document, pagination.resolved_layout, pagination.shaped_lines)
   if (qualifiedTables.status !== 'qualified') return { ok: true, value: refusal(provenance, 'unsupported-source', qualifiedTables.diagnostics[0]!.scope_id, qualifiedTables.diagnostics[0]!.message) }
   const tableCommandsIndex = tableCommandsByPage(request, layout.pages, qualifiedTables.tables)
   if (!tableCommandsIndex) return { ok: true, value: refusal(provenance, 'resource-limit', documentID, 'Table paint indexing exceeded its bounded work or geometry contract') }
@@ -929,7 +946,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
           properties = resolved.properties
           if (fragment.source_kind === 'run') {
             const noteMarker = nativeRun.kind === 'reference' && nativeRun.reference && (nativeRun.reference.kind === 'footnote' || nativeRun.reference.kind === 'endnote') ? noteNumbers.get(nativeRun.reference.target_id) : undefined
-            const sourceText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? page.ordinal + 1 : layout.pages.length) : nativeRun.text
+            const sourceText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? nativeDocxPageNumberV1(pagination.document,layout,page.ordinal) : layout.pages.length) : nativeRun.text
             const exactText = nativeRun.kind === 'text' && sourceText !== undefined && sourceText.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
             const exactMarker = noteMarker !== undefined && fragment.start_utf16 === 0 && fragment.end_utf16 === noteMarker.length && fragment.text === noteMarker
             if (!exactText && !exactMarker) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Run fragment text and UTF-16 range must exactly match native text or its placed note number') }
@@ -1116,7 +1133,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
         if (interval.start !== cursor || interval.end <= interval.start) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must exactly partition their native text run in logical order') }
         cursor = interval.end
       }
-      const expectedText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? ordinal + 1 : layout.pages.length) : nativeRun.text
+      const expectedText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? nativeDocxPageNumberV1(pagination.document,layout,ordinal) : layout.pages.length) : nativeRun.text
       if (cursor !== expectedText.length) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must completely cover their native text run') }
     } else if (nativeRun.kind === 'control' && nativeRun.control === 'tab' && sourceControlCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native tab must have exactly one visual fragment') }
@@ -1172,7 +1189,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const expectedUnderlines: Array<{ pageIndex: number; command: NativeDocxStrokeTextUnderlineCommandV1 }> = []
       const underlineIDsByPlacement = new Map<string, string[]>()
       const headerFooterByPageID = headerFooter.status === 'placed' ? new Map<string, NativeDocxHeaderFooterPageLayoutV1>(headerFooter.pages.map((entry) => [entry.page_id, entry])) : new Map<string, NativeDocxHeaderFooterPageLayoutV1>()
-      const qualifiedTables = qualifyNativeDocxTablesV1(request.value.pagination_request.document, request.value.pagination_request.resolved_layout)
+      const qualifiedTables = qualifyNativeDocxTablesV1(request.value.pagination_request.document, request.value.pagination_request.resolved_layout, request.value.pagination_request.shaped_lines)
       const expectedTableByPageID = qualifiedTables.status === 'qualified'
         ? tableCommandsByPage(request.value, request.value.paginated_layout.pages, qualifiedTables.tables)
         : undefined
