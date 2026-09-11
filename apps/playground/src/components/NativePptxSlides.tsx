@@ -2,6 +2,8 @@ import {useEffect,useId,useRef,useState,type ReactNode} from 'react'
 import {decodePptxPreview,type PptxPreview,type PreviewNode,type PreviewStroke} from '../../../pptx-page-paint-worker/src/contract'
 import {readNativePreviewResponse,decodeNativeDocxImages,nativeDocxImagesWithinBudget} from './NativeDocxPages'
 import {DsButton,DsField,DsSelect} from '../design-system/primitives'
+import type {NativePptxDeck} from '@injoffice/pptx-native'
+import {nativePptxPreviewStatus} from '../nativePptxPreviewStatus'
 
 export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onImageError?:()=>void}){
  const prefix=useId().replace(/:/g,'')
@@ -23,7 +25,20 @@ export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onI
  return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${preview.width} ${preview.height}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>{preview.nodes.map((node,i)=>draw(node,String(i)))}</svg>
 }
 
-export function NativePptxSlides({bytes,slideCount,apiBase}:{bytes:Uint8Array;slideCount:number;apiBase:string}){
+export function NativePptxPreviewResult({preview,source,onImageError}:{preview:PptxPreview;source?:NativePptxDeck;onImageError?:()=>void}){
+ const coverage=nativePptxPreviewStatus(preview,source)
+ const limit=50
+ return <section aria-label={`Native preview result for slide ${preview.slide_index+1}`} data-native-preview-status={coverage.status}>
+  <h4>{coverage.label} · slide {preview.slide_index+1} of {preview.slide_count}</h4>
+  <p className="ds-muted">Supported paint is retained alongside identified gaps. Native line layout uses the InjOffice policy; complete source coverage and PowerPoint equivalence are not established. Read-only; the original file and editing permissions are unchanged.</p>
+  <NativePptxVector preview={preview} onImageError={onImageError}/>
+  {coverage.reasons.length>0&&<details open><summary>Missing content and coverage limits ({coverage.reasons.length})</summary><ul>{coverage.reasons.slice(0,limit).map((reason,i)=><li key={i}>{reason}</li>)}</ul>{coverage.reasons.length>limit&&<p>{coverage.reasons.length-limit} additional coverage reasons are not displayed.</p>}</details>}
+  <details><summary>Native paint counts</summary><p>{coverage.paintPrimitives} paint records · {coverage.glyphRecords} text glyph records · {coverage.placeholderRegions} placeholder regions{coverage.sourceBound?` · ${coverage.knownRefusedObjects} known refused source objects`:''}. Paint records are not object counts or proof of visible pixels after clipping.</p></details>
+  {preview.diagnostics.length>0&&<details><summary>Native diagnostics ({preview.diagnostics.length})</summary><ul>{preview.diagnostics.slice(0,limit).map((message,i)=><li key={i}>{message}</li>)}</ul>{preview.diagnostics.length>limit&&<p>{preview.diagnostics.length-limit} additional diagnostics are not displayed.</p>}</details>}
+ </section>
+}
+
+export function NativePptxSlides({bytes,slideCount,apiBase,source}:{bytes:Uint8Array;slideCount:number;apiBase:string;source?:NativePptxDeck}){
  const [paint,setPaint]=useState<PptxPreview|null>(null),[busy,setBusy]=useState(false),[at,setAt]=useState(0)
  const consent=`Native slides require uploading this presentation to ${apiBase}. Nothing is uploaded until you choose the button below.`
  const [message,setMessage]=useState(consent)
@@ -44,7 +59,7 @@ export function NativePptxSlides({bytes,slideCount,apiBase}:{bytes:Uint8Array;sl
    if(!nativeDocxImagesWithinBudget(decoded.resources))throw new Error('Native slide image pixel budget exceeded.')
    await decodeNativeDocxImages(decoded.resources,controller.signal)
    if(controller.signal.aborted||token!==generation.current)return
-   setPaint(decoded);setMessage('Measured native glyphs. Mixed-font line boxes and anchors use the explicit InjOffice policy, not Office pixel-equivalence. Read-only; the source file is unchanged.')
+   setPaint(decoded);setMessage(`${nativePptxPreviewStatus(decoded,source).label}. Review the content and coverage limits below. The source file is unchanged.`)
   }catch(error){if(!controller.signal.aborted&&token===generation.current)setMessage(`${error instanceof Error?error.message:'Native preview failed'} The file preview remains available; the original file is unchanged.`)}
   finally{if(token===generation.current)setBusy(false)}
  }
@@ -53,6 +68,6 @@ export function NativePptxSlides({bytes,slideCount,apiBase}:{bytes:Uint8Array;sl
   <h3>Measured native slide</h3><p className="ds-status" role="status">{message}</p>
   <div className="ds-workstrip"><DsField label="Native slide"><DsSelect value={at} onChange={event=>changeSlide(Number(event.target.value))}>{Array.from({length:Math.min(slideCount,10000)},(_,i)=><option key={i} value={i}>{i+1} of {slideCount}</option>)}</DsSelect></DsField>
   <DsButton disabled={busy} onClick={()=>void render()}>{busy?'Rendering native slide…':'Upload to helper and render native slide'}</DsButton></div>
-  {paint&&<><NativePptxVector preview={paint} onImageError={()=>{setPaint(null);setMessage('Native image decoding failed. Native rendering was cleared; the original source is unchanged.')}}/><details open><summary>Native preview limits ({paint.diagnostics.length})</summary><ul>{paint.diagnostics.map((message,i)=><li key={i}>{message}</li>)}</ul></details></>}
+  {paint&&<NativePptxPreviewResult preview={paint} source={source} onImageError={()=>{setPaint(null);setMessage('Native image decoding failed. Native rendering was cleared; the original source is unchanged.')}}/>}
  </section>
 }
