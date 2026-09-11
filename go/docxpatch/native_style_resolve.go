@@ -1264,18 +1264,19 @@ func (resolver *nativeLayoutResolver) allStories() []NativeStoryV1 {
 
 func (resolver *nativeLayoutResolver) resolveBlock(block *NativeBlockV1, result *NativeResolvedLayoutInputV1, numberingState *nativeNumberingState) {
 	if block.Paragraph != nil {
-		resolver.resolveParagraph(block.Paragraph, result, numberingState)
+		resolver.resolveParagraph(block.Paragraph, result, numberingState, nil)
 		return
 	}
 	if block.Table == nil {
 		return
 	}
 	table := block.Table
-	result.Tables = append(result.Tables, resolver.resolveTableStyle(table))
+	resolvedTable, tableStyles := resolver.resolveTableStyle(table)
+	result.Tables = append(result.Tables, resolvedTable)
 	for rowIndex := range table.Rows {
 		for cellIndex := range table.Rows[rowIndex].Cells {
 			for paragraphIndex := range table.Rows[rowIndex].Cells[cellIndex].Paragraphs {
-				resolver.resolveParagraph(&table.Rows[rowIndex].Cells[cellIndex].Paragraphs[paragraphIndex], result, numberingState)
+				resolver.resolveParagraph(&table.Rows[rowIndex].Cells[cellIndex].Paragraphs[paragraphIndex], result, numberingState, tableStyles)
 			}
 		}
 	}
@@ -1372,19 +1373,19 @@ func (resolver *nativeLayoutResolver) parseSimpleTableStyleCellFill(node *native
 	return fill, true
 }
 
-func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) NativeResolvedTableV1 {
+func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (NativeResolvedTableV1, []*nativeStyleDefinition) {
 	resolved := NativeResolvedTableV1{TableID: table.ID, StyleID: table.TableStyleID}
 	if table.TableStyleID == nil {
-		return resolved
+		return resolved, nil
 	}
 	definition := resolver.styles["table\x00"+*table.TableStyleID]
 	if definition == nil {
 		resolver.addDiagnostic("MISSING_TABLE_STYLE", table.ID, resolver.partsValue(resolver.parts.StylesPart), nil, "The referenced table style is missing and was not guessed")
-		return resolved
+		return resolved, nil
 	}
 	chain := resolver.styleChain("table", *table.TableStyleID, table.ID)
 	if len(chain) == 0 {
-		return resolved
+		return resolved, nil
 	}
 	simple := true
 	for _, layer := range chain {
@@ -1418,9 +1419,12 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) Na
 				if simple && fill != nil {
 					resolved.CellShadingRGB = fill
 				}
-			case "pPr", "rPr", "trPr", "tblStylePr":
+			case "pPr", "rPr":
+				// Parsed property layers apply after document defaults, before
+				// paragraph/character/direct formatting in each cell paragraph.
+			case "trPr", "tblStylePr":
 				if child.Name.Local != "tblStylePr" {
-					resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, child, "Table-style paragraph, run, or row effects are preserved until table-region cascade support is implemented")
+					resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, child, "Table-style row effects are preserved until table-region cascade support is implemented")
 					simple = false
 				}
 			default:
@@ -1434,11 +1438,12 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) Na
 	if !simple {
 		resolved.Borders = nil
 		resolved.CellShadingRGB = nil
+		return resolved, nil
 	}
-	return resolved
+	return resolved, chain
 }
 
-func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagraphV1, result *NativeResolvedLayoutInputV1, numberingState *nativeNumberingState) {
+func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagraphV1, result *NativeResolvedLayoutInputV1, numberingState *nativeNumberingState, tableStyles []*nativeStyleDefinition) {
 	paragraphNode := resolver.nodeForAnchor(paragraph.Anchor)
 	styleID := ""
 	var directPPr *nativeXMLNode
@@ -1476,12 +1481,56 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 	runBase := nativeRunProperties{}
 	applyNativeRunProperties(&runBase, resolver.docR, false)
 	applied := []string{}
+	var tableFontSize *int
+	var tableAlignment *string
+	for _, definition := range tableStyles {
+		applyNativeParagraphProperties(&p, definition.p)
+		applyNativeRunProperties(&runBase, definition.r, true)
+		if definition.r.fontSize != nil {
+			tableFontSize = definition.r.fontSize
+		}
+		if definition.p.alignment != nil {
+			tableAlignment = definition.p.alignment
+		}
+		// Table provenance remains on resolved.Tables. The paragraph-style
+		// chain has its own bounded namespace and must not mix table IDs.
+	}
 	numberingStyleID := ""
 	if styleID != "" {
 		chain := resolver.styleChain("paragraph", styleID, paragraph.ID)
-		for _, definition := range chain {
-			applyNativeParagraphProperties(&p, definition.p)
-			applyNativeRunProperties(&runBase, definition.r, true)
+		defaultIndex := -1
+		var defaultSize *int
+		var defaultAlignment *string
+		for index, definition := range chain {
+			if definition.r.fontSize != nil {
+				defaultSize = definition.r.fontSize
+			}
+			if definition.p.alignment != nil {
+				defaultAlignment = definition.p.alignment
+			}
+			if definition.id == resolver.defaultP {
+				defaultIndex = index
+				break
+			}
+		}
+		for index, definition := range chain {
+			paragraphLayer, runLayer := definition.p, definition.r
+			// MS-DOCX 2.3.1: with the default (false) compatibility flag,
+			// default paragraph 11/12pt and left alignment do not override
+			// table styles. Explicit compatibility flags remain refused by
+			// pagination settings until their policy is modeled end to end.
+			// Resolve the default style's basedOn ancestors as one layer:
+			// its inherited 11/12pt or left alignment has the same exception.
+			if index <= defaultIndex {
+				if tableFontSize != nil && defaultSize != nil && (*defaultSize == 22 || *defaultSize == 24) {
+					runLayer.fontSize = nil
+				}
+				if tableAlignment != nil && defaultAlignment != nil && *defaultAlignment == "left" {
+					paragraphLayer.alignment = nil
+				}
+			}
+			applyNativeParagraphProperties(&p, paragraphLayer)
+			applyNativeRunProperties(&runBase, runLayer, true)
 			applied = append(applied, definition.id)
 			if definition.p.numbering.present {
 				numberingStyleID = definition.id
