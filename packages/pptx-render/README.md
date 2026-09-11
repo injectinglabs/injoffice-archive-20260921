@@ -12,6 +12,15 @@ pixel input, or drawing-surface allocation. It is safe to run in a worker or on 
 server. Hosts may record paint commands or replay them through the generic
 Canvas2D command adapter using a context they created themselves.
 
+Parsed default pentagons use the DrawingML preset guide equations, rounded once
+to integer EMU, rather than an inscribed regular polygon. Supported solid theme
+fill/outline references are resolved by the native extractor. These source-bound
+projections are read-only. Unsupported shape text is explicitly omitted while
+independently supported geometry remains visible; diagnostics must be shown by
+the host. Vertical text flow, autofit, and pentagon text-region placement are not
+qualified by this geometry support. This is a partial preview, not a claim of
+complete slide or Microsoft Office fidelity.
+
 ```ts
 import {
   compileNativePptxSlide,

@@ -101,16 +101,30 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	if err != nil {
 		return NativeElement{}, err
 	}
-	transform, preset, fill, stroke, err := validateNativeAutoShapeProperties(shapeProperties, dialect, extractor.theme, &gaps)
+	paintProperties := shapeProperties
+	var styleErr error
+	if style != nil {
+		var resolved *nativeXMLNode
+		resolved, styleErr = resolveNativeShapeStyle(shapeProperties, style, extractor.slideDependencies.themeRoot, dialect, extractor.theme)
+		if styleErr == nil {
+			paintProperties = resolved
+		}
+	}
+	transform, preset, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
 	if style != nil {
-		gaps.add("pptx.autoshape-theme-style-unavailable", "theme and style-matrix references are preserved but not resolved by native PPTX v1", true)
+		if styleErr != nil {
+			gaps.add("pptx.autoshape-theme-style-unavailable", "theme and style-matrix references are preserved but not resolved by native PPTX v1", true)
+		} else {
+			gaps.add("pptx.autoshape-theme-style-preview", "solid theme fill/outline references are resolved from the source matrix; style-bound targets remain read-only", false)
+		}
 	}
 
 	paragraphs := []NativeParagraph{}
 	var textBodyLayout *NativeTextBodyLayout
+	textOmitted := false
 	if textBody != nil {
 		if err := extractor.reserveNativeTextOutput(textBody, dialect); err != nil {
 			return NativeElement{}, err
@@ -121,12 +135,14 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			if isNativeDuplicateSingleton(layoutErr, &duplicate) || !isNativeTextLayoutUnsupported(layoutErr) {
 				return NativeElement{}, layoutErr
 			}
-			gaps.add("pptx.autoshape-text-layout-unavailable", layoutErr.Error(), true)
+			gaps.add("pptx.autoshape-text-layout-unavailable", "shape geometry retained; text omitted: "+layoutErr.Error(), false)
+			textOmitted = true
 		} else if boundsErr := validateNativeTextBodyBounds(layout, transform); boundsErr != nil {
 			if !isNativeTextLayoutUnsupported(boundsErr) {
 				return NativeElement{}, boundsErr
 			}
-			gaps.add("pptx.autoshape-text-layout-unavailable", boundsErr.Error(), true)
+			gaps.add("pptx.autoshape-text-layout-unavailable", "shape geometry retained; text omitted: "+boundsErr.Error(), false)
+			textOmitted = true
 		} else {
 			textBodyLayout = layout
 		}
@@ -136,9 +152,18 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			if isNativeDuplicateSingleton(parseErr, &duplicate) {
 				return NativeElement{}, parseErr
 			}
-			gaps.add("pptx.autoshape-text-unavailable", "shape text or inherited text formatting is outside the native PPTX v1 subset", true)
+			gaps.add("pptx.autoshape-text-unavailable", "shape geometry retained; text omitted because its content or inherited formatting is unsupported", false)
+			textOmitted = true
 		} else {
 			paragraphs = parsed
+		}
+		if preset != nil && *preset == NativeShapePresetPentagon {
+			gaps.add("pptx.autoshape-text-layout-unavailable", "pentagon geometry retained; text omitted because preset text-region layout is not qualified", false)
+			textOmitted = true
+		}
+		if textOmitted {
+			paragraphs = []NativeParagraph{}
+			textBodyLayout = nil
 		}
 	}
 
@@ -450,6 +475,9 @@ func validateNativeAutoShapeGeometry(node *nativeXMLNode, dialect nativeExtractD
 		preset = NativeShapePresetTriangle
 	case "diamond":
 		preset = NativeShapePresetDiamond
+	case "pentagon":
+		preset = NativeShapePresetPentagon
+		gaps.add("pptx.autoshape-preset-preview", "default pentagon outline is rendered from DrawingML preset equations; preset target remains read-only", false)
 	default:
 		gaps.add("pptx.autoshape-preset-unavailable", "this PowerPoint preset is outside the exact native v1 AutoShape subset", true)
 		return nil

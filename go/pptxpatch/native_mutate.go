@@ -545,6 +545,12 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Transform.QuarterTurns != nil {
 			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)
 		}
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			switch diagnostic.Code {
+			case "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
+				return nil, fmt.Errorf("%s: projected shape styles or omitted text are preview-only", prefix)
+			}
+		}
 		// These flags are omitted from native paragraphs. Equal compatibility
 		// summaries after rewriting cannot prove that local metadata survived.
 		if operation.Kind == NativePPTXReplaceText {

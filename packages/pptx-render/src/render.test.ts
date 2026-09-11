@@ -926,6 +926,32 @@ describe('native PPTX RenderTree', () => {
     }
   })
 
+  it('uses DrawingML default pentagon guides instead of an inscribed polygon', () => {
+    expect(presetPath('pentagon', 1_000_000, 1_000_000)).toEqual([
+      {kind:'moveTo',x:1,y:381965},{kind:'lineTo',x:500000,y:0},
+      {kind:'lineTo',x:999999,y:381965},{kind:'lineTo',x:809016,y:999997},
+      {kind:'lineTo',x:190984,y:999997},{kind:'close'},
+    ])
+    expect(presetPath('pentagon', 1417740, 1317072)).toEqual([
+      {kind:'moveTo',x:1,y:503075},{kind:'lineTo',x:708870,y:0},
+      {kind:'lineTo',x:1417739,y:503075},{kind:'lineTo',x:1146975,y:1317069},
+      {kind:'lineTo',x:270765,y:1317069},{kind:'close'},
+    ])
+  })
+
+  it('paints preserved geometry with explicit omitted-text diagnostics and no invented glyphs', async () => {
+    const shape:NativeElement={kind:'shape',id:'partial-pentagon',provenance:'authored',
+      transform:{x:100000,y:100000,cx:1000000,cy:800000,quarterTurns:2},preset:'pentagon',fill:'123456',paragraphs:[],passthrough:[],
+      compatibility:{status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autoshape-text-layout-unavailable',message:'Vertical text omitted'}]}}
+    const deck=authoredDeck([shape]);deck.compatibility=shape.compatibility;deck.slides[0]!.compatibility=shape.compatibility
+    const tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()})
+    const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+    const commands=surface.finish()
+    expect(commands).toContainEqual(expect.objectContaining({kind:'path',fill:'123456'}))
+    expect(commands.some(command=>command.kind==='glyphRun'||command.kind==='placeholder')).toBe(false)
+    expect(tree.diagnostics).toContainEqual(expect.objectContaining({sourceCode:'pptx.autoshape-text-layout-unavailable'}))
+  })
+
   it('preserves native AutoShape stroke semantics and placeholders refused custom geometry', async () => {
     const exact: NativeElement = {
       kind: 'shape', id: 'native-autoshape', provenance: 'authored',
