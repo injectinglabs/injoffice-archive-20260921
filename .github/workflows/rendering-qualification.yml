@@ -1,0 +1,67 @@
+name: Manual rendering qualification
+
+# Opt-in synthetic qualification only. External fidelity benchmarks and
+# Microsoft Office/reference exports remain local-only and are not loaded here.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rendering-qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - name: Standalone documentation browser checks
+        run: |
+          npm run test:docs-browser
+          DOCS_BASE=/docs/ npm run docs:build
+          DOCS_BASE=/docs/ npm run test:docs-browser
+      - name: Build browser qualification renderer
+        run: npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+      - name: Showcase navigation, accessibility, and AI workflows
+        timeout-minutes: 10
+        env:
+          SHOWCASE_OUTPUT: artifacts/showcase-browser
+        run: |
+          node --test scripts/showcase-smoke-server.test.mjs
+          npm run test:showcase-browser -- --built
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/document-first node scripts/smoke-document-first-browser.mjs
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
+          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault
+      - name: Generated rendering qualification corpus
+        timeout-minutes: 10
+        env:
+          SHOWCASE_OUTPUT: artifacts/showcase-browser/rendering-corpus
+        run: |
+          test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
+          go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
+          node --test scripts/qualify-rendering-corpus.test.mjs
+          node scripts/qualify-rendering-corpus.mjs
+      - name: Deterministic native Office performance qualification
+        run: npm run qualify:office-performance -- --output artifacts/native-office-performance-node24.json
+      - name: Upload qualification evidence and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manual-rendering-qualification
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14

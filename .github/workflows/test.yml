@@ -39,53 +39,17 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run check:docs-api
-      - name: Standalone documentation browser checks
-        run: |
-          npm run test:docs-browser
-          DOCS_BASE=/docs/ npm run docs:build
-          DOCS_BASE=/docs/ npm run test:docs-browser
       - name: Installed WASM tarballs in Chrome
         timeout-minutes: 10
         run: npm run test:wasm-tarball-browser
-      - name: Build browser qualification renderer
-        run: npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
-      - name: Showcase navigation, accessibility, and AI workflows
-        timeout-minutes: 10
-        env:
-          SHOWCASE_OUTPUT: artifacts/showcase-browser
+      # Keep fast qualification-harness tests here. Full browser/rendering and
+      # performance runs are opt-in in rendering-qualification.yml.
+      - name: Qualification harness unit tests
         run: |
-          node --test scripts/showcase-smoke-server.test.mjs
-          npm run test:showcase-browser -- --built
-          SHOWCASE_OUTPUT=artifacts/showcase-browser/document-first node scripts/smoke-document-first-browser.mjs
-          SHOWCASE_OUTPUT=artifacts/showcase-browser/development npm run test:showcase-browser -- --dev
-          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll npm run test:scroll-showcase-browser -- --built --fault
-          SHOWCASE_OUTPUT=artifacts/showcase-browser/scroll-development npm run test:scroll-showcase-browser -- --dev --fault
-      - name: Generated rendering qualification corpus
-        timeout-minutes: 10
-        env:
-          SHOWCASE_OUTPUT: artifacts/showcase-browser/rendering-corpus
-        run: |
-          # These source/refusal fixtures require the locked DejaVu font and
-          # otherwise skip in the Go-only job, which does not install npm deps.
           test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
           go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
+          node --test scripts/showcase-smoke-server.test.mjs
           node --test scripts/qualify-rendering-corpus.test.mjs
-          node scripts/qualify-rendering-corpus.mjs
-      - name: Upload rendering qualification evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: rendering-qualification
-          path: artifacts/showcase-browser/rendering-corpus
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Upload showcase browser diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: showcase-browser
-          path: artifacts/showcase-browser
-          if-no-files-found: ignore
       - run: npm run test
       - run: npm run check:office-architecture
       - run: npm run check:office-provenance
@@ -95,15 +59,6 @@ jobs:
       - run: npm run check:native-office-completion
       - run: npm run check:packages
       - run: npm run check:consumer
-      - name: Deterministic native Office performance qualification
-        run: npm run qualify:office-performance -- --output artifacts/native-office-performance-node24.json
-      - name: Upload native Office performance report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: native-office-performance-node24
-          path: artifacts/native-office-performance-node24.json
-          if-no-files-found: warn
 
   go-modules:
     runs-on: ubuntu-latest

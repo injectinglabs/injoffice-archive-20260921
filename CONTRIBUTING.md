@@ -33,6 +33,24 @@ go vet ./...
 
 The repository contains independent Go modules under `go/` (`xlsxpatch`, `docxpatch`, `pptxpatch`, `slidesqc`, `officecompat`, `collab`, `injoffice-server`), so repeat that command in each changed module. Tests should be deterministic and must not require private services or credentials.
 
+## Rendering and browser qualification
+
+PR and main CI retain builds, typechecks, unit/contract/security checks, package-consumer checks, and the installed-WASM browser smoke test. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are deliberately not merge gates.
+
+For rendering or UI changes, run the relevant heavier checks locally before opening the PR. After `npm ci` and `npm run build`:
+
+```bash
+npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+npm run test:showcase-browser -- --built
+node scripts/smoke-document-first-browser.mjs
+node scripts/qualify-rendering-corpus.mjs
+npm run qualify:office-performance
+```
+
+Browser checks require Chrome or Chromium (`CHROME_BIN` can select the executable); native qualification also requires Go. The complete built/development, responsive/scroll, documentation, rendering, and performance matrix is available on demand in GitHub Actions → **Manual rendering qualification** → **Run workflow**, selecting the branch to test. Attach relevant results to the PR; a green normal CI run does not mean the full rendering matrix ran.
+
+External fidelity comparisons and Microsoft Office/reference exports remain local-only. The manual workflow uses only the repository's synthetic qualification corpus; do not add private documents, external benchmark downloads, or proprietary fonts to it.
+
 ## Design expectations
 
 - Keep persisted and wire-facing specs plain JSON.
