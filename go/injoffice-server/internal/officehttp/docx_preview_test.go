@@ -33,6 +33,54 @@ func TestDOCXPreviewDisabledAndReadOnly(t *testing.T) {
 	}
 }
 
+func TestDOCXApproximatePreviewDisabledAndSharedGate(t *testing.T) {
+	handler := NewHandler(nil)
+	for _, test := range []struct {
+		method string
+		status int
+	}{{http.MethodGet, 405}, {http.MethodPost, 503}} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(test.method, DOCXApproximatePreviewPath, strings.NewReader("invalid")))
+		if response.Code != test.status {
+			t.Fatalf("status %d want %d", response.Code, test.status)
+		}
+	}
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	probe := &previewReadProbe{}
+	response := httptest.NewRecorder()
+	handleDOCXApproximatePreview(response, httptest.NewRequest(http.MethodPost, DOCXApproximatePreviewPath, probe), DOCXPreviewOptions{WorkerPath: "/operator-worker.js"}, gate)
+	if response.Code != http.StatusServiceUnavailable || probe.reads != 0 || len(gate) != 1 {
+		t.Fatal("approximate route bypassed shared busy gate")
+	}
+	<-gate
+	request := httptest.NewRequest(http.MethodPost, DOCXApproximatePreviewPath, strings.NewReader("invalid"))
+	request.Header.Set("Content-Type", DOCXContentType)
+	response = httptest.NewRecorder()
+	handleDOCXApproximatePreview(response, request, DOCXPreviewOptions{WorkerPath: "/operator-worker.js"}, gate)
+	if response.Code != http.StatusUnprocessableEntity || len(gate) != 0 {
+		t.Fatal("approximate route accepted invalid package or leaked gate")
+	}
+}
+
+// This test only proves operation routing and framing, not rendered fidelity.
+func TestDOCXPreviewOperationIsSelectedByRoute(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("Node required")
+	}
+	worker := filepath.Join(t.TempDir(), "route-worker.cjs")
+	code := `const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>{const frame=Buffer.concat(chunks);const request=JSON.parse(frame.subarray(4));const data=Buffer.from(JSON.stringify({protocol:request.protocol,version:1,id:request.id,ok:true,result:{operation:request.op}}));const header=Buffer.alloc(4);header.writeUInt32BE(data.length);process.stdout.write(Buffer.concat([header,data]));});`
+	if err := os.WriteFile(worker, []byte(code), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, operation := range []string{"render", "render-approximate"} {
+		result, err := compilePreviewWorkerOperation(context.Background(), worker, "injoffice.docx.page-paint-worker", operation, map[string]any{"op": "caller-cannot-override"}, 1024, 1024)
+		if err != nil || string(result) != fmt.Sprintf(`{"operation":%q}`, operation) {
+			t.Fatalf("wrong operation: %s %v", result, err)
+		}
+	}
+}
+
 func TestDOCXPreviewInputRejectsInvalidPackage(t *testing.T) {
 	if _, err := docxPreviewInput(context.Background(), []byte("not a zip")); err == nil {
 		t.Fatal("accepted malformed package")

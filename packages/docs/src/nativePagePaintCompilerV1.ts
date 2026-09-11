@@ -58,6 +58,7 @@ import {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL,
   DOCX_PAGE_PAINT_REQUEST_VERSION,
   compileNativeDocxPagePaintV1,
+  compileNativeDocxApproximatePagePreviewV1,
   decodeNativeDocxPagePaintForRequestV1,
   decodeNativeDocxPagePaintRequestV1,
   nativeDocxPagePaintFontManifestSha256V1,
@@ -143,6 +144,16 @@ export interface NativeDocxPagePaintPreparedV1 {
 export interface NativeDocxPagePaintCompleteInputV1 {
   prepared: NativeDocxPagePaintPreparedV1
   outline_results: readonly NativeDocxGlyphOutlineResultV1[]
+}
+
+export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+
+/** Explicit read-only legacy-settings preview. The strict preparation and
+ * original settings remain intact; only the separate result is approximate. */
+export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
+  const prepared = await prepareNativeDocxPagePaintV1(input, runtime)
+  return compileNativeDocxApproximatePagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
 }
 
 export interface NativeDocxPagePaintCompletedV1 {

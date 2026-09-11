@@ -75,6 +75,17 @@ The SVG viewer validates the returned page-paint schema and source package
 digest, mounts one page at a time, and clears stale pages after edits/reopen.
 It is a read-only glyph preview, not a selectable Word editor.
 
+The separate **Upload to helper and try approximate pages** action submits to
+`POST /v1/docx/page-preview-approximate`, using the same operator configuration,
+upload limits and concurrency gate. It returns the distinct
+`injoffice.docx.approximate-page-preview` envelope, not a qualified page-paint
+result. Eligible absent or legacy Word compatibility settings can use current
+layout rules with persistent, read-only approximation warnings. Original
+settings, diagnostics and source hashes remain attached; malformed settings,
+unsafe packages, missing fonts and unsupported geometry still refuse. The
+strict endpoint is unchanged, and neither action automatically uploads a file
+or falls back to the other endpoint.
+
 The server reconstructs layout, settings, embedded font assets and referenced
 PNG or qualified baseline JFIF JPEG bytes from the submitted archive. The pinned HarfBuzz worker shapes,
 paginates, outlines and validates native page paint. Missing fonts, unsupported

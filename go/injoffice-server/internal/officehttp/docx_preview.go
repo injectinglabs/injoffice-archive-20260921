@@ -20,6 +20,7 @@ import (
 )
 
 const DOCXPreviewPath = "/v1/docx/page-preview"
+const DOCXApproximatePreviewPath = "/v1/docx/page-preview-approximate"
 
 // DOCXPreviewOptions explicitly enables a local Node compiler. The worker path
 // is operator configuration, never a URL or a caller-supplied executable.
@@ -139,7 +140,12 @@ func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input m
 }
 
 func compilePreviewWorker(ctx context.Context, workerPath, protocol string, input map[string]any, maxInput, maxOutput int, workerArgs ...string) (json.RawMessage, error) {
-	payload, err := json.Marshal(map[string]any{"protocol": protocol, "version": 1, "id": "preview", "op": "render", "input": input})
+	return compilePreviewWorkerOperation(ctx, workerPath, protocol, "render", input, maxInput, maxOutput, workerArgs...)
+}
+
+// Operations are selected by server routes, never by request bodies.
+func compilePreviewWorkerOperation(ctx context.Context, workerPath, protocol, operation string, input map[string]any, maxInput, maxOutput int, workerArgs ...string) (json.RawMessage, error) {
+	payload, err := json.Marshal(map[string]any{"protocol": protocol, "version": 1, "id": "preview", "op": operation, "input": input})
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +197,14 @@ func compilePreviewWorker(ctx context.Context, workerPath, protocol string, inpu
 }
 
 func handleDOCXPreview(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}) {
+	handleDOCXPreviewMode(w, r, options, gate, false)
+}
+
+func handleDOCXApproximatePreview(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}) {
+	handleDOCXPreviewMode(w, r, options, gate, true)
+}
+
+func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}, approximate bool) {
 	if r.Method != http.MethodPost {
 		xlsxhttp.WriteError(w, http.StatusMethodNotAllowed, errors.New("POST required"))
 		return
@@ -220,7 +234,21 @@ func handleDOCXPreview(w http.ResponseWriter, r *http.Request, options DOCXPrevi
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	result, err := compileDOCXPreview(ctx, options, input)
+	var result json.RawMessage
+	if approximate {
+		eligibility, eligibilityErr := docxpatch.ExtractNativeDocxApproximationEligibilityV1(data)
+		if eligibilityErr != nil {
+			xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, eligibilityErr)
+			return
+		}
+		args := []string{}
+		if options.FontManifestPath != "" {
+			args = append(args, "--font-manifest", options.FontManifestPath)
+		}
+		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-approximate", map[string]any{"prepare": input, "eligibility": eligibility}, 192*1024*1024, 64*1024*1024, args...)
+	} else {
+		result, err = compileDOCXPreview(ctx, options, input)
+	}
 	if err != nil {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
 		return

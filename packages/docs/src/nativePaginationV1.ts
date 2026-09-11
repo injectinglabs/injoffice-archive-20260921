@@ -7,6 +7,7 @@
  * never exposes a plausible-looking partial page list.
  */
 
+import { decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
 import {
   DOCX_NATIVE_LIMITS,
   DOCX_MAX_TWIPS_FOR_MILLIPOINTS,
@@ -290,6 +291,7 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
+  approximateLegacySettings?: boolean
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
   diagnostics: NativeDocxPaginationDiagnosticV1[]
@@ -818,8 +820,12 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   const scopes = bodyScopeIDs(document)
   const settings = context.request.pagination_settings
   if (settings.profile !== 'word-modern-default') {
-    if (settings.profile === 'absent-default') refuse(context, 'settings-attestation-unsupported', document.document_id, 'Omitted compatibilityMode defaults to Word mode 12; pagination v1 requires an explicit compatibilityMode=15 attestation')
-    for (const diagnostic of settings.diagnostics) refuse(context, 'settings-attestation-unsupported', document.document_id, `Native pagination settings refuse layout: ${diagnostic.code}: ${diagnostic.message}`, { code: diagnostic.code, message: diagnostic.message })
+    if (context.approximateLegacySettings) {
+      addDiagnostic(context, { code: 'settings-attestation-unsupported', severity: 'deferred', scope_id: document.document_id, message: 'Explicit approximate preview uses current layout policy instead of legacy Word layout semantics; original settings and reasons are retained in the approximate envelope' })
+    } else {
+      if (settings.profile === 'absent-default') refuse(context, 'settings-attestation-unsupported', document.document_id, 'Omitted compatibilityMode defaults to Word mode 12; pagination v1 requires an explicit compatibilityMode=15 attestation')
+      for (const diagnostic of settings.diagnostics) refuse(context, 'settings-attestation-unsupported', document.document_id, `Native pagination settings refuse layout: ${diagnostic.code}: ${diagnostic.message}`, { code: diagnostic.code, message: diagnostic.message })
+    }
   }
   const expectedTabInterval = twips(settings.default_tab_stop_twips)
   if (expectedTabInterval === undefined || expectedTabInterval !== shaped.tab_interval_millipoints) {
@@ -1682,8 +1688,9 @@ function expectedSectionGeometry(section: NativeDocxSectionV1): { width: number;
 }
 
 /** Deterministic core for an already decoded and joined pagination request. */
-function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1): NativeDocxPaginatedLayoutV1 {
+function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, approximateLegacySettings = false): NativeDocxPaginatedLayoutV1 {
   const context: PaginationContext = {
+    approximateLegacySettings,
     request,
     provenance: provenance(request),
     diagnostics: [],
@@ -1743,16 +1750,21 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1): Na
  * cannot infer from self-consistency alone.
  */
 export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1): NativeDocxValidationIssue[] {
+  return validatePaginatedLayoutSource(output, request, false)
+}
+
+function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, approximateLegacySettings: boolean): NativeDocxValidationIssue[] {
   const issues: NativeDocxValidationIssue[] = []
   const add = (code: NativeDocxValidationIssue['code'], path: string, message: string): void => {
     if (issues.length < DOCX_NATIVE_LIMITS.maxIssues) issues.push(issue(code, path, message))
   }
-  const expectedOutput = paginateDecodedNativeDocxV1(request)
+  const expectedOutput = paginateDecodedNativeDocxV1(request, approximateLegacySettings)
   if (!samePaginationWire(output, expectedOutput)) add('BROKEN_REFERENCE', '', 'paginated output must exactly equal the deterministic placement projection for this decoded request')
   if (!samePaginationWire(output.provenance, provenance(request))) add('BROKEN_REFERENCE', '/provenance', 'paginated provenance must exactly match the joined pagination request')
   if (output.status === 'refused') return issues
 
   const semanticContext: PaginationContext = {
+    approximateLegacySettings,
     request, provenance: provenance(request), diagnostics: [], diagnosticKeys: new Set(), refused: false,
     pages: [], sections: [], cursorY: 0, previousAfter: 0, sectionPageOrdinal: 0, currentColumnOrdinal: 0,
     sliceCount: 0, linePlacementCount: 0, sliceCountForParagraph: new Map(), lastSliceLocation: new Map(),
@@ -1847,4 +1859,15 @@ export function paginateNativeDocxV1(value: unknown): PaginateNativeDocxV1Result
   const outputValue = paginateDecodedNativeDocxV1(decoded.request)
   const sourceIssues = validateNativeDocxPaginatedLayoutSourceV1(outputValue, decoded.request)
   return sourceIssues.length > 0 ? { ok: false, issues: sourceIssues } : { ok: true, value: outputValue }
+}
+
+/** @internal A separate read-only projection; never a strict V1 attestation. */
+export function paginateNativeDocxApproximateLegacyV1(value: unknown, eligibilityValue: unknown): { fidelity: 'approximate'; layout: NativeDocxPaginatedLayoutV1 } {
+  const decoded = validateRequest(value)
+  if (!decoded.ok || !('request' in decoded)) throw new TypeError('approximate pagination request failed strict structural/source validation')
+  const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, decoded.request.pagination_settings)
+  if (eligibility.status !== 'eligible') throw new TypeError('source settings are ineligible for approximate legacy pagination')
+  const layout = paginateDecodedNativeDocxV1(decoded.request, true)
+  if (validatePaginatedLayoutSource(layout, decoded.request, true).length) throw new TypeError('approximate pagination failed deterministic policy/source validation')
+  return { fidelity: 'approximate', layout }
 }

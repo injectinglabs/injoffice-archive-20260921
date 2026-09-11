@@ -1,13 +1,14 @@
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
 import { describe, expect, it } from 'vitest'
-import { decodeNativeDocxPagePaintV1 } from './nativePagePaintOutputV1.js'
+import { decodeNativeDocxPagePaintV1, decodeNativeDocxApproximatePagePreviewV1 } from './nativePagePaintOutputV1.js'
 import { decodeNativeDocxPagePaintV1 as compilerDecode } from './nativePagePaintV1.js'
 
 describe('browser-safe page paint output entry', () => {
   it('shares the identical strict decoder with the server compiler', () => {
     expect(decodeNativeDocxPagePaintV1).toBe(compilerDecode)
     expect(decodeNativeDocxPagePaintV1({ protocol: 'injoffice.docx.page-paint', version: 1, pages: [] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ protocol: 'injoffice.docx.approximate-page-preview', version: 1, pages: [] }).ok).toBe(false)
   })
   it('bundles for browsers without Node or native provider dependencies', async () => {
     const forbidden: string[] = []

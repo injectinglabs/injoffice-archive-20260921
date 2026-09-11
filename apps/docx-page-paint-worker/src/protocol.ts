@@ -2,6 +2,7 @@ import {
   DOCX_INLINE_IMAGE_LIMITS,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
+  renderNativeDocxApproximatePagePreviewV1,
   type NativeDocxAuthoritativeFontAssetV1,
   type NativeDocxAuthoritativeMediaAssetV1,
   type NativeDocxPagePaintCompleteInputV1,
@@ -126,6 +127,30 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
   try {
     if (!record(value) || !exactKeys(value, ['protocol', 'version', 'id', 'op', 'input']) || value.protocol !== DOCX_PAGE_PAINT_WORKER_PROTOCOL || value.version !== DOCX_PAGE_PAINT_WORKER_VERSION || candidateID === 'invalid') throw new TypeError('worker request envelope is invalid')
     if (value.op === 'ping') return { ...base, ok: true, result: { status: 'ready' } }
+    if (value.op === 'render-approximate') {
+      if (!record(value.input) || !exactFieldSet(value.input, ['prepare', 'eligibility'])) throw new TypeError('approximate render requires exact prepare and eligibility fields')
+      const input = prepareInput(value.input.prepare)
+      if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath) : undefined
+      const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
+      const result = await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, {
+        providerId: 'injoffice.harfbuzz-outline', providerRevision: 'v1',
+        getGlyphOutline(request) {
+          const asset = input.font_assets.find(asset => asset.face_id === request.face.face_id && asset.content_digest === request.face.content_digest && (asset.collection_index ?? undefined) === request.face.collection_index)
+          const host = fonts?.resources.get(request.face.face_id)
+          const resource = asset ?? (host && host.face.contentDigest === request.face.content_digest && host.face.collectionIndex === request.face.collection_index ? { face_id: host.face.faceId, bytes: host.bytes, content_digest: request.face.content_digest, collection_index: host.face.collectionIndex ?? null } : undefined)
+          if (!resource) throw new TypeError('approximate outline face does not exact-join authoritative bytes')
+          let provider = providers.get(resource.face_id)
+          if (!provider) {
+            provider = createHarfBuzzOutlineProviderV1({ bytes: resource.bytes, contentDigest: resource.content_digest, ...(resource.collection_index === null ? {} : { collectionIndex: resource.collection_index }) })
+            providers.set(resource.face_id, provider)
+          }
+          const outline = provider.outline(request.glyph_id)
+          return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em }
+        },
+      }, { createShaper: workerShaper, fonts })
+      return { ...base, ok: true, result }
+    }
     if (value.op === 'prepare') {
       const input = prepareInput(value.input)
       const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath) : undefined

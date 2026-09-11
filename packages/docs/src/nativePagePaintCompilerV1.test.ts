@@ -13,6 +13,8 @@ import {
   DOCX_PAGE_PAINT_COMPILER_VERSION,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
+  renderNativeDocxApproximatePagePreviewV1,
+  decodeNativeDocxApproximatePagePreviewV1,
   type NativeDocxPagePaintPrepareInputV1,
 } from './nativePagePaintCompilerV1.js'
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
@@ -366,6 +368,33 @@ function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV
   return input
 }
 describe('native DOCX page-paint compiler v1', () => {
+  // Each case includes a real HarfBuzz cold start. Bound it independently of
+  // the default five-second unit-test timeout on shared CI runners.
+  it.each([12, 14] as const)('renders approximate mode %s through real HarfBuzz without changing strict preparation', async (mode) => {
+      const input = fixture()
+      const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+      settings.profile = 'unsupported'
+      delete settings.compatibility_mode
+      settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: `Legacy Word mode ${mode} requires different semantics` }]
+      const original = structuredClone(input)
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: mode, reasons: [`Legacy Word mode ${mode} is approximated using current layout`] }
+      const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+      const approximate = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, {
+        providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision,
+        getGlyphOutline(request) {
+          const outline = outlines.outline(request.glyph_id)
+          return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em }
+        },
+      })
+      expect(approximate.status).toBe('painted')
+      expect(approximate.pages.length).toBeGreaterThan(0)
+      expect(approximate.pages[0]!.commands.length).toBeGreaterThan(0)
+      expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+      expect(input).toEqual(original)
+      const strict = await prepareNativeDocxPagePaintV1(input)
+      expect(strict.page_paint_request.paginated_layout).toMatchObject({ status: 'refused', pages: [] })
+      expect(strict.outline_requests).toEqual([])
+  }, 15_000)
   function hostFixture() {
     const input = fixture()
     const original = JSON.parse(input.font_inventory_json) as NativeDOCXFontInventoryV1

@@ -41,6 +41,7 @@ import {
   DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_V1_BINDING_FIELDS,
   compileNativeDocxPagePaintV1,
+  compileNativeDocxApproximatePagePreviewV1,
   decodeNativeDocxPagePaintForRequestV1,
   decodeNativeDocxPagePaintRequestV1,
   decodeNativeDocxPagePaintV1,
@@ -54,6 +55,7 @@ import {
   type NativeDocxGlyphOutlineResultV1,
   type NativeDocxPagePaintRequestV1,
 } from './nativePagePaintV1.js'
+import { decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}` as `sha256:${string}`
 const RELATIONSHIPS_HASH = `sha256:${'b'.repeat(64)}`
@@ -264,6 +266,39 @@ async function painted(request = fixture(), provider = new FixtureProvider()) {
 }
 
 describe('native DOCX page-paint v1', () => {
+  it('keeps explicit legacy approximation separate from strict output and preserves original reasons', async () => {
+    const request = fixture()
+    const settings = request.pagination_request.pagination_settings
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Exact legacy mode 14 requires a different layout policy' }]
+    const refused = paginateNativeDocxV1(request.pagination_request)
+    expect(refused.ok).toBe(true)
+    if (!refused.ok) return
+    request.paginated_layout = refused.value
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(refused.value)
+    const original = structuredClone(request)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 14, reasons: ['Legacy mode 14 uses current layout only in explicit approximate preview'] }
+    const strict = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ protocol: 'injoffice.docx.approximate-page-preview', fidelity: 'approximate', read_only: true, status: 'painted' })
+    expect(approximate.pages).toHaveLength(1)
+    expect(approximate.source_settings_diagnostics).toEqual(settings.diagnostics)
+    expect(approximate.rendering_provenance.pagination_settings).toEqual(settings)
+    expect(request).toEqual(original)
+    expect(decodeNativeDocxPagePaintV1(approximate).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, source_settings_diagnostics: [] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: [] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: [''] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: ['Everything is exact'] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, fidelity: 'exact' }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, rendering_provenance: { ...approximate.rendering_provenance, package_sha256: `sha256:${'f'.repeat(64)}` } }).ok).toBe(false)
+    await expect(compileNativeDocxApproximatePagePreviewV1(request, { ...eligibility, package_sha256: 'wrong' }, new FixtureProvider())).rejects.toThrow('exact-join')
+    const ineligible = await compileNativeDocxApproximatePagePreviewV1(request, { ...eligibility, status: 'ineligible', legacy_compatibility_mode: null }, new FixtureProvider())
+    expect(ineligible).toMatchObject({ fidelity: 'approximate', status: 'refused', pages: [] })
+  })
   it('bounds upstream refusal reasons and keeps valid atomic output', async () => {
     const request = fixture()
     const settings = request.pagination_request.pagination_settings

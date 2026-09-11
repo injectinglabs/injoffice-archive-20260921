@@ -19,7 +19,9 @@ import {
 import { validateNativeDocxBodyPageFieldSourceV1 } from './nativeBodyPageFieldsV1.js'
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
 import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
-import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
+import {deriveNativeSquareWrapPlanV1, hasNativeSquareWrapV1} from './nativeSquareWrapV1.js'
+import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
+import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL, DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS,
@@ -41,6 +43,7 @@ import {
 } from './nativeContract.js'
 import {
   decodeNativeDocxPaginationRequestV1,
+  paginateNativeDocxApproximateLegacyV1,
   type NativeDocxPaginationRequestV1,
   type NativeDocxPaginatedLayoutV1,
   type NativeDocxPaginatedPageV1,
@@ -834,9 +837,32 @@ function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDoc
 export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<CompileNativeDocxPagePaintV1Result> {
   const decoded = decodeNativeDocxPagePaintRequestV1(value)
   if (!decoded.ok) return decoded
+  return compileDecodedPagePaint(decoded.value, outlineProvider)
+}
+
+/** Explicit read-only alternative. The original strict request is validated
+ * before current-policy placement; no adjusted strict artifact is exposed. */
+export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, eligibilityValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxApproximatePagePreviewV1> {
+  const decoded = decodeNativeDocxPagePaintRequestV1(value)
+  if (!decoded.ok) throw new TypeError('approximate preview requires a valid original strict request')
+  const request = decoded.value
+  const settings = request.pagination_request.pagination_settings
+  const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
+  const provenance = requestProvenance(request, request.outline_provider.provider_id, request.outline_provider.provider_revision)
+  if (eligibility.status !== 'eligible' || request.body_field_source || hasNativeDocxPageFieldsV1(request.pagination_request.document) || hasNativeSquareWrapV1(request.pagination_request.document)) {
+    return approximatePagePreviewEnvelope(settings, eligibility, refusal(provenance, 'unsupported-source', settings.document_id, 'Approximate legacy preview requires eligible settings and currently excludes page-field or square-wrap fixed-point layout'))
+  }
+  const approximate = paginateNativeDocxApproximateLegacyV1(request.pagination_request, eligibility)
+  request.paginated_layout = approximate.layout
+  request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(approximate.layout)
+  const painted = await compileDecodedPagePaint(request, outlineProvider, true)
+  if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
+  return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
+}
+
+async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings = false): Promise<CompileNativeDocxPagePaintV1Result> {
   const providerResult = snapshotProvider(outlineProvider)
   if (!providerResult.ok) return providerResult
-  const request = decoded.value
   const provider = providerResult.value
   if (request.outline_provider.provider_id !== provider.id || request.outline_provider.provider_revision !== provider.revision) {
     const expectedProvenance = requestProvenance(request, request.outline_provider.provider_id, request.outline_provider.provider_revision)
@@ -860,7 +886,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
     return { ok: true, value: result }
   }
   if (headerFooter.status === 'refused') return { ok: true, value: refusal(provenance, 'unsupported-source', headerFooter.diagnostics[0]?.scope_id ?? documentID, headerFooter.diagnostics[0]?.message ?? 'Native header/footer layout refused') }
-  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
+  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !(approximateLegacySettings && entry.code === 'settings-attestation-unsupported' && entry.severity === 'deferred') && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
   const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => entry.code !== 'page-control-deferred' || entry.source_id !== undefined)
   const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout))
   if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
