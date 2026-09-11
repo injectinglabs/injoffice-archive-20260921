@@ -4,7 +4,7 @@ export type PreviewMatrix = [number,number,number,number,number,number]
 export type PreviewRect = {x:number;y:number;cx:number;cy:number}
 export type PreviewStroke = {stroke?:string;strokeWidth?:number;strokeLinecap?:'butt'|'round'|'square';strokeLinejoin?:'round'|'bevel'|'miter';strokeMiterlimit?:number}
 export type PreviewNode =
- | {kind:'group';transform:PreviewMatrix;clip?:PreviewRect;children:PreviewNode[];sourceRole?:'paragraphBullet'|'contentRun'}
+ | {kind:'group';transform:PreviewMatrix;clip?:PreviewRect;children:PreviewNode[];sourceRole?:'paragraphBullet'|'contentRun'|'connectorArrow'}
  | ({kind:'path';d:string;fill:string}&PreviewStroke)
  | ({kind:'rect';rect:PreviewRect;radius:number;fill:string}&PreviewStroke)
  | ({kind:'ellipse';rect:PreviewRect;fill:string}&PreviewStroke)
@@ -33,7 +33,7 @@ export function decodePptxPreview(value:unknown):PptxPreview {
   if(n.strokeLinejoin!==undefined&&!['round','bevel','miter'].includes(String(n.strokeLinejoin)))fail()
   if(n.strokeMiterlimit!==undefined)number(n.strokeMiterlimit,1)
   switch(n.kind){
-   case 'group':if(!Array.isArray(n.transform)||n.transform.length!==6||!Array.isArray(n.children)||n.sourceRole!==undefined&&!['paragraphBullet','contentRun'].includes(String(n.sourceRole)))return fail();n.transform.forEach(v=>number(v));if(n.clip!==undefined)rect(n.clip);n.children.forEach(v=>node(v,depth+1));break
+   case 'group':if(!Array.isArray(n.transform)||n.transform.length!==6||!Array.isArray(n.children)||n.sourceRole!==undefined&&!['paragraphBullet','contentRun','connectorArrow'].includes(String(n.sourceRole)))return fail();n.transform.forEach(v=>number(v));if(n.clip!==undefined)rect(n.clip);n.children.forEach(v=>node(v,depth+1));break
    case 'path':if(typeof n.d!=='string'||n.d.length>200000||!/^[MLQCZ0-9eE+.,\s-]*$/.test(n.d))return fail();path(n.d);pathBytes+=n.d.length;if(pathBytes>8e6)fail();color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break
    case 'rect':number(n.radius,0);
    case 'ellipse':rect(n.rect);color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break

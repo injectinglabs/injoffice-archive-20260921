@@ -48,6 +48,14 @@ func buildWithScripts(font []byte, withJPEG, withFields, withScripts bool) ([]by
 }
 
 func buildWithAllDecorations(font []byte, withJPEG, withFields, withScripts bool, underline string) ([]byte, error) {
+	return buildWithAllRendering(font, withJPEG, withFields, withScripts, underline, false)
+}
+
+func buildWithFloating(font []byte, withJPEG, withFields bool, underline string, withFloating bool) ([]byte, error) {
+	return buildWithAllRendering(font, withJPEG, withFields, false, underline, withFloating)
+}
+
+func buildWithAllRendering(font []byte, withJPEG, withFields, withScripts bool, underline string, withFloating bool) ([]byte, error) {
 	if underline != "" && underline != "single" && underline != "double" && underline != "words" {
 		return nil, fmt.Errorf("unsupported underline style")
 	}
@@ -109,6 +117,14 @@ func buildWithAllDecorations(font []byte, withJPEG, withFields, withScripts bool
 		parts["[Content_Types].xml"] = []byte(strings.Replace(string(parts["[Content_Types].xml"]), "</Types>", `<Default Extension="jpg" ContentType="image/jpeg"/></Types>`, 1))
 		parts["word/_rels/document.xml.rels"] = []byte(strings.Replace(string(parts["word/_rels/document.xml.rels"]), "</Relationships>", `<Relationship Id="rImage" Type="`+rns+`/image" Target="media/bands.jpg"/></Relationships>`, 1))
 		drawing := `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1828800" cy="457200"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="1" name="JPEG bands" descr="Red and blue JPEG bands"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="JPEG bands"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImage"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm/><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+		if withFloating {
+			floating := strings.Replace(drawing, `<wp:inline distT="0" distB="0" distL="0" distR="0">`, `<wp:anchor simplePos="0" relativeHeight="7" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1" distT="0" distB="0" distL="0" distR="0"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>3657600</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>2743200</wp:posOffset></wp:positionV><wp:wrapNone/>`, 1)
+			floating = strings.Replace(floating, `</wp:inline>`, `</wp:anchor>`, 1)
+			floating = strings.Replace(floating, `docPr id="1"`, `docPr id="2"`, 1)
+			// Keep an inline picture as a distinct flow-layout regression.
+			secondPage := paragraph("Second page", true)
+			parts["word/document.xml"] = []byte(strings.Replace(string(parts["word/document.xml"]), secondPage, secondPage+floating, 1))
+		}
 		document := strings.Replace(string(parts["word/document.xml"]), `<w:body>`, `<w:body>`+drawing, 1)
 		document = strings.Replace(document, `<w:document `, `<w:document xmlns:r="`+rns+`" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" `, 1)
 		parts["word/document.xml"] = []byte(document)
@@ -182,6 +198,7 @@ func main() {
 	fontPath := flag.String("font", "", "path to licensed embeddable DejaVuSans.ttf")
 	out := flag.String("out", "", "new temporary DOCX output path")
 	withJPEG := flag.Bool("jpeg", false, "include generated baseline JFIF JPEG bands")
+	withFloating := flag.Bool("floating", false, "include page-relative no-wrap foreground JPEG anchor (requires -jpeg)")
 	underline := flag.String("underline", "", "title underline: single, double, or words")
 	withFields := flag.Bool("page-fields", false, "include source-bound PAGE/NUMPAGES with stale caches in header and footer")
 	withScripts := flag.Bool("scripts", false, "include H2O + x2 using font-metric subscript and superscript")
@@ -193,7 +210,7 @@ func main() {
 	font, err := os.ReadFile(*fontPath)
 	if err == nil {
 		var data []byte
-		data, err = buildWithAllDecorations(font, *withJPEG, *withFields, *withScripts, *underline)
+		data, err = buildWithAllRendering(font, *withJPEG, *withFields, *withScripts, *underline, *withFloating)
 		if err == nil {
 			err = os.WriteFile(*out, data, 0600)
 		}

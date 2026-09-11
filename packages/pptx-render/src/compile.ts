@@ -1833,6 +1833,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         kind: 'connector', ...base, path: boundedPath(connectorPath(base.bounds.cx, base.bounds.cy, element.flipH ?? false), `$.elements.${element.id}.path`),
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
         headArrow: element.headArrow ?? false, tailArrow: element.tailArrow ?? false,
+        ...(element.headEnd?{headEnd:{...element.headEnd}}:{}),...(element.tailEnd?{tailEnd:{...element.tailEnd}}:{}),
       }
     case 'picture': {
       if (element.compatibility.diagnostics.some((diagnostic) => diagnostic.code === 'pptx.picture-crop-unavailable')) {

@@ -137,6 +137,8 @@
         "x_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "y_emu": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "horizontal_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "floating_layer": { "enum": ["behind", "front"] },
+        "stacking_order": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "vertical_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "wrap": { "enum": ["none", "square", "tight", "through", "top-and-bottom"] },
         "edit_policy": { "$ref": "#/$defs/EditPolicyV1" }
@@ -276,6 +278,7 @@
         "edit_policy": { "$ref": "#/$defs/EditPolicyV1" },
         "table_style_id": { "$ref": "#/$defs/Identifier" },
         "width_twips": { "type": "integer", "minimum": 1, "maximum": 180143985094819 },
+        "width_percent_fiftieths": { "type": "integer", "minimum": 1, "maximum": 5000 },
         "layout": { "const": "fixed" },
         "alignment": { "const": "left" },
         "indent_twips": { "type": "integer", "minimum": 0, "maximum": 180143985094819 },

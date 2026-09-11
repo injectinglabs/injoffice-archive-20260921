@@ -460,6 +460,17 @@
         "compatibility": { "$ref": "#/$defs/compatibility" }
       }
     },
+    "arrowEnd": {
+      "x-binding-name": "NativeArrowEnd",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "triangle", "arrow", "stealth", "diamond", "oval"] },
+        "w": { "type": "string", "enum": ["sm", "med", "lg"] },
+        "len": { "type": "string", "enum": ["sm", "med", "lg"] }
+      }
+    },
     "connectorElement": {
       "x-binding-name": "NativeConnectorElement",
       "type": "object",
@@ -474,6 +485,8 @@
         "stroke": { "$ref": "#/$defs/stroke" },
         "headArrow": { "type": "boolean" },
         "tailArrow": { "type": "boolean" },
+        "headEnd": { "$ref": "#/$defs/arrowEnd" },
+        "tailEnd": { "$ref": "#/$defs/arrowEnd" },
         "flipH": { "type": "boolean" },
         "animation": { "$ref": "#/$defs/animation" },
         "source": { "$ref": "#/$defs/sourceAnchor" },

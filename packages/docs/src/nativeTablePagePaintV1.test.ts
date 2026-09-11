@@ -71,6 +71,73 @@ function appendRow(request: NativeDocxPaginationRequestV1, ordinal: number): voi
 }
 
 describe('bounded native DOCX table page-paint geometry', () => {
+  it('fragments natural rows at complete lines while repeating headers and preserving source coverage', () => {
+    const request = fixture(20_000), table = request.document.body.blocks[0]!.table!
+    table.rows[0]!.repeat_header = true
+    table.rows[1]!.cant_split = false
+    const paragraph = request.shaped_lines.paragraphs[1]!, originalLine = paragraph.lines[0]!
+    paragraph.lines = Array.from({ length: 8 }, (_, ordinal) => ({ ...structuredClone(originalLine), id: `line:${paragraph.paragraph_id}:${ordinal}`, ordinal }))
+    paragraph.block_advance_millipoints = 48_000
+    const original = JSON.stringify(request), result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!result.ok) throw new Error('invalid request')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, request)).toMatchObject({ ok: true })
+    const fragments = result.value.pages.flatMap(page => page.table_rows ?? [])
+    expect(fragments.length).toBeGreaterThan(1)
+    expect(fragments.reduce((sum, fragment) => sum + fragment.height_millipoints, 0)).toBe(49_000)
+    expect(result.value.pages.flatMap(page => page.lines.filter(line => line.paragraph_id === paragraph.paragraph_id).map(line => line.source_line_ordinal))).toEqual([0,1,2,3,4,5,6,7])
+    expect(result.value.pages.every(page => page.lines.some(line => line.paragraph_id === 'paragraph:cell:1'))).toBe(true)
+    const tampered = structuredClone(result.value)
+    tampered.pages[1]!.table_rows![0]!.source_y_millipoints += 1
+    expect(decodeNativeDocxPaginatedLayoutForRequest(tampered, request).ok).toBe(false)
+    expect(JSON.stringify(request)).toBe(original)
+    // A widow group is atomic even when individual lines would fit.
+    const tooShort = structuredClone(request)
+    tooShort.document.sections[0]!.page.height_twips = 420
+    expect(paginateNativeDocxV1(tooShort)).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+    request.resolved_layout.paragraphs[1]!.properties.keep_lines = true
+    expect(paginateNativeDocxV1(request)).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+  })
+  it('refuses ambiguous split-row constraints before producing table geometry', () => {
+    for (const property of ['keep_next', 'page_break_before'] as const) {
+      const request = fixture()
+      request.document.body.blocks[0]!.table!.rows[1]!.cant_split = false
+      request.resolved_layout.paragraphs[1]!.properties[property] = true
+      expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout)).toMatchObject({ status: 'refused', tables: [] })
+    }
+    const header = fixture()
+    header.document.body.blocks[0]!.table!.rows[0]!.repeat_header = true
+    delete header.document.body.blocks[0]!.table!.rows[0]!.cant_split
+    expect(qualifyNativeDocxTablesV1(header.document, header.resolved_layout)).toMatchObject({ status: 'refused', tables: [] })
+  })
+  it('resolves explicit percent widths proportionally against the owning section without changing source', () => {
+    const request = fixture(14_000), table = request.document.body.blocks[0]!.table!
+    delete table.width_twips; table.width_percent_fiftieths = 2500
+    for (const paragraph of request.shaped_lines.paragraphs) paragraph.lines[0]!.available_width_millipoints = 9_000
+    const original = JSON.stringify(request)
+    const result = qualifyNativeDocxTablesV1(request.document, request.resolved_layout)
+    expect(result.status).toBe('qualified')
+    if (result.status !== 'qualified') throw new Error('percentage refused')
+    expect(result.tables[0]).toMatchObject({ width_millipoints: 10_000, grid_widths_millipoints: [10_000], width_policy: { name: 'fixed-grid-percent-exact-twips-v1', section_id: 'section:1', container_width_twips: 400, percent_fiftieths: 2500, source_grid_widths_twips: [400] } })
+    expect([...result.paragraph_widths.values()]).toEqual([9_000,9_000])
+    const paginated = paginateNativeDocxV1(request)
+    expect(paginated).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!paginated.ok) throw new Error('pagination failed')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(paginated.value, request).ok).toBe(true)
+    expect(JSON.stringify(request)).toBe(original)
+  })
+
+  it('refuses non-integral percent projection and conflicting source grid/cell preferences', () => {
+    for (const mutate of [
+      (table: NonNullable<NativeDocxPaginationRequestV1['document']['body']['blocks'][number]['table']>) => { table.width_percent_fiftieths = 3333 },
+      (table: NonNullable<NativeDocxPaginationRequestV1['document']['body']['blocks'][number]['table']>) => { table.rows[0]!.cells[0]!.width_twips = 399 },
+      (table: NonNullable<NativeDocxPaginationRequestV1['document']['body']['blocks'][number]['table']>) => { table.width_twips = 400 },
+    ]) {
+      const request = fixture(), table = request.document.body.blocks[0]!.table!
+      delete table.width_twips; table.width_percent_fiftieths = 2500; mutate(table)
+      expect(qualifyNativeDocxTablesV1(request.document,request.resolved_layout)).toMatchObject({ status: 'refused', tables: [] })
+    }
+  })
   it('repeats a leading header exactly once on each continuation page with unique placement identities', () => {
     const request = fixture(14_000)
     const table = request.document.body.blocks[0]!.table!
@@ -224,7 +291,7 @@ describe('bounded native DOCX table page-paint geometry', () => {
         request.resolved_layout.diagnostics.push({ code: 'CONDITIONAL_TABLE_STYLE_PRESERVED', severity: 'unsupported', scope_id: 'table:1', preservation: 'preserve-verbatim', message: 'first-row effects' })
       },
       (request: NativeDocxPaginationRequestV1) => { request.document.body.blocks[0]!.table!.width_twips = 401 },
-      (request: NativeDocxPaginationRequestV1) => { request.document.body.blocks[0]!.table!.rows[0]!.cant_split = false },
+      (request: NativeDocxPaginationRequestV1) => { const row = request.document.body.blocks[0]!.table!.rows[0]!; row.cant_split = false; row.height_twips = 400; row.height_rule = 'atLeast' },
       (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.diagnostics.push({ code: 'NESTED_TABLE_PASSTHROUGH', severity: 'unsupported', scope_id: 'table:1', preservation: 'preserve-verbatim', message: 'nested table retained' }) },
     ]) {
       const request = fixture()

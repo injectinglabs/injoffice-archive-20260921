@@ -285,6 +285,11 @@ function validateElement(
     if (element.stroke.join !== 'miter' && element.stroke.miterLimit !== undefined) add(issues, `${path}.stroke.miterLimit`, 'native.stroke', 'is allowed only for a miter join')
   }
 
+  if (element.kind === 'connector') {
+    for (const [name, end, flag] of [['headEnd', element.headEnd, element.headArrow], ['tailEnd', element.tailEnd, element.tailArrow]] as const) {
+      if (end && flag !== undefined && flag !== (end.type !== 'none')) add(issues, `${path}.${name}`, 'native.arrowPresence', 'typed endpoint conflicts with legacy presence flag')
+    }
+  }
   if (element.kind === 'picture') {
     if (element.crop && (element.crop.left + element.crop.right >= 100_000 || element.crop.top + element.crop.bottom >= 100_000)) {
       add(issues, `${path}.crop`, 'native.pictureCrop', 'opposing crop insets must leave a positive source rectangle')

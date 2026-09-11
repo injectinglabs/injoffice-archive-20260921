@@ -46,6 +46,7 @@ import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { placeNativeDocxNotesV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
+import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
 
 export const DOCX_PAGINATION_REQUEST_PROTOCOL = 'injoffice.docx.pagination-request'
 export const DOCX_PAGINATION_REQUEST_VERSION = 1 as const
@@ -204,6 +205,7 @@ export interface NativeDocxPlacedNoteStoryV1 {
 }
 
 export interface NativeDocxPaginatedPageV1 {
+  table_rows?: NativeDocxPlacedTableRowFragmentV1[]
   id: string
   ordinal: number
   section_id: string
@@ -222,6 +224,23 @@ export interface NativeDocxPaginatedPageV1 {
   paragraph_slices: NativeDocxParagraphSliceV1[]
   lines: NativeDocxPlacedLineV1[]
   note_stories?: NativeDocxPlacedNoteStoryV1[]
+}
+
+export interface NativeDocxPlacedTableRowFragmentV1 {
+  id: string
+  table_id: string
+  row_id: string
+  row_ordinal: number
+  fragment_ordinal: number
+  section_id: string
+  column_id: string
+  column_ordinal: number
+  x_millipoints: number
+  y_millipoints: number
+  width_millipoints: number
+  height_millipoints: number
+  source_y_millipoints: number
+  source_height_millipoints: number
 }
 
 export interface NativeDocxPaginatedSectionV1 {
@@ -1335,6 +1354,7 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
 function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTableV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
   const rows = layoutNativeDocxTableRowsV1(table, context.request.shaped_lines)
   if (!rows) { refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs'); return }
+  if (table.table.rows.some((row) => row.cant_split !== true)) { paginateSplittableTable(context, table, rows, shaped); return }
   let index = 0
   const headerCount = table.table.rows.findIndex((row) => !row.repeat_header)
   const headers = headerCount < 0 ? rows.length : headerCount
@@ -1366,6 +1386,83 @@ function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTab
     }
     for (let offset = 0; offset < group && !context.refused; offset += 1) placeTableRow(context, table, rows[index + offset]!, shaped)
     index += group
+  }
+}
+
+function placeRowFragment(context: PaginationContext, table: NativeDocxQualifiedTableV1, row: NativeDocxTableRowGeometryV1, plan: NativeDocxRowBreakPlanV1, start: number, end: number, ordinal: number, previousSlices: Map<string, NativeDocxParagraphSliceV1>): void {
+  const page = context.currentPage, column = currentColumn(context), section = context.currentSection
+  if (!page || !column || !section || end <= start || end-start > remainingHeight(context)) { refuse(context,'line-geometry-invalid',row.row_id,'Invalid bounded table row fragment'); return }
+  const pageY = column.y_millipoints + context.cursorY
+  // Query only lines intersecting this fragment, rather than rescanning every
+  // cell paragraph for each continuation page. Restore source paragraph order
+  // inside the fragment after querying the vertical event index.
+  let low = 0, high = plan.events.length
+  while (low < high) { const middle = Math.floor((low + high) / 2); if (plan.events[middle]!.y < start) low = middle + 1; else high = middle }
+  const selections = new Map<number, Array<{ line: NativeDocxShapedParagraphV1['lines'][number]; y: number }>>()
+  for (let index = low; index < plan.events.length && plan.events[index]!.y < end; index += 1) {
+    const event = plan.events[index]!, line = plan.paragraphs[event.paragraph]!.paragraph.lines[event.line]!
+    if (event.y + line.line_height_millipoints > end) { refuse(context, 'line-geometry-invalid', row.row_id, 'Row cut bisects a cell line'); return }
+    const selected = selections.get(event.paragraph) ?? []
+    selected.push({ line, y: event.y }); selections.set(event.paragraph, selected)
+  }
+  for (const [paragraphIndex, selected] of [...selections].sort(([a], [b]) => a - b)) {
+    const entry = plan.paragraphs[paragraphIndex]!
+    const paragraph = entry.paragraph
+    if (!selected.length) continue
+    if (context.sliceCount >= DOCX_PAGINATION_LIMITS.maxParagraphSlices || context.linePlacementCount + selected.length > DOCX_PAGINATION_LIMITS.maxLinePlacements) { refuse(context,'resource-limit',row.row_id,'Split row exceeds the bounded paragraph/line placement budget'); return }
+    const placed: NativeDocxPlacedLineV1[] = []
+    for (const { line,y } of selected) {
+      if (line.available_width_millipoints !== entry.content_width || line.inline_offset_millipoints + line.advance_inline_millipoints > entry.content_width) { refuse(context,'line-geometry-invalid',line.id,'Split cell line escapes the qualified content width'); return }
+      placed.push({ id:`placed:${line.id}`,line_id:line.id,paragraph_id:paragraph.paragraph_id,table_cell_id:entry.cell_id,section_id:section.id,column_id:column.id,column_ordinal:column.ordinal,source_line_ordinal:line.ordinal,x_millipoints:column.x_millipoints+entry.content_x+line.inline_offset_millipoints,y_millipoints:pageY+y-start,width_millipoints:line.advance_inline_millipoints,height_millipoints:line.line_height_millipoints })
+    }
+    const sliceOrdinal = context.sliceCountForParagraph?.get(paragraph.paragraph_id) ?? 0
+    const previous = previousSlices.get(paragraph.paragraph_id)
+    if (previous) previous.continues_on_next_page = true
+    const slice: NativeDocxParagraphSliceV1 = { id:`slice:${paragraph.paragraph_id}:${sliceOrdinal}`,paragraph_id:paragraph.paragraph_id,table_cell_id:entry.cell_id,section_id:section.id,column_id:column.id,column_ordinal:column.ordinal,slice_ordinal:sliceOrdinal,first_line_ordinal:selected[0]!.line.ordinal,last_line_ordinal:selected.at(-1)!.line.ordinal,line_ids:placed.map(line=>line.line_id),top_millipoints:placed[0]!.y_millipoints,height_millipoints:placed.reduce((sum,line)=>sum+line.height_millipoints,0),space_before_millipoints:0,continued_from_previous_page:previous!==undefined,continues_on_next_page:false,continued_from_previous_column:false,continues_in_next_column:false }
+    page.paragraph_slices.push(slice); page.lines.push(...placed)
+    previousSlices.set(paragraph.paragraph_id,slice)
+    context.sliceCountForParagraph?.set(paragraph.paragraph_id,sliceOrdinal+1)
+    context.sliceCount += 1; context.linePlacementCount += placed.length
+  }
+  ;(page.table_rows ??= []).push({ id:`table-row:${table.table.id}:${row.row_id}:${ordinal}`,table_id:table.table.id,row_id:row.row_id,row_ordinal:row.row_ordinal,fragment_ordinal:ordinal,section_id:section.id,column_id:column.id,column_ordinal:column.ordinal,x_millipoints:column.x_millipoints+table.x_millipoints,y_millipoints:pageY,width_millipoints:table.width_millipoints,height_millipoints:end-start,source_y_millipoints:start,source_height_millipoints:row.height_millipoints })
+  context.cursorY += end-start; context.previousAfter = 0
+}
+
+function paginateSplittableTable(context: PaginationContext, table: NativeDocxQualifiedTableV1, rows: NativeDocxTableRowGeometryV1[], shaped: Map<string, NativeDocxShapedParagraphV1>): void {
+  const resolved = new Map(context.request.resolved_layout.paragraphs.map(paragraph=>[paragraph.paragraph_id,paragraph]))
+  const plans = rows.map(row=>table.table.rows[row.row_ordinal]!.cant_split === true ? undefined : nativeDocxRowBreakPlanV1(table,row,shaped,resolved))
+  if (rows.some((row,index)=>table.table.rows[row.row_ordinal]!.cant_split !== true && !plans[index])) { refuse(context,'line-geometry-invalid',table.table.id,'Natural row cannot derive bounded line-safe fragmentation'); return }
+  const firstBody = table.table.rows.findIndex(row=>!row.repeat_header), headers = firstBody < 0 ? rows.length : firstBody
+  const headerHeight = rows.slice(0,headers).reduce((sum,row)=>sum+row.height_millipoints,0)
+  const freshPage = () => {
+    startNextFlowColumn(context)
+    for(let index=0;index<headers&&!context.refused;index+=1)placeTableRow(context,table,rows[index]!,shaped,true)
+  }
+  const firstMinimum = plans[headers]?.protected[0]?.end ?? rows[headers]?.height_millipoints ?? 0
+  // Never strand an initial/repeated heading without the next complete source
+  // line group. A group taller than the remaining body refuses atomically.
+  const column = currentColumn(context)
+  if (!column || table.x_millipoints+table.width_millipoints>column.width_millipoints || headerHeight+firstMinimum>column.height_millipoints) { refuse(context,'line-geometry-invalid',table.table.id,'Header prefix and first indivisible cell line group cannot fit on an empty page'); return }
+  if(headerHeight+firstMinimum>remainingHeight(context))startNextFlowColumn(context)
+  for(let index=0;index<headers&&!context.refused;index+=1)placeTableRow(context,table,rows[index]!,shaped)
+  for(let index=headers;index<rows.length&&!context.refused;index+=1) {
+    const row=rows[index]!,plan=plans[index]
+    if(!plan) {
+      if(row.height_millipoints>remainingHeight(context))freshPage()
+      if(context.refused)return
+      if(row.height_millipoints>remainingHeight(context)){refuse(context,'line-geometry-invalid',row.row_id,'Indivisible row cannot fit after repeated headers');return}
+      placeTableRow(context,table,row,shaped);continue
+    }
+    let start=0,ordinal=0
+    const previousSlices=new Map<string,NativeDocxParagraphSliceV1>()
+    while(start<plan.height&&!context.refused) {
+      let end=nativeDocxRowCutV1(plan,start,remainingHeight(context))
+      if(end===start){freshPage();if(context.refused)return;end=nativeDocxRowCutV1(plan,start,remainingHeight(context))}
+      if(end===start){refuse(context,'line-geometry-invalid',row.row_id,'Cell line/keep/widow group cannot fit after repeated headers');return}
+      placeRowFragment(context,table,row,plan,start,end,ordinal,previousSlices)
+      start=end;ordinal+=1
+      if(start<plan.height&&!context.refused)freshPage()
+    }
   }
 }
 
@@ -1715,10 +1812,16 @@ export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPagi
   const cellContentX = new Map<string, number>()
   if (qualified.status === 'qualified') for (const table of qualified.tables) for (const row of table.rows) for (const cell of row.cells) for (const paragraph of cell.cell.paragraphs) cellContentX.set(paragraph.id, cell.content_x_millipoints)
   if (actualLines.length !== expectedLines.length) add('BROKEN_REFERENCE', '/pages', 'placed lines must exactly cover every shaped body line once')
+  const expectedByLineID = new Map(expectedLines.map(entry=>[entry.line.id,entry]))
+  const seenSourceLines = new Set<string>()
   for (let index = 0; index < Math.max(actualLines.length, expectedLines.length) && issues.length < DOCX_NATIVE_LIMITS.maxIssues; index += 1) {
-    const expected = expectedLines[index]
     const actual = actualLines[index]
-    if (!expected || !actual) continue
+    // Cell flows interleave across pages when a row fragments; exact replay
+    // above checks placement order while this independent audit checks coverage.
+    if (!actual) continue
+    const expected = expectedByLineID.get(actual.line.line_id)
+    if (!expected || seenSourceLines.has(actual.line.line_id)) { add('BROKEN_REFERENCE',`/pages/${actual.pageIndex}/lines`,'source body line is unknown or duplicated'); continue }
+    seenSourceLines.add(actual.line.line_id)
     const column = actual.page.columns.find((candidate) => candidate.id === actual.line.column_id)
     const expectedX = column ? checkedSum(column.x_millipoints, cellContentX.get(expected.paragraph.id) ?? 0, expected.line.inline_offset_millipoints) : undefined
     if (!expected.sectionID || actual.line.section_id !== expected.sectionID || !column || column.section_id !== expected.sectionID || actual.line.column_ordinal !== column.ordinal || actual.line.id !== `placed:${expected.line.id}` || actual.line.line_id !== expected.line.id || actual.line.paragraph_id !== expected.paragraph.id || actual.line.source_line_ordinal !== expected.line.ordinal || actual.line.width_millipoints !== expected.line.advance_inline_millipoints || actual.line.height_millipoints !== expected.line.line_height_millipoints || expectedX === undefined || actual.line.x_millipoints !== expectedX) {

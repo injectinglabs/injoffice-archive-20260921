@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
+import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
 import { decodeNativeDocxPagePaintV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
 import { DsButton } from '../design-system/primitives'
 
-export function NativeDocxImage({ command, base64, contentType = 'image/png', onError }: { command: NativeDocxPaintInlineImageCommandV1; base64: string; contentType?: 'image/png' | 'image/jpeg'; onError?: () => void }) {
+export function NativeDocxImage({ command, base64, contentType = 'image/png', onError }: { command: NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1; base64: string; contentType?: 'image/png' | 'image/jpeg'; onError?: () => void }) {
   const geometry = nativeDocxImageOrientation(command)
   const crop = command.source_crop
   if (crop.left || crop.top || crop.right || crop.bottom) return <svg data-native-crop="true" x={command.x_millipoints} y={command.y_millipoints} width={geometry.width} height={geometry.height} viewBox={`${crop.left} ${crop.top} ${100000-crop.left-crop.right} ${100000-crop.top-crop.bottom}`} transform={`matrix(${geometry.matrix.join(' ')})`} preserveAspectRatio="none" overflow="hidden"><image x={0} y={0} width={100000} height={100000} preserveAspectRatio="none" href={`data:${contentType};base64,${base64}`} onError={onError} /></svg>
@@ -12,7 +12,7 @@ export function NativeDocxImage({ command, base64, contentType = 'image/png', on
 
 /** Reflect in source axes, then rotate clockwise into the attested inline box.
  * Integer matrices avoid transform-origin and trigonometric rounding. */
-export function nativeDocxImageOrientation(command: NativeDocxPaintInlineImageCommandV1) {
+export function nativeDocxImageOrientation(command: NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1) {
   const { x_millipoints: x, y_millipoints: y, width_millipoints: boxWidth, height_millipoints: boxHeight } = command
   const angle = command.transform.rotation_degrees, quarter = angle === 90 || angle === 270
   const width = quarter ? boxHeight : boxWidth, height = quarter ? boxWidth : boxHeight
@@ -153,6 +153,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
             case 'fill_text_highlight': return <rect key={command.id} data-native-highlight="true" x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'fill_table_cell': return <rect key={command.id} x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'stroke_table_border': case 'stroke_note_separator': case 'stroke_text_underline': return <line key={command.id} data-native-underline={command.kind === 'stroke_text_underline' ? 'true' : undefined} x1={command.x1_millipoints} y1={command.y1_millipoints} x2={command.x2_millipoints} y2={command.y2_millipoints} stroke={`#${command.stroke_rgb}`} strokeWidth={command.width_millipoints} />
+            case 'paint_floating_image':
             case 'paint_inline_image': { const asset = paint.resources.find((asset) => asset.id === command.asset_id); return asset ? <NativeDocxImage key={command.id} command={command} base64={asset.bytes_base64} contentType={asset.content_type} onError={imageFailed} /> : null }
           }
         })}

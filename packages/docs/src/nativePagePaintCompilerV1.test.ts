@@ -16,7 +16,7 @@ import {
   type NativeDocxPagePaintPrepareInputV1,
 } from './nativePagePaintCompilerV1.js'
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
-import { decodeNativeDocxPagePaintResourceListV1 } from './nativeImagePagePaintV1.js'
+import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { paginateNativeDocxV1 } from './nativePaginationV1.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1 } from './nativePagePaintV1.js'
@@ -497,6 +497,60 @@ describe('native DOCX page-paint compiler v1', () => {
       expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(false)
     }
   })
+  it('paints page-relative floating images outside text flow with source-bound front/behind layers', async () => {
+    for (const layer of ['front', 'behind'] as const) {
+      const input = imageFixture()
+      const drawing = (input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!
+      Object.assign(drawing, { placement: 'floating', x_emu: 914400, y_emu: 1270000, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'none', floating_layer: layer, stacking_order: 7 })
+      const prepared = await prepareNativeDocxPagePaintV1(input)
+      const fragment = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments.find(fragment => fragment.source_kind === 'image')!
+      expect(fragment).toMatchObject({ advance_inline_millipoints: 0, ascent_millipoints: 0, descent_millipoints: 0, glyphs: [] })
+      const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+      const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map(request => ({ status: 'outlined' as const, ...request, ...provider.outline(request.glyph_id) })) })
+      expect(completed.page_paint_output.status).toBe('painted')
+      if (completed.page_paint_output.status !== 'painted') throw new Error('floating refused')
+      const page = completed.page_paint_output.pages[0]!
+      const command = layer === 'behind' ? page.commands[0]! : page.commands.at(-1)!
+      expect(command).toMatchObject({ kind: 'paint_floating_image', x_millipoints: 72000, y_millipoints: 100000, width_millipoints: 10000, height_millipoints: 10000, layer, stacking_order: 7 })
+      expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(true)
+      if (command.kind !== 'paint_floating_image') throw new Error('missing floating image')
+      command.x_millipoints += 10
+      expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
+      command.x_millipoints -= 10
+      command.stacking_order += 1
+      expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
+      command.stacking_order -= 1
+      page.commands.reverse()
+      expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
+    }
+  })
+  it('refuses ambiguous stacking, non-body anchors and excessive floating counts', () => {
+    const input = imageFixture(), document = input.document as NativeDocxDocumentV1
+    const paragraph = document.body.blocks[0]!.paragraph!, run = paragraph.runs[0]!, drawing = run.drawing!
+    Object.assign(drawing, { placement: 'floating', x_emu: 0, y_emu: 0, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'none', floating_layer: 'front', stacking_order: 7 })
+    expect(qualifyNativeDocxInlineImageV1(document,run.id,drawing).ok).toBe(true)
+    paragraph.runs.push({ ...run, id: 'run:duplicate', drawing: { ...drawing, id: 'drawing:duplicate' } })
+    expect(qualifyNativeDocxInlineImageV1(document,run.id,drawing)).toMatchObject({ ok: false, code: 'unsupported-image' })
+    paragraph.runs.pop()
+    paragraph.runs.shift()
+    expect(qualifyNativeDocxInlineImageV1(document,run.id,drawing)).toMatchObject({ ok: false, code: 'unsupported-image' })
+    paragraph.runs = Array.from({ length: 129 }, (_,index) => ({ ...run, id: index ? `run:float:${index}` : run.id, drawing: { ...drawing, id: index ? `drawing:float:${index}` : drawing.id, stacking_order: index } }))
+    expect(qualifyNativeDocxInlineImageV1(document,run.id,paragraph.runs[0]!.drawing!)).toMatchObject({ ok: false, code: 'resource-limit' })
+  })
+  it('refuses floating wrapping, unqualified positioning, missing layering and off-page extents', async () => {
+    for (const mutation of [ { wrap: 'square' }, { horizontal_relative_from: 'column' }, { floating_layer: undefined }, { x_emu: -127 }, { x_emu: 1 }, { y_emu: 127000000 } ]) {
+      const input = imageFixture()
+      Object.assign((input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!, { placement: 'floating', x_emu: 914400, y_emu: 1270000, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'none', floating_layer: 'front', stacking_order: 7 },mutation)
+      let outcome = 'unknown'
+      try {
+        const prepared = await prepareNativeDocxPagePaintV1(input)
+        const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+        const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map(request => ({ status: 'outlined' as const, ...request, ...provider.outline(request.glyph_id) })) })
+        outcome = completed.page_paint_output.status
+      } catch (error) { expect(error).toBeInstanceOf(Error); outcome = 'refused' }
+      expect(outcome).toBe('refused')
+    }
+  })
   it('paints text highlight behind real glyphs and rejects color/geometry/coverage tampering', async () => {
     const input = fixture()
     ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.properties = { highlight: 'yellow' }
@@ -890,6 +944,44 @@ describe('native DOCX page-paint compiler v1', () => {
     if (completed.page_paint_output.status !== 'painted') return
     expect(completed.page_paint_output.pages[0]!.commands.map((command) => command.kind)).toEqual(['fill_table_cell', 'fill_glyph_path', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border'])
     expect(completed.page_paint_output.provenance.table_projection.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+  it('paints source-bound natural row fragments without duplicating glyphs or full-row shading', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1
+    const table = document.body.blocks[0]!.table!
+    table.rows[0]!.cant_split = false
+    table.width_twips = 4_680; table.grid_widths_twips = [4_680]; table.rows[0]!.cells[0]!.width_twips = 4_680
+    table.rows[0]!.cells[0]!.paragraphs[0]!.runs[0]!.text = 'a '.repeat(200)
+    document.sections[0]!.page.height_twips = 4_480
+    document.sections[0]!.page.orientation = 'landscape'
+    const original = JSON.stringify(document), prepared = await prepareNativeDocxPagePaintV1(input)
+    if (prepared.page_paint_request.paginated_layout.status !== 'paginated') throw new Error(JSON.stringify(prepared.page_paint_request.paginated_layout))
+    const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map(request => { const outline = provider.outline(request.glyph_id); return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em } }) })
+    if (completed.page_paint_output.status !== 'painted') throw new Error(JSON.stringify(completed.page_paint_output))
+    const pages = completed.page_paint_output.pages
+    expect(pages.length).toBeGreaterThan(1)
+    for (const page of pages) {
+      const fill = page.commands.find(command => command.kind === 'fill_table_cell')!
+      expect(fill).toMatchObject({ kind: 'fill_table_cell', y_millipoints: 72_000 })
+      if (fill.kind === 'fill_table_cell') expect(fill.height_millipoints).toBeLessThanOrEqual(80_000)
+    }
+    expect(new Set(pages.flatMap(page => page.lines.map(line => line.line_id))).size).toBe(prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines.length)
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(true)
+    expect(JSON.stringify(document)).toBe(original)
+  })
+  it('reflows cell shaping to the exact percentage table width and binds the width policy in provenance', async () => {
+    const input = tableFixture(), table = (input.document as NativeDocxDocumentV1).body.blocks[0]!.table!
+    delete table.width_twips; table.width_percent_fiftieths = 2500
+    const original = JSON.stringify(input.document)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    expect(prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.available_width_millipoints).toBe(224_000)
+    const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => ({ status:'outlined' as const,...request,...provider.outline(request.glyph_id) })) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    if(completed.page_paint_output.status!=='painted')throw new Error('percentage paint refused')
+    expect(completed.page_paint_output.pages[0]!.commands.find(command=>command.kind==='fill_table_cell')).toMatchObject({ width_millipoints:234_000 })
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(true)
+    expect(JSON.stringify(input.document)).toBe(original)
   })
 
   it('paints source-bound repeated table headings, shading and borders on continuation pages', async () => {

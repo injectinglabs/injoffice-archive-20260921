@@ -3,6 +3,7 @@ package pptxpatch
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -130,6 +131,66 @@ func TestNativeAncestorPromptKeepsExplicitNestedListCascade(t *testing.T) {
 	p := (*deck.Slides[0].Elements[0].Paragraphs)[0]
 	if *p.Level != 2 || *p.MarginLeftEmu != 400000 || *p.BulletCharacter != "▪" || *p.Runs[0].FontSizeHundredthPt != 2400 {
 		t.Fatalf("wrong nested cascade: %+v", p)
+	}
+}
+
+func TestNativeExplicitPromptParagraphDefaults(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		input := nativePlaceholderFixture(t, strict, func(parts map[string]string) {
+			part := "relocated/masters/master.xml"
+			// Move an existing exact level style into an explicitly indexed prompt.
+			start := strings.Index(parts[part], `<a:lvl1pPr`)
+			end := strings.Index(parts[part], `</a:lvl1pPr>`) + len(`</a:lvl1pPr>`)
+			style := strings.ReplaceAll(parts[part][start:end], "lvl1pPr", "pPr")
+			style = strings.Replace(style, `<a:pPr `, `<a:pPr lvl="0" `, 1)
+			parts[part] = parts[part][:start] + parts[part][end:]
+			parts[part] = strings.Replace(parts[part], `sz="1800"`, ``, 1)
+			parts[part] = strings.Replace(parts[part], `<a:p/>`, `<a:p>`+style+`<a:r><a:t>Do not paint this prompt</a:t></a:r></a:p>`, 1)
+		})
+		deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err != nil || len(deck.Slides[0].Elements) != 1 {
+			t.Fatalf("explicit prompt style failed: %v", err)
+		}
+		p := (*deck.Slides[0].Elements[0].Paragraphs)[0]
+		if *p.BulletCharacter != "▪" || *p.IndentEmu != -100000 || *p.MarginLeftEmu != 400000 || *p.Runs[0].FontSizeHundredthPt != 2400 {
+			t.Fatalf("prompt style or local override lost: %+v", p)
+		}
+		for _, run := range p.Runs {
+			if strings.Contains(*run.Text, "prompt") {
+				t.Fatal("prompt leaked into content")
+			}
+		}
+		if output := os.Getenv("INJOFFICE_PPTX_PREVIEW_FIXTURE"); output != "" && !strict {
+			for _, part := range []string{"relocated/slides/slide-a.xml", "relocated/layouts/layout.xml", "relocated/masters/master.xml", "relocated/themes/theme.xml"} {
+				xml := string(chartZipEntry(t, input, part))
+				for _, change := range [][2]string{{"Calibri", "DejaVu Sans"}, {`b="1"`, `b="0"`}, {`i="1"`, `i="0"`}, {`marL="400000"`, `marL="600000"`}, {`marL="300000"`, `marL="600000"`}, {`indent="-100000"`, `indent="-500000"`}} {
+					xml = strings.ReplaceAll(xml, change[0], change[1])
+				}
+				input = replaceChartZipEntry(t, input, part, []byte(xml))
+			}
+			if err := os.WriteFile(strings.TrimSuffix(output, ".pptx")+"-inherited.pptx", input, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestNativeCompetingPromptDefaultsRefuse(t *testing.T) {
+	for _, prompt := range []string{
+		`<a:p><a:pPr lvl="0" marL="999"/></a:p>`,
+		`<a:p><a:pPr lvl="0"><a:buNone/></a:pPr></a:p>`,
+		`<a:p><a:pPr lvl="0"><a:defRPr sz="2222"/></a:pPr></a:p>`,
+		`<a:p><a:pPr lvl="0"/></a:p><a:p><a:pPr lvl="0"/></a:p>`,
+		`<a:p><a:pPr lvl="9"/></a:p>`,
+	} {
+		input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
+			part := "relocated/layouts/layout.xml"
+			parts[part] = strings.Replace(parts[part], `<a:p/>`, prompt, 1)
+		})
+		deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err == nil && len(deck.Slides[0].Elements) != 0 {
+			t.Fatalf("competing prompt style accepted: %s", prompt)
+		}
 	}
 }
 

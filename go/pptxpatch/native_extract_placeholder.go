@@ -11,9 +11,9 @@ type nativePlaceholderIdentity struct {
 }
 
 // Ancestor placeholder text is an authoring prompt, not slide content. Admit
-// unstyled prompts without copying their text into the source slide. Formatting
-// on prompt paragraphs/runs remains refused until its level cascade is modeled.
-func validateNativePlaceholderPrompt(paragraph *nativeXMLNode, dialect nativeExtractDialect) error {
+// prompts without copying their text into the source slide. Paragraph defaults
+// require an explicit level; run/end-mark formatting remains unqualified.
+func validateNativePlaceholderPrompt(paragraph *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme) error {
 	if requireOnlyNativeAttrs(paragraph) != nil || requireOnlyNativeChildren(paragraph, xml.Name{Space: dialect.drawing, Local: "pPr"}, xml.Name{Space: dialect.drawing, Local: "r"}, xml.Name{Space: dialect.drawing, Local: "endParaRPr"}) != nil || !onlyNativeXMLSpace(paragraph.Text) {
 		return fmt.Errorf("pptxpatch: unmodeled ancestor placeholder prompt")
 	}
@@ -21,6 +21,15 @@ func validateNativePlaceholderPrompt(paragraph *nativeXMLNode, dialect nativeExt
 		property, err := nativeSingleton(paragraph, dialect.drawing, name, false)
 		if err != nil {
 			return err
+		}
+		if name == "pPr" && property != nil && (len(property.Attrs) != 0 || len(property.Children) != 0) {
+			if _, explicit := exactNativeAttr(property, "", "lvl"); !explicit {
+				return fmt.Errorf("pptxpatch: styled ancestor prompt requires explicit list level")
+			}
+			if err := validateNativeTextStyleProperties(property, dialect, true, theme); err != nil {
+				return err
+			}
+			continue
 		}
 		if property != nil && (requireOnlyNativeAttrs(property) != nil || requireOnlyNativeChildren(property) != nil || !onlyNativeXMLSpace(property.Text)) {
 			return fmt.Errorf("pptxpatch: ancestor placeholder paragraph styling remains outside inheritance subset")
@@ -49,6 +58,80 @@ func validateNativePlaceholderPrompt(paragraph *nativeXMLNode, dialect nativeExt
 		}
 	}
 	return nil
+}
+
+// Competing defaults are not guessed: only equal or disjoint qualified
+// properties may be projected from an ancestor prompt's explicit list level.
+func nativePromptStylesCompete(base, prompt *nativeXMLNode) bool {
+	if base == nil || prompt == nil {
+		return false
+	}
+	for _, a := range base.Attrs {
+		for _, b := range prompt.Attrs {
+			if a.Name == b.Name && a.Value != b.Value {
+				return true
+			}
+		}
+	}
+	for _, a := range base.Children {
+		for _, b := range prompt.Children {
+			if base.Name.Local == "solidFill" && a.Name != b.Name {
+				return true
+			}
+			if (a.Name.Local == "buNone" || a.Name.Local == "buChar") && (b.Name.Local == "buNone" || b.Name.Local == "buChar") && a.Name != b.Name {
+				return true
+			}
+			if a.Name == b.Name && nativePromptStylesCompete(a, b) {
+				return true
+			}
+		}
+	}
+	return !onlyNativeXMLSpace(base.Text) && base.Text != prompt.Text
+}
+
+func mergeNativePlaceholderPromptStyles(list, body *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme) (*nativeXMLNode, error) {
+	seen := map[int64]bool{}
+	for _, paragraph := range body.Children {
+		if paragraph.Name != (xml.Name{Space: dialect.drawing, Local: "p"}) {
+			continue
+		}
+		property, err := nativeSingleton(paragraph, dialect.drawing, "pPr", false)
+		if err != nil {
+			return nil, err
+		}
+		if property == nil || (len(property.Attrs) == 0 && len(property.Children) == 0) {
+			continue
+		}
+		value, _ := exactNativeAttr(property, "", "lvl")
+		level, err := parseCanonicalNativeInt(value, 0, 8)
+		if err != nil {
+			return nil, err
+		}
+		if seen[level] {
+			return nil, fmt.Errorf("pptxpatch: duplicate ancestor prompt list level")
+		}
+		seen[level] = true
+		projected := *property
+		projected.Name = xml.Name{Space: dialect.drawing, Local: fmt.Sprintf("lvl%dpPr", level+1)}
+		projected.Attrs = nil
+		for _, attr := range property.Attrs {
+			if attr.Name != (xml.Name{Local: "lvl"}) {
+				projected.Attrs = append(projected.Attrs, attr)
+			}
+		}
+		if list != nil {
+			for _, existing := range list.Children {
+				if (existing.Name.Local == "defPPr" || existing.Name == projected.Name) && nativePromptStylesCompete(existing, &projected) {
+					return nil, fmt.Errorf("pptxpatch: competing ancestor prompt defaults require explicit qualification")
+				}
+			}
+		}
+		list, err = mergeNativeListStyles(list, &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "lstStyle"}, Children: []*nativeXMLNode{&projected}}, dialect, theme)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return list, nil
 }
 
 func nativeTextPlaceholder(node *nativeXMLNode, dialect nativeExtractDialect) (*nativePlaceholderIdentity, error) {
@@ -264,7 +347,7 @@ func (extractor *nativeExtractor) resolveNativePlaceholder(node *nativeXMLNode, 
 		if shape != node {
 			for _, paragraph := range body.Children {
 				if paragraph.Name == (xml.Name{Space: dialect.drawing, Local: "p"}) {
-					if err := validateNativePlaceholderPrompt(paragraph, dialect); err != nil {
+					if err := validateNativePlaceholderPrompt(paragraph, dialect, extractor.theme); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -288,6 +371,12 @@ func (extractor *nativeExtractor) resolveNativePlaceholder(node *nativeXMLNode, 
 		list, err = mergeNativeListStyles(list, localList, dialect, extractor.theme)
 		if err != nil {
 			return nil, nil, err
+		}
+		if shape != node {
+			list, err = mergeNativePlaceholderPromptStyles(list, body, dialect, extractor.theme)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	if transform == nil || bodyProperties == nil {

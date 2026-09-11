@@ -15,6 +15,15 @@ import (
 
 const nativeMaxSafeInteger int64 = 9007199254740991
 
+func containsNativeString(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
 var (
 	nativeIDPattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,255}$`)
 	sha256Pattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -298,7 +307,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if !paint && (element.Fill != nil || element.Stroke != nil) {
 			v.add(p+".fill", "native.elementUnion", "fill or stroke is not allowed for this element kind")
 		}
-		if !connector && (element.HeadArrow != nil || element.TailArrow != nil || element.FlipH != nil) {
+		if !connector && (element.HeadArrow != nil || element.TailArrow != nil || element.FlipH != nil || element.HeadEnd != nil || element.TailEnd != nil) {
 			v.add(p+".headArrow", "native.elementUnion", "connector flags are not allowed for this element kind")
 		}
 		if !asset && element.AssetID != nil {
@@ -359,6 +368,26 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	case NativeElementKindConnector:
 		commonForbidden(false, false, false, true, true, false, false, false, false, false)
+		for _, end := range []struct {
+			name  string
+			value *NativeArrowEnd
+			flag  *bool
+		}{{"headEnd", element.HeadEnd, element.HeadArrow}, {"tailEnd", element.TailEnd, element.TailArrow}} {
+			if end.value == nil {
+				continue
+			}
+			if !containsNativeString([]string{"none", "triangle", "arrow", "stealth", "diamond", "oval"}, end.value.Type) {
+				v.add(p+"."+end.name+".type", "schema.enum", "unknown arrow type")
+			}
+			for _, size := range []*string{end.value.W, end.value.Len} {
+				if size != nil && !containsNativeString([]string{"sm", "med", "lg"}, *size) {
+					v.add(p+"."+end.name, "schema.enum", "unknown arrow size")
+				}
+			}
+			if end.flag != nil && *end.flag != (end.value.Type != "none") {
+				v.add(p+"."+end.name, "native.arrowPresence", "typed endpoint conflicts with legacy presence flag")
+			}
+		}
 		if element.Stroke != nil {
 			v.stroke(*element.Stroke, p+".stroke")
 		}

@@ -39,10 +39,10 @@ func (gaps nativeConnectorGapSet) refused() bool {
 }
 
 // extractConnector projects only a straight, unrotated DrawingML connector
-// whose complete paint is explicit. Named endpoint arrows, including
-// ST_LineEndWidth/Length sm/med/lg that map onto integer EMU as 2/3/5 × the
-// existing stroke width, are exact boolean flags. Unknown named types,
-// unmapped sizes, transformed/theme-unresolved paint, non-solid dash,
+// whose line paint is explicit. Named endpoint arrows are currently presence
+// flags plus additive typed source descriptors. A renderer must not treat a true flag
+// as an exact triangle or infer an Office arrow size. Unknown named types,
+// sizes, transformed/theme-unresolved paint, non-solid dash,
 // custom/bent geometry, and unknown rendering markup remain an exact
 // capability-backed refusal rather than a nearby line approximation.
 func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePart, slideID string, dialect nativeExtractDialect) (NativeElement, error) {
@@ -114,6 +114,15 @@ func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePar
 	}
 	if tailArrow {
 		element.TailArrow = boolPointer(true)
+	}
+	if !gaps.refused() {
+		line, _ := nativeSingleton(shapeProperties, dialect.drawing, "ln", false)
+		if line != nil {
+			head, _ := nativeSingleton(line, dialect.drawing, "headEnd", false)
+			tail, _ := nativeSingleton(line, dialect.drawing, "tailEnd", false)
+			element.HeadEnd = nativeConnectorArrowDescriptor(head)
+			element.TailEnd = nativeConnectorArrowDescriptor(tail)
+		}
 	}
 	if len(gaps.values) == 0 {
 		return element, nil
@@ -276,13 +285,13 @@ func exactNativeConnectorArrow(node *nativeXMLNode) (bool, error) {
 	if node == nil {
 		return false, nil
 	}
-	if requireOnlyNativeAttrs(node, xml.Name{Local: "type"}, xml.Name{Local: "w"}, xml.Name{Local: "sz"}) != nil || requireOnlyNativeChildren(node) != nil {
+	if requireOnlyNativeAttrs(node, xml.Name{Local: "type"}, xml.Name{Local: "w"}, xml.Name{Local: "len"}) != nil || requireOnlyNativeChildren(node) != nil {
 		return false, fmt.Errorf("arrow markup is not exact")
 	}
 	if width, ok := exactNativeAttr(node, "", "w"); ok && !nativeConnectorArrowSizeIsExact(width) {
 		return false, fmt.Errorf("arrow width does not map to an exact native EMU size")
 	}
-	if length, ok := exactNativeAttr(node, "", "sz"); ok && !nativeConnectorArrowSizeIsExact(length) {
+	if length, ok := exactNativeAttr(node, "", "len"); ok && !nativeConnectorArrowSizeIsExact(length) {
 		return false, fmt.Errorf("arrow length does not map to an exact native EMU size")
 	}
 	value, ok := exactNativeAttr(node, "", "type")
@@ -300,12 +309,29 @@ func exactNativeConnectorArrow(node *nativeXMLNode) (bool, error) {
 func nativeConnectorArrowSizeIsExact(value string) bool {
 	switch value {
 	case "sm", "med", "lg":
-		// ST_LineEndWidth/Length map onto integer EMU as 2/3/5 × line width,
-		// which is already in NativeStroke.widthEmu. Compile paints that size.
+		// Preserve named source dimensions; pixel sizes are renderer-policy-owned.
 		return true
 	default:
 		return false
 	}
+}
+
+func nativeConnectorArrowDescriptor(node *nativeXMLNode) *NativeArrowEnd {
+	if node == nil {
+		return nil
+	}
+	kind, _ := exactNativeAttr(node, "", "type")
+	if kind == "" {
+		kind = "none"
+	}
+	end := &NativeArrowEnd{Type: kind}
+	if width, ok := exactNativeAttr(node, "", "w"); ok {
+		end.W = stringPointer(width)
+	}
+	if length, ok := exactNativeAttr(node, "", "len"); ok {
+		end.Len = stringPointer(length)
+	}
+	return end
 }
 
 func validateNativeConnectorTransform(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeConnectorGapSet) (NativeTransform, bool, error) {

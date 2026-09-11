@@ -38,8 +38,15 @@ Embedded static PNG and baseline JFIF images are source-part/digest-bound and
 decoded before display. DrawingML positive source-edge crops are replayed without
 rewriting bytes; malformed rasters and browser decode failures clear native
 success. Browser limits are 16 million pixels per image and 32 million total.
-Arrowhead commands remain visibly unavailable; unqualified source content is
-not silently promoted to native paint.
+Typed source `headEnd`/`tailEnd` descriptors replay triangle, open arrow, stealth,
+diamond, and oval endpoints under the explicit `arrow-v1` preview policy. Named
+small/medium/large dimensions use 2/3/5 times the stroke width; omitted dimensions
+use medium. Closed shapes are filled, open arrows are stroked; endpoints point
+outward from their source straight line. This deterministic geometry is not an
+Office-equivalence claim. Legacy boolean-only endpoints stay visibly unqualified.
+Source names follow Microsoft's [DrawingML head-end documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.headend?view=openxml-3.0.1):
+`type`, `w`, and `len` (not the nonstandard `sz`). Original package bytes remain
+unchanged, including omitted attributes; the transport keeps omissions explicit.
 
 Run `node scripts/smoke-pptx-native-preview-browser.mjs` from the built workspace
 for real-file upload, HarfBuzz glyph, anchor, hanging bullet, cropped-quadrant

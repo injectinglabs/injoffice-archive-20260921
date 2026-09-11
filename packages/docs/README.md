@@ -298,8 +298,8 @@ V1 deliberately accepts only diagnostic-free, simple horizontal body and
 selected static header/footer paragraphs with natural shaped line height, plus
 qualified footnote/endnote paragraphs with natural shaped line height, plus a
 bounded body-table subset:
-explicit fixed dxa width and grid, left alignment/indent, four cell margins,
-indivisible rows, direct cell paragraphs, table-level single/RGB
+explicit fixed dxa or percentage width and grid, left alignment/indent, four cell margins,
+indivisible or line-safe natural-height rows, direct cell paragraphs, table-level single/RGB
 borders, and clear RGB cell shading. Horizontal `grid_span`, vertical restart/continue
 merges, `atLeast`/`exact` row heights, and simple whole-table styles that project
 onto those same border/fill commands are included. Merged rows paginate as one
@@ -314,7 +314,25 @@ parallel text flows of adjacent cells; repeated line placements have unique
 page-derived IDs and are validated by exact pagination replay, not accepted as
 arbitrary duplicate body content. Generated two-column DOCX browser fixtures
 verify this bounded behavior, not Word pixel equivalence.
-It refuses autofit/percentage/missing widths, non-prefix repeating headers,
+Natural-height rows without `cant_split: true` use a line-safe fragmentation
+policy: cuts cannot bisect any adjacent cell's shaped line, `keep_lines` group,
+or initial/final two-line widow group. Header prefixes repeat before fragments;
+cell fills and side borders continue even when that cell has no remaining text.
+Horizontal source borders appear only at the source row boundaries, not invented
+at page cuts. Fragment source ranges are contiguous, identity-bound, and checked
+by exact pagination replay. Split rows currently refuse explicit/minimum heights,
+vertical merges, keep-next chains, forced paragraph page breaks, and documents
+containing notes. This is deterministic bounded pagination, not a claim of Word
+row-break parity or content-based table autofit.
+Percentage width uses the named `fixed-grid-percent-exact-twips-v1` policy:
+resolve the authored 1..5000 fiftieths-of-a-percent against the owning single
+section column, then scale the authored grid proportionally. Every preferred
+cell width must match its original grid span, and all resulting widths must be
+integral twips; non-integral allocations refuse rather than silently round.
+The policy, source grid, percentage and container identity enter the qualified
+table hash. Cell text is shaped again at the resulting content widths. This is
+flexible percentage sizing of a fixed grid, **not content-based autofit**.
+It refuses autofit/missing widths, non-prefix repeating headers,
 cell-border conflicts, nested content, numbered cells, conditional
 `tblStylePr` effects, and any table-descendant resolution diagnostic. Selected story
 lines must fit between the exact header/footer edge distance and the body box.
@@ -339,8 +357,8 @@ canonical hashes for the complete validated request and output.
 Images are restricted to embedded static PNG or baseline JFIF JPEG pictures in `wp:inline` with zero
 distances/effect extents, extent-preserving `a:xfrm` (quarter-turn rotation and
 horizontal/vertical flips), bounded source crop, exact integer
-milli-point geometry, and bounded bytes/pixels. It refuses anchors/floating
-placement, wrapping, remote or external relationships, vectors and other
+milli-point geometry, and bounded bytes/pixels. It refuses text-wrapping anchors,
+remote or external relationships, vectors and other
 raster formats, animation, negative/extending crop, arbitrary rotation, effects, mismatched extents, and
 media digest drift. JPEG support is deliberately bounded to one baseline 8-bit
 grayscale/YCbCr interleaved scan with internal tables and JFIF APP0, following
@@ -348,6 +366,21 @@ grayscale/YCbCr interleaved scan with internal tables and JFIF APP0, following
 progressive/multiple scans and ambiguous color metadata remain refused. The
 validator checks marker structure, not entropy decoding; the viewer decodes the
 preserved bytes and the browser smoke verifies generated red/blue JPEG pixels.
+
+Body-paragraph `wp:anchor` pictures also qualify with explicit page-relative
+non-negative offsets, `wrapNone`, zero distances/effects, disabled `simplePos`
+and `locked`, and enabled `allowOverlap`/`layoutInCell`. Their source
+`behindDoc` and `relativeHeight` become `floating_layer` and `stacking_order`.
+The anchor consumes no inline width or image-height line space; its actual
+paginated paragraph selects the page. `paint_floating_image` replays behind all
+page content or in front of it, sorted by the source stacking order. Consumers
+must handle this additive command and respect global page replay order rather
+than concatenating line-owned commands. At most 128 floating pictures qualify;
+orders must be unique per layer, and images
+must fit wholly inside the page. Header/footer/table anchors, alignment-based
+positions, relative sizing, text wrapping and collision avoidance remain refused.
+This is a source-contract implementation, not independently established Word
+pixel parity.
 Quarter turns require explicit unrotated DrawingML extents whose swapped bounds
 exactly match `wp:extent`; missing or inconsistent extents refuse before painting.
 Reflections apply in source axes before clockwise rotation. Integer SVG matrices

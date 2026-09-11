@@ -7,6 +7,7 @@ import {createHarfBuzzTextShaperV1,createHarfBuzzOutlineProviderV1,inspectHarfBu
 import type {NativeFontManifest,NativeFontResolver,ResolvedFontFace,FontResource} from '@injoffice/font-metrics/layout'
 import {decodePptxPreview,type PreviewNode,type PptxPreview,type PreviewStroke} from './contract.js'
 import {prepareNativeRasterResourceV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
+import {previewArrow,previewArrowShaftInset} from './arrows.js'
 
 const hash=(bytes:Uint8Array)=>`sha256:${createHash('sha256').update(bytes).digest('hex')}` as const
 const object=(v:unknown):Record<string,unknown>=>{if(!v||typeof v!=='object'||Array.isArray(v))throw new TypeError('Expected bounded object');return v as Record<string,unknown>}
@@ -68,13 +69,23 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    case 'transform':{const t=command.transform;current.transform=[t.aPpm/1e6,t.bPpm/1e6,t.cPpm/1e6,t.dPpm/1e6,t.txEmu,t.tyEmu];break}
    case 'clipRect':current.clip=command.rect;break
    case 'path':{
-    if(command.headArrow||command.tailArrow){diagnostics.push('Arrowhead replay is not available in this native vector view');current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Arrowhead unavailable'});break}
+    if(command.headArrow&&!command.headEnd||command.tailArrow&&!command.tailEnd){diagnostics.push('Boolean-only arrowheads lack source type/dimensions and remain unqualified');current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Arrowhead unavailable'});break}
     const stroke=command.stroke
     const paint={fill:command.fill??'none',...(stroke?previewStroke(stroke):{})}
     const first=command.path[0]
     if(first?.kind==='rect'||first?.kind==='roundRect')current.children.push({kind:'rect',rect:first.rect,radius:first.kind==='roundRect'?first.radiusEmu:0,...paint})
     else if(first?.kind==='ellipse')current.children.push({kind:'ellipse',rect:first.rect,...paint})
-    else current.children.push({kind:'path',d:command.path.map(pathPart).join(' '),...paint})
+    else {
+     let d=command.path.map(pathPart).join(' ')
+     if((command.headEnd||command.tailEnd)&&stroke){const start=command.path[0],finish=command.path[1];if(command.path.length!==2||start?.kind!=='moveTo'||finish?.kind!=='lineTo')throw new Error('Arrow shaft must be a straight source connector');const length=Math.hypot(finish.x-start.x,finish.y-start.y),head=previewArrowShaftInset(command.headEnd,stroke.widthEmu),tail=previewArrowShaftInset(command.tailEnd,stroke.widthEmu);if(length<=head+tail)throw new Error('Source connector is too short for arrow-v1 endpoint geometry');const x=(finish.x-start.x)/length,y=(finish.y-start.y)/length;d=`M${start.x+x*head} ${start.y+y*head} L${finish.x-x*tail} ${finish.y-y*tail}`}
+     current.children.push({kind:'path',d,...paint})
+    }
+    if(command.headEnd?.type!=='none'&&command.headEnd||command.tailEnd?.type!=='none'&&command.tailEnd){
+     const start=command.path[0],finish=command.path[1]
+     if(command.path.length!==2||start?.kind!=='moveTo'||finish?.kind!=='lineTo'||!stroke)throw new Error('Typed arrows require a source-bound straight stroked connector')
+     for(const [end,tip,other] of [[command.headEnd,start,finish],[command.tailEnd,finish,start]] as const){if(!end)continue;const arrow=previewArrow(end,tip,{x:tip.x-other.x,y:tip.y-other.y},stroke.widthEmu,stroke.color);if(arrow)current.children.push(arrow)}
+     diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × stroke; omitted = medium), not Office-equivalent geometry')
+    }
     break
    }
    case 'glyphRun':{

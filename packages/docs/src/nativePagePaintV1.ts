@@ -207,6 +207,12 @@ export interface NativeDocxPaintInlineImageCommandV1 {
   transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
 }
 
+export interface NativeDocxPaintFloatingImageCommandV1 extends Omit<NativeDocxPaintInlineImageCommandV1, 'kind'> {
+  kind: 'paint_floating_image'
+  layer: 'behind' | 'front'
+  stacking_order: number
+}
+
 export interface NativeDocxFillTextHighlightCommandV1 {
   kind: 'fill_text_highlight'
   id: string
@@ -235,7 +241,7 @@ export interface NativeDocxStrokeTextUnderlineCommandV1 {
   stroke_rgb: string
 }
 
-export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1
+export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1
 
 export interface NativeDocxPaintLineV1 {
   placed_line_id: string
@@ -712,8 +718,15 @@ function tableCommandsByPage(
   const pageByID = new Map(pages.map((page) => [page.id, page]))
   const commands = new Map<string, NativeDocxTableCommandsV1>(pages.map((page) => [page.id, { fills: [], borders: [] }]))
   const placementsByParagraph = new Map<string, Array<{ pageID: string; line: NativeDocxPlacedLineV1 }>>()
+  type Fragment = NonNullable<NativeDocxPaginatedPageV1['table_rows']>[number]
+  const fragmentsByRow = new Map<string, Array<{ pageID: string; fragment: Fragment }>>()
   let work = 0
   for (const page of pages) {
+    for (const fragment of page.table_rows ?? []) {
+      const key = JSON.stringify([fragment.table_id, fragment.row_id]), entries = fragmentsByRow.get(key) ?? []
+      entries.push({ pageID: page.id, fragment }); fragmentsByRow.set(key, entries)
+      if (++work > DOCX_PAGE_PAINT_LIMITS.maxOutputNodes) return undefined
+    }
     const seen = new Set<string>()
     for (const line of page.lines) {
       if (seen.has(line.paragraph_id)) continue
@@ -733,30 +746,36 @@ function tableCommandsByPage(
       const anchorCell = table.rows[rowIndex]!.cells.find((cell) => cell.vertical_merge !== 'continue') ?? table.rows[rowIndex]!.cells[0]
       const firstParagraph = anchorCell?.cell.paragraphs[0]
       const firstShaped = firstParagraph ? shaped.get(firstParagraph.id) : undefined
-      const placements = firstParagraph ? placementsByParagraph.get(firstParagraph.id) : undefined
+      // Split-row geometry is source-replayed explicitly: a short/empty cell
+      // has no line anchor on later pages but still needs its background/edges.
+      const placements: Array<{ pageID: string; line?: NativeDocxPlacedLineV1; fragment?: Fragment }> | undefined = table.table.rows[rowIndex]!.cant_split !== true
+        ? fragmentsByRow.get(JSON.stringify([table.table.id, row.row_id]))
+        : firstParagraph ? placementsByParagraph.get(firstParagraph.id) : undefined
       if (!placements || !firstShaped) continue
       const topMargin = table.table.cell_margins!.top_twips * 50
       for (const placement of placements) {
         const page = pageByID.get(placement.pageID)
         const target = commands.get(placement.pageID)
         if (!page || !target) return undefined
-        const rowY = placement.line.y_millipoints - topMargin - firstShaped.spacing_before_millipoints
+        const rowY = placement.fragment?.y_millipoints ?? (placement.line!.y_millipoints - topMargin - firstShaped.spacing_before_millipoints)
         if (!Number.isSafeInteger(rowY)) return undefined
         for (const [cellIndex, cell] of row.cells.entries()) {
           work += 1
           if (work > DOCX_PAGE_PAINT_LIMITS.maxOutputNodes) return undefined
           if (cell.vertical_merge === 'continue') continue
           const x = page.body_box.x_millipoints + cell.x_millipoints
-          const height = cell.height_millipoints
-          const placementSuffix = placement.line.repeated_table_header ? `:repeat:${page.id}` : ''
+          const height = placement.fragment?.height_millipoints ?? cell.height_millipoints
+          const placementSuffix = placement.fragment ? `:fragment:${placement.fragment.fragment_ordinal}` : placement.line?.repeated_table_header ? `:repeat:${page.id}` : ''
+          const firstFragment = !placement.fragment || placement.fragment.source_y_millipoints === 0
+          const lastFragment = !placement.fragment || placement.fragment.source_y_millipoints + height === placement.fragment.source_height_millipoints
           if (cell.shading_rgb) target.fills.push({ kind: 'fill_table_cell', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:fill${placementSuffix}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, x_millipoints: x, y_millipoints: rowY, width_millipoints: cell.width_millipoints, height_millipoints: height, fill_rgb: cell.shading_rgb })
           const source = table.table.borders
           const lastMergeRow = rowIndex + cell.row_span - 1
           const edges: Array<{ edge: NativeDocxStrokeTableBorderCommandV1['edge']; border?: import('./nativeContract.js').NativeDocxTableBorderV1; x1: number; y1: number; x2: number; y2: number }> = [
-            { edge: 'top', border: rowIndex === 0 ? source?.top : undefined, x1: x, y1: rowY, x2: x + cell.width_millipoints, y2: rowY },
+            { edge: 'top', border: firstFragment && rowIndex === 0 ? source?.top : undefined, x1: x, y1: rowY, x2: x + cell.width_millipoints, y2: rowY },
             { edge: 'left', border: cell.column_ordinal === 0 ? source?.left : undefined, x1: x, y1: rowY, x2: x, y2: rowY + height },
             { edge: 'right', border: cell.column_ordinal + cell.grid_span === gridColumns ? source?.right : source?.inside_vertical, x1: x + cell.width_millipoints, y1: rowY, x2: x + cell.width_millipoints, y2: rowY + height },
-            { edge: 'bottom', border: lastMergeRow === rows.length - 1 ? source?.bottom : source?.inside_horizontal, x1: x, y1: rowY + height, x2: x + cell.width_millipoints, y2: rowY + height },
+            { edge: 'bottom', border: lastFragment ? lastMergeRow === rows.length - 1 ? source?.bottom : source?.inside_horizontal : undefined, x1: x, y1: rowY + height, x2: x + cell.width_millipoints, y2: rowY + height },
           ]
           for (const edge of edges) if (edge.border?.style === 'single' && edge.border.color_rgb) target.borders.push({
             kind: 'stroke_table_border', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:${edge.edge}${placementSuffix}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, edge: edge.edge,
@@ -855,7 +874,7 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
     const pageParagraphs = new Map((request.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? pagination.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
     const tableCommands = tableCommandsIndex.get(page.id)
     if (!tableCommands) return { ok: true, value: refusal(provenance, 'identity-mismatch', documentID, 'Table geometry could not exact-join paginated cell lines') }
-    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
+    const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
     const paintLines: NativeDocxPaintLineV1[] = []
     const headerFooterPage = headerFooterByPageID.get(page.id)
     if (!headerFooterPage) return { ok: true, value: refusal(provenance, 'incomplete-page', page.id, 'Header/footer layout does not exactly cover the paginated page') }
@@ -930,13 +949,15 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
             const image = qualified.value
             const asset = mediaAssets.get(image.asset_id)
             if (!asset || asset.part_name !== image.part_name || asset.content_type !== image.content_type || asset.content_digest !== image.content_digest) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment does not exact-join one canonical content-addressed media asset') }
-            if (fragment.advance_inline_millipoints !== image.width_millipoints || fragment.ascent_millipoints !== image.height_millipoints || fragment.descent_millipoints !== 0 || fragment.line_gap_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment geometry changed after exact EMU projection') }
-            const y = baselineY - image.height_millipoints
+            if (fragment.advance_inline_millipoints !== (image.floating ? 0 : image.width_millipoints) || fragment.ascent_millipoints !== (image.floating ? 0 : image.height_millipoints) || fragment.descent_millipoints !== 0 || fragment.line_gap_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment geometry changed after exact EMU projection') }
+            const y = image.floating?.y_millipoints ?? baselineY - image.height_millipoints
+            const x = image.floating?.x_millipoints ?? fragmentX
+            if (image.floating && (x + image.width_millipoints > page.width_millipoints || y + image.height_millipoints > page.height_millipoints)) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.id, 'Floating image must fit entirely inside its anchor paragraph page') }
             if (!Number.isSafeInteger(y) || y < 0) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Image placement exceeds bounded non-negative page coordinates') }
             contentCommands.push({
-              kind: 'paint_inline_image', id: paintImageCommandID(placed.id, fragment.id), line_id: line.id, fragment_id: fragment.id, source_id: fragment.source_id,
+              ...(image.floating ? { kind: 'paint_floating_image' as const, layer: image.floating.layer, stacking_order: image.floating.stacking_order } : { kind: 'paint_inline_image' as const }), id: paintImageCommandID(placed.id, fragment.id), line_id: line.id, fragment_id: fragment.id, source_id: fragment.source_id,
               drawing_id: image.drawing_id, asset_id: image.asset_id,
-              x_millipoints: fragmentX, y_millipoints: y, width_millipoints: image.width_millipoints, height_millipoints: image.height_millipoints,
+              x_millipoints: x, y_millipoints: y, width_millipoints: image.width_millipoints, height_millipoints: image.height_millipoints,
               source_crop: image.source_crop, transform: image.transform,
             })
             fragmentX += fragment.advance_inline_millipoints
@@ -1077,7 +1098,11 @@ export async function compileNativeDocxPagePaintV1(value: unknown, outlineProvid
       background_rgb: 'FFFFFF',
       clip_box: { x_millipoints: 0, y_millipoints: 0, width_millipoints: page.width_millipoints, height_millipoints: page.height_millipoints },
       lines: paintLines,
-      commands: [...tableCommands.fills, ...contentCommands, ...tableCommands.borders],
+      commands: [
+        ...contentCommands.filter((command): command is NativeDocxPaintFloatingImageCommandV1 => command.kind === 'paint_floating_image' && command.layer === 'behind').sort((a,b) => a.stacking_order-b.stacking_order),
+        ...tableCommands.fills, ...contentCommands.filter(command => command.kind !== 'paint_floating_image'), ...tableCommands.borders,
+        ...contentCommands.filter((command): command is NativeDocxPaintFloatingImageCommandV1 => command.kind === 'paint_floating_image' && command.layer === 'front').sort((a,b) => a.stacking_order-b.stacking_order),
+      ],
     })
   }
   for (const { paragraphID, prefix, ordinal } of selectedParagraphIDs.values()) for (const nativeRun of nativeParagraphs.get(paragraphID)?.runs ?? []) {
@@ -1140,7 +1165,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       const resolvedParagraphs = new Map(request.value.pagination_request.resolved_layout.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
       const manifestFaces = new Map(request.value.font_manifest.faces.map((face) => [face.faceId, face]))
       const expectedGlyphs: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; glyphIndex: number; glyphID: number; face?: NativeDocxContentAddressedFaceV1; fontSize?: number; fill: string }> = []
-      const expectedImages: Array<{ pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; drawingID: string; assetID: string; x: number; y: number; width: number; height: number; transform: NativeDocxPaintInlineImageCommandV1['transform']; crop: NativeDocxPaintInlineImageCommandV1['source_crop'] }> = []
+      const expectedImages: Array<{ floating?: { layer: 'behind' | 'front'; stacking_order: number }; pageIndex: number; pageID: string; placedLineID: string; lineID: string; fragmentID: string; sourceID: string; drawingID: string; assetID: string; x: number; y: number; width: number; height: number; transform: NativeDocxPaintInlineImageCommandV1['transform']; crop: NativeDocxPaintInlineImageCommandV1['source_crop'] }> = []
       const expectedSeparators: Array<{ pageIndex: number; command: NativeDocxStrokeNoteSeparatorCommandV1 }> = []
       const expectedHighlights: Array<{ pageIndex: number; command: NativeDocxFillTextHighlightCommandV1 }> = []
       const highlightIDsByPlacement = new Map<string, string[]>()
@@ -1191,14 +1216,14 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             if (fragment.source_kind === 'image') {
               const run = nativeRuns.get(fragment.source_id)
               const qualified = run?.drawing ? qualifyNativeDocxInlineImageV1(request.value.pagination_request.document, run.id, run.drawing) : undefined
-              if (qualified?.ok) expectedImages.push({ pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: fragmentX, y: placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
+              if (qualified?.ok) expectedImages.push({ floating: qualified.value.floating, pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: qualified.value.floating?.x_millipoints ?? fragmentX, y: qualified.value.floating?.y_millipoints ?? placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
             }
             fragmentX += fragment.advance_inline_millipoints
           })
         })
       })
       const actualGlyphs = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command, commandIndex) => command.kind === 'fill_glyph_path' ? [{ page, pageIndex, commandIndex, command }] : []))
-      const actualImages = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command, commandIndex) => command.kind === 'paint_inline_image' ? [{ page, pageIndex, commandIndex, command }] : []))
+      const actualImages = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command, commandIndex) => command.kind === 'paint_inline_image' || command.kind === 'paint_floating_image' ? [{ page, pageIndex, commandIndex, command }] : []))
       const actualSeparators = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'stroke_note_separator' ? [{ pageIndex, command }] : []))
       const actualHighlights = output.value.pages.flatMap((page, pageIndex) => page.commands.flatMap((command) => command.kind === 'fill_text_highlight' ? [{ pageIndex, command }] : []))
       if (!sameWire(actualHighlights, expectedHighlights)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'highlights must exactly cover source run colors and shaped font-metric rectangles')
@@ -1241,8 +1266,10 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
         const expected = expectedGlyphs[index]
         if (!expected || actual.pageIndex !== expected.pageIndex || actual.page.id !== expected.pageID || actual.command.line_id !== expected.lineID || actual.command.fragment_id !== expected.fragmentID || actual.command.source_id !== expected.sourceID || actual.command.glyph_index !== expected.glyphIndex || actual.command.glyph_id !== expected.glyphID || !sameWire(actual.command.face, expected.face) || actual.command.font_size_millipoints !== expected.fontSize || actual.command.fill_rgb !== expected.fill || actual.command.fill_rule !== 'nonzero' || actual.command.id !== paintCommandID(expected.placedLineID, expected.fragmentID, expected.glyphIndex)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}`, 'paint command must exact-join its page, line, fragment, face content address, glyph, size, and fill identity')
       })
-      actualImages.forEach((actual, index) => {
-        const expected = expectedImages[index]
+      const expectedImageByID = new Map(expectedImages.map(expected => [paintImageCommandID(expected.placedLineID, expected.fragmentID), expected]))
+      actualImages.forEach((actual) => {
+        const expected = expectedImageByID.get(actual.command.id)
+        if (expected && (actual.command.kind !== (expected.floating ? 'paint_floating_image' : 'paint_inline_image') || actual.command.kind === 'paint_floating_image' && (actual.command.layer !== expected.floating?.layer || actual.command.stacking_order !== expected.floating?.stacking_order))) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}`, 'image layering must exactly match source anchor semantics')
         if (expected && !sameWire(actual.command.transform, expected.transform)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}/transform`, 'image orientation must exactly match the source drawing transform')
         if (expected && !sameWire(actual.command.source_crop, expected.crop)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}/source_crop`, 'image crop must exactly match the source drawing rectangle')
         if (!expected || actual.pageIndex !== expected.pageIndex || actual.page.id !== expected.pageID || actual.command.line_id !== expected.lineID || actual.command.fragment_id !== expected.fragmentID || actual.command.source_id !== expected.sourceID || actual.command.drawing_id !== expected.drawingID || actual.command.asset_id !== expected.assetID || actual.command.x_millipoints !== expected.x || actual.command.y_millipoints !== expected.y || actual.command.width_millipoints !== expected.width || actual.command.height_millipoints !== expected.height || actual.command.id !== paintImageCommandID(expected.placedLineID, expected.fragmentID)) add(issues, 'BROKEN_REFERENCE', `/output/pages/${actual.pageIndex}/commands/${actual.commandIndex}`, 'image command must exact-join its page, line, fragment, drawing, media digest identity, and exact geometry')

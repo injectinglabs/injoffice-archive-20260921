@@ -29,6 +29,13 @@ import {
 
 const root = resolve(import.meta.dirname, '../../..')
 const parsedFull = JSON.parse(readFileSync(resolve(root, 'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'), 'utf8')) as NativePptxDeck
+it('retains typed arrow source descriptors through compile and paint without mutation',async()=>{
+ const deck=structuredClone(parsedFull),connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
+ if(connector.kind!=='connector')throw new Error('connector missing')
+ connector.tailArrow=true;connector.tailEnd={type:'diamond',w:'lg',len:'sm'}
+ const before=JSON.stringify(deck),tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()}),surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+ expect(surface.finish()).toContainEqual(expect.objectContaining({kind:'path',tailArrow:true,tailEnd:{type:'diamond',w:'lg',len:'sm'}}));expect(JSON.stringify(deck)).toBe(before)
+})
 const digest = 'sha256:054edec1d0211f624fed0cbca9d4f9400b0e491c43742af2c5b0abebf0c990d8' as const
 
 const manifest: NativeFontManifest = {

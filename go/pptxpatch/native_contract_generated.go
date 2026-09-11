@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "db4f9fd5877294a9b0c353c2c0cbbd2330b0e3414486f7bbde9720ce57cf3eca"
+const NativePPTXSchemaSHA256 = "5fec15ba9b3d68a110d3a8ef386bf9d75b39fd2516dabef8a7fb69eeb80af3ec"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -38,6 +38,10 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"delayMs", "direction", "distancePpm", "durationMs", "effect"},
 		Required:   []string{"effect"},
 	},
+	"NativeArrowEnd": {
+		Properties: []string{"len", "type", "w"},
+		Required:   []string{"type"},
+	},
 	"NativeAsset": {
 		Properties: []string{"byteLength", "contentType", "dataBase64", "id", "passthrough", "provenance", "sha256", "source"},
 		Required:   []string{"byteLength", "contentType", "id", "passthrough", "provenance", "sha256"},
@@ -51,7 +55,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"diagnostics", "status"},
 	},
 	"NativeConnectorElement": {
-		Properties: []string{"animation", "compatibility", "flipH", "headArrow", "id", "kind", "name", "passthrough", "provenance", "source", "stroke", "tailArrow", "transform"},
+		Properties: []string{"animation", "compatibility", "flipH", "headArrow", "headEnd", "id", "kind", "name", "passthrough", "provenance", "source", "stroke", "tailArrow", "tailEnd", "transform"},
 		Required:   []string{"compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
 	"NativeDiagnostic": {

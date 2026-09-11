@@ -105,6 +105,8 @@ export interface NativeDocxDrawingV1 {
   x_emu?: number
   y_emu?: number
   horizontal_relative_from?: string
+  floating_layer?: 'behind' | 'front'
+  stacking_order?: number
   vertical_relative_from?: string
   wrap?: 'none' | 'square' | 'tight' | 'through' | 'top-and-bottom'
   edit_policy: NativeDocxEditPolicyV1
@@ -182,6 +184,7 @@ export interface NativeDocxTableV1 {
   edit_policy: NativeDocxEditPolicyV1
   table_style_id?: string
   width_twips?: number
+  width_percent_fiftieths?: number
   layout?: 'fixed'
   alignment?: 'left'
   indent_twips?: number
@@ -367,7 +370,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
   RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'control', 'reference', 'drawing'],
@@ -379,7 +382,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   TableCellMarginsV1: ['top_twips', 'right_twips', 'bottom_twips', 'left_twips'],
   TableCellV1: ['id', 'anchor', 'width_twips', 'grid_span', 'vertical_merge', 'borders', 'shading_rgb', 'paragraphs'],
   TableRowV1: ['id', 'anchor', 'height_twips', 'height_rule', 'repeat_header', 'cant_split', 'cells'],
-  TableV1: ['id', 'anchor', 'edit_policy', 'table_style_id', 'width_twips', 'layout', 'alignment', 'indent_twips', 'grid_widths_twips', 'cell_margins', 'borders', 'rows'],
+  TableV1: ['id', 'anchor', 'edit_policy', 'table_style_id', 'width_twips', 'layout', 'alignment', 'indent_twips', 'grid_widths_twips', 'cell_margins', 'borders', 'rows', 'width_percent_fiftieths'],
   BlockV1: ['kind', 'id', 'paragraph', 'table'],
   StoryV1: ['id', 'kind', 'part_name', 'native_story_id', 'relationship_id', 'note_role', 'anchor', 'blocks'],
   HeaderFooterReferenceV1: ['kind', 'story_id', 'relationship_id'],
@@ -641,6 +644,10 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
   integer(entry.x_emu, `${path}/x_emu`, issues, Number.MIN_SAFE_INTEGER, false)
   integer(entry.y_emu, `${path}/y_emu`, issues, Number.MIN_SAFE_INTEGER, false)
   optionalString(entry.horizontal_relative_from, `${path}/horizontal_relative_from`, issues)
+  if (entry.floating_layer !== undefined) enumValue(entry.floating_layer, `${path}/floating_layer`, ['behind', 'front'], issues)
+  integer(entry.stacking_order, `${path}/stacking_order`, issues, 0, false)
+  if (typeof entry.stacking_order === 'number' && entry.stacking_order > 0xffffffff) add(issues, 'OUT_OF_RANGE', `${path}/stacking_order`, 'must be an unsigned 32-bit integer')
+  if (placement === 'inline' && (entry.floating_layer !== undefined || entry.stacking_order !== undefined)) add(issues, 'INVALID_VALUE', path, 'inline drawings cannot carry floating layering')
   optionalString(entry.vertical_relative_from, `${path}/vertical_relative_from`, issues)
   if (entry.wrap !== undefined) enumValue(entry.wrap, `${path}/wrap`, ['none', 'square', 'tight', 'through', 'top-and-bottom'], issues)
   if (placement === 'inline' && (entry.x_emu !== undefined || entry.y_emu !== undefined)) add(issues, 'INVALID_VALUE', path, 'inline drawings cannot carry floating offsets')
@@ -740,6 +747,11 @@ function validateTable(value: unknown, path: string, issues: NativeDocxValidatio
   validateEditPolicy(entry.edit_policy, `${path}/edit_policy`, issues, tableOperations)
   optionalString(entry.table_style_id, `${path}/table_style_id`, issues, ID)
   twipsInteger(entry.width_twips, `${path}/width_twips`, issues, 1, false)
+  if (entry.width_percent_fiftieths !== undefined) {
+    const percent = integer(entry.width_percent_fiftieths, `${path}/width_percent_fiftieths`, issues, 1)
+    if (percent !== undefined && percent !== null && percent > 5000) add(issues, 'OUT_OF_RANGE', `${path}/width_percent_fiftieths`, 'must be at most 5000 fiftieths of a percent')
+    if (entry.width_twips !== undefined) add(issues, 'INVALID_UNION', path, 'table width must use exactly one unit')
+  }
   if (entry.layout !== undefined) enumValue(entry.layout, `${path}/layout`, ['fixed'], issues)
   if (entry.alignment !== undefined) enumValue(entry.alignment, `${path}/alignment`, ['left'], issues)
   twipsInteger(entry.indent_twips, `${path}/indent_twips`, issues, 0, false)

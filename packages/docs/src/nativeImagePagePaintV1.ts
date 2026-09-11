@@ -23,6 +23,7 @@ export const DOCX_INLINE_IMAGE_LIMITS = Object.freeze({
   maxPixelDimension: 32_768,
   maxPixels: 100_000_000,
   maxGeometryMilliPoints: 1_000_000_000,
+  maxFloatingImages: 128,
 })
 
 export interface NativeDocxAuthoritativeMediaAssetV1 {
@@ -44,6 +45,7 @@ export interface NativeDocxPagePaintMediaAssetV1 {
 }
 
 export interface NativeDocxQualifiedInlineImageV1 {
+  floating?: { x_millipoints: number; y_millipoints: number; layer: 'behind' | 'front'; stacking_order: number }
   drawing_id: string
   run_id: string
   asset_id: string
@@ -214,7 +216,21 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
   const crop = drawing.source_crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
   if (!['left','top','right','bottom'].every((key) => Number.isSafeInteger(crop[key as keyof typeof crop]) && crop[key as keyof typeof crop] >= 0 && crop[key as keyof typeof crop] <= 99000) || crop.left + crop.right > 99000 || crop.top + crop.bottom > 99000) return { ok: false, code: 'unsupported-image', message: 'Source crop must retain at least one percent per axis in exact integer units' }
   if (drawing.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(drawing.rotation_degrees) || drawing.flip_horizontal !== undefined && typeof drawing.flip_horizontal !== 'boolean' || drawing.flip_vertical !== undefined && typeof drawing.flip_vertical !== 'boolean') return { ok: false, code: 'unsupported-image', message: 'Inline image transform requires explicit booleans and quarter-turn rotation' }
-  if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined) {
+  let floating: NativeDocxQualifiedInlineImageV1['floating']
+  if (drawing.placement === 'floating') {
+    let bodyParagraph = false, floatingCount = 0, sameOrder = 0
+    for (const block of document.body.blocks) for (const run of block.paragraph?.runs ?? []) {
+      if (run.drawing?.placement !== 'floating') continue
+      if (++floatingCount > DOCX_INLINE_IMAGE_LIMITS.maxFloatingImages) return { ok: false, code: 'resource-limit', message: 'Floating images exceed the bounded document limit' }
+      if (run.id === runID && run.drawing.id === drawing.id) bodyParagraph = true
+      if (run.drawing.floating_layer === drawing.floating_layer && run.drawing.stacking_order === drawing.stacking_order) sameOrder += 1
+    }
+    const x = drawing.x_emu === 0 ? 0 : emuToMilliPoints(drawing.x_emu!)
+    const y = drawing.y_emu === 0 ? 0 : emuToMilliPoints(drawing.y_emu!)
+    if (!bodyParagraph || drawing.horizontal_relative_from !== 'page' || drawing.vertical_relative_from !== 'page' || drawing.wrap !== 'none' || x === undefined || y === undefined || !['behind', 'front'].includes(drawing.floating_layer!) || !Number.isSafeInteger(drawing.stacking_order) || drawing.stacking_order! < 0 || drawing.stacking_order! > 0xffffffff) return { ok: false, code: 'unsupported-image', message: 'Floating images require a body paragraph, exact non-negative page offsets, wrapNone and explicit source layering' }
+    floating = { x_millipoints: x, y_millipoints: y, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order! }
+    if (sameOrder !== 1) return { ok: false, code: 'unsupported-image', message: 'Floating image stacking orders must be unique within each layer' }
+  } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined) {
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }
   }
   if (!drawing.relationship_id || !drawing.media_part || !drawing.content_type) return { ok: false, code: 'invalid-image', message: 'Inline picture lacks an exact embedded relationship/media identity' }
@@ -233,6 +249,7 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
   return {
     ok: true,
     value: {
+      ...(floating ? { floating } : {}),
       drawing_id: drawing.id,
       run_id: runID,
       asset_id: imageAssetID(part.sha256, part.part_name),

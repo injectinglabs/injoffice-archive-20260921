@@ -31,7 +31,8 @@ export const DOCX_PAGINATED_LAYOUT_V1_BINDING_FIELDS = {
   PlacedLineV1: ['id', 'line_id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'repeated_table_header', 'table_cell_id'],
   PlacedNoteStoryV1: ['id', 'story_id', 'story_kind', 'note_role', 'native_story_id', 'relationship_id', 'ordinal', 'reference_run_id', 'number', 'section_id', 'column_id', 'column_ordinal', 'top_millipoints', 'height_millipoints', 'lines'],
   ParagraphSliceV1: ['id', 'paragraph_id', 'section_id', 'column_id', 'column_ordinal', 'slice_ordinal', 'first_line_ordinal', 'last_line_ordinal', 'line_ids', 'top_millipoints', 'height_millipoints', 'space_before_millipoints', 'continued_from_previous_page', 'continues_on_next_page', 'continued_from_previous_column', 'continues_in_next_column', 'repeated_table_header', 'table_cell_id'],
-  PageV1: ['id', 'ordinal', 'section_id', 'section_ids', 'section_page_ordinal', 'kind', 'parity_reason', 'parity_before_section_id', 'width_millipoints', 'height_millipoints', 'body_box', 'columns', 'header_refs', 'footer_refs', 'paragraph_slices', 'lines', 'note_stories'],
+  PageV1: ['id', 'ordinal', 'section_id', 'section_ids', 'section_page_ordinal', 'kind', 'parity_reason', 'parity_before_section_id', 'width_millipoints', 'height_millipoints', 'body_box', 'columns', 'header_refs', 'footer_refs', 'paragraph_slices', 'lines', 'note_stories', 'table_rows'],
+  TableRowFragmentV1: ['id','table_id','row_id','row_ordinal','fragment_ordinal','section_id','column_id','column_ordinal','x_millipoints','y_millipoints','width_millipoints','height_millipoints','source_y_millipoints','source_height_millipoints'],
   SectionV1: ['section_id', 'starts_at_block_id', 'break_type', 'column_ids', 'page_ids'],
   PaginatedLayoutV1: ['protocol', 'version', 'status', 'provenance', 'diagnostics', 'sections', 'pages'],
 } as const
@@ -566,6 +567,7 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
   const referencedLineIDs = new Set<string>()
   const paragraphSlices = new Map<string, SliceValidation[]>()
   const pageResults = pageList.map((page, index) => validatePage(page, `/pages/${index}`, index, issues, pageIDs, placedLineIDs, noteSourceLineIDs, sliceIDs, referencedLineIDs, paragraphSlices))
+  validateTableRowFragments(pageList, issues)
   const sectionIDs = new Set<string>()
   const sectionOrder: string[] = []
   const sectionBreaks = new Map<string, string>()
@@ -645,6 +647,36 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
   if (status === 'paginated' && (sectionList.length === 0 || pageList.length === 0)) add(issues, 'REQUIRED', '', 'paginated layout requires at least one section and page')
   issues.sort(compareNativeValidationIssues)
   return issues.length > 0 ? { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) } : { ok: true, value: value as NativeDocxPaginatedLayoutV1 }
+}
+
+function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidationIssue[]): void {
+  const rows = new Map<string,{ ordinal:number; end:number; height:number; page:number; rowOrdinal:number; sectionID:string; path:string }>()
+  let count = 0
+  for (const [pageIndex,pageValue] of pages.entries()) {
+    if(!isObject(pageValue)||pageValue.table_rows===undefined)continue
+    const path=`/pages/${pageIndex}/table_rows`
+    const fragments=array(pageValue.table_rows,path,DOCX_PAGINATION_LIMITS.maxLinePlacements,issues)
+    if(pageValue.kind==='parity-blank'&&fragments.length)add(issues,'INVALID_UNION',path,'parity blank pages cannot contain table row fragments')
+    for(const [index,value] of fragments.entries()) {
+      count+=1
+      if(count>DOCX_PAGINATION_LIMITS.maxLinePlacements){add(issues,'LIMIT_EXCEEDED',path,'table row fragments exceed the global placement budget');return}
+      const rowPath=`${path}/${index}`,row=object(value,rowPath,DOCX_PAGINATED_LAYOUT_V1_BINDING_FIELDS.TableRowFragmentV1,issues)
+      if(!row)continue
+      const id=stringValue(row.id,`${rowPath}/id`,issues,ID,1024),tableID=stringValue(row.table_id,`${rowPath}/table_id`,issues,ID,1024),rowID=stringValue(row.row_id,`${rowPath}/row_id`,issues,ID,1024),sectionID=stringValue(row.section_id,`${rowPath}/section_id`,issues,ID,1024),columnID=stringValue(row.column_id,`${rowPath}/column_id`,issues,ID,1024)
+      const rowOrdinal=integer(row.row_ordinal,`${rowPath}/row_ordinal`,0,DOCX_NATIVE_LIMITS.maxCollectionItems,issues),ordinal=integer(row.fragment_ordinal,`${rowPath}/fragment_ordinal`,0,DOCX_PAGINATION_LIMITS.maxLinePlacements,issues),columnOrdinal=integer(row.column_ordinal,`${rowPath}/column_ordinal`,0,44,issues)
+      const x=integer(row.x_millipoints,`${rowPath}/x_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),y=integer(row.y_millipoints,`${rowPath}/y_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),width=integer(row.width_millipoints,`${rowPath}/width_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),height=integer(row.height_millipoints,`${rowPath}/height_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),sourceY=integer(row.source_y_millipoints,`${rowPath}/source_y_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),sourceHeight=integer(row.source_height_millipoints,`${rowPath}/source_height_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues)
+      const column=(Array.isArray(pageValue.columns)?pageValue.columns.slice(0,45):[]).find(value=>isObject(value)&&value.id===columnID)
+      if(!isObject(column)||column.section_id!==sectionID||column.ordinal!==columnOrdinal)add(issues,'BROKEN_REFERENCE',rowPath,'row fragment must reference its exact page section column')
+      else if(typeof x==='number'&&typeof y==='number'&&typeof width==='number'&&typeof height==='number'&&(x<(column.x_millipoints as number)||x+width>(column.x_millipoints as number)+(column.width_millipoints as number)||y<(column.y_millipoints as number)||y+height>(column.y_millipoints as number)+(column.height_millipoints as number)))add(issues,'OUT_OF_RANGE',rowPath,'row fragment exceeds its exact page column')
+      if(tableID&&rowID&&sectionID&&ordinal!==undefined&&rowOrdinal!==undefined&&sourceY!==undefined&&sourceHeight!==undefined&&height!==undefined) {
+        const key=JSON.stringify([tableID,rowID]),previous=rows.get(key)
+        if(id!==`table-row:${tableID}:${rowID}:${ordinal}`)add(issues,'INVALID_VALUE',`${rowPath}/id`,'row fragment ID must derive from table, row and ordinal')
+        if(sourceY+height>sourceHeight||(!previous&&(ordinal!==0||sourceY!==0))||(previous&&(ordinal!==previous.ordinal+1||sourceY!==previous.end||sourceHeight!==previous.height||rowOrdinal!==previous.rowOrdinal||sectionID!==previous.sectionID||pageIndex<=previous.page)))add(issues,'BROKEN_REFERENCE',rowPath,'row fragments must exactly and contiguously cover one source row across increasing pages')
+        rows.set(key,{ordinal,end:sourceY+height,height:sourceHeight,page:pageIndex,rowOrdinal,sectionID,path:rowPath})
+      }
+    }
+  }
+  for(const row of rows.values())if(row.end!==row.height)add(issues,'BROKEN_REFERENCE',row.path,'final row fragment must cover the source row through its end')
 }
 
 /** Strict output decoding plus exact source-completeness validation. */

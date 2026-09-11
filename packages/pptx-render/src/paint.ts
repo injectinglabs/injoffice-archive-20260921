@@ -1,6 +1,6 @@
 import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
-import type { NativePictureCrop } from '@injoffice/pptx-native'
+import type { NativePictureCrop,NativeArrowEnd } from '@injoffice/pptx-native'
 
 export type PaintCommand =
   | { readonly kind: 'beginSlide'; readonly size: { readonly cx: number; readonly cy: number }; readonly background: string }
@@ -9,7 +9,7 @@ export type PaintCommand =
   | { readonly kind: 'restore' }
   | { readonly kind: 'transform'; readonly transform: RenderTransform }
   | { readonly kind: 'clipRect'; readonly rect: RenderRect }
-  | { readonly kind: 'path'; readonly sourceElementId: string; readonly path: readonly RenderPathCommand[]; readonly fill?: string; readonly stroke?: RenderStroke; readonly headArrow?: boolean; readonly tailArrow?: boolean }
+  | { readonly kind: 'path'; readonly sourceElementId: string; readonly path: readonly RenderPathCommand[]; readonly fill?: string; readonly stroke?: RenderStroke; readonly headArrow?: boolean; readonly tailArrow?: boolean; readonly headEnd?:Readonly<NativeArrowEnd>;readonly tailEnd?:Readonly<NativeArrowEnd> }
   | { readonly kind: 'image'; readonly sourceElementId: string; readonly role: 'picture' | 'chartPreview'; readonly assetId: string; readonly rect: RenderRect; readonly crop?: Readonly<NativePictureCrop> }
   | { readonly kind: 'glyphRun'; readonly sourceElementId: string; readonly run: RenderTextRunNode }
   | { readonly kind: 'placeholder'; readonly sourceElementId: string; readonly rect: RenderRect; readonly reason: string; readonly label: string }
@@ -92,7 +92,7 @@ function paintNode(node: RenderNode, surface: PaintSurface): void {
       paintTextBody(node.textBody, surface)
       break
     case 'connector':
-      surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, stroke: node.stroke, headArrow: node.headArrow, tailArrow: node.tailArrow })
+      surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, stroke: node.stroke, headArrow: node.headArrow, tailArrow: node.tailArrow,...(node.headEnd?{headEnd:node.headEnd}:{}),...(node.tailEnd?{tailEnd:node.tailEnd}:{}) })
       break
     case 'image':
       surface.push({ kind: 'image', sourceElementId: node.sourceElementId, role: node.role, assetId: node.assetId, rect: node.bounds, ...(node.crop ? { crop: node.crop } : {}) })

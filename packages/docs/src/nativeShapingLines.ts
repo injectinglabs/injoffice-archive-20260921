@@ -1435,7 +1435,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
       sourceKind: 'image', sourceID: run.id, startUtf16: 0, endUtf16: 0, text: '',
       direction, bidiLevel: level, script: 'Zyyy', language: resolved.properties.language ?? 'und',
       whitespace: false, unsafeToBreak: false, breakAfter: false, dynamicTab: false,
-      advance: image.width_millipoints, metrics, glyphs: [],
+      advance: image.floating ? 0 : image.width_millipoints, metrics: image.floating ? emptyMetrics() : metrics, glyphs: [],
     } }]
   }
   if (run.kind === 'reference') {

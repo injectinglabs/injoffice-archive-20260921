@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "db4f9fd5877294a9b0c353c2c0cbbd2330b0e3414486f7bbde9720ce57cf3eca" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "5fec15ba9b3d68a110d3a8ef386bf9d75b39fd2516dabef8a7fb69eeb80af3ec" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -39,6 +39,17 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     ],
     "required": [
       "effect"
+    ]
+  },
+  "NativeArrowEnd": {
+    "schemaName": "arrowEnd",
+    "properties": [
+      "len",
+      "type",
+      "w"
+    ],
+    "required": [
+      "type"
     ]
   },
   "NativeAsset": {
@@ -105,6 +116,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "compatibility",
       "flipH",
       "headArrow",
+      "headEnd",
       "id",
       "kind",
       "name",
@@ -113,6 +125,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "source",
       "stroke",
       "tailArrow",
+      "tailEnd",
       "transform"
     ],
     "required": [
@@ -1451,6 +1464,43 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "arrowEnd": {
+      "x-binding-name": "NativeArrowEnd",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "triangle",
+            "arrow",
+            "stealth",
+            "diamond",
+            "oval"
+          ]
+        },
+        "w": {
+          "type": "string",
+          "enum": [
+            "sm",
+            "med",
+            "lg"
+          ]
+        },
+        "len": {
+          "type": "string",
+          "enum": [
+            "sm",
+            "med",
+            "lg"
+          ]
+        }
+      }
+    },
     "connectorElement": {
       "x-binding-name": "NativeConnectorElement",
       "type": "object",
@@ -1488,6 +1538,12 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "tailArrow": {
           "type": "boolean"
+        },
+        "headEnd": {
+          "$ref": "#/$defs/arrowEnd"
+        },
+        "tailEnd": {
+          "$ref": "#/$defs/arrowEnd"
         },
         "flipH": {
           "type": "boolean"

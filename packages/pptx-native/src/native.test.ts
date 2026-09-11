@@ -20,6 +20,15 @@ function fixture(path: string): unknown {
 }
 
 describe('native PPTX contract', () => {
+  it('preserves typed source endpoints and refuses contradictory legacy flags',()=>{
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck,connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
+    if(connector.kind!=='connector')throw new Error('connector missing')
+    connector.tailArrow=true;connector.tailEnd={type:'diamond',w:'lg',len:'sm'}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    connector.tailArrow=false;expect(validateNativePptx(deck).ok).toBe(false)
+    delete connector.tailArrow;expect(validateNativePptx(deck).ok).toBe(true)
+    ;(connector.tailEnd as unknown as {type:string}).type='star';expect(validateNativePptx(deck).ok).toBe(false)
+  })
   it('retains bounded authored markers and refuses contradictory or malformed bullet metadata', () => {
     const deck = fixture('valid/parsed-full.json') as NativePptxDeck
     const element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!

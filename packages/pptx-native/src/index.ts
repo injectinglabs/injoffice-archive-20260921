@@ -24,6 +24,7 @@ export {
 } from './schema.generated'
 export type {
   NativeAnimation,
+  NativeArrowEnd,
   NativeAnimationEffect,
   NativeAsset,
   NativeChartElement,

@@ -103,8 +103,11 @@ unsupported diagnostic and passthrough inventory.
 Top-level title/body placeholders resolve one unique relationship-bound layout
 index and master type. Complete geometry, body properties, and explicit list
 levels cascade into a read-only projection; original slide runs and source
-fingerprints are retained. Unstyled ancestor authoring prompts are accepted but
-never copied into the slide. Local paragraph/run overrides still win, including
-explicit nested list levels. Formatting attached to ancestor prompt paragraphs
-or runs, competing matches, grouped placeholders, and unmodeled master artwork
-remain outside this subset. This is not whole-master or PowerPoint fidelity.
+fingerprints are retained. Ancestor authoring prompt text is never copied into
+the slide. Explicit level 0–8 prompt paragraph properties and `defRPr` defaults
+can supply missing or equal list-level properties. Duplicate levels, conflicting
+defaults, implicit styled levels, and run/end-mark styling refuse; no competing
+source is guessed. Local slide paragraph/run overrides still win, including
+explicit nested list levels. Competing placeholder matches, grouped placeholders,
+and unmodeled master artwork remain outside this subset. This is not whole-master
+or PowerPoint fidelity.

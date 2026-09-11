@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-func TestExtractNativePPTXStraightConnectorArrowsAreExactBooleanFlags(t *testing.T) {
+func TestExtractNativePPTXStraightConnectorArrowsPreserveTypedDescriptors(t *testing.T) {
 	t.Parallel()
 	line := nativeAutoShapeSolidLine("12700", "flat", `<a:round/>`, "123456")
-	head := strings.Replace(line, `</a:ln>`, `<a:headEnd type="triangle" w="med" sz="med"/></a:ln>`, 1)
+	head := strings.Replace(line, `</a:ln>`, `<a:headEnd type="triangle" w="med" len="med"/></a:ln>`, 1)
 	tail := strings.Replace(line, `</a:ln>`, `<a:tailEnd type="stealth" w="sm"/></a:ln>`, 1)
-	both := strings.Replace(line, `</a:ln>`, `<a:headEnd type="arrow" w="lg" sz="sm"/><a:tailEnd type="diamond" sz="lg"/></a:ln>`, 1)
-	none := strings.Replace(line, `</a:ln>`, `<a:headEnd type="none" w="med" sz="med"/></a:ln>`, 1)
+	both := strings.Replace(line, `</a:ln>`, `<a:headEnd type="arrow" w="lg" len="sm"/><a:tailEnd type="diamond" len="lg"/></a:ln>`, 1)
+	none := strings.Replace(line, `</a:ln>`, `<a:headEnd type="none" w="med" len="med"/></a:ln>`, 1)
 	children := strings.Join([]string{
 		nativeConnectorXML(3, "Head", `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, head, "", "", "", ""),
 		nativeConnectorXML(4, "Tail", `<a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>`, tail, "", "", "", ""),
@@ -38,6 +38,33 @@ func TestExtractNativePPTXStraightConnectorArrowsAreExactBooleanFlags(t *testing
 		if gotHead != want[index].head || gotTail != want[index].tail {
 			t.Fatalf("connector %d arrow flags = head:%v tail:%v, want %#v: %#v", index, gotHead, gotTail, want[index], connector)
 		}
+		if gotHead && connector.HeadEnd == nil || gotTail && connector.TailEnd == nil {
+			t.Fatal("typed arrow source descriptor missing")
+		}
+	}
+	if connectors[0].HeadEnd.Type != "triangle" || *connectors[0].HeadEnd.W != "med" || *connectors[0].HeadEnd.Len != "med" || connectors[1].TailEnd.Type != "stealth" || connectors[1].TailEnd.Len != nil || connectors[2].TailEnd.Type != "diamond" || *connectors[2].TailEnd.Len != "lg" {
+		t.Fatal("authored arrow type, size, or omission lost")
+	}
+	connectors[0].HeadEnd.Type = "star"
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("invalid endpoint enum admitted")
+	}
+}
+
+func TestTypedArrowStrictSourcePreservation(t *testing.T) {
+	line := strings.Replace(nativeAutoShapeSolidLine("12700", "flat", `<a:round/>`, "123456"), `</a:ln>`, `<a:headEnd type="oval" w="sm" len="lg"/></a:ln>`, 1)
+	input := nativeConnectorFixture(t, true, nativeConnectorXML(3, "Typed", `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line, "", "", "", ""))
+	before := append([]byte(nil), input...)
+	deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectors := nativeFixtureConnectors(deck.Slides[0])
+	if len(connectors) != 1 || connectors[0].HeadEnd == nil || connectors[0].HeadEnd.Type != "oval" || *connectors[0].HeadEnd.W != "sm" || *connectors[0].HeadEnd.Len != "lg" {
+		t.Fatal("Strict typed descriptor lost")
+	}
+	if !bytes.Equal(input, before) {
+		t.Fatal("source was rewritten")
 	}
 }
 
@@ -115,8 +142,9 @@ func TestExtractNativePPTXConnectorRenderingGapsAreRefusedAndPreserved(t *testin
 		rootExtra string
 		wantCode  string
 	}{
-		{name: "unknown-arrow-type", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="star" w="med" sz="med"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
+		{name: "unknown-arrow-type", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="star" w="med" len="med"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
 		{name: "unknown-arrow-size", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="triangle" w="huge"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
+		{name: "nonstandard-arrow-length-attribute", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="triangle" sz="med"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
 		{name: "rotation", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: exactLine, xfrmAttrs: ` rot="60000"`, wantCode: "pptx.connector-transform-unavailable"},
 		{name: "bent", geometry: `<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>`, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},
 		{name: "custom", geometry: customGeometry, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},

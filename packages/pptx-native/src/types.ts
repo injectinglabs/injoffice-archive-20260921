@@ -183,11 +183,19 @@ export interface NativeShapeElement extends NativeElementBase {
   textBody?: NativeTextBodyLayout
 }
 
+/** Source DrawingML names. Omitted width/length stay omitted; not pixel geometry. */
+export interface NativeArrowEnd {
+  type: 'none' | 'triangle' | 'arrow' | 'stealth' | 'diamond' | 'oval'
+  w?: 'sm' | 'med' | 'lg'
+  len?: 'sm' | 'med' | 'lg'
+}
 export interface NativeConnectorElement extends NativeElementBase {
   kind: 'connector'
   stroke?: NativeStroke
   headArrow?: boolean
   tailArrow?: boolean
+  headEnd?: NativeArrowEnd
+  tailEnd?: NativeArrowEnd
   flipH?: boolean
 }
 

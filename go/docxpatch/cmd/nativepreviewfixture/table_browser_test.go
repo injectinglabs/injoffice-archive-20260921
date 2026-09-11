@@ -52,6 +52,19 @@ func TestNativePreviewRepeatingTableBrowserFixture(t *testing.T) {
 	}
 	body.WriteString(`</w:tbl><w:sectPr><w:pgSz w:w="12240" w:h="4480" w:orient="landscape"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`)
 	document := []byte(`<w:document xmlns:w="` + wns + `"><w:body>` + body.String() + `</w:body></w:document>`)
+	if os.Getenv("INJOFFICE_TABLE_PERCENT") == "2500" {
+		document = []byte(strings.Replace(string(document), `<w:tblW w:w="9360" w:type="dxa"/>`, `<w:tblW w:w="2500" w:type="pct"/>`, 1))
+	}
+	if os.Getenv("INJOFFICE_TABLE_SPLIT") == "true" {
+		text := string(document)
+		text = strings.ReplaceAll(text, `<w:cantSplit/><w:trHeight w:val="720" w:hRule="exact"/>`, ``)
+		text = strings.Replace(text, `<w:trPr><w:tblHeader/>`, `<w:trPr><w:cantSplit/><w:trHeight w:val="720" w:hRule="exact"/><w:tblHeader/>`, 1)
+		text = strings.Replace(text, `Body row 1 column 1`, strings.Repeat(`Long natural row `, 100), 1)
+		text = strings.ReplaceAll(text, `</w:tcPr><w:p>`, `<w:shd w:val="clear" w:fill="EEF5EE"/></w:tcPr><w:p>`)
+		// Header retains its original shading; no duplicate properties.
+		text = strings.ReplaceAll(text, `<w:shd w:val="clear" w:fill="DDEEFF"/><w:shd w:val="clear" w:fill="EEF5EE"/>`, `<w:shd w:val="clear" w:fill="DDEEFF"/>`)
+		document = []byte(text)
+	}
 	reader, err := zip.NewReader(bytes.NewReader(source), int64(len(source)))
 	if err != nil {
 		t.Fatal(err)

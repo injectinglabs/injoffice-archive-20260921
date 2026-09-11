@@ -73,6 +73,22 @@ func TestNativeMeasuredPreviewBrowserFixture(t *testing.T) {
 	if err := os.WriteFile(strings.TrimSuffix(output, ".pptx")+"-crop.pptx", picture, 0600); err != nil {
 		t.Fatal(err)
 	}
+	arrows := ""
+	for i, kind := range []string{"triangle", "stealth", "diamond", "oval", "arrow"} {
+		line := nativeAutoShapeSolidLine("120000", "flat", `<a:round/>`, "2255aa")
+		line = strings.Replace(line, `</a:ln>`, `<a:tailEnd type="`+kind+`" w="lg" len="lg"/></a:ln>`, 1)
+		connector := nativeConnectorXML(i+10, kind, `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line, "", "", "", "")
+		connector = strings.Replace(connector, fmt.Sprintf(`<a:off x="%d" y="%d"/>`, (i+10)*100000, (i+10)*50000), fmt.Sprintf(`<a:off x="1000000" y="%d"/>`, 800000+i*1100000), 1)
+		connector = strings.Replace(connector, `cx="1000000" cy="500000"`, `cx="3000000" cy="200000"`, 1)
+		arrows += connector
+	}
+	arrowSource := nativeConnectorFixture(t, false, arrows)
+	slide = string(chartZipEntry(t, arrowSource, part))
+	start, end = strings.Index(slide, "<p:sp>"), strings.Index(slide, "</p:sp>")+len("</p:sp>")
+	arrowSource = replaceChartZipEntry(t, arrowSource, part, []byte(slide[:start]+slide[end:]))
+	if err := os.WriteFile(strings.TrimSuffix(output, ".pptx")+"-arrows.pptx", arrowSource, 0600); err != nil {
+		t.Fatal(err)
+	}
 	group := `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Chart preview group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="6858000"/><a:chOff x="0" y="0"/><a:chExt cx="12192000" cy="6858000"/></a:xfrm></p:grpSpPr>` + nativeChartGraphicFrameXML(false, 4, "Cached chart preview", "") + `</p:grpSp>`
 	chart := nativeChartFixture(t, nativeChartFixtureOptions{previewData: encoded.String(), frameXML: group})
 	slide = string(chartZipEntry(t, chart, part))

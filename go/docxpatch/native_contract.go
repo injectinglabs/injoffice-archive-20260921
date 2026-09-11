@@ -105,6 +105,8 @@ type NativeDrawingV1 struct {
 	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
 	VerticalRelativeFrom   *string              `json:"vertical_relative_from,omitempty"`
 	Wrap                   *string              `json:"wrap,omitempty"`
+	FloatingLayer          *string              `json:"floating_layer,omitempty"`
+	StackingOrder          *int64               `json:"stacking_order,omitempty"`
 	EditPolicy             NativeEditPolicyV1   `json:"edit_policy"`
 }
 
@@ -194,18 +196,19 @@ type NativeTableCellMarginsV1 struct {
 }
 
 type NativeTableV1 struct {
-	ID              string                    `json:"id"`
-	Anchor          NativeSourceAnchorV1      `json:"anchor"`
-	EditPolicy      NativeEditPolicyV1        `json:"edit_policy"`
-	TableStyleID    *string                   `json:"table_style_id,omitempty"`
-	WidthTwips      *int64                    `json:"width_twips,omitempty"`
-	Layout          *string                   `json:"layout,omitempty"`
-	Alignment       *string                   `json:"alignment,omitempty"`
-	IndentTwips     *int64                    `json:"indent_twips,omitempty"`
-	GridWidthsTwips []int64                   `json:"grid_widths_twips,omitempty"`
-	CellMargins     *NativeTableCellMarginsV1 `json:"cell_margins,omitempty"`
-	Borders         *NativeTableBordersV1     `json:"borders,omitempty"`
-	Rows            []NativeTableRowV1        `json:"rows"`
+	ID                    string                    `json:"id"`
+	Anchor                NativeSourceAnchorV1      `json:"anchor"`
+	EditPolicy            NativeEditPolicyV1        `json:"edit_policy"`
+	TableStyleID          *string                   `json:"table_style_id,omitempty"`
+	WidthTwips            *int64                    `json:"width_twips,omitempty"`
+	WidthPercentFiftieths *int64                    `json:"width_percent_fiftieths,omitempty"`
+	Layout                *string                   `json:"layout,omitempty"`
+	Alignment             *string                   `json:"alignment,omitempty"`
+	IndentTwips           *int64                    `json:"indent_twips,omitempty"`
+	GridWidthsTwips       []int64                   `json:"grid_widths_twips,omitempty"`
+	CellMargins           *NativeTableCellMarginsV1 `json:"cell_margins,omitempty"`
+	Borders               *NativeTableBordersV1     `json:"borders,omitempty"`
+	Rows                  []NativeTableRowV1        `json:"rows"`
 }
 
 type NativeBlockV1 struct {
@@ -889,6 +892,14 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 	v.editPolicy(&table.EditPolicy, path+"/edit_policy", nativeTableOperations)
 	v.optionalID(table.TableStyleID, path+"/table_style_id")
 	v.optionalTwips(table.WidthTwips, path+"/width_twips", 1)
+	if table.WidthPercentFiftieths != nil {
+		if *table.WidthPercentFiftieths < 1 || *table.WidthPercentFiftieths > 5000 {
+			v.add("OUT_OF_RANGE", path+"/width_percent_fiftieths", "percentage table width must be 1..5000 fiftieths of a percent")
+		}
+		if table.WidthTwips != nil {
+			v.add("INVALID_UNION", path, "table width must use exactly one unit")
+		}
+	}
 	v.optionalTwips(table.IndentTwips, path+"/indent_twips", 0)
 	for i := range table.GridWidthsTwips {
 		v.twips(&table.GridWidthsTwips[i], fmt.Sprintf("%s/grid_widths_twips/%d", path, i), 1)
@@ -1057,6 +1068,16 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 	}
 	v.optionalString(drawing.HorizontalRelativeFrom, path+"/horizontal_relative_from")
 	v.optionalString(drawing.VerticalRelativeFrom, path+"/vertical_relative_from")
+	if drawing.FloatingLayer != nil {
+		v.oneOf(*drawing.FloatingLayer, path+"/floating_layer", "behind", "front")
+	}
+	v.optionalSafe(drawing.StackingOrder, path+"/stacking_order")
+	if drawing.StackingOrder != nil && (*drawing.StackingOrder < 0 || *drawing.StackingOrder > 4294967295) {
+		v.add("OUT_OF_RANGE", path+"/stacking_order", "must be an unsigned 32-bit stacking order")
+	}
+	if drawing.Placement == "inline" && (drawing.FloatingLayer != nil || drawing.StackingOrder != nil) {
+		v.add("INVALID_VALUE", path, "inline drawings cannot carry floating layering")
+	}
 	if drawing.Placement == "inline" && (drawing.XEMU != nil || drawing.YEMU != nil) {
 		v.add("INVALID_VALUE", path, "inline drawings cannot carry floating offsets")
 	}

@@ -124,6 +124,12 @@ type NativeTextBodyLayout struct {
 	VerticalOverflow   string                   `json:"verticalOverflow"`
 }
 
+type NativeArrowEnd struct {
+	Type string  `json:"type"`
+	W    *string `json:"w,omitempty"`
+	Len  *string `json:"len,omitempty"`
+}
+
 type NativeStroke struct {
 	Color      string            `json:"color"`
 	WidthEMU   *int64            `json:"widthEmu"`
@@ -198,6 +204,8 @@ type NativeElement struct {
 	Fill           *string                `json:"fill,omitempty"`
 	Stroke         *NativeStroke          `json:"stroke,omitempty"`
 	HeadArrow      *bool                  `json:"headArrow,omitempty"`
+	HeadEnd        *NativeArrowEnd        `json:"headEnd,omitempty"`
+	TailEnd        *NativeArrowEnd        `json:"tailEnd,omitempty"`
 	TailArrow      *bool                  `json:"tailArrow,omitempty"`
 	FlipH          *bool                  `json:"flipH,omitempty"`
 	AssetID        *string                `json:"assetId,omitempty"`

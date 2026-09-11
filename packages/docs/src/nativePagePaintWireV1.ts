@@ -51,6 +51,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   ImageCropV1: ['left', 'top', 'right', 'bottom', 'unit'],
   ImageTransformV1: ['rotation_degrees', 'flip_horizontal', 'flip_vertical'],
   ImageCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'drawing_id', 'asset_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'source_crop', 'transform'],
+  FloatingImageCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'drawing_id', 'asset_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'source_crop', 'transform', 'layer', 'stacking_order'],
   BodyLineV1: ['placed_line_id', 'line_id', 'paragraph_id', 'region', 'section_id', 'column_id', 'column_ordinal', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'baseline_y_millipoints', 'command_ids'],
   HeaderFooterLineV1: ['placed_line_id', 'line_id', 'paragraph_id', 'region', 'section_id', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'baseline_y_millipoints', 'command_ids'],
   BodyBoxV1: ['x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
@@ -497,6 +498,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         : kind === 'fill_text_highlight' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.HighlightCommandV1
         : kind === 'stroke_text_underline' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.UnderlineCommandV1
         : kind === 'paint_inline_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageCommandV1
+        : kind === 'paint_floating_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.FloatingImageCommandV1
           : kind === 'fill_table_cell' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.CellFillCommandV1
             : kind === 'stroke_table_border' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BorderCommandV1
               : kind === 'stroke_note_separator' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.NoteSeparatorCommandV1 : undefined
@@ -567,6 +569,11 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         if (!outlineKind) add(issues, 'INVALID_VALUE', `${commandPath}/outline_kind`, 'must be path or empty')
         validatePaintPath(command.path, `${commandPath}/path`, outlineKind, issues, state)
       } else {
+        if (kind === 'paint_floating_image') {
+          if (command.layer !== 'behind' && command.layer !== 'front') add(issues, 'INVALID_VALUE', `${commandPath}/layer`, 'must be behind or front')
+          integer(command.stacking_order, `${commandPath}/stacking_order`, issues, 0, 0xffffffff)
+          if (typeof command.x_millipoints === 'number' && typeof command.width_millipoints === 'number' && command.x_millipoints + command.width_millipoints > (page.width_millipoints as number) || typeof command.y_millipoints === 'number' && typeof command.height_millipoints === 'number' && command.y_millipoints + command.height_millipoints > (page.height_millipoints as number)) add(issues, 'INVALID_VALUE', commandPath, 'floating image must fit entirely inside its page')
+        }
         stringValue(command.drawing_id, `${commandPath}/drawing_id`, issues, ID, 1024)
         const assetID = stringValue(command.asset_id, `${commandPath}/asset_id`, issues, ID, 1024)
         if (assetID && !resources.some((resource) => resource.id === assetID)) add(issues, 'BROKEN_REFERENCE', `${commandPath}/asset_id`, 'image command must reference one canonical output media resource')
@@ -586,7 +593,16 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
     })
     if (commands.length > DOCX_PAGE_PAINT_LIMITS.maxGlyphs) add(issues, 'LIMIT_EXCEEDED', `${path}/commands`, `commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxGlyphs}`)
     const actualCommandIDs = commands.flatMap((command) => isObject(command) && (command.kind === 'fill_glyph_path' || command.kind === 'fill_text_highlight' || command.kind === 'stroke_text_underline' || command.kind === 'paint_inline_image' || command.kind === 'stroke_note_separator') && typeof command.id === 'string' ? [command.id] : [])
-    if (actualCommandIDs.length !== referencedCommandIDs.length || actualCommandIDs.some((id, index) => id !== referencedCommandIDs[index])) add(issues, 'BROKEN_REFERENCE', `${path}/lines`, 'line command ids must exactly cover page commands in replay order')
+    const floatingCommands = commands.filter(command => isObject(command) && command.kind === 'paint_floating_image') as Record<string, unknown>[]
+    const floatingIDs = new Set(floatingCommands.map(command => command.id))
+    const ordinaryReferences = referencedCommandIDs.filter(id => !floatingIDs.has(id))
+    if (actualCommandIDs.length !== ordinaryReferences.length || actualCommandIDs.some((id, index) => id !== ordinaryReferences[index]) || floatingCommands.some(command => !referencedCommandIDs.includes(command.id as string))) add(issues, 'BROKEN_REFERENCE', `${path}/lines`, 'line command ids must exactly cover ordinary replay order and floating anchor ownership')
+    const floatingByID = new Map(floatingCommands.map(command => [command.id, command]))
+    const sourceOrderedFloating = referencedCommandIDs.flatMap(id => { const command = floatingByID.get(id); return command ? [command] : [] })
+    const behind = sourceOrderedFloating.filter(command => command.layer === 'behind').sort((a,b) => (a.stacking_order as number)-(b.stacking_order as number))
+    const front = sourceOrderedFloating.filter(command => command.layer === 'front').sort((a,b) => (a.stacking_order as number)-(b.stacking_order as number))
+    const replay = [...behind, ...commands.filter(command => !isObject(command) || command.kind !== 'paint_floating_image'), ...front]
+    if (commands.some((command,index) => command !== replay[index])) add(issues, 'BROKEN_REFERENCE', `${path}/commands`, 'floating layers must bracket page content in stacking order with source-order ties')
     if (page.kind === 'parity-blank' && (commands.length > 0 || lines.length > 0)) add(issues, 'INVALID_UNION', path, 'parity-blank pages cannot contain lines or paint commands')
     if (!pageID) return
   })

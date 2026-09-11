@@ -1,4 +1,5 @@
 import type {
+  NativeArrowEnd,
   NativeCompatibilityStatus,
   NativeDiagnosticSeverity,
   NativePictureCrop,
@@ -218,6 +219,8 @@ export interface RenderConnectorNode extends RenderNodeBase {
   readonly stroke?: RenderStroke
   readonly headArrow: boolean
   readonly tailArrow: boolean
+  readonly headEnd?: Readonly<NativeArrowEnd>
+  readonly tailEnd?: Readonly<NativeArrowEnd>
 }
 
 export interface RenderImageNode extends RenderNodeBase {

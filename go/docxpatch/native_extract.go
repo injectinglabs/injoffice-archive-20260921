@@ -2391,6 +2391,9 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		return refuse("AMBIGUOUS_DRAWING", "A DrawingML run must contain exactly one wp:inline or wp:anchor picture", node)
 	}
 	container := containers[0]
+	if container.Name.Local == "anchor" && !nativeExactPageAnchor(container, wpNS, aNS) {
+		return refuse("FLOATING_DRAWING_SEMANTICS_PRESERVED", "Only exact page-relative wrapNone anchors with explicit layering and overlap are projected", container)
+	}
 	if container.Name.Local == "inline" && !nativeExactInlinePictureContainer(container, wpNS, aNS) {
 		return refuse("INLINE_DRAWING_SEMANTICS_PRESERVED", "Inline pictures with unmodeled container attributes or children remain preserve-only", container)
 	}
@@ -2496,6 +2499,13 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	}
 	if container.Name.Local == "anchor" {
 		drawing.Placement = "floating"
+		layer := "front"
+		if behind, _ := nativeUnqualifiedAttr(container, "behindDoc"); behind == "1" || behind == "true" {
+			layer = "behind"
+		}
+		drawing.FloatingLayer = nativeString(layer)
+		order, _ := nativeNonnegativeInt64Attr(container, "", "relativeHeight")
+		drawing.StackingOrder = nativeInt64(order)
 		positionH := firstDirectNativeChild(container, wpNS, "positionH")
 		positionV := firstDirectNativeChild(container, wpNS, "positionV")
 		if positionH == nil || positionV == nil {
@@ -2751,10 +2761,72 @@ func (extractor *nativeExtractor) imageRelationship(ownerPart, relID string) (st
 	return "", "", false
 }
 
+func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
+	if !nativeExactContainer(node, xml.Name{Local: "distT"}, xml.Name{Local: "distB"}, xml.Name{Local: "distL"}, xml.Name{Local: "distR"}, xml.Name{Local: "simplePos"}, xml.Name{Local: "relativeHeight"}, xml.Name{Local: "behindDoc"}, xml.Name{Local: "locked"}, xml.Name{Local: "layoutInCell"}, xml.Name{Local: "allowOverlap"}) {
+		return false
+	}
+	for _, name := range []string{"distT", "distB", "distL", "distR"} {
+		if value, present := nativeUnqualifiedAttr(node, name); present && value != "0" {
+			return false
+		}
+	}
+	for name, want := range map[string]bool{"simplePos": false, "locked": false, "layoutInCell": true, "allowOverlap": true} {
+		value, present := nativeUnqualifiedAttr(node, name)
+		if !present || (want && value != "1" && value != "true") || (!want && value != "0" && value != "false") {
+			return false
+		}
+	}
+	behind, present := nativeUnqualifiedAttr(node, "behindDoc")
+	if !present || (behind != "0" && behind != "1" && behind != "true" && behind != "false") {
+		return false
+	}
+	order, ok := nativeNonnegativeInt64Attr(node, "", "relativeHeight")
+	if !ok || order > 4294967295 {
+		return false
+	}
+	// Reuse the exact inline payload qualification after removing only the
+	// anchor fields whose semantics are explicitly represented below.
+	projection := *node
+	projection.Attrs = nil
+	projection.Children = nil
+	seen := map[string]bool{}
+	for _, child := range node.Children {
+		if child.Name.Space == wpNS && (child.Name.Local == "simplePos" || child.Name.Local == "positionH" || child.Name.Local == "positionV" || child.Name.Local == "wrapNone") {
+			if seen[child.Name.Local] {
+				return false
+			}
+			seen[child.Name.Local] = true
+			switch child.Name.Local {
+			case "simplePos":
+				if !nativeExactLeaf(child, xml.Name{Local: "x"}, xml.Name{Local: "y"}) {
+					return false
+				}
+				x, xok := nativeUnqualifiedAttr(child, "x")
+				y, yok := nativeUnqualifiedAttr(child, "y")
+				if !xok || !yok || x != "0" || y != "0" {
+					return false
+				}
+			case "positionH", "positionV":
+				value, relative, ok := nativeDrawingPosition(child, wpNS)
+				if !ok || relative != "page" || value < 0 {
+					return false
+				}
+			case "wrapNone":
+				if !nativeExactLeaf(child) {
+					return false
+				}
+			}
+		} else {
+			projection.Children = append(projection.Children, child)
+		}
+	}
+	return len(seen) == 4 && nativeExactInlinePictureContainer(&projection, wpNS, aNS)
+}
+
 func nativeDrawingPosition(node *nativeXMLNode, wpNS string) (int64, string, bool) {
 	relativeFrom, _ := nativeUnqualifiedAttr(node, "relativeFrom")
 	position := firstDirectNativeChild(node, wpNS, "posOffset")
-	if position == nil || len(node.Children) != 1 {
+	if position == nil || len(node.Children) != 1 || !nativeExactContainer(node, xml.Name{Local: "relativeFrom"}) || len(position.Attrs) != 0 || len(position.Children) != 0 {
 		return 0, "", false
 	}
 	value, err := strconv.ParseInt(strings.TrimSpace(position.Text), 10, 64)
@@ -3171,6 +3243,8 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 				typeValue, typeOK := nativeAttr(property, extractor.wordNS, "type")
 				if widthOK && width > 0 && typeOK && typeValue == "dxa" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
 					table.WidthTwips = nativeInt64(width)
+				} else if widthOK && width > 0 && width <= 5000 && typeOK && typeValue == "pct" && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
+					table.WidthPercentFiftieths = nativeInt64(width)
 				} else {
 					unsafe = true
 				}
