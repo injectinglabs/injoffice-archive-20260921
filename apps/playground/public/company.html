@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Company and contact information for InjOffice, a product of Injecting inc.">
+  <title>Company &amp; contact — InjOffice</title>
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <style>
+    :root { color-scheme: light; font-family: "Avenir Next", "Segoe UI", sans-serif; color: #141816; background: #fff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #0f6f8f; text-underline-offset: 4px; }
+    a:focus-visible { outline: 2px solid #0f6f8f; outline-offset: 5px; }
+    header, main, footer { width: min(760px, calc(100% - 48px)); margin-inline: auto; }
+    header { padding-block: 32px; border-bottom: 1px solid #e3e7e5; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; color: inherit; font-size: 20px; font-weight: 650; text-decoration: none; }
+    .brand img { width: 32px; height: 32px; }
+    main { padding-block: 64px; }
+    h1 { margin: 0 0 20px; font-size: clamp(30px, 5vw, 44px); line-height: 1.15; letter-spacing: -.035em; font-weight: 600; }
+    .intro { max-width: 56ch; margin: 0 0 40px; color: #5a6560; line-height: 1.7; }
+    dl { margin: 0; }
+    .detail { display: grid; grid-template-columns: 160px 1fr; gap: 24px; padding-block: 22px; border-top: 1px solid #e3e7e5; }
+    dt { color: #5a6560; font-size: 14px; }
+    dd { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+    address { font-style: normal; }
+    footer { padding-block: 24px; border-top: 1px solid #e3e7e5; color: #5a6560; font-size: 14px; }
+    @media (max-width: 480px) { main { padding-block: 40px; } .detail { grid-template-columns: 1fr; gap: 8px; } }
+    @media print { header, main, footer { width: 100%; } main { padding-block: 28px; } a { color: inherit; } .detail { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header><a class="brand" href="./"><img src="./logo.svg" alt=""><span>InjOffice</span></a></header>
+  <main>
+    <h1>Company &amp; contact</h1>
+    <p class="intro">InjOffice is a product of Injecting inc. This page identifies the company behind InjOffice and its website.</p>
+    <dl>
+      <div class="detail"><dt>Company</dt><dd>Injecting inc.</dd></div>
+      <div class="detail"><dt>Website</dt><dd><a href="https://injoffice.com/">injoffice.com</a></dd></div>
+      <div class="detail"><dt>Business address</dt><dd><address>1130 Kifer Rd<br>Sunnyvale, CA 94086<br>US</address></dd></div>
+      <div class="detail"><dt>Contact email</dt><dd><a href="mailto:nick.pismenkov@injecting.ai">nick.pismenkov@injecting.ai</a></dd></div>
+    </dl>
+  </main>
+  <footer><a href="./">Back to InjOffice</a></footer>
+</body>
+</html>
