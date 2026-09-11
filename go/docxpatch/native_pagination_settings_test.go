@@ -241,6 +241,29 @@ func TestExtractNativePaginationSettingsV1AcceptsOnlyDisabledFieldUpdates(t *tes
 	}
 }
 
+func TestNativePaginationStatsSettingDoesNotChangeLayoutAndRejectsSmuggling(t *testing.T) {
+	for _, test := range []struct {
+		markup   string
+		accepted bool
+	}{
+		{`<w:doNotIncludeSubdocsInStats/>`, true},
+		{`<w:doNotIncludeSubdocsInStats w:val="true"/>`, true},
+		{`<w:doNotIncludeSubdocsInStats w:val="false"/>`, true},
+		{`<w:doNotIncludeSubdocsInStats w:val="maybe"/>`, false},
+		{`<w:doNotIncludeSubdocsInStats w:layout="1"/>`, false},
+		{`<w:doNotIncludeSubdocsInStats><w:mirrorMargins/></w:doNotIncludeSubdocsInStats>`, false},
+	} {
+		parts := nativePaginationSettingsParts(`<w:settings xmlns:w="` + wordMLTransitional + `">` + test.markup + `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`)
+		settings, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(parts)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (settings.Profile == "word-modern-default") != test.accepted {
+			t.Fatalf("%s: unexpected attestation %#v", test.markup, settings)
+		}
+	}
+}
+
 func TestExtractNativePaginationSettingsV1UsesASCIIOnlyContentTypeEquality(t *testing.T) {
 	for _, test := range []struct {
 		name        string

@@ -57,6 +57,85 @@ func TestNativeLatentStyleBehaviorIsRenderNeutralButPreserved(t *testing.T) {
 	}
 }
 
+func TestNativeStyleDiagnosticsFollowOnlyActiveCascadeConsumers(t *testing.T) {
+	styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:styleId="Unused"><w:pPr><w:tabs><w:tab w:val="right" w:pos="1000"/></w:tabs></w:pPr><w:rPr><w:szCs w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Child"><w:basedOn w:val="Unused"/></w:style></w:styles>`
+	for _, active := range []bool{false, true} {
+		parts := resolvedStylesTestParts(styles)
+		if active {
+			parts["word/document.xml"] = strings.Replace(parts["word/document.xml"], "<w:p>", `<w:p><w:pPr><w:pStyle w:val="Child"/></w:pPr>`, 1)
+		}
+		data := buildNativeDOCX(t, nativeEntries(parts))
+		before := append([]byte(nil), data...)
+		resolved, err := ResolveNativeDocumentLayoutV1(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(before, data) {
+			t.Fatal("style resolution mutated source")
+		}
+		if !active && len(resolved.Diagnostics) != 0 {
+			t.Fatalf("unused styles blocked layout: %#v", resolved.Diagnostics)
+		}
+		if active {
+			if len(resolved.Diagnostics) != 2 {
+				t.Fatalf("active base style lost diagnostics: %#v", resolved.Diagnostics)
+			}
+			for _, diagnostic := range resolved.Diagnostics {
+				if diagnostic.ScopeID != resolved.Paragraphs[0].ParagraphID || diagnostic.Path == nil || !strings.Contains(*diagnostic.Path, "/w:style[1]/") {
+					t.Fatalf("incorrect cascade diagnostic provenance: %#v", diagnostic)
+				}
+			}
+		}
+	}
+}
+
+func TestDeferredStyleDiagnosticsRemainBounded(t *testing.T) {
+	markup := strings.Repeat(`<w:unknown/>`, NativeDOCXMaxResolvedDiagnostics+1)
+	styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:styleId="Unused"><w:rPr>` + markup + `</w:rPr></w:style></w:styles>`
+	if _, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(resolvedStylesTestParts(styles)))); err == nil || !strings.Contains(err.Error(), "diagnostics exceed") {
+		t.Fatalf("unbounded inactive style diagnostics: %v", err)
+	}
+}
+
+func TestNativeBasicLatinFontSlotsRespectCascadeAndRefuseMixedScripts(t *testing.T) {
+	styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Base ASCII" w:hAnsi="Base High"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:rPr><w:rFonts w:ascii="Paragraph ASCII"/></w:rPr></w:style><w:style w:type="character" w:styleId="Em"><w:rPr><w:rFonts w:ascii="Character ASCII"/></w:rPr></w:style></w:styles>`
+	for _, test := range []struct {
+		name, text, rpr, font string
+		refused               bool
+	}{
+		{"paragraph", "Basic 123", "", "Paragraph ASCII", false},
+		{"character", "Basic 123", `<w:rStyle w:val="Em"/>`, "Character ASCII", false},
+		{"direct", "Basic 123", `<w:rStyle w:val="Em"/><w:rFonts w:ascii="Direct ASCII"/>`, "Direct ASCII", false},
+		{"non-latin", "Basic العربية", "", "", true},
+		{"high-ansi", "café", "", "", true},
+		{"rtl", "Basic", `<w:rtl/>`, "", true},
+		{"equal-slots", "café", `<w:rFonts w:ascii="Equal" w:hAnsi="Equal"/>`, "Equal", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parts := resolvedStylesTestParts(styles)
+			parts["word/document.xml"] = strings.Replace(parts["word/document.xml"], `<w:r><w:t>test</w:t></w:r>`, `<w:r><w:rPr>`+test.rpr+`</w:rPr><w:t>`+test.text+`</w:t></w:r>`, 1)
+			resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			font := resolved.Runs[0].Properties.FontFamily
+			if test.refused {
+				if font != nil {
+					t.Fatalf("guessed font %q", *font)
+				}
+				if len(resolved.Diagnostics) == 0 || resolved.Diagnostics[0].Code != "SCRIPT_DEPENDENT_LATIN_FONT" {
+					t.Fatalf("missing slot refusal: %#v", resolved.Diagnostics)
+				}
+			} else if font == nil || *font != test.font || len(resolved.Diagnostics) != 0 {
+				t.Fatalf("font=%v diagnostics=%#v", font, resolved.Diagnostics)
+			}
+			if mark := resolved.Paragraphs[0].ParagraphMarkProperties.FontFamily; mark == nil || *mark != "Paragraph ASCII" {
+				t.Fatalf("paragraph mark lost its own ASCII cascade: %v", mark)
+			}
+		})
+	}
+}
+
 func TestResolveNativeDocumentLayoutV1CascadePrecedenceAndToggles(t *testing.T) {
 	parts := map[string]string{
 		"[Content_Types].xml":          `<Types xmlns="` + opcContentTypesNS + `"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/lists/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>`,

@@ -234,29 +234,30 @@ func EncodeNativeResolvedLayoutInputV1(input *NativeResolvedLayoutInputV1) ([]by
 }
 
 type nativeLayoutResolver struct {
-	pkg                   *nativePackage
-	doc                   *NativeDocumentV1
-	mainPart              string
-	wordNS                string
-	relBase               string
-	parts                 NativeResolvedSourcePartsV1
-	numberingSource       *NativeResolvedNumberingSourceV1
-	styles                map[string]*nativeStyleDefinition
-	abstractNums          map[string]*nativeAbstractNumbering
-	nums                  map[string]*nativeNumberingInstance
-	docP                  nativeParagraphProperties
-	docR                  nativeRunProperties
-	defaultP              string
-	defaultC              string
-	fonts                 []NativeResolvedFontV1
-	diagnostics           []NativeResolutionDiagnosticV1
-	diagnosticSet         map[string]bool
-	diagnosticOverflow    bool
-	deferredNumbering     *[]nativeDeferredNumberingDiagnostic
-	numberingRootDeferred []nativeDeferredNumberingDiagnostic
-	nodeByAnchor          map[string]*nativeXMLNode
-	themeSrgb             map[string]string
-	themeLatinFonts       nativeThemeLatinFonts
+	pkg                     *nativePackage
+	doc                     *NativeDocumentV1
+	mainPart                string
+	wordNS                  string
+	relBase                 string
+	parts                   NativeResolvedSourcePartsV1
+	numberingSource         *NativeResolvedNumberingSourceV1
+	styles                  map[string]*nativeStyleDefinition
+	abstractNums            map[string]*nativeAbstractNumbering
+	nums                    map[string]*nativeNumberingInstance
+	docP                    nativeParagraphProperties
+	docR                    nativeRunProperties
+	defaultP                string
+	defaultC                string
+	fonts                   []NativeResolvedFontV1
+	diagnostics             []NativeResolutionDiagnosticV1
+	diagnosticSet           map[string]bool
+	diagnosticOverflow      bool
+	deferredNumbering       *[]nativeDeferredNumberingDiagnostic
+	deferredDiagnosticCount int
+	numberingRootDeferred   []nativeDeferredNumberingDiagnostic
+	nodeByAnchor            map[string]*nativeXMLNode
+	themeSrgb               map[string]string
+	themeLatinFonts         nativeThemeLatinFonts
 }
 
 type nativeDeferredNumberingDiagnostic struct {
@@ -272,6 +273,7 @@ type nativeStyleDefinition struct {
 	node     *nativeXMLNode
 	p        nativeParagraphProperties
 	r        nativeRunProperties
+	deferred []nativeDeferredNumberingDiagnostic
 }
 
 type nativeAbstractNumbering struct {
@@ -320,6 +322,8 @@ type nativeBoolProperty struct {
 
 type nativeRunProperties struct {
 	fontFamily        *string
+	asciiFamily       *string
+	hAnsiFamily       *string
 	fontSize          *int
 	bold              nativeBoolProperty
 	italic            nativeBoolProperty
@@ -591,10 +595,14 @@ func (resolver *nativeLayoutResolver) loadStyles(partName string) error {
 				definition.basedOn, _ = nativeAttr(basedOn, resolver.wordNS, "val")
 			}
 			if pPr := firstDirectNativeChild(child, resolver.wordNS, "pPr"); pPr != nil {
+				resolver.deferredNumbering = &definition.deferred
 				definition.p = resolver.parseParagraphProperties(partName, pPr, resolver.doc.DocumentID)
+				resolver.deferredNumbering = nil
 			}
 			if rPr := firstDirectNativeChild(child, resolver.wordNS, "rPr"); rPr != nil {
+				resolver.deferredNumbering = &definition.deferred
 				definition.r = resolver.parseRunProperties(partName, rPr, resolver.doc.DocumentID)
+				resolver.deferredNumbering = nil
 			}
 			resolver.styles[key] = definition
 			if len(resolver.styles) > NativeDOCXMaxCollectionItems {
@@ -1514,11 +1522,13 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 		marker := runBase
 		applyNativeRunProperties(&marker, markerR, false)
 		applyNativeRunProperties(&marker, directParagraphMark, false)
+		resolver.resolveLatinRunFont(&marker, resolvedNumbering.ResolvedText, paragraph.ID, paragraph.Anchor.PartName)
 		resolvedNumbering.Marker = nativeExportRunProperties(marker)
 		if !resolver.resolveNumberingGeometry(resolvedNumbering, p, paragraph.ID) {
 			resolvedNumbering = nil
 		}
 	}
+	resolver.resolveLatinRunFont(&paragraphMark, "\r", paragraph.ID, paragraph.Anchor.PartName)
 	resolvedParagraph := NativeResolvedParagraphV1{
 		ParagraphID: paragraph.ID, AppliedStyles: applied,
 		Properties:              nativeExportParagraphProperties(p),
@@ -1590,6 +1600,11 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 		if !rawOwnerFound && run.Properties != nil {
 			applyNativeRunProperties(&r, nativeRunPropertiesFromContract(run.Properties), false)
 		}
+		text := ""
+		if run.Text != nil {
+			text = *run.Text
+		}
+		resolver.resolveLatinRunFont(&r, text, run.ID, run.Anchor.PartName)
 		if run.Kind != "text" && r.verticalAlignment != nil && *r.verticalAlignment != "baseline" {
 			resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", run.ID, run.Anchor.PartName, nil, "Script transforms on note markers and controls remain unqualified")
 		}
@@ -1747,7 +1762,51 @@ func (resolver *nativeLayoutResolver) styleChain(kind, id, scopeID string) []*na
 	for left, right := 0, len(chain)-1; left < right; left, right = left+1, right-1 {
 		chain[left], chain[right] = chain[right], chain[left]
 	}
+	// Style properties affect layout only through an actual cascade consumer.
+	// Keep their exact source paths, but bind failures to that consumer rather
+	// than letting an unused style block every paragraph in the document.
+	for _, definition := range chain {
+		for _, diagnostic := range definition.deferred {
+			resolver.addDiagnostic(diagnostic.code, scopeID, diagnostic.partName, diagnostic.node, diagnostic.message)
+		}
+	}
 	return chain
+}
+
+func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string) {
+	ascii, hAnsi := properties.asciiFamily, properties.hAnsiFamily
+	if ascii == nil && hAnsi == nil {
+		return
+	}
+	if ascii == nil {
+		ascii = hAnsi
+	}
+	if hAnsi == nil {
+		hAnsi = ascii
+	}
+	if *ascii == *hAnsi {
+		properties.fontFamily = nativeString(*ascii)
+		return
+	}
+	// OOXML rFonts assigns U+0000..U+007F to ascii/asciiTheme.
+	// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.runfonts
+	// Only Basic Latin is qualified here. Complex-script overrides, high ANSI,
+	// and mixed ranges still require slot-aware shaping and are not guessed.
+	if !properties.rtl.value {
+		basicLatin := true
+		for _, character := range text {
+			if character > 0x7f {
+				basicLatin = false
+				break
+			}
+		}
+		if basicLatin {
+			properties.fontFamily = nativeString(*ascii)
+			return
+		}
+	}
+	properties.fontFamily = nil
+	resolver.addDiagnostic("SCRIPT_DEPENDENT_LATIN_FONT", scopeID, partName, nil, "Distinct ascii/hAnsi fonts are qualified only for non-RTL Basic Latin text; other script ranges require slot-aware shaping")
 }
 
 func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *nativeXMLNode, scopeID string) nativeRunProperties {
@@ -1775,6 +1834,14 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 		case "rStyle":
 			// The style reference is consumed from the native run contract.
 		case "rFonts":
+			allowed := []xml.Name{}
+			for _, local := range []string{"ascii", "hAnsi", "asciiTheme", "hAnsiTheme", "eastAsia", "eastAsiaTheme", "cs", "csTheme", "hint"} {
+				allowed = append(allowed, xml.Name{Space: resolver.wordNS, Local: local})
+			}
+			if !nativeExactLeaf(child, allowed...) {
+				resolver.addDiagnostic("UNMODELED_FONT_SELECTION", scopeID, partName, child, "Font selection contains unknown attributes or nested markup and is not resolved")
+				continue
+			}
 			ascii, hasASCII := nativeAttr(child, resolver.wordNS, "ascii")
 			hAnsi, hasHAnsi := nativeAttr(child, resolver.wordNS, "hAnsi")
 			asciiTheme, hasAsciiTheme := nativeAttr(child, resolver.wordNS, "asciiTheme")
@@ -1816,12 +1883,13 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			}
 			if !validASCII || !validHAnsi {
 				resolver.addDiagnostic("INVALID_FONT_FAMILY", scopeID, partName, child, "Invalid explicit font family is preserved and ignored")
-			} else if asciiFace != "" && (hAnsiFace == "" || hAnsiFace == asciiFace) {
-				properties.fontFamily = nativeString(asciiFace)
-			} else if hAnsiFace != "" && asciiFace == "" {
-				properties.fontFamily = nativeString(hAnsiFace)
-			} else if asciiFace != "" && hAnsiFace != "" && asciiFace != hAnsiFace {
-				resolver.addDiagnostic("SCRIPT_DEPENDENT_LATIN_FONT", scopeID, partName, child, "Different ascii/hAnsi fonts require character classification and are not collapsed")
+			} else {
+				if asciiFace != "" {
+					properties.asciiFamily = nativeString(asciiFace)
+				}
+				if hAnsiFace != "" {
+					properties.hAnsiFamily = nativeString(hAnsiFace)
+				}
 			}
 		case "sz":
 			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); ok && value <= 3276 {
@@ -2240,6 +2308,13 @@ func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProper
 	}
 	if layer.fontFamily != nil {
 		target.fontFamily = nativeString(*layer.fontFamily)
+		target.asciiFamily, target.hAnsiFamily = nativeString(*layer.fontFamily), nativeString(*layer.fontFamily)
+	}
+	if layer.asciiFamily != nil {
+		target.asciiFamily = nativeString(*layer.asciiFamily)
+	}
+	if layer.hAnsiFamily != nil {
+		target.hAnsiFamily = nativeString(*layer.hAnsiFamily)
 	}
 	if layer.fontSize != nil {
 		target.fontSize = nativeInt(*layer.fontSize)
@@ -2324,6 +2399,11 @@ func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRun
 
 func (resolver *nativeLayoutResolver) addDiagnostic(code, scopeID, partName string, node *nativeXMLNode, message string) {
 	if resolver.deferredNumbering != nil {
+		resolver.deferredDiagnosticCount++
+		if resolver.deferredDiagnosticCount > NativeDOCXMaxResolvedDiagnostics {
+			resolver.diagnosticOverflow = true
+			return
+		}
 		*resolver.deferredNumbering = append(*resolver.deferredNumbering, nativeDeferredNumberingDiagnostic{code: code, partName: partName, node: node, message: message})
 		return
 	}

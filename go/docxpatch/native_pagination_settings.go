@@ -209,7 +209,7 @@ func nativeSettingsNeutralWordElement(result *NativePaginationSettingsV1, node *
 			return false
 		}
 		return true
-	case "trackRevisions", "doNotTrackMoves", "doNotTrackFormatting", "autoFormatOverride", "styleLockTheme", "styleLockQFSet", "savePreviewPicture", "doNotValidateAgainstSchema", "saveInvalidXml", "ignoreMixedContent", "doNotPromoteQF", "doNotAutoCompressPictures":
+	case "trackRevisions", "doNotTrackMoves", "doNotTrackFormatting", "autoFormatOverride", "styleLockTheme", "styleLockQFSet", "savePreviewPicture", "doNotValidateAgainstSchema", "saveInvalidXml", "ignoreMixedContent", "doNotPromoteQF", "doNotAutoCompressPictures", "doNotIncludeSubdocsInStats":
 		if !nativeSettingsExactLeaf(result, node, val) {
 			return false
 		}
