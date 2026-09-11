@@ -296,6 +296,19 @@ func nativeSettingsNeutralForeignElement(result *NativePaginationSettingsV1, nod
 
 func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nativeXMLNode, wordNS string) {
 	seen := map[string]bool{}
+	// An absent autoHyphenation element means no automatic hyphenation. Its
+	// zone, cap and consecutive-line options then have no line-layout effect.
+	// Resolve this gate before traversal so XML element order cannot change it.
+	// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.autohyphenation
+	automaticHyphenationDisabled := true
+	autoHyphenation := directNativeChildren(root, wordNS, "autoHyphenation")
+	if len(autoHyphenation) > 0 {
+		automaticHyphenationDisabled = false
+		if len(autoHyphenation) == 1 && nativeExactLeaf(autoHyphenation[0], xml.Name{Space: wordNS, Local: "val"}) {
+			enabled, valid := nativeSettingsOnOff(autoHyphenation[0], wordNS)
+			automaticHyphenationDisabled = valid && !enabled
+		}
+	}
 	rootAttrs := map[xml.Name]bool{{Space: nativeMCNamespace, Local: "Ignorable"}: true}
 	nativeSettingsExactNode(result, root, rootAttrs, true)
 	for _, child := range root.Children {
@@ -319,6 +332,31 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 		}
 		seen[local] = true
 		switch local {
+		case "autoHyphenation", "doNotHyphenateCaps":
+			if !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "val"}) {
+				continue
+			}
+			_, valid := nativeSettingsOnOff(child, wordNS)
+			if !valid {
+				result.addDiagnostic("INVALID_SETTINGS_ON_OFF", child, "Hyphenation switch has an invalid lexical value")
+				continue
+			}
+			if !automaticHyphenationDisabled {
+				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Automatic hyphenation is enabled or ambiguous; dictionary-driven line breaking is not implemented")
+			}
+		case "hyphenationZone", "consecutiveHyphenLimit":
+			if !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "val"}) {
+				continue
+			}
+			raw, present := nativeAttr(child, wordNS, "val")
+			value, err := strconv.ParseUint(raw, 10, 32)
+			if !present || err != nil || value > 1_000_000_000 {
+				result.addDiagnostic("INVALID_SETTINGS_STRUCTURE", child, "Hyphenation distance/count requires a non-negative bounded integer")
+				continue
+			}
+			if !automaticHyphenationDisabled {
+				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Active hyphenation options require dictionary-driven line breaking; inactive options are preserved without changing layout")
+			}
 		case "defaultTabStop":
 			if !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "val"}) {
 				continue

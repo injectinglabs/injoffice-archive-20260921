@@ -264,6 +264,76 @@ func TestNativePaginationStatsSettingDoesNotChangeLayoutAndRejectsSmuggling(t *t
 	}
 }
 
+func TestNativePaginationInactiveHyphenationPreservesManualHyphens(t *testing.T) {
+	parts := nativePaginationSettingsParts(`<w:settings xmlns:w="` + wordMLTransitional + `"><w:hyphenationZone w:val="360"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`)
+	parts["Word/Document.XML"] = strings.Replace(parts["Word/Document.XML"], `<w:t>settings</w:t>`, `<w:t>well-known</w:t><w:softHyphen/><w:t>word</w:t>`, 1)
+	data := buildNativeDOCX(t, nativeEntries(parts))
+	before := append([]byte(nil), data...)
+	settings, err := ExtractNativePaginationSettingsV1(data)
+	if err != nil || settings.Profile != "word-modern-default" {
+		t.Fatalf("inactive automatic policy: settings=%#v err=%v", settings, err)
+	}
+	doc, err := ExtractNativeDocumentV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := doc.Body.Blocks[0].Paragraph.Runs
+	if len(runs) != 3 || runs[0].Text == nil || *runs[0].Text != "well-known" || runs[1].Control != "soft-hyphen" || runs[2].Text == nil || *runs[2].Text != "word" {
+		t.Fatalf("manual hyphen content changed: %#v", runs)
+	}
+	if !bytes.Equal(before, data) {
+		t.Fatal("hyphenation qualification mutated source")
+	}
+}
+
+func TestNativePaginationHyphenationPolicyIsOrderIndependentAndFailClosed(t *testing.T) {
+	options := `<w:hyphenationZone w:val="360"/><w:consecutiveHyphenLimit w:val="2"/><w:doNotHyphenateCaps/>`
+	for _, test := range []struct {
+		name, markup string
+		accepted     bool
+	}{
+		{"default disabled", options, true},
+		{"disabled before", `<w:autoHyphenation w:val="false"/>` + options, true},
+		{"disabled after", options + `<w:autoHyphenation w:val="0"/>`, true},
+		{"enabled before", `<w:autoHyphenation/>` + options, false},
+		{"enabled after", options + `<w:autoHyphenation w:val="true"/>`, false},
+		{"duplicate gate", `<w:autoHyphenation w:val="0"/>` + options + `<w:autoHyphenation w:val="1"/>`, false},
+		{"invalid gate", options + `<w:autoHyphenation w:val="maybe"/>`, false},
+		{"foreign gate", options + `<x:autoHyphenation xmlns:x="urn:foreign" w:val="false"/>`, false},
+		{"negative distance", `<w:hyphenationZone w:val="-1"/>`, false},
+		{"oversized distance", `<w:hyphenationZone w:val="1000000001"/>`, false},
+		{"missing value", `<w:hyphenationZone/>`, false},
+		{"nested markup", `<w:hyphenationZone w:val="360"><w:autoHyphenation/></w:hyphenationZone>`, false},
+		{"unknown attribute", `<w:doNotHyphenateCaps w:layout="1"/>`, false},
+	} {
+		for _, ns := range []string{wordMLTransitional, wordMLStrict} {
+			t.Run(test.name+ns, func(t *testing.T) {
+				parts := nativePaginationSettingsParts(`<w:settings xmlns:w="` + ns + `">` + test.markup + `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`)
+				if ns == wordMLStrict {
+					parts["_rels/.rels"] = strings.ReplaceAll(parts["_rels/.rels"], relBaseTransitional, relBaseStrict)
+					parts["Word/_RELS/Document.XML.RELS"] = strings.ReplaceAll(parts["Word/_RELS/Document.XML.RELS"], relBaseTransitional, relBaseStrict)
+					parts["Word/Document.XML"] = strings.ReplaceAll(parts["Word/Document.XML"], wordMLTransitional, wordMLStrict)
+				}
+				data := buildNativeDOCX(t, nativeEntries(parts))
+				before := append([]byte(nil), data...)
+				settings, err := ExtractNativePaginationSettingsV1(data)
+				if err != nil {
+					if test.accepted {
+						t.Fatal(err)
+					}
+					return
+				}
+				if (settings.Profile == "word-modern-default") != test.accepted {
+					t.Fatalf("unexpected policy: %#v", settings)
+				}
+				if !bytes.Equal(before, data) {
+					t.Fatal("settings attestation mutated source")
+				}
+			})
+		}
+	}
+}
+
 func TestExtractNativePaginationSettingsV1UsesASCIIOnlyContentTypeEquality(t *testing.T) {
 	for _, test := range []struct {
 		name        string
