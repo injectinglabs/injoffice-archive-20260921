@@ -273,6 +273,12 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	v.id(element.ID, p+".id")
 	v.elements[element.ID] = slideID
 	v.transform(element.Transform, p+".transform")
+	if element.Transform.QuarterTurns != nil && element.Kind != NativeElementKindText && element.Kind != NativeElementKindShape {
+		v.add(p+".transform.quarterTurns", "native.rotation", "quarter turns are supported only for text and shapes")
+	}
+	if element.ChildTransform != nil && element.ChildTransform.QuarterTurns != nil {
+		v.add(p+".childTransform.quarterTurns", "native.rotation", "child coordinate systems cannot carry quarter turns")
+	}
 	if element.Name != nil && utf16CodeUnitLengthBounded(*element.Name, 1024) > 1024 {
 		v.add(p+".name", "schema.maxLength", "must contain at most 1024 characters")
 	}
@@ -903,6 +909,15 @@ func (v *nativeValidator) transform(transform NativeTransform, p string) {
 	v.requiredInteger(transform.Y, p+".y")
 	v.requiredPositive(transform.Cx, p+".cx")
 	v.requiredPositive(transform.Cy, p+".cy")
+	if transform.QuarterTurns != nil {
+		q := *transform.QuarterTurns
+		if q < 1 || q > 3 {
+			v.add(p+".quarterTurns", "native.rotation", "must be 1, 2, or 3")
+		}
+		if q%2 != 0 && transform.Cx != nil && transform.Cy != nil && (*transform.Cx%2 != *transform.Cy%2) {
+			v.add(p+".quarterTurns", "native.rotation", "quarter-turn center must remain exact integer EMU")
+		}
+	}
 }
 func (v *nativeValidator) placeholder(value *NativePlaceholderType, p string) {
 	if value != nil && *value != NativePlaceholderTypeTitle && *value != NativePlaceholderTypeCtrTitle && *value != NativePlaceholderTypeSubTitle && *value != NativePlaceholderTypeBody {

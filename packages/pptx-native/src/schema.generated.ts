@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "5fec15ba9b3d68a110d3a8ef386bf9d75b39fd2516dabef8a7fb69eeb80af3ec" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "a8187e6611a2b3230534407f133501ebbcce3533e1326580dfa17da4b5d2890a" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -512,6 +512,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "properties": [
       "cx",
       "cy",
+      "quarterTurns",
       "x",
       "y"
     ],
@@ -837,6 +838,11 @@ export const PPTX_NATIVE_SCHEMA = {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
+        },
+        "quarterTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
         }
       }
     },

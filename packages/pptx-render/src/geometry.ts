@@ -1,10 +1,22 @@
-import type { NativeShapePreset } from '@injoffice/pptx-native'
+import type { NativeShapePreset,NativeTransform } from '@injoffice/pptx-native'
 import type { RenderPathCommand, RenderRect, RenderTransform } from './types.js'
 
 export const IDENTITY_PPM = 1_000_000
 
 export function translationTransform(txEmu: number, tyEmu: number): RenderTransform {
   return { aPpm: IDENTITY_PPM, bPpm: 0, cPpm: 0, dPpm: IDENTITY_PPM, txEmu, tyEmu }
+}
+
+/** Clockwise rotation about the original DrawingML frame center, without trig. */
+export function quarterTurnTransform(frame:NativeTransform):RenderTransform {
+  const {x,y,cx,cy,quarterTurns:q}=frame
+  if(!q)return translationTransform(x,y)
+  const value=(n:bigint)=>{const v=Number(n);if(!Number.isSafeInteger(v))throw new RangeError('rotation translation exceeds integer precision');return v}
+  if(q!==2&&cx%2!==cy%2)throw new RangeError('rotation center requires fractional EMU')
+  const sum=BigInt(cx)+BigInt(cy),difference=BigInt(cx)-BigInt(cy)
+  if(q===1)return {aPpm:0,bPpm:IDENTITY_PPM,cPpm:-IDENTITY_PPM,dPpm:0,txEmu:value(BigInt(x)+sum/2n),tyEmu:value(BigInt(y)-difference/2n)}
+  if(q===2)return {aPpm:-IDENTITY_PPM,bPpm:0,cPpm:0,dPpm:-IDENTITY_PPM,txEmu:value(BigInt(x)+BigInt(cx)),tyEmu:value(BigInt(y)+BigInt(cy))}
+  return {aPpm:0,bPpm:-IDENTITY_PPM,cPpm:IDENTITY_PPM,dPpm:0,txEmu:value(BigInt(x)+difference/2n),tyEmu:value(BigInt(y)+sum/2n)}
 }
 
 export function localBounds(cx: number, cy: number): RenderRect {

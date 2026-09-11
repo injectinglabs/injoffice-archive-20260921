@@ -173,7 +173,8 @@
         "x": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "y": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "cx": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "cy": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        "cy": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "quarterTurns": { "type": "integer", "minimum": 1, "maximum": 3 }
       }
     },
     "sourceAnchor": {

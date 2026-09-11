@@ -36,7 +36,7 @@ export default function PptxFilePreview({ deck }: { deck: NativePptxDeck }) {
     const text = element.kind === 'text' || element.kind === 'shape' ? element.paragraphs : []
     const body = element.kind === 'text' || element.kind === 'shape' ? element.textBody : undefined
     const crop = element.kind === 'picture' ? element.crop : undefined
-    return <g key={element.id} transform={`translate(${x * size.scale} ${y * size.scale})`}>
+    return <g key={element.id} transform={`translate(${x * size.scale} ${y * size.scale})${element.transform.quarterTurns?` rotate(${element.transform.quarterTurns*90} ${cx*size.scale/2} ${cy*size.scale/2})`:''}`}>
       <title>{element.name || element.kind}{issue ? `: ${issue}` : ''}</title>
       {issue ? <>
         <rect width={cx * size.scale} height={cy * size.scale} fill="#f5f6f6" stroke="#5a6560" strokeDasharray="4 3" />

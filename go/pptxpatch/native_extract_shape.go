@@ -376,13 +376,21 @@ func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtract
 	if err != nil {
 		return NativeTransform{}, err
 	}
+	var quarterTurns *int64
 	if value, ok := exactNativeAttr(node, "", "rot"); ok {
-		rotation, parseErr := parseCanonicalNativeInt(value, -nativeMaxSafeInteger, nativeMaxSafeInteger)
+		rotation, parseErr := parseCanonicalNativeInt(value, -2147483648, 2147483647)
 		if parseErr != nil {
 			return NativeTransform{}, fmt.Errorf("pptxpatch: native extract: invalid AutoShape rotation")
 		}
-		if rotation != 0 {
-			gaps.add("pptx.autoshape-transform-unavailable", "rotated shapes are preserved but not approximated by native PPTX v1", true)
+		if rotation%5400000 != 0 {
+			gaps.add("pptx.autoshape-transform-unavailable", "non-quarter-turn shapes require an unmodeled rotation affine", true)
+		} else if q := (rotation/5400000%4 + 4) % 4; q != 0 {
+			if q%2 != 0 && cx%2 != cy%2 {
+				gaps.add("pptx.autoshape-transform-unavailable", "quarter-turn shape center requires fractional EMU", true)
+			} else {
+				quarterTurns = int64Pointer(q)
+				gaps.add("pptx.quarter-turn-preview", "source quarter-turn rotation is rendered with an exact integer affine; rotated targets remain read-only", false)
+			}
 		}
 	}
 	for _, name := range []string{"flipH", "flipV"} {
@@ -396,7 +404,7 @@ func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtract
 			}
 		}
 	}
-	return NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}, nil
+	return NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy), QuarterTurns: quarterTurns}, nil
 }
 
 func requiredCanonicalNativeShapeInt(node *nativeXMLNode, local string, minimum, maximum int64) (int64, error) {

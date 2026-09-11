@@ -1,5 +1,12 @@
 # @injoffice/pptx-native
 
+Text/shape transforms may include `quarterTurns: 1 | 2 | 3`, clockwise around
+their frame center. Omission means zero rotation. The renderer composes exact
+integer-affine quarter turns; 90/270-degree frames require matching width/height
+parity to avoid fractional EMU centers. Group, picture, table, and connector
+rotation is not introduced by this field. Parsed rotated shapes remain
+preview-only, and mutation requests cannot supply quarter-turn transforms.
+
 Text extraction resolves a bounded local DrawingML style cascade: list default,
 matching list level, paragraph properties, then explicit run properties. Only
 modeled typeface/size/bold/italic/solid color and paragraph alignment/list metadata

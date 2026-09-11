@@ -156,7 +156,7 @@
           },
           {
             "code": "pptx.autoshape-transform-unavailable",
-            "message": "rotated shapes are preserved but not approximated by native PPTX v1",
+            "message": "non-quarter-turn shapes require an unmodeled rotation affine",
             "scope": {
               "elementId": "element-9c68cb285f2e2b25bd06e8b1",
               "partName": "relocated/slides/slide-a.xml",
@@ -323,7 +323,7 @@
               },
               {
                 "code": "pptx.autoshape-transform-unavailable",
-                "message": "rotated shapes are preserved but not approximated by native PPTX v1",
+                "message": "non-quarter-turn shapes require an unmodeled rotation affine",
                 "scope": {
                   "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                   "partName": "relocated/slides/slide-a.xml",
@@ -438,7 +438,7 @@
                   },
                   {
                     "code": "pptx.autoshape-transform-unavailable",
-                    "message": "rotated shapes are preserved but not approximated by native PPTX v1",
+                    "message": "non-quarter-turn shapes require an unmodeled rotation affine",
                     "scope": {
                       "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                       "partName": "relocated/slides/slide-a.xml",

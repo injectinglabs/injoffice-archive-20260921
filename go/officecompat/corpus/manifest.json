@@ -391,7 +391,7 @@
       "package": "generated/packages/pptx-transitional-fidelity-diagnostics.pptx",
       "expected": "generated/expected/pptx-transitional-fidelity-diagnostics.json",
       "sha256": "b5deef92481018000ad2ef9699d9f90aab809640cca85d0f438f9105998df0eb",
-      "expectedSha256": "549a0ad33c32cf96fa279363fc2ae604270744000c6287e7bfd554b2445550be",
+      "expectedSha256": "a519eb55e69144be4c900ca3bc8a108c6c7794d29d9d19c39328e5f38b1d82e0",
       "bytes": 4281,
       "expandedBytes": 4584,
       "parts": 12,

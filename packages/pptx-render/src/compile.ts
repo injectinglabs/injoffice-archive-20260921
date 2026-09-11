@@ -31,7 +31,7 @@ import {
   type NativeTextBodyLayout,
   type NativeTextRun,
 } from '@injoffice/pptx-native'
-import { connectorPath, localBounds, presetPath, translationTransform } from './geometry.js'
+import { connectorPath, localBounds, presetPath, translationTransform,quarterTurnTransform } from './geometry.js'
 import {
   PPTX_RENDER_LIMITS,
   PPTX_RENDER_TREE_VERSION,
@@ -120,6 +120,8 @@ interface ExactRational {
 
 interface WorldAffine {
   readonly a: ExactRational
+  readonly b: ExactRational
+  readonly c: ExactRational
   readonly d: ExactRational
   readonly tx: ExactRational
   readonly ty: ExactRational
@@ -128,7 +130,7 @@ interface WorldAffine {
 const AFFINE_PPM = 1_000_000n
 const RATIONAL_ZERO: ExactRational = { numerator: 0n, denominator: 1n }
 const RATIONAL_ONE: ExactRational = { numerator: 1n, denominator: 1n }
-const IDENTITY_WORLD_AFFINE: WorldAffine = { a: RATIONAL_ONE, d: RATIONAL_ONE, tx: RATIONAL_ZERO, ty: RATIONAL_ZERO }
+const IDENTITY_WORLD_AFFINE: WorldAffine = { a: RATIONAL_ONE, b:RATIONAL_ZERO, c:RATIONAL_ZERO, d: RATIONAL_ONE, tx: RATIONAL_ZERO, ty: RATIONAL_ZERO }
 
 function affineGcd(left: bigint, right: bigint): bigint {
   let a = left < 0n ? -left : left
@@ -672,7 +674,7 @@ function elementBase(element: NativeElement, zIndex: number, budget: Budget, cli
     sourceElementId: element.id,
     sourceKind: element.kind,
     zIndex,
-    transform: translationTransform(x, y),
+    transform: quarterTurnTransform(element.transform),
     bounds: localBounds(cx, cy),
     ...(clipToElement ? { clip: { kind: 'rect' as const, rect: localBounds(cx, cy) } } : {}),
     compatibility: element.compatibility.status,
@@ -763,11 +765,14 @@ function checkedWorldAffine(
   path: string,
   budget: Budget,
 ): WorldAffine {
-  if (local.bPpm !== 0 || local.cPpm !== 0) {
-    throw new RenderCompileError('render.worldTransform', `${path}.transform`, 'v1 cumulative world validation supports only exact axis-aligned affine transforms')
+  const scale=local.bPpm===0&&local.cPpm===0&&local.aPpm>0&&local.dPpm>0
+  const half=local.bPpm===0&&local.cPpm===0&&local.aPpm===-1000000&&local.dPpm===-1000000
+  const quarter=local.aPpm===0&&local.dPpm===0&&local.bPpm===-local.cPpm&&Math.abs(local.bPpm)===1000000
+  if (!scale&&!half&&!quarter) {
+    throw new RenderCompileError('render.worldTransform', `${path}.transform`, 'only exact scale/translation and source quarter turns are supported')
   }
   const localScale = (value: number, componentPath: string): ExactRational => {
-    if (!Number.isSafeInteger(value) || value <= 0 || value > PPTX_RENDER_LIMITS.maxAffinePpm) {
+    if (!Number.isSafeInteger(value) || Math.abs(value) > PPTX_RENDER_LIMITS.maxAffinePpm) {
       throw new RenderCompileError('render.worldTransform', componentPath, 'affine coefficient exceeds the safe integer range')
     }
     return exactRational(BigInt(value), AFFINE_PPM)
@@ -776,22 +781,24 @@ function checkedWorldAffine(
     const limit = BigInt(budget.maxCoordinateEmu) * value.denominator
     return value.numerator >= -limit && value.numerator <= limit
   }
+  const a=localScale(local.aPpm,`${path}.transform.aPpm`),b=localScale(local.bPpm,`${path}.transform.bPpm`),c=localScale(local.cPpm,`${path}.transform.cPpm`),d=localScale(local.dPpm,`${path}.transform.dPpm`)
+  const pair=(a:ExactRational,b:ExactRational,c:ExactRational,d:ExactRational)=>addRational(multiplyRational(a,b),multiplyRational(c,d))
   const world: WorldAffine = {
-    a: multiplyRational(parent.a, localScale(local.aPpm, `${path}.transform.aPpm`)),
-    d: multiplyRational(parent.d, localScale(local.dPpm, `${path}.transform.dPpm`)),
-    tx: addRational(parent.tx, multiplyRationalInteger(parent.a, local.txEmu)),
-    ty: addRational(parent.ty, multiplyRationalInteger(parent.d, local.tyEmu)),
+    a:pair(parent.a,a,parent.c,b), b:pair(parent.b,a,parent.d,b),
+    c:pair(parent.a,c,parent.c,d), d:pair(parent.b,c,parent.d,d),
+    tx:addRational(parent.tx,addRational(multiplyRationalInteger(parent.a,local.txEmu),multiplyRationalInteger(parent.c,local.tyEmu))),
+    ty:addRational(parent.ty,addRational(multiplyRationalInteger(parent.b,local.txEmu),multiplyRationalInteger(parent.d,local.tyEmu))),
   }
   if (!withinCoordinateBudget(world.tx)) throw new RenderCompileError('render.worldTransform', `${path}.transform.txEmu`, 'cumulative translation exceeds the render coordinate budget')
   if (!withinCoordinateBudget(world.ty)) throw new RenderCompileError('render.worldTransform', `${path}.transform.tyEmu`, 'cumulative translation exceeds the render coordinate budget')
-  const coordinate = (scale: ExactRational, translation: ExactRational, value: number, componentPath: string): void => {
-    const result = addRational(translation, multiplyRationalInteger(scale, value))
+  const coordinate = (a:ExactRational,b:ExactRational,translation:ExactRational,x:number,y:number,componentPath:string): void => {
+    const result=addRational(translation,addRational(multiplyRationalInteger(a,x),multiplyRationalInteger(b,y)))
     if (!withinCoordinateBudget(result)) throw new RenderCompileError('render.worldTransform', componentPath, 'world-space bound exceeds the render coordinate budget')
   }
-  coordinate(world.a, world.tx, bounds.x, `${path}.bounds.x`)
-  coordinate(world.a, world.tx, bounds.x + bounds.cx, `${path}.bounds.cx`)
-  coordinate(world.d, world.ty, bounds.y, `${path}.bounds.y`)
-  coordinate(world.d, world.ty, bounds.y + bounds.cy, `${path}.bounds.cy`)
+  for(const x of [bounds.x,bounds.x+bounds.cx])for(const y of [bounds.y,bounds.y+bounds.cy]){
+    coordinate(world.a,world.c,world.tx,x,y,`${path}.bounds.x`)
+    coordinate(world.b,world.d,world.ty,x,y,`${path}.bounds.y`)
+  }
   return world
 }
 

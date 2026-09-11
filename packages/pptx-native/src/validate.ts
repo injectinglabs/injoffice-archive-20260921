@@ -258,6 +258,11 @@ function validateElement(
     return 'refused'
   }
   registerId(element.id, `${path}.id`, ids, issues)
+  if(element.transform.quarterTurns!==undefined){
+    if(element.kind!=='text'&&element.kind!=='shape')add(issues,`${path}.transform.quarterTurns`,'native.rotation','quarter turns are supported only for text and shapes')
+    if(element.transform.quarterTurns%2!==0&&element.transform.cx%2!==element.transform.cy%2)add(issues,`${path}.transform.quarterTurns`,'native.rotation','quarter-turn center must remain exact integer EMU')
+  }
+  if(element.kind==='group'&&element.childTransform?.quarterTurns!==undefined)add(issues,`${path}.childTransform.quarterTurns`,'native.rotation','child coordinate systems cannot carry quarter turns')
   elements.set(element.id, slideId)
   validateSourceState(deck, element.provenance, element.source, element.passthrough, path, issues)
   if (element.provenance === 'parsed' && !slidePart) {

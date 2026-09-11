@@ -30,7 +30,7 @@ export interface NativePptxDeck {
 }
 
 export interface NativeSize { cx: number; cy: number }
-export interface NativeTransform { x: number; y: number; cx: number; cy: number }
+export interface NativeTransform { x: number; y: number; cx: number; cy: number; quarterTurns?: 1 | 2 | 3 }
 
 export interface NativeSourceAnchor {
   partName: string

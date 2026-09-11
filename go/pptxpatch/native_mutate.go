@@ -542,6 +542,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Compatibility.Status == NativeCompatibilityStatusRefused {
 			return nil, fmt.Errorf("%s: element %q is refused and cannot be mutated", prefix, operation.ElementID)
 		}
+		if element.Transform.QuarterTurns != nil {
+			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)
+		}
 		// These flags are omitted from native paragraphs. Equal compatibility
 		// summaries after rewriting cannot prove that local metadata survived.
 		if operation.Kind == NativePPTXReplaceText {
@@ -698,6 +701,9 @@ func validateNativeMutationParagraphs(paragraphs []NativeParagraph, budget *nati
 }
 
 func validateNativeAutoShapeMutation(shape NativePPTXAutoShapeMutation) error {
+	if shape.Transform.QuarterTurns != nil {
+		return fmt.Errorf("quarter-turn transforms are preview-only")
+	}
 	if shape.Transform.X == nil || shape.Transform.Y == nil || shape.Transform.Cx == nil || shape.Transform.Cy == nil {
 		return fmt.Errorf("AutoShape transform must be complete")
 	}
@@ -1304,7 +1310,7 @@ func nativeAutoShapeEquals(element NativeElement, expected NativePPTXAutoShapeMu
 }
 
 func nativeTransformEqual(left, right NativeTransform) bool {
-	return nativeInt64PointerEqual(left.X, right.X) && nativeInt64PointerEqual(left.Y, right.Y) && nativeInt64PointerEqual(left.Cx, right.Cx) && nativeInt64PointerEqual(left.Cy, right.Cy)
+	return nativeInt64PointerEqual(left.X, right.X) && nativeInt64PointerEqual(left.Y, right.Y) && nativeInt64PointerEqual(left.Cx, right.Cx) && nativeInt64PointerEqual(left.Cy, right.Cy) && nativeInt64PointerEqual(left.QuarterTurns, right.QuarterTurns)
 }
 
 func nativeStrokeEqual(left, right *NativeStroke) bool {
