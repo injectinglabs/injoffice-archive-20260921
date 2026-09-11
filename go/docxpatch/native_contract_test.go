@@ -61,6 +61,41 @@ func setNativePointer(root any, pointer string, value any) error {
 	return fmt.Errorf("pointer %q is empty", pointer)
 }
 
+func TestValidateNativeDocumentV1ChargesCollectionsOnce(t *testing.T) {
+	doc, err := DecodeNativeDocumentV1(nativeFixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Unsupported = make([]NativeUnsupportedCapabilityV1, 1000)
+	for i := range doc.Unsupported {
+		doc.Unsupported[i] = NativeUnsupportedCapabilityV1{ID: fmt.Sprintf("unsupported:test:%d", i), Code: "PRESERVED", Capability: "metadata", ScopeID: doc.Body.ID, Preservation: "refuse-mutation", Message: "Unmodeled metadata is preserved."}
+	}
+	if _, err := EncodeNativeDocumentV1(doc); err != nil {
+		t.Fatalf("bounded collection was charged repeatedly: %v", err)
+	}
+	doc.Unsupported[999].Preservation = "invalid"
+	issues := ValidateNativeDocumentV1(doc)
+	if len(issues) != 1 || issues[0].Path != "/unsupported/999/preservation" {
+		t.Fatalf("validator did not reach final entry: %#v", issues)
+	}
+}
+
+func TestNativeValidatorCollectionBudgetStillEnforced(t *testing.T) {
+	v := &nativeValidator{}
+	for i := 0; i < NativeDOCXMaxNodes/NativeDOCXMaxCollectionItems; i++ {
+		if got := v.collection(NativeDOCXMaxCollectionItems, "/items", NativeDOCXMaxCollectionItems); got != NativeDOCXMaxCollectionItems {
+			t.Fatalf("premature limit: %d", got)
+		}
+	}
+	if got := v.collection(1, "/overflow", NativeDOCXMaxCollectionItems); got != 0 || len(v.issues) != 1 || v.issues[0].Code != "LIMIT_EXCEEDED" {
+		t.Fatalf("budget no longer enforced: %#v", v)
+	}
+	v = &nativeValidator{}
+	if got := v.collection(NativeDOCXMaxCollectionItems+1, "/too-many", NativeDOCXMaxCollectionItems); got != NativeDOCXMaxCollectionItems || len(v.issues) != 1 {
+		t.Fatal("collection bound no longer enforced")
+	}
+}
+
 func TestDecodeNativeDocumentV1CrossLanguageFixture(t *testing.T) {
 	doc, err := DecodeNativeDocumentV1(nativeFixture(t))
 	if err != nil {

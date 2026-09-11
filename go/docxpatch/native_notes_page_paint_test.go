@@ -13,6 +13,36 @@ func nativeNotePagePaintParts() map[string]string {
 	return parts
 }
 
+func TestExtractNativeNoteStoriesAllowsIgnorableRootMetadata(t *testing.T) {
+	parts := nativeNotePagePaintParts()
+	for _, part := range []string{"Custom/Notes/Foot.XML", "Custom/Notes/End.XML"} {
+		parts[part] = strings.Replace(parts[part], `xmlns:w="`+testW+`"`, `xmlns:w="`+testW+`" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" mc:Ignorable="w14"`, 1)
+	}
+	doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Notes) != 6 {
+		t.Fatalf("lost note stories: %d", len(doc.Notes))
+	}
+	for _, note := range doc.Notes {
+		anchor := note.Anchor
+		if anchor == nil || anchor.StartByte == nil || anchor.EndByte == nil || anchor.XMLSHA256 != nativeSHA([]byte(parts[note.PartName])[*anchor.StartByte:*anchor.EndByte]) {
+			t.Fatalf("note lost exact source anchor: %#v", note)
+		}
+	}
+}
+
+func TestExtractNativeNoteStoriesRejectsSpoofedIgnorableRootMetadata(t *testing.T) {
+	for _, attrs := range []string{`Ignorable="w14"`, `xmlns:mc="urn:spoof" mc:Ignorable="w14"`, `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:MustUnderstand="w14"`} {
+		parts := nativeNotePagePaintParts()
+		parts["Custom/Notes/Foot.XML"] = strings.Replace(parts["Custom/Notes/Foot.XML"], `<w:footnotes `, `<w:footnotes `+attrs+` `, 1)
+		if _, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts))); err == nil {
+			t.Fatalf("unsupported root metadata accepted: %s", attrs)
+		}
+	}
+}
+
 func nativeNotePagePaintPackage(t *testing.T) []byte {
 	parts := nativeNotePagePaintParts()
 	return buildNativeDOCX(t, nativeEntries(parts))

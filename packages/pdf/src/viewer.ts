@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { paintLinkBorders } from './linkBorders.js';
 
 export interface SearchMatch {
   pageIndex: number;
@@ -229,6 +230,9 @@ export async function renderPageToCanvas(
   try {
     await task.promise;
     checkAbort(options.signal);
+    const annotations = await page.getAnnotations({ intent: 'display' });
+    checkAbort(options.signal);
+    paintLinkBorders(context, annotations, viewport.transform, metrics.transform?.[0] ?? 1);
   } finally {
     options.signal?.removeEventListener('abort', cancel);
   }

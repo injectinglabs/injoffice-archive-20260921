@@ -256,11 +256,13 @@ func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDia
 		if err := requireOnlyNativeAttrs(stretch); err != nil {
 			gaps.add("pptx.picture-fill-unavailable", "picture stretch metadata is not modeled in native PPTX v1")
 		}
-		fillRect, fillErr := nativeSingleton(stretch, dialect.drawing, "fillRect", true)
+		// DrawingML CT_StretchInfoProperties permits an omitted fillRect;
+		// it denotes the complete destination rectangle, just like <fillRect/>.
+		fillRect, fillErr := nativeSingleton(stretch, dialect.drawing, "fillRect", false)
 		if fillErr != nil {
 			return "", "", fillErr
 		}
-		if err := requireOnlyNativeChildren(stretch, xml.Name{Space: dialect.drawing, Local: "fillRect"}); err != nil || requireEmptyNativeElement(fillRect) != nil {
+		if err := requireOnlyNativeChildren(stretch, xml.Name{Space: dialect.drawing, Local: "fillRect"}); err != nil || fillRect != nil && requireEmptyNativeElement(fillRect) != nil || !onlyNativeXMLSpace(stretch.Text) {
 			gaps.add("pptx.picture-fill-unavailable", "picture stretch rectangle metadata is not modeled in native PPTX v1")
 		}
 	}

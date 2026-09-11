@@ -42,6 +42,44 @@ func TestExtractNativePPTXPicturesTransitionalAndStrict(t *testing.T) {
 	}
 }
 
+func TestExtractNativePPTXPictureStretchDefaults(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		for _, content := range []string{"", " \n\t", "<a:fillRect/>"} {
+			t.Run(fmt.Sprintf("strict=%v/content=%q", strict, content), func(t *testing.T) {
+				deck, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{strict: strict, stretchContent: &content}), nativeTestExtractOptions())
+				if err != nil {
+					t.Fatal(err)
+				}
+				picture := nativeFixturePicture(t, deck.Slides[0])
+				if picture.Compatibility.Status != NativeCompatibilityStatusEditable {
+					t.Fatalf("default stretch not modeled: %#v", picture.Compatibility)
+				}
+				if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+					t.Fatalf("invalid deck: %#v", issues)
+				}
+			})
+		}
+	}
+}
+
+func TestExtractNativePPTXPictureStretchRetainsSafetyBoundaries(t *testing.T) {
+	for _, content := range []string{"rogue", `<a:fillRect l="1000"/>`, `<a:unknown/>`} {
+		t.Run(content, func(t *testing.T) {
+			deck, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{stretchContent: &content}), nativeTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if picture := nativeFixturePicture(t, deck.Slides[0]); picture.Compatibility.Status == NativeCompatibilityStatusEditable {
+				t.Fatal("unmodeled stretch became editable")
+			}
+		})
+	}
+	duplicate := `<a:fillRect/><a:fillRect/>`
+	if _, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{stretchContent: &duplicate}), nativeTestExtractOptions()); err == nil {
+		t.Fatal("duplicate rectangle accepted")
+	}
+}
+
 func TestExtractNativePPTXPictureRoutesRelocatedCaseAndPercentAsset(t *testing.T) {
 	t.Parallel()
 
@@ -465,6 +503,7 @@ func TestNativePPTXPictureAssetBudgetsAreCumulativeAndPreMaterialization(t *test
 }
 
 type nativePictureFixtureOptions struct {
+	stretchContent          *string
 	strict                  bool
 	secondSlide             bool
 	reverseSlides           bool
@@ -594,6 +633,9 @@ func nativePictureFixture(t *testing.T, options nativePictureFixtureOptions) []b
 				}
 				if options.duplicateRelationshipID {
 					relationships += fmt.Sprintf(`<Relationship Id="rIdImage" Type="%s" Target="%s"%s/>`, relType, imageTarget, mode)
+				}
+				if options.stretchContent != nil {
+					pictures = strings.ReplaceAll(pictures, `<a:fillRect/>`, *options.stretchContent)
 				}
 				parts[slidePart] = strings.Replace(parts[slidePart], `</p:spTree>`, pictures+`</p:spTree>`, 1)
 				parts[relationshipsPart] = strings.Replace(parts[relationshipsPart], `</Relationships>`, relationships+`</Relationships>`, 1)

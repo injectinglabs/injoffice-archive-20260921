@@ -1315,7 +1315,9 @@ func (extractor *nativeExtractor) extractNotes(partName, kind, relationshipID st
 	if root.Name != (xml.Name{Space: extractor.wordNS, Local: wantRoot}) {
 		return fmt.Errorf("docxpatch: native extract: %s part %q has spoofed or invalid root", wantRoot, partName)
 	}
-	if !nativeExactContainer(root) {
+	// Word commonly declares ignorable extension namespaces on note roots.
+	// Unknown child markup is still recorded below, not silently discarded.
+	if !nativeExactContainer(root, xml.Name{Space: "http://schemas.openxmlformats.org/markup-compatibility/2006", Local: "Ignorable"}) {
 		return fmt.Errorf("docxpatch: native extract: %s part %q root has attributes or text outside the exact note subset", wantRoot, partName)
 	}
 	if err := rejectNativeNamespaceSpoofing(root, extractor.wordNS); err != nil {

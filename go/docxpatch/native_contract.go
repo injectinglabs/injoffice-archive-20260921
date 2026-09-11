@@ -610,7 +610,7 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 	if doc.Sections == nil || len(doc.Sections) == 0 {
 		v.add("REQUIRED", "/sections", "at least one section is required")
 	}
-	for i := 0; i < v.collection(len(doc.Sections), "/sections", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.Sections), "/sections", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.section(&doc.Sections[i], fmt.Sprintf("/sections/%d", i), doc.Source.MainPart, bodyAnchor)
 	}
 	v.storyList(doc.Headers, "/headers", "header")
@@ -618,19 +618,19 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 	if doc.Notes == nil {
 		v.add("REQUIRED", "/notes", "field is required")
 	}
-	for i := 0; i < v.collection(len(doc.Notes), "/notes", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.Notes), "/notes", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.story(&doc.Notes[i], fmt.Sprintf("/notes/%d", i), map[string]bool{"footnote": true, "endnote": true})
 	}
 	if doc.CommentStories == nil {
 		v.add("REQUIRED", "/comment_stories", "field is required")
 	}
-	for i := 0; i < v.collection(len(doc.CommentStories), "/comment_stories", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.CommentStories), "/comment_stories", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.story(&doc.CommentStories[i], fmt.Sprintf("/comment_stories/%d", i), map[string]bool{"comment": true})
 	}
 	if doc.Comments == nil {
 		v.add("REQUIRED", "/comments", "field is required")
 	}
-	for i := 0; i < v.collection(len(doc.Comments), "/comments", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.Comments), "/comments", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		path := fmt.Sprintf("/comments/%d", i)
 		comment := &doc.Comments[i]
 		v.id(comment.ID, path+"/id")
@@ -655,7 +655,7 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 		v.add("REQUIRED", "/capabilities", "field is required")
 	}
 	capabilityNames := map[string]bool{}
-	for i := 0; i < v.collection(len(doc.Capabilities), "/capabilities", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.Capabilities), "/capabilities", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		path := fmt.Sprintf("/capabilities/%d", i)
 		capability := &doc.Capabilities[i]
 		v.requiredID(capability.Name, path+"/name")
@@ -669,7 +669,7 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 	if doc.PassthroughParts == nil {
 		v.add("REQUIRED", "/passthrough_parts", "field is required")
 	}
-	for i := 0; i < v.collection(len(doc.PassthroughParts), "/passthrough_parts", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.PassthroughParts), "/passthrough_parts", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		path := fmt.Sprintf("/passthrough_parts/%d", i)
 		part := &doc.PassthroughParts[i]
 		v.part(part.PartName, path+"/part_name")
@@ -691,7 +691,7 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 	if doc.Unsupported == nil {
 		v.add("REQUIRED", "/unsupported", "field is required")
 	}
-	for i := 0; i < v.collection(len(doc.Unsupported), "/unsupported", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(doc.Unsupported), "/unsupported", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		path := fmt.Sprintf("/unsupported/%d", i)
 		entry := &doc.Unsupported[i]
 		v.id(entry.ID, path+"/id")
@@ -744,7 +744,7 @@ func (v *nativeValidator) storyList(stories []NativeStoryV1, base, kind string) 
 		v.add("REQUIRED", base, "field is required")
 		return
 	}
-	for i := 0; i < v.collection(len(stories), base, NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(stories), base, NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.story(&stories[i], fmt.Sprintf("%s/%d", base, i), map[string]bool{kind: true})
 	}
 }
@@ -820,7 +820,7 @@ func (v *nativeValidator) story(story *NativeStoryV1, path string, kinds map[str
 	if story.Blocks == nil {
 		v.add("REQUIRED", path+"/blocks", "field is required")
 	}
-	for i := 0; i < v.collection(len(story.Blocks), path+"/blocks", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(story.Blocks), path+"/blocks", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.block(&story.Blocks[i], fmt.Sprintf("%s/blocks/%d", path, i), story.PartName, storyAnchor, story.Kind == "body")
 	}
 	return storyAnchor
@@ -880,7 +880,7 @@ func (v *nativeValidator) paragraph(paragraph *NativeParagraphV1, path string, t
 	if paragraph.Runs == nil {
 		v.add("REQUIRED", path+"/runs", "field is required")
 	}
-	for i := 0; i < v.collection(len(paragraph.Runs), path+"/runs", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(paragraph.Runs), path+"/runs", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.run(&paragraph.Runs[i], fmt.Sprintf("%s/runs/%d", path, i), ownerPart, paragraphAnchor)
 	}
 }
@@ -916,7 +916,7 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 	if table.Rows == nil {
 		v.add("REQUIRED", path+"/rows", "field is required")
 	}
-	for i := 0; i < v.collection(len(table.Rows), path+"/rows", NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(table.Rows), path+"/rows", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		rowPath := fmt.Sprintf("%s/rows/%d", path, i)
 		row := &table.Rows[i]
 		v.id(row.ID, rowPath+"/id")
@@ -934,7 +934,7 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 		if row.Cells == nil {
 			v.add("REQUIRED", rowPath+"/cells", "field is required")
 		}
-		for j := 0; j < v.collection(len(row.Cells), rowPath+"/cells", NativeDOCXMaxCollectionItems); j++ {
+		for j, limit := 0, v.collection(len(row.Cells), rowPath+"/cells", NativeDOCXMaxCollectionItems); j < limit; j++ {
 			cellPath := fmt.Sprintf("%s/cells/%d", rowPath, j)
 			cell := &row.Cells[j]
 			v.id(cell.ID, cellPath+"/id")
@@ -945,7 +945,7 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 			if cell.Paragraphs == nil {
 				v.add("REQUIRED", cellPath+"/paragraphs", "field is required")
 			}
-			for k := 0; k < v.collection(len(cell.Paragraphs), cellPath+"/paragraphs", NativeDOCXMaxCollectionItems); k++ {
+			for k, limit := 0, v.collection(len(cell.Paragraphs), cellPath+"/paragraphs", NativeDOCXMaxCollectionItems); k < limit; k++ {
 				v.paragraph(&cell.Paragraphs[k], fmt.Sprintf("%s/paragraphs/%d", cellPath, k), true, ownerPart, cellAnchor)
 			}
 		}
@@ -1158,7 +1158,7 @@ func (v *nativeValidator) headerFooterRefs(refs []NativeHeaderFooterReferenceV1,
 		v.add("REQUIRED", path, "field is required")
 		return
 	}
-	for i := 0; i < v.collection(len(refs), path, NativeDOCXMaxCollectionItems); i++ {
+	for i, limit := 0, v.collection(len(refs), path, NativeDOCXMaxCollectionItems); i < limit; i++ {
 		refPath := fmt.Sprintf("%s/%d", path, i)
 		v.oneOf(refs[i].Kind, refPath+"/kind", "default", "first", "even")
 		v.requiredID(refs[i].StoryID, refPath+"/story_id")
@@ -1173,7 +1173,7 @@ func (v *nativeValidator) editPolicy(policy *NativeEditPolicyV1, path string, su
 		v.add("REQUIRED", path+"/allowed_operations", "field is required")
 	}
 	seen := map[string]bool{}
-	for i := 0; i < v.collection(len(policy.AllowedOperations), path+"/allowed_operations", len(nativeOperations)); i++ {
+	for i, limit := 0, v.collection(len(policy.AllowedOperations), path+"/allowed_operations", len(nativeOperations)); i < limit; i++ {
 		operation := policy.AllowedOperations[i]
 		opPath := fmt.Sprintf("%s/allowed_operations/%d", path, i)
 		if !nativeOperations[operation] {
