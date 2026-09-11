@@ -361,14 +361,20 @@ export default function NativeRoundTripPage() {
       <p className="native-status workbench-status ds-status" role="status" aria-live="polite" aria-atomic="true" data-state={error ? 'error' : busy ? 'busy' : workbook ? 'ready' : 'idle'}>
         {busy ? 'Working · ' : ''}{status}
       </p>
-      <DsCallout
-        tone="note"
-        title={mode === 'browser' ? 'Browser-local engine' : 'Explicit server fallback'}
-      >
-        {mode === 'browser'
-          ? 'The first operation loads the version-matched Go engine (about 6.3 MiB) in a Web Worker. A native feature refusal remains a refusal on the server path. Server fallback stays disabled until VITE_INJOFFICE_API_BASE is set.'
-          : 'This mode uploads the workbook. Local Vite uses its proxy; a static build needs a secured compatible API configured with VITE_INJOFFICE_API_BASE.'}
-      </DsCallout>
+      <details className="ds-panel" data-xlsx-technical>
+        <summary>Technical details</summary>
+        <DsCallout
+          tone="note"
+          title={mode === 'browser' ? 'Browser-local engine' : 'Explicit server fallback'}
+        >
+          {mode === 'browser'
+            ? 'The first operation downloads the version-matched Go engine and runs it in a browser Worker. Unsupported features remain unsupported on the server path.'
+            : 'This mode uploads the workbook to the configured API. Unsupported features remain unsupported on this path.'}
+        </DsCallout>
+        <p className="ds-muted">{SERVER_FALLBACK_CONFIGURED
+          ? 'A server API is configured. Selecting Server fallback uploads the workbook; it does not happen automatically.'
+          : 'Server fallback is unavailable in this build. Developers can configure it with VITE_INJOFFICE_API_BASE.'}</p>
+      </details>
       {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
 
       <div className="native-workspace ds-split">
@@ -411,10 +417,10 @@ export default function NativeRoundTripPage() {
             </>
           ) : (
             <div className="native-empty">
-              <span className="native-kicker ds-eyebrow">Native XLSX round trip</span>
-              <h2>Put real XLSX bytes through the engine.</h2>
-              <p>The Go engine runs inside a browser Worker by default. It extracts a revision-bound model, applies one supported edit, reopens the saved package, and returns real <code>.xlsx</code> bytes without a server.</p>
-              <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Run the bundled proof</DsButton>
+              <span className="native-kicker ds-eyebrow">XLSX files</span>
+              <h2>Open a spreadsheet</h2>
+              <p>Open an <code>.xlsx</code> file using the toolbar, or try the sample below. Preview its cells, make a supported edit, and download the updated file.</p>
+              <DsButton variant="filled" className="workbench-button workbench-button--primary" disabled={busy} onClick={() => void loadSample()}>Try sample spreadsheet</DsButton>
             </div>
           )}
         </section>

@@ -57,6 +57,14 @@ try {
       const root = `document.querySelector('[data-scroll-section="${tool}"] [data-workspace-panel="agent"]')`
       await until(`${root} && !${root}.hidden && ${root}.querySelector('[data-agent-prepare]:not(:disabled)')`)
       await delay(200)
+      assert.equal(await evaluate(`(() => {
+        const header = document.querySelector('.app-header-inner');
+        const actions = header.querySelector('.app-header-actions');
+        const edge = header.getBoundingClientRect().right - parseFloat(getComputedStyle(header).paddingRight);
+        return Math.abs(actions.getBoundingClientRect().right - edge) <= 1
+          && !!actions.querySelector('.scheme-toggle') && !!actions.querySelector('.github-link')
+          && !header.textContent.includes('About this demo');
+      })()`), true, `Header controls are right-aligned without the demo disclosure at ${tool}/${width}`)
       const geometry = await evaluate(`(() => {
         const panel = ${root}, artifact = panel.querySelector('.agent-artifact'), footer = panel.querySelector('.agent-demo__document > footer');
         const documentBox = panel.querySelector('.agent-demo__document').getBoundingClientRect(), assistant = panel.querySelector('.agent-demo__inspector').getBoundingClientRect();

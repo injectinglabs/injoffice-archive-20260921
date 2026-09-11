@@ -95,11 +95,18 @@ try {
   await cdp.send('Page.navigate', { url: `${siteUrl}#/sheets?feature=native` })
   await pollExpression(cdp, `document.querySelector('.native-toolbar') !== null`, 'spreadsheet native workspace feature', 90_000)
   await pollExpression(cdp, `(() => {
+    const details = document.querySelector('[data-xlsx-technical]')
+    return details instanceof HTMLDetailsElement && !details.open
+      && details.querySelector('summary')?.textContent === 'Technical details'
+      && details.textContent.includes('Server fallback is unavailable in this build.')
+      && document.querySelector('.native-empty h2')?.textContent === 'Open a spreadsheet'
+  })()`, 'task-first XLSX empty state with collapsed configuration details')
+  await pollExpression(cdp, `(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Server fallback'))
     return Boolean(button?.disabled && button.textContent?.includes('not configured'))
   })()`, 'disabled unconfigured server fallback')
   await pollExpression(cdp, `(() => {
-    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Use bundled .xlsx')
+    const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Try sample spreadsheet')
     if (!button) return false
     button.click()
     return true

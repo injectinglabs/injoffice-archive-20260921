@@ -16,10 +16,6 @@ import { surfaceHref, type Surface } from './route'
 import { SCROLL_SECTIONS, sectionForHash, workspaceNavigationHash, activeSectionKey, type ScrollSection } from './scrollSections'
 import { createDemoRetention } from './demoRetention'
 
-type SidecarState = 'checking' | 'connected' | 'offline'
-
-const API_BASE = (import.meta.env.VITE_INJOFFICE_API_BASE ?? '').replace(/\/$/, '')
-
 function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
 }
@@ -55,7 +51,7 @@ function ColorSchemeToggle({ scheme, onScheme }: { scheme: ColorScheme; onScheme
   )
 }
 
-function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
+function AppHeader({ scheme, onScheme }: { scheme: ColorScheme; onScheme: (next: ColorScheme) => void }) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -69,15 +65,6 @@ function AppHeader({ sidecar, scheme, onScheme }: { sidecar: SidecarState; schem
           <span><strong>InjOffice</strong></span>
         </a>
         <div className="app-header-actions">
-          <details className="runtime-information">
-            <summary>About this demo</summary>
-            <div>
-              <strong>Your files stay in this browser by default.</strong>
-              <p>Guided tasks use a simulated agent, with real file edits and verification. No language model is contacted.</p>
-              <p role="status">{sidecar === 'checking' ? 'Checking optional server connection…' : sidecar === 'connected' ? 'Optional server connected. Server-backed examples are available.' : 'Optional server not connected. Browser-local examples do not require it.'}</p>
-              <p>Server modes are separate and explicitly selected. Document previews show supported content, not full Office fidelity.</p>
-            </div>
-          </details>
           <ColorSchemeToggle scheme={scheme} onScheme={onScheme} />
           <a className="github-link" href="https://github.com/injectinglabs/injoffice" target="_blank" rel="noreferrer">GitHub<span aria-hidden="true">↗</span></a>
         </div>
@@ -322,7 +309,6 @@ class SectionBoundary extends Component<{ children: ReactNode; onRetry: () => vo
 export default function App() {
   const [route, setRoute] = useState(() => ({ surface: sectionForHash(location.hash).surface, hash: workspaceNavigationHash(location.hash) }))
   const { surface, hash } = route
-  const [sidecar, setSidecar] = useState<SidecarState>('checking')
   const [scheme, setScheme] = useState<ColorScheme>(() => currentColorScheme())
   const [proofSection, setProofSection] = useState<(ScrollSection & { featureHash: string }) | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -463,20 +449,6 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 1800)
-    void fetch(`${API_BASE}/healthz`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('offline')
-        const body = await response.json() as { status?: string }
-        setSidecar(body.status === 'ok' ? 'connected' : 'offline')
-      })
-      .catch(() => setSidecar('offline'))
-      .finally(() => window.clearTimeout(timeout))
-    return () => { window.clearTimeout(timeout); controller.abort() }
-  }, [])
-
-  useEffect(() => {
     preloadWorkspaceOnIntent(surface)
   }, [surface])
 
@@ -486,7 +458,7 @@ export default function App() {
         event.preventDefault()
         document.getElementById('main-content')?.focus({ preventScroll: true })
       }}>Skip to demo</a>
-      <AppHeader sidecar={sidecar} scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
+      <AppHeader scheme={scheme} onScheme={(next) => { persistColorScheme(next); setScheme(next) }} />
       <div className="app-frame">
       <aside className="app-sidebar">
         <ToolNavigation surface={surface} remembered={sectionHashes.current} />
