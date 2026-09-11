@@ -29,3 +29,5 @@ export type {
   NativeWorkbookSheetV2,
   NativeWorkbookV2,
 } from './nativeContractV2.generated.js'
+export { formatNativeSheetCellDisplayV2 } from './nativeCellDisplayV2.js'
+export type { NativeSheetCellDisplayFormatResultV2 } from './nativeCellDisplayV2.js'

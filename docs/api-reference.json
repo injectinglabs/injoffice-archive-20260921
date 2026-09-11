@@ -12214,6 +12214,16 @@
               "signature": "export declare function decodeWorkbookMutationBatch(value: unknown): DecodeWorkbookMutationResult"
             },
             {
+              "name": "formatNativeSheetCellDisplayV2",
+              "kind": "function",
+              "signature": "export declare function formatNativeSheetCellDisplayV2(kind: 'number' | 'date', lexical: string, numberFormat: string | undefined, date1904?: boolean): NativeSheetCellDisplayFormatResultV2"
+            },
+            {
+              "name": "NativeSheetCellDisplayFormatResultV2",
+              "kind": "type",
+              "signature": "NativeSheetCellDisplayFormatResultV2"
+            },
+            {
               "name": "NativeWorkbookCellV2",
               "kind": "type",
               "signature": "export interface NativeWorkbookCellV2"

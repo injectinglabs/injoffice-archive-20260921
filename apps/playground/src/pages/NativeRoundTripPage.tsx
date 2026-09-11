@@ -26,6 +26,7 @@ import {
   type XlsxRoundTripMode,
   type XlsxRoundTripRuntime,
 } from '../xlsxRoundTripRuntime'
+import { nativeCellPreview } from '../nativeCellPreview'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-fixture/launch-readiness-plan.xlsx`
@@ -81,16 +82,6 @@ function previewBounds(sheet: NativeSheet): { rows: number; columns: number } {
   const rows = Math.max(3, Math.min(8, 1 + Math.max(-1, ...sheet.cells.map((cell) => cell.row))))
   const columns = Math.max(3, Math.min(6, 1 + Math.max(-1, ...sheet.cells.map((cell) => cell.column))))
   return { rows, columns }
-}
-
-function previewCellValue(workbook: NativeWorkbook, cell: NativeCell | undefined): string {
-  const value = displayCellValue(cell)
-  const numberFormat = cell ? workbook.styles[cell.style_id]?.effective.number_format : undefined
-  if (cell?.value?.kind === 'number' && numberFormat?.startsWith('$')) {
-    const number = Number(value)
-    if (Number.isFinite(number)) return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(number)
-  }
-  return value
 }
 
 function previewCellStyle(workbook: NativeWorkbook, cell: NativeCell | undefined): CSSProperties | undefined {
@@ -320,6 +311,13 @@ export default function NativeRoundTripPage() {
   const bounds = activeSheet ? previewBounds(activeSheet) : null
   const cellMap = new Map(activeSheet?.cells.map((cell) => [`${cell.row}:${cell.column}`, cell]) ?? [])
   const editableMap = new Map(targets.map((candidate) => [targetKey(candidate), candidate]))
+  const previewWarnings = workbook && activeSheet && bounds
+    ? activeSheet.cells.filter((cell) => cell.row < bounds.rows && cell.column < bounds.columns)
+      .flatMap((cell) => {
+        const warning = nativeCellPreview(workbook, cell).warning
+        return warning ? [{ ref: cell.ref, warning }] : []
+      })
+    : []
 
   return (
     <div className="platen-fill native-demo workbench-surface ds" data-demo-surface="native" data-demo-busy={busy}>
@@ -383,7 +381,7 @@ export default function NativeRoundTripPage() {
             <>
               <div className="native-sheet-heading">
                 <div>
-                  <span className="native-kicker ds-eyebrow">Exact native projection</span>
+                  <span className="native-kicker ds-eyebrow">Spreadsheet preview · limited layout</span>
                   <h2>{activeSheet.name}</h2>
                 </div>
                 <span className="native-muted ds-muted">{sourceName} · {workbook.source.authority}</span>
@@ -399,13 +397,15 @@ export default function NativeRoundTripPage() {
                           const cell = cellMap.get(`${row}:${column}`)
                           const candidate = activeSheet ? editableMap.get(targetKey({ sheetId: activeSheet.id, row, column })) : undefined
                           const active = candidate && targetKey(candidate) === targetKey(target ?? candidate)
+                          const preview = nativeCellPreview(workbook, cell)
                           return (
-                            <td key={column} className={active ? 'native-cell-active' : undefined} style={previewCellStyle(workbook, cell)}>
+                            <td key={column} className={active ? 'native-cell-active' : undefined} style={previewCellStyle(workbook, cell)} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
                               {candidate ? (
                                 <button type="button" onClick={() => chooseTarget(candidate)} aria-label={`Edit ${activeSheet.name} ${cell?.ref ?? `${columnName(column)}${row + 1}`}`}>
-                                  {previewCellValue(workbook, cell) || '\u00a0'}
+                                  {preview.text || '\u00a0'}
+                                  {preview.warning && <sup role="img" aria-label={preview.warning}> ⚠</sup>}
                                 </button>
-                              ) : <span>{previewCellValue(workbook, cell) || '\u00a0'}</span>}
+                              ) : <span>{preview.text || '\u00a0'}{preview.warning && <sup role="img" aria-label={preview.warning}> ⚠</sup>}</span>}
                             </td>
                           )
                         })}
@@ -414,6 +414,12 @@ export default function NativeRoundTripPage() {
                   </tbody>
                 </table>
               </div>
+              <p className="ds-muted">Formula cells show saved results, which may be stale; this preview does not recalculate. Warning markers identify raw values or missing saved results.</p>
+              {previewWarnings.length > 0 && <details className="ds-muted">
+                <summary>{previewWarnings.length} preview cell warnings</summary>
+                <ul>{previewWarnings.slice(0, 12).map(({ ref, warning }) => <li key={ref}><strong>{ref}:</strong> {warning}</li>)}</ul>
+                {previewWarnings.length > 12 && <p>{previewWarnings.length - 12} more cells are marked in the preview; hover their markers for details.</p>}
+              </details>}
             </>
           ) : (
             <div className="native-empty">
