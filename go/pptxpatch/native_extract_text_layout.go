@@ -105,8 +105,11 @@ func extractNativeTextBodyLayout(txBody *nativeXMLNode, dialect nativeExtractDia
 	if autofitCount > 1 {
 		return nil, fmt.Errorf("pptxpatch: native extract: conflicting text autofit children")
 	}
-	if normalAutofit != nil || shapeAutofit != nil {
-		return nil, unsupportedNativeTextLayout("font or shape autofit is not representable")
+	if normalAutofit != nil {
+		return nil, unsupportedNativeTextLayout("a:normAutofit requires font scaling and line-spacing reduction")
+	}
+	if shapeAutofit != nil {
+		return nil, unsupportedNativeTextLayout("a:spAutoFit requires content-dependent shape sizing")
 	}
 	if noAutofit != nil {
 		if err := requireEmptyNativeElement(noAutofit); err != nil {

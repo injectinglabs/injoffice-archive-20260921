@@ -542,6 +542,15 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Compatibility.Status == NativeCompatibilityStatusRefused {
 			return nil, fmt.Errorf("%s: element %q is refused and cannot be mutated", prefix, operation.ElementID)
 		}
+		// These flags are omitted from native paragraphs. Equal compatibility
+		// summaries after rewriting cannot prove that local metadata survived.
+		if operation.Kind == NativePPTXReplaceText {
+			for _, diagnostic := range element.Compatibility.Diagnostics {
+				if diagnostic.Code == "pptx.text-checking-metadata-preserved" {
+					return nil, fmt.Errorf("%s: text checking metadata is preserve-only and cannot be replaced", prefix)
+				}
+			}
+		}
 		switch operation.Kind {
 		case NativePPTXReplaceText:
 			if operation.Paragraphs == nil || operation.AutoShape != nil {

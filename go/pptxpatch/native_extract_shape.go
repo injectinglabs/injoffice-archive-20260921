@@ -162,6 +162,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		element.Name = stringPointer(name)
 	}
 	if len(gaps.values) == 0 {
+		nativePreserveTextCheckingMetadata(&element, node, dialect)
 		return element, nil
 	}
 

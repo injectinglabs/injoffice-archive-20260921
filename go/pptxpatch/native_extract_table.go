@@ -141,6 +141,7 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	if name != "" {
 		element.Name = stringPointer(name)
 	}
+	nativePreserveTextCheckingMetadata(&element, node, dialect)
 	return element, nil
 }
 

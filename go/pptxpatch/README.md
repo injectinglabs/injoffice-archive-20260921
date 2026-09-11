@@ -49,6 +49,14 @@ color and `fontFamily` fields when the relationship-routed theme and master
 color map supply exact snapshots. Alpha-only and unmodeled color transforms
 remain object-local refusals.
 
+Static text previews accept the Boolean `dirty` and `smtClean` run/default-run
+checking flags. They are validated before style precedence and omitted only from
+the owned paint projection; original package bytes remain untouched. Affected
+text, shape, and table targets stay preserve-only because text replacement does
+not round-trip those flags. This does not permit unsupported language/layout
+properties, symbol-font bullet substitution, or shape/font autofit. Autofit and
+unsupported inherited-property diagnostics name the remaining blocker.
+
 The parsed connector subset projects unrotated `p:cxnSp` straight-line geometry
 with positive X/Y extents and a complete explicit sRGB or documented theme
 solid stroke. Named `headEnd`/`tailEnd` types, including `w`/`sz` values `sm`/`med`/`lg`

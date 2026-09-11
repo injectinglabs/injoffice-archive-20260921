@@ -1856,6 +1856,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		element.Name = stringPointer(name)
 	}
 	if textLayoutMessage == "" && textContentMessage == "" {
+		nativePreserveTextCheckingMetadata(&element, txBody, dialect)
 		_ = fingerprint
 		_ = zIndex
 		return element, nil

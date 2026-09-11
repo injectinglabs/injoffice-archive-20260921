@@ -74,6 +74,14 @@ func TestNativeTransparentTextBoxUnsupportedContentRemainsVisibleRefusal(t *test
 	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
 		t.Fatalf("invalid refusal contract: %#v", issues)
 	}
+	var layout, content bool
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		layout = layout || (diagnostic.Code == "pptx.text-layout-unavailable" && strings.Contains(diagnostic.Message, "a:spAutoFit"))
+		content = content || (diagnostic.Code == "pptx.text-content-unavailable" && strings.Contains(diagnostic.Message, "buFont"))
+	}
+	if !layout || !content {
+		t.Fatalf("diagnostics lost the independent autofit and symbol-font blockers: %+v", element.Compatibility.Diagnostics)
+	}
 }
 
 func TestNativeTextBoxRejectsUnmodeledPaint(t *testing.T) {

@@ -102,6 +102,7 @@ func resolveNativeLocalTextStyles(body *nativeXMLNode, dialect nativeExtractDial
 				}
 			}
 			merged := mergeNativeStyleNodes(defaults, localRun, dialect)
+			merged.Attrs = nativeTextPaintAttrs(merged.Attrs)
 			merged.Name = xml.Name{Space: dialect.drawing, Local: "rPr"}
 			projected := *run
 			projected.Children = []*nativeXMLNode{merged}
@@ -118,20 +119,20 @@ func resolveNativeLocalTextStyles(body *nativeXMLNode, dialect nativeExtractDial
 }
 
 func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtractDialect, paragraph bool, theme nativeResolvedTheme) error {
-	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}}
+	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}}
 	names := []string{"latin", "ea", "cs", "solidFill"}
 	if paragraph {
 		attrs = []xml.Name{{Local: "algn"}, {Local: "lvl"}, {Local: "marL"}, {Local: "indent"}}
 		names = []string{"buNone", "buChar", "defRPr"}
 	}
 	if err := requireOnlyNativeAttrs(node, attrs...); err != nil {
-		return unsupportedNativeTextContent("unmodeled inherited text property")
+		return unsupportedNativeTextContent("unmodeled inherited text property: " + err.Error())
 	}
 	// Validate each source before precedence can hide a malformed value.
 	for _, attr := range node.Attrs {
 		var err error
 		switch attr.Name.Local {
-		case "b", "i":
+		case "b", "i", "dirty", "smtClean":
 			_, err = nativeBool(attr.Value)
 		case "sz":
 			_, err = parseCanonicalNativeInt(attr.Value, 1, 400000)
@@ -152,8 +153,8 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 	for _, name := range names {
 		allowed = append(allowed, xml.Name{Space: dialect.drawing, Local: name})
 	}
-	if requireOnlyNativeChildren(node, allowed...) != nil {
-		return unsupportedNativeTextContent("unmodeled inherited text property child")
+	if err := requireOnlyNativeChildren(node, allowed...); err != nil {
+		return unsupportedNativeTextContent("unmodeled inherited text property child: " + err.Error())
 	}
 	for _, name := range names {
 		child, err := nativeSingleton(node, dialect.drawing, name, false)
@@ -194,6 +195,50 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 		}
 	}
 	return nil
+}
+
+// These two Boolean flags track spelling/smart-tag checking, not glyph layout.
+// They are validated before cascade resolution and omitted only from the owned
+// paint projection. Language, kumimoji, and all other attributes remain strict.
+func nativeTextPaintAttrs(attrs []xml.Attr) []xml.Attr {
+	result := make([]xml.Attr, 0, len(attrs))
+	for _, attr := range attrs {
+		if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean") {
+			continue
+		}
+		result = append(result, attr)
+	}
+	return result
+}
+
+func nativeHasTextCheckingMetadata(node *nativeXMLNode, dialect nativeExtractDialect) bool {
+	if node == nil {
+		return false
+	}
+	if node.Name.Space == dialect.drawing && (node.Name.Local == "rPr" || node.Name.Local == "defRPr") {
+		for _, attr := range node.Attrs {
+			if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean") {
+				return true
+			}
+		}
+	}
+	for _, child := range node.Children {
+		if nativeHasTextCheckingMetadata(child, dialect) {
+			return true
+		}
+	}
+	return false
+}
+
+func nativePreserveTextCheckingMetadata(element *NativeElement, node *nativeXMLNode, dialect nativeExtractDialect) {
+	if element.Compatibility.Status == NativeCompatibilityStatusRefused || !nativeHasTextCheckingMetadata(node, dialect) {
+		return
+	}
+	element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+		Severity: NativeDiagnosticSeverityWarning, Code: "pptx.text-checking-metadata-preserved",
+		Message: "spelling and smart-tag check flags do not affect static text paint; source remains preserve-only because replacement does not round-trip these flags",
+	})
 }
 
 func mergeNativeStyleNodes(base, override *nativeXMLNode, dialect nativeExtractDialect) *nativeXMLNode {
