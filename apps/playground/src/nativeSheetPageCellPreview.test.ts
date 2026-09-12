@@ -11,6 +11,37 @@ function fixture(format='General'){
  return {workbook,cell,objects}
 }
 describe('page-only compact display',()=>{
+ it('resolves General alignment from stored kinds and respects authored overrides',()=>{
+  const {workbook,cell,objects}=fixture(),before=JSON.stringify({workbook,cell,objects})
+  expect(preview(workbook,cell,objects,'s.xml')).toMatchObject({horizontal:'right'})
+  expect(preview(workbook,cell,objects,'s.xml',true)).toMatchObject({horizontal:'right'})
+  const formula={...cell,value:undefined,formula:{type:'normal' as const,text:'16/3',cached:cell.value}}
+  expect(preview(workbook,formula,objects,'s.xml')).toMatchObject({horizontal:'right',cached:true})
+  for(const value of [
+   {kind:'string',storage:'inline-string',text:'123',rich:false},
+   {kind:'boolean',storage:'boolean',lexical:'1',rich:false},
+   {kind:'error',storage:'error',lexical:'#VALUE!',rich:false},
+  ]as const){
+   expect(preview(workbook,{...cell,value}as NativeCell,objects,'s.xml')).toMatchObject({horizontal:'left'})
+   expect(preview(workbook,{...formula,formula:{...formula.formula,cached:value}}as NativeCell,objects,'s.xml')).toMatchObject({horizontal:'left'})
+  }
+  for(const horizontal_alignment of ['left','center','right']as const){
+   const styled={...workbook,styles:[{...workbook.styles[0]!,effective:{...workbook.styles[0]!.effective,horizontal_alignment}}]}
+   expect(preview(styled,cell,objects,'s.xml')).toMatchObject({horizontal:horizontal_alignment})
+  }
+  expect(JSON.stringify({workbook,cell,objects})).toBe(before)
+ })
+ it('does not invent alignment for unsupported styles or uncached formulas',()=>{
+  const {workbook,cell,objects}=fixture()
+  for(const flag of ['horizontal-alignment','alignment-extended']){
+   const unsupported={...workbook,styles:[{...workbook.styles[0]!,effective:{...workbook.styles[0]!.effective,unsupported:[flag]}}]}
+   expect(preview(unsupported,cell,objects,'s.xml')).toMatchObject({horizontal:'left',warnings:[expect.stringContaining('Source alignment is unsupported')]})
+  }
+  expect(preview({...workbook,styles:[]},cell,objects,'s.xml')).toMatchObject({horizontal:'left'})
+  expect(preview(workbook,{...cell,value:undefined,formula:{type:'normal',text:'NOW()'}},objects,'s.xml')).toMatchObject({horizontal:'left',cached:false})
+  const date={...cell,value:{kind:'date',storage:'date',lexical:'2026-09-12',rich:false}}as NativeCell
+  expect(preview(workbook,date,objects,'s.xml')).toMatchObject({horizontal:'right'})
+ })
  it('defaults off, applies only by explicit choice, and preserves saved formulas/source',()=>{
   const {workbook,cell,objects}=fixture(),before=JSON.stringify({workbook,cell,objects})
   expect(preview(workbook,cell,objects,'s.xml').text).toBe('5.3333333333333304')

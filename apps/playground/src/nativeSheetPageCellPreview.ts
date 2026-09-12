@@ -8,6 +8,14 @@ export function nativeSheetPageCellPreview(workbook: NativeWorkbook, cell: Nativ
   const value = cell?.formula ? cell.formula.cached : cell?.value
   const style = cell ? workbook.styles[cell.style_id]?.effective : undefined
   const warnings = display.warning ? [display.warning] : []
+  // Match the native cell painter's General alignment policy using the stored
+  // value kind, never by parsing formatted text or evaluating a formula.
+  const alignmentUnavailable = style?.unsupported.some(flag => flag === 'horizontal-alignment' || flag === 'alignment-extended') ?? false
+  const authoredAlignment = style?.horizontal_alignment ?? 'general'
+  const horizontal = alignmentUnavailable || !style ? 'left' : authoredAlignment === 'general'
+    ? value?.kind === 'number' || value?.kind === 'date' ? 'right' : 'left'
+    : authoredAlignment
+  if (alignmentUnavailable) warnings.push('Source alignment is unsupported; this preview uses left alignment without indent or rotation.')
   let text = display.text, compacted = false
   if (compactGeneral && cell && value?.kind === 'number' && style?.number_format === 'General' && !style.unsupported.includes('number-format')) {
     const table = nativeTableNumberFormatPreview(objects, workbook.source.package_sha256, sheetPart, cell.row, cell.column, cell.style_id, value.kind, value.lexical ?? '', workbook.date1904)
@@ -17,5 +25,5 @@ export function nativeSheetPageCellPreview(workbook: NativeWorkbook, cell: Nativ
       else warnings.push(result.warning)
     }
   }
-  return { text, warnings, cached: Boolean(cell?.formula && value), compacted, truncated: text.length > 2048, stored: value?.text ?? value?.lexical ?? '' }
+  return { text, warnings, horizontal, cached: Boolean(cell?.formula && value), compacted, truncated: text.length > 2048, stored: value?.text ?? value?.lexical ?? '' }
 }

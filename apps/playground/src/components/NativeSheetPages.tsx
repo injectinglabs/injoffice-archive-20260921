@@ -153,7 +153,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
           {cells.filter(cell => cell.row >= page.rows.start && cell.row <= page.rows.end && cell.column >= page.columns.start && cell.column <= page.columns.end).map(cell => {
             const x = cell.rect.x_emu / EMU_PER_PIXEL, y = cell.rect.y_emu / EMU_PER_PIXEL, w = cell.rect.width_emu / EMU_PER_PIXEL, h = cell.rect.height_emu / EMU_PER_PIXEL
             const id = `${clip}-${cell.key}`, size = (cell.style?.font_size_points ?? 11) * 96 / 72
-            const right = cell.style?.horizontal_alignment === 'right', center = cell.style?.horizontal_alignment === 'center'
+            const right = cell.display.horizontal === 'right', center = cell.display.horizontal === 'center'
             const exactNormal = cell.style?.font_name === workbook.normal_style?.font_name && Boolean(cell.style?.bold) === Boolean(workbook.normal_style?.font_bold) && Boolean(cell.style?.italic) === Boolean(workbook.normal_style?.font_italic)
             return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
               <rect x={x} y={y} width={w} height={h} fill={cell.fill}/>

@@ -20,6 +20,16 @@ function fixture() {
 const render = (props = fixture()) => renderToStaticMarkup(createElement(NativeSheetPageImages, props))
 
 describe('selected-range page presentation', () => {
+  it('right-aligns General numeric values but retains left-aligned numeric-looking text', () => {
+    const props = fixture()
+    props.workbook.styles[0]!.effective.number_format = 'General'
+    props.sheet.cells[0] = { ...props.sheet.cells[0]!, value: { kind: 'number', storage: 'number', lexical: '123', rich: false } }
+    expect(render(props)).toMatch(/<text[^>]*x="98"[^>]*text-anchor="end"[^>]*>123<\/text>/)
+    props.sheet.cells[0] = { ...props.sheet.cells[0]!, value: { kind: 'string', storage: 'inline-string', text: '123', rich: false } } as NativeSheet['cells'][number]
+    expect(render(props)).toMatch(/<text[^>]*x="2"[^>]*text-anchor="start"[^>]*>123<\/text>/)
+    props.workbook.styles[0]!.effective.horizontal_alignment = 'center'
+    expect(render(props)).toMatch(/<text[^>]*x="50"[^>]*text-anchor="middle"[^>]*>123<\/text>/)
+  })
   it('shows visible cache and compact-number disclosures without changing strict default output', () => {
     const props = fixture()
     props.workbook.styles[0]!.effective.number_format = 'General'
