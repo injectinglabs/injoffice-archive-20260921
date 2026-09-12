@@ -4,6 +4,8 @@ import type { NativeSheetRenderModelV2, NativeWorkbookRenderModelV2 } from './na
 import { sha256Hex } from './nativeSha256.js'
 import { NativePlainDataError, snapshotNativePlainData } from './nativePlainData.js'
 import { isNativeMaximumDigitWidthAuthorityV2 } from './nativeMaximumDigitWidthV2.js'
+import {decodeNativeWorkbookObjectsV1,type NativeWorkbookObjectsV1} from './nativeObjectsPreviewV1.js'
+import type {NativeStoredRowGeometryV1} from './nativeStoredRowsPreviewV1.js'
 
 export const NATIVE_SHEET_GEOMETRY_V2_PROTOCOL = 'injoffice.xlsx.sheet-geometry'
 export const NATIVE_SHEET_GEOMETRY_V2_VERSION = 1 as const
@@ -16,6 +18,27 @@ export const NATIVE_SHEET_GEOMETRY_V2_LIMITS = Object.freeze({
   maxCommands: 110_000,
 })
 const compiledNativeSheetGeometries = new WeakSet<object>()
+const compiledStoredRowGeometries = new WeakSet<object>()
+export interface NativeStoredRowSheetGeometryV1 extends NativeSheetGeometryV2 {
+ readonly approximation:{readonly policy:'source-stored-rows-v1';readonly read_only:true;readonly source:NativeStoredRowGeometryV1}
+}
+export function isCompiledNativeStoredRowSheetGeometryV1(value:unknown):value is NativeStoredRowSheetGeometryV1 {
+ return typeof value==='object'&&value!==null&&compiledStoredRowGeometries.has(value)&&Object.isFrozen(value)
+}
+/** Explicit read-only row-height policy. Descender metadata does not alter the
+ * stored row boxes; text fitting/baselines are not qualified by this projection.
+ * This is deliberately NOT branded or accepted as strict sheet geometry.
+ */
+export function compileNativeStoredRowSheetGeometryV1(workbook:NativeWorkbookRenderModelV2,sheetId:string,viewport:NativeSheetViewportV2,metricAuthority:NativeMaximumDigitWidthAuthorityV2,objects:NativeWorkbookObjectsV1):NativeStoredRowSheetGeometryV1 {
+ if(!isProjectedNativeWorkbookV2(workbook))throw new TypeError('Stored-row geometry requires a projected source workbook')
+ const evidence=decodeNativeWorkbookObjectsV1(objects,workbook.source.package_sha256)
+ const sheet=workbook.sheets.find(s=>s.id===sheetId)
+ const rows=evidence.row_geometry?.filter(r=>r.sheet_part===sheet?.mutation_authority.source_part)??[]
+ if(rows.length!==1||rows[0]!.rows.length!==32)throw new TypeError('Qualified stored row dimensions unavailable')
+ const view=snapshotViewport(viewport)
+ if(view.end_row>=32)throw new RangeError('Stored row approximation covers only the first 32 rows')
+ return compileGeometry(workbook,sheetId,view,metricAuthority,rows[0]) as NativeStoredRowSheetGeometryV1
+}
 
 export type NativeSheetGeometryIssueCode =
   | 'geometry.invalidViewport'
@@ -156,6 +179,9 @@ export function compileNativeSheetGeometryV2(
   viewport: NativeSheetViewportV2,
   metricAuthority: NativeMaximumDigitWidthAuthorityV2,
 ): NativeSheetGeometryV2 {
+ return compileGeometry(workbook,sheetId,viewport,metricAuthority)
+}
+function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,viewport:NativeSheetViewportV2,metricAuthority:NativeMaximumDigitWidthAuthorityV2,storedRows?:NativeStoredRowGeometryV1):NativeSheetGeometryV2 {
   if (!isProjectedNativeWorkbookV2(workbook)) throw new NativeSheetGeometryV2Error('geometry.sourceUnsupported', '$.workbook', 'workbook must be the branded frozen result of projectNativeWorkbookV2')
   const safeViewport = snapshotViewport(viewport)
   if (!isNativeMaximumDigitWidthAuthorityV2(metricAuthority)) throw new NativeSheetGeometryV2Error('geometry.metricAuthority', '$.metric_authority', 'maximum digit width must come from the pinned native sfnt provider over exact font bytes')
@@ -166,7 +192,7 @@ export function compileNativeSheetGeometryV2(
   const format = sheet.sheet_format
   if (!format) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format', 'source worksheet has no authoritative sheetFormatPr geometry')
   if (format.zero_height) throw new NativeSheetGeometryV2Error('geometry.zeroHeightUnavailable', '$.sheet.sheet_format.zero_height', 'zeroHeight needs explicit-row visibility provenance not available in native v2')
-  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && (
+  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && !(storedRows&&(item.code==='SHEET_FORMAT_EXTRAS'||item.code==='ROW_DIMENSION_EXTRAS')) && (
     item.code === 'SHEET_FORMAT_EXTRAS' || item.code === 'ROW_DIMENSION_EXTRAS' || item.code === 'COLUMN_DIMENSION_EXTRAS' || item.code === 'COLS_ATTRIBUTES'
     || item.code === 'SHEET_VIEW_GEOMETRY' || item.code === 'WORKSHEET_ATTRIBUTES' || item.code === 'FOREIGN_WORKSHEET_MARKUP'
   ))
@@ -181,8 +207,8 @@ export function compileNativeSheetGeometryV2(
   for (let row = safeViewport.row; row <= safeViewport.end_row; row++) {
     while (rowCursor < sheet.rows.length && sheet.rows[rowCursor]!.row < row) rowCursor++
     const override = sheet.rows[rowCursor]?.row === row ? sheet.rows[rowCursor] : undefined
-    const points = override?.height_points ?? format.default_row_height_points
-    const hidden = (override?.hidden ?? false) || points === 0
+    const points = storedRows?.rows[row]?.height_points ?? override?.height_points ?? format.default_row_height_points
+    const hidden = (storedRows?.rows[row]?.hidden ?? override?.hidden ?? false) || points === 0
     const height = hidden ? 0 : checkedInteger(Math.round(points * EMU_PER_POINT), `$.rows[${rows.length}].height_emu`)
     rows.push({ row, y_emu: y, height_emu: height, hidden, source: override ? 'row-override' : 'sheet-default' })
     y = checkedSum(y, height, `$.rows[${rows.length - 1}].y_emu`)
@@ -214,6 +240,7 @@ export function compileNativeSheetGeometryV2(
     ...safeMetricAuthority,
   }
   const unsigned = {
+    ...(storedRows?{approximation:{policy:'source-stored-rows-v1' as const,read_only:true as const,source:storedRows}}:{}),
     protocol: NATIVE_SHEET_GEOMETRY_V2_PROTOCOL,
     version: NATIVE_SHEET_GEOMETRY_V2_VERSION,
     document_id: workbook.document_id,
@@ -234,7 +261,8 @@ export function compileNativeSheetGeometryV2(
     geometry_sha256: geometryDigest(unsigned),
   }
   const frozen = deepFreeze(result)
-  compiledNativeSheetGeometries.add(frozen)
+  if(storedRows)compiledStoredRowGeometries.add(frozen)
+  else compiledNativeSheetGeometries.add(frozen)
   return frozen
 }
 

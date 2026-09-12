@@ -1,5 +1,6 @@
 import { decodeNativeStoredRowGeometryV1, type NativeStoredRowGeometryV1 } from "./nativeStoredRowsPreviewV1.js";
 import { snapshotNativePlainData } from "./nativePlainData.js";
+import {decodeNativeSheetPageSettingsV1,type NativeSheetPageSettingsV1} from './nativeSheetPageSettingsV1.js';
 /** Read-only source-derived metadata. Never a workbook mutation envelope. */
 export interface NativeWorkbookObjectsV1 {
   protocol: "injoffice.xlsx.preview-objects";
@@ -8,6 +9,7 @@ export interface NativeWorkbookObjectsV1 {
   tables: NativeTablePreviewV1[];
   charts: NativeChartPreviewV1[];
   row_geometry?: NativeStoredRowGeometryV1[];
+  page_settings?: NativeSheetPageSettingsV1[];
 }
 export interface NativeTablePreviewV1 {
   part: string;
@@ -102,6 +104,7 @@ export function decodeNativeWorkbookObjectsV1(
   const bit = (v: unknown) => (typeof v === "boolean" ? v : fail());
   const count = (v: unknown) => (v === 0 || v === 1 ? v : fail());
   const hasRows = !!input && typeof input === "object" && Object.hasOwn(input, "row_geometry");
+  const hasPages = !!input && typeof input === "object" && Object.hasOwn(input, "page_settings");
   const value = obj(input, [
     "protocol",
     "version",
@@ -109,6 +112,7 @@ export function decodeNativeWorkbookObjectsV1(
     "tables",
     "charts",
     ...(hasRows ? ["row_geometry"] : []),
+    ...(hasPages ? ["page_settings"] : []),
   ]);
   if (
     value.protocol !== "injoffice.xlsx.preview-objects" ||
@@ -316,6 +320,7 @@ export function decodeNativeWorkbookObjectsV1(
     tables,
     charts,
     ...(hasRows ? { row_geometry: decodeNativeStoredRowGeometryV1(value.row_geometry) } : {}),
+    ...(hasPages ? { page_settings: decodeNativeSheetPageSettingsV1(value.page_settings) } : {}),
   };
 }
 

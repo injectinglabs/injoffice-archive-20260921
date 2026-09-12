@@ -28,6 +28,7 @@ import {
 } from '../xlsxRoundTripRuntime'
 import { nativeCellPreview } from '../nativeCellPreview'
 import { NativeWorkbookObjects } from '../components/NativeWorkbookObjects'
+import { NativeSheetPages } from '../components/NativeSheetPages'
 import {nativeStoredRowPreviewV1,nativeTableFillPreview,nativeTableHeaderTextPreview,nativeTableTotalsTextPreview,nativeTableBorderPreview,type NativeWorkbookObjectsV1,type NativeTableBorderSideV1} from '@injoffice/sheets/browser'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -441,6 +442,7 @@ export default function NativeRoundTripPage() {
               <p className="ds-muted">The grid preview is limited to the first 32 rows and 12 columns. Original content outside this window remains in the file.</p>
               {objects?.package_sha256===workbook.source.package_sha256&&<p className="ds-muted">{objects.row_geometry?.find(sheet=>sheet.sheet_part===activeSheet.part_name)?.warnings.join(' ')??'Stored row geometry is unavailable for this sheet; host preview sizes remain in use.'} Text may be clipped to stored heights; no font metrics or automatic fitting are inferred.</p>}
               {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} onInspection={setObjects} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
+              {objects?.package_sha256 === workbook.source.package_sha256 && <NativeSheetPages workbook={workbook} sheet={activeSheet} objects={objects} rows={bounds.rows} columns={bounds.columns}/>}
               {previewWarnings.length > 0 && <details className="ds-muted">
                 <summary>{previewWarnings.length} preview cell warnings</summary>
                 <ul>{previewWarnings.slice(0, 12).map(({ ref, warning }) => <li key={ref}><strong>{ref}:</strong> {warning}</li>)}</ul>

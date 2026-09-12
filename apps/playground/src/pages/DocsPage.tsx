@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS } from '@injoffice/docx-wasm'
+import {createNativeDocxPartialContentPreviewV1} from '@injoffice/docs/native-docx'
 import {
   DsButton,
   DsCallout,
@@ -12,6 +13,7 @@ import '../design-system/live-create-edit.css'
 import './docs-workspace.css'
 import { extractDocxPreviewImages } from '../docxPreviewImages'
 import { NativeDocxPages } from '../components/NativeDocxPages'
+import {NativeDocxPartialCoverage} from '../components/NativeDocxPartialCoverage'
 import {
   DOCX_MEDIA_TYPE,
   nativeDocxHighlight,
@@ -212,6 +214,7 @@ export default function DocsPage() {
   }, [authoritativeBytes, document])
 
   const stats = useMemo(() => document ? nativeDocxPreviewStats(document) : null, [document])
+  const partialCoverage=useMemo(()=>{if(!document)return null;try{return {value:createNativeDocxPartialContentPreviewV1(document,{policy:'source-text-with-omissions-v1',read_only:true})}}catch{return {error:true as const}}},[document])
   const preview = useMemo(() => document ? visibleNativeDocxBlocks(document) : null, [document])
   const targets = useMemo(() => document ? editableDocxRuns(document) : [], [document])
   const target = targets.find((candidate) => candidate.key === selection) ?? targets[0]
@@ -492,6 +495,7 @@ export default function DocsPage() {
               <h4>{sourceName}</h4>
               <p className="native-muted ds-muted">Select a passage to edit. The selected passage is highlighted.</p>
               <p className="docx-preview-boundary">Continuous content view. Fonts and wrapping may differ; supported embedded PNG/JPEG images appear inline, other drawings use placeholders. List markers are unresolved, and headers/footers appear below the body. Unsupported content remains in the original file.</p>
+              {partialCoverage&&(partialCoverage.value?<NativeDocxPartialCoverage coverage={partialCoverage.value}/>:<p role="status">Preview coverage is unavailable. The existing editor and source file are unchanged.</p>)}
               {preview.blocks.map((block) => <BlockView key={block.id} block={block} />)}
               {preview.omitted > 0 && <p className="docx-omitted">Preview stopped after 200 body blocks; {preview.omitted} remain in the validated contract.</p>}
               {selectedOutsidePreview && <section className="docx-preview-story" aria-label="Selected passage outside the preview"><h5>Selected passage</h5><BlockView block={selectedOutsidePreview} /></section>}

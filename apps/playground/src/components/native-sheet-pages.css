@@ -1,0 +1,8 @@
+.native-sheet-page-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+.native-sheet-page-controls > label { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.native-sheet-page-controls input[type="file"] { max-width: 100%; }
+.native-sheet-page-controls input[type="number"] { width: 100px; }
+.native-sheet-page-list { background: var(--ds-chrome); padding: 16px; margin-top: 16px; overflow: auto; }
+.native-sheet-page-list figure { margin: 0 auto 24px; max-width: 816px; }
+.native-sheet-page-list figcaption { color: var(--ds-mute); margin-bottom: 8px; }
+.native-sheet-page-list svg { display: block; width: 100%; height: auto; border: 1px solid var(--ds-line); background: #fff; }

@@ -19,6 +19,7 @@
     "@injoffice/collab": "*",
     "@injoffice/connectors": "*",
     "@injoffice/docx-wasm": "*",
+    "@injoffice/docs": "*",
     "@injoffice/font-metrics": "*",
     "@injoffice/formulas": "*",
     "@injoffice/history": "*",

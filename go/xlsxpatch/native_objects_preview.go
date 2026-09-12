@@ -22,6 +22,7 @@ type NativeWorkbookObjectsV1 struct {
 	Tables        []NativeTablePreviewV1      `json:"tables"`
 	Charts        []NativeChartPreviewV1      `json:"charts"`
 	RowGeometry   []NativeStoredRowGeometryV1 `json:"row_geometry,omitempty"`
+	PageSettings  []NativeSheetPageSettingsV1 `json:"page_settings,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -179,6 +180,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	for _, sheet := range workbook.Sheets {
 		if len(result.RowGeometry) < 64 {
 			result.RowGeometry = append(result.RowGeometry, previewNativeStoredRows(pkg.files[sheet.PartName], sheet.PartName))
+			result.PageSettings = append(result.PageSettings, previewNativePageSettings(pkg.files[sheet.PartName], sheet.PartName, sheet.ID))
 		}
 		relPart := path.Join(path.Dir(sheet.PartName), "_rels", path.Base(sheet.PartName)+".rels")
 		if raw, ok := pkg.files[relPart]; ok {

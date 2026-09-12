@@ -1,5 +1,35 @@
 # @injoffice/docs
 
+### Read-only partial source-content projection
+
+`createNativeDocxPartialContentPreviewV1(document,
+{ policy: 'source-text-with-omissions-v1', read_only: true }, resolvedLayout?)`
+is available from the browser-safe `@injoffice/docs/native-docx` entry. It
+validates the native source model and, when supplied, the resolved model's exact
+document/revision/main-part identity. The result is a continuous plain-text
+source projection with source-bound omission placeholders, **not paginated
+native paint, an editable document, or a substitute persistence format**.
+Text segments are literal source strings: render them as text, never as HTML.
+
+The first profile includes ordinary body text only. Hidden text, fields,
+controls, drawings, tables and nonbody stories receive explicit placeholders;
+source diagnostics remain attached. Unknown document-wide diagnostics prevent
+text qualification. Without resolved layout, inherited visibility is unknown,
+so the result provides an inventory only and exposes no text. Formatting,
+numbering and document layout are not reconstructed. A 200-body-block and
+100,000-text-unit budget produces explicit truncation placeholders rather than
+silently dropping source content. The original source and mutation guards are
+unchanged; package hashes remain trusted native-extractor evidence, not XML
+bytes independently re-hashed by this consumer.
+The resolved-layout V1 contract has no package digest of its own: the caller
+must supply document and layout from the same authoritative extraction. The
+identity join is not independent proof that arbitrary caller-provided models
+were extracted from particular package bytes.
+
+The playground displays this inventory separately from its existing richer
+continuous editor; limitations of this reusable projection do not imply that
+the editor omits the same content.
+
 Native DOCX text shaping honors inherited `w:kern` minimum sizes in bounded whole half-points (1–3276). The resolved `kerning_min_size_half_points` threshold enables kerning when the resolved `w:sz` is at least that threshold; absent thresholds explicitly disable kerning, as specified by ECMA-376 §17.3.2.19. Direct kerning markup remains source-preserved and does not grant replacement permission. Unit-bearing, malformed, duplicate, and out-of-range thresholds remain unqualified. This may change advances from earlier previews that inherited HarfBuzz's default kerning without an authored DOCX setting.
 
 Renderer-independent Docs contracts and layout helpers. Native DOCX v1 is the
