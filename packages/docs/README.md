@@ -37,11 +37,11 @@ source projection with source-bound omission placeholders, **not paginated
 native paint, an editable document, or a substitute persistence format**.
 Text segments are literal source strings: render them as text, never as HTML.
 
-The profile includes ordinary body text and unmerged table-cell source text,
+The profile includes ordinary body text and unmerged or merged-owner table-cell source text,
 grouped by source row/cell ordinals without reconstructing table geometry.
 Qualified authored drawing descriptions appear as labeled alternative text
 alongside the retained drawing omission. Hidden text, fields, controls, drawing
-geometry, merged cells, table layout and nonbody stories receive placeholders;
+geometry, vertical-merge continuation cells, table layout and nonbody stories receive placeholders;
 source diagnostics remain attached. Unknown document-wide diagnostics prevent
 text qualification. Without resolved layout, inherited visibility is unknown,
 so the result provides an inventory only and exposes no text. Formatting,

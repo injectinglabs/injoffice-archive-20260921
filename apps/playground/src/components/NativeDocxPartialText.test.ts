@@ -24,5 +24,13 @@ describe('browser-local partial text UI',()=>{
   expect(html).toContain('Summary');expect(html).toContain('Source row 1, cell 1');expect(html).toContain('no table layout')
   expect(html).toContain('Authored drawing description');expect(html).toContain('&lt;script&gt;description&lt;/script&gt;')
   expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable');expect(html).not.toContain('<input')
+  const cell=document.body.blocks[1]!.table!.rows[0]!.cells[0]!
+  cell.grid_span=2;cell.vertical_merge='restart'
+  const owner=renderToStaticMarkup(createElement(NativeDocxPartialTextView,{preview:createNativeDocxPartialContentPreviewV1(document,{policy:'source-text-with-omissions-v1',read_only:true},resolved)}))
+  expect(owner).toContain('Summary');expect(owner).toContain('Authored span: 2 grid columns');expect(owner).toContain('Vertical merge starts here — owner text only');expect(owner).toContain('Merge geometry is not reproduced')
+  cell.grid_span=1;cell.vertical_merge='continue'
+  const continuation=renderToStaticMarkup(createElement(NativeDocxPartialTextView,{preview:createNativeDocxPartialContentPreviewV1(document,{policy:'source-text-with-omissions-v1',read_only:true},resolved)}))
+  expect(continuation).not.toContain('Summary');expect(continuation).toContain('Vertical merge continuation — text omitted')
+  expect(continuation).toContain('1 grid column.');expect(continuation).not.toContain('1 grid columns')
  })
 })

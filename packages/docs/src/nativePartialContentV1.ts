@@ -11,7 +11,7 @@ export type NativeDocxPartialSegmentV1=
  | {kind:'alternative-text';source:NativeDocxPartialSourceV1;text:string;label:'authored-drawing-description'}
  | {kind:'omission';source:NativeDocxPartialSourceV1;code:NativeDocxPartialOmissionCode;count:number;diagnostic_ids:string[]}
 export type NativeDocxPartialParagraphV1={kind:'paragraph';source:NativeDocxPartialSourceV1;segments:NativeDocxPartialSegmentV1[]}
-export type NativeDocxPartialCellV1={kind:'cell-source';source:NativeDocxPartialSourceV1;row_ordinal:number;cell_ordinal:number;paragraphs:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
+export type NativeDocxPartialCellV1={kind:'cell-source';source:NativeDocxPartialSourceV1;row_ordinal:number;cell_ordinal:number;source_merge?:{grid_span:number;vertical_merge:'none'|'restart'|'continue'};paragraphs:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
 export interface NativeDocxPartialContentV1 {
  protocol:'injoffice.docx.partial-content';version:1;policy:typeof DOCX_PARTIAL_CONTENT_POLICY;read_only:true;fidelity:'partial-source-content';pagination:'not-produced'
  source:{document_id:string;revision:string;package_sha256:string}
@@ -128,8 +128,10 @@ export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{p
    if(tableCells>=DOCX_PARTIAL_CONTENT_LIMITS.tableCells)continue
    tableCells++;visited++
    const cs=source(cell.id,cell.anchor),diagnostics=[...(blockers.get(row.id)??[]),...(blockers.get(cell.id)??[])]
-   const content=diagnostics.length?[omit(cs,'unsupported-source',1,diagnostics)]:cell.grid_span!==1||cell.vertical_merge!=='none'?[omit(cs,'merged-cell')]:cell.paragraphs.map(projectParagraph)
-   cells.push({kind:'cell-source',source:cs,row_ordinal:rowOrdinal,cell_ordinal:cellOrdinal,paragraphs:content})
+   // Recover only source-owner text, not shared-cell geometry or continuation
+   // text. The existing paragraph/run visibility and diagnostic gates still run.
+   const content=diagnostics.length?[omit(cs,'unsupported-source',1,diagnostics)]:cell.vertical_merge==='continue'?[omit(cs,'merged-cell')]:cell.paragraphs.map(projectParagraph)
+   cells.push({kind:'cell-source',source:cs,row_ordinal:rowOrdinal,cell_ordinal:cellOrdinal,...(cell.grid_span!==1||cell.vertical_merge!=='none'?{source_merge:{grid_span:cell.grid_span,vertical_merge:cell.vertical_merge}}:{}),paragraphs:content})
   }
   blocks.push({kind:'table-source',source:s,source_cell_count:count,cells})
   // Table layout remains explicitly omitted even when cell text is recovered.

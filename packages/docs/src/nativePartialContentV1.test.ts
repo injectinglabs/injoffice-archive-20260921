@@ -39,6 +39,9 @@ describe('read-only native partial source content',()=>{
   resolved.tables=[{table_id:table.id,automatic_border_preview:evidence}];resolved.diagnostics=[diagnostic]
   expect(JSON.stringify(project(document,options,resolved).blocks)).toContain('Summary')
   const before=structuredClone({document,resolved});project(document,options,resolved);expect({document,resolved}).toEqual(before)
+  table.rows[0]!.cells[0]!.grid_span=2
+  expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
+  table.rows[0]!.cells[0]!.grid_span=1
   for(const change of [{package_sha256:'sha256:'+'0'.repeat(64)},{source_sha256:'sha256:'+'0'.repeat(64)},{cell_ids:['wrong-cell']},{source_path:path+'/w:nested[1]/w:tblBorders[1]'},{source_diagnostics:[{...evidence.source_diagnostics[0]!,path:'/wrong'}]}]){
    resolved.tables[0]!.automatic_border_preview={...evidence,...change}
    expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
@@ -67,18 +70,45 @@ describe('read-only native partial source content',()=>{
   resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden=true
   expect(JSON.stringify(project(document,options,resolved))).not.toContain('<script>description</script>')
  })
- it('keeps merged and unsupported table-cell content behind explicit omissions',()=>{
+ it('keeps continuation and unsupported table-cell content behind explicit omissions',()=>{
   for(const reason of ['merged','cell-diagnostic','row-diagnostic'] as const){
    const {document,resolved}=fixture(),table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!
-   if(reason==='merged')cell.vertical_merge='restart'
+   if(reason==='merged')cell.vertical_merge='continue'
    else {const scope=reason==='cell-diagnostic'?cell:table.rows[0]!;document.unsupported=[{id:'unsafe-cell',code:'UNMODELED',scope_id:scope.id,anchor:scope.anchor,capability:'tables',preservation:'preserve-verbatim',message:'Unknown'}]}
    const out=project(document,options,resolved),group=out.blocks.find(b=>b.kind==='table-source')!
    expect(JSON.stringify(group)).not.toContain('Summary')
    expect(out.omissions.some(o=>o.code===(reason==='merged'?'merged-cell':'unsupported-source'))).toBe(true)
   }
  })
- it('bounds total table-cell groups and records exact source-cell remainder',()=>{
+ it.each(['none','restart'] as const)('recovers merged-owner source text with vertical role %s and preserves all authority',vertical=>{
+  const {document,resolved}=fixture(),cell=document.body.blocks[1]!.table!.rows[0]!.cells[0]!
+  cell.grid_span=2;cell.vertical_merge=vertical
+  const before=structuredClone({document,resolved}),out=project(document,options,resolved),table=out.blocks.find(b=>b.kind==='table-source')!
+  expect(JSON.stringify(table)).toContain('Summary')
+  if(table.kind!=='table-source')throw Error('Expected source table')
+  expect(table.cells[0]!.source_merge).toEqual({grid_span:2,vertical_merge:vertical})
+  expect(out.omissions.some(o=>o.code==='table')).toBe(true)
+  expect({document,resolved}).toEqual(before)
+  expect(JSON.stringify(project(document,options).blocks)).not.toContain('Summary')
+  const run=cell.paragraphs[0]!.runs[0]!
+  resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden=true
+  expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
+  delete resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden
+  run.properties={...run.properties,hidden:true}
+  expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
+ })
+ it('does not broaden nested-table, paragraph, run, table or global diagnostic exceptions for merged owners',()=>{
+  for(const kind of ['nested','table','paragraph','run','global'] as const){
+   const {document,resolved}=fixture(),table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!,p=cell.paragraphs[0]!
+   cell.grid_span=2;cell.vertical_merge='restart'
+   const owner=kind==='paragraph'?p:kind==='run'?p.runs[0]!:table
+   document.unsupported=[{id:'unsafe-owner',code:kind==='nested'?'NESTED_TABLE_OR_CELL_MARKUP':'UNMODELED',scope_id:kind==='global'?document.document_id:owner.id,anchor:owner.anchor,capability:'tables',preservation:'preserve-verbatim',message:'Preserved'}]
+   expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
+  }
+ })
+ it('bounds merged-owner table-cell groups and records exact source-cell remainder',()=>{
   const {document}=fixture(),table=document.body.blocks[1]!.table!,original=table.rows[0]!
+  original.cells[0]!.grid_span=2;original.cells[0]!.vertical_merge='restart'
   table.rows=Array.from({length:203},(_,i)=>{
    const row=structuredClone(original);row.id=`row:${i}`;row.anchor.path=table.anchor.path+`/w:tr[${i+1}]`
    for(const [j,cell]of row.cells.entries()){cell.id=`cell:${i}:${j}`;cell.anchor.path=row.anchor.path+`/w:tc[${j+1}]`;for(const [k,p]of cell.paragraphs.entries()){p.id=`p:${i}:${j}:${k}`;p.anchor.path=cell.anchor.path+`/w:p[${k+1}]`;for(const [n,r]of p.runs.entries()){r.id=`r:${i}:${j}:${k}:${n}`;r.anchor.path=p.anchor.path+`/w:r[${n+1}]`}}}
@@ -87,6 +117,7 @@ describe('read-only native partial source content',()=>{
   const out=project(document,options),group=out.blocks.find(b=>b.kind==='table-source')!
   if(group.kind!=='table-source')throw new Error('Expected table groups')
   expect(group.cells).toHaveLength(200);expect(group.source_cell_count).toBe(203)
+  expect(group.cells.every(cell=>cell.source_merge?.grid_span===2&&cell.source_merge.vertical_merge==='restart')).toBe(true)
   expect(out.omissions.find(o=>o.code==='cell-limit')).toMatchObject({count:3,source:{scope_id:table.id}})
  })
  it('keeps safe source text alongside explicit drawing/table/story omissions, never page or mutation output',()=>{
