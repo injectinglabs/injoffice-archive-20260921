@@ -2081,6 +2081,13 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}) {
 				return false
 			}
+		case "szCs":
+			// Preserve the exact inactive slot. Resolved script context still
+			// decides whether its size is active; RTL/mixed text keeps refusal.
+			value, ok := nativePositiveIntAttr(property, wordNS, "val")
+			if !ok || value > 3276 || !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}) {
+				return false
+			}
 		default:
 			return false
 		}

@@ -15,6 +15,7 @@ func TestNativeFlatPageField(t *testing.T) {
 		{"mergeformat", " PAGE ", " PAGE \\* MERGEFORMAT ", true},
 		{"arabic", " PAGE ", " PAGE \\* Arabic ", true},
 		{"both-switches", " PAGE ", " PAGE \\*Arabic \\*MERGEFORMAT ", true},
+		{"result-underline", `<w:t>999 stale</w:t>`, `<w:rPr><w:u w:val="single"/></w:rPr><w:t>999 stale</w:t>`, true},
 		{"unsupported-switch", " PAGE ", " PAGE \\* CHARFORMAT ", false},
 		{"unknown", " PAGE ", " DATE ", false},
 		{"locked", `w:fldCharType="begin"`, `w:fldCharType="begin" w:fldLock="true"`, false},

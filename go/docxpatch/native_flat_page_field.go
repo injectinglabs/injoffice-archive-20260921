@@ -57,13 +57,13 @@ func (extractor *nativeExtractor) extractFlatPageField(partName, paragraphID str
 	}
 	wordNS := extractor.wordNS
 	metadata := func(run *nativeXMLNode, kind, value string) bool {
-		if run.Name != (xml.Name{Space: wordNS, Local: "r"}) || !nativeExactContainer(run) {
+		if run.Name != (xml.Name{Space: wordNS, Local: "r"}) || !nativeExactRevisionContainer(run, wordNS, "rsidR", "rsidRPr", "rsidDel") {
 			return false
 		}
 		var content *nativeXMLNode
 		for _, child := range run.Children {
 			if child.Name == (xml.Name{Space: wordNS, Local: "rPr"}) {
-				if !nativeExactParagraphMarkProperties(child, wordNS) {
+				if !nativeExactPageFieldProperties(child, wordNS) {
 					return false
 				}
 				continue
@@ -102,10 +102,46 @@ func (extractor *nativeExtractor) extractFlatPageField(partName, paragraphID str
 		}
 	}
 	result := sequence[3]
-	if result.Name != (xml.Name{Space: wordNS, Local: "r"}) || !nativeExactContainer(result) || len(directNativeChildren(result, wordNS, "rPr")) > 1 {
+	if result.Name != (xml.Name{Space: wordNS, Local: "r"}) || !nativeExactRevisionContainer(result, wordNS, "rsidR", "rsidRPr", "rsidDel") || len(directNativeChildren(result, wordNS, "rPr")) > 1 {
 		return refuse()
 	}
-	runs, unsafe, err := extractor.extractRunNode(partName, paragraphID, result)
+	// Only the visible result's formatting enters layout. Keep original XML
+	// anchors and result identity while excluding exact proofing metadata and
+	// the deferred complex-script size from the conservative editable projection.
+	// The resolver still reads their original source and refuses active script
+	// semantics. No source bytes or editing permissions are changed.
+	projection := *result
+	projection.Children = nil
+	for _, child := range result.Children {
+		if child.Name == (xml.Name{Space: wordNS, Local: "rPr"}) {
+			if len(directNativeChildren(child, wordNS, "noProof")) == 0 && len(directNativeChildren(child, wordNS, "szCs")) == 0 {
+				projection.Children = append(projection.Children, child)
+				continue
+			}
+			if !nativeExactPageFieldProperties(child, wordNS) {
+				return refuse()
+			}
+			properties := *child
+			properties.Children = nil
+			for _, property := range child.Children {
+				if property.Name.Local != "noProof" && property.Name.Local != "szCs" {
+					properties.Children = append(properties.Children, property)
+				}
+			}
+			projection.Children = append(projection.Children, &properties)
+		} else {
+			if child.Name != (xml.Name{Space: wordNS, Local: "t"}) || len(child.Children) != 0 {
+				return refuse()
+			}
+			for _, attr := range child.Attrs {
+				if attr.Name != (xml.Name{Space: "http://www.w3.org/XML/1998/namespace", Local: "space"}) || (attr.Value != "preserve" && attr.Value != "default") {
+					return refuse()
+				}
+			}
+			projection.Children = append(projection.Children, child)
+		}
+	}
+	runs, unsafe, err := extractor.extractRunNode(partName, paragraphID, &projection)
 	if err != nil {
 		return NativeRunV1{}, false, err
 	}
@@ -115,4 +151,35 @@ func (extractor *nativeExtractor) extractFlatPageField(partName, paragraphID str
 	runs[0].PageField = instruction
 	runs[0].Text = nativeString("")
 	return runs[0], true, nil
+}
+
+// Character style and proofing metadata on non-visible field instruction runs
+// are retained, not used to override the visible result run's style.
+func nativeExactPageFieldProperties(node *nativeXMLNode, wordNS string) bool {
+	if !nativeExactContainer(node) {
+		return false
+	}
+	projection := *node
+	projection.Children = nil
+	seen := map[string]bool{}
+	for _, child := range node.Children {
+		if child.Name.Space != wordNS || seen[child.Name.Local] {
+			return false
+		}
+		seen[child.Name.Local] = true
+		switch child.Name.Local {
+		case "rStyle":
+			value, ok := nativeAttr(child, wordNS, "val")
+			if !ok || !nativeIDPattern.MatchString(value) || !nativeExactLeaf(child, xml.Name{Space: wordNS, Local: "val"}) {
+				return false
+			}
+		case "noProof":
+			if !nativeNeutralSourceProperty(child, node, wordNS) {
+				return false
+			}
+		default:
+			projection.Children = append(projection.Children, child)
+		}
+	}
+	return nativeExactParagraphMarkProperties(&projection, wordNS)
 }
