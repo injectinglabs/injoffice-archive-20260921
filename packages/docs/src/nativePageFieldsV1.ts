@@ -2,6 +2,14 @@ import type { NativeDocxDocumentV1, NativeDocxStoryV1 } from './nativeContract.j
 import { decodeNativeDocxPaginationRequestV1, type NativeDocxPaginationRequestV1, type NativeDocxPaginatedLayoutV1 } from './nativePaginationV1.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
+import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import type {NativeFontManifest} from '@injoffice/font-metrics/layout'
+
+export interface NativeDocxFontVariantPolicyV1 {manifest:NativeFontManifest;policy:unknown;descriptors?:{eligibility:unknown;inventoryJSON:string}}
+/** Internal read-only route; every variant is independently source-qualified. */
+export function validateNativeDocxFontPageFieldVariantsV1(request:NativeDocxPaginationRequestV1,layout:NativeDocxPaginatedLayoutV1,input:unknown,font:NativeDocxFontVariantPolicyV1){
+ return validatePageFieldVariants(request,layout,input,font)
+}
 
 export interface NativeDocxPageFieldVariantV1 { page_id: string; shaped_lines: NativeDocxShapedLinesV1 }
 export const DOCX_PAGE_FIELD_LIMITS = { maxPages: 64, maxFragments: 100_000 } as const
@@ -45,6 +53,14 @@ export function nativeDocxPageFieldDocumentV1(document: NativeDocxDocumentV1, or
 
 /** Reuse full existing shaping/source validation after deterministic field substitution. */
 export function validateNativeDocxPageFieldVariantsV1(request: NativeDocxPaginationRequestV1, layout: NativeDocxPaginatedLayoutV1, input: unknown): NativeDocxPageFieldVariantV1[] | undefined {
+  return validatePageFieldVariants(request,layout,input)
+}
+function validatePageFieldVariants(request: NativeDocxPaginationRequestV1, layout: NativeDocxPaginatedLayoutV1, input: unknown,font?:NativeDocxFontVariantPolicyV1): NativeDocxPageFieldVariantV1[] | undefined {
+  const qualify=(shaped:NativeDocxShapedLinesV1,document:NativeDocxDocumentV1)=>font?qualifyNativeDocxFontSubstitutionsV1(shaped,request.resolved_layout,font.manifest,font.policy,document,font.descriptors):[]
+  const baseRecords=qualify(request.shaped_lines,request.document)
+  const choices=new Map(baseRecords.map(r=>[JSON.stringify([r.source_id,r.source_role]),JSON.stringify(r)]))
+  const headerScopes=new Set([...request.document.headers,...request.document.footers].flatMap(s=>s.blocks.flatMap(b=>b.paragraph?[b.paragraph.id,...b.paragraph.runs.map(r=>r.id)]:[])))
+  const metadata=(shaped:NativeDocxShapedLinesV1,records:NativeDocxFontSubstitutionV1[])=>font?{...shaped,paragraphs:[],font_substitutions:records.filter(r=>!headerScopes.has(r.source_id)),diagnostics:shaped.diagnostics.filter(d=>!headerScopes.has(d.scope_id)||!isQualifiedNativeDocxFontDiagnosticV1(d,records))}:{...shaped,paragraphs:[]}
   const hasFields = hasNativeDocxPageFieldsV1(request.document)
   if (!hasFields) { if (input !== undefined) throw new TypeError('Page-field variants require authored page fields'); return undefined }
   if (layout.status !== 'paginated') { if (input !== undefined) throw new TypeError('Refused pagination cannot carry field variants'); return undefined }
@@ -57,9 +73,11 @@ export function validateNativeDocxPageFieldVariantsV1(request: NativeDocxPaginat
     const decoded = decodeNativeDocxPaginationRequestV1({ ...request, document, shaped_lines: entry.shaped_lines })
     if (!decoded.ok) throw new TypeError(`Page-field shaping source join failed: ${decoded.issues[0]?.message}`)
     const shaped = decoded.value.shaped_lines
+    const records=qualify(shaped,document)
+    for(const r of records){const key=JSON.stringify([r.source_id,r.source_role]),choice=JSON.stringify(r);if(choices.has(key)&&choices.get(key)!==choice)throw new TypeError('Page variants conflict on a source font choice');choices.set(key,choice)}
     const originalNonStories = request.shaped_lines.paragraphs.filter((p) => p.story_kind !== 'header' && p.story_kind !== 'footer')
     const derivedNonStories = shaped.paragraphs.filter((p) => p.story_kind !== 'header' && p.story_kind !== 'footer')
-    if (JSON.stringify(originalNonStories) !== JSON.stringify(derivedNonStories) || JSON.stringify({ ...request.shaped_lines, paragraphs: [] }) !== JSON.stringify({ ...shaped, paragraphs: [] })) throw new TypeError('Page fields must not change body/note shaping, dimensions or provider identity')
+    if (JSON.stringify(originalNonStories) !== JSON.stringify(derivedNonStories) || JSON.stringify(metadata(request.shaped_lines,baseRecords)) !== JSON.stringify(metadata(shaped,records))) throw new TypeError('Page fields must not change body/note shaping, dimensions or provider identity')
     fragmentCount += shaped.paragraphs.reduce((total, p) => total + p.lines.reduce((n, line) => n + line.fragments.length, 0), 0)
     if (fragmentCount > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Cumulative page-field shaping exceeds fragment budget')
     return { page_id: page.id, shaped_lines: shaped }

@@ -3,6 +3,7 @@ import {bytesToHex} from '@noble/hashes/utils.js'
 import {EXPLICIT_FONT_POLICY_V1,decodeExplicitFontPolicyV1,canonicalExplicitFontPolicyV1,type ExplicitFontPolicyV1} from '@injoffice/font-metrics/layout'
 import {validateFontManifest,type NativeFontManifest} from '@injoffice/font-metrics/layout'
 import {canonicalWireSha256} from './nativePagePaintWireV1.js'
+import {qualifyNativeDocxFontCompositionV1,type NativeDocxFontCompositionV1} from './nativeFontCompositionV1.js'
 import {preflightWire,decodeNativeDocxPagePaintV1,DOCX_PAGE_PAINT_PROTOCOL} from './nativePagePaintWireV1.js'
 import type {NativeDocxPagePaintV1} from './nativePagePaintV1.js'
 import {decodeNativeDocxFontSubstitutionsV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
@@ -19,6 +20,8 @@ export interface NativeDocxFontSubstitutionPreviewV1 {
  source:{document_id:string;revision:string;package_sha256:string}
  substitutions:NativeDocxFontSubstitutionV1[]
  selected_font_manifest:NativeFontManifest
+ composition?:NativeDocxFontCompositionV1
+ composition_sha256?:string
  reasons:string[]
  status:NativeDocxPagePaintV1['status']
  pages:NativeDocxPagePaintV1['pages']
@@ -29,13 +32,17 @@ export interface NativeDocxFontSubstitutionPreviewV1 {
 export const nativeDocxFontPolicySha256V1=(policy:unknown)=>`sha256:${bytesToHex(sha256(new TextEncoder().encode(canonicalExplicitFontPolicyV1(policy))))}`
 export function decodeNativeDocxFontSubstitutionPreviewV1(value:unknown):NativeDocxFontSubstitutionPreviewV1{
  if(preflightWire(value,'font substitution preview').length)throw new TypeError('Invalid bounded font preview')
+ const candidate=value as Partial<NativeDocxFontSubstitutionPreviewV1>
+ const composition=candidate.composition===undefined?undefined:qualifyNativeDocxFontCompositionV1(candidate.composition)
  const v=structuredClone(value) as NativeDocxFontSubstitutionPreviewV1
- if(!v||Object.keys(v).sort().join(',')!=='diagnostics,fidelity,operator_policy,pages,policy,policy_sha256,protocol,read_only,reasons,rendering_provenance,resources,selected_font_manifest,source,status,substitutions,version'||v.protocol!==DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL||v.version!==1||v.fidelity!=='approximate'||v.read_only!==true||v.policy!==EXPLICIT_FONT_POLICY_V1)throw new TypeError('Invalid font preview envelope')
+ if(!v||Object.keys(v).filter(k=>!['composition','composition_sha256'].includes(k)).sort().join(',')!=='diagnostics,fidelity,operator_policy,pages,policy,policy_sha256,protocol,read_only,reasons,rendering_provenance,resources,selected_font_manifest,source,status,substitutions,version'||v.protocol!==DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL||v.version!==1||v.fidelity!=='approximate'||v.read_only!==true||v.policy!==EXPLICIT_FONT_POLICY_V1)throw new TypeError('Invalid font preview envelope')
  v.operator_policy=decodeExplicitFontPolicyV1(v.operator_policy)
  if(v.policy_sha256!==nativeDocxFontPolicySha256V1(v.operator_policy))throw new TypeError('Font preview policy hash mismatch')
  v.substitutions=decodeNativeDocxFontSubstitutionsV1(v.substitutions)
  const paint=decodeNativeDocxPagePaintV1({protocol:DOCX_PAGE_PAINT_PROTOCOL,version:1,status:v.status,provenance:v.rendering_provenance,diagnostics:v.diagnostics,pages:v.pages,resources:v.resources})
  if(!paint.ok||!v.source||Object.keys(v.source).sort().join(',')!=='document_id,package_sha256,revision'||v.source.document_id!==v.rendering_provenance.document_id||v.source.revision!==v.rendering_provenance.revision||v.source.package_sha256!==v.rendering_provenance.package_sha256)throw new TypeError('Font preview does not join original source')
+ if(composition){if(v.composition_sha256!==composition.sha256||composition.document.document_id!==v.source.document_id||composition.document.revision!==v.source.revision||composition.document.source.package_sha256!==v.source.package_sha256||composition.reasons.some(reason=>!v.reasons?.includes(reason)))throw new TypeError('Font composition provenance or persistent warnings mismatch')}
+ else if(v.composition_sha256!==undefined)throw new TypeError('Font composition hash has no source evidence')
  const manifest=validateFontManifest(v.selected_font_manifest)
  if(!manifest.ok||manifest.value.manifestId!==v.rendering_provenance.font_manifest.manifest_id||manifest.value.revision!==v.rendering_provenance.font_manifest.revision||canonicalWireSha256(manifest.value)!==v.rendering_provenance.font_manifest.sha256)throw new TypeError('Font preview manifest does not join rendering provenance')
  for(const r of v.substitutions){

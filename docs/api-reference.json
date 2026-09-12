@@ -3154,7 +3154,7 @@
             {
               "name": "compileNativeDocxFontSubstitutionPreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeDocxFontSubstitutionPreviewV1(value: unknown, policyValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxFontSubstitutionPreviewV1>"
+              "signature": "export declare function compileNativeDocxFontSubstitutionPreviewV1(value: unknown, policyValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1, compositionValue?: unknown): Promise<NativeDocxFontSubstitutionPreviewV1>"
             },
             {
               "name": "compileNativeDocxPagePaintV1",
@@ -3788,7 +3788,7 @@
             },
             {
               "name": "NativeDocxContentAddressedFaceV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxContentAddressedFaceV1"
             },
             {
@@ -3833,17 +3833,17 @@
             },
             {
               "name": "NativeDocxFillGlyphPathCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxFillGlyphPathCommandV1"
             },
             {
               "name": "NativeDocxFillTableCellCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxFillTableCellCommandV1"
             },
             {
               "name": "NativeDocxFillTextHighlightCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxFillTextHighlightCommandV1"
             },
             {
@@ -3883,12 +3883,12 @@
             },
             {
               "name": "NativeDocxGlyphOutlineProviderV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxGlyphOutlineProviderV1"
             },
             {
               "name": "NativeDocxGlyphOutlineRequestV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxGlyphOutlineRequestV1"
             },
             {
@@ -3898,7 +3898,7 @@
             },
             {
               "name": "NativeDocxHardBreakV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHardBreakV1"
             },
             {
@@ -3908,17 +3908,17 @@
             },
             {
               "name": "NativeDocxHeaderFooterDiagnosticV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHeaderFooterDiagnosticV1"
             },
             {
               "name": "NativeDocxHeaderFooterLayoutInputV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHeaderFooterLayoutInputV1"
             },
             {
               "name": "NativeDocxHeaderFooterLayoutRefusedV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHeaderFooterLayoutRefusedV1 extends NativeDocxHeaderFooterLayoutBaseV1"
             },
             {
@@ -3928,7 +3928,7 @@
             },
             {
               "name": "NativeDocxHeaderFooterLayoutSuccessV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHeaderFooterLayoutSuccessV1 extends NativeDocxHeaderFooterLayoutBaseV1"
             },
             {
@@ -3938,7 +3938,7 @@
             },
             {
               "name": "NativeDocxHeaderFooterPageLayoutV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxHeaderFooterPageLayoutV1"
             },
             {
@@ -3973,7 +3973,7 @@
             },
             {
               "name": "NativeDocxLineFragmentV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxLineFragmentV1"
             },
             {
@@ -4063,7 +4063,7 @@
             },
             {
               "name": "NativeDocxPagePaintDiagnosticV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPagePaintDiagnosticV1"
             },
             {
@@ -4103,12 +4103,12 @@
             },
             {
               "name": "NativeDocxPagePaintProvenanceV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPagePaintProvenanceV1"
             },
             {
               "name": "NativeDocxPagePaintRefusedV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPagePaintRefusedV1 extends NativeDocxPagePaintBaseV1"
             },
             {
@@ -4118,7 +4118,7 @@
             },
             {
               "name": "NativeDocxPagePaintRequestV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPagePaintRequestV1"
             },
             {
@@ -4128,7 +4128,7 @@
             },
             {
               "name": "NativeDocxPagePaintSuccessV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPagePaintSuccessV1 extends NativeDocxPagePaintBaseV1"
             },
             {
@@ -4198,22 +4198,22 @@
             },
             {
               "name": "NativeDocxPaintFloatingImageCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPaintFloatingImageCommandV1 extends Omit<NativeDocxPaintInlineImageCommandV1, 'kind'>"
             },
             {
               "name": "NativeDocxPaintInlineImageCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPaintInlineImageCommandV1"
             },
             {
               "name": "NativeDocxPaintLineV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPaintLineV1"
             },
             {
               "name": "NativeDocxPaintPageV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPaintPageV1"
             },
             {
@@ -4273,7 +4273,7 @@
             },
             {
               "name": "NativeDocxPlacedHeaderFooterLineV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPlacedHeaderFooterLineV1"
             },
             {
@@ -4293,7 +4293,7 @@
             },
             {
               "name": "NativeDocxPositionedGlyphV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxPositionedGlyphV1"
             },
             {
@@ -4473,22 +4473,22 @@
             },
             {
               "name": "NativeDocxShapedLinesV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapedLinesV1"
             },
             {
               "name": "NativeDocxShapedLineV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapedLineV1"
             },
             {
               "name": "NativeDocxShapedListMarkerV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapedListMarkerV1"
             },
             {
               "name": "NativeDocxShapedParagraphV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapedParagraphV1"
             },
             {
@@ -4498,17 +4498,17 @@
             },
             {
               "name": "NativeDocxShapingDiagnosticV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapingDiagnosticV1"
             },
             {
               "name": "NativeDocxShapingProviders",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapingProviders"
             },
             {
               "name": "NativeDocxShapingRequestV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxShapingRequestV1"
             },
             {
@@ -4533,17 +4533,17 @@
             },
             {
               "name": "NativeDocxStrokeNoteSeparatorCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxStrokeNoteSeparatorCommandV1"
             },
             {
               "name": "NativeDocxStrokeTableBorderCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxStrokeTableBorderCommandV1"
             },
             {
               "name": "NativeDocxStrokeTextUnderlineCommandV1",
-              "kind": "interface",
+              "kind": "type",
               "signature": "export interface NativeDocxStrokeTextUnderlineCommandV1"
             },
             {
@@ -4779,7 +4779,7 @@
             {
               "name": "renderNativeDocxFontSubstitutionPreviewV1",
               "kind": "function",
-              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
+              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; composition?: unknown; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
             },
             {
               "name": "ShapeNativeDocxLinesResult",
@@ -5451,7 +5451,7 @@
             {
               "name": "renderNativeDocxFontSubstitutionPreviewV1",
               "kind": "function",
-              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
+              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; composition?: unknown; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
             },
             {
               "name": "validNativeDocxHostDefaultSizePolicyV1",

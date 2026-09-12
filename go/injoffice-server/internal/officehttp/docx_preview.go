@@ -242,9 +242,13 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 	}
 	var result json.RawMessage
 	if fontSubstitution {
-		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-font-substitution", map[string]any{"prepare": input}, 192*1024*1024, 64*1024*1024, "--font-manifest", options.FontManifestPath)
+		var composition map[string]any
+		composition, err = docxFontPreviewComposition(input, data)
 		if err == nil {
-			err = validateDOCXFontSubstitutionPreview(result, input, options.FontManifestPath)
+			result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-font-substitution", map[string]any{"prepare": input, "composition": composition}, 192*1024*1024, 64*1024*1024, "--font-manifest", options.FontManifestPath)
+		}
+		if err == nil {
+			err = validateDOCXFontSubstitutionPreview(result, input, options.FontManifestPath, composition)
 		}
 	} else if approximate {
 		eligibility, eligibilityErr := docxpatch.ExtractNativeDocxApproximationEligibilityV1(data)
@@ -268,6 +272,40 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(result)
+}
+
+func docxFontPreviewComposition(input map[string]any, data []byte) (map[string]any, error) {
+	descriptors, err := docxpatch.ExtractNativeDOCXFontSubstitutionEligibilityV1(data)
+	if err != nil {
+		return nil, err
+	}
+	composition := map[string]any{"source_document": input["document"], "source_resolved_layout": input["resolved_layout"], "source_pagination_settings": input["pagination_settings"], "source_font_inventory_json": input["font_inventory_json"], "font_descriptor_eligibility": descriptors}
+	settings, _ := input["pagination_settings"].(*docxpatch.NativePaginationSettingsV1)
+	if settings == nil {
+		return nil, errors.New("font composition settings missing")
+	}
+	if settings.Profile != "word-modern-default" {
+		legacy, err := docxpatch.ExtractNativeDocxApproximationEligibilityV1(data)
+		if err != nil {
+			return nil, err
+		}
+		if legacy.Status != "eligible" {
+			return nil, errors.New("font composition legacy settings ineligible")
+		}
+		composition["legacy_eligibility"] = legacy
+		if len(legacy.AbsentFontSizes) > 0 {
+			composition["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
+		}
+	}
+	layout, _ := input["resolved_layout"].(*docxpatch.NativeResolvedLayoutInputV1)
+	if layout != nil {
+		for _, table := range layout.Tables {
+			if table.AutomaticBorderPreview != nil {
+				composition["automatic_borders"] = true
+			}
+		}
+	}
+	return composition, nil
 }
 
 func docxApproximateWorkerInput(input map[string]any, eligibility *docxpatch.NativeDocxApproximationEligibilityV1) (string, map[string]any) {

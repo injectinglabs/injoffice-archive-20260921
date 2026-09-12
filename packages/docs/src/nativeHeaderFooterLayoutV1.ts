@@ -23,6 +23,8 @@ import type { NativeDocxPaginatedLayoutV1, NativeDocxPaginatedPageV1 } from './n
 import { compareNativeCodeUnits } from './nativeDeterminism.js'
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { validateNativeDocxPageFieldVariantsV1 } from './nativePageFieldsV1.js'
+import {validateNativeDocxFontPageFieldVariantsV1,type NativeDocxFontVariantPolicyV1} from './nativePageFieldsV1.js'
+import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
 
 export const DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL = 'injoffice.docx.header-footer-layout'
 export const DOCX_HEADER_FOOTER_LAYOUT_VERSION = 1 as const
@@ -205,7 +207,7 @@ function selectedStory(document: NativeDocxDocumentV1, region: NativeDocxHeaderF
   return story
 }
 
-function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[]): void {
+function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[]): void {
   const selectedScopes = scopes(story)
   for (const block of story.blocks) {
     if (block.kind === 'table') diagnostics.push(diagnostic('selected-story-table', block.id, 'Selected header/footer tables require native table grid layout and are refused'))
@@ -223,7 +225,7 @@ function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story
     diagnostics.push(diagnostic(code, unsupported.scope_id, `Selected header/footer source is preserve-only: ${unsupported.code}: ${unsupported.message}`))
   }
   for (const entry of input.resolved_layout.diagnostics) if (selectedScopes.has(entry.scope_id)) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer resolved layout is not exact: ${entry.code}: ${entry.message}`))
-  for (const entry of input.shaped_lines.diagnostics) if (selectedScopes.has(entry.scope_id) || entry.source_id && selectedScopes.has(entry.source_id)) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer shaping is not exact: ${entry.code}: ${entry.message}`))
+  for (const entry of input.shaped_lines.diagnostics) if ((!fontRecords||!isQualifiedNativeDocxFontDiagnosticV1(entry,fontRecords))&&(selectedScopes.has(entry.scope_id) || entry.source_id && selectedScopes.has(entry.source_id))) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer shaping is not exact: ${entry.code}: ${entry.message}`))
 }
 
 function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDocxShapedParagraphV1>, resolved: NativeDocxResolvedLayoutInputV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[]): { lines: { paragraph: NativeDocxShapedParagraphV1; lineIndex: number; y: number }[]; height: number } | undefined {
@@ -266,8 +268,8 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
   return diagnostics.length === 0 && height !== undefined ? { lines: result, height } : undefined
 }
 
-function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
-  validateSelectedStory(input, story, diagnostics)
+function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
+  validateSelectedStory(input, story, diagnostics,fontRecords)
   const shaped = new Map((input.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? input.shaped_lines).paragraphs.map((entry) => [entry.paragraph_id, entry]))
   const offsets = storyLineOffsets(story, shaped, input.resolved_layout, diagnostics)
   if (!offsets || diagnostics.length > 0) return []
@@ -302,9 +304,17 @@ function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocx
 }
 
 export function layoutNativeDocxHeadersFootersV1(input: NativeDocxHeaderFooterLayoutInputV1): NativeDocxHeaderFooterLayoutV1 {
+  return layoutHeadersFooters(input)
+}
+/** Internal approximate placement: policy and complete source evidence are mandatory. */
+export function layoutNativeDocxFontHeadersFootersV1(input:NativeDocxHeaderFooterLayoutInputV1,font:NativeDocxFontVariantPolicyV1):NativeDocxHeaderFooterLayoutV1{
+  return layoutHeadersFooters(input,font)
+}
+function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:NativeDocxFontVariantPolicyV1):NativeDocxHeaderFooterLayoutV1{
   const diagnostics: NativeDocxHeaderFooterDiagnosticV1[] = []
   const pages: NativeDocxHeaderFooterPageLayoutV1[] = []
-  try { validateNativeDocxPageFieldVariantsV1({ protocol: 'injoffice.docx.pagination-request', version: 1, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings }, input.paginated_layout, input.page_field_variants) }
+  let records:NativeDocxFontSubstitutionV1[]|undefined
+  try { const request={ protocol: 'injoffice.docx.pagination-request' as const, version: 1 as const, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings };if(font){validateNativeDocxFontPageFieldVariantsV1(request,input.paginated_layout,input.page_field_variants,font);records=qualifyNativeDocxFontSubstitutionsV1(input.shaped_lines,input.resolved_layout,font.manifest,font.policy,input.document,font.descriptors)}else validateNativeDocxPageFieldVariantsV1(request, input.paginated_layout, input.page_field_variants) }
   catch (error) { diagnostics.push(diagnostic('selected-story-field', input.document.document_id, error instanceof Error ? error.message : 'Invalid page-field source')) }
   if (input.paginated_layout.status !== 'paginated') {
     diagnostics.push(diagnostic('selected-story-unsupported', input.document.document_id, 'Header/footer placement requires a complete paginated body'))
@@ -329,7 +339,7 @@ export function layoutNativeDocxHeadersFootersV1(input: NativeDocxHeaderFooterLa
         else pageLayout.footer_ref = { ...reference }
         const story = selectedStory(input.document, region, reference, diagnostics)
         if (!story) continue
-        const placed = placeStory(input, page, section, region, reference, story, diagnostics)
+        const placed = placeStory(input, page, section, region, reference, story, diagnostics,records)
         placedCount += placed.length
         if (placedCount > MAX_PLACED_LINES) diagnostics.push(diagnostic('resource-limit', input.document.document_id, `Header/footer placements exceed ${MAX_PLACED_LINES}`))
         pageLayout.lines.push(...placed)

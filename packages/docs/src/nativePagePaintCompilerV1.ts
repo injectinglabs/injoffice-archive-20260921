@@ -23,6 +23,9 @@ import { canonicalWireSha256 } from './nativePagePaintWireV1.js'
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,type ExplicitFontPolicyV1} from '@injoffice/font-metrics/layout'
 import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1} from './nativeFontSubstitutionEvidenceV1.js'
 import {compileNativeDocxFontSubstitutionPreviewV1} from './nativePagePaintV1.js'
+import {decodeNativeDocxFontComputedPagePaintV1} from './nativePagePaintV1.js'
+import {qualifyNativeDocxFontCompositionV1} from './nativeFontCompositionV1.js'
+import {qualifyNativeDocxFontDescriptorPreviewV1} from './nativeFontDescriptorPreviewV1.js'
 export {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,DOCX_FONT_SUBSTITUTION_WARNING} from './nativeFontSubstitutionPreviewV1.js'
 export type {NativeDocxFontSubstitutionPreviewV1} from './nativeFontSubstitutionPreviewV1.js'
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
@@ -42,7 +45,7 @@ import {
   type NativeDocxValidationIssue,
 } from './nativeContract.js'
 import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
-import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
+import { shapeNativeDocxLinesWithParagraphWidthsV1,shapeNativeDocxFontPreviewLinesV1 } from './nativeShapingLines.js'
 import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
 import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
 import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1, nativeDocxTableGeometryV1 } from './nativeTablePagePaintV1.js'
@@ -559,18 +562,21 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
 
 /** Original extraction/inventory is retained; only this separate read-only
  * renderer qualifies explicit source-bound substitution diagnostics. */
-export async function renderNativeDocxFontSubstitutionPreviewV1(input:NativeDocxPagePaintPrepareInputV1,outlineProvider:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1,runtime:{createShaper?:(sourceRevision:string)=>HarfBuzzTextShaperV1;fonts:NativeDocxHostFontsV1}):Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>{
+export async function renderNativeDocxFontSubstitutionPreviewV1(input:NativeDocxPagePaintPrepareInputV1,outlineProvider:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1,runtime:{createShaper?:(sourceRevision:string)=>HarfBuzzTextShaperV1;fonts:NativeDocxHostFontsV1;composition?:unknown}):Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>{
   if(!runtime?.fonts?.substitutionPolicy)throw new TypeError('Font preview requires an explicit supplied-font policy')
   const policy=decodeExplicitFontPolicyV1(runtime.fonts.substitutionPolicy)
   const settings=decodeNativeDocxPaginationSettings(input.pagination_settings),document=decodeNativeDocxDocument(input.document)
-  if(!settings.ok||!document.ok||settings.value.profile!=='word-modern-default'||hasNativeDocxPageFieldsV1(document.value)||nativeDocxBodyPageFieldRunsV1(document.value).length||hasNativeSquareWrapV1(document.value))throw new TypeError('Font-only preview excludes legacy settings, fields and wrap policy combinations')
-  const prepared=await prepareNativeDocxPagePaintInternalV1(input,runtime,undefined,policy)
-  return compileNativeDocxFontSubstitutionPreviewV1(prepared.page_paint_request,policy,outlineProvider)
+  if(!settings.ok||!document.ok||nativeDocxBodyPageFieldRunsV1(document.value).length||hasNativeSquareWrapV1(document.value))throw new TypeError('Font preview excludes body fields and wrap policy combinations')
+  const composition=runtime.composition===undefined?undefined:qualifyNativeDocxFontCompositionV1(runtime.composition)
+  if(composition){if(canonicalWireSha256(composition.value.source_document)!==canonicalWireSha256(input.document)||canonicalWireSha256(composition.value.source_resolved_layout)!==canonicalWireSha256(input.resolved_layout)||canonicalWireSha256(composition.value.source_pagination_settings)!==canonicalWireSha256(input.pagination_settings)||composition.value.source_font_inventory_json!==input.font_inventory_json)throw new TypeError('Font composition does not join exact original compiler input');input={...input,document:composition.document,resolved_layout:composition.resolved}}
+  else if(settings.value.profile!=='word-modern-default')throw new TypeError('Legacy font preview requires qualified composition')
+  const prepared=await prepareNativeDocxPagePaintInternalV1(input,runtime,composition?.legacy,policy,composition?.descriptors)
+  return compileNativeDocxFontSubstitutionPreviewV1(prepared.page_paint_request,policy,outlineProvider,composition?.value)
 }
 
 // Approximate preparation is private: its computed placement is never returned
 // as a public strict prepared artifact, and retains the original settings.
-async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }, approximateEligibility?: unknown,fontPolicy?:ExplicitFontPolicyV1): Promise<NativeDocxPagePaintPreparedV1> {
+async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }, approximateEligibility?: unknown,fontPolicy?:ExplicitFontPolicyV1,descriptors?:{eligibility:unknown;inventoryJSON:string}): Promise<NativeDocxPagePaintPreparedV1> {
   if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'document,font_assets,font_inventory_json,media_assets,outline_provider,pagination_settings,protocol,resolved_layout,source_revision,version' || input.protocol !== DOCX_PAGE_PAINT_COMPILER_PROTOCOL || input.version !== DOCX_PAGE_PAINT_COMPILER_VERSION || !PROVIDER_ID.test(input.source_revision) || !input.outline_provider || typeof input.outline_provider !== 'object' || Object.keys(input.outline_provider).sort().join(',') !== 'provider_id,provider_revision' || !PROVIDER_ID.test(input.outline_provider.provider_id) || !PROVIDER_ID.test(input.outline_provider.provider_revision)) throw new TypeError('native page-paint compiler input identity is invalid')
   const document = decodeNativeDocxDocument(input.document)
   if (!document.ok) failIssues('native document is invalid', document.issues)
@@ -613,7 +619,9 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   const mediaAssets = prepareNativeDocxPagePaintMediaAssetsV1(document.value, input.media_assets)
   const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
   if (!isCanonicalHarfBuzzTextShaperV1(shaper, input.source_revision)) throw new TypeError('HarfBuzz shaper provenance does not attest the exact pinned runtime and requested engine source revision')
-  await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references, fontPolicy===undefined||resolved.value.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED'))
+  if(descriptors)qualifyNativeDocxFontDescriptorPreviewV1(descriptors.eligibility,document.value,resolved.value,descriptors.inventoryJSON)
+  await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references, fontPolicy===undefined||!descriptors&&resolved.value.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED'))
+  const shapeLines:typeof shapeNativeDocxLinesWithParagraphWidthsV1=(value,providers,widths,intervals)=>fontPolicy?shapeNativeDocxFontPreviewLinesV1(value,providers,widths,fontPolicy,descriptors):shapeNativeDocxLinesWithParagraphWidthsV1(value,providers,widths,intervals)
   const dimensions = shapingDimensions(document.value, settings.value)
   const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
   const initialBodyFieldValues = Object.fromEntries(bodyFields.map(run => [run.id, '1']))
@@ -628,12 +636,12 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     // Body fields outside tables need visible seed text even during the
     // intrinsic table probe; field values do not influence table content.
     const probeDocument = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value, initialBodyFieldValues) : document.value
-    const measured = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document: probeDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, shapingParagraphWidths(document.value, probeWidths))
+    const measured = await shapeLines({ protocol: 'injoffice.docx.shaping-request', version: 1, document: probeDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, shapingParagraphWidths(document.value, probeWidths))
     if (!measured.ok) failIssues('autofit measurement failed validation', measured.issues)
     // Page controls are consumed by the final source-bound paginator, not by
     // intrinsic text measurement. Every other diagnostic remains a refusal.
     if(!fontPolicy&&measured.value.font_substitutions?.length)throw new TypeError('Strict preparation does not accept substituted fonts')
-    const measuredFonts=fontPolicy?qualifyNativeDocxFontSubstitutionsV1(measured.value,resolved.value,manifest.value,fontPolicy,document.value):[]
+    const measuredFonts=fontPolicy?qualifyNativeDocxFontSubstitutionsV1(measured.value,resolved.value,manifest.value,fontPolicy,document.value,descriptors):[]
     const measurementIssues = measured.value.diagnostics.filter(diagnostic => !isQualifiedNativeDocxFontDiagnosticV1(diagnostic,measuredFonts)&&(diagnostic.code !== 'page-control-deferred' || diagnostic.severity !== 'deferred'))
     if (measurementIssues.length) throw new TypeError(`Content autofit measurement refused unqualified source text or exceeded its budget: ${measurementIssues.map(diagnostic => diagnostic.code).join(', ')}`)
     measuredTables = measured.value
@@ -649,14 +657,14 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   const squareWrapPresent = hasNativeSquareWrapV1(document.value)
   const solved = await solveNativeDocxLayoutFixedPointV1({ bodyFieldValues: initialBodyFieldValues, wrapPlan: {} as NativeDocxLineIntervalPlanV1 }, async state => {
   const fieldDocument = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value,state.bodyFieldValues) : document.value
-  const shaped = await shapeNativeDocxLinesWithParagraphWidthsV1({
+  const shaped = await shapeLines({
     protocol: 'injoffice.docx.shaping-request', version: 1,
     document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value,
     available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab,
   }, { resolver, shaper }, paragraphWidths, state.wrapPlan)
   if (!shaped.ok) failIssues('native shaping failed validation', shaped.issues)
   if(!fontPolicy&&shaped.value.font_substitutions?.length)throw new TypeError('Strict preparation does not accept substituted fonts')
-  if(fontPolicy)qualifyNativeDocxFontSubstitutionsV1(shaped.value,resolved.value,manifest.value,fontPolicy,document.value)
+  if(fontPolicy)qualifyNativeDocxFontSubstitutionsV1(shaped.value,resolved.value,manifest.value,fontPolicy,document.value,descriptors)
   layoutFragmentWork += shaped.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
   if ((bodyFields.length || squareWrapPresent) && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Field/wrap layout solve exceeds cumulative shaping fragment budget')
   const paginationRequest: NativeDocxPaginationRequestV1 = {
@@ -685,7 +693,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     let fragments = layoutFragmentWork
     for (const page of paginated.value.pages) {
       const fieldDocument = nativeDocxPageFieldDocumentV1(decodedPagination.value.document, page.ordinal, paginated.value.pages.length, nativeDocxPageNumberV1(decodedPagination.value.document, paginated.value, page.ordinal))
-      const variant = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, paragraphWidths, solved.state.wrapPlan)
+      const variant = await shapeLines({ protocol: 'injoffice.docx.shaping-request', version: 1, document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, paragraphWidths, solved.state.wrapPlan)
       if (!variant.ok) failIssues('page-field shaping failed', variant.issues)
       fragments += variant.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
       if (fragments > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Page-field expansion exceeds cumulative fragment budget')
@@ -715,14 +723,14 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     },
     outline_provider: { ...input.outline_provider },
   }
-  const decodedRequest = approximateEligibility === undefined ? decodeNativeDocxPagePaintRequestV1(pagePaintRequest) : { ok: true as const, value: decodeNativeDocxApproximateComputedPagePaintV1(pagePaintRequest, approximateEligibility).request }
+  const decodedRequest = fontPolicy?{ok:true as const,value:decodeNativeDocxFontComputedPagePaintV1(pagePaintRequest,fontPolicy,approximateEligibility,descriptors).request}:approximateEligibility === undefined ? decodeNativeDocxPagePaintRequestV1(pagePaintRequest) : { ok: true as const, value: decodeNativeDocxApproximateComputedPagePaintV1(pagePaintRequest, approximateEligibility).request }
   if (!decodedRequest.ok) failIssues('page-paint request is invalid', decodedRequest.issues)
   return Object.freeze({
     protocol: DOCX_PAGE_PAINT_COMPILER_PROTOCOL,
     version: DOCX_PAGE_PAINT_COMPILER_VERSION,
     page_paint_request: decodedRequest.value,
-    request_sha256: approximateEligibility === undefined ? nativeDocxPagePaintRequestSha256V1(decodedRequest.value) : canonicalWireSha256(decodedRequest.value),
-    outline_requests: approximateEligibility === undefined ? collectNativeDocxPagePaintOutlineRequestsV1(decodedRequest.value) : [],
+    request_sha256: approximateEligibility === undefined&&!fontPolicy ? nativeDocxPagePaintRequestSha256V1(decodedRequest.value) : canonicalWireSha256(decodedRequest.value),
+    outline_requests: approximateEligibility === undefined&&!fontPolicy ? collectNativeDocxPagePaintOutlineRequestsV1(decodedRequest.value) : [],
     providers: Object.freeze({
       resolver_id: resolver.providerId,
       resolver_revision: resolver.providerRevision,

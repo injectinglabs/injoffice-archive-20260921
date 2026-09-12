@@ -7,7 +7,8 @@
  * pagination, or package-mutation dependency.
  */
 
-import {nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {nativeDocxFontSubstitutionDiagnosticV1,qualifyNativeDocxFontSubstitutionsV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {qualifyNativeDocxFontDescriptorPreviewV1} from './nativeFontDescriptorPreviewV1.js'
 import {
   NATIVE_TEXT_LAYOUT_VERSION,
   MAX_TEXT_RUN_UTF16,
@@ -292,6 +293,7 @@ const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+
 const GLUE_RE = /[\u00A0\u202F\u2060]/u
 
 interface NativeShapingContext {
+  qualifiedFontDescriptors?:boolean
   fontSubstitutions: import('./nativeFontSubstitutionEvidenceV1.js').NativeDocxFontSubstitutionV1[]
   lineIntervals?: NativeDocxLineIntervalPlanV1
   request: NativeDocxShapingRequestV1
@@ -1179,7 +1181,7 @@ async function resolveFontResource(context: NativeShapingContext, run: TextRunIn
     addDiagnostic(context, { code: 'invalid-provider-output', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Injected resolver returned a face that is invalid, not manifest-backed, or not matched to the authored family request' })
     return null
   }
-  if (context.request.resolved_layout.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED') && resolution.face.resolution !== 'exact') {
+  if (!context.qualifiedFontDescriptors && context.request.resolved_layout.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED') && resolution.face.resolution !== 'exact') {
     addDiagnostic(context, { code: 'provider-refusal', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Preserved font matching metadata requires an exact supplied font; metadata-driven substitution is not implemented' })
     return null
   }
@@ -2002,7 +2004,7 @@ function tableDiagnosticScopes(table: NativeDocxTableV1): Set<string> {
  * Validate both Go wire projections, verify every durable-id join, and shape
  * source-ordered paragraphs with injected native font providers.
  */
-async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult> {
+async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1,descriptors?:{eligibility:unknown;inventoryJSON:string}): Promise<ShapeNativeDocxLinesResult> {
   const ownedIntervals = lineIntervals ? deepFreezeWire(structuredClone(lineIntervals)) : undefined
   let intervalCount = 0
   for (const intervals of Object.values(ownedIntervals ?? {})) {
@@ -2025,10 +2027,12 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
   const providerBoundary = snapshotProviderBoundary(providers)
   if (!providerBoundary.ok) return providerBoundary
   const request = decoded.value
+  if(descriptors)qualifyNativeDocxFontDescriptorPreviewV1(descriptors.eligibility,request.document,request.resolved_layout,descriptors.inventoryJSON)
   const fontManifest = snapshotFontManifest(request.font_manifest)
   const inventory = inventoryDocument(request.document)
   const qualifiedNotes = qualifyNoteNumbers(request.document)
   const context: NativeShapingContext = {
+    qualifiedFontDescriptors:descriptors!==undefined,
     lineIntervals: ownedIntervals,
     request,
     providers: providerBoundary.value,
@@ -2150,4 +2154,12 @@ export async function shapeNativeDocxLinesV1(value: unknown, providers: NativeDo
 /** Internal canonical page-paint seam: reuses one provider/cache/budget context while shaping qualified cell widths. */
 export async function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult> {
   return shapeNativeDocxLinesCoreV1(value, providers, paragraphWidths, lineIntervals)
+}
+
+/** Read-only preview seam: source descriptor and policy evidence are validated
+ * before/after providers run. Strict shaping never takes this path. */
+export async function shapeNativeDocxFontPreviewLinesV1(value:unknown,providers:NativeDocxShapingProviders,paragraphWidths:ReadonlyMap<string,number>,policy:import('@injoffice/font-metrics/layout').ExplicitFontPolicyV1,descriptors?:{eligibility:unknown;inventoryJSON:string}):Promise<ShapeNativeDocxLinesResult>{
+ const result=await shapeNativeDocxLinesCoreV1(value,providers,paragraphWidths,undefined,descriptors)
+ if(result.ok){const decoded=validateRequest(value);if(!decoded.ok)throw new TypeError('Font preview source invalid');qualifyNativeDocxFontSubstitutionsV1(result.value,decoded.value.resolved_layout,decoded.value.font_manifest,policy,decoded.value.document,descriptors)}
+ return result
 }

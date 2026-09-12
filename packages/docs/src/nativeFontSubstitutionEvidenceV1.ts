@@ -3,6 +3,7 @@ import type {NativeDocxShapingDiagnosticV1,NativeDocxShapedLinesV1} from './nati
 import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 import type {NativeDocxDocumentV1,NativeDocxParagraphV1} from './nativeContract.js'
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,type NativeFontManifest,type TextRunInput} from '@injoffice/font-metrics/layout'
+import {qualifyNativeDocxFontDescriptorPreviewV1} from './nativeFontDescriptorPreviewV1.js'
 
 export interface NativeDocxFontSubstitutionV1 {
  source_id:string
@@ -31,10 +32,11 @@ export function decodeNativeDocxFontSubstitutionsV1(value:unknown):NativeDocxFon
 }
 /** Validate derived evidence against original source properties, actual selected
  * manifest faces and the explicit consumer policy; no source projection. */
-export function qualifyNativeDocxFontSubstitutionsV1(shaped:NativeDocxShapedLinesV1,resolved:NativeDocxResolvedLayoutInputV1,manifest:NativeFontManifest,policyValue:unknown,document:NativeDocxDocumentV1):NativeDocxFontSubstitutionV1[]{
+export function qualifyNativeDocxFontSubstitutionsV1(shaped:NativeDocxShapedLinesV1,resolved:NativeDocxResolvedLayoutInputV1,manifest:NativeFontManifest,policyValue:unknown,document:NativeDocxDocumentV1,descriptors?:{eligibility:unknown;inventoryJSON:string}):NativeDocxFontSubstitutionV1[]{
  if(shaped.document_id!==document.document_id||shaped.revision!==document.revision||resolved.document_id!==document.document_id||resolved.revision!==document.revision)throw new TypeError('Font evidence source revision mismatch')
  const policy=decodeExplicitFontPolicyV1(policyValue),records=decodeNativeDocxFontSubstitutionsV1(shaped.font_substitutions??[])
- if(records.length&&resolved.diagnostics.some(d=>d.code==='FONT_MATCHING_METADATA_PRESERVED'))throw new TypeError('Font matching metadata requires exact faces')
+ if(descriptors)qualifyNativeDocxFontDescriptorPreviewV1(descriptors.eligibility,document,resolved,descriptors.inventoryJSON)
+ if(!descriptors&&records.length&&resolved.diagnostics.some(d=>d.code==='FONT_MATCHING_METADATA_PRESERVED'))throw new TypeError('Font matching metadata requires exact faces')
  const expectedDiagnostics=new Set<string>()
  const paragraphs=new Map(resolved.paragraphs.map(p=>[p.paragraph_id,p])),runs=new Map(resolved.runs.map(r=>[r.run_id,r]))
  const nativeParagraphs=new Map<string,NativeDocxParagraphV1>()

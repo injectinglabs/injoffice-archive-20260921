@@ -25,6 +25,7 @@ import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilit
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {qualifyNativeDocxFontCompositionV1} from './nativeFontCompositionV1.js'
 import {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,DOCX_FONT_SUBSTITUTION_WARNING,nativeDocxFontPolicySha256V1,type NativeDocxFontSubstitutionPreviewV1} from './nativeFontSubstitutionPreviewV1.js'
 import {decodeExplicitFontPolicyV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
 export {
@@ -61,6 +62,7 @@ import {
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
   layoutNativeDocxHeadersFootersV1,
+  layoutNativeDocxFontHeadersFootersV1,
   type NativeDocxHeaderFooterLayoutV1,
   type NativeDocxHeaderFooterPageLayoutV1,
   type NativeDocxPlacedHeaderFooterLineV1,
@@ -77,6 +79,7 @@ import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
 import { nativeDocxScriptScaleV1, validateNativeDocxScriptTransformV1 } from './nativeScriptLayoutV1.js'
 import { validateNativeDocxPageFieldVariantsV1, type NativeDocxPageFieldVariantV1 } from './nativePageFieldsV1.js'
+import {validateNativeDocxFontPageFieldVariantsV1,type NativeDocxFontVariantPolicyV1,nativeDocxPageFieldDocumentV1} from './nativePageFieldsV1.js'
 
 export interface NativeDocxPagePaintRequestV1 {
   protocol: typeof DOCX_PAGE_PAINT_REQUEST_PROTOCOL
@@ -408,15 +411,16 @@ export function nativeDocxPagePaintOutputSha256V1(value: unknown): string {
   return canonicalWireSha256(decoded.value)
 }
 
-function headerFooterLayout(request: NativeDocxPagePaintRequestV1): NativeDocxHeaderFooterLayoutV1 {
-  return layoutNativeDocxHeadersFootersV1({
+function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDocxFontVariantPolicyV1): NativeDocxHeaderFooterLayoutV1 {
+  const input={
     document: request.pagination_request.document,
     resolved_layout: request.pagination_request.resolved_layout,
     shaped_lines: request.pagination_request.shaped_lines,
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
-  })
+  }
+  return font?layoutNativeDocxFontHeadersFootersV1(input,font):layoutNativeDocxHeadersFootersV1(input)
 }
 
 function requestProvenance(request: NativeDocxPagePaintRequestV1, outlineID: string, outlineRevision: string, layout: NativeDocxHeaderFooterLayoutV1 = headerFooterLayout(request)): NativeDocxPagePaintProvenanceV1 {
@@ -459,7 +463,13 @@ export function decodeNativeDocxApproximateComputedPagePaintV1(value: unknown, e
   return { fidelity: 'approximate', request: decoded.value }
 }
 
-function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown): DecodeNativeDocxPagePaintRequestV1Result {
+/** Internal tagged result for the read-only font renderer, never a strict prepared artifact. */
+export function decodeNativeDocxFontComputedPagePaintV1(value:unknown,policy:unknown,eligibility?:unknown,descriptors?:NativeDocxFontVariantPolicyV1['descriptors']):{fidelity:'approximate';request:NativeDocxPagePaintRequestV1}{
+  const decoded=decodePagePaintRequestForPolicy(value,eligibility,{policy,descriptors})
+  if(!decoded.ok)throw new TypeError(`Font computed source validation failed: ${decoded.issues.map(i=>i.message).join('; ')}`)
+  return {fidelity:'approximate',request:decoded.value}
+}
+function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown,font?:Omit<NativeDocxFontVariantPolicyV1,'manifest'>): DecodeNativeDocxPagePaintRequestV1Result {
   const preflight = preflightWire(value, 'page-paint request')
   if (preflight.length > 0) return { ok: false, issues: preflight }
   const snapshot = safeClone(value)
@@ -524,7 +534,7 @@ function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown):
     catch (error) { add(issues,'BROKEN_REFERENCE','/body_field_source',error instanceof Error ? error.message : 'Invalid body-field source') }
   }
   if (pagination.ok && paginated.ok) {
-    try { pageFieldVariants = validateNativeDocxPageFieldVariantsV1(pagination.value, paginated.value, root.page_field_variants) }
+    try { pageFieldVariants = font&&manifest.ok?validateNativeDocxFontPageFieldVariantsV1(pagination.value,paginated.value,root.page_field_variants,{...font,manifest:manifest.value}):validateNativeDocxPageFieldVariantsV1(pagination.value, paginated.value, root.page_field_variants) }
     catch (error) { add(issues, 'BROKEN_REFERENCE', '/page_field_variants', error instanceof Error ? error.message : 'Invalid page-field variants') }
   }
   if (pagination.ok && manifest.ok) for (const shaped of [pagination.value.shaped_lines, ...(pageFieldVariants ?? []).map((variant) => variant.shaped_lines)]) for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) for (const fragment of line.fragments) {
@@ -891,18 +901,27 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
 }
 
 /** Separate approximate envelope; never exports its prepared or strict paint. */
-export async function compileNativeDocxFontSubstitutionPreviewV1(value:unknown,policyValue:unknown,outlineProvider:NativeDocxGlyphOutlineProviderV1):Promise<NativeDocxFontSubstitutionPreviewV1>{
- const decoded=decodeNativeDocxPagePaintRequestV1(value);if(!decoded.ok)throw new TypeError('Font preview requires valid original-source request')
+export async function compileNativeDocxFontSubstitutionPreviewV1(value:unknown,policyValue:unknown,outlineProvider:NativeDocxGlyphOutlineProviderV1,compositionValue?:unknown):Promise<NativeDocxFontSubstitutionPreviewV1>{
+ const composition=compositionValue===undefined?undefined:qualifyNativeDocxFontCompositionV1(compositionValue)
+ const decoded={ok:true as const,value:decodeNativeDocxFontComputedPagePaintV1(value,policyValue,composition?.legacy,composition?.descriptors).request}
  const request=decoded.value,policy=decodeExplicitFontPolicyV1(policyValue)
- if(request.pagination_request.pagination_settings.profile!=='word-modern-default'||request.body_field_source||request.page_field_variants||hasNativeSquareWrapV1(request.pagination_request.document))throw new TypeError('Font preview currently requires modern settings without other approximate or field/wrap policies')
- const records=qualifyNativeDocxFontSubstitutionsV1(request.pagination_request.shaped_lines,request.pagination_request.resolved_layout,request.font_manifest,policy,request.pagination_request.document)
- const painted=await compileDecodedPagePaint(request,outlineProvider,false,records)
+ if((!composition&&request.pagination_request.pagination_settings.profile!=='word-modern-default')||request.body_field_source||hasNativeSquareWrapV1(request.pagination_request.document))throw new TypeError('Font preview requires qualified composition and excludes body field/wrap policies')
+ if(composition&&(canonicalWireSha256(request.pagination_request.document)!==canonicalWireSha256(composition.document)||canonicalWireSha256(request.pagination_request.resolved_layout)!==canonicalWireSha256(composition.resolved)||canonicalWireSha256(request.pagination_request.pagination_settings)!==canonicalWireSha256(composition.settings)))throw new TypeError('Font composition does not reproduce private layout projection')
+ const records=qualifyNativeDocxFontSubstitutionsV1(request.pagination_request.shaped_lines,request.pagination_request.resolved_layout,request.font_manifest,policy,request.pagination_request.document,composition?.descriptors)
+ const font={manifest:request.font_manifest,policy,descriptors:composition?.descriptors}
+ validateNativeDocxFontPageFieldVariantsV1(request.pagination_request,request.paginated_layout,request.page_field_variants,font)
+ const seen=new Set(records.map(r=>JSON.stringify([r.source_id,r.source_role])))
+ for(const [index,variant]of (request.page_field_variants??[]).entries()){
+  const page=request.paginated_layout.pages[index]!,document=nativeDocxPageFieldDocumentV1(request.pagination_request.document,page.ordinal,request.paginated_layout.pages.length,nativeDocxPageNumberV1(request.pagination_request.document,request.paginated_layout,page.ordinal))
+  for(const r of qualifyNativeDocxFontSubstitutionsV1(variant.shaped_lines,request.pagination_request.resolved_layout,request.font_manifest,policy,document,composition?.descriptors)){const key=JSON.stringify([r.source_id,r.source_role]);if(!seen.has(key)){records.push(r);seen.add(key)}}
+ }
+ const painted=await compileDecodedPagePaint(request,outlineProvider,composition?.legacy??false,records,font)
  if(!painted.ok)throw new TypeError('Font preview painting failed validation')
  const paint=painted.value
- return decodeNativeDocxFontSubstitutionPreviewV1({protocol:DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,version:1,fidelity:'approximate',read_only:true,policy:EXPLICIT_FONT_POLICY_V1,operator_policy:policy,policy_sha256:nativeDocxFontPolicySha256V1(policy),source:{document_id:paint.provenance.document_id,revision:paint.provenance.revision,package_sha256:paint.provenance.package_sha256},selected_font_manifest:request.font_manifest,substitutions:records,reasons:[DOCX_FONT_SUBSTITUTION_WARNING,...records.map(r=>nativeDocxFontSubstitutionDiagnosticV1(r).message)],status:paint.status,pages:paint.pages,resources:paint.resources,diagnostics:paint.diagnostics,rendering_provenance:paint.provenance})
+ return decodeNativeDocxFontSubstitutionPreviewV1({protocol:DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,version:1,fidelity:'approximate',read_only:true,policy:EXPLICIT_FONT_POLICY_V1,operator_policy:policy,policy_sha256:nativeDocxFontPolicySha256V1(policy),source:{document_id:paint.provenance.document_id,revision:paint.provenance.revision,package_sha256:paint.provenance.package_sha256},selected_font_manifest:request.font_manifest,substitutions:records,...(composition?{composition:composition.value,composition_sha256:composition.sha256}:{}),reasons:[DOCX_FONT_SUBSTITUTION_WARNING,...(composition?.reasons??[]),...records.map(r=>nativeDocxFontSubstitutionDiagnosticV1(r).message)],status:paint.status,pages:paint.pages,resources:paint.resources,diagnostics:paint.diagnostics,rendering_provenance:paint.provenance})
 }
 
-async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false,fontSubstitutions?:readonly NativeDocxFontSubstitutionV1[]): Promise<CompileNativeDocxPagePaintV1Result> {
+async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false,fontSubstitutions?:readonly NativeDocxFontSubstitutionV1[],font?:NativeDocxFontVariantPolicyV1): Promise<CompileNativeDocxPagePaintV1Result> {
   const providerResult = snapshotProvider(outlineProvider)
   if (!providerResult.ok) return providerResult
   const provider = providerResult.value
@@ -910,7 +929,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     const expectedProvenance = requestProvenance(request, request.outline_provider.provider_id, request.outline_provider.provider_revision)
     return { ok: true, value: refusal(expectedProvenance, 'provider-mismatch', request.pagination_request.document.document_id, 'Injected outline provider id and revision do not match the page-paint request') }
   }
-  const headerFooter = headerFooterLayout(request)
+  const headerFooter = headerFooterLayout(request,font)
   const provenance = requestProvenance(request, provider.id, provider.revision, headerFooter)
   const pagination = request.pagination_request
   const layout = request.paginated_layout

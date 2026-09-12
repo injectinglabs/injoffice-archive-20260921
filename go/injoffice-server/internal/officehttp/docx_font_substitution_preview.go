@@ -34,15 +34,17 @@ func fontPreviewJSONDigest(value any) string {
 
 // The worker independently qualifies source text, shapes and paint. This boundary
 // additionally joins its evidence to this request and the operator-only policy.
-func validateDOCXFontSubstitutionPreview(data json.RawMessage, input map[string]any, path string) error {
+func validateDOCXFontSubstitutionPreview(data json.RawMessage, input map[string]any, path string, compositions ...map[string]any) error {
 	fail := func() error { return errors.New("DOCX substitution preview source or operator evidence mismatch") }
 	var response struct {
-		Protocol string `json:"protocol"`
-		Version  int    `json:"version"`
-		ReadOnly bool   `json:"read_only"`
-		Fidelity string `json:"fidelity"`
-		Status   string `json:"status"`
-		Source   struct {
+		Protocol          string         `json:"protocol"`
+		Version           int            `json:"version"`
+		ReadOnly          bool           `json:"read_only"`
+		Fidelity          string         `json:"fidelity"`
+		Status            string         `json:"status"`
+		Composition       map[string]any `json:"composition"`
+		CompositionSHA256 string         `json:"composition_sha256"`
+		Source            struct {
 			DocumentID string `json:"document_id"`
 			Revision   string `json:"revision"`
 			Digest     string `json:"package_sha256"`
@@ -73,6 +75,18 @@ func validateDOCXFontSubstitutionPreview(data json.RawMessage, input map[string]
 		} `json:"substitutions"`
 	}
 	if json.Unmarshal(data, &response) != nil || response.Protocol != "injoffice.docx.font-substitution-preview" || response.Version != 1 || !response.ReadOnly || response.Fidelity != "approximate" || response.Policy != "explicit-whole-run-font-substitution-v1" || len(response.Entries) > 10000 {
+		return fail()
+	}
+	if len(compositions) > 0 {
+		raw, e := json.Marshal(compositions[0])
+		if e != nil || len(raw) > 8*1024*1024 {
+			return fail()
+		}
+		var original map[string]any
+		if json.Unmarshal(raw, &original) != nil || response.Composition == nil || fontPreviewJSONDigest(original) != fontPreviewJSONDigest(response.Composition) || response.CompositionSHA256 != fontPreviewJSONDigest(original) {
+			return fail()
+		}
+	} else if response.Composition != nil || response.CompositionSHA256 != "" {
 		return fail()
 	}
 	layout, ok := input["resolved_layout"].(*docxpatch.NativeResolvedLayoutInputV1)

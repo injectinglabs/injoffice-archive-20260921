@@ -15,7 +15,7 @@ describe('native document page viewer', () => {
   it('offers an explicit separate font-substitution upload without enabling it automatically',()=>{
     const html=renderToStaticMarkup(createElement(NativeDocxPages,{bytes:new Uint8Array([1]),packageDigest:`sha256:${'a'.repeat(64)}`,apiBase:'https://helper.invalid'}))
     expect(html).toContain('Upload to helper and allow operator font substitution')
-    expect(html).toContain('cannot combine with the other approximate page policies')
+    expect(html).toContain('can be combined when their original source is verified')
     expect(html).not.toContain('Approximate page limitations')
   })
   const resources = [{ content_type: 'image/jpeg', bytes_base64: 'AA==', width_px: 2, height_px: 1 }] as Parameters<typeof decodeNativeDocxImages>[0]

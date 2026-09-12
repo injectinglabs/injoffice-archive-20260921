@@ -6,6 +6,9 @@ import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TAB
 import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
 import {selectExplicitFontV1} from '@injoffice/font-metrics/layout'
 import {renderNativeDocxFontSubstitutionPreviewV1,decodeNativeDocxFontSubstitutionPreviewV1} from './nativePagePaintCompilerV1.js'
+import {validateNativeDocxFontPageFieldVariantsV1,validateNativeDocxPageFieldVariantsV1} from './nativePageFieldsV1.js'
+import {nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {qualifyNativeDocxFontCompositionV1} from './nativeFontCompositionV1.js'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, inspectHarfBuzzFontMetricsV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
 import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, type NativeDocxRunV1 } from './nativeContract.js'
@@ -551,11 +554,12 @@ describe('native DOCX page-paint compiler v1', () => {
     return input
   }
 
-  it.each([false,true])('applies source-qualified legacy origin only in approximate paint, automatic borders %s',async automatic=>{
+  it.each([[false,true],[true,true],[false,false],[true,false]])('applies source-qualified legacy origin only in approximate paint, automatic borders %s, unsplit %s',async (automatic,cantSplit)=>{
     const input=automatic?autoBorderFixture():tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1
     settings.profile='unsupported';delete settings.compatibility_mode
     settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy12'}]
     const table=document.body.blocks[0]!.table!,part=table.anchor.part_name,base=table.anchor.path+'/w:tblPr[1]'
+    table.rows[0]!.cant_split=cantSplit!
     const fact={table_id:table.id,package_sha256:HASH,indent_twips:0,left_margin_twips:100,source_indent:{part_name:part,path:base+'/w:tblInd[1]',sha256:HASH},source_margin:{part_name:part,path:base+'/w:tblCellMar[1]/w:left[1]',sha256:HASH}}
     const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:HASH,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy12'],legacy_table_origins:[fact]}
     const outlines=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
@@ -609,6 +613,16 @@ describe('native DOCX page-paint compiler v1', () => {
       computed.integrity.table_projection_sha256=approximateTables.sha256
       expect(decodeNativeDocxApproximateComputedPagePaintV1(computed,eligibility).fidelity).toBe('approximate')
       expect(decodeNativeDocxPagePaintRequestV1(computed).ok).toBe(false)
+      if(!cantSplit){
+        expect(computed.paginated_layout.pages[0]!.table_rows?.length).toBeGreaterThan(0)
+        for(const [key,delta] of [['x_millipoints',-1],['width_millipoints',1],['y_millipoints',-1000000]] as const){
+          const wrongRow=structuredClone(computed)
+          wrongRow.paginated_layout.pages[0]!.table_rows![0]![key]+=delta
+          wrongRow.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(wrongRow.paginated_layout)
+          expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(wrongRow,eligibility)).toThrow()
+        }
+        expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(computed,baselineEligibility)).toThrow()
+      }
       const forged=structuredClone(computed);forged.paginated_layout.pages[0]!.lines[0]!.x_millipoints+=1
       forged.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(forged.paginated_layout)
       expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(forged,eligibility)).toThrow()
@@ -842,7 +856,70 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(result).toMatchObject({protocol:'injoffice.docx.font-substitution-preview',fidelity:'approximate',read_only:true})
     expect(result.substitutions).toEqual([expect.objectContaining({source_id:'run:1',source_role:'run',source_family:'Missing Family',selected_family:'DejaVu Sans',font_digest:FONT_DIGEST})])
     expect(decodeNativeDocxFontSubstitutionPreviewV1(result)).toEqual(result)
+    const inv=JSON.parse(input.font_inventory_json),composition={source_document:input.document,source_resolved_layout:input.resolved_layout,source_pagination_settings:input.pagination_settings,source_font_inventory_json:input.font_inventory_json,font_descriptor_eligibility:{protocol:'injoffice.docx.font-substitution-eligibility',version:1,document_id:inv.document_id,revision:inv.revision,package_sha256:inv.package_sha256,font_table:inv.font_table??null,facts:[]}}
+    expect(qualifyNativeDocxFontCompositionV1(composition).document).toEqual(input.document)
+    const composed=await renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured,composition})
+    expect(composed.status).toBe('painted');expect(composed.composition).toEqual(composition)
+    for(const mutate of [
+      (v:any)=>{v.source_document.revision='stale'},
+      (v:any)=>{v.source_font_inventory_json+=' '.repeat(3*1024*1024)},
+      (v:any)=>{v.source_resolved_layout.fonts[0].name='forged'},
+      (v:any)=>{v.font_descriptor_eligibility.package_sha256=`sha256:${'f'.repeat(64)}`},
+      (v:any)=>{v.automatic_borders=true},
+      (v:any)=>{v.font_size_policy={kind:'host-default-size-v1',half_points:22}},
+      (v:any)=>{v.unknown_policy=true},
+    ]){const forged=structuredClone(composition);mutate(forged);await expect(renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured,composition:forged})).rejects.toThrow()}
+    for(const mutate of [(v:any)=>{v.composition_sha256=HASH},(v:any)=>{delete v.composition},(v:any)=>{v.composition.source_document.revision='stale'}]){const forged=structuredClone(composed);mutate(forged);expect(()=>decodeNativeDocxFontSubstitutionPreviewV1(forged)).toThrow()}
     expect(input).toEqual(original)
+    // Blank PAGE uses paragraph-mark metrics in the base shape; its numeric
+    // variant uses a run face. Both role records must survive the envelope.
+    const withHeader=structuredClone(input),headerDocument=withHeader.document as NativeDocxDocumentV1,headerResolved=withHeader.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const header=structuredClone(headerDocument.body.blocks[0]!.paragraph!)
+    header.id='paragraph:header';header.anchor={...anchor('/w:hdr[1]/w:p[1]',10,900),part_name:'word/header1.xml'}
+    header.runs=[{kind:'text',id:'run:header',anchor:{...header.anchor,path:'/w:hdr[1]/w:p[1]/w:fldSimple[1]/w:r[1]/w:t[1]',start_byte:20,end_byte:80},text:'',page_field:'PAGE'}]
+    headerDocument.headers.push({id:'story:header',kind:'header',part_name:'word/header1.xml',anchor:{...header.anchor,path:'/w:hdr[1]',start_byte:1,end_byte:1000},blocks:[{kind:'paragraph',id:header.id,paragraph:header}]})
+    headerDocument.sections[0]!.header_refs.push({kind:'default',story_id:'story:header',relationship_id:'rIdHeader'})
+    headerResolved.paragraphs.push({...structuredClone(headerResolved.paragraphs[0]!),paragraph_id:header.id,properties:{alignment:'right'}})
+    headerResolved.runs.push({...structuredClone(headerResolved.runs[0]!),run_id:'run:header',paragraph_id:header.id})
+    rewriteInventory(withHeader,inventory=>{inventory.references[0]!.scope_ids.push(header.id,'run:header');inventory.references[0]!.scope_ids.sort()})
+    const headerBefore=structuredClone(withHeader),headerResult=await renderNativeDocxFontSubstitutionPreviewV1(withHeader,outlines,{fonts:configured})
+    expect(headerResult.status).toBe('painted')
+    expect(headerResult.substitutions).toEqual(expect.arrayContaining([
+      expect.objectContaining({source_id:'paragraph:header',source_role:'paragraph-mark'}),
+      expect.objectContaining({source_id:'run:header',source_role:'run'}),
+    ]))
+    expect(headerResult.pages[0]!.lines.some(l=>l.region==='header')).toBe(true)
+    expect(withHeader).toEqual(headerBefore)
+    await expect(prepareNativeDocxPagePaintV1(withHeader,{fonts:configured})).rejects.toThrow(/strict|substitution/i)
+    const exactHeader=structuredClone(withHeader),exactResolved=exactHeader.resolved_layout as NativeDocxResolvedLayoutInputV1
+    exactResolved.fonts[0]!.name='DejaVu Sans'
+    exactResolved.runs.forEach(r=>{r.properties.font_family='DejaVu Sans'})
+    exactResolved.paragraphs.forEach(p=>{p.paragraph_mark_properties!.font_family='DejaVu Sans'})
+    rewriteInventory(exactHeader,inventory=>{inventory.families[0]!.name='DejaVu Sans';inventory.references.forEach(r=>{r.family='DejaVu Sans'})})
+    const exactPrepared=await prepareNativeDocxPagePaintV1(exactHeader,{fonts}),request=structuredClone(exactPrepared.page_paint_request.pagination_request),variants=structuredClone(exactPrepared.page_paint_request.page_field_variants!)
+    request.resolved_layout.runs.forEach(r=>{r.properties.font_family='Missing Family'})
+    request.resolved_layout.paragraphs.forEach(p=>{p.paragraph_mark_properties!.font_family='Missing Family'})
+    const attach=(shaped:typeof request.shaped_lines)=>{
+      const records:NativeDocxFontSubstitutionV1[]=[]
+      for(const p of shaped.paragraphs)for(const l of p.lines){
+        const sources=l.fragments.length?l.fragments.map(f=>({id:f.source_id,role:f.source_kind as 'run'})):[{id:p.paragraph_id,role:'paragraph-mark' as const}]
+        for(const source of sources)if(!records.some(r=>r.source_id===source.id&&r.source_role===source.role))records.push({source_id:source.id,source_role:source.role,source_family:'Missing Family',selected_family:'DejaVu Sans',face_id:fonts.manifest.faces[0]!.faceId,font_digest:FONT_DIGEST,weight:400,style:'normal'})
+      }
+      shaped.font_substitutions=records;shaped.diagnostics.push(...records.map(nativeDocxFontSubstitutionDiagnosticV1))
+    }
+    attach(request.shaped_lines);variants.forEach(v=>attach(v.shaped_lines))
+    const variantPolicy={manifest:fonts.manifest,policy},layout=exactPrepared.page_paint_request.paginated_layout
+    expect(validateNativeDocxFontPageFieldVariantsV1(request,layout,variants,variantPolicy)).toHaveLength(1)
+    expect(()=>validateNativeDocxPageFieldVariantsV1(request,layout,variants)).toThrow()
+    for(const mutate of [
+      (v:typeof variants)=>{v[0]!.shaped_lines.font_substitutions=[]},
+      (v:typeof variants)=>{v[0]!.shaped_lines.font_substitutions![0]!.font_digest=HASH},
+      (v:typeof variants)=>{v[0]!.shaped_lines.diagnostics[0]!.message+=' forged'},
+      (v:typeof variants)=>{v[0]!.shaped_lines.paragraphs[0]!.lines[0]!.line_height_millipoints+=1},
+      (v:typeof variants)=>{v[0]!.shaped_lines.providers.shaper_revision='changed'},
+    ]){const forged=structuredClone(variants);mutate(forged);expect(()=>validateNativeDocxFontPageFieldVariantsV1(request,layout,forged,variantPolicy)).toThrow()}
+    header.runs[0]!.text='999'
+    await expect(renderNativeDocxFontSubstitutionPreviewV1(withHeader,outlines,{fonts:configured})).rejects.toThrow()
     await expect(prepareNativeDocxPagePaintV1(input,{fonts:configured})).rejects.toThrow(/strict|substitution/i)
     for(const mutate of [
       (value:any)=>{value.source.revision='rev:other'},

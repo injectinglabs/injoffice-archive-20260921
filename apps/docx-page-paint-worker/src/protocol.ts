@@ -134,7 +134,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       const automatic = value.op === 'render-auto-borders'
       const fontOnly=value.op==='render-font-substitution'
       if (!record(value.input)) throw new TypeError('approximate render requires an input object')
-      const fields = fontOnly?['prepare']:automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
+      const fields = fontOnly?('composition' in value.input?['prepare','composition']:['prepare']):automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
       if ('font_size_policy' in value.input) fields.push('font_size_policy')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
@@ -162,7 +162,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
         },
       }
       const runtime = { createShaper: workerShaper, fonts, fontSizePolicy }
-      const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!}):automatic
+      const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)
       return { ...base, ok: true, result }

@@ -14,6 +14,8 @@ import {
 import { decodeNativeDocxPaginationSettings } from './nativePaginationSettings.js'
 import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION } from './nativeShapingLines.js'
 import { asciiLowerNative, compareNativeValidationIssues } from './nativeDeterminism.js'
+import {decodeNativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
+import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 
 export type DecodeNativeDocxPaginatedLayoutResult =
   | { ok: true; value: NativeDocxPaginatedLayoutV1 }
@@ -495,7 +497,7 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
   return decodePaginatedLayoutForPolicyShape(value, false)
 }
 
-function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolean): DecodeNativeDocxPaginatedLayoutResult {
+function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolean,legacyRows:ReadonlyMap<string,{x:number;width:number}>=new Map()): DecodeNativeDocxPaginatedLayoutResult {
   const issues: NativeDocxValidationIssue[] = []
   const preflightState = { nodes: 0, bounded: true }
   preflight(value, '', 0, new WeakSet(), preflightState, issues)
@@ -572,7 +574,7 @@ function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolea
   const referencedLineIDs = new Set<string>()
   const paragraphSlices = new Map<string, SliceValidation[]>()
   const pageResults = pageList.map((page, index) => validatePage(page, `/pages/${index}`, index, issues, pageIDs, placedLineIDs, noteSourceLineIDs, sliceIDs, referencedLineIDs, paragraphSlices))
-  validateTableRowFragments(pageList, issues)
+  validateTableRowFragments(pageList, issues,legacyRows)
   const sectionIDs = new Set<string>()
   const sectionOrder: string[] = []
   const sectionBreaks = new Map<string, string>()
@@ -654,7 +656,7 @@ function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolea
   return issues.length > 0 ? { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) } : { ok: true, value: value as NativeDocxPaginatedLayoutV1 }
 }
 
-function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidationIssue[]): void {
+function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidationIssue[],legacyRows:ReadonlyMap<string,{x:number;width:number}>): void {
   const rows = new Map<string,{ ordinal:number; end:number; height:number; page:number; rowOrdinal:number; sectionID:string; path:string }>()
   let count = 0
   for (const [pageIndex,pageValue] of pages.entries()) {
@@ -672,7 +674,13 @@ function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidatio
       const x=integer(row.x_millipoints,`${rowPath}/x_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),y=integer(row.y_millipoints,`${rowPath}/y_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),width=integer(row.width_millipoints,`${rowPath}/width_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),height=integer(row.height_millipoints,`${rowPath}/height_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),sourceY=integer(row.source_y_millipoints,`${rowPath}/source_y_millipoints`,0,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues),sourceHeight=integer(row.source_height_millipoints,`${rowPath}/source_height_millipoints`,1,DOCX_PAGINATION_LIMITS.maxCoordinateMilliPoints,issues)
       const column=(Array.isArray(pageValue.columns)?pageValue.columns.slice(0,45):[]).find(value=>isObject(value)&&value.id===columnID)
       if(!isObject(column)||column.section_id!==sectionID||column.ordinal!==columnOrdinal)add(issues,'BROKEN_REFERENCE',rowPath,'row fragment must reference its exact page section column')
-      else if(typeof x==='number'&&typeof y==='number'&&typeof width==='number'&&typeof height==='number'&&(x<(column.x_millipoints as number)||x+width>(column.x_millipoints as number)+(column.width_millipoints as number)||y<(column.y_millipoints as number)||y+height>(column.y_millipoints as number)+(column.height_millipoints as number)))add(issues,'OUT_OF_RANGE',rowPath,'row fragment exceeds its exact page column')
+      else if(typeof x==='number'&&typeof y==='number'&&typeof width==='number'&&typeof height==='number'){
+        const legacy=typeof tableID==='string'?legacyRows.get(tableID):undefined
+        // Only the independently reproduced legacy table origin may cross the
+        // column's horizontal edge. Vertical containment and page bounds stay exact.
+        const qualifiedLegacy=legacy!==undefined&&x===(column.x_millipoints as number)+legacy.x&&width===legacy.width&&x>=0&&x+width<=(pageValue.width_millipoints as number)
+        if((!qualifiedLegacy&&(x<(column.x_millipoints as number)||x+width>(column.x_millipoints as number)+(column.width_millipoints as number)))||y<(column.y_millipoints as number)||y+height>(column.y_millipoints as number)+(column.height_millipoints as number))add(issues,'OUT_OF_RANGE',rowPath,'row fragment exceeds its exact page column')
+      }
       if(tableID&&rowID&&sectionID&&ordinal!==undefined&&rowOrdinal!==undefined&&sourceY!==undefined&&sourceHeight!==undefined&&height!==undefined) {
         const key=JSON.stringify([tableID,rowID]),previous=rows.get(key)
         if(id!==`table-row:${tableID}:${rowID}:${ordinal}`)add(issues,'INVALID_VALUE',`${rowPath}/id`,'row fragment ID must derive from table, row and ordinal')
@@ -697,7 +705,14 @@ export function decodeNativeDocxApproximatePaginatedLayoutForRequest(value: unkn
 
 function decodePaginatedLayoutForPolicy(value: unknown, requestValue: unknown, eligibility?: unknown): DecodeNativeDocxPaginatedLayoutResult {
   const request = decodeNativeDocxPaginationRequestV1(requestValue)
-  const output = decodePaginatedLayoutForPolicyShape(value, eligibility !== undefined)
+  const legacyRows=new Map<string,{x:number;width:number}>()
+  if(request.ok&&eligibility!==undefined){
+    try{
+      const qualified=qualifyApproximateLegacyTables(request.value.document,request.value.resolved_layout,request.value.shaped_lines,decodeNativeDocxApproximationEligibilityV1(eligibility,request.value.pagination_settings))
+      if(qualified.status==='qualified')for(const table of qualified.tables)if(table.origin_policy)legacyRows.set(table.table.id,{x:table.x_millipoints,width:table.width_millipoints})
+    }catch(error){return {ok:false,issues:[{code:'BROKEN_REFERENCE',path:'/eligibility',message:error instanceof Error?error.message:'Invalid source-qualified table origin'}]}}
+  }
+  const output = decodePaginatedLayoutForPolicyShape(value, eligibility !== undefined,legacyRows)
   if (!request.ok || !output.ok) {
     const issues: NativeDocxValidationIssue[] = []
     if (!request.ok) issues.push(...request.issues.map((entry) => ({ ...entry, path: `/request${entry.path}` })))

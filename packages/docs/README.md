@@ -348,14 +348,21 @@ this output (also exported from the browser-safe `native-page-paint-output`
 entrypoint). Source font names, package bytes, and unrelated diagnostics remain
 unchanged; removing or forging substitution evidence cannot qualify strict paint.
 
-This first tier requires modern Word settings and graphic ASCII/LTR source runs
-or Latin numbering, plus eligible blank paragraph-mark metric consumers. Symbol
-bullets, font-matching metadata, EA/CS/RTL selection, legacy layout, automatic
-borders, absent-size policies, page fields and square-wrap combinations remain
-unsupported. Layout is not Word-validated; an explicit request may still return
-`status: 'refused'` with no pages. These constraints currently prevent applying
-this font-only tier to the original benchmark documents with matching metadata
-and legacy settings.
+The supplied-source `composition` option joins the complete original document,
+resolved layout, settings and canonical font inventory to extractor-qualified
+font descriptor facts. It can compose the existing qualified legacy settings,
+automatic border and absent-size policies. Original matching metadata remains
+preserved; it never selects a substitute. Active descriptors require qualified
+Latin charsets; unused symbol descriptors cannot authorize symbol substitution.
+
+Static header/footer text and bounded PAGE/NUMPAGES variants use independently
+qualified source font evidence. Empty field paragraph-mark metrics and expanded
+numeric run faces retain their separate role records. Body/note shaping,
+provider identity and unrelated diagnostics must remain identical across page
+variants. Graphic ASCII/LTR runs and Latin numbering remain the supported text
+subset. Symbol bullets, EA/CS/RTL selection, substituted note fonts, body fields
+and square-wrap combinations still refuse. Layout is not Word-validated; an
+explicit request may return `status: 'refused'` with no pages.
 
 The separate opt-in `renderNativeDocxApproximatePagePreviewV1` path may use
 current layout rules for exact legacy mode 12/14 settings. Its extractor-owned
