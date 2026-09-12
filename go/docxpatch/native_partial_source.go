@@ -35,14 +35,19 @@ func InspectNativePartialSourceV1(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	notices, err := inspectNativeEquationContext(data, document, layout, equations)
+	if err != nil {
+		return nil, err
+	}
 	result, err := json.Marshal(struct {
-		Protocol       string                    `json:"protocol"`
-		Version        int                       `json:"version"`
-		PackageSHA256  string                    `json:"package_sha256"`
-		Document       json.RawMessage           `json:"document"`
-		ResolvedLayout json.RawMessage           `json:"resolved_layout"`
-		Equations      []NativePartialEquationV1 `json:"equations,omitempty"`
-	}{"injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations})
+		Protocol               string                          `json:"protocol"`
+		Version                int                             `json:"version"`
+		PackageSHA256          string                          `json:"package_sha256"`
+		Document               json.RawMessage                 `json:"document"`
+		ResolvedLayout         json.RawMessage                 `json:"resolved_layout"`
+		Equations              []NativePartialEquationV1       `json:"equations,omitempty"`
+		EquationContextNotices []NativeEquationContextNoticeV1 `json:"equation_context_notices,omitempty"`
+	}{"injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations, notices})
 	if err != nil {
 		return nil, err
 	}

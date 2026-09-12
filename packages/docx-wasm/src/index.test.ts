@@ -114,6 +114,11 @@ describe('DOCX WASM package client', () => {
     const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,equations:[equation]}
     const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
     expect((await client.inspectPartialContent(bytes)).equations).toEqual([equation]);client.terminate()
+    const section=document.sections[0]!,sectionAnchor={...section.anchor,path:section.anchor.path+'/w:textDirection[1]'}
+    document.unsupported.push({id:'section:direction',code:'UNMODELED_SECTION_PROPERTY',scope_id:section.id,anchor:sectionAnchor,capability:'sections',preservation:'refuse-mutation',message:'Preserved direction'})
+    const notice={kind:'horizontal-section',package_sha256:hash,part_sha256:'sha256:'+'a'.repeat(64),anchor:sectionAnchor,diagnostic_origin:'document',diagnostic_id:'section:direction',code:'UNMODELED_SECTION_PROPERTY',scope_id:section.id,value:'lrTb'}
+    const noticeWorker=new FakeWorker(JSON.stringify({...envelope,equation_context_notices:[notice]})),withNotice=createDocxWasmClient({workerFactory:()=>noticeWorker})
+    const joined=await withNotice.inspectPartialContent(bytes);expect(joined.equations?.[0]?.status).toBe('supported');expect(joined.equation_context_notices).toEqual([notice]);expect(joined.document.unsupported).toEqual(document.unsupported);withNotice.terminate()
     const badWorker=new FakeWorker(JSON.stringify({...envelope,equations:[{...equation,diagnostic_id:'wrong'}]})),bad=createDocxWasmClient({workerFactory:()=>badWorker})
     await expect(bad.inspectPartialContent(bytes)).rejects.toThrow();expect(badWorker.terminated).toBe(true)
   })

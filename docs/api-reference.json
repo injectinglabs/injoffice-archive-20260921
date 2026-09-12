@@ -3152,6 +3152,11 @@
               "signature": "export declare function compileNativeDocxApproximatePagePreviewV1(value: unknown, eligibilityValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxApproximatePagePreviewV1>"
             },
             {
+              "name": "compileNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeDocxFontSubstitutionPreviewV1(value: unknown, policyValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxFontSubstitutionPreviewV1>"
+            },
+            {
               "name": "compileNativeDocxPagePaintV1",
               "kind": "function",
               "signature": "export declare function compileNativeDocxPagePaintV1(value: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<CompileNativeDocxPagePaintV1Result>"
@@ -3184,7 +3189,7 @@
             {
               "name": "createNativeDocxEquationPreviewsV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown): NativeDocxEquationPreviewV1[]"
+              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown, contextNotices?: unknown): NativeDocxEquationPreviewV1[]"
             },
             {
               "name": "createNativeDocxPartialContentPreviewV1",
@@ -3222,9 +3227,19 @@
               "signature": "export declare function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult"
             },
             {
+              "name": "decodeNativeDocxEquationContextNoticesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxEquationContextNoticesV1(source: unknown, layout: unknown, input: unknown): NativeDocxEquationContextNoticeV1[]"
+            },
+            {
               "name": "decodeNativeDOCXFontInventoryV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDOCXFontInventoryV1(json: string): NativeDOCXFontInventoryV1"
+            },
+            {
+              "name": "decodeNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxFontSubstitutionPreviewV1(value: unknown): NativeDocxFontSubstitutionPreviewV1"
             },
             {
               "name": "decodeNativeDocxJson",
@@ -3385,6 +3400,16 @@
               "name": "DOCX_EMBEDDED_FONT_RESOLVER_ID",
               "kind": "const",
               "signature": "export declare const DOCX_EMBEDDED_FONT_RESOLVER_ID = \"injoffice.docx.embedded-fonts\""
+            },
+            {
+              "name": "DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL: 'injoffice.docx.font-substitution-preview'"
+            },
+            {
+              "name": "DOCX_FONT_SUBSTITUTION_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_WARNING = \"Font substitution preview \\u2014 layout may differ. Missing source fonts may be replaced only by the explicit operator selections disclosed below for read-only rendering; source font names and original file bytes are unchanged.\""
             },
             {
               "name": "DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL",
@@ -3792,6 +3817,11 @@
               "signature": "export interface NativeDOCXEmbeddedFontSourceV1"
             },
             {
+              "name": "NativeDocxEquationContextNoticeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxEquationContextNoticeV1"
+            },
+            {
               "name": "NativeDocxEquationPreviewV1",
               "kind": "interface",
               "signature": "export interface NativeDocxEquationPreviewV1"
@@ -3830,6 +3860,11 @@
               "name": "NativeDOCXFontReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDOCXFontReferenceV1"
+            },
+            {
+              "name": "NativeDocxFontSubstitutionPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxFontSubstitutionPreviewV1"
             },
             {
               "name": "NativeDOCXFontTableBindingV1",
@@ -4444,7 +4479,7 @@
             {
               "name": "NativeDocxShapingDiagnosticCode",
               "kind": "type",
-              "signature": "export type NativeDocxShapingDiagnosticCode = 'provider-refusal' | 'provider-decision' | 'provider-failure' | 'invalid-provider-output' | 'missing-run-font' | 'missing-run-size' | 'unresolved-layout-diagnostic' | 'paint-diagnostic-preserved' | 'bidi-resolution-refusal' | 'justification-unsupported' | 'table-layout-unsupported' | 'drawing-layout-unsupported' | 'reference-layout-unsupported' | 'page-control-deferred' | 'soft-hyphen-deferred' | 'unsupported-numbering-text' | 'unsupported-numbering-format' | 'list-marker-alignment-deferred' | 'list-marker-tab-deferred' | 'numbering-state-invalidated' | 'empty-line-metrics-unresolved' | 'cluster-overflow' | 'resource-limit' | 'diagnostic-overflow'"
+              "signature": "export type NativeDocxShapingDiagnosticCode = 'font-substitution-approximate' | 'provider-refusal' | 'provider-decision' | 'provider-failure' | 'invalid-provider-output' | 'missing-run-font' | 'missing-run-size' | 'unresolved-layout-diagnostic' | 'paint-diagnostic-preserved' | 'bidi-resolution-refusal' | 'justification-unsupported' | 'table-layout-unsupported' | 'drawing-layout-unsupported' | 'reference-layout-unsupported' | 'page-control-deferred' | 'soft-hyphen-deferred' | 'unsupported-numbering-text' | 'unsupported-numbering-format' | 'list-marker-alignment-deferred' | 'list-marker-tab-deferred' | 'numbering-state-invalidated' | 'empty-line-metrics-unresolved' | 'cluster-overflow' | 'resource-limit' | 'diagnostic-overflow'"
             },
             {
               "name": "NativeDocxShapingDiagnosticV1",
@@ -4727,6 +4762,11 @@
               "signature": "export declare function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1, legacyEligibility?: unknown): Promise<NativeDocxAutomaticBorderPreviewV1>"
             },
             {
+              "name": "renderNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
+            },
+            {
               "name": "ShapeNativeDocxLinesResult",
               "kind": "type",
               "signature": "export type ShapeNativeDocxLinesResult ="
@@ -4785,7 +4825,7 @@
             {
               "name": "createNativeDocxEquationPreviewsV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown): NativeDocxEquationPreviewV1[]"
+              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown, contextNotices?: unknown): NativeDocxEquationPreviewV1[]"
             },
             {
               "name": "createNativeDocxPartialContentPreviewV1",
@@ -4796,6 +4836,11 @@
               "name": "decodeNativeDocxDocument",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult"
+            },
+            {
+              "name": "decodeNativeDocxEquationContextNoticesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxEquationContextNoticesV1(source: unknown, layout: unknown, input: unknown): NativeDocxEquationContextNoticeV1[]"
             },
             {
               "name": "decodeNativeDocxJson",
@@ -4931,6 +4976,11 @@
               "name": "NativeDocxEditPolicyV1",
               "kind": "interface",
               "signature": "export interface NativeDocxEditPolicyV1"
+            },
+            {
+              "name": "NativeDocxEquationContextNoticeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxEquationContextNoticeV1"
             },
             {
               "name": "NativeDocxEquationPreviewV1",
@@ -5214,6 +5264,11 @@
               "signature": "export declare function decodeNativeDOCXFontInventoryV1(json: string): NativeDOCXFontInventoryV1"
             },
             {
+              "name": "decodeNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxFontSubstitutionPreviewV1(value: unknown): NativeDocxFontSubstitutionPreviewV1"
+            },
+            {
               "name": "DOCX_APPROXIMATE_PREVIEW_POLICY",
               "kind": "export",
               "signature": "DOCX_APPROXIMATE_PREVIEW_POLICY"
@@ -5242,6 +5297,16 @@
               "name": "DOCX_EMBEDDED_FONT_RESOLVER_ID",
               "kind": "const",
               "signature": "export declare const DOCX_EMBEDDED_FONT_RESOLVER_ID = \"injoffice.docx.embedded-fonts\""
+            },
+            {
+              "name": "DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL: 'injoffice.docx.font-substitution-preview'"
+            },
+            {
+              "name": "DOCX_FONT_SUBSTITUTION_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_WARNING = \"Font substitution preview \\u2014 layout may differ. Missing source fonts may be replaced only by the explicit operator selections disclosed below for read-only rendering; source font names and original file bytes are unchanged.\""
             },
             {
               "name": "DOCX_INLINE_IMAGE_LIMITS",
@@ -5304,6 +5369,11 @@
               "signature": "NativeDocxAutomaticBorderPreviewV1"
             },
             {
+              "name": "NativeDocxFontSubstitutionPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxFontSubstitutionPreviewV1"
+            },
+            {
               "name": "NativeDocxHostDefaultSizePolicyV1",
               "kind": "type",
               "signature": "export interface NativeDocxHostDefaultSizePolicyV1"
@@ -5349,6 +5419,11 @@
               "signature": "export declare function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1, legacyEligibility?: unknown): Promise<NativeDocxAutomaticBorderPreviewV1>"
             },
             {
+              "name": "renderNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxFontSubstitutionPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts: NativeDocxHostFontsV1; }): Promise<import('./nativeFontSubstitutionPreviewV1.js').NativeDocxFontSubstitutionPreviewV1>"
+            },
+            {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
               "kind": "export",
               "signature": "validNativeDocxHostDefaultSizePolicyV1"
@@ -5368,6 +5443,11 @@
               "name": "decodeNativeDocxAutomaticBorderPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxAutomaticBorderPreviewV1(value: unknown):"
+            },
+            {
+              "name": "decodeNativeDocxFontSubstitutionPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxFontSubstitutionPreviewV1(value: unknown): NativeDocxFontSubstitutionPreviewV1"
             },
             {
               "name": "decodeNativeDocxPagePaintV1",
@@ -5400,6 +5480,16 @@
               "signature": "export declare const DOCX_AUTO_BORDER_PREVIEW_PROTOCOL: \"injoffice.docx.auto-border-preview\""
             },
             {
+              "name": "DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL: 'injoffice.docx.font-substitution-preview'"
+            },
+            {
+              "name": "DOCX_FONT_SUBSTITUTION_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_FONT_SUBSTITUTION_WARNING = \"Font substitution preview \\u2014 layout may differ. Missing source fonts may be replaced only by the explicit operator selections disclosed below for read-only rendering; source font names and original file bytes are unchanged.\""
+            },
+            {
               "name": "DOCX_PAGE_PAINT_LIMITS",
               "kind": "const",
               "signature": "export declare const DOCX_PAGE_PAINT_LIMITS: Readonly<"
@@ -5428,6 +5518,11 @@
               "name": "NativeDocxFillTextHighlightCommandV1",
               "kind": "type",
               "signature": "export interface NativeDocxFillTextHighlightCommandV1"
+            },
+            {
+              "name": "NativeDocxFontSubstitutionPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxFontSubstitutionPreviewV1"
             },
             {
               "name": "NativeDocxPagePaintCommandV1",

@@ -15,6 +15,7 @@ import {
 } from './nativeShapingLines.js'
 import { compareNativeValidationIssues } from './nativeDeterminism.js'
 import { validateNativeDocxScriptTransformV1 } from './nativeScriptLayoutV1.js'
+import {decodeNativeDocxFontSubstitutionsV1} from './nativeFontSubstitutionEvidenceV1.js'
 
 export type DecodeNativeDocxShapedLinesResult =
   | { ok: true; value: NativeDocxShapedLinesV1 }
@@ -31,7 +32,7 @@ export const DOCX_SHAPED_LINES_V1_BINDING_FIELDS = {
   ListMarkerV1: ['marker_id', 'definition_sha256', 'numbering_part_sha256', 'model_sha256', 'num_id', 'abstract_num_id', 'level', 'counter_value', 'text', 'suffix', 'alignment', 'label_start_millipoints', 'label_end_millipoints', 'marker_start_millipoints', 'marker_advance_millipoints', 'text_start_millipoints'],
   ParagraphV1: ['paragraph_id', 'story_id', 'story_kind', 'direction', 'alignment', 'spacing_before_millipoints', 'spacing_after_millipoints', 'indent_start_millipoints', 'indent_end_millipoints', 'first_line_delta_millipoints', 'list_marker', 'block_advance_millipoints', 'lines'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'source_id', 'source_diagnostic_code', 'source_diagnostic_message', 'message'],
-  ShapedLinesV1: ['protocol', 'version', 'document_id', 'revision', 'numbering_source', 'available_width_millipoints', 'tab_interval_millipoints', 'font_manifest', 'providers', 'paragraphs', 'diagnostics'],
+  ShapedLinesV1: ['protocol', 'version', 'document_id', 'revision', 'numbering_source', 'available_width_millipoints', 'tab_interval_millipoints', 'font_manifest', 'providers', 'paragraphs', 'diagnostics','font_substitutions'],
 } as const
 
 type JsonObject = Record<string, unknown>
@@ -498,6 +499,7 @@ export function decodeNativeDocxShapedLines(value: unknown): DecodeNativeDocxSha
     validateParagraph(paragraph, `/paragraphs/${index}`, issues, state, paragraphIDs, lineIDs)
   })
   array(root.diagnostics, '/diagnostics', issues, DOCX_SHAPED_LINES_LIMITS.maxDiagnostics).forEach((diagnostic, index) => validateDiagnostic(diagnostic, `/diagnostics/${index}`, issues))
+  if(root.font_substitutions!==undefined)try{decodeNativeDocxFontSubstitutionsV1(root.font_substitutions)}catch{add(issues,'INVALID_VALUE','/font_substitutions','invalid bounded source font substitution evidence')}
   issues.sort(compareNativeValidationIssues)
   return issues.length > 0 ? { ok: false, issues } : { ok: true, value: value as NativeDocxShapedLinesV1 }
 }

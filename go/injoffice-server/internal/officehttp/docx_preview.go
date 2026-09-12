@@ -21,6 +21,7 @@ import (
 
 const DOCXPreviewPath = "/v1/docx/page-preview"
 const DOCXApproximatePreviewPath = "/v1/docx/page-preview-approximate"
+const DOCXFontSubstitutionPreviewPath = "/v1/docx/page-preview-font-substitution"
 
 // DOCXPreviewOptions explicitly enables a local Node compiler. The worker path
 // is operator configuration, never a URL or a caller-supplied executable.
@@ -205,12 +206,17 @@ func handleDOCXApproximatePreview(w http.ResponseWriter, r *http.Request, option
 }
 
 func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}, approximate bool) {
+	fontSubstitution := r.URL.Path == DOCXFontSubstitutionPreviewPath
 	if r.Method != http.MethodPost {
 		xlsxhttp.WriteError(w, http.StatusMethodNotAllowed, errors.New("POST required"))
 		return
 	}
 	if options.WorkerPath == "" {
 		xlsxhttp.WriteError(w, http.StatusServiceUnavailable, errors.New("native page preview is not enabled by the server operator"))
+		return
+	}
+	if fontSubstitution && (r.URL.RawQuery != "" || options.FontManifestPath == "") {
+		xlsxhttp.WriteError(w, http.StatusBadRequest, errors.New("font substitution preview requires operator font configuration and accepts no query options"))
 		return
 	}
 	select {
@@ -235,7 +241,12 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 		return
 	}
 	var result json.RawMessage
-	if approximate {
+	if fontSubstitution {
+		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-font-substitution", map[string]any{"prepare": input}, 192*1024*1024, 64*1024*1024, "--font-manifest", options.FontManifestPath)
+		if err == nil {
+			err = validateDOCXFontSubstitutionPreview(result, input, options.FontManifestPath)
+		}
+	} else if approximate {
 		eligibility, eligibilityErr := docxpatch.ExtractNativeDocxApproximationEligibilityV1(data)
 		if eligibilityErr != nil {
 			xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, eligibilityErr)

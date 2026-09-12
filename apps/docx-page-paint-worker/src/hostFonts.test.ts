@@ -21,8 +21,26 @@ function input(){
  return {font_assets:[],font_inventory_json:encodeNativeDOCXFontInventoryV1(inventory)} as unknown as NativeDocxPagePaintPrepareInputV1
 }
 let id=0
-function config(faces:unknown[]){const p=resolve(scratch,`fonts-${id++}.json`);writeFileSync(p,JSON.stringify({version:1,faces}));return p}
+function config(faces:unknown[],substitutions?:unknown){const p=resolve(scratch,`fonts-${id++}.json`);writeFileSync(p,JSON.stringify({version:1,faces,...(substitutions?{substitutions}:{})}));return p}
 describe('operator-owned DOCX fonts',()=>{
+ it('requires explicit opt-in, retains source family and binds selected bytes',async()=>{
+  const value=input(),inventory=JSON.parse(value.font_inventory_json)
+  inventory.references.forEach((r:any)=>{r.family='Missing Family'})
+  inventory.inventory_sha256='';inventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(inventory)
+  value.font_inventory_json=encodeNativeDOCXFontInventoryV1(inventory)
+  const policy={version:1,mappings:[{sourceFamily:'Missing Family',targetFamily:'DejaVu Sans',weight:400,style:'normal'}]}
+  const p=config([entry],policy)
+  await expect(loadHostFonts(value,p)).rejects.toThrow(/Exact configured font/)
+  const fonts=await loadHostFonts(value,p,true)
+  const run={version:1 as const,text:'Actual source',fontSizeMilliPoints:10000,font:{families:['Missing Family'],weight:400,style:'normal' as const,stretch:100},script:'Latn',language:'en',direction:'ltr' as const}
+  const selected=await fonts.resolver.resolve({manifest:fonts.manifest,run})
+  if(!('face' in selected))throw new Error('Expected operator selection')
+  expect(selected.face).toMatchObject({matchedFamily:'Missing Family',family:'DejaVu Sans',resolution:'substitute',contentDigest:sha256})
+  expect(await fonts.resolver.load(selected.face)).toHaveProperty('bytes')
+  expect(()=>fonts.resolver.load({...selected.face,matchedFamily:'Forged'})).toThrow(/binding/)
+  expect(await fonts.resolver.resolve({manifest:fonts.manifest,run:{...run,text:'漢',script:'Hani'}})).toMatchObject({status:'refused'})
+  await expect(loadHostFonts(value,config([entry]),true)).rejects.toThrow(/not configured/)
+ })
  it('loads only exact referenced fonts and owns each returned byte buffer',async()=>{
   const fonts=await loadHostFonts(input(),config([entry,{...entry,family:'Unused',path:'/nonexistent/unreferenced.ttf'}]))
   expect(fonts.manifest.faces).toHaveLength(1)

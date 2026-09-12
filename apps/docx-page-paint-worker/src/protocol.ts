@@ -4,6 +4,7 @@ import {
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
   renderNativeDocxAutomaticBorderPreviewV1,
+  renderNativeDocxFontSubstitutionPreviewV1,
   validNativeDocxHostDefaultSizePolicyV1,
   type NativeDocxAuthoritativeFontAssetV1,
   type NativeDocxAuthoritativeMediaAssetV1,
@@ -129,17 +130,20 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
   try {
     if (!record(value) || !exactKeys(value, ['protocol', 'version', 'id', 'op', 'input']) || value.protocol !== DOCX_PAGE_PAINT_WORKER_PROTOCOL || value.version !== DOCX_PAGE_PAINT_WORKER_VERSION || candidateID === 'invalid') throw new TypeError('worker request envelope is invalid')
     if (value.op === 'ping') return { ...base, ok: true, result: { status: 'ready' } }
-    if (value.op === 'render-approximate' || value.op === 'render-auto-borders') {
+    if (value.op === 'render-approximate' || value.op === 'render-auto-borders' || value.op==='render-font-substitution') {
       const automatic = value.op === 'render-auto-borders'
+      const fontOnly=value.op==='render-font-substitution'
       if (!record(value.input)) throw new TypeError('approximate render requires an input object')
-      const fields = automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
+      const fields = fontOnly?['prepare']:automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
       if ('font_size_policy' in value.input) fields.push('font_size_policy')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
+      if(fontOnly&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
       if (fontSizePolicy !== undefined && !validNativeDocxHostDefaultSizePolicyV1(fontSizePolicy)) throw new TypeError('Host default size policy is invalid')
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
-      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath) : undefined
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath,fontOnly) : undefined
+      if(fontOnly&&!fonts)throw new TypeError('Font preview requires explicit operator fonts')
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const outlineProvider: Parameters<typeof renderNativeDocxAutomaticBorderPreviewV1>[1] = {
         providerId: 'injoffice.harfbuzz-outline', providerRevision: 'v1',
@@ -158,7 +162,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
         },
       }
       const runtime = { createShaper: workerShaper, fonts, fontSizePolicy }
-      const result = automatic
+      const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)
       return { ...base, ok: true, result }

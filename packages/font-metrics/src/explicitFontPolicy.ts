@@ -69,7 +69,7 @@ export function selectExplicitFontV1(manifest:NativeFontManifest,run:TextRunInpu
   for(const family of run.font.families){const exact=choose(family,family,false);if(exact)return exact}
   if(!checked)return null
   // PostScript identity and vertical/script-specific font selection stay exact.
-  if(run.font.postscriptName!==undefined||run.direction!=='ltr'||run.script!=='Latn'||run.font.stretch!==100)return null
+  if(run.font.postscriptName!==undefined||run.direction!=='ltr'||(run.script!=='Latn'&&!(run.script==='Zyyy'&&/^[\x20-\x7e]*$/.test(run.text)))||run.font.stretch!==100)return null
   for(const family of run.font.families){
     if(!/^[\x20-\x7e]+$/.test(family)||family.trim()!==family)continue
     const mapping=checked.mappings.find(m=>fold(m.sourceFamily)===fold(family)&&m.weight===run.font.weight&&m.style===run.font.style)

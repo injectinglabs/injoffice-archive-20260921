@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
-import {createNativeDocxEquationPreviewsV1 as preview} from './nativePartialEquationsV1.js'
+import {createNativeDocxEquationPreviewsV1 as preview,decodeNativeDocxEquationContextNoticesV1 as decodeNotices,type NativeDocxEquationContextNoticeV1} from './nativePartialEquationsV1.js'
 import type {NativeDocxDocumentV1} from './nativeContract.js'
 import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 function fixture(){
@@ -12,6 +12,41 @@ function fixture(){
  return {document,resolved,equation}
 }
 describe('source-bound read-only equation preview',()=>{
+ it('qualifies only exact ignored charset declarations and bounded non-drawing tab notices',()=>{
+  const {document,resolved,equation}=fixture(),style=document.passthrough_parts.find(p=>p.part_name==='word/styles.xml')!
+  const font={...style,part_name:'word/fontTable.xml',content_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml'};document.passthrough_parts.push(font)
+  resolved.source_parts.font_table_part=font.part_name;resolved.source_parts.styles_part=style.part_name
+  const fa={part_name:font.part_name,path:'/w:fonts[1]/w:font[1]/w:charset[1]',start_byte:10,end_byte:60,xml_sha256:'sha256:'+'a'.repeat(64)},ta={...fa,part_name:style.part_name,path:'/w:styles[1]/w:style[1]/w:pPr[1]/w:tabs[1]'}
+  resolved.diagnostics.push({code:'UNMODELED_FONT_METADATA',scope_id:document.document_id,part_name:fa.part_name,path:fa.path,severity:'unsupported',preservation:'preserve-verbatim',message:'Ignored matching only'},{code:'UNMODELED_PARAGRAPH_PROPERTY',scope_id:equation.paragraph_id,part_name:ta.part_name,path:ta.path,severity:'unsupported',preservation:'preserve-verbatim',message:'Tab stops'})
+  const base={package_sha256:document.source.package_sha256,part_sha256:font.sha256,diagnostic_origin:'resolved' as const}
+  const fn:NativeDocxEquationContextNoticeV1={...base,kind:'ignored-font-matching',anchor:fa,code:'UNMODELED_FONT_METADATA',scope_id:document.document_id,value:'80',character_set:'utf-8'},tn:NativeDocxEquationContextNoticeV1={...base,kind:'unused-paragraph-tab-stops',anchor:ta,code:'UNMODELED_PARAGRAPH_PROPERTY',scope_id:equation.paragraph_id,tab_stops:[{kind:'left',position_twips:709,leader:'none'}]}
+  expect(preview(document,resolved,[equation],[fn,tn])[0]!.status).toBe('supported')
+  for(const change of [{value:'02'},{character_set:'unknown'},{anchor:{...fa,path:'/w:fonts[1]/w:font[1]/w:charset[1]/extra'}}])expect(()=>decodeNotices(document,resolved,[{...fn,...change}])).toThrow(TypeError)
+  for(const stops of [[],[{kind:'bar',position_twips:709,leader:'none'}],[{kind:'left',position_twips:-1,leader:'none'}],[{kind:'left',position_twips:709,leader:'dot'}],[...tn.tab_stops!,...tn.tab_stops!]])expect(()=>decodeNotices(document,resolved,[{...tn,tab_stops:stops}])).toThrow(TypeError)
+ })
+ it('uses exact same-source notices only for equations while retaining diagnostics and hidden guards',()=>{
+  const {document,resolved,equation}=fixture(),part=document.passthrough_parts.find(p=>p.part_name==='word/styles.xml')!
+  resolved.source_parts.styles_part=part.part_name
+  const anchor={part_name:part.part_name,path:'/w:styles[1]/w:style[1]/w:pPr[1]/w:suppressAutoHyphens[1]',start_byte:100,end_byte:160,xml_sha256:'sha256:'+'a'.repeat(64)}
+  resolved.diagnostics.push({code:'UNMODELED_PARAGRAPH_PROPERTY',scope_id:equation.paragraph_id,part_name:part.part_name,path:anchor.path,severity:'unsupported',preservation:'preserve-verbatim',message:'Retained'})
+  const notice:NativeDocxEquationContextNoticeV1={kind:'disabled-paragraph-hyphenation',package_sha256:document.source.package_sha256,part_sha256:part.sha256,anchor,diagnostic_origin:'resolved',code:'UNMODELED_PARAGRAPH_PROPERTY',scope_id:equation.paragraph_id,value:'true'}
+  const before=structuredClone({document,resolved,notice})
+  expect(preview(document,resolved,[equation])[0]!.status).toBe('omitted')
+  expect(preview(document,resolved,[equation],[notice])[0]).toMatchObject({status:'supported',context_notice_ids:[expect.any(String)]})
+  expect({document,resolved,notice}).toEqual(before)
+  for(const change of [{package_sha256:'sha256:'+'0'.repeat(64)},{part_sha256:'sha256:'+'0'.repeat(64)},{anchor:{...anchor,part_name:'word/foreign.xml'}},{anchor:{...anchor,path:anchor.path+'/nested'}},{anchor:{...anchor,end_byte:part.byte_length+1}},{value:'false'},{scope_id:document.document_id},{code:'UNKNOWN'}])expect(()=>decodeNotices(document,resolved,[{...notice,...change}])).toThrow(TypeError)
+  expect(()=>decodeNotices(document,resolved,[notice,notice])).toThrow(TypeError)
+  resolved.paragraphs[0]!.paragraph_mark_properties.hidden=true
+  expect(preview(document,resolved,[equation],[notice])[0]!.status).toBe('omitted')
+ })
+ it('joins horizontal section notice to its entire original diagnostic anchor',()=>{
+  const {document,resolved,equation}=fixture(),section=document.sections[0]!
+  const anchor={...section.anchor,path:section.anchor.path+'/w:textDirection[1]'}
+  document.unsupported.push({id:'section:direction',code:'UNMODELED_SECTION_PROPERTY',scope_id:section.id,anchor,capability:'sections',preservation:'refuse-mutation',message:'Direction'})
+  const notice:NativeDocxEquationContextNoticeV1={kind:'horizontal-section',package_sha256:document.source.package_sha256,part_sha256:'sha256:'+'a'.repeat(64),anchor,diagnostic_origin:'document',diagnostic_id:'section:direction',code:'UNMODELED_SECTION_PROPERTY',scope_id:section.id,value:'lrTb'}
+  expect(preview(document,resolved,[equation],[notice])[0]!.status).toBe('supported')
+  for(const change of [{value:'tbRl'},{anchor:{...anchor,xml_sha256:'sha256:'+'0'.repeat(64)}},{anchor:{...anchor,start_byte:anchor.start_byte+1}},{diagnostic_id:'wrong'}])expect(()=>decodeNotices(document,resolved,[{...notice,...change}])).toThrow(TypeError)
+ })
  it('recovers independently qualified equations in separate paragraphs without clearing unrelated blockers',()=>{
   const {document,resolved,equation}=fixture(),p=document.body.blocks[1]!.table!.rows[0]!.cells[0]!.paragraphs[0]!
   const anchor={...p.anchor,path:p.anchor.path+'/ns12345678:oMath[1]',start_byte:p.anchor.start_byte+1,end_byte:p.anchor.end_byte-1}

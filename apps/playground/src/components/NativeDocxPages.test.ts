@@ -1,9 +1,23 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse } from './NativeDocxPages'
+import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse,nativeDocxFontSubstitutionSummary } from './NativeDocxPages'
 
 describe('native document page viewer', () => {
+  it('keeps the persistent font warning and deduplicated selections separate from technical evidence',()=>{
+    const record={source_family:'Missing',selected_family:'Selected',weight:400,style:'normal'}
+    const summary=nativeDocxFontSubstitutionSummary({substitutions:[record,record]} as any)
+    expect(summary).toHaveLength(2)
+    expect(summary[0]).toContain('layout may differ')
+    expect(summary[1]).toBe('Missing → Selected (400, normal).')
+    expect(summary.join(' ')).not.toContain('sha256:')
+  })
+  it('offers an explicit separate font-substitution upload without enabling it automatically',()=>{
+    const html=renderToStaticMarkup(createElement(NativeDocxPages,{bytes:new Uint8Array([1]),packageDigest:`sha256:${'a'.repeat(64)}`,apiBase:'https://helper.invalid'}))
+    expect(html).toContain('Upload to helper and allow operator font substitution')
+    expect(html).toContain('cannot combine with the other approximate page policies')
+    expect(html).not.toContain('Approximate page limitations')
+  })
   const resources = [{ content_type: 'image/jpeg', bytes_base64: 'AA==', width_px: 2, height_px: 1 }] as Parameters<typeof decodeNativeDocxImages>[0]
   it('requires successful decoding with exact source dimensions', async () => {
     const released: string[] = []

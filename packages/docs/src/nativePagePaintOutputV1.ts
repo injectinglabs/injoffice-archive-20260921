@@ -1,4 +1,6 @@
 /** Browser-safe output-only boundary. No shaping or native provider imports. */
+export {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,DOCX_FONT_SUBSTITUTION_WARNING} from './nativeFontSubstitutionPreviewV1.js'
+export type {NativeDocxFontSubstitutionPreviewV1} from './nativeFontSubstitutionPreviewV1.js'
 export { decodeNativeDocxApproximatePagePreviewV1, DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, DOCX_APPROXIMATE_PREVIEW_WARNING } from './nativeApproximationV1.js'
 export type { NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from './nativeAutomaticBorderPreviewV1.js'

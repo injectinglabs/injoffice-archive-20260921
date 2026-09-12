@@ -7,6 +7,7 @@
  * pagination, or package-mutation dependency.
  */
 
+import {nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
 import {
   NATIVE_TEXT_LAYOUT_VERSION,
   MAX_TEXT_RUN_UTF16,
@@ -113,6 +114,7 @@ export interface NativeDocxShapingProviders {
 }
 
 export type NativeDocxShapingDiagnosticCode =
+  | 'font-substitution-approximate'
   | 'provider-refusal'
   | 'provider-decision'
   | 'provider-failure'
@@ -243,6 +245,7 @@ export interface NativeDocxShapedListMarkerV1 {
 }
 
 export interface NativeDocxShapedLinesV1 {
+  font_substitutions?: import('./nativeFontSubstitutionEvidenceV1.js').NativeDocxFontSubstitutionV1[]
   protocol: typeof DOCX_SHAPED_LINES_PROTOCOL
   version: typeof DOCX_SHAPED_LINES_VERSION
   document_id: string
@@ -289,6 +292,7 @@ const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+
 const GLUE_RE = /[\u00A0\u202F\u2060]/u
 
 interface NativeShapingContext {
+  fontSubstitutions: import('./nativeFontSubstitutionEvidenceV1.js').NativeDocxFontSubstitutionV1[]
   lineIntervals?: NativeDocxLineIntervalPlanV1
   request: NativeDocxShapingRequestV1
   providers: NativeProviderSnapshot
@@ -1180,7 +1184,6 @@ async function resolveFontResource(context: NativeShapingContext, run: TextRunIn
     return null
   }
   for (const decision of resolution.decisions) addDiagnostic(context, { code: 'provider-decision', severity: 'deferred', scope_id: sourceID, source_id: sourceID, message: `${decision.code}: ${decision.message}` })
-  if(resolution.face.resolution!=='exact') addDiagnostic(context,{code:'provider-decision',severity:'deferred',scope_id:sourceID,source_id:sourceID,message:`font-substitution-approximate: ${resolution.face.matchedFamily} -> ${resolution.face.family}; ${resolution.face.faceId}; ${resolution.face.contentDigest}. Read-only preview; metrics and layout may differ.`})
   const cacheKey = resolvedFaceCacheKey(resolution.face)
   const cached = context.fontResources.get(cacheKey)
   if (cached) {
@@ -1289,6 +1292,7 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
         atom.metrics = { ...atom.metrics, ascentMilliPoints:ascent, descentMilliPoints:descent, lineGapMilliPoints:gap, lineHeightMilliPoints:ascent-descent+gap }
       }
     }
+    recordNativeFontSubstitution(context,sourceKind,sourceID,properties,resource)
     return atoms
   } catch (error) {
     addDiagnostic(context, { code: 'provider-failure', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: `Injected native text provider failed: ${boundedProviderError(error)}` })
@@ -1327,11 +1331,23 @@ async function resolveParagraphMarkMetrics(context: NativeShapingContext, paragr
       addDiagnostic(context, { code: 'invalid-provider-output', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Paragraph-mark font metrics cannot produce bounded blank-line metrics' })
       return null
     }
+    recordNativeFontSubstitution(context,'paragraph-mark',paragraph.paragraph_id,properties,resource)
     return metrics
   } catch (error) {
     addDiagnostic(context, { code: 'provider-failure', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: `Injected native font resolver failed for paragraph-mark metrics: ${boundedProviderError(error)}` })
     return null
   }
+}
+
+function recordNativeFontSubstitution(context:NativeShapingContext,role:NativeDocxFontSubstitutionV1['source_role'],sourceID:string,properties:NativeDocxResolvedRunPropertiesV1,resource:FontResource):void{
+  if(resource.face.resolution==='exact')return
+  if(role==='list-marker'&&context.paragraphs.get(sourceID)?.numbering?.format==='bullet')throw new TypeError('Symbol bullet fonts require exact supplied faces')
+  if(!properties.font_family||!['normal','italic'].includes(resource.face.style))throw new TypeError('Substitution lacks authored font or supported style')
+  const record:NativeDocxFontSubstitutionV1={source_id:sourceID,source_role:role,source_family:properties.font_family,selected_family:resource.face.family,face_id:resource.face.faceId,font_digest:resource.face.contentDigest,weight:resource.face.weight,style:resource.face.style as 'normal'|'italic'}
+  const existing=context.fontSubstitutions.find(r=>r.source_id===sourceID&&r.source_role===role)
+  if(existing&&JSON.stringify(existing)!==JSON.stringify(record))throw new TypeError('Font substitution changed within one source role')
+  if(!existing){if(context.fontSubstitutions.length>=10000)throw new RangeError('Font substitution evidence exceeds budget');context.fontSubstitutions.push(record)}
+  addDiagnostic(context,nativeDocxFontSubstitutionDiagnosticV1(record))
 }
 
 function clusterAtom(segment: ShapedSegment, cluster: ShapedCluster, clusterIndex: number, span: SourceSpan, sourceKind: 'run' | 'list-marker', sourceID: string): FragmentAtom {
@@ -2039,6 +2055,7 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
     uniqueFontBytes: 0,
     providerFacingFontBytes: 0,
     fontResources: new Map(),
+    fontSubstitutions: [],
     providerFontResources: new Map(),
     activeParagraphFailed: false,
     numberingFailed: false,
@@ -2120,6 +2137,7 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
       },
       ...(request.resolved_layout.numbering_source ? { numbering_source: request.resolved_layout.numbering_source } : {}),
       paragraphs: context.numberingFailed ? [] : paragraphs,
+      ...(context.fontSubstitutions.length?{font_substitutions:context.fontSubstitutions}:{}),
       diagnostics: context.diagnostics,
     },
   }

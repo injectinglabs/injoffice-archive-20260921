@@ -14,6 +14,8 @@ import {
   decodeNativeDocxResolvedLayout,
   createNativeDocxEquationPreviewsV1,
   type NativeDocxEquationPreviewV1,
+  decodeNativeDocxEquationContextNoticesV1,
+  type NativeDocxEquationContextNoticeV1,
   type NativeDocxResolvedLayoutInputV1,
   type NativeDocxDocumentV1,
   type NativeDocxOfficeMutationEnvelopeV1,
@@ -50,7 +52,7 @@ export interface DocxWasmOperationOptions {
 }
 
 export interface DocxWasmClient {
-  inspectPartialContent(bytes:Uint8Array,options?:DocxWasmOperationOptions):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[]}>
+  inspectPartialContent(bytes:Uint8Array,options?:DocxWasmOperationOptions):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[]}>
   extract(bytes: Uint8Array, options?: DocxWasmOperationOptions): Promise<NativeDocxDocumentV1>
   apply(
     original: Uint8Array,
@@ -95,7 +97,7 @@ class DocxWasmClientImpl implements DocxWasmClient {
     return this.extractValidated(bytes, options)
   }
 
-  async inspectPartialContent(bytes:Uint8Array,options:DocxWasmOperationOptions={}):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[]}>{
+  async inspectPartialContent(bytes:Uint8Array,options:DocxWasmOperationOptions={}):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[]}>{
     assertPackageSize(bytes,this.maxPackageBytes)
     if(options.signal?.aborted){const error=new Error('Partial inspection aborted');error.name='AbortError';throw error}
     const snapshot=new Uint8Array(bytes)
@@ -104,10 +106,11 @@ class DocxWasmClientImpl implements DocxWasmClient {
     try{
       if(json.length>16*1024*1024||new TextEncoder().encode(json).byteLength>16*1024*1024)throw new TypeError('Partial source exceeds response budget')
       const value=JSON.parse(json) as Record<string,unknown>
-      if(!value||!['document,package_sha256,protocol,resolved_layout,version','document,equations,package_sha256,protocol,resolved_layout,version'].includes(Object.keys(value).sort().join(','))||value.protocol!=='injoffice.docx.partial-source'||value.version!==1||value.package_sha256!==hash)throw new TypeError('Partial source package identity mismatch')
+      if(!value||!['document,package_sha256,protocol,resolved_layout,version','document,equations,package_sha256,protocol,resolved_layout,version','document,equation_context_notices,equations,package_sha256,protocol,resolved_layout,version'].includes(Object.keys(value).sort().join(','))||value.protocol!=='injoffice.docx.partial-source'||value.version!==1||value.package_sha256!==hash)throw new TypeError('Partial source package identity mismatch')
       const document=decodeNativeDocxDocument(value.document),layout=decodeNativeDocxResolvedLayout(value.resolved_layout)
       if(!document.ok||!layout.ok||document.value.source.package_sha256!==hash||document.value.document_id!==layout.value.document_id||document.value.revision!==layout.value.revision||document.value.source.main_part!==layout.value.source_parts.main_part)throw new TypeError('Invalid joined partial source models')
-      return {document:document.value,resolved_layout:layout.value,...(value.equations===undefined?{}:{equations:createNativeDocxEquationPreviewsV1(document.value,layout.value,value.equations)})}
+      const notices=decodeNativeDocxEquationContextNoticesV1(document.value,layout.value,value.equation_context_notices)
+      return {document:document.value,resolved_layout:layout.value,...(value.equations===undefined?{}:{equations:createNativeDocxEquationPreviewsV1(document.value,layout.value,value.equations,notices)}),...(value.equation_context_notices===undefined?{}:{equation_context_notices:notices})}
     }catch(error){this.native.terminate();throw error}
   }
 

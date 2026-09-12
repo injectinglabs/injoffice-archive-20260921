@@ -20,6 +20,13 @@ describe('native DOCX page-paint worker protocol', () => {
       expect(response).not.toHaveProperty('result')
     }
   })
+  it('refuses substitution policy injection and unsupported approximate combinators', async () => {
+    for(const input of [{prepare:{},policy:{}},{prepare:{},eligibility:{}},{prepare:{},font_size_policy:{kind:'host-default-size-v1',half_points:22}},{prepare:{},host_font_manifest_path:'/caller/fonts.json'}]){
+      const response=await dispatchNativeDocxPagePaintWorkerRequestV1({protocol:DOCX_PAGE_PAINT_WORKER_PROTOCOL,version:1,id:'fonts:malformed',op:'render-font-substitution',input})
+      expect(response).toMatchObject({ok:false,error:{code:'COMPILATION_REFUSED'}})
+      expect(response).not.toHaveProperty('result')
+    }
+  })
   it('requires an explicit exact approximate envelope and rejects caller font overrides', async () => {
     for (const input of [{}, { prepare: {}, eligibility: {}, host_font_manifest_path: '/caller/fonts.json' }, { prepare: { font_manifest: {} }, eligibility: {} }]) {
       const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'approximate:malformed', op: 'render-approximate', input })

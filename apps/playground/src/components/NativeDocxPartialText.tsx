@@ -13,7 +13,8 @@ function MathNode({node}:{node:NativeDocxMathNodeV1}):React.ReactNode{
 }
 export function NativeDocxEquationList({equations}:{equations:NativeDocxEquationPreviewV1[]}){
  if(!equations.length)return null
- return <section aria-label="Read-only equation approximations"><h4>Equation previews</h4><p>Browser math layout, not Word typography or pagination. Equations are listed separately in source order; the original unsupported-source warnings remain.</p>{equations.map((equation,index)=><div key={equation.diagnostic_id}><p>Equation {index+1}</p>{equation.status==='supported'&&equation.tree?createElement('math',{xmlns:'http://www.w3.org/1998/Math/MathML',display:'block'},<MathNode node={equation.tree}/>):<p>[Equation omitted: {equation.reason}]</p>}</div>)}</section>
+ const noticeCount=new Set(equations.flatMap(e=>e.context_notice_ids??[])).size
+ return <section aria-label="Read-only equation approximations"><h4>Equation previews</h4><p>Browser math layout, not Word typography or pagination. Equations are listed separately in source order; the original unsupported-source warnings remain.</p>{noticeCount>0&&<p>{noticeCount} source context notices retained: this equation-only view does not reproduce paragraph tabs, hyphenation, section layout or source font matching. Already decoded Unicode is unchanged.</p>}{equations.map((equation,index)=><div key={equation.diagnostic_id}><p>Equation {index+1}</p>{equation.status==='supported'&&equation.tree?createElement('math',{xmlns:'http://www.w3.org/1998/Math/MathML',display:'block'},<MathNode node={equation.tree}/>):<p>[Equation omitted: {equation.reason}]</p>}</div>)}</section>
 }
 export function NativeDocxPartialTextView({preview}:{preview:NativeDocxPartialContentV1}){
  return <article aria-label="Read-only partial source text">

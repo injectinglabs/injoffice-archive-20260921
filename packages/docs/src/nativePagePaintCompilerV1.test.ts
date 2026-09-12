@@ -4,6 +4,8 @@ import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
 import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING} from './nativeLegacyTableOriginV1.js'
 import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
+import {selectExplicitFontV1} from '@injoffice/font-metrics/layout'
+import {renderNativeDocxFontSubstitutionPreviewV1,decodeNativeDocxFontSubstitutionPreviewV1} from './nativePagePaintCompilerV1.js'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, inspectHarfBuzzFontMetricsV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
 import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, type NativeDocxRunV1 } from './nativeContract.js'
@@ -805,6 +807,68 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(prepared.providers.resolver_id).toBe('test.host-fonts')
     expect(JSON.stringify(input)).toBe(before)
     await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow(/configure explicit host fonts/)
+  })
+
+  it('renders missing source fonts only through the distinct read-only substitution envelope', async () => {
+    const {input,fonts}=hostFixture()
+    const resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    resolved.fonts[0]!.name='Missing Family'
+    resolved.runs[0]!.properties.font_family='Missing Family'
+    resolved.paragraphs[0]!.paragraph_mark_properties!.font_family='Missing Family'
+    ;(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.text='Actual source 123.'
+    rewriteInventory(input,inventory=>{
+      inventory.families[0]!.name='Missing Family'
+      inventory.references.forEach(reference=>{reference.family='Missing Family'})
+    })
+    const policy={version:1 as const,mappings:[{sourceFamily:'Missing Family',targetFamily:'DejaVu Sans',weight:400 as const,style:'normal' as const}]}
+    const metrics=inspectHarfBuzzFontMetricsV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    fonts.resolver.resolve=({run})=>{
+      const selection=selectExplicitFontV1(fonts.manifest,run,policy)
+      if(!selection)throw new Error('No configured face')
+      const face=selection.face
+      return {status:'resolved',face,attemptedFaceIds:[face.faceId],decisions:[]}
+    }
+    fonts.resolver.load=face=>({face,bytes:Uint8Array.from(FONT_BYTES),metrics})
+    const configured={...fonts,substitutionPolicy:policy}
+    const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const outlines={providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:any){
+      const outline=provider.outline(request.glyph_id)
+      return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}
+    }}
+    const original=structuredClone(input)
+    const result=await renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured})
+    expect(result.status).toBe('painted')
+    expect(result.pages[0]!.commands.length).toBeGreaterThan(0)
+    expect(result).toMatchObject({protocol:'injoffice.docx.font-substitution-preview',fidelity:'approximate',read_only:true})
+    expect(result.substitutions).toEqual([expect.objectContaining({source_id:'run:1',source_role:'run',source_family:'Missing Family',selected_family:'DejaVu Sans',font_digest:FONT_DIGEST})])
+    expect(decodeNativeDocxFontSubstitutionPreviewV1(result)).toEqual(result)
+    expect(input).toEqual(original)
+    await expect(prepareNativeDocxPagePaintV1(input,{fonts:configured})).rejects.toThrow(/strict|substitution/i)
+    for(const mutate of [
+      (value:any)=>{value.source.revision='rev:other'},
+      (value:any)=>{value.policy_sha256=HASH},
+      (value:any)=>{value.substitutions.push(structuredClone(value.substitutions[0]))},
+      (value:any)=>{value.substitutions[0].selected_family='Another family'},
+      (value:any)=>{value.reasons=[]},
+      (value:any)=>{value.read_only=false},
+      (value:any)=>{value.substitutions[0].font_digest=HASH},
+      (value:any)=>{value.substitutions[0].face_id='forged-face'},
+      (value:any)=>{value.selected_font_manifest.faces[0].source.contentDigest=HASH},
+    ]){
+      const corrupt=structuredClone(result);mutate(corrupt)
+      expect(()=>decodeNativeDocxFontSubstitutionPreviewV1(corrupt)).toThrow()
+    }
+    const paragraph=(input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!
+    paragraph.runs[0]!.text='א'
+    expect(await renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured})).toMatchObject({status:'refused',pages:[]})
+    paragraph.runs[0]!.text='A'
+    resolved.runs[0]!.properties.rtl=true
+    await expect(renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured})).rejects.toThrow(/left-to-right/)
+    paragraph.runs=[];resolved.runs=[]
+    rewriteInventory(input,inventory=>{inventory.references.forEach(reference=>{reference.scope_ids=['paragraph:1']})})
+    const empty=await renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured})
+    expect(empty.status).toBe('painted')
+    expect(empty.substitutions).toEqual([expect.objectContaining({source_id:'paragraph:1',source_role:'paragraph-mark',source_family:'Missing Family',font_digest:FONT_DIGEST})])
   })
 
   it('refuses stale, missing, corrupt, and overriding host font evidence', async () => {

@@ -475,7 +475,8 @@ describe('shapeNativeDocxLinesV1', () => {
     const result=await shapeNativeDocxLinesV1(request(document),providers)
     expect(result.ok).toBe(true);if(!result.ok)return
     expect(result.value.paragraphs.length).toBeGreaterThan(0)
-    expect(result.value.diagnostics.some(d=>d.message.includes('font-substitution-approximate')&&d.message.includes(digest))).toBe(true)
+    expect(result.value.diagnostics.some(d=>d.code==='font-substitution-approximate')).toBe(true)
+    expect(result.value.font_substitutions?.some(r=>r.font_digest===digest)).toBe(true)
   })
 
   it('rejects mismatched durable identities before invoking providers', async () => {

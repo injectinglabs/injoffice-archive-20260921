@@ -14,6 +14,20 @@ equations separately under its explicit read-only partial-text preview. Strict
 painting and equation-paragraph mutations remain refused. No HTML strings,
 links, arbitrary MathML attributes or source font assets are exposed.
 
+An optional `equation_context_notices` inventory on same-byte inspection can
+qualify exact horizontal `lrTb` section direction, explicitly suppressed
+paragraph hyphenation, bounded non-drawing tab stops and two source-declared
+charset pairs for this equation-only view. These diagnostics remain in the
+original document/layout; neither ordinary text recovery nor native paint uses
+the exception. Charset declarations are ignored font-matching metadata, not a
+reinterpreted encoding or a claim of consistent/default font selection: MathML
+uses the already XML-decoded Unicode. The demo displays the retained notice count.
+Standalone hosts must supply trusted same-byte extractor evidence. The decoder
+joins styles/font-table digests to passthrough part hashes and bounds their slice
+anchors; it does not recompute XML slice hashes without source bytes. Main-part
+whole-part SHA is producer evidence; its original section diagnostic anchor
+(including slice SHA), section owner and package identity are joined exactly.
+
 `createNativeDocxPartialContentPreviewV1(document,
 { policy: 'source-text-with-omissions-v1', read_only: true }, resolvedLayout?)`
 is available from the browser-safe `@injoffice/docs/native-docx` entry. It
@@ -305,6 +319,35 @@ resolved/shaped advances remain unsupported. `updateFields=false` is attested
 explicitly, and content-type identity uses ASCII-only case folding. Explicit
 extractor-owned Word default section
 geometry is accepted; no other geometry is inferred.
+
+### Explicit operator font substitution (read-only)
+
+`renderNativeDocxFontSubstitutionPreviewV1(input, outlineProvider, { fonts })`
+is a separate approximate compiler. Supply a content-addressed host `manifest`,
+`resolver`, and `substitutionPolicy` on `fonts`; the policy is
+`{ version: 1, mappings: [{ sourceFamily, targetFamily, weight: 400 | 700,
+style: 'normal' | 'italic' }] }`. Exact supplied faces always win. There are no
+built-in substitutions, system font discovery, synthetic styles, or bundled
+proprietary fonts. `compileNativeDocxFontSubstitutionPreviewV1` accepts the
+corresponding original-source shaping/page-paint request plus the same policy.
+Neither function exports a strict prepared artifact or grants editing rights.
+
+The distinct `injoffice.docx.font-substitution-preview` envelope carries the
+original source identity, policy/hash, actual source-to-selected font records,
+the selected font manifest joined to rendering provenance, and persistent
+approximation warnings. `decodeNativeDocxFontSubstitutionPreviewV1` validates
+this output (also exported from the browser-safe `native-page-paint-output`
+entrypoint). Source font names, package bytes, and unrelated diagnostics remain
+unchanged; removing or forging substitution evidence cannot qualify strict paint.
+
+This first tier requires modern Word settings and graphic ASCII/LTR source runs
+or Latin numbering, plus eligible blank paragraph-mark metric consumers. Symbol
+bullets, font-matching metadata, EA/CS/RTL selection, legacy layout, automatic
+borders, absent-size policies, page fields and square-wrap combinations remain
+unsupported. Layout is not Word-validated; an explicit request may still return
+`status: 'refused'` with no pages. These constraints currently prevent applying
+this font-only tier to the original benchmark documents with matching metadata
+and legacy settings.
 
 The separate opt-in `renderNativeDocxApproximatePagePreviewV1` path may use
 current layout rules for exact legacy mode 12/14 settings. Its extractor-owned

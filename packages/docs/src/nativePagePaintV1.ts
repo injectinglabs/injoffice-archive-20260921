@@ -24,6 +24,9 @@ import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
 import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
+import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,DOCX_FONT_SUBSTITUTION_WARNING,nativeDocxFontPolicySha256V1,type NativeDocxFontSubstitutionPreviewV1} from './nativeFontSubstitutionPreviewV1.js'
+import {decodeExplicitFontPolicyV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
 export {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL, DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS,
@@ -887,7 +890,19 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
 }
 
-async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false): Promise<CompileNativeDocxPagePaintV1Result> {
+/** Separate approximate envelope; never exports its prepared or strict paint. */
+export async function compileNativeDocxFontSubstitutionPreviewV1(value:unknown,policyValue:unknown,outlineProvider:NativeDocxGlyphOutlineProviderV1):Promise<NativeDocxFontSubstitutionPreviewV1>{
+ const decoded=decodeNativeDocxPagePaintRequestV1(value);if(!decoded.ok)throw new TypeError('Font preview requires valid original-source request')
+ const request=decoded.value,policy=decodeExplicitFontPolicyV1(policyValue)
+ if(request.pagination_request.pagination_settings.profile!=='word-modern-default'||request.body_field_source||request.page_field_variants||hasNativeSquareWrapV1(request.pagination_request.document))throw new TypeError('Font preview currently requires modern settings without other approximate or field/wrap policies')
+ const records=qualifyNativeDocxFontSubstitutionsV1(request.pagination_request.shaped_lines,request.pagination_request.resolved_layout,request.font_manifest,policy,request.pagination_request.document)
+ const painted=await compileDecodedPagePaint(request,outlineProvider,false,records)
+ if(!painted.ok)throw new TypeError('Font preview painting failed validation')
+ const paint=painted.value
+ return decodeNativeDocxFontSubstitutionPreviewV1({protocol:DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,version:1,fidelity:'approximate',read_only:true,policy:EXPLICIT_FONT_POLICY_V1,operator_policy:policy,policy_sha256:nativeDocxFontPolicySha256V1(policy),source:{document_id:paint.provenance.document_id,revision:paint.provenance.revision,package_sha256:paint.provenance.package_sha256},selected_font_manifest:request.font_manifest,substitutions:records,reasons:[DOCX_FONT_SUBSTITUTION_WARNING,...records.map(r=>nativeDocxFontSubstitutionDiagnosticV1(r).message)],status:paint.status,pages:paint.pages,resources:paint.resources,diagnostics:paint.diagnostics,rendering_provenance:paint.provenance})
+}
+
+async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false,fontSubstitutions?:readonly NativeDocxFontSubstitutionV1[]): Promise<CompileNativeDocxPagePaintV1Result> {
   const providerResult = snapshotProvider(outlineProvider)
   if (!providerResult.ok) return providerResult
   const provider = providerResult.value
@@ -900,6 +915,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
   const pagination = request.pagination_request
   const layout = request.paginated_layout
   const documentID = pagination.document.document_id
+  if(pagination.shaped_lines.font_substitutions?.length&&fontSubstitutions===undefined)return {ok:true,value:refusal(provenance,'unsupported-diagnostic',documentID,'Substituted fonts require a separate explicit approximate compiler; strict paint is unavailable')}
   if (layout.status !== 'paginated') {
     const result = refusal(provenance, 'upstream-refused', documentID, 'Native pagination refused; no visual projection was emitted')
     // Keep the v1 wire schema and atomic refusal, but expose actionable source
@@ -913,8 +929,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     return { ok: true, value: result }
   }
   if (headerFooter.status === 'refused') return { ok: true, value: refusal(provenance, 'unsupported-source', headerFooter.diagnostics[0]?.scope_id ?? documentID, headerFooter.diagnostics[0]?.message ?? 'Native header/footer layout refused') }
-  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !(approximateLegacySettings && entry.code === 'settings-attestation-unsupported' && entry.severity === 'deferred') && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
-  const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => entry.code !== 'page-control-deferred' || entry.source_id !== undefined)
+  const allowedFontPagination=(entry:typeof layout.diagnostics[number])=>fontSubstitutions!==undefined&&entry.code==='source-diagnostic'&&entry.severity==='deferred'&&fontSubstitutions.some(r=>{const d=nativeDocxFontSubstitutionDiagnosticV1(r);return entry.scope_id===d.scope_id&&entry.source_code===d.code&&entry.source_message===d.message&&entry.message===`Shaping diagnostic retained by pagination: ${d.code}: ${d.message}`})
+  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !allowedFontPagination(entry)&&!(approximateLegacySettings && entry.code === 'settings-attestation-unsupported' && entry.severity === 'deferred') && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
+  const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => !(fontSubstitutions!==undefined&&isQualifiedNativeDocxFontDiagnosticV1(entry,fontSubstitutions))&&(entry.code !== 'page-control-deferred' || entry.source_id !== undefined))
   const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout))
   if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]

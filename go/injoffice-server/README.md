@@ -86,6 +86,21 @@ unsafe packages, missing fonts and unsupported geometry still refuse. The
 strict endpoint is unchanged, and neither action automatically uploads a file
 or falls back to the other endpoint.
 
+The separate **Upload to helper and allow operator font substitution** action
+posts to `/v1/docx/page-preview-font-substitution` with no query options. Enable
+the worker and supply `-docx-font-manifest /absolute/operator-fonts.json`.
+The existing `{ "version": 1, "faces": [...] }` configuration can additionally
+contain `"substitutions": { "version": 1, "mappings": [{ "sourceFamily":
+"Missing Family", "weight": 400, "style": "normal", "targetFamily":
+"DejaVu Sans" }] }`. The selected face must be in the operator's `faces` list,
+with its absolute local path and SHA-256. Request payloads cannot supply paths,
+policies or fonts. Exact faces win, and neither other endpoint opts in.
+This returns `injoffice.docx.font-substitution-preview`, not strict paint:
+source/selected identities, actual font digests, selected manifest and policy
+hash remain visible. Modern-settings, graphic ASCII/LTR font-only restrictions
+apply; matching metadata, symbol bullets and other approximate policy
+combinations still refuse. No original bytes or source font names are rewritten.
+
 The server reconstructs layout, settings, embedded font assets and referenced
 PNG or qualified baseline JFIF JPEG bytes from the submitted archive. The pinned HarfBuzz worker shapes,
 paginates, outlines and validates native page paint. Missing fonts, unsupported

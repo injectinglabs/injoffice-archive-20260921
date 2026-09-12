@@ -15,6 +15,9 @@ describe('explicit whole-run font policy',()=>{
   expect(canonicalExplicitFontPolicyV1(policy)).not.toBe(canonicalExplicitFontPolicyV1({...policy,mappings:[{...policy.mappings[0]!,targetFamily:'Another'}]}))
  })
  it('does not synthesize styles, discover fallback or substitute vertical/script-specific runs',()=>{
+  expect(selectExplicitFontV1(manifest,{...run,text:'',script:'Zyyy'},policy)?.face.resolution).toBe('substitute')
+  expect(selectExplicitFontV1(manifest,{...run,text:'123 .',script:'Zyyy'},policy)?.face.resolution).toBe('substitute')
+  expect(selectExplicitFontV1(manifest,{...run,text:'☃',script:'Zyyy'},policy)).toBeNull()
   for(const r of [{...run,font:{...run.font,weight:700}},{...run,script:'Arab'},{...run,direction:'ttb' as const},{...run,font:{...run.font,postscriptName:'AuthoredPS'}}])expect(selectExplicitFontV1(manifest,r,policy)).toBeNull()
   expect(selectExplicitFontV1({...manifest,faces:[face('Other')]},run,policy)).toBeNull()
   expect(()=>selectExplicitFontV1({...manifest,faces:[face('Selected'),{...face('Selected'),faceId:'duplicate'}]},run,policy)).toThrow()
