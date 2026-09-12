@@ -2,7 +2,7 @@ import {decodeNativeDocxDocument,type NativeDocxSourceAnchorV1} from './nativeCo
 import {decodeNativeDocxResolvedLayout} from './nativeResolvedLayout.js'
 import {isRenderNeutralLayoutDiagnostic} from './nativeRenderDiagnostics.js'
 
-export type NativeDocxMathNodeV1={kind:'text';text:string}|{kind:'row'|'fraction'|'superscript'|'subscript'|'radical';children:NativeDocxMathNodeV1[]}
+export type NativeDocxMathNodeV1={kind:'text';text:string}|{kind:'row'|'fraction'|'superscript'|'subscript'|'radical'|'indexed-radical';children:NativeDocxMathNodeV1[]}
 export interface NativeDocxEquationPreviewV1 {package_sha256:string;paragraph_id:string;anchor:NativeDocxSourceAnchorV1;diagnostic_id:string;status:'supported'|'omitted';tree?:NativeDocxMathNodeV1;reason?:string;context_notice_ids?:string[]}
 export interface NativeDocxEquationContextNoticeV1 {kind:'horizontal-section'|'ignored-font-matching'|'disabled-paragraph-hyphenation'|'unused-paragraph-tab-stops';package_sha256:string;part_sha256:string;anchor:NativeDocxSourceAnchorV1;diagnostic_origin:'document'|'resolved';diagnostic_id?:string;code:string;scope_id:string;value?:string;character_set?:string;tab_stops?:Array<{kind:string;position_twips:number;leader:'none'}>}
 const noticeID=(n:NativeDocxEquationContextNoticeV1)=>n.diagnostic_origin==='document'?`document:${n.diagnostic_id}`:`resolved:${n.code}:${n.scope_id}:${n.anchor.part_name}:${n.anchor.path}`
@@ -29,7 +29,7 @@ function validateTree(value:unknown,depth:number,budget:{nodes:number;units:numb
  if(depth>32||++budget.nodes>256||!own(value))return false
  if(value.kind==='text'){if(!exact(value,['kind','text'])||typeof value.text!=='string'||!value.text.length)return false;budget.units+=new TextEncoder().encode(value.text).length;return budget.units<=32768}
  if(!exact(value,['kind','children'])||!Array.isArray(value.children)||!value.children.length)return false
- const arity=value.kind==='row'?undefined:value.kind==='radical'?1:['fraction','superscript','subscript'].includes(String(value.kind))?2:0
+ const arity=value.kind==='row'?undefined:value.kind==='radical'?1:['fraction','superscript','subscript','indexed-radical'].includes(String(value.kind))?2:0
  if(arity===0||arity!==undefined&&value.children.length!==arity)return false
  return value.children.length<=256&&value.children.every(v=>validateTree(v,depth+1,budget))
 }

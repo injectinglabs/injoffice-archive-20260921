@@ -29,6 +29,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [paper, setPaper] = useState<'A4' | 'Letter'>('A4')
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
   const [scale, setScale] = useState('100')
+  const [pageOrder, setPageOrder] = useState<'downThenOver' | 'overThenDown'>('downThenOver')
+  const [margins, setMargins] = useState({ left: '0.5', right: '0.5', top: '0.5', bottom: '0.5' })
   const [useSource, setUseSource] = useState(true)
   const [useStoredRows, setUseStoredRows] = useState(false)
   const [compactGeneral, setCompactGeneral] = useState(false)
@@ -61,9 +63,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       const geometry = useStoredRows
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, viewport, authority, objects)
         : compileNativeSheetGeometryV2(model, sheet.id, viewport, authority)
+      if (!useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
       const host: NativeSheetHostPagePolicyV1 | undefined = useSource ? undefined : {
         kind: 'explicit-host-page-policy-v1', paper, orientation, scale: Number(scale),
-        left_inches: 0.5, right_inches: 0.5, top_inches: 0.5, bottom_inches: 0.5,
+        page_order: pageOrder,
+        left_inches: Number(margins.left), right_inches: Number(margins.right), top_inches: Number(margins.top), bottom_inches: Number(margins.bottom),
       }
       const plan = compileNativeSheetPagePreviewV1(geometry, objects, host)
       const drawings = layoutNativeDrawingObjectsV1(geometry, objects)
@@ -98,7 +102,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
         <label>Scale (%)<DsInput type="number" min={10} max={400} step={1} value={scale} onChange={event => { invalidate(); setScale(event.target.value) }}/></label>
-        <p className="ds-muted">Your page choices use 0.5-inch margins. These are preview choices, not workbook defaults.</p>
+        <label>Page order<DsSelect value={pageOrder} onChange={event => { invalidate(); setPageOrder(event.target.value as 'downThenOver' | 'overThenDown') }}><option value="downThenOver">Down, then across</option><option value="overThenDown">Across, then down</option></DsSelect></label>
+        {(['left', 'right', 'top', 'bottom'] as const).map(side => <label key={side}>{side[0]!.toUpperCase() + side.slice(1)} margin (inches)<DsInput type="number" min={0} max={20} step="0.05" value={margins[side]} onChange={event => { invalidate(); setMargins(current => ({ ...current, [side]: event.target.value })) }}/></label>)}
+        <p className="ds-muted">Paper, margins, scale and page order are your preview choices, not workbook defaults.</p>
       </>}
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
@@ -106,6 +112,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     <p role="status">{message}</p>
     {result && <>
       <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scale' : 'Your paper, margins and scale'} · approximate selected-range preview</p>
+      <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
       {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
       <NativeSheetPageImages {...{workbook, sheet, objects}} {...result}/>

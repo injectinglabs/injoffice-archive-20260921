@@ -7,6 +7,9 @@ equation evidence. `createNativeDocxEquationPreviewsV1` validates its package,
 paragraph, original unsupported diagnostic and exact anchor before exposing a
 bounded JSON tree. Rows, literal math text, fractions, superscripts, subscripts
 and explicit square roots can be shown by a host through fixed MathML elements.
+Property-free indexed radicals with nonempty degree and radicand can also be
+shown as `mroot`, with radicand then degree; unknown radical properties remain
+omitted. This does not expand native rendering or mutation support.
 Unknown formatting, revisions, attributes, constructs, malformed child order or
 unqualified visibility omit the whole equation. This is browser math layout,
 not Word typography, font fidelity or native pagination. The demo lists these

@@ -12,6 +12,24 @@ function fixture(){
  return {geometry,objects,model,font}
 }
 describe('source-bound selected worksheet page geometry',()=>{
+ it('honors source and explicit host page order without changing page geometry or source settings',()=>{
+  const {geometry,objects}=fixture()
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,page_order:'overThenDown'})
+  const before=JSON.stringify(objects),source=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(source.policy).toBe('whole-bands-over-then-down-v1');expect(source.settings_origin).toBe('source')
+  expect(source.pages.map(p=>[p.rows.start,p.columns.start])).toEqual([[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]])
+  const host=compileNativeSheetPagePreviewV1(geometry,objects,{...objects.page_settings![0]!.settings!,kind:'explicit-host-page-policy-v1',page_order:'downThenOver'})
+  expect(host.policy).toBe('whole-bands-down-then-over-v1');expect(host.settings_origin).toBe('explicit-host')
+  for(const p of source.pages){const same=host.pages.find(q=>q.rows.start===p.rows.start&&q.columns.start===p.columns.start)!;expect({...p,number:0}).toEqual({...same,number:0})}
+  expect(JSON.stringify(objects)).toBe(before)
+ })
+ it('rejects unknown, empty and non-string ordering rather than silently using defaults',()=>{
+  for(const order of ['diagonal','',null,0,undefined]){
+   const {geometry,objects}=fixture()
+   Object.assign(objects.page_settings![0]!.settings!,{page_order:order})
+   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow()
+  }
+ })
  it('rejects accessor and symbol host policies without invoking getters',()=>{
   const {geometry,objects}=fixture();let invoked=false
   const host={kind:'explicit-host-page-policy-v1',paper:'A4',orientation:'portrait',scale:100,left_inches:1,right_inches:1,top_inches:1,bottom_inches:1}

@@ -12,6 +12,18 @@ function fixture(){
  return {document,resolved,equation}
 }
 describe('source-bound read-only equation preview',()=>{
+ it('validates indexed radical arity and source joins while retaining hidden guards',()=>{
+  const {document,resolved,equation}=fixture()
+  const tree={kind:'indexed-radical',children:[{kind:'text',text:'x + 1'},{kind:'text',text:'3'}]}
+  const indexed={...equation,tree}
+  expect(preview(document,resolved,[indexed])[0]!.tree).toEqual(tree)
+  for(const children of [[],tree.children.slice(0,1),[...tree.children,tree.children[0]], [{kind:'text',text:'x'},{kind:'text',text:''}], [{kind:'text',text:'x'},{kind:'text',text:'n'.repeat(32769)}], [{kind:'text',text:'x'},{kind:'text',text:'3',href:'javascript:bad'}]])expect(()=>preview(document,resolved,[{...indexed,tree:{...tree,children}}])).toThrow(TypeError)
+  expect(()=>preview(document,resolved,[{...indexed,package_sha256:'sha256:'+'0'.repeat(64)}])).toThrow(TypeError)
+  expect(()=>preview(document,resolved,[{...indexed,anchor:{...indexed.anchor,xml_sha256:'sha256:'+'0'.repeat(64)}}])).toThrow(TypeError)
+  resolved.paragraphs[0]!.paragraph_mark_properties.hidden=true
+  expect(preview(document,resolved,[indexed])[0]).toMatchObject({status:'omitted'})
+  expect(preview(document,resolved,[indexed])[0]).not.toHaveProperty('tree')
+ })
  it('qualifies only exact ignored charset declarations and bounded non-drawing tab notices',()=>{
   const {document,resolved,equation}=fixture(),style=document.passthrough_parts.find(p=>p.part_name==='word/styles.xml')!
   const font={...style,part_name:'word/fontTable.xml',content_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml'};document.passthrough_parts.push(font)

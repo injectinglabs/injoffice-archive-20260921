@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestNativePageSettingsPageOrder(t *testing.T) {
+	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
+		for _, order := range []string{"downThenOver", "overThenDown"} {
+			raw := `<worksheet xmlns="` + ns + `"><pageSetup paperSize="1" orientation="landscape" scale="75" pageOrder="` + order + `"/><pageMargins left="0.4" right="0.6" top="0.8" bottom="1" header="0.2" footer="0.2"/></worksheet>`
+			got := previewNativePageSettings([]byte(raw), "sheet.xml", "1")
+			if got.Status != "available" || got.Settings.PageOrder != order || got.Settings.Left != 0.4 || got.Settings.Right != 0.6 {
+				t.Fatalf("lost explicit page order/margins: %+v", got)
+			}
+			for _, replacement := range []string{`pageOrder=""`, `pageOrder="diagonal"`, `xmlns:f="urn:foreign" f:pageOrder="overThenDown"`, `pageOrder="overThenDown" pageOrder="downThenOver"`, `pageOrder="overThenDown" fitToWidth="1"`} {
+				bad := strings.Replace(raw, `pageOrder="`+order+`"`, replacement, 1)
+				if previewNativePageSettings([]byte(bad), "sheet.xml", "1").Status != "unavailable" {
+					t.Fatalf("accepted unqualified page setup %s", replacement)
+				}
+			}
+		}
+	}
+}
+
 func TestNativePageSettingsRejectDuplicateAndForeignOwnersBothDialects(t *testing.T) {
 	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
 		setup := `<pageSetup paperSize="9" orientation="portrait" scale="100"/>`

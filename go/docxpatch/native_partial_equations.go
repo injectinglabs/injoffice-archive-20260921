@@ -61,7 +61,7 @@ func nativePartialMathTree(n *nativeXMLNode, ns string, depth int, nodes, units 
 	result := &NativePartialMathNodeV1{Kind: "row"}
 	children := n.Children
 	switch n.Name.Local {
-	case "oMath", "oMathPara", "r", "e", "num", "den", "sup", "sub":
+	case "oMath", "oMathPara", "r", "e", "num", "den", "sup", "sub", "deg":
 		if len(children) == 0 {
 			return nil, false
 		}
@@ -111,6 +111,13 @@ func nativePartialMathTree(n *nativeXMLNode, ns string, depth int, nodes, units 
 			}
 		}
 	case "rad":
+		// Property-free indexed radicals preserve both nonempty operands. MathML
+		// mroot takes the radicand before the index, opposite the OMML order.
+		if len(children) == 2 && children[0].Name == (xml.Name{Space: ns, Local: "deg"}) && children[1].Name == (xml.Name{Space: ns, Local: "e"}) {
+			children = []*nativeXMLNode{children[1], children[0]}
+			result.Kind = "indexed-radical"
+			break
+		}
 		if len(children) != 3 || children[0].Name != (xml.Name{Space: ns, Local: "radPr"}) || children[1].Name != (xml.Name{Space: ns, Local: "deg"}) || children[2].Name != (xml.Name{Space: ns, Local: "e"}) {
 			return nil, false
 		}

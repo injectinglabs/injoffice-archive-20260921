@@ -8,7 +8,7 @@ import (
 
 func TestPartialEquationSourceAndStrictRefusal(t *testing.T) {
 	text := `<m:r><m:t>x&lt;y</m:t></m:r>`
-	for _, body := range []string{text, `<m:f><m:num>` + text + `</m:num><m:den>` + text + `</m:den></m:f>`, `<m:sSup><m:e>` + text + `</m:e><m:sup>` + text + `</m:sup></m:sSup>`, `<m:sSub><m:e>` + text + `</m:e><m:sub>` + text + `</m:sub></m:sSub>`, `<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>` + text + `</m:e></m:rad>`} {
+	for _, body := range []string{text, `<m:f><m:num>` + text + `</m:num><m:den>` + text + `</m:den></m:f>`, `<m:sSup><m:e>` + text + `</m:e><m:sup>` + text + `</m:sup></m:sSup>`, `<m:sSub><m:e>` + text + `</m:e><m:sub>` + text + `</m:sub></m:sSub>`, `<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>` + text + `</m:e></m:rad>`, `<m:rad><m:deg><m:r><m:t>3</m:t></m:r></m:deg><m:e>` + text + `</m:e></m:rad>`} {
 		xml := nativeMutationMain(`<w:p><w:r><w:t>Before</w:t></w:r><m:oMath xmlns:m="` + nativePartialMathNamespace(testW) + `">` + body + `</m:oMath></w:p>`)
 		source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(xml)))
 		doc, err := ExtractNativeDocumentV1(source)
@@ -48,6 +48,58 @@ func TestPartialEquationSourceAndStrictRefusal(t *testing.T) {
 		}
 	}
 }
+func TestPartialEquationIndexedRadical(t *testing.T) {
+	for _, wordNS := range []string{testW, testWS} {
+		ns := nativePartialMathNamespace(wordNS)
+		run := func(text string) string { return `<m:r><m:t>` + text + `</m:t></m:r>` }
+		rad := func(degree, body string) string {
+			return `<m:rad><m:deg>` + degree + `</m:deg><m:e>` + body + `</m:e></m:rad>`
+		}
+		valid := rad(run("3"), run("x")+run("+")+run("1"))
+		for _, body := range []string{valid, rad(run("n"), valid)} {
+			root, err := parseNativeXML("math.xml", []byte(`<m:oMath xmlns:m="`+ns+`">`+body+`</m:oMath>`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			count, units := 0, 0
+			tree, ok := nativePartialMathTree(root, ns, 0, &count, &units)
+			if !ok || tree.Children[0].Kind != "indexed-radical" || len(tree.Children[0].Children) != 2 {
+				t.Fatal("indexed radical was omitted")
+			}
+			index := tree.Children[0].Children[1].Children[0].Children[0].Text
+			if index != "3" && index != "n" {
+				t.Fatalf("degree not in second operand: %+v", tree)
+			}
+			if body == valid && tree.Children[0].Children[0].Children[0].Children[0].Text != "x" {
+				t.Fatal("radicand not in first operand")
+			}
+		}
+		for _, body := range []string{
+			rad("", run("x")), rad(run("3"), ""),
+			strings.Replace(valid, `<m:rad>`, `<m:rad evil="1">`, 1),
+			strings.Replace(valid, `<m:deg>`, `<m:deg evil="1">`, 1),
+			strings.Replace(valid, `<m:deg>`, `<m:deg xmlns:m="urn:evil">`, 1),
+			strings.Replace(valid, `<m:rad>`, `<m:rad><m:radPr/>`, 1),
+			strings.Replace(valid, `<m:rad>`, `<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr>`, 1),
+			strings.Replace(valid, `<m:rad>`, `<m:rad><m:radPr><m:degHide m:val="0"/></m:radPr>`, 1),
+			rad(`<m:r><m:rPr/><m:t>3</m:t></m:r>`, run("x")),
+			rad(`<m:deg>`+run("3")+`</m:deg>`, run("x")),
+			`<m:deg>` + run("3") + `</m:deg>`,
+			rad(run(strings.Repeat("n", 32769)), run("x")),
+			rad(strings.Repeat(run("n"), 130), run("x")),
+		} {
+			root, err := parseNativeXML("math.xml", []byte(`<m:oMath xmlns:m="`+ns+`">`+body+`</m:oMath>`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			count, units := 0, 0
+			if _, ok := nativePartialMathTree(root, ns, 0, &count, &units); ok {
+				t.Fatalf("unsupported indexed radical admitted: %.200s", body)
+			}
+		}
+	}
+}
+
 func TestPartialEquationUnknownContentRemainsOmitted(t *testing.T) {
 	for _, body := range []string{`<m:r><m:rPr/><m:t>x</m:t></m:r>`, `<m:r><m:t href="evil">x</m:t></m:r>`, `<m:foo/>`, `<m:f><m:num><m:r><m:t>x</m:t></m:r></m:num></m:f>`, `<m:r xmlns:m="urn:evil"><m:t>x</m:t></m:r>`, strings.Repeat(`<m:e>`, 34) + `<m:r><m:t>x</m:t></m:r>` + strings.Repeat(`</m:e>`, 34)} {
 		source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(nativeMutationMain(`<w:p><m:oMath xmlns:m="`+nativePartialMathNamespace(testW)+`">`+body+`</m:oMath></w:p>`))))

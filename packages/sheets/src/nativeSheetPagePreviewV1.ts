@@ -20,7 +20,7 @@ export interface NativeSheetPagePreviewV1 {
  fidelity:'approximate';read_only:true;
  document_id:string;sheet_id:string;source_revision:string;source_package_sha256:string;
  geometry_sha256:string;
- policy:'whole-bands-down-then-over-v1';
+ policy:'whole-bands-down-then-over-v1'|'whole-bands-over-then-down-v1';
  settings_origin:'source'|'explicit-host';settings:NativeSheetPageConfigV1;
  warnings:string[];pages:NativeSheetPreviewPageV1[];
 }
@@ -41,7 +41,7 @@ export function compileNativeSheetPagePreviewV1(
  if(hostPolicy!==undefined){
   hostPolicy=snapshotNativePlainData(hostPolicy,{maxDepth:4,maxNodes:64}) as NativeSheetHostPagePolicyV1
   const copy=Object.getOwnPropertyDescriptors(hostPolicy)
-  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==8||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
+  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==(Object.hasOwn(copy,'page_order')?9:8)||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
   const {kind:_,...config}=hostPolicy
   settings=decodeNativeSheetPageSettingsV1([{sheet_id:pageSettings.sheet_id,sheet_part:pageSettings.sheet_part,status:'available',settings:config,warnings:['Explicit host choices']}])[0]!.settings!
  }else{
@@ -74,6 +74,9 @@ export function compileNativeSheetPagePreviewV1(
   if(!rows.some(b=>r.y_emu>=b.at&&r.y_emu+r.height_emu<=b.at+b.length)||!columns.some(b=>r.x_emu>=b.at&&r.x_emu+r.width_emu<=b.at+b.length))throw new RangeError('A merged cell crosses a preview page boundary')
  }
  const pages:NativeSheetPreviewPageV1[]=[]
- for(const c of columns)for(const r of rows)pages.push({number:pages.length+1,width_emu:width,height_emu:height,content_clip:{x_emu:left,y_emu:top,width_emu:cw,height_emu:ch},source_clip:{x_emu:c.at,y_emu:r.at,width_emu:c.length,height_emu:r.length},scale,translate_x_emu:left-c.at*scale,translate_y_emu:top-r.at*scale,rows:{start:r.start,end:r.end},columns:{start:c.start,end:c.end}})
- return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy:'whole-bands-down-then-over-v1',settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),'Only the explicitly selected range is paginated. Charts, drawings, headers, print areas/titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.',...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
+ const addPage=(c:typeof columns[number],r:typeof rows[number])=>pages.push({number:pages.length+1,width_emu:width,height_emu:height,content_clip:{x_emu:left,y_emu:top,width_emu:cw,height_emu:ch},source_clip:{x_emu:c.at,y_emu:r.at,width_emu:c.length,height_emu:r.length},scale,translate_x_emu:left-c.at*scale,translate_y_emu:top-r.at*scale,rows:{start:r.start,end:r.end},columns:{start:c.start,end:c.end}})
+ if(settings.page_order==='overThenDown'){for(const r of rows)for(const c of columns)addPage(c,r)}
+ else {for(const c of columns)for(const r of rows)addPage(c,r)}
+ const policy=settings.page_order==='overThenDown'?'whole-bands-over-then-down-v1':'whole-bands-down-then-over-v1'
+ return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),'Only the explicitly selected range is paginated. Charts, drawings, headers, print areas/titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.',...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
 }

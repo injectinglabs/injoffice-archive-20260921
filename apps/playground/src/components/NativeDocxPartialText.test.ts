@@ -5,6 +5,11 @@ import {renderToStaticMarkup} from 'react-dom/server'
 import {createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
 import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList} from './NativeDocxPartialText'
 describe('browser-local partial text UI',()=>{
+ it('paints indexed radicals with the radicand first and escaped degree text',()=>{
+  const html=renderToStaticMarkup(createElement(NativeDocxEquationList,{equations:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p:1',diagnostic_id:'equation:1',anchor:{part_name:'word/document.xml',path:'/p/math',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)},status:'supported',tree:{kind:'indexed-radical',children:[{kind:'text',text:'x + 1'},{kind:'text',text:'3<script>'}]}}]}))
+  expect(html).toContain('<mroot><mtext>x + 1</mtext><mtext>3&lt;script&gt;</mtext></mroot>')
+  expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable')
+ })
  it('uses fixed MathML elements and escapes equation source text',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxEquationList,{equations:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p:1',diagnostic_id:'equation:1',anchor:{part_name:'word/document.xml',path:'/p/math',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)},status:'supported',tree:{kind:'fraction',children:[{kind:'text',text:'<script>bad</script>'},{kind:'radical',children:[{kind:'text',text:'x'}]}]}}]}))
   expect(html).toContain('<mfrac>');expect(html).toContain('<msqrt>');expect(html).toContain('&lt;script&gt;');expect(html).not.toContain('<script>');expect(html).toContain('not Word typography or pagination')

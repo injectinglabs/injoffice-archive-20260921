@@ -4,6 +4,15 @@ Dependency-free contracts for fail-closed native spreadsheet saves. Version 1
 normalizes editor changes into a small JSON vocabulary; it does not apply the
 changes to XLSX bytes. `go/xlsxpatch` is the native application boundary.
 
+`compileNativeSheetPagePreviewV1` offers a separate read-only, selected-range
+page preview. Eligible source settings can retain `page_order: 'downThenOver'`
+or `'overThenDown'`; omission keeps down-then-over ordering. An explicit host
+page policy can independently choose page order, paper, scale and four margins.
+Changing order renumbers the same page rectangles; it does not reflow cells.
+The demo exposes these overrides only when saved settings are turned off.
+This does not implement Excel print areas, repeated titles, fit-to-page or printer
+defaults, and does not change strict cell geometry or mutation authority.
+
 ```bash
 npm install @injoffice/sheets
 ```

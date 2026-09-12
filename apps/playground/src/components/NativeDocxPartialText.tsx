@@ -8,7 +8,7 @@ function Paragraph({paragraph}:{paragraph:NativeDocxPartialParagraphV1}){
 }
 function MathNode({node}:{node:NativeDocxMathNodeV1}):React.ReactNode{
  if(node.kind==='text')return createElement('mtext',null,node.text)
- const tag={row:'mrow',fraction:'mfrac',superscript:'msup',subscript:'msub',radical:'msqrt'}[node.kind]
+ const tag={row:'mrow',fraction:'mfrac',superscript:'msup',subscript:'msub',radical:'msqrt','indexed-radical':'mroot'}[node.kind]
  return createElement(tag,null,node.children.map((child,index)=><MathNode key={index} node={child}/>))
 }
 export function NativeDocxEquationList({equations}:{equations:NativeDocxEquationPreviewV1[]}){

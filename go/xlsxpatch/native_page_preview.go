@@ -21,6 +21,7 @@ type NativeSheetPageConfigV1 struct {
 	Right       float64 `json:"right_inches"`
 	Top         float64 `json:"top_inches"`
 	Bottom      float64 `json:"bottom_inches"`
+	PageOrder   string  `json:"page_order,omitempty"`
 }
 
 func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSettingsV1 {
@@ -70,7 +71,15 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		}
 		return count == len(names)
 	}
-	if !exactLeaf(setup, "paperSize", "orientation", "scale") || !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
+	setupFields := []string{"paperSize", "orientation", "scale"}
+	order := setup.attr("pageOrder")
+	if order != "" {
+		if order != "downThenOver" && order != "overThenDown" {
+			return result
+		}
+		setupFields = append(setupFields, "pageOrder")
+	}
+	if !exactLeaf(setup, setupFields...) || !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
 		return result
 	}
 	paper := map[string]string{"1": "Letter", "9": "A4"}[setup.attr("paperSize")]
@@ -88,7 +97,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		values[name] = value
 	}
 	result.Status = "available"
-	result.Settings = &NativeSheetPageConfigV1{paper, orientation, scale, values["left"], values["right"], values["top"], values["bottom"]}
+	result.Settings = &NativeSheetPageConfigV1{paper, orientation, scale, values["left"], values["right"], values["top"], values["bottom"], order}
 	result.Warnings = []string{"Read-only selected-range page geometry approximation. Native print areas, titles, charts, headers and printer behavior are not reproduced; no Excel fidelity claim."}
 	return result
 }
