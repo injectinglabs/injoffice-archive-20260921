@@ -25,7 +25,11 @@ describe('browser-local partial text UI',()=>{
   const resolved:NativeDocxResolvedLayoutInputV1={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
   for(const block of document.body.blocks)for(const p of block.paragraph?[block.paragraph]:block.table!.rows.flatMap(r=>r.cells.flatMap(c=>c.paragraphs))){resolved.paragraphs.push({paragraph_id:p.id,applied_styles:[],properties:{},paragraph_mark_properties:{}});for(const r of p.runs){resolved.runs.push({run_id:r.id,paragraph_id:p.id,applied_paragraph_styles:[],applied_character_styles:[],properties:{}});if(r.drawing)r.drawing.alt_text='<script>description</script>'}}
   const preview=createNativeDocxPartialContentPreviewV1(document,{policy:'source-text-with-omissions-v1',read_only:true},resolved)
+  const anchor=document.headers[0]!.anchor
+  preview.header_footer_stories=[{kind:'header',source:{scope_id:'source:header',anchor:{...anchor,part_name:'word/<script>header.xml'}},page_assignment:'not-selected',blocks:[{kind:'paragraph',source:{scope_id:'source:p',anchor},segments:[{kind:'text',source:{scope_id:'source:r',anchor},text:'Header <script>source</script>'}]}]}]
   const html=renderToStaticMarkup(createElement(NativeDocxPartialTextView,{preview}))
+  expect(html).toContain('Header and footer source inventory');expect(html).toContain('No active first, even or default variant is selected')
+  expect(html).toContain('word/&lt;script&gt;header.xml');expect(html).toContain('Header &lt;script&gt;source&lt;/script&gt;')
   expect(html).toContain('Summary');expect(html).toContain('Source row 1, cell 1');expect(html).toContain('no table layout')
   expect(html).toContain('Authored drawing description');expect(html).toContain('&lt;script&gt;description&lt;/script&gt;')
   expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable');expect(html).not.toContain('<input')

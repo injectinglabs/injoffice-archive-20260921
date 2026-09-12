@@ -4247,6 +4247,11 @@
               "signature": "export interface NativeDocxPartialContentV1"
             },
             {
+              "name": "NativeDocxPartialHeaderFooterV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialHeaderFooterV1 ="
+            },
+            {
               "name": "NativeDocxPartialOmissionCode",
               "kind": "type",
               "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit' | 'nested-table' | 'nested-table-limit'"
@@ -5071,6 +5076,11 @@
               "name": "NativeDocxPartialContentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialContentV1"
+            },
+            {
+              "name": "NativeDocxPartialHeaderFooterV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialHeaderFooterV1 ="
             },
             {
               "name": "NativeDocxPartialOmissionCode",
@@ -8319,7 +8329,7 @@
             {
               "name": "applyFormValues",
               "kind": "function",
-              "signature": "export declare function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]): Promise<FormValuesResult>"
+              "signature": "export declare function applyFormValues(bytes: Uint8Array, values: FormValueSpec[], options?: FormValuesOptions): Promise<FormValuesResult>"
             },
             {
               "name": "applyImageEdits",
@@ -8457,9 +8467,19 @@
               "signature": "export interface FormFieldsRedactionResult"
             },
             {
+              "name": "FormValueAppearance",
+              "kind": "type",
+              "signature": "export interface FormValueAppearance"
+            },
+            {
               "name": "FormValueFailure",
               "kind": "type",
               "signature": "export interface FormValueFailure"
+            },
+            {
+              "name": "FormValuesOptions",
+              "kind": "type",
+              "signature": "export interface FormValuesOptions"
             },
             {
               "name": "FormValueSpec",
@@ -8760,6 +8780,11 @@
               "name": "SurgicalEditSpec",
               "kind": "type",
               "signature": "export interface SurgicalEditSpec extends EditBase"
+            },
+            {
+              "name": "TextAppearanceFont",
+              "kind": "type",
+              "signature": "export type TextAppearanceFont = 'Helvetica' | 'Times-Roman' | 'Courier'"
             },
             {
               "name": "TextEditFailure",

@@ -44,7 +44,7 @@ The profile includes ordinary body text and unmerged or merged-owner table-cell 
 grouped by source row/cell ordinals without reconstructing table geometry.
 Qualified authored drawing descriptions appear as labeled alternative text
 alongside the retained drawing omission. Hidden text, fields, controls, drawing
-geometry, vertical-merge continuation cells, table layout and nonbody stories receive placeholders;
+geometry, vertical-merge continuation cells, table layout, notes and comments receive placeholders;
 source diagnostics remain attached. Unknown document-wide diagnostics prevent
 text qualification. Without resolved layout, inherited visibility is unknown,
 so the result provides an inventory only and exposes no text. Formatting,
@@ -57,6 +57,16 @@ The resolved-layout V1 contract has no package digest of its own: the caller
 must supply document and layout from the same authoritative extraction. The
 identity join is not independent proof that arbitrary caller-provided models
 were extracted from particular package bytes.
+
+The optional `header_footer_stories` result lists direct header/footer paragraphs
+separately, retaining each story kind, source part and anchor. It is a source
+inventory: `page_assignment: 'not-selected'` never chooses an active first, even
+or default variant, page placement or repetition. The same paragraph/run
+visibility gates and global/story diagnostics apply; header/footer tables stay
+opaque. The inventory shares the body text budget and has a combined limit of
+64 stories and 200 header/footer blocks. Hosts must label this distinction and
+render source part names as escaped text. Native rendering and mutation support
+are unchanged.
 
 The optional fourth argument accepts `nested_table_omissions` from the same-byte
 WASM inspector. At most 64 exact direct nested-table boundaries may replace

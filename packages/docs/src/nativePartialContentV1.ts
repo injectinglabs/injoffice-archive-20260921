@@ -4,7 +4,7 @@ import {isRenderNeutralLayoutDiagnostic} from './nativeRenderDiagnostics.js'
 import {decodeNativeDocxNestedTableOmissionsV1,type NativeDocxNestedTableOmissionsV1} from './nativePartialNestedTablesV1.js'
 
 export const DOCX_PARTIAL_CONTENT_POLICY='source-text-with-omissions-v1' as const
-export const DOCX_PARTIAL_CONTENT_LIMITS={bodyBlocks:200,tableCells:200,textUnits:100_000} as const
+export const DOCX_PARTIAL_CONTENT_LIMITS={bodyBlocks:200,tableCells:200,textUnits:100_000,headerFooterStories:64,headerFooterBlocks:200} as const
 export type NativeDocxPartialOmissionCode='unsupported-source'|'unqualified-text-visibility'|'hidden-text'|'drawing'|'field'|'reference'|'control'|'table'|'nonbody-story'|'block-limit'|'text-limit'|'merged-cell'|'cell-limit'|'nested-table'|'nested-table-limit'
 export interface NativeDocxPartialSourceV1 {scope_id:string;anchor:NativeDocxSourceAnchorV1}
 export type NativeDocxPartialSegmentV1=
@@ -12,6 +12,7 @@ export type NativeDocxPartialSegmentV1=
  | {kind:'alternative-text';source:NativeDocxPartialSourceV1;text:string;label:'authored-drawing-description'}
  | {kind:'omission';source:NativeDocxPartialSourceV1;code:NativeDocxPartialOmissionCode;count:number;diagnostic_ids:string[]}
 export type NativeDocxPartialParagraphV1={kind:'paragraph';source:NativeDocxPartialSourceV1;segments:NativeDocxPartialSegmentV1[]}
+export type NativeDocxPartialHeaderFooterV1={kind:'header'|'footer';source:NativeDocxPartialSourceV1;page_assignment:'not-selected';blocks:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
 export type NativeDocxPartialCellV1={kind:'cell-source';source:NativeDocxPartialSourceV1;row_ordinal:number;cell_ordinal:number;source_merge?:{grid_span:number;vertical_merge:'none'|'restart'|'continue'};paragraphs:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
 export interface NativeDocxPartialContentV1 {
  protocol:'injoffice.docx.partial-content';version:1;policy:typeof DOCX_PARTIAL_CONTENT_POLICY;read_only:true;fidelity:'partial-source-content';pagination:'not-produced'
@@ -21,6 +22,7 @@ export interface NativeDocxPartialContentV1 {
  source_diagnostics:{document:NativeDocxDocumentV1['unsupported'];resolved:NativeDocxResolvedLayoutInputV1['diagnostics']}
  retained_nontext_diagnostic_ids:string[]
  nested_table_omissions?:NativeDocxNestedTableOmissionsV1
+ header_footer_stories?:NativeDocxPartialHeaderFooterV1[]
  coverage:{body_blocks:number;visited_body_blocks:number;projected_text_runs:number;omitted_units:number;layout_present:boolean}
  warnings:string[]
 }
@@ -146,6 +148,23 @@ export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{p
  const remaining=document.body.blocks.length-DOCX_PARTIAL_CONTENT_LIMITS.bodyBlocks
  if(remaining>0&&!inherited.length)blocks.push(omit(source(document.body.id,document.body.anchor),'block-limit',remaining))
  if(nested.omitted_count)blocks.push(omit(source(document.body.id,document.body.anchor),'nested-table-limit',nested.omitted_count))
- for(const story of [...document.headers,...document.footers,...document.notes,...document.comment_stories])blocks.push(omit(source(story.id,story.anchor),'nonbody-story',1,blockers.get(story.id)??[]))
- return {protocol:'injoffice.docx.partial-content',version:1,policy:DOCX_PARTIAL_CONTENT_POLICY,read_only:true,fidelity:'partial-source-content',pagination:'not-produced',source:{document_id:document.document_id,revision:document.revision,package_sha256:document.source.package_sha256},blocks,omissions,source_diagnostics:{document:document.unsupported,resolved:resolved?.diagnostics??[]},retained_nontext_diagnostic_ids:retainedNontext,...(nestedEvidence===undefined?{}:{nested_table_omissions:nested}),coverage:{body_blocks:document.body.blocks.length,visited_body_blocks:inherited.length?0:Math.min(document.body.blocks.length,DOCX_PARTIAL_CONTENT_LIMITS.bodyBlocks),projected_text_runs:textRuns,omitted_units:omissions.reduce((n,o)=>n+o.count,0),layout_present:resolved!==undefined},warnings:['Read-only extracted source content, not document pagination. Formatting, list markers, layout and nonbody stories are not reconstructed. Every omitted unit has a source-bound placeholder.',...(retainedNontext.length?['Source-qualified nontext metadata diagnostics are retained but do not prevent plain text recovery. This does not qualify their rendering.']:[]),...(resolved?[]:['No resolved layout was supplied: text visibility is unqualified, so this result contains an omission inventory rather than text.'])]}
+ const headerFooter:NativeDocxPartialHeaderFooterV1[]=[]
+ let nonbodyBlocks=0
+ for(const [index,story]of [...document.headers,...document.footers].entries()){
+  const s=source(story.id,story.anchor),diagnostics=[...global,...(blockers.get(story.id)??[])]
+  // This inventory never selects an active first/even/default variant. Only
+  // direct, already extracted paragraphs enter the existing visibility gate.
+  if(index>=DOCX_PARTIAL_CONTENT_LIMITS.headerFooterStories){blocks.push(omit(s,'nonbody-story',1,diagnostics));continue}
+  const storyBlocks:NativeDocxPartialHeaderFooterV1['blocks']=[]
+  if(diagnostics.length)storyBlocks.push(omit(s,'unsupported-source',Math.max(1,story.blocks.length),diagnostics))
+  else for(const block of story.blocks){
+   if(nonbodyBlocks>=DOCX_PARTIAL_CONTENT_LIMITS.headerFooterBlocks){storyBlocks.push(omit(s,'block-limit',story.blocks.length-storyBlocks.length));break}
+   nonbodyBlocks++
+   if(block.paragraph)storyBlocks.push(projectParagraph(block.paragraph))
+   else storyBlocks.push(omit(source(block.table!.id,block.table!.anchor),'table',1,blockers.get(block.table!.id)??[]))
+  }
+  headerFooter.push({kind:story.kind as 'header'|'footer',source:s,page_assignment:'not-selected',blocks:storyBlocks})
+ }
+ for(const story of [...document.notes,...document.comment_stories])blocks.push(omit(source(story.id,story.anchor),'nonbody-story',1,blockers.get(story.id)??[]))
+ return {protocol:'injoffice.docx.partial-content',version:1,policy:DOCX_PARTIAL_CONTENT_POLICY,read_only:true,fidelity:'partial-source-content',pagination:'not-produced',source:{document_id:document.document_id,revision:document.revision,package_sha256:document.source.package_sha256},blocks,omissions,...(headerFooter.length?{header_footer_stories:headerFooter}:{}),source_diagnostics:{document:document.unsupported,resolved:resolved?.diagnostics??[]},retained_nontext_diagnostic_ids:retainedNontext,...(nestedEvidence===undefined?{}:{nested_table_omissions:nested}),coverage:{body_blocks:document.body.blocks.length,visited_body_blocks:inherited.length?0:Math.min(document.body.blocks.length,DOCX_PARTIAL_CONTENT_LIMITS.bodyBlocks),projected_text_runs:textRuns,omitted_units:omissions.reduce((n,o)=>n+o.count,0),layout_present:resolved!==undefined},warnings:['Read-only extracted source content, not document pagination. Formatting, list markers and layout are not reconstructed. Header/footer paragraphs are a separate source inventory; active variants and page placement are not selected. Notes and comments remain omitted. Every omitted unit has a source-bound placeholder.',...(retainedNontext.length?['Source-qualified nontext metadata diagnostics are retained but do not prevent plain text recovery. This does not qualify their rendering.']:[]),...(resolved?[]:['No resolved layout was supplied: text visibility is unqualified, so this result contains an omission inventory rather than text.'])]}
 }

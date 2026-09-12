@@ -6,6 +6,7 @@ import {
   applyPdfDrawing,
   applyPdfFormValues,
   pdfFormResultMessage,
+  restorePdfSkippedDrafts,
   applyPdfMarkup,
   applyPdfNote,
   applyPdfNoteEdit,
@@ -131,5 +132,31 @@ describe('playground PDF workbench helpers', () => {
     expect(movePageOrder(3, 2, 1)).toEqual([1, 3, 2])
     expect(movePageOrder(1, 1, 1)).toBeNull()
     expect(movePageOrder(3, 0, 1)).toBeNull()
+  })
+
+  it('retains only matching skipped drafts after a mixed form update', () => {
+    const canonical = [{ name: 'memo', kind: 'text' as const, value: 'BEFORE' }, { name: 'agree', kind: 'checkbox' as const, checked: true }]
+    const drafts = [{ name: 'memo', kind: 'text' as const, value: '你好' }, { name: 'agree', kind: 'checkbox' as const, checked: false }]
+    expect(restorePdfSkippedDrafts(canonical, drafts, [{ name: 'memo' }])).toEqual([drafts[0], canonical[1]])
+    expect(restorePdfSkippedDrafts(canonical, drafts, [])).toEqual(canonical)
+    expect(restorePdfSkippedDrafts(canonical, [...drafts, drafts[0]!], [{ name: 'memo' }])).toEqual(canonical)
+    expect(canonical[0]!.value).toBe('BEFORE')
+  })
+
+  it('forwards the explicit form font policy and reports generated appearances separately', async () => {
+    const doc = await PDFDocument.create()
+    const page = doc.addPage()
+    const field = doc.getForm().createTextField('memo')
+    field.addToPage(page, { x: 30, y: 30, width: 180, height: 30 })
+    const bytes = await doc.save()
+    const result = await applyPdfFormValues(bytes, [{ name: 'memo', kind: 'text', value: 'AFTER' }], { textAppearance: { font: 'Courier' } })
+    expect(result.appearances).toEqual([{ name: 'memo', status: 'generated', widgets: 1 }])
+    expect(pdfFormResultMessage(result)).toBe('Applied 1 form value. Generated 1 widget appearance with the selected font.')
+    expect((await PDFDocument.load(result.bytes)).getForm().getTextField('memo').getText()).toBe('AFTER')
+    const skipped = await applyPdfFormValues(bytes, [{ name: 'memo', kind: 'text', value: '你好' }], { textAppearance: { font: 'Helvetica' } })
+    expect(skipped.applied).toBe(0)
+    expect(skipped.bytes).toBe(bytes)
+    expect(pdfFormResultMessage(skipped)).not.toContain('Generated')
+    expect(pdfFormResultMessage({ applied: 2, skipped: [], appearances: [{ name: 'memo', status: 'generated', widgets: 2 }, { name: 'choice', status: 'viewer-required', widgets: 1 }] })).toContain('Generated 2 widget appearances with the selected font. 1 field still requires viewer-generated appearances.')
   })
 })

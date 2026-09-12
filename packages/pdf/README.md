@@ -63,3 +63,38 @@ nested bookmarks, while `getOutline()` remains the flat compatibility API.
 Call `viewer.destroy()` when replacing or closing a document.
 
 `@injoffice/pdf/browser` contains the browser-safe viewer and page operations. The root entry additionally exposes Node.js PDFium, system-font, image, OCR, and redaction paths. Treat transformed files as untrusted input, apply resource limits in the host, and use the package's verification results for destructive redaction workflows.
+
+### Explicit text form appearances
+
+`applyFormValues(source, values)` retains its existing behavior: text values,
+including Unicode, are written without replacing their appearance streams and
+request viewer regeneration. To explicitly replace supported text appearances:
+
+```ts
+const result = await applyFormValues(source, [
+  { name: 'customer', kind: 'text', value: 'Alex Smith' },
+], { textAppearance: { font: 'Helvetica' } })
+```
+
+The selected font must be `Helvetica`, `Times-Roman`, or `Courier`. This opts
+into pdf-lib's default text appearance provider and replaces the original font
+and appearance artwork. It supports printable ASCII (U+0020–U+007E), empty text,
+and plain single-line text fields only. It is not an original-font fidelity or
+universal rendering guarantee; fixed font sizes and long values may clip.
+Rich text, multiline, comb, password, file selection, field/widget actions,
+missing page widgets, and ambiguous/shared widget ownership are skipped before
+the value changes. XFA refuses the entire opt-in batch before pdf-lib can remove
+its data. No unsupported character is replaced, transliterated, or dropped.
+
+`applied` and `skipped` describe value updates. In opt-in mode, `appearances`
+reports each applied text/choice request as `generated` (with the number of text
+widgets updated) or `viewer-required` (choice fields). Checkbox/radio behavior
+is unchanged. Every owned text widget is regenerated; unrelated fields retain
+their appearances. Existing `NeedAppearances=true` is preserved because other
+fields may still need regeneration. An unexpected generation failure rejects
+the entire operation, returning no partially updated PDF. Source bytes are
+never modified. Reopen and inspect both values and rendered widgets before
+using an exported form.
+
+The implementation uses pdf-lib's documented
+[text field appearance API](https://pdf-lib.js.org/docs/api/classes/pdftextfield#updateappearances).

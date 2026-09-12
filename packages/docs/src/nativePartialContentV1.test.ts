@@ -15,6 +15,90 @@ function fixture(){
  return {document,resolved}
 }
 describe('read-only native partial source content',()=>{
+ function storyFixture(){
+  const joined=fixture()
+  for(const story of [...joined.document.headers,...joined.document.footers]){
+   story.anchor.end_byte=1000
+   const p=structuredClone(joined.document.body.blocks[0]!.paragraph!)
+   p.id=story.id+':p';p.anchor={...p.anchor,part_name:story.part_name,path:story.anchor.path+'/w:p[1]'}
+   p.runs=[p.runs[0]!];const run=p.runs[0]!
+   run.id=p.id+':r';run.anchor={...run.anchor,part_name:story.part_name,path:p.anchor.path+'/w:r[1]'};run.text=story.kind+' inventory <script>'
+   story.blocks=[{kind:'paragraph',id:p.id,paragraph:p}]
+   joined.resolved.paragraphs.push({paragraph_id:p.id,applied_styles:[],properties:{},paragraph_mark_properties:{}})
+   joined.resolved.runs.push({run_id:run.id,paragraph_id:p.id,applied_paragraph_styles:[],applied_character_styles:[],properties:{}})
+  }
+  return joined
+ }
+ it('recovers separately labeled header/footer source paragraphs without selecting active variants or changing source',()=>{
+  const {document,resolved}=storyFixture(),before=structuredClone({document,resolved}),out=project(document,options,resolved)
+  expect(out.header_footer_stories).toHaveLength(2)
+  for(const [index,story]of [...document.headers,...document.footers].entries()){
+   expect(out.header_footer_stories![index]).toMatchObject({kind:story.kind,source:{scope_id:story.id,anchor:story.anchor},page_assignment:'not-selected'})
+   expect(JSON.stringify(out.header_footer_stories![index]!.blocks)).toContain(story.kind+' inventory <script>')
+  }
+  expect(JSON.stringify(out.blocks)).not.toContain('inventory <script>')
+  expect({document,resolved}).toEqual(before)
+  expect(out.pagination).toBe('not-produced')
+ })
+ it('retains all global/story/paragraph/run blockers, hidden text and missing joins in header/footer inventory',()=>{
+  for(const scope of ['global','story','paragraph','run','deleted','hidden','missing']){
+   const {document,resolved}=storyFixture(),story=document.headers[0]!,p=story.blocks[0]!.paragraph!,run=p.runs[0]!
+   if(scope==='hidden')resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden=true
+   else if(scope==='missing')resolved.runs=resolved.runs.filter(r=>r.run_id!==run.id)
+   else{
+    const owner=scope==='story'?story:scope==='run'?run:p
+    document.unsupported=[{id:'unsafe',code:scope==='deleted'?'UNMODELED_PARAGRAPH_MARKUP':'UNMODELED',scope_id:scope==='global'?document.document_id:owner.id,anchor:owner.anchor,capability:'source',preservation:'preserve-verbatim',message:'Retained'}]
+   }
+   const out=project(document,options,resolved)
+   expect(JSON.stringify(out.header_footer_stories![0]!.blocks)).not.toContain('header inventory')
+   expect(out.source_diagnostics.document).toEqual(document.unsupported)
+   if(scope==='global')expect(JSON.stringify(out.header_footer_stories)).not.toContain('footer inventory')
+  }
+  const {document}=storyFixture()
+  expect(JSON.stringify(project(document,options).header_footer_stories)).not.toContain('inventory <script>')
+ })
+ it('shares text budgets with the body and across header/footer stories',()=>{
+  const {document,resolved}=storyFixture()
+  document.body.blocks[0]!.paragraph!.runs[0]!.text='x'.repeat(100_000)
+  const out=project(document,options,resolved)
+  expect(JSON.stringify(out.header_footer_stories)).not.toContain('inventory <script>')
+  expect(out.header_footer_stories!.every(s=>JSON.stringify(s.blocks).includes('text-limit'))).toBe(true)
+ })
+ it('requires exact header/footer source parts and preserves resolved blockers',()=>{
+  const {document,resolved}=storyFixture(),story=document.headers[0]!,p=story.blocks[0]!.paragraph!
+  p.runs[0]!.anchor.part_name='word/footer1.xml'
+  expect(()=>project(document,options,resolved)).toThrow('Invalid native document')
+  p.runs[0]!.anchor.part_name=story.part_name
+  resolved.diagnostics=[{code:'UNMODELED',scope_id:p.id,part_name:story.part_name,path:p.anchor.path,severity:'unsupported',preservation:'preserve-verbatim',message:'Retained'}]
+  const out=project(document,options,resolved)
+  expect(JSON.stringify(out.header_footer_stories![0]!.blocks)).not.toContain('header inventory')
+  expect(out.source_diagnostics.resolved).toEqual(resolved.diagnostics)
+  resolved.diagnostics[0]!.scope_id=document.document_id
+  expect(JSON.stringify(project(document,options,resolved).header_footer_stories)).not.toContain('inventory <script>')
+ })
+ it('bounds the combined header/footer block inventory and leaves tables opaque',()=>{
+  const {document}=storyFixture()
+  for(const [index,story]of [...document.headers,...document.footers].entries()){
+   const original=story.blocks[0]!.paragraph!
+   story.blocks=Array.from({length:index===0?150:51},(_,i)=>{
+    const p=structuredClone(original);p.id+=`:${i}`;p.anchor.path=story.anchor.path+`/w:p[${i+1}]`
+    p.runs[0]!.id+=`:${i}`;p.runs[0]!.anchor.path=p.anchor.path+'/w:r[1]'
+    return {kind:'paragraph' as const,id:p.id,paragraph:p}
+   })
+  }
+  const out=project(document,options)
+  expect(out.header_footer_stories![0]!.blocks).toHaveLength(150)
+  expect(out.header_footer_stories![1]!.blocks).toHaveLength(51)
+  expect(out.header_footer_stories![1]!.blocks[50]).toMatchObject({code:'block-limit',count:1})
+  const {document:withTable,resolved}=storyFixture(),story=withTable.headers[0]!,table=withTable.body.blocks.splice(1,1)[0]!
+  const rewrite=(anchor:typeof story.anchor)=>{anchor.part_name=story.part_name;anchor.path=anchor.path.replace('/w:document[1]/w:body[1]',story.anchor.path)}
+  rewrite(table.table!.anchor);story.anchor.end_byte=10000
+  for(const row of table.table!.rows){rewrite(row.anchor);for(const cell of row.cells){rewrite(cell.anchor);for(const p of cell.paragraphs){rewrite(p.anchor);for(const r of p.runs)rewrite(r.anchor)}}}
+  story.blocks.push(table)
+  const result=project(withTable,options,resolved)
+  expect(result.header_footer_stories![0]!.blocks[1]).toMatchObject({code:'table',source:{scope_id:table.id}})
+  expect(JSON.stringify(result.header_footer_stories)).not.toContain('Summary')
+ })
  it('recovers outer paragraph text around an exact nested-table omission without changing strict source',()=>{
   const {document,resolved}=fixture(),table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!
   const anchor={...cell.anchor,path:cell.anchor.path+'/w:tbl[1]',start_byte:1401,end_byte:1450}

@@ -1,7 +1,7 @@
 import { PDFArray, PDFCheckBox, PDFDict, PDFDocument, PDFDropdown, PDFHexString, PDFName, PDFNumber, PDFOptionList, PDFRadioGroup, PDFRef, PDFString, PDFTextField } from 'pdf-lib'
 import { applyAnnotDeletes } from '../../../packages/pdf/src/annotate/annotDelete'
 import { applyDrawings, applyNoteEdits } from '../../../packages/pdf/src/annotate/drawing'
-import { applyFormValues } from '../../../packages/pdf/src/annotate/forms'
+import { applyFormValues, type FormValuesOptions, type FormValueAppearance } from '../../../packages/pdf/src/annotate/forms'
 import { applyMarkups } from '../../../packages/pdf/src/annotate/markup'
 import { applySignatureStamps, applyStamps, VISUAL_SIGNATURE_CONTENT_PREFIX } from '../../../packages/pdf/src/annotate/stamp'
 import type { DrawingSpec, FormValueSpec, MarkupType } from '../../../packages/pdf/src/annotate/types'
@@ -107,13 +107,26 @@ export async function applyPdfStamp(bytes: Uint8Array, page: number, signature: 
 
 export { VISUAL_SIGNATURE_CONTENT_PREFIX }
 
-export async function applyPdfFormValues(bytes: Uint8Array, values: FormValueSpec[]) {
-  return applyFormValues(bytes, values)
+export async function applyPdfFormValues(bytes: Uint8Array, values: FormValueSpec[], options?: FormValuesOptions) {
+  return applyFormValues(bytes, values, options)
 }
 
-export function pdfFormResultMessage(result: { applied: number; skipped: { name: string; reason: string }[] }): string {
+/** Keep rejected input as an unsaved draft, never as a claimed canonical value. */
+export function restorePdfSkippedDrafts(canonical: PdfFormField[], drafts: PdfFormField[], skipped: { name: string }[]): PdfFormField[] {
+  const names = new Set(skipped.map(({ name }) => name))
+  return canonical.map(field => {
+    const matches = drafts.filter(draft => draft.name === field.name && draft.kind === field.kind)
+    return names.has(field.name) && matches.length === 1 ? matches[0]! : field
+  })
+}
+
+export function pdfFormResultMessage(result: { applied: number; skipped: { name: string; reason: string }[]; appearances?: FormValueAppearance[] }): string {
   const summary = result.applied === 0 ? 'No form values applied.' : `Applied ${result.applied} form value${result.applied === 1 ? '' : 's'}.`
-  return result.skipped.length === 0 ? summary : `${summary} Skipped ${result.skipped.length}: ${result.skipped.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}`
+  const outcome = result.skipped.length === 0 ? summary : `${summary} Skipped ${result.skipped.length}: ${result.skipped.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}`
+  if (!result.appearances?.length) return outcome
+  const generated = result.appearances.filter((item) => item.status === 'generated').reduce((sum, item) => sum + item.widgets, 0)
+  const viewerRequired = result.appearances.filter((item) => item.status === 'viewer-required').length
+  return `${outcome} Generated ${generated} widget appearance${generated === 1 ? '' : 's'} with the selected font.${viewerRequired ? ` ${viewerRequired} field${viewerRequired === 1 ? ' still requires' : 's still require'} viewer-generated appearances.` : ''}`
 }
 
 export async function applyPdfAnnotDelete(bytes: Uint8Array, annot: PdfAnnot): Promise<Uint8Array> {

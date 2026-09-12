@@ -10,6 +10,7 @@ import {
 } from '../design-system/primitives'
 import '../design-system/live-create-edit.css'
 import type { MarkupType } from '../../../../packages/pdf/src/annotate/types'
+import type { TextAppearanceFont } from '../../../../packages/pdf/src/annotate/forms'
 import type { PdfDocumentInfo } from '../../../../packages/pdf/src/types'
 import {
   configurePdfWorker,
@@ -25,6 +26,7 @@ import {
   applyPdfPlacedDrawing,
   applyPdfFormValues,
   pdfFormResultMessage,
+  restorePdfSkippedDrafts,
   applyPdfMarkup,
   applyPdfNote,
   applyPdfNoteEdit,
@@ -124,7 +126,11 @@ export default function PdfPage() {
   const [geometry, setGeometry] = useState<PdfDocumentInfo | null>(null)
   const [annots, setAnnots] = useState<PdfAnnot[]>([])
   const [fields, setFields] = useState<PdfFormField[]>([])
+  const [fieldBytes, setFieldBytes] = useState<Uint8Array | null>(null)
   const [formNotice, setFormNotice] = useState<string | null>(null)
+  const [formAppearanceFont, setFormAppearanceFont] = useState<TextAppearanceFont | 'viewer'>('viewer')
+  const [unsavedFormNames, setUnsavedFormNames] = useState<string[]>([])
+  const pendingFormDrafts = useRef<{ bytes: Uint8Array; drafts: PdfFormField[]; skipped: { name: string }[] } | null>(null)
   const [noteText, setNoteText] = useState('Shared note')
   const [hostOld, setHostOld] = useState('InjOffice')
   const [hostNew, setHostNew] = useState('InjOffice PDF')
@@ -188,16 +194,20 @@ export default function PdfPage() {
   }
 
   const applyFormDrafts = async () => {
-    if (!bytes || busy) return
+    if (!bytes || busy || fieldBytes !== bytes) return
     setBusy('editing')
     setError(null)
     setInfo('')
     setFormNotice(null)
     try {
-      const result = await applyPdfFormValues(bytes, fields)
+      const result = await applyPdfFormValues(bytes, fields, formAppearanceFont === 'viewer' ? undefined : { textAppearance: { font: formAppearanceFont } })
       const message = pdfFormResultMessage(result)
       setFormNotice(message)
-      if (result.applied > 0) await applyBytes(result.bytes, message)
+      setUnsavedFormNames(result.skipped.map(({ name }) => name))
+      if (result.applied > 0) {
+        pendingFormDrafts.current = { bytes: result.bytes, drafts: fields, skipped: result.skipped }
+        await applyBytes(result.bytes, message)
+      }
       else setInfo(message)
     } catch (reason: unknown) {
       setError(errorMessage(reason))
@@ -304,7 +314,16 @@ export default function PdfPage() {
           setOutline(nextOutline)
           setGeometry(nextGeometry)
           setAnnots(nextAnnots)
-          setFields(nextFields)
+          const pending = pendingFormDrafts.current
+          if (pending?.bytes === bytes) {
+            setFields(restorePdfSkippedDrafts(nextFields, pending.drafts, pending.skipped))
+            setUnsavedFormNames(pending.skipped.map(({ name }) => name))
+          } else {
+            setFields(nextFields)
+            setUnsavedFormNames([])
+          }
+          pendingFormDrafts.current = null
+          setFieldBytes(bytes)
         }
       } catch (reason: unknown) {
         if (cancelled) return
@@ -376,6 +395,7 @@ export default function PdfPage() {
       const candidate = await PdfViewerDocument.load(nextBytes, getPdfLoadOptions())
       try { await candidate.getPage(1) } finally { await candidate.destroy() }
       setFileName(file.name || 'document.pdf')
+      setFormAppearanceFont('viewer')
       setEdited(false)
       setHistory({ past: [], future: [] })
       setPage(1)
@@ -587,17 +607,30 @@ export default function PdfPage() {
           {inspector === 'forms' && (
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Fill form fields</span>
+              <DsField label="Saved text appearance">
+                <DsSelect aria-label="Saved text appearance" value={formAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
+                  setFormAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
+                  setFormNotice(null)
+                }}>
+                  <option value="viewer">Let the PDF viewer generate it</option>
+                  <option value="Helvetica">Generate with Helvetica</option>
+                  <option value="Times-Roman">Generate with Times Roman</option>
+                  <option value="Courier">Generate with Courier</option>
+                </DsSelect>
+              </DsField>
+              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields using printable ASCII. This replaces the text font; it does not preserve the original typography. Long text may clip in a fixed-size field. Unsupported text fields are skipped. Other field types may still depend on the PDF viewer.</p>
               {formNotice && <p role="status" className="ds-muted" aria-live="polite">{formNotice}</p>}
+              {unsavedFormNames.length > 0 && <p role="status" className="ds-muted">Unsaved drafts: {unsavedFormNames.join(', ')}. These values are not in the downloaded PDF. Change the input or appearance mode and apply again.</p>}
               {fields.length === 0 ? <p className="ds-muted">No form fields in this file.</p> : fields.map((field, index) => (
                 <DsField key={field.name} label={field.name}>
                   {field.kind === 'checkbox' ? (
-                    <input type="checkbox" checked={Boolean(field.checked)} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, checked: event.target.checked } : item))} />
+                    <input type="checkbox" disabled={locked || fieldBytes !== bytes} checked={Boolean(field.checked)} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, checked: event.target.checked } : item))} />
                   ) : (
-                    <DsInput value={field.value ?? ''} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
+                    <DsInput disabled={locked || fieldBytes !== bytes} value={field.value ?? ''} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
                   )}
                 </DsField>
               ))}
-              <DsButton variant="outlined" className="workbench-button" disabled={locked || fields.length === 0} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
+              <DsButton variant="outlined" className="workbench-button" disabled={locked || fieldBytes !== bytes || fields.length === 0} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
             </div>
           )}
 

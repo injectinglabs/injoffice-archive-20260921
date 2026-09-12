@@ -1,4 +1,4 @@
-import { PDFBool, PDFDocument, PDFName } from 'pdf-lib';
+import { decodePDFRawStream, PDFArray, PDFBool, PDFDict, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { applyFormValues } from './forms.js';
 import type { FormValueSpec } from './types.js';
@@ -19,6 +19,135 @@ async function formDoc(): Promise<Uint8Array> {
 }
 
 describe('applyFormValues', () => {
+  const portable = { textAppearance: { font: 'Helvetica' as const } };
+  const widgetStreams = (doc: PDFDocument, name: string) => doc.getForm().getTextField(name).acroField.getWidgets()
+    .map(widget => {
+      const stream = doc.context.lookup(widget.getNormalAppearance());
+      if (!(stream instanceof PDFRawStream)) throw new Error('expected raw appearance stream');
+      return Buffer.from(decodePDFRawStream(stream).decode()).toString('latin1');
+    });
+
+  it('regenerates every owned widget, preserves unrelated appearances and source bytes', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    const field = doc.getForm().getTextField('name');
+    field.setText('BEFORE');
+    field.addToPage(doc.addPage([300, 300]), { x: 10, y: 200, width: 100, height: 20 });
+    doc.getForm().createTextField('other').addToPage(doc.getPage(0), { x: 10, y: 250, width: 100, height: 20 });
+    const source = await doc.save();
+    const sourceCopy = source.slice();
+    const original = await PDFDocument.load(source);
+    const result = await applyFormValues(source, [{ name: 'name', kind: 'text', value: 'AFTER' }], portable);
+    expect(result).toMatchObject({ applied: 1, skipped: [], appearances: [{ name: 'name', status: 'generated', widgets: 2 }] });
+    const loaded = await PDFDocument.load(result.bytes);
+    expect(loaded.getForm().getTextField('name').getText()).toBe('AFTER');
+    for (const stream of widgetStreams(loaded, 'name')) expect(stream).toContain('<4146544552> Tj');
+    expect(widgetStreams(loaded, 'name')).not.toEqual(widgetStreams(original, 'name'));
+    expect(widgetStreams(loaded, 'other')).toEqual(widgetStreams(original, 'other'));
+    expect(loaded.getForm().getTextField('other').getText()).toBeUndefined();
+    expect(loaded.getForm().acroForm.dict.has(PDFName.of('NeedAppearances'))).toBe(false);
+    expect(source).toEqual(sourceCopy);
+  });
+
+  it.each(['日本語', 'مرحبا', 'café', 'line\nbreak', '\t', '\u007f'])('skips unsupported %s without changing its value/AP in a mixed batch', async value => {
+    const source = await formDoc();
+    const result = await applyFormValues(source, [
+      { name: 'name', kind: 'text', value }, { name: 'agree', kind: 'checkbox', checked: true },
+    ], portable);
+    expect(result).toMatchObject({ applied: 1, skipped: [{ name: 'name', reason: 'text appearances support printable ASCII only' }], appearances: [] });
+    const loaded = await PDFDocument.load(result.bytes);
+    expect(loaded.getForm().getTextField('name').getText()).toBeUndefined();
+    expect(widgetStreams(loaded, 'name')).toEqual(widgetStreams(await PDFDocument.load(source), 'name'));
+  });
+
+  it.each(['enableMultiline', 'enablePassword', 'enableFileSelection', 'enableRichFormatting', 'enableCombing'] as const)(
+    'skips unsupported field flag %s', async flag => {
+      const doc = await PDFDocument.load(await formDoc());
+      const field = doc.getForm().getTextField('name');
+      field.setMaxLength(8);
+      field[flag]();
+      const source = await doc.save({ updateFieldAppearances: false });
+      const result = await applyFormValues(source, [{ name: 'name', kind: 'text', value: 'AFTER' }], portable);
+      expect(result.applied).toBe(0);
+      expect(result.bytes).toBe(source);
+      expect(result.skipped[0]?.reason).toContain('plain single-line');
+    },
+  );
+
+  it.each(['Helvetica', 'Times-Roman', 'Courier'] as const)('supports explicit %s and empty values', async font => {
+    const result = await applyFormValues(await formDoc(), [{ name: 'name', kind: 'text', value: '' }], { textAppearance: { font } });
+    expect(result.applied).toBe(1);
+    const loaded = await PDFDocument.load(result.bytes);
+    expect(loaded.getForm().getTextField('name').getText() ?? '').toBe('');
+    expect(widgetStreams(loaded, 'name')[0]).toContain('Tf');
+  });
+
+  it('retains a prior NeedAppearances request and reports choice appearances separately', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    doc.getForm().acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.True);
+    const source = await doc.save();
+    const text = { name: 'name', kind: 'text' as const, value: 'AFTER' };
+    const result = await applyFormValues(source, [text], portable);
+    expect((await PDFDocument.load(result.bytes)).getForm().acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True);
+    const checkboxOnly = await applyFormValues(source, [{ name: 'agree', kind: 'checkbox', checked: true }], portable);
+    expect((await PDFDocument.load(checkboxOnly.bytes)).getForm().acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True);
+    const mixed = await applyFormValues(await formDoc(), [text, { name: 'country', kind: 'choice', value: 'UK' }], portable);
+    expect(mixed.appearances?.map(item => item.status)).toEqual(['generated', 'viewer-required']);
+  });
+
+  it.each(['XFA', 'actions', 'shared', 'orphan', 'rotation'] as const)('skips %s forms/widgets', async kind => {
+    const doc = await PDFDocument.load(await formDoc());
+    const form = doc.getForm();
+    const field = form.getTextField('name');
+    if (kind === 'XFA') form.acroForm.dict.set(PDFName.of('XFA'), doc.context.obj('unsupported'));
+    if (kind === 'actions') field.acroField.dict.set(PDFName.of('AA'), doc.context.obj({}));
+    if (kind === 'shared') doc.getPage(0).node.Annots()!.push(field.acroField.dict.lookup(PDFName.of('Kids'), PDFArray).asArray()[0]!);
+    if (kind === 'orphan') doc.getPage(0).node.set(PDFName.of('Annots'), doc.context.obj([]));
+    if (kind === 'rotation') field.acroField.getWidgets()[0]!.dict.set(PDFName.of('MK'), doc.context.obj({ R: 45 }));
+    const source = await doc.save({ updateFieldAppearances: false });
+    const result = await applyFormValues(source, [{ name: 'name', kind: 'text', value: 'AFTER' }], portable);
+    expect(result.applied).toBe(0);
+    expect(result.bytes).toBe(source);
+  });
+
+  it('rejects the whole operation on an unexpected provider failure after another field succeeds', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    const field = doc.getForm().getTextField('name');
+    field.addToPage(doc.addPage([300, 300]), { x: 10, y: 200, width: 100, height: 20 });
+    // An out-of-range background color is read by the provider after setText.
+    // The first widget has already regenerated when the second widget fails.
+    field.acroField.getWidgets()[1]!.dict.set(PDFName.of('MK'), doc.context.obj({ BG: [2, 0, 0] }));
+    const source = await doc.save({ updateFieldAppearances: false });
+    const copy = source.slice();
+    await expect(applyFormValues(source, [
+      { name: 'agree', kind: 'checkbox', checked: true }, { name: 'name', kind: 'text', value: 'AFTER' },
+    ], portable)).rejects.toThrow();
+    expect(source).toEqual(copy);
+  });
+
+  it('retains text and AP when max length rejects a mixed opt-in request', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    doc.getForm().getTextField('name').setMaxLength(2);
+    const source = await doc.save();
+    const result = await applyFormValues(source, [
+      { name: 'name', kind: 'text', value: 'LONG' }, { name: 'agree', kind: 'checkbox', checked: true },
+    ], portable);
+    expect(result.applied).toBe(1);
+    const loaded = await PDFDocument.load(result.bytes);
+    expect(loaded.getForm().getTextField('name').getText()).toBeUndefined();
+    expect(widgetStreams(loaded, 'name')).toEqual(widgetStreams(await PDFDocument.load(source), 'name'));
+  });
+
+  it('refuses actions on a non-terminal field ancestor', async () => {
+    const doc = await PDFDocument.create();
+    const field = doc.getForm().createTextField('group.name');
+    field.addToPage(doc.addPage(), { x: 10, y: 10, width: 100, height: 20 });
+    field.acroField.dict.lookup(PDFName.of('Parent'), PDFDict).set(PDFName.of('AA'), doc.context.obj({}));
+    const source = await doc.save();
+    const result = await applyFormValues(source, [{ name: 'group.name', kind: 'text', value: 'AFTER' }], portable);
+    expect(result.bytes).toBe(source);
+    expect(result.skipped).toEqual([{ name: 'group.name', reason: 'text appearances with field actions are unsupported' }]);
+  });
+
   it('fills a text field', async () => {
     const bytes = await formDoc();
     const result = await applyFormValues(bytes, [{ name: 'name', kind: 'text', value: 'Nick' }]);
