@@ -40,7 +40,7 @@ import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } 
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
 import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
 import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
-import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1 } from './nativeTablePagePaintV1.js'
+import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1, nativeDocxTableGeometryV1 } from './nativeTablePagePaintV1.js'
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { decodeNativeDOCXFontInventoryV1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 export { decodeNativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
@@ -525,7 +525,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   const initialBodyFieldValues = Object.fromEntries(bodyFields.map(run => [run.id, '1']))
   let layoutFragmentWork = 0
   let measuredTables: import('./nativeShapingLines.js').NativeDocxShapedLinesV1 | undefined
-  if (document.value.body.blocks.some(block => block.table?.layout === 'autofit')) {
+  if (document.value.body.blocks.some(block => block.table && nativeDocxTableGeometryV1(block.table, resolved.value).layout === 'autofit')) {
     // The probe uses the same source, attested fonts and canonical shaper. A
     // generous bounded width yields intrinsic advances; final qualification
     // independently derives the same min/max from the final wrapped clusters.

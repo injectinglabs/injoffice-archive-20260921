@@ -4277,6 +4277,11 @@
               "signature": "export interface NativeDocxResolvedSourcePartsV1"
             },
             {
+              "name": "NativeDocxResolvedTableGeometryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxResolvedTableGeometryV1"
+            },
+            {
               "name": "NativeDocxResolvedTableV1",
               "kind": "interface",
               "signature": "export interface NativeDocxResolvedTableV1"
@@ -4405,6 +4410,11 @@
               "name": "NativeDocxTableCellV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTableCellV1"
+            },
+            {
+              "name": "nativeDocxTableGeometryV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxTableGeometryV1(table: NativeDocxTableV1, resolved: NativeDocxResolvedLayoutInputV1): NativeDocxTableV1"
             },
             {
               "name": "nativeDocxTableProjectionSha256V1",

@@ -222,10 +222,19 @@ function percentTable(table: NativeDocxTableV1, width: number, sectionID: string
  * Qualifies a deliberately narrow exact subset. Any ambiguity refuses the
  * entire table set before shaping or outline-provider work begins.
  */
+/** @internal Source properties take precedence; this never mutates source bytes or objects. */
+export function nativeDocxTableGeometryV1(table: NativeDocxTableV1, resolved: NativeDocxResolvedLayoutInputV1): NativeDocxTableV1 {
+  const geometry = resolved.tables.find(entry => entry.table_id === table.id)?.geometry
+  if (!geometry) return table
+  const width = table.width_twips !== undefined || table.width_percent_fiftieths !== undefined ? {} : geometry.width_type === 'dxa' ? { width_twips: geometry.width_value } : geometry.width_type === 'pct' ? { width_percent_fiftieths: geometry.width_value } : {}
+  return { ...table, ...width, layout: table.layout ?? geometry.layout, alignment: table.alignment ?? geometry.alignment, indent_twips: table.indent_twips ?? geometry.indent_twips, cell_margins: table.cell_margins ?? { ...geometry.cell_margins } }
+}
+
 export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1): NativeDocxQualifiedTablesV1 {
-  const sourceTables = document.body.blocks.flatMap((block) => block.kind === 'table' && block.table ? [block.table] : [])
+  const sourceTables = document.body.blocks.flatMap((block) => block.kind === 'table' && block.table ? [nativeDocxTableGeometryV1(block.table, resolved)] : [])
   if (sourceTables.length === 0) return { status: 'qualified', tables: [], paragraph_widths: new Map(), sha256: nativeDocxTableProjectionSha256V1([]) }
   const fail = (scope_id: string, message: string): NativeDocxQualifiedTablesV1 => ({ status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'unsupported-table-source', scope_id, message }] })
+  if (resolved.document_id !== document.document_id || resolved.revision !== document.revision) return fail(document.document_id, 'Resolved table geometry must exact-join the source document and revision')
   if (sourceTables.some(table => table.layout === 'autofit') && (!shaped || shaped.document_id !== document.document_id || shaped.revision !== document.revision || resolved.document_id !== document.document_id || resolved.revision !== document.revision)) return fail(document.document_id, 'Autofit measurements must exact-join the source document and revision')
   if (sourceTables.length > DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables) return { status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'table-resource-limit', scope_id: document.document_id, message: `Tables exceed ${DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables}` }] }
   const resolvedParagraphs = new Map(resolved.paragraphs.map((entry) => [entry.paragraph_id, entry]))
@@ -240,9 +249,10 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   let activeSection: NativeDocxDocumentV1['sections'][number] | undefined
   for (const block of document.body.blocks) {
     activeSection = sectionsByStart.get(block.id) ?? activeSection
-    if ((block.table?.width_percent_fiftieths !== undefined || block.table?.layout === 'autofit') && activeSection) {
+    const table = block.table ? nativeDocxTableGeometryV1(block.table, resolved) : undefined
+    if ((table?.width_percent_fiftieths !== undefined || table?.layout === 'autofit') && activeSection) {
       const geometry = qualifyNativeDocxSectionColumnsV1(activeSection)
-      if (geometry.ok && geometry.value.columns.length === 1) tableContainers.set(block.table.id, { width: geometry.value.columns[0]!.width_millipoints / 50, sectionID: activeSection.id })
+      if (geometry.ok && geometry.value.columns.length === 1) tableContainers.set(table!.id, { width: geometry.value.columns[0]!.width_millipoints / 50, sectionID: activeSection.id })
     }
   }
   for (const [blockIndex, block] of document.body.blocks.entries()) if (block.table) {

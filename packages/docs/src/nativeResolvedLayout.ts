@@ -111,11 +111,21 @@ export interface NativeDocxResolvedRunV1 {
   properties: NativeDocxResolvedRunPropertiesV1
 }
 
+export interface NativeDocxResolvedTableGeometryV1 {
+  layout: 'fixed' | 'autofit'
+  alignment: 'left'
+  indent_twips: number
+  width_type: 'auto' | 'dxa' | 'pct'
+  width_value: number
+  cell_margins: { top_twips: number; right_twips: number; bottom_twips: number; left_twips: number }
+}
+
 export interface NativeDocxResolvedTableV1 {
   table_id: string
   style_id?: string
   borders?: NativeDocxTableBordersV1
   cell_shading_rgb?: string
+  geometry?: NativeDocxResolvedTableGeometryV1
 }
 
 export interface NativeDocxResolvedFontV1 {
@@ -163,7 +173,7 @@ export const DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS = {
   RunV1: ['run_id', 'paragraph_id', 'character_style_id', 'applied_paragraph_styles', 'applied_character_styles', 'properties'],
   TableBorderV1: ['style', 'size_eighth_points', 'color_rgb'],
   TableBordersV1: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
-  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb'],
+  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb', 'geometry'],
   FontV1: ['name', 'alt_name'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'part_name', 'path', 'preservation', 'message'],
   LayoutInputV1: ['protocol', 'version', 'document_id', 'revision', 'source_parts', 'numbering_source', 'paragraphs', 'runs', 'tables', 'fonts', 'diagnostics'],
@@ -609,6 +619,19 @@ export function decodeNativeDocxResolvedLayout(value: unknown): DecodeNativeDocx
     if (id) tableIDs.add(id)
     optionalString(entry.style_id, `${path}/style_id`, issues)
     optionalString(entry.cell_shading_rgb, `${path}/cell_shading_rgb`, issues, COLOR, 6)
+    if (entry.geometry !== undefined) {
+      const geometryPath = `${path}/geometry`
+      const geometry = object(entry.geometry, geometryPath, ['layout', 'alignment', 'indent_twips', 'width_type', 'width_value', 'cell_margins'], issues)
+      if (geometry) {
+        enumValue(geometry.layout, `${geometryPath}/layout`, ['fixed', 'autofit'], issues)
+        enumValue(geometry.alignment, `${geometryPath}/alignment`, ['left'], issues)
+        enumValue(geometry.width_type, `${geometryPath}/width_type`, ['auto', 'dxa', 'pct'], issues)
+        integer(geometry.indent_twips, `${geometryPath}/indent_twips`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS, false)
+        integer(geometry.width_value, `${geometryPath}/width_value`, issues, geometry.width_type === 'auto' ? 0 : 1, geometry.width_type === 'auto' ? 0 : geometry.width_type === 'pct' ? 5000 : DOCX_MAX_TWIPS_FOR_MILLIPOINTS, false)
+        const margins = object(geometry.cell_margins, `${geometryPath}/cell_margins`, ['top_twips', 'right_twips', 'bottom_twips', 'left_twips'], issues)
+        if (margins) for (const side of ['top_twips', 'right_twips', 'bottom_twips', 'left_twips']) integer(margins[side], `${geometryPath}/cell_margins/${side}`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS, false)
+      }
+    }
     if (entry.borders !== undefined) {
       const borders = object(entry.borders, `${path}/borders`, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBordersV1, issues)
       if (borders) for (const key of DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBordersV1) if (borders[key] !== undefined) {

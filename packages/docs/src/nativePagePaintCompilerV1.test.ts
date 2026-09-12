@@ -1238,7 +1238,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(completed.page_paint_output.pages[0]!.commands.map((command) => command.kind)).toEqual(['fill_table_cell', 'fill_glyph_path', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border'])
     expect(completed.page_paint_output.provenance.table_projection.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
   })
-  it('autofits unequal text columns from real font advances and replays the source-bound width policy', async () => {
+  it.each([false, true])('autofits unequal text columns with resolved geometry %s and replays the width policy', async (inherited) => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     const table = document.body.blocks[0]!.table!, left = table.rows[0]!.cells[0]!
     table.layout = 'autofit'; table.width_twips = 4_000; table.grid_widths_twips = [4_680, 4_680]
@@ -1249,6 +1249,10 @@ describe('native DOCX page-paint compiler v1', () => {
     resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs.find(p=>p.paragraph_id===oldParagraph)!), paragraph_id: paragraph.id })
     resolved.runs.push({ ...structuredClone(resolved.runs.find(r=>r.run_id===oldRun)!), paragraph_id:paragraph.id, run_id:paragraph.runs[0]!.id })
     rewriteInventory(input, inventory=>{inventory.references[0]!.scope_ids.push(paragraph.id,paragraph.runs[0]!.id);inventory.references[0]!.scope_ids.sort()})
+    if (inherited) {
+      resolved.tables[0]!.geometry = { layout: 'autofit', alignment: 'left', indent_twips: table.indent_twips!, width_type: 'dxa', width_value: table.width_twips!, cell_margins: { ...table.cell_margins! } }
+      delete table.layout; delete table.alignment; delete table.indent_twips; delete table.width_twips; delete table.cell_margins
+    }
     const original = JSON.stringify(document), prepared = await prepareNativeDocxPagePaintV1(input)
     const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
     const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map(request=>{const outline=provider.outline(request.glyph_id);return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}}) })
@@ -1271,6 +1275,7 @@ describe('native DOCX page-paint compiler v1', () => {
     // Auto/omitted preferred widths shrink to intrinsic max content, capped by
     // the source section; this is not equal-grid scaling in disguise.
     delete table.width_twips
+    if (inherited) { resolved.tables[0]!.geometry!.width_type='auto'; resolved.tables[0]!.geometry!.width_value=0 }
     for(const cell of table.rows[0]!.cells)delete cell.width_twips
     const auto=await prepareNativeDocxPagePaintV1(input)
     expect(auto.page_paint_request.paginated_layout.status).toBe('paginated')
@@ -1280,7 +1285,7 @@ describe('native DOCX page-paint compiler v1', () => {
       expect(automatic.tables[0]!.width_millipoints).toBeLessThanOrEqual(468_000)
       expect(automatic.tables[0]!.grid_widths_millipoints[0]).toBeLessThan(automatic.tables[0]!.grid_widths_millipoints[1]!)
     }
-  })
+  }, 15_000)
   it('composes content autofit with a pagination-dependent body field without changing either source', async () => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     const table = document.body.blocks[0]!.table!

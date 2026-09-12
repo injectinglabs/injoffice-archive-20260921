@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BIDI_UNICODE_VERSION, NATIVE_BIDI_PROVIDER_ID, NATIVE_BIDI_PROVIDER_REVISION } from '@injoffice/font-metrics/bidi'
 import { UNICODE_13_CLASSIFIER_REVISION } from '@injoffice/font-metrics/unicode13'
 import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, type NativeDocxParagraphV1 } from './nativeContract.js'
-import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
+import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION, type NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION } from './nativePaginationSettings.js'
 import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
@@ -71,6 +71,25 @@ function appendRow(request: NativeDocxPaginationRequestV1, ordinal: number): voi
 }
 
 describe('bounded native DOCX table page-paint geometry', () => {
+  it('uses bounded resolved geometry without changing source or overriding direct properties', () => {
+    const request=fixture(), table=request.document.body.blocks[0]!.table!
+    const expected=structuredClone(qualifyNativeDocxTablesV1(request.document,request.resolved_layout))
+    request.resolved_layout.tables[0]!.geometry={layout:'fixed',alignment:'left',indent_twips:0,width_type:'dxa',width_value:400,cell_margins:{...table.cell_margins!}}
+    delete table.layout;delete table.alignment;delete table.indent_twips;delete table.width_twips;delete table.cell_margins
+    const original=structuredClone(request.document)
+    expect(decodeNativeDocxResolvedLayout(request.resolved_layout).ok).toBe(true)
+    expect(qualifyNativeDocxTablesV1(request.document,request.resolved_layout)).toEqual(expected)
+    expect(request.document).toEqual(original)
+    expect(qualifyNativeDocxTablesV1(request.document,{...request.resolved_layout,revision:'stale'}).status).toBe('refused')
+    expect(qualifyNativeDocxTablesV1(request.document,{...request.resolved_layout,document_id:'document:other'}).status).toBe('refused')
+    table.width_twips=400;request.resolved_layout.tables[0]!.geometry!.width_value=800
+    expect(qualifyNativeDocxTablesV1(request.document,request.resolved_layout)).toEqual(expected)
+    for(const change of [ {width_type:'auto',width_value:400}, {width_value:-1}, {layout:'future'}, {cell_margins:{left_twips:10}}, {extra:true} ]) {
+      const invalid=structuredClone(request.resolved_layout)
+      Object.assign(invalid.tables[0]!.geometry!,change)
+      expect(decodeNativeDocxResolvedLayout(invalid).ok).toBe(false)
+    }
+  })
   it('fragments natural rows at complete lines while repeating headers and preserving source coverage', () => {
     const request = fixture(20_000), table = request.document.body.blocks[0]!.table!
     table.rows[0]!.repeat_header = true

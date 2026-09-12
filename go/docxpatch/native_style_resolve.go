@@ -79,10 +79,11 @@ type NativeResolvedRunV1 struct {
 }
 
 type NativeResolvedTableV1 struct {
-	TableID        string                `json:"table_id"`
-	StyleID        *string               `json:"style_id,omitempty"`
-	Borders        *NativeTableBordersV1 `json:"borders,omitempty"`
-	CellShadingRGB *string               `json:"cell_shading_rgb,omitempty"`
+	Geometry       *NativeResolvedTableGeometryV1 `json:"geometry,omitempty"`
+	TableID        string                         `json:"table_id"`
+	StyleID        *string                        `json:"style_id,omitempty"`
+	Borders        *NativeTableBordersV1          `json:"borders,omitempty"`
+	CellShadingRGB *string                        `json:"cell_shading_rgb,omitempty"`
 }
 
 type NativeResolvedParagraphPropertiesV1 struct {
@@ -1292,6 +1293,7 @@ func (resolver *nativeLayoutResolver) resolveBlock(block *NativeBlockV1, result 
 	}
 	table := block.Table
 	resolvedTable, tableStyles := resolver.resolveTableStyle(table)
+	resolvedTable.Geometry = resolver.resolveTableGeometry(table)
 	result.Tables = append(result.Tables, resolvedTable)
 	for rowIndex := range table.Rows {
 		for cellIndex := range table.Rows[rowIndex].Cells {
@@ -2834,6 +2836,9 @@ func ValidateNativeResolvedLayoutInputV1(input *NativeResolvedLayoutInputV1) err
 	}
 	tables := map[string]bool{}
 	for _, table := range input.Tables {
+		if table.Geometry != nil && !nativeValidResolvedTableGeometry(table.Geometry) {
+			return fmt.Errorf("invalid resolved table geometry")
+		}
 		if !nativeIDPattern.MatchString(table.TableID) || tables[table.TableID] {
 			return fmt.Errorf("invalid or duplicate table id %q", table.TableID)
 		}

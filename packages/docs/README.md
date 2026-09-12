@@ -358,7 +358,16 @@ The policy, source grid, percentage and container identity enter the qualified
 table hash. Cell text is shaped again at the resulting content widths. This is
 flexible percentage sizing of a fixed grid, **not content-based autofit**.
 Content-based sizing is a separate `shaped-content-minmax-v1` policy for explicit
-`autofit` tables. A bounded preliminary pass uses the same attested fonts and
+`autofit` tables. Source-resolved table geometry can also select this path: an
+explicit, complete unconditional table-style chain supplies inherited geometry,
+then direct table properties override it. The separate resolved model retains
+auto-width resets and per-side margin inheritance; source objects remain unchanged.
+The documented defaults are autofit layout, auto preferred width, left alignment,
+zero indent, zero top/bottom margins, and 115-twip left/right margins when absent
+throughout the qualified chain. Explicit inherited margins override these defaults.
+Unknown geometry, conditional chains, automatic border colors and unsupported
+alignment remain outside this qualification; no built-in style or font is guessed.
+A bounded preliminary pass uses the same attested fonts and
 HarfBuzz shaper as the final render. Intrinsic minima come from complete
 space-separated words; maxima come from complete hard-break-delimited lines.
 Widths round upward to integer twips so text minima are never rounded down.
