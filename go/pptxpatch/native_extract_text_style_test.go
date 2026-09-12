@@ -112,7 +112,7 @@ func TestNativeTextCheckingFlagsPreviewWithoutMutationPermission(t *testing.T) {
 }
 
 func TestNativeTextCheckingFlagsRemainStrict(t *testing.T) {
-	for _, metadata := range []string{`dirty="yes"`, `smtClean="2"`, `dirty="0" dirty="1"`, `kumimoji="1"`, `lang="en-US"`, `unknown="0"`, `x:dirty="0" xmlns:x="urn:other"`} {
+	for _, metadata := range []string{`dirty="yes"`, `smtClean="2"`, `dirty="0" dirty="1"`, `kumimoji="1"`, `lang="en_US"`, `unknown="0"`, `x:dirty="0" xmlns:x="urn:other"`} {
 		deck, err := ExtractNativePPTX(nativeTextCheckingFixture(t, false, metadata), nativeTestExtractOptions())
 		if err == nil {
 			for _, element := range deck.Slides[0].Elements {

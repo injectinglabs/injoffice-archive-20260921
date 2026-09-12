@@ -122,6 +122,18 @@ function textLayout(shaper = fixtureShaper(), resolveRun?: NativePptxTextLayout[
   }
 }
 
+it('passes authored language to actual native shaping and retains glyph paint', async () => {
+  const base=fixtureShaper(),languages:string[]=[]
+  const shaper:NativeTextShaper={...base,shape(request){languages.push(request.run.language);return base.shape(request)}}
+  const element=nativeTextElement('authored-language','Istanbul',nativeTextBody(),{x:100,y:100,cx:1000000,cy:500000})
+  element.paragraphs[0]!.runs[0]!.language='tr-TR'
+  const tree=await compileNativePptxSlide(authoredDeck([element]),0,{textLayout:textLayout(shaper)})
+  const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+  expect(languages.length).toBeGreaterThan(0);expect(languages.every(language=>language==='tr-TR')).toBe(true)
+  expect(surface.finish().some(command=>command.kind==='glyphRun')).toBe(true)
+  expect(surface.finish().some(command=>command.kind==='placeholder')).toBe(false)
+})
+
 function authoredDeck(elements: NativeElement[]): NativePptxDeck {
   return {
     contractVersion: 'pptx-native/v1', documentId: 'authored-render-deck', origin: 'authored',

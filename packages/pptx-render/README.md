@@ -47,6 +47,12 @@ and shaped through that boundary. Glyph placement converts integer milli-points
 to integer EMU. The core never estimates width from character count or delegates
 measurement to a browser.
 
+The native run's optional `language` retains a bounded authored language tag and
+is passed to shaping ahead of host language defaults. An explicit host
+`resolveRun` language override still takes precedence. This does not qualify
+presentation-default cascade rules, autofit, vertical flow, or bullet font
+substitution; those remain separate rendering boundaries.
+
 Resolver, load, and shaper results are untrusted runtime inputs. The compiler
 normalizes exact known fields into fresh bounded objects, validates face identity,
 digests, decisions, attempted face IDs, metrics, glyphs, and clusters, and refuses

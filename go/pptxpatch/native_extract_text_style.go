@@ -119,7 +119,7 @@ func resolveNativeLocalTextStyles(body *nativeXMLNode, dialect nativeExtractDial
 }
 
 func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtractDialect, paragraph bool, theme nativeResolvedTheme) error {
-	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}}
+	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}, {Local: "lang"}}
 	names := []string{"latin", "ea", "cs", "solidFill"}
 	if paragraph {
 		attrs = []xml.Name{{Local: "algn"}, {Local: "lvl"}, {Local: "marL"}, {Local: "indent"}}
@@ -132,6 +132,10 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 	for _, attr := range node.Attrs {
 		var err error
 		switch attr.Name.Local {
+		case "lang":
+			if !validNativeLanguage(attr.Value) {
+				err = fmt.Errorf("invalid authored language tag")
+			}
 		case "b", "i", "dirty", "smtClean":
 			_, err = nativeBool(attr.Value)
 		case "sz":
@@ -199,7 +203,7 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 
 // These two Boolean flags track spelling/smart-tag checking, not glyph layout.
 // They are validated before cascade resolution and omitted only from the owned
-// paint projection. Language, kumimoji, and all other attributes remain strict.
+// paint projection. Language is retained for shaping; kumimoji remains strict.
 func nativeTextPaintAttrs(attrs []xml.Attr) []xml.Attr {
 	result := make([]xml.Attr, 0, len(attrs))
 	for _, attr := range attrs {

@@ -98,6 +98,7 @@ type NativeTextRun struct {
 	FontSizeHundredthPt *int64  `json:"fontSizeHundredthPt,omitempty"`
 	Color               *string `json:"color,omitempty"`
 	FontFamily          *string `json:"fontFamily,omitempty"`
+	Language            *string `json:"language,omitempty"`
 }
 
 type NativeParagraph struct {

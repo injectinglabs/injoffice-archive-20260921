@@ -1005,7 +1005,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
       ...(fallbackChainIds === undefined ? {} : { fallbackChainIds: [...fallbackChainIds] }),
     },
     script: override.script ?? state.textDefaults.script,
-    language: override.language ?? state.textDefaults.language,
+    language: override.language ?? nativeRun.language ?? state.textDefaults.language,
     direction: override.direction ?? state.textDefaults.direction,
     features: override.features?.map((feature) => ({ ...feature })),
     variations: override.variations?.map((variation) => ({ ...variation })),

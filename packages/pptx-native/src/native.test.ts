@@ -20,6 +20,19 @@ function fixture(path: string): unknown {
 }
 
 describe('native PPTX contract', () => {
+  it('retains bounded authored language tags and refuses malformed tags', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text fixture missing')
+    const run=element.paragraphs[0]!.runs[0]!
+    for(const language of ['tr-TR','en-US','pl-PL','zh-Hant-TW','und']){
+      run.language=language;expect(validateNativePptx(deck).ok).toBe(true)
+      expect(JSON.parse(stringifyNativePptx(deck)).slides[0].elements.find((item:NativeElement)=>item.kind==='text').paragraphs[0].runs[0].language).toBe(language)
+    }
+    for(const language of ['', 'en_US','en US','en-US\" bad=\"1','a','en-'+ 'a'.repeat(9),'en-'+ 'abcdefgh-'.repeat(8)]){
+      run.language=language;expect(validateNativePptx(deck).ok).toBe(false)
+    }
+  })
   it('preserves typed source endpoints and refuses contradictory legacy flags',()=>{
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck,connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
     if(connector.kind!=='connector')throw new Error('connector missing')

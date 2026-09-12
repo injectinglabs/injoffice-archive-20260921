@@ -82,6 +82,7 @@ export interface NativeTextRun {
   fontSizeHundredthPt?: number
   color?: string
   fontFamily?: string
+  language?: string
 }
 
 export interface NativeParagraph {

@@ -15,6 +15,12 @@ import (
 
 const nativeMaxSafeInteger int64 = 9007199254740991
 
+var nativeLanguagePattern = regexp.MustCompile(`^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$`)
+
+func validNativeLanguage(value string) bool {
+	return len(value) <= 63 && nativeLanguagePattern.MatchString(value)
+}
+
 func containsNativeString(values []string, value string) bool {
 	for _, candidate := range values {
 		if candidate == value {
@@ -678,6 +684,9 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 			}
 			if run.Color != nil {
 				v.color(*run.Color, rp+".color")
+			}
+			if run.Language != nil && !validNativeLanguage(*run.Language) {
+				v.add(rp+".language", "schema.pattern", "must be a bounded supported language tag")
 			}
 			if run.FontFamily != nil {
 				fontFamilyLength := utf16CodeUnitLengthBounded(*run.FontFamily, 256)

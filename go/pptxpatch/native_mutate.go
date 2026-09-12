@@ -292,7 +292,7 @@ func validateNativePPTXParagraphFieldNames(raw json.RawMessage) error {
 		}
 		for _, rawRun := range runs {
 			if _, err := nativePPTXJSONObject(rawRun, map[string]bool{
-				"text": true, "bold": true, "italic": true, "fontSizeHundredthPt": true, "color": true, "fontFamily": true,
+				"text": true, "bold": true, "italic": true, "fontSizeHundredthPt": true, "color": true, "fontFamily": true, "language": true,
 			}); err != nil {
 				return err
 			}
@@ -680,6 +680,9 @@ func validateNativeMutationParagraphs(paragraphs []NativeParagraph, budget *nati
 			if !utf8.ValidString(*run.Text) || !utf8.ValidString(*run.FontFamily) {
 				return fmt.Errorf("paragraph %d run %d is not valid UTF-8", paragraphIndex, runIndex)
 			}
+			if run.Language != nil && !validNativeLanguage(*run.Language) {
+				return fmt.Errorf("paragraph %d run %d has invalid language", paragraphIndex, runIndex)
+			}
 			if strings.ContainsAny(*run.Text, "\t\r\n") {
 				return fmt.Errorf("paragraph %d run %d contains literal tab or line-break text outside the exact native mutation subset", paragraphIndex, runIndex)
 			}
@@ -825,7 +828,11 @@ func encodeNativeParagraphs(paragraphs []NativeParagraph, dialect nativeExtractD
 			if *run.Italic {
 				italic = "1"
 			}
-			fmt.Fprintf(&output, `<a:r><a:rPr b=%q i=%q sz=%q><a:latin typeface="%s"/><a:solidFill><a:srgbClr val=%q/></a:solidFill></a:rPr>`, bold, italic, strconv.FormatInt(*run.FontSizeHundredthPt, 10), font, *run.Color)
+			language := ""
+			if run.Language != nil {
+				language = fmt.Sprintf(` lang=%q`, *run.Language)
+			}
+			fmt.Fprintf(&output, `<a:r><a:rPr b=%q i=%q sz=%q%s><a:solidFill><a:srgbClr val=%q/></a:solidFill><a:latin typeface="%s"/></a:rPr>`, bold, italic, strconv.FormatInt(*run.FontSizeHundredthPt, 10), language, *run.Color, font)
 			if strings.TrimSpace(*run.Text) != *run.Text {
 				output.WriteString(`<a:t xml:space="preserve">`)
 			} else {
@@ -1301,7 +1308,7 @@ func nativeParagraphEqual(left, right NativeParagraph) bool {
 	}
 	for index := range left.Runs {
 		l, r := left.Runs[index], right.Runs[index]
-		if !nativeStringPointerEqual(l.Text, r.Text) || !nativeBoolPointerEqual(l.Bold, r.Bold) || !nativeBoolPointerEqual(l.Italic, r.Italic) || !nativeInt64PointerEqual(l.FontSizeHundredthPt, r.FontSizeHundredthPt) || !nativeStringPointerEqual(l.Color, r.Color) || !nativeStringPointerEqual(l.FontFamily, r.FontFamily) {
+		if !nativeStringPointerEqual(l.Text, r.Text) || !nativeBoolPointerEqual(l.Bold, r.Bold) || !nativeBoolPointerEqual(l.Italic, r.Italic) || !nativeInt64PointerEqual(l.FontSizeHundredthPt, r.FontSizeHundredthPt) || !nativeStringPointerEqual(l.Color, r.Color) || !nativeStringPointerEqual(l.FontFamily, r.FontFamily) || !nativeStringPointerEqual(l.Language, r.Language) {
 			return false
 		}
 	}
