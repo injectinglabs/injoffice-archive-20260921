@@ -2,6 +2,12 @@
 
 `docxpatch` surgically edits WordprocessingML paragraphs and selected document features without regenerating unrelated DOCX parts.
 
+Native read-only layout recognizes exact `w:noProof` spelling/grammar preferences
+and explicitly disabled `w:autoSpaceDE` / `w:autoSpaceDN` spacing. These properties
+stay in the source and keep affected paragraphs preservation-only; they do not
+grant mutation support. Enabled East Asian automatic spacing, malformed values,
+duplicates, and unknown markup remain unsupported.
+
 ```bash
 go get github.com/injectinglabs/injoffice/go/docxpatch
 ```

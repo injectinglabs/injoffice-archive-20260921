@@ -2030,6 +2030,12 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			case "widowControl":
 				properties.WidowControl = nativeBool(value)
 			}
+		case "autoSpaceDE", "autoSpaceDN":
+			preserveOnly = true
+			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "Automatic East Asian spacing is supported only as an exact explicit disabled setting")
+			}
 		case "bidi":
 			preserveOnly = true
 			if _, ok := nativeOnOff(child, extractor.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
@@ -2993,6 +2999,12 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 				properties.Language = nativeString(value)
 			} else {
 				unsafe = true
+			}
+		case "noProof":
+			preserveOnly = true
+			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
 			}
 		case "vertAlign":
 			preserveOnly = true

@@ -2091,6 +2091,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 					properties.deferScriptProperty("language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "East-Asia/bidi language metadata is preserved for script shaping")
 				}
 			}
+		case "noProof":
+			if !nativeNeutralSourceProperty(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
+			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)
 			if ok {
@@ -2141,6 +2145,10 @@ func (resolver *nativeLayoutResolver) parseParagraphProperties(partName string, 
 			resolver.parseSpacing(child, scopeID, partName, &properties)
 		case "ind":
 			resolver.parseIndent(child, scopeID, partName, &properties)
+		case "autoSpaceDE", "autoSpaceDN":
+			if !nativeNeutralSourceProperty(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", scopeID, partName, child, "Automatic East Asian spacing is supported only as an exact explicit disabled setting")
+			}
 		case "keepNext", "keepLines", "pageBreakBefore", "widowControl", "bidi":
 			value, ok := nativeOnOff(child, resolver.wordNS)
 			if !ok {
