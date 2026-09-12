@@ -78,7 +78,7 @@ func TestExtractNativePPTXTextBodyUnsupportedSemanticsAreObjectRefusals(t *testi
 		`<a:bodyPr lIns="-1"/>`,
 		`<a:bodyPr lIns="2147483648"/>`,
 		`<a:bodyPr lIns="3000000" rIns="3000000"/>`,
-		`<a:bodyPr vert="vert"/>`,
+		`<a:bodyPr vert="vert270"/>`,
 		`<a:bodyPr vert="wordArtVert"/>`,
 		`<a:bodyPr numCol="2"/>`,
 		`<a:bodyPr anchorCtr="1"/>`,

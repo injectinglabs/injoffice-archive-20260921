@@ -235,7 +235,14 @@ func nativeHasTextCheckingMetadata(node *nativeXMLNode, dialect nativeExtractDia
 }
 
 func nativePreserveTextCheckingMetadata(element *NativeElement, node *nativeXMLNode, dialect nativeExtractDialect) {
-	if element.Compatibility.Status == NativeCompatibilityStatusRefused || !nativeHasTextCheckingMetadata(node, dialect) {
+	if element.Compatibility.Status == NativeCompatibilityStatusRefused {
+		return
+	}
+	if nativeHasEndParagraphMetadata(node, dialect) {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.end-paragraph-metadata-preserved", Message: "non-layout end-paragraph metadata is source-preserved; replacement does not round-trip the end mark"})
+	}
+	if !nativeHasTextCheckingMetadata(node, dialect) {
 		return
 	}
 	element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly

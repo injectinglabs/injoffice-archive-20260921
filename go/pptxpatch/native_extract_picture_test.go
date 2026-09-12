@@ -520,6 +520,7 @@ type nativePictureFixtureOptions struct {
 	relationshipMode        string
 	xfrmAttrs               string
 	sourceRect              string
+	pictureGeometry         string
 	blipContent             string
 	nonVisualContent        string
 	omitImagePart           bool
@@ -636,6 +637,9 @@ func nativePictureFixture(t *testing.T, options nativePictureFixtureOptions) []b
 				}
 				if options.stretchContent != nil {
 					pictures = strings.ReplaceAll(pictures, `<a:fillRect/>`, *options.stretchContent)
+				}
+				if options.pictureGeometry != "" {
+					pictures = strings.ReplaceAll(pictures, `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, options.pictureGeometry)
 				}
 				parts[slidePart] = strings.Replace(parts[slidePart], `</p:spTree>`, pictures+`</p:spTree>`, 1)
 				parts[relationshipsPart] = strings.Replace(parts[relationshipsPart], `</Relationships>`, relationships+`</Relationships>`, 1)

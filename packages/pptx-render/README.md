@@ -12,6 +12,13 @@ pixel input, or drawing-surface allocation. It is safe to run in a worker or on 
 server. Hosts may record paint commands or replay them through the generic
 Canvas2D command adapter using a context they created themselves.
 
+Pictures can retain `clip: 'roundRect'` for the exact default DrawingML preset
+(an empty `avLst`). Its radius is `min(width, height) * 16667 / 100000`, rounded
+once to integer EMU. The new `clipRoundRect` paint command clips the local shape
+frame after source cropping and composes with parent transforms. Host adapters
+must implement this command; unsupported presets and nonempty adjustment lists
+remain visible placeholders rather than unmasked images.
+
 Parsed default pentagons use the DrawingML preset guide equations, rounded once
 to integer EMU, rather than an inscribed regular polygon. Supported solid theme
 fill/outline references are resolved by the native extractor. These source-bound

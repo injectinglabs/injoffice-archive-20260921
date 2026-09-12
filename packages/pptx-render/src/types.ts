@@ -54,7 +54,7 @@ export interface RenderTransform {
   readonly tyEmu: number
 }
 
-export interface RenderClip { readonly kind: 'rect'; readonly rect: RenderRect }
+export type RenderClip = { readonly kind: 'rect'; readonly rect: RenderRect } | { readonly kind: 'roundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
 
 export type RenderPathCommand =
   | { readonly kind: 'moveTo'; readonly x: number; readonly y: number }
@@ -176,6 +176,8 @@ export interface RenderTextBodyNode {
   readonly kind: 'textBody'
   readonly sourceElementId: string
   readonly bounds: RenderRect
+  /** Text-only physical mapping; parent shape/group transforms remain separate. */
+  readonly transform?: RenderTransform
   readonly fidelity: 'native' | 'deterministicNative' | 'approximateSourceFrame' | 'nativeUnavailable' | 'legacyUnavailable'
   /** Explicit InjOffice line-box policy; does not attest Office visual parity. */
   readonly lineLayoutPolicy?: 'max-run-natural-v1'

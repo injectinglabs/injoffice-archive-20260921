@@ -76,7 +76,8 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	if err != nil {
 		return NativeElement{}, err
 	}
-	transform, err := validateNativePictureShapeProperties(shapeProperties, dialect, &gaps)
+	var clip *string
+	transform, err := validateNativePictureShapeProperties(shapeProperties, dialect, &gaps, &clip)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -114,7 +115,7 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	relID := relationshipID
 	element := NativeElement{
 		Kind: NativeElementKindPicture, ID: elementID, Provenance: NativeProvenanceParsed,
-		Transform: transform, AssetID: &assetID, Crop: crop, Passthrough: []NativePassthroughRef{}, Children: nil,
+		Transform: transform, AssetID: &assetID, Crop: crop, Clip: clip, Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, RelationshipID: &relID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
 	}
@@ -291,7 +292,7 @@ func validateNativePictureSourceRect(node *nativeXMLNode) ([4]int64, error) {
 	return insets, nil
 }
 
-func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet) (NativeTransform, error) {
+func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet, clip **string) (NativeTransform, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.picture-shape-unavailable", "picture shape properties contain unmodeled attributes")
 	}
@@ -312,7 +313,8 @@ func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExt
 		gaps.add("pptx.picture-geometry-unavailable", "picture rectangle geometry is not explicit in native PPTX v1")
 	} else {
 		preset, presetOK := exactNativeAttr(geometry, "", "prst")
-		if err := requireOnlyNativeAttrs(geometry, xml.Name{Local: "prst"}); err != nil || !presetOK || preset != "rect" {
+		presetValid := requireOnlyNativeAttrs(geometry, xml.Name{Local: "prst"}) == nil && presetOK && (preset == "rect" || preset == "roundRect")
+		if !presetValid {
 			gaps.add("pptx.picture-geometry-unavailable", "non-rectangle picture geometry is preserved but cannot be represented in native PPTX v1")
 		}
 		adjustments, adjustmentsErr := nativeSingleton(geometry, dialect.drawing, "avLst", true)
@@ -321,6 +323,10 @@ func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExt
 		}
 		if err := requireOnlyNativeChildren(geometry, xml.Name{Space: dialect.drawing, Local: "avLst"}); err != nil || requireEmptyNativeElement(adjustments) != nil {
 			gaps.add("pptx.picture-geometry-unavailable", "picture geometry adjustments are not modeled in native PPTX v1")
+		} else if presetValid && preset == "roundRect" {
+			// ECMA presetShapeDefinitions: default adj=16667; x1=ss*adj/100000.
+			// Keep the source preset, not a generic approximate corner radius.
+			*clip = stringPointer("roundRect")
 		}
 	}
 	return validateNativePictureTransform(xfrm, dialect, gaps)

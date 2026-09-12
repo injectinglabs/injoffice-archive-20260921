@@ -309,6 +309,7 @@
         "wrap": { "$ref": "#/$defs/textWrap" },
         "verticalAnchor": { "$ref": "#/$defs/textVerticalAnchor" },
         "autoFit": { "enum": ["none", "shape-source-frame"] },
+        "writingMode": { "const": "vertical-clockwise" },
         "horizontalOverflow": { "const": "overflow" },
         "verticalOverflow": { "const": "overflow" }
       }
@@ -521,6 +522,7 @@
         "transform": { "$ref": "#/$defs/transform" },
         "assetId": { "$ref": "#/$defs/nativeId" },
         "crop": { "$ref": "#/$defs/pictureCrop" },
+        "clip": { "const": "roundRect" },
         "animation": { "$ref": "#/$defs/animation" },
         "source": { "$ref": "#/$defs/sourceAnchor" },
         "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },

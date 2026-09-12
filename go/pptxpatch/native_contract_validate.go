@@ -304,6 +304,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 			v.add(p+".textBody.autoFit", "native.autofitApproximation", "source-frame autofit requires a parsed source, non-editable status and explicit approximation warning")
 		}
 	}
+	if element.TextBody != nil && element.TextBody.WritingMode != nil && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
+		v.add(p+".textBody.writingMode", "native.verticalPreview", "parsed vertical text must remain read-only")
+	}
 	if element.Provenance == NativeProvenanceParsed && slidePart == "" {
 		v.add(p+".provenance", "native.sourceOwnership", "parsed elements require an owning parsed slide with a source anchor")
 	} else if element.Provenance == NativeProvenanceParsed && element.Source != nil && element.Source.PartName != slidePart {
@@ -338,6 +341,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 		if !asset && element.Crop != nil {
 			v.add(p+".crop", "native.elementUnion", "is not allowed for this element kind")
+		}
+		if !asset && element.Clip != nil {
+			v.add(p+".clip", "native.elementUnion", "is not allowed for this element kind")
 		}
 		if !table && element.Table != nil {
 			v.add(p+".table", "native.elementUnion", "is not allowed for this element kind")
@@ -416,6 +422,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	case NativeElementKindPicture:
 		commonForbidden(false, false, false, false, false, true, false, false, false, false)
+		if element.Clip != nil && *element.Clip != "roundRect" {
+			v.add(p+".clip", "schema.const", "only the default roundRect picture clip is supported")
+		}
 		if crop := element.Crop; crop != nil {
 			valid := true
 			for _, side := range []struct {
@@ -515,6 +524,9 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	}
 	if body.AutoFit != "none" && body.AutoFit != "shape-source-frame" {
 		v.add(p+".autoFit", "schema.enum", "must be none or shape-source-frame")
+	}
+	if body.WritingMode != nil && *body.WritingMode != "vertical-clockwise" {
+		v.add(p+".writingMode", "schema.enum", "must equal vertical-clockwise")
 	}
 	if body.HorizontalOverflow != "overflow" {
 		v.add(p+".horizontalOverflow", "schema.const", "must equal overflow")
@@ -766,6 +778,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, p 
 			if hasParagraphs && hasTextBody {
 				if cell.TextBody.AutoFit != "none" {
 					v.add(cp+".textBody.autoFit", "native.autofitApproximation", "table cell autofit preview is not supported")
+				}
+				if cell.TextBody.WritingMode != nil {
+					v.add(cp+".textBody.writingMode", "native.verticalPreview", "vertical table cells are not supported")
 				}
 				authoritativeCells++
 				v.paragraphs(*cell.Paragraphs, cp+".paragraphs")

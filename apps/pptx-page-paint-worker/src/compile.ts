@@ -72,6 +72,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    case 'restore':if(stack.length<2)throw new Error('Paint stack underflow');stack.pop();break
    case 'transform':{const t=command.transform;current.transform=[t.aPpm/1e6,t.bPpm/1e6,t.cPpm/1e6,t.dPpm/1e6,t.txEmu,t.tyEmu];break}
    case 'clipRect':current.clip=command.rect;break
+   case 'clipRoundRect':current.clip={...command.rect,radius:command.radiusEmu};break
    case 'path':{
     if(command.headArrow&&!command.headEnd||command.tailArrow&&!command.tailEnd){diagnostics.push('Boolean-only arrowheads lack source type/dimensions and remain unqualified');current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Arrowhead unavailable'});break}
     const stroke=command.stroke

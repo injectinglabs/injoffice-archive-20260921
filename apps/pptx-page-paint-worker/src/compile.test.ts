@@ -33,6 +33,18 @@ function input(){
  return {deck,slide_index:0,package_sha256:'a'.repeat(64),font_manifest_path:manifest}
 }
 describe('actual source-font native PPTX worker',()=>{
+ it('replays source crop within the rounded local clip and bounds untrusted radii',async()=>{
+  const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))
+  const picture=source.slides[0].elements.find((e:{kind:string})=>e.kind==='picture')
+  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64')
+  const assetHash=createHash('sha256').update(bytes).digest('hex')
+  request.deck.assets=[{id:picture.assetId,provenance:'parsed',contentType:'image/png',sha256:assetHash,byteLength:bytes.length,dataBase64:bytes.toString('base64'),source:{partName:'ppt/media/image.png',objectId:'asset',fingerprintSha256:assetHash},passthrough:[]}]
+  picture.clip='roundRect';picture.crop={left:10000,top:20000,right:30000,bottom:0};picture.transform.cx=3000000;picture.transform.cy=2000000
+  request.deck.slides[0].elements=[picture]
+  const result=await compilePptxPreview(request),serialized=JSON.stringify(result.nodes)
+  expect(serialized).toContain('"radius":333340');expect(serialized).toContain('"left":10000');expect(result.resources).toHaveLength(1)
+  for(const radius of [-1,Infinity,1000001,'1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'group',transform:[1,0,0,1,0,0],clip:{x:0,y:0,cx:3000000,cy:2000000,radius},children:[]}]})).toThrow()
+ })
  it('keeps an element-scoped text refusal visible without hiding neighboring text',async()=>{
   const request=input(),slide=request.deck.slides[0],good=slide.elements[0],refused=structuredClone(good)
   refused.id='element:unsupported-text';refused.paragraphs=[];delete refused.textBody

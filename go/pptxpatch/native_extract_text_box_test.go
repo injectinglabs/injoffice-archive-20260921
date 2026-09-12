@@ -84,6 +84,59 @@ func TestNativeTransparentTextBoxUnsupportedContentRemainsVisibleRefusal(t *test
 	}
 }
 
+func TestNativeSourceFrameUnsupportedContentRetainsApproximationAndRefusal(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		original := nativeRectangularTextBoxFixture(t, strict, `<a:noFill/>`, true)
+		before := bytes.Clone(original)
+		options := nativeTestExtractOptions()
+		options.AllowSourceFrameAutoFitPreview = true
+		deck, err := ExtractNativePPTX(original, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deck.Slides[0].Elements) != 1 {
+			t.Fatal("unsupported text lost its placeholder")
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.Compatibility.Status != NativeCompatibilityStatusRefused || element.Source == nil || len(element.Passthrough) == 0 {
+			t.Fatalf("source-frame option weakened the content refusal: %+v", element)
+		}
+		if element.TextBody == nil || element.TextBody.AutoFit != "shape-source-frame" {
+			t.Fatal("source-frame layout was lost")
+		}
+		if element.Paragraphs != nil && len(*element.Paragraphs) != 0 {
+			t.Fatal("unsupported symbol-font text was invented")
+		}
+		warnings, refusals := 0, 0
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == "pptx.autofit-source-frame-approximate" && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warnings++
+			}
+			if diagnostic.Code == "pptx.text-content-unavailable" && diagnostic.Severity == NativeDiagnosticSeverityRefusal && strings.Contains(diagnostic.Message, "buFont") {
+				refusals++
+			}
+		}
+		if warnings != 1 || refusals != 1 {
+			t.Fatalf("expected independent approximation and refusal: %+v", element.Compatibility.Diagnostics)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+			t.Fatalf("invalid partial-preview contract: %+v", issues)
+		}
+		if !bytes.Equal(original, before) {
+			t.Fatal("preview changed original bytes")
+		}
+		strictDeck, err := ExtractNativePPTX(original, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, diagnostic := range strictDeck.Slides[0].Elements[0].Compatibility.Diagnostics {
+			if diagnostic.Code == "pptx.autofit-source-frame-approximate" {
+				t.Fatal("strict extraction opted into approximation")
+			}
+		}
+	}
+}
+
 func TestNativeTextBoxRejectsUnmodeledPaint(t *testing.T) {
 	for _, properties := range []string{
 		`<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:noFill/>`,

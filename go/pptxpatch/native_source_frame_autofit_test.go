@@ -56,7 +56,7 @@ func TestNativeSourceFrameAutoFitIsExplicitReadOnly(t *testing.T) {
 }
 
 func TestNativeSourceFrameAutoFitDoesNotHideOtherLayoutGaps(t *testing.T) {
-	for _, body := range []string{`<a:bodyPr><a:spAutoFit/><a:noAutofit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit/><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit bad="1"/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit>text</a:spAutoFit></a:bodyPr>`, `<a:bodyPr vert="vert"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:normAutofit/></a:bodyPr>`, `<a:bodyPr numCol="2"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr vertOverflow="clip"><a:spAutoFit/></a:bodyPr>`} {
+	for _, body := range []string{`<a:bodyPr><a:spAutoFit/><a:noAutofit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit/><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit bad="1"/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit>text</a:spAutoFit></a:bodyPr>`, `<a:bodyPr vert="vert270"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:normAutofit/></a:bodyPr>`, `<a:bodyPr numCol="2"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr vertOverflow="clip"><a:spAutoFit/></a:bodyPr>`} {
 		options := nativeMutationExtractOptions()
 		options.AllowSourceFrameAutoFitPreview = true
 		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, body), options)

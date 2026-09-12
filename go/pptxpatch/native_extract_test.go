@@ -495,7 +495,7 @@ func TestExtractNativePPTXUnsupportedShapeUsesObjectLocalCapability(t *testing.T
 	t.Parallel()
 
 	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
-		parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<a:bodyPr/>`, `<a:bodyPr vert="vert"/>`, 1)
+		parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<a:bodyPr/>`, `<a:bodyPr vert="vert270"/>`, 1)
 	}})
 	var requests []NativePassthroughTokenRequest
 	deck, err := ExtractNativePPTX(payload, NativePPTXExtractOptions{TokenFactory: NativePassthroughTokenFactoryFunc(func(request NativePassthroughTokenRequest) (string, error) {

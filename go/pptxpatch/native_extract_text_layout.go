@@ -186,9 +186,12 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		}
 		return nil, unsupportedNativeTextLayout("clipped or ellipsis vertical overflow is not representable")
 	}
+	var writingMode *string
 	if value, ok := exactNativeAttr(bodyPr, "", "vert"); ok && value != "horz" {
 		switch value {
-		case "vert", "vert270", "wordArtVert", "eaVert", "mongolianVert", "wordArtVertRtl":
+		case "vert":
+			writingMode = stringPointer("vertical-clockwise")
+		case "vert270", "wordArtVert", "eaVert", "mongolianVert", "wordArtVertRtl":
 			return nil, unsupportedNativeTextLayout("non-horizontal text flow is not representable")
 		default:
 			return nil, fmt.Errorf("pptxpatch: native extract: invalid text flow")
@@ -231,6 +234,7 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		LeftInsetEMU: &left, RightInsetEMU: &right, TopInsetEMU: &top, BottomInsetEMU: &bottom,
 		Wrap: wrap, VerticalAnchor: anchor, AutoFit: autoFit,
 		HorizontalOverflow: "overflow", VerticalOverflow: "overflow",
+		WritingMode: writingMode,
 	}, nil
 }
 
@@ -240,6 +244,16 @@ func nativeMarkSourceFrameAutoFit(element *NativeElement) {
 	}
 	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
 	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.autofit-source-frame-approximate", Message: "Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint."})
+}
+
+func nativeMarkVerticalTextPreview(element *NativeElement) {
+	if element.TextBody == nil || element.TextBody.WritingMode == nil {
+		return
+	}
+	if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+	}
+	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.vertical-text-preview", Message: "clockwise vertical text is read-only; native rendering qualifies only non-bulleted ASCII Latin text"})
 }
 
 func validateNativeTextBodyBounds(layout *NativeTextBodyLayout, transform NativeTransform) error {

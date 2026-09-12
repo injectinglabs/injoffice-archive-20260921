@@ -9,6 +9,7 @@ export type PaintCommand =
   | { readonly kind: 'restore' }
   | { readonly kind: 'transform'; readonly transform: RenderTransform }
   | { readonly kind: 'clipRect'; readonly rect: RenderRect }
+  | { readonly kind: 'clipRoundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
   | { readonly kind: 'path'; readonly sourceElementId: string; readonly path: readonly RenderPathCommand[]; readonly fill?: string; readonly stroke?: RenderStroke; readonly headArrow?: boolean; readonly tailArrow?: boolean; readonly headEnd?:Readonly<NativeArrowEnd>;readonly tailEnd?:Readonly<NativeArrowEnd> }
   | { readonly kind: 'image'; readonly sourceElementId: string; readonly role: 'picture' | 'chartPreview'; readonly assetId: string; readonly rect: RenderRect; readonly crop?: Readonly<NativePictureCrop> }
   | { readonly kind: 'glyphRun'; readonly sourceElementId: string; readonly run: RenderTextRunNode }
@@ -76,13 +77,18 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
     })
     return
   }
+  if (textBody.transform) {
+    surface.push({kind:'save'})
+    surface.push({kind:'transform',transform:textBody.transform})
+  }
   paintParagraphs(textBody.paragraphs, surface)
+  if (textBody.transform) surface.push({kind:'restore'})
 }
 
 function paintNode(node: RenderNode, surface: PaintSurface): void {
   surface.push({ kind: 'save' })
   surface.push({ kind: 'transform', transform: node.transform })
-  if (node.clip) surface.push({ kind: 'clipRect', rect: node.clip.rect })
+  if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : { kind: 'clipRect', rect: node.clip.rect })
   switch (node.kind) {
     case 'shape':
       surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, fill: node.fill?.color, stroke: node.stroke })

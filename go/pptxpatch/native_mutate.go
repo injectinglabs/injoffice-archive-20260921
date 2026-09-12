@@ -545,9 +545,12 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Transform.QuarterTurns != nil {
 			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)
 		}
+		if element.TextBody != nil && element.TextBody.WritingMode != nil {
+			return nil, fmt.Errorf("%s: vertical text is preview-only", prefix)
+		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
 			switch diagnostic.Code {
-			case "pptx.autofit-source-frame-approximate", "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
+			case "pptx.end-paragraph-metadata-preserved", "pptx.autofit-source-frame-approximate", "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
 				return nil, fmt.Errorf("%s: projected shape styles or omitted text are preview-only", prefix)
 			}
 		}

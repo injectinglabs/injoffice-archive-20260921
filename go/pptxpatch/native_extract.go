@@ -1858,8 +1858,11 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if name != "" {
 		element.Name = stringPointer(name)
 	}
+	// The retained source-frame layout is approximate even when an independent
+	// content refusal prevents painting text. Keep that provenance in both paths.
+	nativeMarkSourceFrameAutoFit(&element)
 	if textLayoutMessage == "" && textContentMessage == "" {
-		nativeMarkSourceFrameAutoFit(&element)
+		nativeMarkVerticalTextPreview(&element)
 		nativePreserveTextCheckingMetadata(&element, txBody, dialect)
 		_ = fingerprint
 		_ = zIndex
@@ -1869,6 +1872,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		return NativeElement{}, fmt.Errorf("pptxpatch: native extract: cumulative emitted passthrough reference budget exceeded")
 	}
 	reason := "pptx.text-refused"
+	nativeMarkVerticalTextPreview(&element)
 	if textContentMessage == "" {
 		reason = "pptx.text-layout-refused"
 	} else if textLayoutMessage == "" {
@@ -1962,9 +1966,6 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 		if err != nil {
 			return nil, err
 		}
-		if endParaRPr != nil {
-			return nil, fmt.Errorf("pptxpatch: native extract: end-paragraph formatting is not representable in v1")
-		}
 		paragraph := NativeParagraph{Runs: []NativeTextRun{}}
 		for _, child := range paragraphNode.Children {
 			switch child.Name {
@@ -2045,6 +2046,9 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 		}
 		if len(paragraph.Runs) == 0 {
 			return nil, fmt.Errorf("pptxpatch: native extract: empty paragraph lacks self-contained end-paragraph font metrics")
+		}
+		if err := qualifyNativeEndParagraphMetadata(endParaRPr, paragraph); err != nil {
+			return nil, err
 		}
 		paragraphs = append(paragraphs, paragraph)
 	}

@@ -124,6 +124,7 @@ type NativeTextBodyLayout struct {
 	AutoFit            string                   `json:"autoFit"`
 	HorizontalOverflow string                   `json:"horizontalOverflow"`
 	VerticalOverflow   string                   `json:"verticalOverflow"`
+	WritingMode        *string                  `json:"writingMode,omitempty"`
 }
 
 type NativeArrowEnd struct {
@@ -212,6 +213,7 @@ type NativeElement struct {
 	FlipH          *bool                  `json:"flipH,omitempty"`
 	AssetID        *string                `json:"assetId,omitempty"`
 	Crop           *NativePictureCrop     `json:"crop,omitempty"`
+	Clip           *string                `json:"clip,omitempty"`
 	Table          *NativeTable           `json:"table,omitempty"`
 	Chart          *NativeOpaqueChart     `json:"chart,omitempty"`
 	ChildTransform *NativeTransform       `json:"childTransform,omitempty"`

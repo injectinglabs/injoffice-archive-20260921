@@ -13,7 +13,7 @@ export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onI
   switch(node.kind){
    case 'image':{const resource=preview.resources.find(r=>r.id===node.resourceId)!;const c=node.crop??{left:0,top:0,right:0,bottom:0};return <svg key={key} x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} viewBox={`${c.left} ${c.top} ${100000-c.left-c.right} ${100000-c.top-c.bottom}`} preserveAspectRatio="none" overflow="hidden"><image data-native-raster={resource.id} href={`data:${resource.content_type};base64,${resource.bytes_base64}`} width={100000} height={100000} preserveAspectRatio="none" onError={onImageError}/></svg>}
    case 'group':{const clip=node.clip,id=`${prefix}-${key}`;return <g key={key} data-native-source-role={node.sourceRole} transform={`matrix(${node.transform.join(' ')})`}>
-    {clip&&<defs><clipPath id={id}><rect x={clip.x} y={clip.y} width={clip.cx} height={clip.cy}/></clipPath></defs>}
+    {clip&&<defs><clipPath id={id} clipPathUnits="userSpaceOnUse"><rect x={clip.x} y={clip.y} width={clip.cx} height={clip.cy} rx={clip.radius} ry={clip.radius}/></clipPath></defs>}
     <g clipPath={clip?`url(#${id})`:undefined}>{node.children.map((child,i)=>draw(child,`${key}-${i}`))}</g>
    </g>}
    case 'path':return <path key={key} d={node.d} fill={color(node.fill)} stroke={node.stroke?color(node.stroke):undefined} strokeWidth={node.strokeWidth} {...strokeProps(node)}/>
