@@ -9627,7 +9627,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"e996f800463c37d6604e9e3d6b05cc4b2d10cd1adf4c9aa7e39a49153359fe88\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"e0a7aebee5e13fd1ec333c5e4fb980cf04183b7b823aa7e152eb062751f733ca\""
             },
             {
               "name": "provenanceValues",

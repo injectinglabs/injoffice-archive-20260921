@@ -119,6 +119,8 @@ export interface RenderCluster extends Omit<ShapedCluster, 'startUtf16' | 'endUt
 }
 
 export interface RenderTextRunNode {
+  /** Digest-bound legacy cmap transport; text and clusters retain authored bytes. */
+  readonly symbolEncoding?: {readonly policy:'windows-symbol-byte-v1';readonly sourceByte:number;readonly transportCodePoint:number;readonly glyphId:number;readonly unitsPerEm:number;readonly advanceWidth:number;readonly ascender:number;readonly descender:number;readonly lineGap:number}
   /** Marker UTF-16 offsets refer to paragraph.bulletCharacter, not a content run. */
   readonly sourceRole?: 'paragraphBullet'
   readonly kind: 'textRun'

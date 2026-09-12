@@ -157,10 +157,6 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		} else {
 			paragraphs = parsed
 		}
-		if preset != nil && *preset == NativeShapePresetPentagon {
-			gaps.add("pptx.autoshape-text-layout-unavailable", "pentagon geometry retained; text omitted because preset text-region layout is not qualified", false)
-			textOmitted = true
-		}
 		if textOmitted {
 			paragraphs = []NativeParagraph{}
 			textBodyLayout = nil

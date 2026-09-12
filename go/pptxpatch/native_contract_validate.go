@@ -683,6 +683,12 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 				v.add(pp+".bulletCharacter", "native.bulletCharacter", "requires one authored character and bullet=true")
 			}
 		}
+		if family := paragraph.BulletFontFamily; family != nil && (paragraph.BulletCharacter == nil || paragraph.Bullet == nil || !*paragraph.Bullet || len(*family) == 0 || len(*family) > 256 || strings.TrimSpace(*family) != *family || strings.HasPrefix(*family, "+") || strings.IndexFunc(*family, unicode.IsControl) >= 0) {
+			v.add(pp+".bulletFontFamily", "native.bulletFontFamily", "requires an exact family and authored bullet character")
+		}
+		if encoding := paragraph.BulletFontEncoding; encoding != nil && (*encoding != "windows-symbol-byte-v1" || paragraph.BulletFontFamily == nil || paragraph.BulletCharacter == nil || len(*paragraph.BulletCharacter) != 1 || (*paragraph.BulletCharacter)[0] < 32 || (*paragraph.BulletCharacter)[0] > 126) {
+			v.add(pp+".bulletFontEncoding", "native.bulletFontEncoding", "symbol byte policy requires exact font and ASCII graphic marker")
+		}
 		if paragraph.MarginLeftEmu != nil && (*paragraph.MarginLeftEmu < 0 || *paragraph.MarginLeftEmu > 51206400) {
 			v.add(pp+".marginLeftEmu", "schema.range", "invalid paragraph margin")
 		}

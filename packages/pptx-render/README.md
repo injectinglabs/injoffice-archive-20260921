@@ -19,13 +19,25 @@ frame after source cropping and composes with parent transforms. Host adapters
 must implement this command; unsupported presets and nonempty adjustment lists
 remain visible placeholders rather than unmasked images.
 
+Authored bullet fonts resolve only to an exact host-provided face, without a
+fallback override. A source `charset=2` bullet has a separate, narrowly qualified
+Windows symbol-byte policy: matching Macintosh-byte and Windows-symbol cmap
+entries select one glyph, and digest-bound hmtx/hhea metrics place that glyph.
+The original character and cluster remain unchanged. This is not Unicode
+substitution or general symbol-font shaping. Unsupported legacy encodings,
+shaping/variable fonts, ambiguous maps, and missing exact faces remain refused;
+no proprietary font bytes are bundled. The render run retains the encoding
+evidence, and diagnostics disclose that no GSUB/GPOS shaping is applied to the
+isolated symbol.
+
 Parsed default pentagons use the DrawingML preset guide equations, rounded once
 to integer EMU, rather than an inscribed regular polygon. Supported solid theme
 fill/outline references are resolved by the native extractor. These source-bound
 projections are read-only. Unsupported shape text is explicitly omitted while
 independently supported geometry remains visible; diagnostics must be shown by
-the host. Vertical text flow, autofit, and pentagon text-region placement are not
-qualified by this geometry support. This is a partial preview, not a claim of
+the host. Default pentagon text uses the official preset text rectangle followed
+by authored body insets; custom adjustments remain unsupported. Vertical text
+flow and autofit are not qualified by this geometry support. This is a partial preview, not a claim of
 complete slide or Microsoft Office fidelity.
 
 ```ts

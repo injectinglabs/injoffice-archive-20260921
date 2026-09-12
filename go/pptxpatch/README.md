@@ -8,7 +8,7 @@ frame. Its native `textBody.autoFit` is `shape-source-frame`, with a persistent
 approximation diagnostic and non-editable status. No content-dependent resizing
 is performed; frame size, text layout, and overflow or clipping may differ from
 PowerPoint. Normal extraction and mutation remain strict. Malformed autofit,
-font scaling, vertical text, unsupported fonts and other independent gaps remain
+font scaling, unsupported vertical modes, unsupported fonts and other independent gaps remain
 refusals.
 
 ```bash
@@ -58,7 +58,7 @@ color and `fontFamily` fields when the relationship-routed theme and master
 color map supply exact snapshots. Alpha-only and unmodeled color transforms
 remain object-local refusals.
 
-Static text previews accept the Boolean `dirty` and `smtClean` run/default-run
+Static text previews accept the Boolean `dirty`, `smtClean`, and `err` run/default-run
 checking flags. They are validated before style precedence and omitted only from
 the owned paint projection; original package bytes remain untouched. Affected
 text, shape, and table targets stay preserve-only because text replacement does

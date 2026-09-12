@@ -558,6 +558,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		// summaries after rewriting cannot prove that local metadata survived.
 		if operation.Kind == NativePPTXReplaceText {
 			for _, diagnostic := range element.Compatibility.Diagnostics {
+				if diagnostic.Code == "pptx.bullet-font-preserved" {
+					return nil, fmt.Errorf("%s: authored bullet font is preserve-only", prefix)
+				}
 				if diagnostic.Code == "pptx.text-checking-metadata-preserved" {
 					return nil, fmt.Errorf("%s: text checking metadata is preserve-only and cannot be replaced", prefix)
 				}
@@ -656,6 +659,9 @@ func validateNativeMutationParagraphs(paragraphs []NativeParagraph, budget *nati
 	budget.paragraphs += len(paragraphs)
 	budget.nodes += len(paragraphs)
 	for paragraphIndex, paragraph := range paragraphs {
+		if paragraph.BulletFontFamily != nil || paragraph.BulletFontEncoding != nil {
+			return fmt.Errorf("paragraph %d authored bullet font is preserve-only", paragraphIndex)
+		}
 		if paragraph.Runs == nil || paragraph.Align == nil || paragraph.Level == nil || paragraph.Bullet == nil {
 			return fmt.Errorf("paragraph %d is not self-contained", paragraphIndex)
 		}

@@ -1975,6 +1975,7 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 				}
 				if err := requireOnlyNativeChildren(child,
 					xml.Name{Space: dialect.drawing, Local: "buNone"},
+					xml.Name{Space: dialect.drawing, Local: "buFont"},
 					xml.Name{Space: dialect.drawing, Local: "buChar"}); err != nil {
 					return nil, fmt.Errorf("pptxpatch: native extract: unmodeled paragraph metadata: %w", err)
 				}
@@ -1998,6 +1999,26 @@ func (extractor *nativeExtractor) extractNativeParagraphs(txBody *nativeXMLNode,
 					}
 					paragraph.Bullet = boolPointer(true)
 					paragraph.BulletCharacter = &marker
+				}
+				bulletFont, fontErr := nativeSingleton(child, dialect.drawing, "buFont", false)
+				if fontErr != nil {
+					return nil, fontErr
+				}
+				if bulletFont != nil {
+					if buChar == nil {
+						return nil, unsupportedNativeTextContent("authored bullet font requires an explicit character")
+					}
+					family, err := nativeBulletFontFamily(bulletFont)
+					if err != nil {
+						return nil, err
+					}
+					paragraph.BulletFontFamily = &family
+					if charset, ok := exactNativeAttr(bulletFont, "", "charset"); ok && charset == "2" {
+						if paragraph.BulletCharacter == nil || len(*paragraph.BulletCharacter) != 1 || (*paragraph.BulletCharacter)[0] < 32 || (*paragraph.BulletCharacter)[0] > 126 {
+							return nil, unsupportedNativeTextContent("buFont symbol preview requires an ASCII graphic source byte")
+						}
+						paragraph.BulletFontEncoding = stringPointer("windows-symbol-byte-v1")
+					}
 				}
 				for _, field := range []struct {
 					name   string

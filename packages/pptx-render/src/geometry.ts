@@ -46,7 +46,7 @@ function polygon(cx: number, cy: number, pointsPpm: readonly (readonly [number, 
  * Derived from the public preset equations (also documented in Apache POI's
  * presetShapeDefinitions.xml). Keep guide precision until the final EMU rounding.
  */
-function pentagon(cx: number, cy: number): readonly RenderPathCommand[] {
+function pentagonGuides(cx: number, cy: number) {
   const halfX = cx / 2
   const scaledX = halfX * 105146 / 100000
   const scaledY = cy / 2 * 110557 / 100000
@@ -56,6 +56,19 @@ function pentagon(cx: number, cy: number): readonly RenderPathCommand[] {
   const dx2 = scaledX * Math.sqrt(10 - 2 * root5) / 4
   const y1 = scaledY * (1 - (root5 - 1) / 4)
   const y2 = scaledY * (1 + (root5 + 1) / 4)
+  return { halfX, dx1, dx2, y1, y2 }
+}
+
+/** ECMA-376 pentagon text rect: x2, y1*dx2/dx1, x3, y2; before body insets. */
+export function defaultPentagonTextRect(cx: number, cy: number): RenderRect {
+  const { halfX, dx1, dx2, y1, y2 } = pentagonGuides(cx, cy)
+  const x = Math.round(halfX - dx2)
+  const y = Math.round(y1 * dx2 / dx1)
+  return { x, y, cx: Math.round(halfX + dx2) - x, cy: Math.round(y2) - y }
+}
+
+function pentagon(cx: number, cy: number): readonly RenderPathCommand[] {
+  const { halfX, dx1, dx2, y1, y2 } = pentagonGuides(cx, cy)
   const points = [[halfX - dx1, y1], [halfX, 0], [halfX + dx1, y1], [halfX + dx2, y2], [halfX - dx2, y2]]
   return [
     ...points.map(([x, y], index) => ({

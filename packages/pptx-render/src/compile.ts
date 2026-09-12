@@ -1,7 +1,9 @@
+import { qualifySymbolBullet } from './symbolBullet.js'
 import {
   NATIVE_TEXT_LAYOUT_VERSION,
   classifyNativeOfficeLineBreakRanges,
   scaleLineMetrics,
+  scaleFontUnits,
   validateFontManifest,
   validateTextRunInput,
   type NativeTextDecision,
@@ -31,7 +33,7 @@ import {
   type NativeTextBodyLayout,
   type NativeTextRun,
 } from '@injoffice/pptx-native'
-import { connectorPath, localBounds, presetPath, translationTransform,quarterTurnTransform } from './geometry.js'
+import { connectorPath, defaultPentagonTextRect, localBounds, presetPath, translationTransform,quarterTurnTransform } from './geometry.js'
 import {
   PPTX_RENDER_LIMITS,
   PPTX_RENDER_TREE_VERSION,
@@ -685,11 +687,14 @@ function elementBase(element: NativeElement, zIndex: number, budget: Budget, cli
 function nativeTextBodyBounds(element: Extract<NativeElement, { kind: 'text' | 'shape' }>, state: CompileState): RenderRect {
   const layout = element.textBody
   if (!layout) return localBounds(element.transform.cx, element.transform.cy)
+  const region = element.kind === 'shape' && element.preset === 'pentagon'
+    ? defaultPentagonTextRect(element.transform.cx, element.transform.cy)
+    : localBounds(element.transform.cx, element.transform.cy)
   const bounds = {
-    x: layout.leftInsetEmu,
-    y: layout.topInsetEmu,
-    cx: element.transform.cx - layout.leftInsetEmu - layout.rightInsetEmu,
-    cy: element.transform.cy - layout.topInsetEmu - layout.bottomInsetEmu,
+    x: region.x + layout.leftInsetEmu,
+    y: region.y + layout.topInsetEmu,
+    cx: region.cx - layout.leftInsetEmu - layout.rightInsetEmu,
+    cy: region.cy - layout.topInsetEmu - layout.bottomInsetEmu,
   }
   checkCoordinate(bounds.x, `$.elements.${element.id}.textBody.leftInsetEmu`, state.budget)
   checkCoordinate(bounds.y, `$.elements.${element.id}.textBody.topInsetEmu`, state.budget)
@@ -990,10 +995,10 @@ function refusedRun(
   }
 }
 
-async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunContext, state: CompileState): Promise<ShapedRunResult> {
+async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunContext, state: CompileState, exactFamily?: string, symbolEncoding?: 'windows-symbol-byte-v1'): Promise<ShapedRunResult> {
   const override = state.resolveRun?.(context) ?? {}
-  const families = [...(override.fontFamilies ?? (nativeRun.fontFamily ? [nativeRun.fontFamily] : state.textDefaults.fontFamilies))]
-  const fallbackChainIds = override.fallbackChainIds ?? state.textDefaults.fallbackChainIds
+  const families = exactFamily ? [exactFamily] : [...(override.fontFamilies ?? (nativeRun.fontFamily ? [nativeRun.fontFamily] : state.textDefaults.fontFamilies))]
+  const fallbackChainIds = exactFamily ? undefined : override.fallbackChainIds ?? state.textDefaults.fallbackChainIds
   const input: TextRunInput = deepFreeze({
     version: NATIVE_TEXT_LAYOUT_VERSION,
     text: nativeRun.text,
@@ -1029,6 +1034,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
   let resolution: Exclude<NormalizedResolution, NativeTextRefusal>
   let loaded: FontResource
   let shaped: ShapedSegment
+  let symbolEvidence: ReturnType<typeof qualifySymbolBullet> | undefined
   try {
     if (state.providerResolveCalls >= PPTX_RENDER_LIMITS.maxProviderResolveCalls) throw new TextBodyLayoutRefusal('text.providerBudget', `resolver calls exceed ${PPTX_RENDER_LIMITS.maxProviderResolveCalls}`)
     state.providerResolveCalls++
@@ -1036,6 +1042,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
     if (!providerIdentityStable(state.providers)) throw new TextBodyLayoutRefusal('text.refused', 'the injected provider changed its snapshotted identity during resolution')
     const normalizedResolution = normalizeResolution(resolvedLive, state, `${path}.resolution`, input.text.length)
     if (normalizedResolution.status === 'refused') throw new TextBodyLayoutRefusal('text.refused', 'the injected font resolver refused the complete native paragraph')
+    if (exactFamily && (normalizedResolution.face.family !== exactFamily || normalizedResolution.face.resolution !== 'exact')) throw new TextBodyLayoutRefusal('text.refused', 'authored bullet requires its exact font face without substitution')
     if (!faceBackedByManifest(normalizedResolution.face, state.fontManifest, input)) throw new TextBodyLayoutRefusal('text.refused', 'the injected resolver returned a face that is not exactly backed by the snapshotted font manifest')
     if (decisionsBlockLayout(normalizedResolution.decisions)) throw new TextBodyLayoutRefusal('text.refused', 'the injected resolver reported a blocking shaping decision')
     resolution = normalizedResolution
@@ -1071,12 +1078,23 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
     if (state.providerShapeCalls >= PPTX_RENDER_LIMITS.maxProviderShapeCalls) throw new TextBodyLayoutRefusal('text.providerBudget', `shaper calls exceed ${PPTX_RENDER_LIMITS.maxProviderShapeCalls}`)
     if (fontDigest(providerResource.bytes) !== resolution.face.contentDigest) throw new TextBodyLayoutRefusal('text.refused', 'the isolated provider-facing font bytes were mutated before shaping')
     state.providerShapeCalls++
-    const shapedLive = await state.providers.shaper.shape(Object.freeze({ run: input, startUtf16: 0, endUtf16: input.text.length, font: providerResource }))
+    if (symbolEncoding) {
+      if (!exactFamily) throw new TextBodyLayoutRefusal('text.refused', 'symbol encoding requires an exact authored family')
+      if(input.direction!=='ltr' || input.features?.length || input.variations?.length || input.letterSpacingMilliPoints!==undefined || input.wordSpacingMilliPoints!==undefined) throw new TextBodyLayoutRefusal('text.refused','symbol glyph placement does not implement shaping features, variations, spacing or non-LTR direction')
+      symbolEvidence = qualifySymbolBullet(loaded.bytes, nativeRun.text)
+      if(symbolEvidence.unitsPerEm!==loaded.metrics.unitsPerEm || symbolEvidence.ascender!==loaded.metrics.ascender || symbolEvidence.descender!==loaded.metrics.descender || symbolEvidence.lineGap!==loaded.metrics.lineGap) throw new TextBodyLayoutRefusal('text.refused','symbol font units or line metrics disagree with source metrics')
+    }
+    let shapedLive: unknown
+    if(symbolEvidence) {
+      const advance=scaleFontUnits(symbolEvidence.advanceWidth,symbolEvidence.unitsPerEm,input.fontSizeMilliPoints)
+      shapedLive={startUtf16:0,endUtf16:1,face:resolution.face,glyphs:[{glyphId:symbolEvidence.glyphId,clusterIndex:0,advanceXMilliPoints:advance,advanceYMilliPoints:0,offsetXMilliPoints:0,offsetYMilliPoints:0}],clusters:[{startUtf16:0,endUtf16:1,glyphStart:0,glyphEnd:1,advanceInlineMilliPoints:advance}],metrics:scaleLineMetrics(loaded.metrics,input.fontSizeMilliPoints),advanceInlineMilliPoints:advance,advanceBlockMilliPoints:0}
+    } else shapedLive = await state.providers.shaper.shape(Object.freeze({ run: input, startUtf16: 0, endUtf16: input.text.length, font: providerResource }))
     if (!providerIdentityStable(state.providers)) throw new TextBodyLayoutRefusal('text.refused', 'the injected provider changed its snapshotted identity during shaping')
     if (fontDigest(providerResource.bytes) !== resolution.face.contentDigest) throw new TextBodyLayoutRefusal('text.refused', 'the injected shaper mutated its isolated font bytes during shaping')
     const normalizedShaped = normalizeShaperOutput(shapedLive, state, `${path}.shaping`, input.text.length)
     if ('status' in normalizedShaped) throw new TextBodyLayoutRefusal('text.refused', 'the injected shaper refused the complete native paragraph')
     shaped = normalizedShaped
+    if (symbolEvidence && (shaped.glyphs.length !== 1 || shaped.glyphs[0]!.glyphId !== symbolEvidence.glyphId || shaped.clusters.length !== 1)) throw new TextBodyLayoutRefusal('text.refused', 'symbol transport glyph disagrees with source cmap evidence')
     validateSegment(shaped, input, resolution.face, path)
     const expectedMetrics = scaleLineMetrics(loaded.metrics, input.fontSizeMilliPoints)
     if (!sameMetrics(shaped.metrics, expectedMetrics)) throw new TextBodyLayoutRefusal('text.refused', 'shaper line metrics are not exactly derived from the digest-bound font resource')
@@ -1156,6 +1174,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
       startUtf16: 0,
       endUtf16: nativeRun.text.length,
       text: nativeRun.text,
+      ...(symbolEvidence ? {symbolEncoding:symbolEvidence} : {}),
       direction: input.direction,
       fontSizeMilliPoints: input.fontSizeMilliPoints,
       faceId: resolution.face.faceId,
@@ -1553,8 +1572,9 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     let shapedMarker:ShapedRunResult|undefined
     if(measuredParagraph&&paragraph.bullet){
       if(!paragraph.bulletCharacter||!paragraph.runs[0])throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','native bullet needs one explicit authored character and a source font run')
-      const markerRun={...paragraph.runs[0],text:paragraph.bulletCharacter}
-      shapedMarker=await shapeRun(markerRun,{slideId:state.slide.id,elementId:context.elementId,elementKind:context.elementKind,paragraphIndex,runIndex:0,text:paragraph.bulletCharacter},state)
+      const markerRun={...paragraph.runs[0],text:paragraph.bulletCharacter,...(paragraph.bulletFontFamily ? {fontFamily:paragraph.bulletFontFamily} : {})}
+      shapedMarker=await shapeRun(markerRun,{slideId:state.slide.id,elementId:context.elementId,elementKind:context.elementKind,paragraphIndex,runIndex:0,text:paragraph.bulletCharacter},state,paragraph.bulletFontFamily,paragraph.bulletFontEncoding)
+      if (shapedMarker.run.symbolEncoding) state.diagnostics.push({severity:'info',code:'text.symbolBulletEncoding',message:'Authored bullet byte selects one exact font glyph through qualified Windows symbol cmap and hmtx metrics; source character and cluster remain unchanged. No GSUB/GPOS shaping is applied to this isolated symbol.',slideId:state.slide.id,elementId:context.elementId})
       if(shapedMarker.direction!=='ltr'||shapedMarker.run.status!=='shaped'||indent+shapedMarker.run.advanceInlineEmu>0)throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','authored hanging indent does not fit the exact shaped marker before the text origin')
     }
     const directions = new Set(shaped.map((item) => item.direction))

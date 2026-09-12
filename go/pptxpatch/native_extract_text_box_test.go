@@ -12,7 +12,7 @@ func nativeRectangularTextBoxFixture(t *testing.T, strict bool, properties strin
 		parts[part] = strings.Replace(parts[part], `</a:xfrm></p:spPr>`, `</a:xfrm>`+properties+`</p:spPr>`, 1)
 		if unsupportedText {
 			parts[part] = strings.Replace(parts[part], `<a:bodyPr/>`, `<a:bodyPr><a:spAutoFit/></a:bodyPr>`, 1)
-			parts[part] = strings.Replace(parts[part], `<a:buNone/>`, `<a:buFont typeface="Wingdings"/><a:buChar char="q"/>`, 1)
+			parts[part] = strings.Replace(parts[part], `<a:buNone/>`, `<a:buFont typeface="Wingdings" charset="invalid"/><a:buChar char="q"/>`, 1)
 		}
 	}})
 }

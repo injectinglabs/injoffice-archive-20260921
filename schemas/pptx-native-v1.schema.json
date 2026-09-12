@@ -292,6 +292,8 @@
         "level": { "type": "integer", "minimum": 0, "maximum": 8 },
         "bullet": { "type": "boolean" },
         "bulletCharacter": { "type": "string", "minLength": 1, "maxLength": 2, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+        "bulletFontFamily": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "bulletFontEncoding": { "enum": ["windows-symbol-byte-v1"] },
         "marginLeftEmu": { "type": "integer", "minimum": 0, "maximum": 51206400 },
         "indentEmu": { "type": "integer", "minimum": -51206400, "maximum": 51206400 }
       }

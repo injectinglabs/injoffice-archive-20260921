@@ -119,11 +119,11 @@ func resolveNativeLocalTextStyles(body *nativeXMLNode, dialect nativeExtractDial
 }
 
 func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtractDialect, paragraph bool, theme nativeResolvedTheme) error {
-	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}, {Local: "lang"}}
+	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}, {Local: "err"}, {Local: "lang"}}
 	names := []string{"latin", "ea", "cs", "solidFill"}
 	if paragraph {
 		attrs = []xml.Name{{Local: "algn"}, {Local: "lvl"}, {Local: "marL"}, {Local: "indent"}}
-		names = []string{"buNone", "buChar", "defRPr"}
+		names = []string{"buNone", "buChar", "buFont", "defRPr"}
 	}
 	if err := requireOnlyNativeAttrs(node, attrs...); err != nil {
 		return unsupportedNativeTextContent("unmodeled inherited text property: " + err.Error())
@@ -136,7 +136,7 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 			if !validNativeLanguage(attr.Value) {
 				err = fmt.Errorf("invalid authored language tag")
 			}
-		case "b", "i", "dirty", "smtClean":
+		case "b", "i", "dirty", "smtClean", "err":
 			_, err = nativeBool(attr.Value)
 		case "sz":
 			_, err = parseCanonicalNativeInt(attr.Value, 1, 400000)
@@ -179,6 +179,10 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 				return unsupportedNativeTextContent("invalid inherited typeface metadata")
 			}
 			_, err = theme.resolveTypeface(family)
+		case "buFont":
+			if _, err := nativeBulletFontFamily(child); err != nil {
+				return err
+			}
 		case "buNone":
 			err = requireEmptyNativeElement(child)
 		case "buChar":
@@ -201,13 +205,13 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 	return nil
 }
 
-// These two Boolean flags track spelling/smart-tag checking, not glyph layout.
+// These Boolean flags track spelling/smart-tag checking, not glyph layout.
 // They are validated before cascade resolution and omitted only from the owned
 // paint projection. Language is retained for shaping; kumimoji remains strict.
 func nativeTextPaintAttrs(attrs []xml.Attr) []xml.Attr {
 	result := make([]xml.Attr, 0, len(attrs))
 	for _, attr := range attrs {
-		if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean") {
+		if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean" || attr.Name.Local == "err") {
 			continue
 		}
 		result = append(result, attr)
@@ -221,7 +225,7 @@ func nativeHasTextCheckingMetadata(node *nativeXMLNode, dialect nativeExtractDia
 	}
 	if node.Name.Space == dialect.drawing && (node.Name.Local == "rPr" || node.Name.Local == "defRPr") {
 		for _, attr := range node.Attrs {
-			if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean") {
+			if attr.Name.Space == "" && (attr.Name.Local == "dirty" || attr.Name.Local == "smtClean" || attr.Name.Local == "err") {
 				return true
 			}
 		}
@@ -242,6 +246,15 @@ func nativePreserveTextCheckingMetadata(element *NativeElement, node *nativeXMLN
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.end-paragraph-metadata-preserved", Message: "non-layout end-paragraph metadata is source-preserved; replacement does not round-trip the end mark"})
 	}
+	if element.Paragraphs != nil {
+		for _, p := range *element.Paragraphs {
+			if p.BulletFontFamily != nil {
+				element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+				element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.bullet-font-preserved", Message: "Authored bullet font requires its exact operator-provided face; source font metadata remains preserve-only"})
+				break
+			}
+		}
+	}
 	if !nativeHasTextCheckingMetadata(node, dialect) {
 		return
 	}
@@ -250,6 +263,24 @@ func nativePreserveTextCheckingMetadata(element *NativeElement, node *nativeXMLN
 		Severity: NativeDiagnosticSeverityWarning, Code: "pptx.text-checking-metadata-preserved",
 		Message: "spelling and smart-tag check flags do not affect static text paint; source remains preserve-only because replacement does not round-trip these flags",
 	})
+}
+
+func nativeBulletFontFamily(node *nativeXMLNode) (string, error) {
+	family, ok := exactNativeAttr(node, "", "typeface")
+	if !ok || family == "" || len(family) > 256 || strings.TrimSpace(family) != family || strings.HasPrefix(family, "+") || strings.IndexFunc(family, unicode.IsControl) >= 0 || requireOnlyNativeAttrs(node, xml.Name{Local: "typeface"}, xml.Name{Local: "pitchFamily"}, xml.Name{Local: "charset"}) != nil || requireOnlyNativeChildren(node) != nil || !onlyNativeXMLSpace(node.Text) {
+		return "", unsupportedNativeTextContent("unsupported authored bullet font")
+	}
+	for _, attr := range []string{"pitchFamily", "charset"} {
+		if value, present := exactNativeAttr(node, "", attr); present {
+			if _, err := parseCanonicalNativeInt(value, 0, 255); err != nil {
+				return "", unsupportedNativeTextContent("invalid buFont metadata")
+			}
+			if attr == "charset" && value != "0" && value != "2" {
+				return "", unsupportedNativeTextContent("unsupported buFont character encoding")
+			}
+		}
+	}
+	return family, nil
 }
 
 func mergeNativeStyleNodes(base, override *nativeXMLNode, dialect nativeExtractDialect) *nativeXMLNode {

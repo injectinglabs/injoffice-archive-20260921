@@ -34,6 +34,53 @@ func nativeStyledTextFixture(t *testing.T, strict bool, marker string, customize
 	}})
 }
 
+func TestNativeAuthoredBulletFontIsSourcePreserved(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		data := nativeStyledTextFixture(t, strict, "q", func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<a:buChar char="q"/>`, `<a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="q"/>`, 1)
+		})
+		before := bytes.Clone(data)
+		deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := deck.Slides[0].Elements[0]
+		if e.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || e.Paragraphs == nil {
+			t.Fatalf("not preserve-only: %+v", e)
+		}
+		p := (*e.Paragraphs)[0]
+		if p.BulletFontEncoding == nil || *p.BulletFontEncoding != "windows-symbol-byte-v1" {
+			t.Fatal("source charset was dropped")
+		}
+		if p.BulletFontFamily == nil || *p.BulletFontFamily != "Wingdings" || p.BulletCharacter == nil || *p.BulletCharacter != "q" {
+			t.Fatalf("font/character changed: %+v", p)
+		}
+		if p.Runs[0].FontFamily != nil && *p.Runs[0].FontFamily == "Wingdings" {
+			t.Fatal("marker font changed content font")
+		}
+		if !bytes.Equal(data, before) {
+			t.Fatal("source changed")
+		}
+		paragraphs := nativeMutationParagraphs("replacement")
+		_, err = ApplyNativePPTXMutations(data, NativePPTXMutationRequest{ExpectedSourceRevision: *deck.SourceRevision, Operations: []NativePPTXMutation{{OperationID: "replace", Kind: NativePPTXReplaceText, ElementID: e.ID, ExpectedFingerprintSHA256: e.Source.FingerprintSHA256, Paragraphs: &paragraphs}}})
+		if err == nil || !strings.Contains(err.Error(), "bullet font is preserve-only") {
+			t.Fatalf("unsafe replacement: %v", err)
+		}
+	}
+}
+
+func TestNativeBulletFontRejectsUnknownAndAmbiguousSourceMetadata(t *testing.T) {
+	for _, attrs := range []string{`typeface=""`, `typeface="+mn-lt"`, `typeface="Wingdings" charset="bad"`, `typeface="Wingdings" charset="128"`, `typeface="Wingdings" pitchFamily="256"`, `typeface="Wingdings" panose="unknown"`, `typeface="Wingdings" other="1"`} {
+		node, err := parseNativeXML([]byte(`<a:buFont xmlns:a="`+nsDrawingTransitional+`" `+attrs+`/>`), "test.xml")
+		if err != nil {
+			continue
+		}
+		if _, err := nativeBulletFontFamily(node); err == nil {
+			t.Fatalf("accepted %s", attrs)
+		}
+	}
+}
+
 func TestNativeLocalStyleCascadeAndAuthoredBullet(t *testing.T) {
 	for _, strict := range []bool{false, true} {
 		for _, marker := range []string{"", "▪", "🙂"} {
@@ -82,7 +129,7 @@ func TestNativeTextCheckingFlagsPreviewWithoutMutationPermission(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, metadata := range []string{`dirty="0" smtClean="1"`, `dirty="true" smtClean="false"`} {
+		for _, metadata := range []string{`dirty="0" smtClean="1"`, `dirty="true" smtClean="false"`, `err="1"`, `err="0"`, `err="true" dirty="0"`, `err="false" smtClean="0"`} {
 			original := nativeTextCheckingFixture(t, strict, metadata)
 			before := bytes.Clone(original)
 			deck, err := ExtractNativePPTX(original, nativeMutationExtractOptions())
@@ -112,7 +159,7 @@ func TestNativeTextCheckingFlagsPreviewWithoutMutationPermission(t *testing.T) {
 }
 
 func TestNativeTextCheckingFlagsRemainStrict(t *testing.T) {
-	for _, metadata := range []string{`dirty="yes"`, `smtClean="2"`, `dirty="0" dirty="1"`, `kumimoji="1"`, `lang="en_US"`, `unknown="0"`, `x:dirty="0" xmlns:x="urn:other"`} {
+	for _, metadata := range []string{`dirty="yes"`, `smtClean="2"`, `dirty="0" dirty="1"`, `err="yes"`, `err="2"`, `err="0" err="1"`, `x:err="0" xmlns:x="urn:other"`, `kumimoji="1"`, `lang="en_US"`, `unknown="0"`, `x:dirty="0" xmlns:x="urn:other"`} {
 		deck, err := ExtractNativePPTX(nativeTextCheckingFixture(t, false, metadata), nativeTestExtractOptions())
 		if err == nil {
 			for _, element := range deck.Slides[0].Elements {
@@ -190,7 +237,7 @@ func TestNativeTextStyleRefusesUnmodeledOrAmbiguousDefaults(t *testing.T) {
 		{`<a:buChar char="▪"/>`, `<a:buChar char="▪"/><a:buNone/>`},
 		{`<a:buChar char="▪"/>`, `<a:buAutoNum type="arabicPeriod"/>`},
 		{`<a:buChar char="▪"/>`, `<a:buChar char="two"/>`},
-		{`<a:buChar char="▪"/>`, `<a:buChar char="▪"/><a:buFont typeface="Symbol"/>`},
+		{`<a:buChar char="▪"/>`, `<a:buChar char="▪"/><a:buFont typeface="Symbol" charset="invalid"/>`},
 		{`sz="1800"`, `sz="invalid"`},
 		{`b="0" i="1"`, `b="invalid" i="1"`},
 		{`algn="r"`, `algn="invalid"`},

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { defaultPentagonTextRect } from './geometry.js'
 import type {
   NativeFontManifest,
   NativeFontResolver,
@@ -676,6 +677,13 @@ describe('native PPTX RenderTree', () => {
     expect(JSON.stringify(deck)).toBe(before)
   })
 
+  it('does not substitute an authored marker face through resolver aliases or caller overrides', async () => {
+    const element=nativeTextElement('exact-bullet','AB',nativeTextBody(),{x:0,y:0,cx:381000,cy:500000})
+    element.paragraphs=[{...element.paragraphs[0]!,bullet:true,bulletCharacter:'q',bulletFontFamily:'Missing Symbol Font',marginLeftEmu:12700,indentEmu:-12700}]
+    const tree=await compileNativePptxSlide(authoredDeck([element]),0,{textLayout:textLayout(),lineLayoutPolicy:'max-run-natural-v1'})
+    expect(findNode(tree,'text',element.id).textBody.status).toBe('refused')
+  })
+
   it('uses different first/continuation widths for a positive non-list indent and refuses ambiguous bullet geometry', async () => {
     const base=nativeTextElement('indent','AB CD',nativeTextBody(),{x:0,y:0,cx:50800,cy:500000})
     base.paragraphs=[{...base.paragraphs[0]!,marginLeftEmu:12700,indentEmu:12700}]
@@ -1046,6 +1054,9 @@ describe('native PPTX RenderTree', () => {
   })
 
   it('uses DrawingML default pentagon guides instead of an inscribed polygon', () => {
+    // Independent trigonometric evaluation of the official guide equations.
+    expect(defaultPentagonTextRect(1_000_000, 1_000_000)).toEqual({x:190984,y:236067,cx:618032,cy:763930})
+    expect(defaultPentagonTextRect(1417740, 1317072)).toEqual({x:270765,y:310918,cx:876210,cy:1006151})
     expect(presetPath('pentagon', 1_000_000, 1_000_000)).toEqual([
       {kind:'moveTo',x:1,y:381965},{kind:'lineTo',x:500000,y:0},
       {kind:'lineTo',x:999999,y:381965},{kind:'lineTo',x:809016,y:999997},
@@ -1056,6 +1067,31 @@ describe('native PPTX RenderTree', () => {
       {kind:'lineTo',x:1417739,y:503075},{kind:'lineTo',x:1146975,y:1317069},
       {kind:'lineTo',x:270765,y:1317069},{kind:'close'},
     ])
+  })
+
+  it('places pentagon text inside the preset rectangle before body insets and frame rotation', async () => {
+    for (const quarterTurns of [0,1,2] as const) {
+      const source=nativeTextElement('pentagon-text','AB',nativeTextBody({leftInsetEmu:1000,rightInsetEmu:2000,topInsetEmu:3000,bottomInsetEmu:4000}),{x:100,y:200,cx:1000000,cy:1000000})
+      const shape:NativeElement={...source,kind:'shape',preset:'pentagon',transform:{...source.transform,...(quarterTurns?{quarterTurns}:{})}}
+      const tree=await compileNativePptxSlide(authoredDeck([shape]),0,{textLayout:textLayout()})
+      expect(findNode(tree,'shape',shape.id).textBody).toMatchObject({status:'laidOut',bounds:{x:191984,y:239067,cx:615032,cy:756930}})
+      const rectangular=await compileNativePptxSlide(authoredDeck([{...shape,preset:'rect'}]),0,{textLayout:textLayout()})
+      expect(findNode(rectangular,'shape',shape.id).textBody?.bounds).toEqual({x:1000,y:3000,cx:997000,cy:993000})
+      const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+      expect(surface.finish().some(command=>command.kind==='glyphRun')).toBe(true)
+      const group:NativeElement={kind:'group',id:'pentagon-parent',provenance:'authored',transform:{x:0,y:0,cx:2000000,cy:3000000},childTransform:{x:0,y:0,cx:1000000,cy:1000000},children:[shape],passthrough:[],compatibility:{status:'editable',diagnostics:[]}}
+      const grouped=await compileNativePptxSlide(authoredDeck([group]),0,{textLayout:textLayout()})
+      const parent=findNode(grouped,'group',group.id)
+      expect(parent.children[0]).toMatchObject({kind:'shape',textBody:{bounds:{x:191984,y:239067,cx:615032,cy:756930},status:'laidOut'}})
+      const groupSurface=createRecordingPaintSurface();paintSlideRenderTree(grouped,groupSurface)
+      expect(groupSurface.finish().filter(command=>command.kind==='glyphRun')).toHaveLength(surface.finish().filter(command=>command.kind==='glyphRun').length)
+    }
+  })
+
+  it('refuses insets that collapse the smaller pentagon text rectangle', async () => {
+    const source=nativeTextElement('collapsed','AB',nativeTextBody({leftInsetEmu:400000,rightInsetEmu:400000}),{x:0,y:0,cx:1000000,cy:1000000})
+    const shape:NativeElement={...source,kind:'shape',preset:'pentagon'}
+    await expect(compileNativePptxSlide(authoredDeck([shape]),0,{textLayout:textLayout()})).rejects.toMatchObject({code:'render.coordinateBudget'})
   })
 
   it('paints preserved geometry with explicit omitted-text diagnostics and no invented glyphs', async () => {

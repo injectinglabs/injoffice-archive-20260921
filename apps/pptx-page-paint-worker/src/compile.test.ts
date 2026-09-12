@@ -45,6 +45,22 @@ describe('actual source-font native PPTX worker',()=>{
   expect(serialized).toContain('"radius":333340');expect(serialized).toContain('"left":10000');expect(result.resources).toHaveLength(1)
   for(const radius of [-1,Infinity,1000001,'1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'group',transform:[1,0,0,1,0,0],clip:{x:0,y:0,cx:3000000,cy:2000000,radius},children:[]}]})).toThrow()
  })
+ it('shapes authored markers in the exact supplied family and rejects a missing marker face',async()=>{
+  const request=input(),p=request.deck.slides[0].elements[0].paragraphs[0]
+  Object.assign(p,{bullet:true,bulletCharacter:'q',bulletFontFamily:'DejaVu Sans',marginLeftEmu:300000,indentEmu:-100000})
+  const before=JSON.stringify(request)
+  const rendered=await compilePptxPreview(request)
+  expect(JSON.stringify(rendered.nodes)).toContain('paragraphBullet')
+  expect(JSON.stringify(rendered.nodes)).toContain('contentRun')
+  expect(JSON.stringify(request)).toBe(before)
+  p.bulletFontEncoding='windows-symbol-byte-v1'
+  const unqualified=await compilePptxPreview(request)
+  expect(unqualified.diagnostics.join(' ')).toContain('symbol bullet font encoding is not qualified')
+  expect(JSON.stringify(unqualified.nodes)).not.toContain('paragraphBullet')
+  delete p.bulletFontEncoding
+  p.bulletFontFamily='Missing Symbol Font'
+  await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator bullet font unavailable')
+ })
  it('keeps an element-scoped text refusal visible without hiding neighboring text',async()=>{
   const request=input(),slide=request.deck.slides[0],good=slide.elements[0],refused=structuredClone(good)
   refused.id='element:unsupported-text';refused.paragraphs=[];delete refused.textBody
