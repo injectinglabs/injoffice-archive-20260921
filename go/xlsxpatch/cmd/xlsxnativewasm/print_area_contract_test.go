@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/injectinglabs/injoffice/go/xlsxpatch"
@@ -17,16 +18,20 @@ import (
 func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 	wasm, wasmExec, script := requireNodeHarness(t)
 	for _, tc := range []struct {
-		name, ref    string
-		available    bool
-		fit          string
-		fitAvailable bool
+		name, ref       string
+		available       bool
+		fit             string
+		fitAvailable    bool
+		titles          string
+		titlesAvailable bool
 	}{
-		{"rectangle", `Sheet1!$B$2:$D$4`, true, "", false},
-		{"union", `Sheet1!$B$2:$D$4,Sheet1!$F$6`, false, "", false},
-		{"fit", `Sheet1!$B$2:$D$4`, true, "1", true},
-		{"fit-unbounded", `Sheet1!$B$2:$D$4`, true, "0", true},
-		{"fit-invalid", `Sheet1!$B$2:$D$4`, true, "101", false},
+		{"rectangle", `Sheet1!$B$2:$D$4`, true, "", false, "", false},
+		{"union", `Sheet1!$B$2:$D$4,Sheet1!$F$6`, false, "", false, "", false},
+		{"fit", `Sheet1!$B$2:$D$4`, true, "1", true, "", false},
+		{"fit-unbounded", `Sheet1!$B$2:$D$4`, true, "0", true, "", false},
+		{"fit-invalid", `Sheet1!$B$2:$D$4`, true, "101", false, "", false},
+		{"titles-both", `Sheet1!$B$2:$D$4`, true, "", false, `Sheet1!$1:$2,Sheet1!$A:$B`, true},
+		{"titles-invalid", `Sheet1!$B$2:$D$4`, false, "", false, `Sheet1!$A$1:$B$2`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			parts := map[string]string{
@@ -38,6 +43,9 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 			}
 			if tc.fit != "" {
 				parts["xl/worksheets/sheet1.xml"] = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="true"/></sheetPr><sheetData/><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="` + tc.fit + `"/></worksheet>`
+			}
+			if tc.titles != "" {
+				parts["xl/workbook.xml"] = strings.Replace(parts["xl/workbook.xml"], `</definedNames>`, `<definedName name="_xlnm.Print_Titles" localSheetId="0">`+tc.titles+`</definedName></definedNames>`, 1)
 			}
 			var buf bytes.Buffer
 			z := zip.NewWriter(&buf)
@@ -63,6 +71,9 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 			}
 			if len(want.PrintAreas) != 1 || (want.PrintAreas[0].Status == "available") != tc.available {
 				t.Fatalf("%+v", want.PrintAreas)
+			}
+			if len(want.PrintTitles) != 1 || (want.PrintTitles[0].Status == "available") != tc.titlesAvailable {
+				t.Fatalf("%+v", want.PrintTitles)
 			}
 			if tc.fit != "" && (len(want.PageSettings) != 1 || (want.PageSettings[0].Status == "available") != tc.fitAvailable) {
 				t.Fatalf("unexpected Go fit settings: %+v", want.PageSettings)

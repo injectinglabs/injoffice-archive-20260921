@@ -1,5 +1,22 @@
 # @injoffice/sheets
 
+### Opt-in saved print headings
+
+`compileNativeSheetPagePreviewV1(geometry, objects, hostPolicy, { repeat_print_titles: true })`
+joins optional `objects.print_titles` to the exact source package and worksheet part.
+Only leading row and/or column ranges wholly within the selected viewport are supported;
+both title bands and the remaining body must have visible geometry. Crossing merges,
+unavailable metadata, nonleading titles and targets outside bounded pagination are refused.
+The existing call without the fourth argument does not repeat headings.
+
+An opted-in page includes `regions`: body, repeated rows, repeated columns and (when
+both axes repeat) one corner. Consumers must paint each region exactly once, clipped
+to its `source_clip`, using its translation and the page's shared scale. Page-level
+source bounds and translations describe only the body. Repainting the whole range
+for each region without clipping duplicates content. Drawing repetition is not supplied;
+hosts must separately qualify drawings that intersect heading bands. Fit-to-page
+reserves heading space on every page but remains an approximation, not Excel fidelity.
+
 Dependency-free contracts for fail-closed native spreadsheet saves. Version 1
 normalizes editor changes into a small JSON vocabulary; it does not apply the
 changes to XLSX bytes. `go/xlsxpatch` is the native application boundary.

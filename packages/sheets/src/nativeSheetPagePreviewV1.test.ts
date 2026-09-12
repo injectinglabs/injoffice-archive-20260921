@@ -14,6 +14,87 @@ function fixture(change?:(workbook:NativeWorkbookV2)=>void){
  return {geometry,objects,model,font}
 }
 describe('source-bound selected worksheet page geometry',()=>{
+ it('repeats both leading title axes with disjoint regions and complete body coverage',()=>{
+  const {model,font,objects}=fixture(),geometry=compileNativeSheetGeometryV2(model,'7',{row:1,column:1,end_row:6,end_column:6},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},columns:{start:1,end:1},warnings:['Saved titles']}]
+  const baseline=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(baseline.pages.every(p=>p.regions===undefined)).toBe(true)
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:3,right_inches:3,top_inches:5,bottom_inches:5})
+  const before=JSON.stringify(objects),p=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+  expect(p.pages.length).toBeGreaterThan(1)
+  const allBody=new Set<string>()
+  for(const page of p.pages){
+   expect(page.regions!.map(r=>r.kind)).toEqual(['body','repeat-rows','repeat-columns','repeat-corner'])
+   const cells=new Set<string>()
+   for(const r of page.regions!){
+    for(let row=r.rows.start;row<=r.rows.end;row++)for(let col=r.columns.start;col<=r.columns.end;col++){
+     const key=`${row}:${col}`;expect(cells.has(key)).toBe(false);cells.add(key)
+     if(r.kind==='body'){expect(allBody.has(key)).toBe(false);allBody.add(key)}
+    }
+    const right=(r.source_clip.x_emu+r.source_clip.width_emu)*page.scale+r.translate_x_emu,bottom=(r.source_clip.y_emu+r.source_clip.height_emu)*page.scale+r.translate_y_emu
+    expect(right).toBeLessThanOrEqual(page.content_clip.x_emu+page.content_clip.width_emu)
+    expect(bottom).toBeLessThanOrEqual(page.content_clip.y_emu+page.content_clip.height_emu)
+   }
+  }
+  expect(allBody.size).toBe(25);expect(JSON.stringify(objects)).toBe(before)
+  Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:{width:1,height:1}})
+  const fit=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+  expect(fit.pages).toHaveLength(1);expect(fit.pages[0]!.scale).toBeLessThan(1)
+  expect(fit.pages[0]!.regions).toHaveLength(4)
+ })
+ it('rejects missing, stale, nonleading, all-title and hidden-only repetition',()=>{
+  const {geometry,objects,model,font}=fixture(),options={repeat_print_titles:true} as const
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('titles unavailable')
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},warnings:['Source']}]
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('must lead')
+  objects.print_titles[0]!.rows={start:0,end:2}
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('leave body')
+  objects.print_titles[0]!.rows={start:0,end:0};objects.print_titles[0]!.sheet_part='wrong.xml'
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('worksheet part')
+  objects.print_titles[0]!.sheet_part='Worksheets/Sheet1.xml'
+  objects.row_geometry=[{sheet_part:'Worksheets/Sheet1.xml',rows:Array.from({length:32},(_,row)=>({row,height_points:14.4,hidden:row===0})),warnings:['Stored']}]
+  const hidden=compileNativeStoredRowSheetGeometryV1(model,'7',{row:0,column:0,end_row:2,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font),objects)
+  expect(()=>compileNativeSheetPagePreviewV1(hidden,objects,undefined,options)).toThrow('visible')
+  for(const bad of [null,{},false,{repeat_print_titles:false},{repeat_print_titles:true,extra:1}])expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,bad as any)).toThrow()
+ })
+ it('supports single-axis repetition and refuses oversized title reservations',()=>{
+  for(const axis of ['rows','columns'] as const){
+   const {geometry,objects}=fixture();objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',[axis]:{start:0,end:0},warnings:['Source']}]
+   const p=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+   expect(p.pages[0]!.regions!.map(r=>r.kind)).toEqual(['body',axis==='rows'?'repeat-rows':'repeat-columns'])
+   Object.assign(objects.page_settings![0]!.settings!,{left_inches:4.2,right_inches:4.2,top_inches:5.49,bottom_inches:5.49})
+   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('exceeds one page')
+  }
+ })
+ it('keeps heading merges intact and refuses merges crossing heading/body partitions',()=>{
+  const merged=(ref:string,row:number,column:number,end_row:number,end_column:number)=>fixture(workbook=>{
+   Object.assign(workbook.sheets[0]!,{cells:workbook.sheets[0]!.cells.filter(c=>c.ref==='F1'),merged_ranges:[{ref,row,column,end_row,end_column,editable:false}]})
+   const location=['MERGED_CELLS','merges','sheet:7','Worksheets/Sheet1.xml','',''].join('\0')
+   Object.assign(workbook,{unsupported:[...workbook.unsupported,{id:`unsupported:${createHash('sha256').update(location).digest('hex')}`,code:'MERGED_CELLS',capability:'merges',scope_id:'sheet:7',part_name:'Worksheets/Sheet1.xml',preservation:'preserve-exact',message:'Merged source geometry'}]})
+  })
+  for(const spec of [['A1:B1',0,0,0,1],['A1:A2',0,0,1,0]] as const){
+   const {geometry,objects}=merged(spec[0],spec[1],spec[2],spec[3],spec[4])
+   objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:0,end:0},warnings:['Saved']}]
+   if(spec[0]==='A1:A2')expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('region boundary')
+   else {
+    const pages=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+    expect(pages.pages[0]!.regions!.find(r=>r.kind==='repeat-rows')!.columns).toEqual({start:0,end:2})
+    Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5})
+    expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('page boundary')
+    Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:{width:3,height:3}})
+    expect(compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true}).pages[0]!.scale).toBeLessThan(1)
+   }
+  }
+ })
+ it('retains the page budget and fit lower bound with repeated headings',()=>{
+  const {model,font,objects}=fixture(),geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:3999,end_column:24},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:0,end:0},columns:{start:0,end:0},warnings:['Saved']}]
+  Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:{width:100,height:0}})
+  const pages=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true}).pages
+  expect(pages.length).toBeLessThanOrEqual(100);expect(Math.max(...pages.map(p=>p.rows.end))).toBe(3999)
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:4.249,right_inches:4.249,fit_to_page:{width:1,height:0}})
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('cannot be met')
+ })
  it('searches lower scales when a merged cell would cross an otherwise valid fit boundary',()=>{
   const {geometry,objects}=fixture(workbook=>{
    Object.assign(workbook.sheets[0]!,{merged_ranges:[{ref:'B2:C3',row:1,column:1,end_row:2,end_column:2,editable:false}]})

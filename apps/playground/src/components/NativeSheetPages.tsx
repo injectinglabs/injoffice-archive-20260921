@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
@@ -46,6 +46,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [useStoredRows, setUseStoredRows] = useState(false)
   const [compactGeneral, setCompactGeneral] = useState(false)
   const [usePrintArea, setUsePrintArea] = useState(false)
+  const [repeatHeadings, setRepeatHeadings] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
   const [rangeColumns, setRangeColumns] = useState(String(columns))
   const [result, setResult] = useState<Result | null>(null)
@@ -87,8 +88,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         page_order: pageOrder,
         left_inches: Number(margins.left), right_inches: Number(margins.right), top_inches: Number(margins.top), bottom_inches: Number(margins.bottom),
       }
-      const plan = compileNativeSheetPagePreviewV1(geometry, objects, host)
+      const plan = compileNativeSheetPagePreviewV1(geometry, objects, host, repeatHeadings ? { repeat_print_titles: true } : undefined)
       const drawings = layoutNativeDrawingObjectsV1(geometry, objects)
+      if (repeatHeadings) assertNativeSheetHeadingDrawings(plan, drawings)
       const fontFamily = `injoffice-sheet-${instance}-${token}`
       loaded = await new FontFace(fontFamily, bytes.buffer, {
         weight: model.normal_style?.font_bold ? '700' : '400',
@@ -121,6 +123,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <label><input type="checkbox" checked={compactGeneral} onChange={event => { invalidate(); setCompactGeneral(event.target.checked) }}/> Compact General numbers (host preview)</label>
       {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
+      <label><input type="checkbox" checked={repeatHeadings} onChange={event => { invalidate(); setRepeatHeadings(event.target.checked) }}/> Repeat saved print headings</label>
+      <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns must start at the beginning of your selected range and leave room for body cells. Drawings that overlap headings are not supported in this mode.' : 'Saved print headings are not repeated unless you select this option.'}</p>
       {!useSource && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
@@ -136,18 +140,29 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       </>}
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
-    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Headers and repeated print titles are not drawn here. Saved print areas must be one supported rectangle. Formula values are saved caches, not recalculated results.</p>
+    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas must be one supported rectangle. Formula values are saved caches, not recalculated results.</p>
     <p role="status">{message}</p>
     {result && <>
       <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scaling' : 'Your paper, margins and scaling'} · approximate selected-range preview</p>
       {result.plan.settings.fit_to_page && <p>Fit limits: {result.plan.settings.fit_to_page.width || 'unlimited'} wide × {result.plan.settings.fit_to_page.height || 'unlimited'} tall. Effective preview scale: {result.plan.pages.length ? `${Math.round(result.plan.pages[0]!.scale * 100)}%` : 'no visible cells'}.</p>}
       <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
+      {result.plan.pages.some(page => page.regions) && <p>Saved print headings repeat on each page. Page captions list body rows and columns; heading cells are shown separately.</p>}
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
       {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
       <NativeSheetPageImages {...{workbook, sheet, objects}} {...result}/>
     </>}
   </section>
+}
+
+/** This demo paints drawings only in body regions, never silently dropping a
+ * drawing that overlaps a repeated heading or whose position is unavailable. */
+export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1, drawings: NativePositionedDrawingV1[]) {
+  const headings = plan.pages.flatMap(page => page.regions?.filter(region => region.kind !== 'body') ?? [])
+  if (drawings.some(drawing => drawing.status !== 'positioned' || !drawing.rect || !drawing.clip || headings.some(({ source_clip: h }) => {
+    const d = drawing.clip!
+    return d.x_emu < h.x_emu + h.width_emu && d.x_emu + d.width_emu > h.x_emu && d.y_emu < h.y_emu + h.height_emu && d.y_emu + d.height_emu > h.y_emu
+  }))) throw new Error('Drawings overlap saved print headings or have unavailable positions. Turn off repeated headings to preview this range without repeating them.')
 }
 
 export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
@@ -176,14 +191,16 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
       {!!disclosures.length && <details><summary>Cell display details ({disclosures.length})</summary><ul>{disclosures.slice(0,100).map(cell => <li key={cell.key}>{address(cell.row,cell.column)}: {cell.display.cached && 'Saved formula result; freshness unknown. '}{cell.display.warnings.join(' ')}{cell.display.truncated && ' Text is truncated in this preview. '}{cell.display.compacted && ' Host rounding applied; not Excel General. '}Stored value: {cell.display.stored.slice(0,256)}{cell.display.stored.length > 256 && '… (detail shortened)'}</li>)}</ul>{disclosures.length > 100 && <p>Showing the first 100 of {disclosures.length} cell details.</p>}</details>}
     </section>
     {plan.pages.map(page => {
-    const clip = `${uid}-page-${page.number}`
     return <figure key={page.number}>
-      <figcaption>Page {page.number} · rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
+      <figcaption>Page {page.number} · {page.regions ? 'body ' : ''}rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
       <svg role="img" aria-label={`Approximate spreadsheet page ${page.number}`} viewBox={`0 0 ${page.width_emu / EMU_PER_PIXEL} ${page.height_emu / EMU_PER_PIXEL}`}>
         <rect width="100%" height="100%" fill="#FFFFFF"/>
-        <defs><clipPath id={clip}><rect x={page.source_clip.x_emu / EMU_PER_PIXEL} y={page.source_clip.y_emu / EMU_PER_PIXEL} width={page.source_clip.width_emu / EMU_PER_PIXEL} height={page.source_clip.height_emu / EMU_PER_PIXEL}/></clipPath></defs>
-        <g transform={`translate(${page.translate_x_emu / EMU_PER_PIXEL} ${page.translate_y_emu / EMU_PER_PIXEL}) scale(${page.scale})`} clipPath={`url(#${clip})`}>
-          {cells.filter(cell => cell.row >= page.rows.start && cell.row <= page.rows.end && cell.column >= page.columns.start && cell.column <= page.columns.end).map(cell => {
+        {(page.regions ?? [{ ...page, kind: 'body' as const }]).map(region => {
+        const clip = `${uid}-page-${page.number}${page.regions ? `-${region.kind}` : ''}`
+        return <Fragment key={region.kind}>
+        <defs><clipPath id={clip}><rect x={region.source_clip.x_emu / EMU_PER_PIXEL} y={region.source_clip.y_emu / EMU_PER_PIXEL} width={region.source_clip.width_emu / EMU_PER_PIXEL} height={region.source_clip.height_emu / EMU_PER_PIXEL}/></clipPath></defs>
+        <g data-page-region={page.regions ? region.kind : undefined} transform={`translate(${region.translate_x_emu / EMU_PER_PIXEL} ${region.translate_y_emu / EMU_PER_PIXEL}) scale(${page.scale})`} clipPath={`url(#${clip})`}>
+          {cells.filter(cell => cell.row >= region.rows.start && cell.row <= region.rows.end && cell.column >= region.columns.start && cell.column <= region.columns.end).map(cell => {
             const x = cell.rect.x_emu / EMU_PER_PIXEL, y = cell.rect.y_emu / EMU_PER_PIXEL, w = cell.rect.width_emu / EMU_PER_PIXEL, h = cell.rect.height_emu / EMU_PER_PIXEL
             const id = `${clip}-${cell.key}`, size = (cell.style?.font_size_points ?? 11) * 96 / 72
             const right = cell.display.horizontal === 'right', center = cell.display.horizontal === 'center'
@@ -194,8 +211,8 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>
             </g>
           })}
-          {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
-            const r = drawing.rect!, c = drawing.clip!, p = page.source_clip
+          {region.kind === 'body' && drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
+            const r = drawing.rect!, c = drawing.clip!, p = region.source_clip
             const left = Math.max(c.x_emu, p.x_emu), top = Math.max(c.y_emu, p.y_emu), right = Math.min(c.x_emu + c.width_emu, p.x_emu + p.width_emu), bottom = Math.min(c.y_emu + c.height_emu, p.y_emu + p.height_emu)
             if (right <= left || bottom <= top) return null
             const id = `${clip}-drawing-${index}`, chart = objects.charts.find(chart => chart.part === drawing.source.chart_part)
@@ -207,6 +224,8 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             </g>
           })}
         </g>
+        </Fragment>
+        })}
       </svg>
     </figure>
   })}</div>

@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { NativeSheetPageImages, NativeSheetPages, NativePositionedChartPlot } from './NativeSheetPages'
+import { NativeSheetPageImages, NativeSheetPages, NativePositionedChartPlot, assertNativeSheetHeadingDrawings } from './NativeSheetPages'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
 import type { NativeWorkbookObjectsV1, NativeSheetGeometryV2, NativeSheetPagePreviewV1, NativeChartPreviewV1, NativePositionedDrawingV1 } from '@injoffice/sheets/browser'
 
@@ -101,6 +101,8 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('type="file"')
     expect(html).toContain('Normal font: Exact Font')
     expect(html).toContain('Use saved page settings')
+    expect(html).toContain('Repeat saved print headings')
+    expect(html).not.toContain('checked=""/> Repeat saved print headings')
     expect(html).toContain('aria-label="Preview range"')
     expect(html).toContain('value="a1" selected=""')
     expect(html).toContain('Use saved print area')
@@ -145,6 +147,28 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('Rent &lt;script&gt;bad&lt;/script&gt;')
     expect(html).not.toContain('Outside page one')
     expect(html.indexOf('scale(0.37)')).toBeLessThan(html.indexOf('Source-positioned drawing 1'))
+  })
+  it('paints repeated heading regions separately without duplicating corner cells', () => {
+    const props = fixture(), page = props.plan.pages[0]!
+    props.geometry.columns.push({ ...props.geometry.columns[0]!, column: 1, x_emu: 952500 })
+    props.sheet.cells.push({ ...props.sheet.cells[0]!, row: 0, column: 1, ref: 'B1', value: { kind: 'string', text: 'Column heading' } } as NativeSheet['cells'][number])
+    props.sheet.cells.push({ ...props.sheet.cells[0]!, row: 1, column: 1, ref: 'B2', value: { kind: 'string', text: 'Body value' } } as NativeSheet['cells'][number])
+    const region = (kind: 'body' | 'repeat-rows' | 'repeat-columns' | 'repeat-corner', row: number, column: number) => ({
+      kind, rows: { start: row, end: row }, columns: { start: column, end: column },
+      source_clip: { x_emu: column * 952500, y_emu: row * 190500, width_emu: 952500, height_emu: 190500 },
+      translate_x_emu: 457200, translate_y_emu: 457200,
+    })
+    page.rows = { start: 1, end: 1 }; page.columns = { start: 1, end: 1 }
+    page.regions = [region('repeat-corner', 0, 0), region('repeat-rows', 0, 1), region('repeat-columns', 1, 0), region('body', 1, 1)]
+    const html = render(props)
+    expect(html).toContain('body rows 2–2, columns 2–2')
+    for (const kind of ['body', 'repeat-rows', 'repeat-columns', 'repeat-corner']) expect(html).toContain(`data-page-region="${kind}"`)
+    for (const address of ['A1', 'B1', 'A2', 'B2']) expect(html.match(new RegExp(`<title>${address}:`, 'g'))).toHaveLength(1)
+    expect(html).toContain('>Body value</text>')
+    const drawing: NativePositionedDrawingV1 = { source: { sheet_id: '1', sheet_part: props.sheet.part_name, drawing_part: 'xl/drawings/drawing1.xml', ordinal: 1, kind: 'unsupported', warnings: [] }, status: 'positioned', rect: region('body', 1, 1).source_clip, clip: region('body', 1, 1).source_clip }
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [drawing])).not.toThrow()
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawing, clip: region('repeat-corner', 0, 0).source_clip }])).toThrow('Drawings overlap')
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawing, clip: undefined }])).toThrow('unavailable positions')
   })
   it('labels cached plots as approximate and never activates source links', () => {
     const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }

@@ -61,7 +61,7 @@ func TestNativePrintAreasNamespacesScopeAndAmbiguity(t *testing.T) {
 			{"foreign-name-attr", `<definedNames>` + def + `<definedName xmlns:f="urn:foreign" f:name="_xlnm.Print_Titles" localSheetId="0">x</definedName></definedNames>`, false, false},
 			{"duplicate", `<definedNames>` + def + def + second + `</definedNames>`, false, true},
 			{"case-ambiguous", `<definedNames>` + def + strings.Replace(def, "_xlnm.Print_Area", "_xlnm.print_area", 1) + second + `</definedNames>`, false, false},
-			{"titles", `<definedNames>` + def + second + `<definedName name="_xlnm.Print_Titles" localSheetId="0">'Data Set'!$1:$2</definedName></definedNames>`, false, true},
+			{"titles", `<definedNames>` + def + second + `<definedName name="_xlnm.Print_Titles" localSheetId="0">'Data Set'!$1:$2</definedName></definedNames>`, true, true},
 			{"global", `<definedNames>` + def + strings.Replace(second, ` localSheetId="1"`, ``, 1) + `</definedNames>`, false, false},
 			{"sheet-id-not-ordinal", `<definedNames>` + strings.Replace(def, `localSheetId="0"`, `localSheetId="7"`, 1) + second + `</definedNames>`, false, false},
 			{"malformed-scope", `<definedNames>` + strings.Replace(def, `localSheetId="0"`, `localSheetId="00"`, 1) + second + `</definedNames>`, false, false},

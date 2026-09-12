@@ -34,27 +34,57 @@ func previewNativePrintAreas(raw []byte, sheets []NativeWorkbookSheetV2) []Nativ
 	}
 	result := make([]NativeSheetPrintAreaV1, count)
 	for i, sheet := range sheets[:count] {
-		result[i] = NativeSheetPrintAreaV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print area unavailable: requires exactly one worksheet-local absolute same-sheet A1 rectangle and no repeated print titles."}}
+		result[i] = NativeSheetPrintAreaV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print area unavailable: requires exactly one worksheet-local absolute same-sheet A1 rectangle and supported saved print titles, if present."}}
 	}
+	areas, titles, valid := collectNativePrintNames(raw, sheets)
+	if !valid {
+		return result
+	}
+	for i, sheet := range sheets[:count] {
+		defs := areas[sheet.Order]
+		if len(defs) != 1 || !validNativePrintName(defs[0]) {
+			continue
+		}
+		if ts := titles[sheet.Order]; len(ts) > 0 {
+			if len(ts) != 1 || !validNativePrintName(ts[0]) {
+				continue
+			}
+			rows, columns := parseNativePrintTitles(ts[0].text, sheet.Name)
+			if rows == nil && columns == nil {
+				continue
+			}
+		}
+		area := parseNativePrintAreaRect(defs[0].text, sheet.Name)
+		if area == nil {
+			continue
+		}
+		result[i].Status, result[i].Area = "available", area
+		result[i].Warnings = []string{"Read-only saved print-area rectangle. Page geometry is approximate; formulas and printer behavior are not reproduced. Saved print titles require explicit preview selection."}
+	}
+	return result
+}
+
+// Both projections share closed ownership and scope checks; neither grants edit authority.
+func collectNativePrintNames(raw []byte, sheets []NativeWorkbookSheetV2) (map[int][]*previewXML, map[int][]*previewXML, bool) {
 	root, err := parsePreviewXML(raw)
 	if err != nil || root.name.Local != "workbook" || !isSpreadsheetMLNamespace(root.name.Space) {
-		return result
+		return nil, nil, false
 	}
 	owner := root.child("definedNames")
 	if owner != nil {
 		for _, a := range owner.attrs {
 			if !isPreviewNamespaceDeclaration(a) {
-				return result
+				return nil, nil, false
 			}
 		}
 		for _, child := range owner.children {
 			if child.name.Space != root.name.Space || child.name.Local != "definedName" {
-				return result
+				return nil, nil, false
 			}
 		}
 	}
 	areas := map[int][]*previewXML{}
-	titles := map[int]bool{}
+	titles := map[int][]*previewXML{}
 	ambiguous := false
 	var visit func(*previewXML, *previewXML)
 	visit = func(n, parent *previewXML) {
@@ -82,7 +112,7 @@ func previewNativePrintAreas(raw []byte, sheets []NativeWorkbookSheetV2) []Nativ
 					ambiguous = true
 				} else {
 					if name == "_xlnm.Print_Titles" {
-						titles[index] = true
+						titles[index] = append(titles[index], n)
 					} else {
 						areas[index] = append(areas[index], n)
 					}
@@ -94,44 +124,35 @@ func previewNativePrintAreas(raw []byte, sheets []NativeWorkbookSheetV2) []Nativ
 		}
 	}
 	visit(root, nil)
-	if ambiguous {
-		return result
+	return areas, titles, !ambiguous
+}
+
+func validNativePrintName(n *previewXML) bool {
+	if len(n.children) != 0 {
+		return false
 	}
-	for i, sheet := range sheets[:count] {
-		// Order is the workbook ordinal, not the potentially sparse sheetId.
-		defs := areas[sheet.Order]
-		if len(defs) != 1 || titles[sheet.Order] {
+	for _, a := range n.attrs {
+		if isPreviewNamespaceDeclaration(a) {
 			continue
 		}
-		n := defs[0]
-		if len(n.children) != 0 {
-			continue
+		if a.Name.Space != "" || (a.Name.Local != "name" && a.Name.Local != "localSheetId") {
+			return false
 		}
-		valid := true
-		for _, a := range n.attrs {
-			if isPreviewNamespaceDeclaration(a) {
-				continue
-			}
-			if a.Name.Space != "" || (a.Name.Local != "name" && a.Name.Local != "localSheetId") {
-				valid = false
-			}
-		}
-		if !valid {
-			continue
-		}
-		area := parseNativePrintAreaRect(n.text, sheet.Name)
-		if area == nil {
-			continue
-		}
-		result[i].Status, result[i].Area = "available", area
-		result[i].Warnings = []string{"Read-only saved print-area rectangle. Page geometry is approximate; formulas, repeated titles and printer behavior are not reproduced."}
 	}
-	return result
+	return true
 }
 
 func parseNativePrintAreaRect(text, sheetName string) *NativePrintAreaRectV1 {
-	if len(text) > 4096 {
+	ref, ok := nativePrintReference(text, sheetName)
+	if !ok {
 		return nil
+	}
+	return parseNativePrintRectReference(ref)
+}
+
+func nativePrintReference(text, sheetName string) (string, bool) {
+	if len(text) > 4096 {
+		return "", false
 	}
 	// A quoted sheet token may contain escaped apostrophes and literal ! characters.
 	var sheet, ref string
@@ -149,24 +170,28 @@ func parseNativePrintAreaRect(text, sheetName string) *NativePrintAreaRectV1 {
 				continue
 			}
 			if i+1 >= len(text) || text[i+1] != '!' {
-				return nil
+				return "", false
 			}
 			sheet, ref, closed = name.String(), text[i+2:], true
 			break
 		}
 		if !closed {
-			return nil
+			return "", false
 		}
 	} else {
 		var found bool
 		sheet, ref, found = strings.Cut(text, "!")
 		if !found || !nativeUnquotedPrintSheet.MatchString(sheet) {
-			return nil
+			return "", false
 		}
 	}
 	if sheet != sheetName || strings.ContainsAny(sheet, "[]:") {
-		return nil
+		return "", false
 	}
+	return ref, true
+}
+
+func parseNativePrintRectReference(ref string) *NativePrintAreaRectV1 {
 	m := nativeAbsolutePrintRect.FindStringSubmatch(ref)
 	if m == nil {
 		return nil

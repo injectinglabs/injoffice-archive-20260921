@@ -11615,7 +11615,7 @@
             {
               "name": "compileNativeSheetPagePreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1): NativeSheetPagePreviewV1"
+              "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPagePreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -11656,6 +11656,11 @@
               "name": "decodeNativeSheetPrintAreasV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreasV1(input: unknown): NativeSheetPrintAreaV1[]"
+            },
+            {
+              "name": "decodeNativeSheetPrintTitlesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintTitlesV1(input: unknown): NativeSheetPrintTitlesV1[]"
             },
             {
               "name": "decodeNativeWorkbookObjectsV1",
@@ -12353,6 +12358,11 @@
               "signature": "export interface NativeSheetPageConfigV1"
             },
             {
+              "name": "NativeSheetPagePreviewOptionsV1",
+              "kind": "type",
+              "signature": "NativeSheetPagePreviewOptionsV1"
+            },
+            {
               "name": "NativeSheetPagePreviewV1",
               "kind": "type",
               "signature": "NativeSheetPagePreviewV1"
@@ -12378,9 +12388,24 @@
               "signature": "NativeSheetPreviewPageV1"
             },
             {
+              "name": "NativeSheetPreviewRegionV1",
+              "kind": "type",
+              "signature": "NativeSheetPreviewRegionV1"
+            },
+            {
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
+              "name": "NativeSheetPrintTitleRangeV1",
+              "kind": "type",
+              "signature": "export interface NativeSheetPrintTitleRangeV1"
+            },
+            {
+              "name": "NativeSheetPrintTitlesV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintTitlesV1 ="
             },
             {
               "name": "NativeSheetRenderModelV1",
@@ -13066,7 +13091,7 @@
             {
               "name": "compileNativeSheetPagePreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1): NativeSheetPagePreviewV1"
+              "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPagePreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -13082,6 +13107,11 @@
               "name": "decodeNativeSheetPrintAreasV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreasV1(input: unknown): NativeSheetPrintAreaV1[]"
+            },
+            {
+              "name": "decodeNativeSheetPrintTitlesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintTitlesV1(input: unknown): NativeSheetPrintTitlesV1[]"
             },
             {
               "name": "decodeNativeWorkbookObjectsV1",
@@ -13179,6 +13209,11 @@
               "signature": "NativeSheetHostPagePolicyV1"
             },
             {
+              "name": "NativeSheetPagePreviewOptionsV1",
+              "kind": "type",
+              "signature": "NativeSheetPagePreviewOptionsV1"
+            },
+            {
               "name": "NativeSheetPagePreviewV1",
               "kind": "type",
               "signature": "NativeSheetPagePreviewV1"
@@ -13189,9 +13224,24 @@
               "signature": "NativeSheetPreviewPageV1"
             },
             {
+              "name": "NativeSheetPreviewRegionV1",
+              "kind": "type",
+              "signature": "NativeSheetPreviewRegionV1"
+            },
+            {
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
+              "name": "NativeSheetPrintTitleRangeV1",
+              "kind": "type",
+              "signature": "export interface NativeSheetPrintTitleRangeV1"
+            },
+            {
+              "name": "NativeSheetPrintTitlesV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintTitlesV1 ="
             },
             {
               "name": "NativeSheetViewportV2",
