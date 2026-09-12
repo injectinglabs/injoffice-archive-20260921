@@ -1753,6 +1753,13 @@ export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPagi
   return validatePaginatedLayoutSource(output, request, false)
 }
 
+/** @internal Explicit current-policy source join; this never attests strict fidelity. */
+export function validateNativeDocxApproximatePaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, eligibilityValue: unknown): NativeDocxValidationIssue[] {
+  const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, request.pagination_settings)
+  if (eligibility.status !== 'eligible') return [issue('BROKEN_REFERENCE', '', 'ineligible source settings for current-policy layout')]
+  return validatePaginatedLayoutSource(output, request, true)
+}
+
 function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, approximateLegacySettings: boolean): NativeDocxValidationIssue[] {
   const issues: NativeDocxValidationIssue[] = []
   const add = (code: NativeDocxValidationIssue['code'], path: string, message: string): void => {

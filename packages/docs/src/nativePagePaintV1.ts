@@ -50,7 +50,7 @@ import {
   type NativeDocxPlacedLineV1,
   type NativeDocxPlacedNoteStoryV1,
 } from './nativePaginationV1.js'
-import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
+import { decodeNativeDocxPaginatedLayoutForRequest, decodeNativeDocxApproximatePaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import {
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
@@ -443,6 +443,18 @@ function requestProvenance(request: NativeDocxPagePaintRequestV1, outlineID: str
 
 /** Strictly decodes and exact-joins every engine-owned input projection. */
 export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNativeDocxPagePaintRequestV1Result {
+  return decodePagePaintRequestForPolicy(value)
+}
+
+/** @internal Only the approximate renderer consumes this explicitly tagged result. */
+export function decodeNativeDocxApproximateComputedPagePaintV1(value: unknown, eligibility: unknown): { fidelity: 'approximate'; request: NativeDocxPagePaintRequestV1 } {
+  if (eligibility === undefined) throw new TypeError('Approximate computed layout requires explicit eligibility')
+  const decoded = decodePagePaintRequestForPolicy(value, eligibility)
+  if (!decoded.ok) throw new TypeError(`approximate computed request failed full source validation: ${decoded.issues.map(issue => issue.message).join('; ')}`)
+  return { fidelity: 'approximate', request: decoded.value }
+}
+
+function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown): DecodeNativeDocxPagePaintRequestV1Result {
   const preflight = preflightWire(value, 'page-paint request')
   if (preflight.length > 0) return { ok: false, issues: preflight }
   const snapshot = safeClone(value)
@@ -454,7 +466,7 @@ export function decodeNativeDocxPagePaintRequestV1(value: unknown): DecodeNative
   if (root.version !== DOCX_PAGE_PAINT_REQUEST_VERSION) add(issues, 'UNSUPPORTED_VERSION', '/version', `must equal ${DOCX_PAGE_PAINT_REQUEST_VERSION}`)
   const pagination = decodeNativeDocxPaginationRequestV1(root.pagination_request)
   if (!pagination.ok) issues.push(...pagination.issues.map((entry) => ({ ...entry, path: `/pagination_request${entry.path}` })))
-  const paginated = decodeNativeDocxPaginatedLayoutForRequest(root.paginated_layout, root.pagination_request)
+  const paginated = eligibility === undefined ? decodeNativeDocxPaginatedLayoutForRequest(root.paginated_layout, root.pagination_request) : decodeNativeDocxApproximatePaginatedLayoutForRequest(root.paginated_layout, root.pagination_request, eligibility)
   if (!paginated.ok) issues.push(...paginated.issues.map((entry) => ({ ...entry, path: `/paginated_layout${entry.path}` })))
   if (pagination.ok && paginated.ok && paginated.value.status === 'paginated') {
     try { deriveNativeSquareWrapPlanV1(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines, paginated.value, true) }
@@ -857,6 +869,18 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(approximate.layout)
   const painted = await compileDecodedPagePaint(request, outlineProvider, true)
   if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
+  return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
+}
+
+/** @internal Paints only a source-validated current-policy fixed-point result.
+ * The public strict compiler/decoder never accepts this as strict pagination. */
+export async function compileNativeDocxApproximateComputedPagePreviewV1(value: unknown, eligibilityValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxApproximatePagePreviewV1> {
+  const { request } = decodeNativeDocxApproximateComputedPagePaintV1(value, eligibilityValue)
+  const settings = request.pagination_request.pagination_settings
+  const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
+  if (hasNativeSquareWrapV1(request.pagination_request.document) || hasNativeDocxPageFieldsV1(request.pagination_request.document)) throw new TypeError('Approximate computed previews currently exclude square wrapping and header/footer page fields')
+  const painted = await compileDecodedPagePaint(request, outlineProvider, true)
+  if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
   return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
 }
 

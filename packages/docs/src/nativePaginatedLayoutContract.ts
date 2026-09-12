@@ -8,6 +8,7 @@ import {
   DOCX_PAGINATION_LIMITS,
   decodeNativeDocxPaginationRequestV1,
   validateNativeDocxPaginatedLayoutSourceV1,
+  validateNativeDocxApproximatePaginatedLayoutSourceV1,
   type NativeDocxPaginatedLayoutV1,
 } from './nativePaginationV1.js'
 import { decodeNativeDocxPaginationSettings } from './nativePaginationSettings.js'
@@ -491,6 +492,10 @@ function validatePage(
 }
 
 export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDocxPaginatedLayoutResult {
+  return decodePaginatedLayoutForPolicyShape(value, false)
+}
+
+function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolean): DecodeNativeDocxPaginatedLayoutResult {
   const issues: NativeDocxValidationIssue[] = []
   const preflightState = { nodes: 0, bounded: true }
   preflight(value, '', 0, new WeakSet(), preflightState, issues)
@@ -559,7 +564,7 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
     if (!hasUnsupported) add(issues, 'REQUIRED', '/diagnostics', 'refused layout requires at least one unsupported diagnostic')
   }
   if (status === 'paginated' && hasUnsupported) add(issues, 'INVALID_UNION', '/diagnostics', 'paginated layout cannot carry unsupported diagnostics')
-  if (status === 'paginated' && settingsUnsupported) add(issues, 'INVALID_UNION', '/provenance/pagination_settings/profile', 'paginated output cannot carry an unsupported settings attestation')
+  if (status === 'paginated' && settingsUnsupported && !approximate) add(issues, 'INVALID_UNION', '/provenance/pagination_settings/profile', 'paginated output cannot carry an unsupported settings attestation')
   const pageIDs = new Set<string>()
   const placedLineIDs = new Set<string>()
   const noteSourceLineIDs = new Set<string>()
@@ -681,14 +686,24 @@ function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidatio
 
 /** Strict output decoding plus exact source-completeness validation. */
 export function decodeNativeDocxPaginatedLayoutForRequest(value: unknown, requestValue: unknown): DecodeNativeDocxPaginatedLayoutResult {
+  return decodePaginatedLayoutForPolicy(value, requestValue)
+}
+
+/** @internal Separate current-policy validation, retaining every source/integrity check. */
+export function decodeNativeDocxApproximatePaginatedLayoutForRequest(value: unknown, requestValue: unknown, eligibility: unknown): DecodeNativeDocxPaginatedLayoutResult {
+  if (eligibility === undefined) return { ok: false, issues: [{ code: 'REQUIRED', path: '', message: 'approximate layout requires explicit eligibility' }] }
+  return decodePaginatedLayoutForPolicy(value, requestValue, eligibility)
+}
+
+function decodePaginatedLayoutForPolicy(value: unknown, requestValue: unknown, eligibility?: unknown): DecodeNativeDocxPaginatedLayoutResult {
   const request = decodeNativeDocxPaginationRequestV1(requestValue)
-  const output = decodeNativeDocxPaginatedLayout(value)
+  const output = decodePaginatedLayoutForPolicyShape(value, eligibility !== undefined)
   if (!request.ok || !output.ok) {
     const issues: NativeDocxValidationIssue[] = []
     if (!request.ok) issues.push(...request.issues.map((entry) => ({ ...entry, path: `/request${entry.path}` })))
     if (!output.ok) issues.push(...output.issues.map((entry) => ({ ...entry, path: `/output${entry.path}` })))
     return { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) }
   }
-  const issues = validateNativeDocxPaginatedLayoutSourceV1(output.value, request.value)
+  const issues = eligibility === undefined ? validateNativeDocxPaginatedLayoutSourceV1(output.value, request.value) : validateNativeDocxApproximatePaginatedLayoutSourceV1(output.value, request.value, eligibility)
   return issues.length > 0 ? { ok: false, issues } : output
 }

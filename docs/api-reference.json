@@ -3142,6 +3142,11 @@
               "signature": "CommentThread"
             },
             {
+              "name": "compileNativeDocxApproximateComputedPagePreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeDocxApproximateComputedPagePreviewV1(value: unknown, eligibilityValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxApproximatePagePreviewV1>"
+            },
+            {
               "name": "compileNativeDocxApproximatePagePreviewV1",
               "kind": "function",
               "signature": "export declare function compileNativeDocxApproximatePagePreviewV1(value: unknown, eligibilityValue: unknown, outlineProvider: NativeDocxGlyphOutlineProviderV1): Promise<NativeDocxApproximatePagePreviewV1>"
@@ -3182,9 +3187,19 @@
               "signature": "export declare const CSS_PX_PER_INCH = 96"
             },
             {
+              "name": "decodeNativeDocxApproximateComputedPagePaintV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximateComputedPagePaintV1(value: unknown, eligibility: unknown):"
+            },
+            {
               "name": "decodeNativeDocxApproximatePagePreviewV1",
               "kind": "export",
               "signature": "decodeNativeDocxApproximatePagePreviewV1"
+            },
+            {
+              "name": "decodeNativeDocxApproximatePaginatedLayoutForRequest",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximatePaginatedLayoutForRequest(value: unknown, requestValue: unknown, eligibility: unknown): DecodeNativeDocxPaginatedLayoutResult"
             },
             {
               "name": "decodeNativeDocxDocument",
@@ -4605,6 +4620,11 @@
               "name": "twipsToMilliPoints",
               "kind": "function",
               "signature": "export declare function twipsToMilliPoints(twips: number): number"
+            },
+            {
+              "name": "validateNativeDocxApproximatePaginatedLayoutSourceV1",
+              "kind": "function",
+              "signature": "export declare function validateNativeDocxApproximatePaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, eligibilityValue: unknown): NativeDocxValidationIssue[]"
             },
             {
               "name": "validateNativeDocxPagePaintForRequestV1",

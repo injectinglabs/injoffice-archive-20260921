@@ -267,6 +267,13 @@ unsupported geometry are not made renderable by this settings policy. The
 result remains a distinct, read-only approximate envelope; strict pagination
 and mutation safety are unchanged.
 
+Approximate body `PAGE`/`NUMPAGES` fields use the same bounded fixed-point solver
+as strict layout: field text derives from final page placement, not cached
+values, with cycle detection and an eight-pass limit. Original field source,
+read-only policy, settings and integrity hashes remain bound to the preview.
+Combining this approximate body-field path with square wrapping or header/footer
+page fields remains explicitly unsupported.
+
 Top-of-page paragraph-before spacing is retained only on the first content page
 of a section and suppressed on later pages, including automatic, explicit, and
 keep/widow-driven page moves. Keep-chain planning uses one bounded reverse pass.

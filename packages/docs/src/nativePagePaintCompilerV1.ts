@@ -49,6 +49,8 @@ import {
   DOCX_PAGINATION_REQUEST_VERSION,
   decodeNativeDocxPaginationRequestV1,
   paginateNativeDocxV1,
+  paginateNativeDocxApproximateLegacyV1,
+  validateNativeDocxApproximatePaginatedLayoutSourceV1,
   validateNativeDocxPaginatedLayoutSourceV1,
   type NativeDocxPaginationRequestV1,
 } from './nativePaginationV1.js'
@@ -59,6 +61,8 @@ import {
   DOCX_PAGE_PAINT_REQUEST_VERSION,
   compileNativeDocxPagePaintV1,
   compileNativeDocxApproximatePagePreviewV1,
+  compileNativeDocxApproximateComputedPagePreviewV1,
+  decodeNativeDocxApproximateComputedPagePaintV1,
   decodeNativeDocxPagePaintForRequestV1,
   decodeNativeDocxPagePaintRequestV1,
   nativeDocxPagePaintFontManifestSha256V1,
@@ -148,10 +152,20 @@ export interface NativeDocxPagePaintCompleteInputV1 {
 
 export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import { decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
 
 /** Explicit read-only legacy-settings preview. The strict preparation and
  * original settings remain intact; only the separate result is approximate. */
 export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
+  const document = decodeNativeDocxDocument(input.document)
+  if (!document.ok) failIssues('native document is invalid', document.issues)
+  const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
+  if (bodyFields.length) {
+    const probe = nativeDocxBodyPageFieldDocumentV1(document.value, Object.fromEntries(bodyFields.map(run => [run.id, '1'])))
+    if (hasNativeSquareWrapV1(document.value) || hasNativeDocxPageFieldsV1(probe)) throw new TypeError('Approximate body-field preview excludes square wrapping and header/footer page fields')
+    const prepared = await prepareNativeDocxPagePaintInternalV1(input, runtime, eligibility)
+    return compileNativeDocxApproximateComputedPagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
+  }
   const prepared = await prepareNativeDocxPagePaintV1(input, runtime)
   return compileNativeDocxApproximatePagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
 }
@@ -461,6 +475,12 @@ export function collectNativeDocxPagePaintOutlineRequestsV1(requestValue: unknow
 }
 
 export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }): Promise<NativeDocxPagePaintPreparedV1> {
+  return prepareNativeDocxPagePaintInternalV1(input, runtime)
+}
+
+// Approximate preparation is private: its computed placement is never returned
+// as a public strict prepared artifact, and retains the original settings.
+async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPrepareInputV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }, approximateEligibility?: unknown): Promise<NativeDocxPagePaintPreparedV1> {
   if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'document,font_assets,font_inventory_json,media_assets,outline_provider,pagination_settings,protocol,resolved_layout,source_revision,version' || input.protocol !== DOCX_PAGE_PAINT_COMPILER_PROTOCOL || input.version !== DOCX_PAGE_PAINT_COMPILER_VERSION || !PROVIDER_ID.test(input.source_revision) || !input.outline_provider || typeof input.outline_provider !== 'object' || Object.keys(input.outline_provider).sort().join(',') !== 'provider_id,provider_revision' || !PROVIDER_ID.test(input.outline_provider.provider_id) || !PROVIDER_ID.test(input.outline_provider.provider_revision)) throw new TypeError('native page-paint compiler input identity is invalid')
   const document = decodeNativeDocxDocument(input.document)
   if (!document.ok) failIssues('native document is invalid', document.issues)
@@ -468,6 +488,7 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
   if (!resolved.ok) failIssues('resolved layout is invalid', resolved.issues)
   const settings = decodeNativeDocxPaginationSettings(input.pagination_settings)
   if (!settings.ok) failIssues('pagination settings are invalid', settings.issues)
+  if (approximateEligibility !== undefined && decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value).status !== 'eligible') throw new TypeError('Source settings are ineligible for approximate body-field layout')
   const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
   if (inventory.document_id !== document.value.document_id || inventory.revision !== document.value.revision || inventory.package_sha256 !== document.value.source.package_sha256 || inventory.main_part !== document.value.source.main_part
     || inventory.document_id !== resolved.value.document_id || inventory.revision !== resolved.value.revision || inventory.main_part !== resolved.value.source_parts.main_part
@@ -551,9 +572,9 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
   }
   const decodedPagination = decodeNativeDocxPaginationRequestV1(paginationRequest)
   if (!decodedPagination.ok) failIssues('pagination request is invalid', decodedPagination.issues)
-  const paginated = paginateNativeDocxV1(decodedPagination.value)
+  const paginated = approximateEligibility === undefined ? paginateNativeDocxV1(decodedPagination.value) : { ok: true as const, value: paginateNativeDocxApproximateLegacyV1(decodedPagination.value, approximateEligibility).layout }
   if (!paginated.ok) failIssues('native pagination failed validation', paginated.issues)
-  const paginationIssues = validateNativeDocxPaginatedLayoutSourceV1(paginated.value, decodedPagination.value)
+  const paginationIssues = approximateEligibility === undefined ? validateNativeDocxPaginatedLayoutSourceV1(paginated.value, decodedPagination.value) : validateNativeDocxApproximatePaginatedLayoutSourceV1(paginated.value, decodedPagination.value, approximateEligibility)
   if (paginationIssues.length > 0) failIssues('native pagination source join failed', paginationIssues)
   const wrapPlan = squareWrapPresent ? deriveNativeSquareWrapPlanV1(fieldDocument, resolved.value, shaped.value, paginated.value) : {}
   return { next: { bodyFieldValues: bodyFields.length ? nativeDocxBodyPageFieldValuesV1(document.value,decodedPagination.value,paginated.value) : {}, wrapPlan }, result: { shaped, decodedPagination, paginated } }
@@ -593,14 +614,14 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
     },
     outline_provider: { ...input.outline_provider },
   }
-  const decodedRequest = decodeNativeDocxPagePaintRequestV1(pagePaintRequest)
+  const decodedRequest = approximateEligibility === undefined ? decodeNativeDocxPagePaintRequestV1(pagePaintRequest) : { ok: true as const, value: decodeNativeDocxApproximateComputedPagePaintV1(pagePaintRequest, approximateEligibility).request }
   if (!decodedRequest.ok) failIssues('page-paint request is invalid', decodedRequest.issues)
   return Object.freeze({
     protocol: DOCX_PAGE_PAINT_COMPILER_PROTOCOL,
     version: DOCX_PAGE_PAINT_COMPILER_VERSION,
     page_paint_request: decodedRequest.value,
-    request_sha256: nativeDocxPagePaintRequestSha256V1(decodedRequest.value),
-    outline_requests: collectNativeDocxPagePaintOutlineRequestsV1(decodedRequest.value),
+    request_sha256: approximateEligibility === undefined ? nativeDocxPagePaintRequestSha256V1(decodedRequest.value) : canonicalWireSha256(decodedRequest.value),
+    outline_requests: approximateEligibility === undefined ? collectNativeDocxPagePaintOutlineRequestsV1(decodedRequest.value) : [],
     providers: Object.freeze({
       resolver_id: resolver.providerId,
       resolver_revision: resolver.providerRevision,
