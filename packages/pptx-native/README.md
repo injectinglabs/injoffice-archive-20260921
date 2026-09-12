@@ -13,6 +13,15 @@ modeled typeface/size/bold/italic/solid color and paragraph alignment/list metad
 participate. Theme tokens still resolve through the relationship-bound theme.
 Source XML bytes are never rewritten to materialize these rendering properties.
 
+For non-placeholder AutoShapes, an authored `fontRef` can supply a missing Latin
+font and/or solid color after that local cascade. The bounded projection requires
+graphic ASCII text and an exact relationship-bound theme. Applicable presentation
+and master text-style layers must be absent or empty; competing defaults are not
+guessed. Explicit local/list font and color retain precedence. No missing size,
+bold, italic or paragraph values are invented. These shapes remain read-only,
+with `pptx.shape-font-reference-preview` identifying the source projection. This
+is a prerequisite for broader text inheritance, not full slide fidelity.
+
 Paragraphs may retain an authored `bulletCharacter` (one Unicode scalar, with
 `bullet: true`) and bounded `marginLeftEmu` / `indentEmu`. The approximate file
 preview uses those values instead of inventing a generic bullet. Exact native

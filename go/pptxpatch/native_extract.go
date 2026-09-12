@@ -206,6 +206,7 @@ type nativeExtractor struct {
 	groupProjectionSeen     bool
 	theme                   nativeResolvedTheme
 	slideDependencies       nativeSlideDependencyGraph
+	fontReferenceBlocked    bool
 }
 
 type nativeStagedPassthroughToken struct {
@@ -1240,6 +1241,7 @@ func (extractor *nativeExtractor) extract() (NativePPTXDeck, error) {
 	if err := extractor.validateRelationshipSet(rootRelationships, dialect, "package root"); err != nil {
 		return NativePPTXDeck{}, err
 	}
+	extractor.fontReferenceBlocked = !nativeShapeReferenceEmptyLayer(presentationRoot, dialect.presentation, "defaultTextStyle", false, dialect)
 	presentationUnsupported := []nativeUnsupportedSource{}
 	if hasNativeSemanticAttrs(presentationRoot) || !onlyNativeXMLSpace(presentationRoot.Text) {
 		unsupported, unsupportedErr := makeNativeUnsupportedSource(extractor.pkg.parts[officeDocument.Part], presentationRoot, officeDocument.Part, "presentation-root", "pptx.unsupported-presentation-markup", "presentation root contains unmodeled markup")

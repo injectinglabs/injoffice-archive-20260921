@@ -146,7 +146,24 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		} else {
 			textBodyLayout = layout
 		}
-		parsed, parseErr := extractor.extractNativeParagraphs(textBody, dialect)
+		paintText := textBody
+		fontReferenceUsed := false
+		var parseErr error
+		if style != nil && styleErr == nil {
+			placeholder, placeholderErr := nativeTextPlaceholder(node, dialect)
+			if placeholderErr != nil {
+				parseErr = placeholderErr
+			} else if placeholder == nil {
+				paintText, fontReferenceUsed, parseErr = resolveNativeShapeTextFontReference(textBody, style, dialect, extractor.theme)
+				if parseErr == nil && fontReferenceUsed && (extractor.fontReferenceBlocked || !nativeShapeReferenceEmptyLayer(extractor.slideDependencies.masterRoot, dialect.presentation, "txStyles", true, dialect)) {
+					parseErr = unsupportedNativeTextContent("shape font reference competes with unqualified external text defaults")
+				}
+			}
+		}
+		var parsed []NativeParagraph
+		if parseErr == nil {
+			parsed, parseErr = extractor.extractNativeParagraphs(paintText, dialect)
+		}
 		if parseErr != nil {
 			var duplicate nativeDuplicateSingletonError
 			if isNativeDuplicateSingleton(parseErr, &duplicate) {
@@ -156,6 +173,9 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			textOmitted = true
 		} else {
 			paragraphs = parsed
+			if fontReferenceUsed && !textOmitted {
+				gaps.add("pptx.shape-font-reference-preview", "shape text font/color resolved from its authored theme reference; target remains read-only", false)
+			}
 		}
 		if textOmitted {
 			paragraphs = []NativeParagraph{}
