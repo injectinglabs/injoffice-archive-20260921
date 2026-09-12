@@ -13,6 +13,21 @@ function sample(format: string, lexical: string, date1904?: boolean): { workbook
 }
 
 describe('native spreadsheet display integration', () => {
+  it('renders an explicit accounting format without changing native numeric or formula drafts',()=>{
+    const {workbook,cell}=sample('_-* #,##0.00\\ "Ft"_-;\\-* #,##0.00\\ "Ft"_-','2.75')
+    expect(nativeCellPreview(workbook,cell)).toMatchObject({text:'2.75 Ft',warning:expect.stringContaining('padding')})
+    expect(displayCellValue(cell)).toBe('2.75')
+  })
+  it('applies source-joined table number formats only to saved display values',()=>{
+    const {workbook,cell}=sample('General','2.75')
+    const formula:NativeCell={...cell,editable:false,value:undefined,formula:{type:'normal',text:'AVERAGE(A2:A3)',cached:cell.value}}
+    const objects={protocol:'injoffice.xlsx.preview-objects' as const,version:1 as const,package_sha256:workbook.source.package_sha256,charts:[],tables:[{part:'xl/tables/t.xml',sheet_part:'xl/worksheets/s.xml',name:'Original',ref:'A1:A3',style:'TableStyleMedium2',header_rows:1,total_rows:0,row_stripes:true,column_stripes:false,warnings:[],number_formats:[{ref:'A1:A1',dxf_id:0,number_format:'0.00" X"',style_ids:[0]}]}]}
+    const before=JSON.stringify(formula)
+    expect(nativeCellPreview(workbook,formula,objects,'xl/worksheets/s.xml')).toEqual({text:'2.75 X',cached:true})
+    expect(displayCellValue(formula)).toBe('=AVERAGE(A2:A3)')
+    expect(JSON.stringify(formula)).toBe(before)
+    expect(nativeCellPreview(workbook,formula,{...objects,package_sha256:'stale'},'xl/worksheets/s.xml').text).toBe('2.75')
+  })
   it.each([
     ['0.00', '12.345', '12.35'],
     ['0.00%', '0.125', '12.50%'],

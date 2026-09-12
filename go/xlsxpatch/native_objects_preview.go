@@ -23,17 +23,32 @@ type NativeWorkbookObjectsV1 struct {
 	Charts        []NativeChartPreviewV1 `json:"charts"`
 }
 type NativeTablePreviewV1 struct {
-	Part          string                    `json:"part"`
-	SheetPart     string                    `json:"sheet_part"`
-	Name          string                    `json:"name"`
-	Ref           string                    `json:"ref"`
-	Style         string                    `json:"style"`
-	HeaderRows    int                       `json:"header_rows"`
-	TotalRows     int                       `json:"total_rows"`
-	RowStripes    bool                      `json:"row_stripes"`
-	ColumnStripes bool                      `json:"column_stripes"`
-	Warnings      []string                  `json:"warnings"`
-	FillPreview   *NativeTableFillPreviewV1 `json:"fill_preview,omitempty"`
+	Part          string                      `json:"part"`
+	SheetPart     string                      `json:"sheet_part"`
+	Name          string                      `json:"name"`
+	Ref           string                      `json:"ref"`
+	Style         string                      `json:"style"`
+	HeaderRows    int                         `json:"header_rows"`
+	TotalRows     int                         `json:"total_rows"`
+	RowStripes    bool                        `json:"row_stripes"`
+	ColumnStripes bool                        `json:"column_stripes"`
+	Warnings      []string                    `json:"warnings"`
+	FillPreview   *NativeTableFillPreviewV1   `json:"fill_preview,omitempty"`
+	NumberFormats []NativeTableNumberFormatV1 `json:"number_formats,omitempty"`
+	BorderPreview *NativeTableBorderPreviewV1 `json:"border_preview,omitempty"`
+}
+type NativeTableBorderPreviewV1 struct {
+	Color             string  `json:"color"`
+	TotalsColor       string  `json:"totals_color"`
+	WidthPoints       float64 `json:"width_points"`
+	TotalsWidthPoints float64 `json:"totals_width_points"`
+	StyleIDs          []int   `json:"style_ids"`
+}
+type NativeTableNumberFormatV1 struct {
+	Ref          string `json:"ref"`
+	DxfID        int    `json:"dxf_id"`
+	NumberFormat string `json:"number_format"`
+	StyleIDs     []int  `json:"style_ids"`
 }
 
 // NativeTableFillPreviewV1 qualifies fills and default-font header text only.
@@ -248,6 +263,9 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 				table.Warnings = append(table.Warnings, "Table has no unambiguous worksheet relationship; no grid styling is applied.")
 			}
 			qualifyNativeTableFillPreview(pkg, root, &table)
+			if e := inspectNativeTableNumberFormats(pkg, root, &table); e != nil {
+				return nil, e
+			}
 			result.Tables = append(result.Tables, table)
 		case xml.Name{Space: "http://schemas.openxmlformats.org/drawingml/2006/chart", Local: "chartSpace"}, xml.Name{Space: "http://purl.oclc.org/ooxml/drawingml/chart", Local: "chartSpace"}:
 			result.Charts = append(result.Charts, previewChart(root, actual))

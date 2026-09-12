@@ -28,7 +28,7 @@ import {
 } from '../xlsxRoundTripRuntime'
 import { nativeCellPreview } from '../nativeCellPreview'
 import { NativeWorkbookObjects } from '../components/NativeWorkbookObjects'
-import {nativeTableFillPreview,nativeTableHeaderTextPreview,type NativeWorkbookObjectsV1} from '@injoffice/sheets/browser'
+import {nativeTableFillPreview,nativeTableHeaderTextPreview,nativeTableBorderPreview,type NativeWorkbookObjectsV1,type NativeTableBorderSideV1} from '@injoffice/sheets/browser'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-fixture/launch-readiness-plan.xlsx`
@@ -80,15 +80,18 @@ function columnName(index: number): string {
   return result
 }
 
-function previewBounds(sheet: NativeSheet): { rows: number; columns: number } {
-  const rows = Math.max(3, Math.min(8, 1 + Math.max(-1, ...sheet.cells.map((cell) => cell.row))))
-  const columns = Math.max(3, Math.min(6, 1 + Math.max(-1, ...sheet.cells.map((cell) => cell.column))))
+function previewBounds(sheet: NativeSheet,objects?:NativeWorkbookObjectsV1|null): { rows: number; columns: number } {
+  let lastRow=sheet.cells.reduce((max,cell)=>Math.max(max,cell.row),-1),lastColumn=sheet.cells.reduce((max,cell)=>Math.max(max,cell.column),-1)
+  for(const table of objects?.tables??[]){if(table.sheet_part!==sheet.part_name)continue;const match=/^[A-Z]{1,3}[1-9][0-9]*:([A-Z]{1,3})([1-9][0-9]*)$/.exec(table.ref);if(match){lastRow=Math.max(lastRow,Number(match[2])-1);lastColumn=Math.max(lastColumn,[...match[1]!].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1)}}
+  const rows = Math.max(3, Math.min(32, 1 + lastRow))
+  const columns = Math.max(3, Math.min(12, 1 + lastColumn))
   return { rows, columns }
 }
 
-function previewCellStyle(workbook: NativeWorkbook, cell: NativeCell | undefined): CSSProperties | undefined {
-  if (!cell) return undefined
-  const style = workbook.styles[cell.style_id]?.effective
+function previewCellStyle(workbook: NativeWorkbook, cell: NativeCell | undefined,implicitStyleID?:number): CSSProperties | undefined {
+  const id=cell?.style_id??implicitStyleID
+  if (id===undefined) return undefined
+  const style = workbook.styles[id]?.effective
   if (!style) return undefined
   return {
     backgroundColor: style.fill_color,
@@ -312,13 +315,22 @@ export default function NativeRoundTripPage() {
     }
   }
 
-  const bounds = activeSheet ? previewBounds(activeSheet) : null
+  const bounds = activeSheet ? previewBounds(activeSheet,objects?.package_sha256===workbook?.source.package_sha256?objects:undefined) : null
   const cellMap = new Map(activeSheet?.cells.map((cell) => [`${cell.row}:${cell.column}`, cell]) ?? [])
+  const rowStyles=new Map(activeSheet?.rows.filter(r=>r.style_id!==undefined).map(r=>[r.row,r.style_id])??[])
+  const styleAt=(row:number,column:number):number|null|undefined=>{
+    if(row<0||column<0||row>=1048576||column>=16384)return null
+    const cell=cellMap.get(`${row}:${column}`);if(cell)return cell.style_id
+    const rowStyle=rowStyles.get(row),columnStyles=activeSheet?.columns.filter(c=>c.column<=column&&column<=c.end_column&&c.style_id!==undefined).map(c=>c.style_id!)??[]
+    if(new Set(columnStyles).size>1||rowStyle!==undefined&&columnStyles.length>0&&columnStyles[0]!==rowStyle)return undefined
+    return rowStyle??columnStyles[0]??0
+  }
+  const edgeCSS=(edge:NativeTableBorderSideV1)=>`${edge.widthPoints}pt ${edge.style} ${edge.color}`
   const editableMap = new Map(targets.map((candidate) => [targetKey(candidate), candidate]))
   const previewWarnings = workbook && activeSheet && bounds
     ? activeSheet.cells.filter((cell) => cell.row < bounds.rows && cell.column < bounds.columns)
       .flatMap((cell) => {
-        const warning = nativeCellPreview(workbook, cell).warning
+        const warning = nativeCellPreview(workbook, cell,objects,activeSheet.part_name).warning
         return warning ? [{ ref: cell.ref, warning }] : []
       })
     : []
@@ -401,11 +413,13 @@ export default function NativeRoundTripPage() {
                           const cell = cellMap.get(`${row}:${column}`)
                           const candidate = activeSheet ? editableMap.get(targetKey({ sheetId: activeSheet.id, row, column })) : undefined
                           const active = candidate && targetKey(candidate) === targetKey(target ?? candidate)
-                          const preview = nativeCellPreview(workbook, cell)
-                          const tableFill=objects?nativeTableFillPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,cell?workbook.styles[cell.style_id]?.effective.fill:undefined,cell?.style_id??-1):undefined
-                          const tableHeader=objects&&cell?nativeTableHeaderTextPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,workbook.styles[cell.style_id]?.effective.fill,cell.style_id):false
+                          const preview = nativeCellPreview(workbook, cell,objects,activeSheet.part_name)
+                          const styleID=styleAt(row,column),fill=styleID===null||styleID===undefined?undefined:workbook.styles[styleID]?.effective.fill
+                          const tableFill=objects?nativeTableFillPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,fill,styleID??-1):undefined
+                          const tableHeader=objects?nativeTableHeaderTextPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,fill,styleID??-1):false
+                          const tableEdges=objects?nativeTableBorderPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,styleID??-1,{top:styleAt(row-1,column),right:styleAt(row,column+1),bottom:styleAt(row+1,column),left:styleAt(row,column-1)}):undefined
                           return (
-                            <td key={column} className={active ? 'native-cell-active' : undefined} style={{...previewCellStyle(workbook, cell),...(tableFill?{backgroundColor:tableFill}:{}),...(tableHeader?{color:'#FFFFFF',fontWeight:700}:{})}} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
+                            <td key={column} className={active ? 'native-cell-active' : undefined} style={{...previewCellStyle(workbook, cell,styleID??undefined),...(tableFill?{backgroundColor:tableFill}:{}),...(tableHeader?{color:'#FFFFFF',fontWeight:700}:{}),...(tableEdges?.top?{borderTop:edgeCSS(tableEdges.top)}:{}),...(tableEdges?.right?{borderRight:edgeCSS(tableEdges.right)}:{}),...(tableEdges?.bottom?{borderBottom:edgeCSS(tableEdges.bottom)}:{}),...(tableEdges?.left?{borderLeft:edgeCSS(tableEdges.left)}:{})}} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
                               {candidate ? (
                                 <button type="button" style={tableFill?{background:'transparent'}:undefined} onClick={() => chooseTarget(candidate)} aria-label={`Edit ${activeSheet.name} ${cell?.ref ?? `${columnName(column)}${row + 1}`}`}>
                                   {preview.text || '\u00a0'}
@@ -421,6 +435,7 @@ export default function NativeRoundTripPage() {
                 </table>
               </div>
               <p className="ds-muted">Formula cells show saved results, which may be stale; this preview does not recalculate. Warning markers identify raw values or missing saved results.</p>
+              <p className="ds-muted">The grid preview is limited to the first 32 rows and 12 columns. Original content outside this window remains in the file.</p>
               {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} onInspection={setObjects} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
               {previewWarnings.length > 0 && <details className="ds-muted">
                 <summary>{previewWarnings.length} preview cell warnings</summary>

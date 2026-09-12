@@ -11178,6 +11178,11 @@
               "signature": "export declare const EXCEL_MAX_ROWS = 1048576"
             },
             {
+              "name": "formatNativeAccountingTextPreview",
+              "kind": "function",
+              "signature": "export declare function formatNativeAccountingTextPreview(lexical: string, format: string): NativeTableNumberDisplayV1 | undefined"
+            },
+            {
               "name": "formatNativeSheetCellDisplayV2",
               "kind": "function",
               "signature": "export declare function formatNativeSheetCellDisplayV2(kind: 'number' | 'date', lexical: string, numberFormat: string | undefined, date1904?: boolean): NativeSheetCellDisplayFormatResultV2"
@@ -11818,6 +11823,26 @@
               "signature": "NativeStyleUnsupportedCodeV2"
             },
             {
+              "name": "NativeTableBorderEdgesV1",
+              "kind": "type",
+              "signature": "NativeTableBorderEdgesV1"
+            },
+            {
+              "name": "nativeTableBorderPreview",
+              "kind": "function",
+              "signature": "export declare function nativeTableBorderPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, styleID: number, neighbors: Record<'top' | 'right' | 'bottom' | 'left', number | null | undefined>): NativeTableBorderEdgesV1 | undefined"
+            },
+            {
+              "name": "NativeTableBorderPreviewV1",
+              "kind": "type",
+              "signature": "NativeTableBorderPreviewV1"
+            },
+            {
+              "name": "NativeTableBorderSideV1",
+              "kind": "type",
+              "signature": "NativeTableBorderSideV1"
+            },
+            {
               "name": "nativeTableFillPreview",
               "kind": "function",
               "signature": "export declare function nativeTableFillPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, fill: NativeWorkbookFillV2 | undefined, styleID: number): string | undefined"
@@ -11826,6 +11851,21 @@
               "name": "nativeTableHeaderTextPreview",
               "kind": "function",
               "signature": "export declare function nativeTableHeaderTextPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, fill: NativeWorkbookFillV2 | undefined, styleID: number): boolean"
+            },
+            {
+              "name": "NativeTableNumberDisplayV1",
+              "kind": "type",
+              "signature": "NativeTableNumberDisplayV1"
+            },
+            {
+              "name": "nativeTableNumberFormatPreview",
+              "kind": "function",
+              "signature": "export declare function nativeTableNumberFormatPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, styleID: number, kind: 'number' | 'date', lexical: string, date1904?: boolean): NativeTableNumberDisplayV1 | undefined"
+            },
+            {
+              "name": "NativeTableNumberFormatV1",
+              "kind": "type",
+              "signature": "NativeTableNumberFormatV1"
             },
             {
               "name": "NativeTablePreviewV1",
@@ -12369,6 +12409,11 @@
               "signature": "export declare function decodeWorkbookMutationBatch(value: unknown): DecodeWorkbookMutationResult"
             },
             {
+              "name": "formatNativeAccountingTextPreview",
+              "kind": "function",
+              "signature": "export declare function formatNativeAccountingTextPreview(lexical: string, format: string): NativeTableNumberDisplayV1 | undefined"
+            },
+            {
               "name": "formatNativeSheetCellDisplayV2",
               "kind": "function",
               "signature": "export declare function formatNativeSheetCellDisplayV2(kind: 'number' | 'date', lexical: string, numberFormat: string | undefined, date1904?: boolean): NativeSheetCellDisplayFormatResultV2"
@@ -12399,6 +12444,26 @@
               "signature": "NativeSheetCellDisplayFormatResultV2"
             },
             {
+              "name": "NativeTableBorderEdgesV1",
+              "kind": "type",
+              "signature": "NativeTableBorderEdgesV1"
+            },
+            {
+              "name": "nativeTableBorderPreview",
+              "kind": "function",
+              "signature": "export declare function nativeTableBorderPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, styleID: number, neighbors: Record<'top' | 'right' | 'bottom' | 'left', number | null | undefined>): NativeTableBorderEdgesV1 | undefined"
+            },
+            {
+              "name": "NativeTableBorderPreviewV1",
+              "kind": "type",
+              "signature": "NativeTableBorderPreviewV1"
+            },
+            {
+              "name": "NativeTableBorderSideV1",
+              "kind": "type",
+              "signature": "NativeTableBorderSideV1"
+            },
+            {
               "name": "nativeTableFillPreview",
               "kind": "function",
               "signature": "export declare function nativeTableFillPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, fill: NativeWorkbookFillV2 | undefined, styleID: number): string | undefined"
@@ -12407,6 +12472,21 @@
               "name": "nativeTableHeaderTextPreview",
               "kind": "function",
               "signature": "export declare function nativeTableHeaderTextPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, fill: NativeWorkbookFillV2 | undefined, styleID: number): boolean"
+            },
+            {
+              "name": "NativeTableNumberDisplayV1",
+              "kind": "type",
+              "signature": "NativeTableNumberDisplayV1"
+            },
+            {
+              "name": "nativeTableNumberFormatPreview",
+              "kind": "function",
+              "signature": "export declare function nativeTableNumberFormatPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number, styleID: number, kind: 'number' | 'date', lexical: string, date1904?: boolean): NativeTableNumberDisplayV1 | undefined"
+            },
+            {
+              "name": "NativeTableNumberFormatV1",
+              "kind": "type",
+              "signature": "NativeTableNumberFormatV1"
             },
             {
               "name": "NativeTablePreviewV1",

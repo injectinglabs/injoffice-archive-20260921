@@ -254,3 +254,20 @@ ID alone is not default-format authority: the cell style must appear in the
 engine's source-qualified eligible list. Neither changes the workbook or grants
 edit support. Overlapping tables, missing provenance and unsupported
 styles remain unpainted; table warnings describe the partial result.
+
+`nativeTableNumberFormatPreview` projects explicit table/column differential
+number formats onto source-qualified General-format cells. Explicit cell formats
+(including an explicit General override) take precedence. Saved formula results
+are displayed without recalculation. `formatNativeAccountingTextPreview` is a
+separate, display-only fallback for bounded numeric sections and quoted literals;
+it preserves decimal lexical precision and reports omitted accounting fill and
+padding alignment. It does not widen the exact native glyph-paint contract.
+
+`nativeTableBorderPreview` supports a measured subset of built-in Medium2:
+1-point outer/horizontal borders using accent1 with +0.4 HLS tint, and a 3-point
+double totals divider in accent1. Source-qualified default border styles are
+required on both sides of an edge. Explicit, unknown, overlapping-table, named
+style and unsupported differential border overrides remain unpainted. Custom
+DXF fonts/fills/borders, totals font styling, accounting positioning and text
+metrics are not fully reproduced. This is partial read-only presentation, not
+an Office-fidelity claim or mutation authority.

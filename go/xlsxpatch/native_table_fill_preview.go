@@ -9,7 +9,24 @@ import (
 
 func nativeTableStyleIDsWithinBudget(tables []NativeTablePreviewV1) bool {
 	total := 0
+	regions := 0
 	for _, table := range tables {
+		if table.BorderPreview != nil {
+			total += len(table.BorderPreview.StyleIDs)
+			if total > 16384 {
+				return false
+			}
+		}
+		regions += len(table.NumberFormats)
+		if regions > 1024 {
+			return false
+		}
+		for _, format := range table.NumberFormats {
+			total += len(format.StyleIDs)
+			if total > 16384 {
+				return false
+			}
+		}
 		if p := table.FillPreview; p != nil {
 			total += len(p.FillStyleIDs) + len(p.HeaderFontStyleIDs)
 			if total > 16384 {
@@ -99,6 +116,8 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 	}
 	headerFonts := []int{}
 	defaultFills := []int{}
+	var borderRegistry *styleRegistry
+	var borderStyles *previewXML
 	if stylesPart == "" {
 		return
 	}
@@ -107,6 +126,7 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 		if e != nil || len(registry.fills) == 0 || !registry.fills[0].supported || registry.fills[0].color != nil {
 			return
 		}
+		borderRegistry = registry
 		for id, xf := range registry.cellXfs {
 			base := effectiveCellStyleXF(registry.styleXfs[xf.xfID])
 			if len(headerFonts) < 4096 && effectiveStyleComponent(xf.fontID, base.fontID, xf.applyFont) == 0 && (xf.applyFont == nil || !*xf.applyFont) {
@@ -120,6 +140,7 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 		if e != nil {
 			return
 		}
+		borderStyles = styles
 		if custom := styles.child("tableStyles"); custom != nil {
 			for _, child := range custom.children {
 				if child.attr("name") == table.Style {
@@ -149,7 +170,8 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 		return
 	}
 	table.FillPreview = &NativeTableFillPreviewV1{Header: accent, Stripe: tableLightenHLS(accent, 0.8), Body: "#FFFFFF", HeaderFontStyleIDs: headerFonts, FillStyleIDs: defaultFills}
-	table.Warnings = []string{"Medium2 header and alternating body fills are previewed from the source theme. Default-font header cells use white bold text; explicit cell formatting retains precedence.", "Table borders, totals-row formatting, differential styles and missing-cell backgrounds are not reproduced by this partial preview."}
+	table.Warnings = []string{"Medium2 header and alternating body fills are previewed from the source theme. Default-font header cells use white bold text; explicit cell formatting retains precedence.", "Table text metrics and unqualified style components are not reproduced. Additional format and border notices describe supported subsets."}
+	qualifyNativeTableBorders(tableXML, table, borderRegistry, borderStyles, accent)
 }
 
 // Spreadsheet color tint is a luminance adjustment in HLS (ISO29500 ColorType),
