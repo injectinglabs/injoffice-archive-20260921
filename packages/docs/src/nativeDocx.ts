@@ -3,6 +3,7 @@
 // browser-local extract/apply client must not evaluate.
 export * from './nativeContract.js'
 export * from './nativePartialContentV1.js'
+export * from './nativePartialNestedTablesV1.js'
 export * from './nativePartialEquationsV1.js'
 export {decodeNativeDocxResolvedLayout,type NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 export * from './nativeTransactionAdapterV1.js'

@@ -38,7 +38,7 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
    client=createDocxWasmClient()
    const joined=await client.inspectPartialContent(bytes,{signal:controller.signal})
    if(joined.document.source.package_sha256!==packageDigest)throw new Error('Source changed; reopen the partial text preview.')
-   const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true},joined.resolved_layout)
+   const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true},joined.resolved_layout,joined.nested_table_omissions)
    if(active.current===controller&&!controller.signal.aborted){setResult(preview);setEquations(joined.equations??[])}
   }catch(reason){if(active.current===controller&&!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Partial source text could not be qualified.')}
   finally{client?.terminate();if(active.current===controller){active.current=null;setBusy(false)}}

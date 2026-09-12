@@ -3194,7 +3194,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "CSS_PX_PER_INCH",
@@ -3245,6 +3245,11 @@
               "name": "decodeNativeDocxJson",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxJson(json: string): DecodeNativeDocxResult"
+            },
+            {
+              "name": "decodeNativeDocxNestedTableOmissionsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
             },
             {
               "name": "decodeNativeDocxPagePaintForRequestV1",
@@ -3992,6 +3997,16 @@
               "signature": "export type NativeDocxMathNodeV1 ="
             },
             {
+              "name": "NativeDocxNestedTableOmissionsV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTableOmissionsV1"
+            },
+            {
+              "name": "NativeDocxNestedTableOmissionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTableOmissionV1"
+            },
+            {
               "name": "NativeDocxNumberingReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNumberingReferenceV1"
@@ -4234,7 +4249,7 @@
             {
               "name": "NativeDocxPartialOmissionCode",
               "kind": "type",
-              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit'"
+              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit' | 'nested-table' | 'nested-table-limit'"
             },
             {
               "name": "NativeDocxPartialParagraphV1",
@@ -4830,7 +4845,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "decodeNativeDocxDocument",
@@ -4846,6 +4861,11 @@
               "name": "decodeNativeDocxJson",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxJson(json: string): DecodeNativeDocxResult"
+            },
+            {
+              "name": "decodeNativeDocxNestedTableOmissionsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
             },
             {
               "name": "decodeNativeDocxProseMirrorTransactionJsonV1",
@@ -5003,6 +5023,16 @@
               "signature": "export type NativeDocxMathNodeV1 ="
             },
             {
+              "name": "NativeDocxNestedTableOmissionsV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTableOmissionsV1"
+            },
+            {
+              "name": "NativeDocxNestedTableOmissionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTableOmissionV1"
+            },
+            {
               "name": "NativeDocxNumberingReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNumberingReferenceV1"
@@ -5045,7 +5075,7 @@
             {
               "name": "NativeDocxPartialOmissionCode",
               "kind": "type",
-              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit'"
+              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit' | 'nested-table' | 'nested-table-limit'"
             },
             {
               "name": "NativeDocxPartialParagraphV1",

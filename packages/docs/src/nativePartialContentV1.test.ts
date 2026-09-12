@@ -15,6 +15,42 @@ function fixture(){
  return {document,resolved}
 }
 describe('read-only native partial source content',()=>{
+ it('recovers outer paragraph text around an exact nested-table omission without changing strict source',()=>{
+  const {document,resolved}=fixture(),table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!
+  const anchor={...cell.anchor,path:cell.anchor.path+'/w:tbl[1]',start_byte:1401,end_byte:1450}
+  const diagnostic={id:'nested:1',code:'NESTED_TABLE_OR_CELL_MARKUP',scope_id:table.id,anchor,capability:'table-structure',preservation:'refuse-mutation' as const,message:'Nested source remains opaque'}
+  document.unsupported=[diagnostic]
+  const evidence={items:[{package_sha256:document.source.package_sha256,part_sha256:'sha256:'+'a'.repeat(64),table_id:table.id,cell_id:cell.id,diagnostic_id:diagnostic.id,anchor}],omitted_count:0}
+  const before=structuredClone({document,resolved,evidence}),out=project(document,options,resolved,evidence)
+  expect(JSON.stringify(out.blocks)).toContain('Summary');expect(out.omissions).toContainEqual({kind:'omission',source:{scope_id:diagnostic.id,anchor},code:'nested-table',count:1,diagnostic_ids:[diagnostic.id]})
+  expect(out.source_diagnostics.document).toEqual([diagnostic]);expect(out.nested_table_omissions).toEqual(evidence);expect({document,resolved,evidence}).toEqual(before)
+  expect(JSON.stringify(project(document,options,resolved).blocks)).not.toContain('Summary')
+  cell.grid_span=2;cell.vertical_merge='restart'
+  expect(JSON.stringify(project(document,options,resolved,evidence).blocks)).toContain('Summary')
+  cell.vertical_merge='continue'
+  expect(JSON.stringify(project(document,options,resolved,evidence).blocks)).not.toContain('Summary')
+  cell.vertical_merge='restart'
+  const run=cell.paragraphs[0]!.runs[0]!;resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden=true
+  expect(JSON.stringify(project(document,options,resolved,evidence).blocks)).not.toContain('Summary')
+  delete resolved.runs.find(r=>r.run_id===run.id)!.properties.hidden
+  document.unsupported.push({...diagnostic,id:'unknown',code:'UNMODELED_CELL_PROPERTY'})
+  expect(JSON.stringify(project(document,options,resolved,evidence).blocks)).not.toContain('Summary')
+ })
+ it('rejects forged nested evidence and hostile dense-array inputs without invoking getters',()=>{
+  const {document,resolved}=fixture(),table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!,anchor={...cell.anchor,path:cell.anchor.path+'/w:tbl[1]',start_byte:1401,end_byte:1450}
+  document.unsupported=[{id:'nested:1',code:'NESTED_TABLE_OR_CELL_MARKUP',scope_id:table.id,anchor,capability:'table-structure',preservation:'refuse-mutation',message:'Opaque'}]
+  const fact={package_sha256:document.source.package_sha256,part_sha256:'sha256:'+'a'.repeat(64),table_id:table.id,cell_id:cell.id,diagnostic_id:'nested:1',anchor}
+  for(const change of [{package_sha256:'sha256:'+'0'.repeat(64)},{cell_id:'wrong'},{part_sha256:'bad'},{anchor:{...anchor,path:anchor.path+'/w:p[1]'}},{anchor:{...anchor,start_byte:1100}},{anchor:{...anchor,xml_sha256:'sha256:'+'0'.repeat(64)}}])expect(()=>project(document,options,resolved,{items:[{...fact,...change}],omitted_count:0})).toThrow()
+  let called=0;const getter=Object.defineProperty([],0,{get(){called++;return fact}})
+  for(const items of [getter,new Array(1),[fact,fact],Object.assign([fact],{extra:1}),Object.assign([fact],{[Symbol('x')]:1}),Array(65).fill(fact)])expect(()=>project(document,options,resolved,{items,omitted_count:0})).toThrow()
+  expect(called).toBe(0)
+  const second={...fact,diagnostic_id:'nested:2',part_sha256:'sha256:'+'b'.repeat(64),anchor:{...anchor,path:cell.anchor.path+'/w:tbl[2]',start_byte:1451,end_byte:1490}}
+  document.unsupported.push({...document.unsupported[0]!,id:second.diagnostic_id,anchor:second.anchor})
+  expect(()=>project(document,options,resolved,{items:[fact,second],omitted_count:0})).toThrow('source identity')
+  document.unsupported.pop()
+  const out=project(document,options,resolved,{items:[fact],omitted_count:3})
+  expect(out.omissions.some(o=>o.code==='nested-table-limit'&&o.count===3)).toBe(true)
+ })
  it('retains exact nontext metadata without allowing similarly named or misplaced diagnostics',()=>{
   const {document,resolved}=fixture();resolved.source_parts.styles_part='word/styles.xml'
   const diagnostic={code:'LATENT_STYLE_BEHAVIOR_PRESERVED',scope_id:document.document_id,part_name:'word/styles.xml',path:'/w:styles[1]/w:latentStyles[1]',severity:'unsupported' as const,preservation:'preserve-verbatim' as const,message:'Preserved metadata'}

@@ -55,6 +55,14 @@ must supply document and layout from the same authoritative extraction. The
 identity join is not independent proof that arbitrary caller-provided models
 were extracted from particular package bytes.
 
+The optional fourth argument accepts `nested_table_omissions` from the same-byte
+WASM inspector. At most 64 exact direct nested-table boundaries may replace
+their original table-wide diagnostic with source-positioned omission placeholders,
+allowing surrounding outer-cell paragraphs through the unchanged visibility gates.
+Nested text is never recovered. Unknown wrappers, conditional styles and other
+diagnostics remain blockers; excess boundaries receive a bounded count summary.
+The main-part digest is inspector evidence, not independently re-hashed XML.
+
 The playground displays this inventory separately from its existing richer
 continuous editor; limitations of this reusable projection do not imply that
 the editor omits the same content.

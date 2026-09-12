@@ -14,6 +14,7 @@ export { groupThreads, openThreadCount, newCommentId, newCommentEntry } from './
 export type { CommentEntry, CommentThread } from './comments'
 export * from './nativeContract'
 export * from './nativePartialContentV1'
+export * from './nativePartialNestedTablesV1'
 export * from './nativeResolvedLayout'
 export * from './nativeNumberingV1'
 export * from './nativeShapingLines'

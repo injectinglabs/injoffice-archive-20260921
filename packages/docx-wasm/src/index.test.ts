@@ -104,6 +104,19 @@ const success = (request: NativeWasmWorkerRequest, result?: unknown): NativeWasm
 } as NativeWasmWorkerResponse)
 
 describe('DOCX WASM package client', () => {
+  it('validates optional nested omission evidence before returning it',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=JSON.parse(readFileSync(new URL('../../../testdata/docx-native/document-v1.json',import.meta.url),'utf8')) as NativeDocxDocumentV1
+    document.source.package_sha256=hash
+    const table=document.body.blocks[1]!.table!,cell=table.rows[0]!.cells[0]!,anchor={...cell.anchor,path:cell.anchor.path+'/w:tbl[1]',start_byte:1401,end_byte:1450}
+    document.unsupported=[{id:'nested:1',code:'NESTED_TABLE_OR_CELL_MARKUP',scope_id:table.id,anchor,capability:'table-structure',preservation:'refuse-mutation',message:'Opaque'}]
+    const fact={package_sha256:hash,part_sha256:'sha256:'+'a'.repeat(64),table_id:table.id,cell_id:cell.id,diagnostic_id:'nested:1',anchor}
+    const resolved_layout={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
+    const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,nested_table_omissions:{items:[fact],omitted_count:0}}
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).nested_table_omissions).toEqual(envelope.nested_table_omissions);client.terminate()
+    const badWorker=new FakeWorker(JSON.stringify({...envelope,nested_table_omissions:{items:[{...fact,cell_id:'wrong'}],omitted_count:0}})),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow();expect(badWorker.terminated).toBe(true)
+  })
   it('validates optional equation evidence before returning browser math data',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
     document.source.package_sha256=hash
