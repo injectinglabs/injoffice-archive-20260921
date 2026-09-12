@@ -122,6 +122,25 @@ function textLayout(shaper = fixtureShaper(), resolveRun?: NativePptxTextLayout[
   }
 }
 
+it('never lays out source-frame autofit without opt-in and labels opted-in paint approximate',async()=>{
+ const deck=structuredClone(parsedFull),element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+ if(element.kind!=='text')throw new Error('text missing')
+ const authored=nativeTextElement(element.id,'Saved frame text',nativeTextBody({autoFit:'shape-source-frame'}),element.transform)
+ element.paragraphs=authored.paragraphs;element.textBody=authored.textBody
+ element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autofit-source-frame-approximate',message:'Approximate saved frame'}]}
+ deck.slides[0]!.elements=[element]
+ const before=JSON.stringify(deck)
+ const strict=await compileNativePptxSlide(deck,0,{textLayout:textLayout(),lineLayoutPolicy:'max-run-natural-v1'})
+ expect(findNode(strict,'text',element.id).textBody).toMatchObject({status:'refused',fidelity:'nativeUnavailable'})
+ const approximate=await compileNativePptxSlide(deck,0,{textLayout:textLayout(),lineLayoutPolicy:'max-run-natural-v1',sourceFrameAutoFitPreview:true})
+ expect(findNode(approximate,'text',element.id).textBody).toMatchObject({status:'laidOut',fidelity:'approximateSourceFrame',autoFit:'shape-source-frame'})
+ const paint=createRecordingPaintSurface();paintSlideRenderTree(approximate,paint)
+ expect(paint.finish().some(command=>command.kind==='glyphRun')).toBe(true)
+ expect(approximate.diagnostics.some(diagnostic=>diagnostic.code==='text.sourceFrameAutoFitApproximate')).toBe(true)
+ expect(JSON.stringify(deck)).toBe(before)
+ await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(),sourceFrameAutoFitPreview:'true' as never})).rejects.toMatchObject({path:'$.options.sourceFrameAutoFitPreview'})
+})
+
 it('passes authored language to actual native shaping and retains glyph paint', async () => {
   const base=fixtureShaper(),languages:string[]=[]
   const shaper:NativeTextShaper={...base,shape(request){languages.push(request.run.language);return base.shape(request)}}

@@ -579,17 +579,22 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(computed,undefined)).toThrow('explicit eligibility')
     await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow('bounded successful pagination')
   },15_000)
-  it('keeps approximate body fields plus square wrapping explicitly unsupported', async () => {
+  it('keeps interior square-image islands unsupported in approximate field layout', async () => {
     const input=imageFixture(), document=input.document as NativeDocxDocumentV1
     const paragraph=document.body.blocks[0]!.paragraph!
-    Object.assign(paragraph.runs[0]!.drawing!,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'square',floating_layer:'front',stacking_order:7})
+    Object.assign(paragraph.runs[0]!.drawing!,{placement:'floating',x_emu:2540000,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'square',floating_layer:'front',stacking_order:7})
     const field=paragraph.runs.find(run=>run.kind==='text')!;field.page_field='NUMPAGES';field.text=''
-    await expect(renderNativeDocxApproximatePagePreviewV1(input,{}, {providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(){throw new Error('must not request glyphs')}})).rejects.toThrow('excludes square wrapping')
+    const settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]',preservation:'preserve-verbatim',message:'Legacy mode12'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:settings.package_sha256,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy mode12']}
+    await expect(renderNativeDocxApproximatePagePreviewV1(input,eligibility, {providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(){throw new Error('must not request glyphs')}})).rejects.toThrow('two text intervals')
   })
-  it('derives PAGE/NUMPAGES from final pagination in both repeated header and footer, never cached values', async () => {
+  it.each([undefined,12,14] as const)('derives repeated header/footer PAGE/NUMPAGES with approximate mode %s', async mode => {
     const input = fixture()
     const document = input.document as NativeDocxDocumentV1
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    if(mode!==undefined)document.sections[0]!.page_number_start=7
     const second = structuredClone(document.body.blocks[0]!.paragraph!)
     second.id = 'paragraph:second'; second.anchor = anchor('/w:document[1]/w:body[1]/w:p[2]', 200, 290)
     second.properties.page_break_before = true
@@ -611,16 +616,45 @@ describe('native DOCX page-paint compiler v1', () => {
       scopes.push(paragraph.id, ...paragraph.runs.map((run) => run.id))
     }
     rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids.push(...scopes); inventory.references[0]!.scope_ids.sort() })
+    if(mode===14){const field=document.body.blocks[0]!.paragraph!.runs[0]!;field.page_field='NUMPAGES';field.text=''}
     const prepared = await prepareNativeDocxPagePaintV1(input)
     expect(prepared.page_paint_request.page_field_variants).toHaveLength(2)
     for (const [index, variant] of prepared.page_paint_request.page_field_variants!.entries()) for (const region of ['header', 'footer']) {
       const text = variant.shaped_lines.paragraphs.find((p) => p.story_kind === region)!.lines.flatMap((line) => line.fragments).map((fragment) => fragment.text).join('')
-      expect(text).toBe(`${index + 1}2`)
+      expect(text).toBe(`${index + (mode===undefined?1:7)}2`)
     }
     const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
     const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => ({ status: 'outlined' as const, ...request, ...provider.outline(request.glyph_id) })) })
     expect(completed.page_paint_output.status).toBe('painted')
     expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(true)
+    if(mode!==undefined){
+      const settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+      settings.profile='unsupported';delete settings.compatibility_mode
+      settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]',preservation:'preserve-verbatim',message:`Legacy mode${mode}`}]
+      const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:settings.package_sha256,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:mode,reasons:[`Legacy mode${mode}`]}
+      const before=structuredClone(input)
+      const approximate=await renderNativeDocxApproximatePagePreviewV1(input,eligibility,{providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request){const outline=provider.outline(request.glyph_id);return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}}})
+      expect(approximate).toMatchObject({status:'painted',fidelity:'approximate',read_only:true})
+      expect(approximate.pages).toEqual(completed.page_paint_output.pages)
+      expect(approximate.rendering_provenance.pagination_settings).toEqual(settings)
+      expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+      expect(input).toEqual(before)
+      const cached=structuredClone(input)
+      ;(cached.document as NativeDocxDocumentV1).headers[0]!.blocks[0]!.paragraph!.runs[0]!.text='999'
+      await expect(renderNativeDocxApproximatePagePreviewV1(cached,eligibility,{providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(){throw new Error('must not request glyphs')}})).rejects.toThrow('cached text is not authoritative')
+      const computed=structuredClone(prepared.page_paint_request)
+      computed.pagination_request.pagination_settings=structuredClone(settings)
+      computed.paginated_layout=paginateNativeDocxApproximateLegacyV1(computed.pagination_request,eligibility).layout
+      computed.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(computed.paginated_layout)
+      expect(decodeNativeDocxPagePaintRequestV1(computed).ok).toBe(false)
+      expect(decodeNativeDocxApproximateComputedPagePaintV1(computed,eligibility).fidelity).toBe('approximate')
+      const missing=structuredClone(computed);delete missing.page_field_variants
+      missing.integrity.shaped_lines_sha256=nativeDocxPagePaintShapedLinesSha256V1(missing.pagination_request.shaped_lines)
+      expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(missing,eligibility)).toThrow()
+      const reversed=structuredClone(computed);reversed.page_field_variants!.reverse()
+      reversed.integrity.shaped_lines_sha256=nativeDocxPagePaintShapedLinesSha256V1(reversed.pagination_request.shaped_lines,reversed.page_field_variants)
+      expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(reversed,eligibility)).toThrow()
+    }
     for (const mutate of [
       (request: typeof prepared.page_paint_request) => { delete request.page_field_variants },
       (request: typeof prepared.page_paint_request) => { request.page_field_variants!.reverse() },
@@ -630,12 +664,14 @@ describe('native DOCX page-paint compiler v1', () => {
       invalid.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(invalid.pagination_request.shaped_lines, invalid.page_field_variants)
       expect(decodeNativeDocxPagePaintRequestV1(invalid).ok).toBe(false)
     }
-    const stale = structuredClone(document); stale.headers[0]!.blocks[0]!.paragraph!.runs[0]!.text = '999'
-    expect(() => nativeDocxPageFieldDocumentV1(stale, 0, 2)).toThrow(/cached results/)
-    expect(() => nativeDocxPageFieldDocumentV1(document, 0, 65)).toThrow(/bounded/)
-    const bodyField = structuredClone(document); bodyField.body.blocks[0]!.paragraph!.runs[0]!.page_field = 'PAGE'
-    expect(() => nativeDocxPageFieldDocumentV1(bodyField, 0, 2)).toThrow(/Body fields/)
-  })
+    if(mode===undefined){
+      const stale = structuredClone(document); stale.headers[0]!.blocks[0]!.paragraph!.runs[0]!.text = '999'
+      expect(() => nativeDocxPageFieldDocumentV1(stale, 0, 2)).toThrow(/cached results/)
+      expect(() => nativeDocxPageFieldDocumentV1(document, 0, 65)).toThrow(/bounded/)
+      const bodyField = structuredClone(document); bodyField.body.blocks[0]!.paragraph!.runs[0]!.page_field = 'PAGE'
+      expect(() => nativeDocxPageFieldDocumentV1(bodyField, 0, 2)).toThrow(/Body fields/)
+    }
+  },15_000)
   it('exact-joins source-attested inline image flips and half-turns without changing layout extents', async () => {
     for (const rotation_degrees of [0, 90, 180, 270] as const) for (const flip_horizontal of [false, true]) for (const flip_vertical of [false, true]) {
       const input = imageFixture()
@@ -724,6 +760,43 @@ describe('native DOCX page-paint compiler v1', () => {
       }
     }
   }, 30_000)
+  it.each(['left','right'] as const)('uses source-verified %s square exclusions in approximate current-policy layout', async edge => {
+    const input=imageFixture(),doc=input.document as NativeDocxDocumentV1,paragraph=doc.body.blocks[0]!.paragraph!,drawing=paragraph.runs[0]!.drawing!
+    paragraph.runs[1]!.text='Square wrapped source text continues after the picture. '.repeat(8)
+    if(edge==='left'){
+      const field=structuredClone(paragraph.runs[1]!)
+      field.id='run:square-field';field.text='';field.page_field='NUMPAGES';field.anchor=anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:fldSimple[1]',150,170)
+      paragraph.runs.push(field)
+      const resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+      resolved.runs.push({...structuredClone(resolved.runs.find(run=>run.run_id===paragraph.runs[1]!.id)!),run_id:field.id})
+      rewriteInventory(input,inventory=>{inventory.references[0]!.scope_ids.push(field.id);inventory.references[0]!.scope_ids.sort()})
+    }
+    Object.assign(drawing,{placement:'floating',x_emu:edge==='left'?914400:5588000,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'square',floating_layer:'front',stacking_order:7})
+    const reference=await prepareNativeDocxPagePaintV1(structuredClone(input))
+    const settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]',preservation:'preserve-verbatim',message:'Legacy mode14'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:settings.package_sha256,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:14,reasons:['Legacy mode14']}
+    const before=structuredClone(input),outlines=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const outline=(request:Parameters<import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1['getGlyphOutline']>[0])=>{const path=outlines.outline(request.glyph_id);return path.path.length?{status:'outlined' as const,...request,...path}:{status:'empty' as const,...request,units_per_em:path.units_per_em}}
+    const approximate=await renderNativeDocxApproximatePagePreviewV1(input,eligibility,{providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline:outline})
+    const strict=await completeNativeDocxPagePaintV1({prepared:reference,outline_results:reference.outline_requests.map(outline)})
+    expect(approximate.status).toBe('painted')
+    expect(approximate.pages).toEqual(strict.page_paint_output.pages)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    expect(input).toEqual(before)
+    const computed=structuredClone(reference.page_paint_request)
+    computed.pagination_request.pagination_settings=structuredClone(settings)
+    computed.paginated_layout=paginateNativeDocxApproximateLegacyV1(computed.pagination_request,eligibility).layout
+    computed.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(computed.paginated_layout)
+    expect(decodeNativeDocxApproximateComputedPagePaintV1(computed,eligibility).fidelity).toBe('approximate')
+    expect(decodeNativeDocxPagePaintRequestV1(computed).ok).toBe(false)
+    const stale=structuredClone(computed)
+    const staleDrawing=stale.pagination_request.document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    if(edge==='left')staleDrawing.width_emu+=127000
+    else staleDrawing.x_emu!-=127000
+    expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(stale,eligibility)).toThrow()
+  },15_000)
   it('independently rejects stale square geometry, interior islands, and blocked lines', async () => {
     const input=imageFixture(),source=input.document as NativeDocxDocumentV1,drawing=source.body.blocks[0]!.paragraph!.runs[0]!.drawing!
     Object.assign(drawing,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'none',floating_layer:'front',stacking_order:7})

@@ -129,7 +129,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		if err := extractor.reserveNativeTextOutput(textBody, dialect); err != nil {
 			return NativeElement{}, err
 		}
-		layout, layoutErr := extractNativeTextBodyLayout(textBody, dialect)
+		layout, layoutErr := extractNativeTextBodyLayoutPolicy(textBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
 		if layoutErr != nil {
 			var duplicate nativeDuplicateSingletonError
 			if isNativeDuplicateSingleton(layoutErr, &duplicate) || !isNativeTextLayoutUnsupported(layoutErr) {
@@ -187,6 +187,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		element.Name = stringPointer(name)
 	}
 	if len(gaps.values) == 0 {
+		nativeMarkSourceFrameAutoFit(&element)
 		nativePreserveTextCheckingMetadata(&element, node, dialect)
 		return element, nil
 	}
@@ -217,6 +218,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			Scope: &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &partName},
 		})
 	}
+	nativeMarkSourceFrameAutoFit(&element)
 	return element, nil
 }
 

@@ -28,7 +28,7 @@ import {
 } from '../xlsxRoundTripRuntime'
 import { nativeCellPreview } from '../nativeCellPreview'
 import { NativeWorkbookObjects } from '../components/NativeWorkbookObjects'
-import {nativeTableFillPreview,nativeTableHeaderTextPreview,nativeTableBorderPreview,type NativeWorkbookObjectsV1,type NativeTableBorderSideV1} from '@injoffice/sheets/browser'
+import {nativeStoredRowPreviewV1,nativeTableFillPreview,nativeTableHeaderTextPreview,nativeTableTotalsTextPreview,nativeTableBorderPreview,type NativeWorkbookObjectsV1,type NativeTableBorderSideV1} from '@injoffice/sheets/browser'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-fixture/launch-readiness-plan.xlsx`
@@ -406,9 +406,11 @@ export default function NativeRoundTripPage() {
                 <table className="native-grid">
                   <thead><tr><th aria-label="Row" />{Array.from({ length: bounds.columns }, (_, column) => <th key={column}>{columnName(column)}</th>)}</tr></thead>
                   <tbody>
-                    {Array.from({ length: bounds.rows }, (_, row) => (
-                      <tr key={row}>
-                        <th>{row + 1}</th>
+                    {Array.from({ length: bounds.rows }, (_, row) => {
+                      const stored=objects?nativeStoredRowPreviewV1(objects,workbook.source.package_sha256,activeSheet.part_name,row):undefined
+                      return (
+                      <tr key={row} className={stored?'native-stored-row':undefined} style={stored?{'--native-stored-row-height':`${stored.height_points}pt`,height:`${stored.height_points}pt`,...(stored.hidden?{display:'none'}:{})} as CSSProperties:undefined}>
+                        <th><span>{row + 1}</span></th>
                         {Array.from({ length: bounds.columns }, (__, column) => {
                           const cell = cellMap.get(`${row}:${column}`)
                           const candidate = activeSheet ? editableMap.get(targetKey({ sheetId: activeSheet.id, row, column })) : undefined
@@ -416,10 +418,11 @@ export default function NativeRoundTripPage() {
                           const preview = nativeCellPreview(workbook, cell,objects,activeSheet.part_name)
                           const styleID=styleAt(row,column),fill=styleID===null||styleID===undefined?undefined:workbook.styles[styleID]?.effective.fill
                           const tableFill=objects?nativeTableFillPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,fill,styleID??-1):undefined
+                          const tableTotals=objects?nativeTableTotalsTextPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,styleID??-1):false
                           const tableHeader=objects?nativeTableHeaderTextPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,fill,styleID??-1):false
                           const tableEdges=objects?nativeTableBorderPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,styleID??-1,{top:styleAt(row-1,column),right:styleAt(row,column+1),bottom:styleAt(row+1,column),left:styleAt(row,column-1)}):undefined
                           return (
-                            <td key={column} className={active ? 'native-cell-active' : undefined} style={{...previewCellStyle(workbook, cell,styleID??undefined),...(tableFill?{backgroundColor:tableFill}:{}),...(tableHeader?{color:'#FFFFFF',fontWeight:700}:{}),...(tableEdges?.top?{borderTop:edgeCSS(tableEdges.top)}:{}),...(tableEdges?.right?{borderRight:edgeCSS(tableEdges.right)}:{}),...(tableEdges?.bottom?{borderBottom:edgeCSS(tableEdges.bottom)}:{}),...(tableEdges?.left?{borderLeft:edgeCSS(tableEdges.left)}:{})}} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
+                            <td key={column} className={active ? 'native-cell-active' : undefined} style={{...previewCellStyle(workbook, cell,styleID??undefined),...(tableFill?{backgroundColor:tableFill}:{}),...(tableHeader?{color:'#FFFFFF',fontWeight:700}:{}),...(tableTotals?{fontWeight:700}:{}),...(tableEdges?.top?{borderTop:edgeCSS(tableEdges.top)}:{}),...(tableEdges?.right?{borderRight:edgeCSS(tableEdges.right)}:{}),...(tableEdges?.bottom?{borderBottom:edgeCSS(tableEdges.bottom)}:{}),...(tableEdges?.left?{borderLeft:edgeCSS(tableEdges.left)}:{})}} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
                               {candidate ? (
                                 <button type="button" style={tableFill?{background:'transparent'}:undefined} onClick={() => chooseTarget(candidate)} aria-label={`Edit ${activeSheet.name} ${cell?.ref ?? `${columnName(column)}${row + 1}`}`}>
                                   {preview.text || '\u00a0'}
@@ -430,12 +433,13 @@ export default function NativeRoundTripPage() {
                           )
                         })}
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
               <p className="ds-muted">Formula cells show saved results, which may be stale; this preview does not recalculate. Warning markers identify raw values or missing saved results.</p>
               <p className="ds-muted">The grid preview is limited to the first 32 rows and 12 columns. Original content outside this window remains in the file.</p>
+              {objects?.package_sha256===workbook.source.package_sha256&&<p className="ds-muted">{objects.row_geometry?.find(sheet=>sheet.sheet_part===activeSheet.part_name)?.warnings.join(' ')??'Stored row geometry is unavailable for this sheet; host preview sizes remain in use.'} Text may be clipped to stored heights; no font metrics or automatic fitting are inferred.</p>}
               {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} onInspection={setObjects} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
               {previewWarnings.length > 0 && <details className="ds-muted">
                 <summary>{previewWarnings.length} preview cell warnings</summary>

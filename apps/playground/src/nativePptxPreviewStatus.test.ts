@@ -14,6 +14,16 @@ function source():NativePptxDeck{return {contractVersion:'pptx-native/v1',docume
 function refused():NativeElement{return {kind:'text',id:'text-2',name:'Budget notes',provenance:'parsed',transform:{x:60,y:10,cx:30,cy:20},paragraphs:[],passthrough:[],compatibility:{status:'refused',diagnostics:[{severity:'refusal',code:'pptx.text-layout-unavailable',message:'Shape autofit is not supported',scope:{slideId:'slide-1',elementId:'text-2'}}]}}}
 
 describe('native PPTX preview coverage reporting',()=>{
+ it('keeps the source-frame warning visible outside collapsed diagnostics and never calls it complete',()=>{
+  const result={...preview(),source_frame_autofit_count:1}
+  expect(nativePptxPreviewStatus(result,source()).status).toBe('partial')
+  const html=renderToStaticMarkup(createElement(NativePptxPreviewResult,{preview:result,source:source()}))
+  expect(html).toContain('data-autofit-approximation')
+  expect(html).toContain('Approximate autofit preview.')
+  expect(html.indexOf('Approximate autofit preview.')).toBeLessThan(html.indexOf('<details'))
+  expect(html).toContain('without resizing')
+  expect(html).toContain('editing permissions are unchanged')
+ })
  it('keeps supported paint visible while identifying refused objects and placeholder regions separately',()=>{
   const deck=source();deck.slides[0]!.elements=[refused()]
   deck.compatibility.diagnostics=[...refused().compatibility.diagnostics]

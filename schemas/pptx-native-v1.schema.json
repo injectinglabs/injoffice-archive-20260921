@@ -308,7 +308,7 @@
         "bottomInsetEmu": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
         "wrap": { "$ref": "#/$defs/textWrap" },
         "verticalAnchor": { "$ref": "#/$defs/textVerticalAnchor" },
-        "autoFit": { "const": "none" },
+        "autoFit": { "enum": ["none", "shape-source-frame"] },
         "horizontalOverflow": { "const": "overflow" },
         "verticalOverflow": { "const": "overflow" }
       }

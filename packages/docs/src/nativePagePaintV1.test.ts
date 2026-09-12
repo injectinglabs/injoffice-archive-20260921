@@ -386,6 +386,18 @@ describe('native DOCX page-paint v1', () => {
     expect(unknown.ok && unknown.value.status).toBe('refused')
   })
 
+  it('retains empty default numbering style evidence without blocking paint', async () => {
+    const request = fixture(), resolved = request.pagination_request.resolved_layout
+    resolved.source_parts.styles_part = 'word/styles.xml'
+    resolved.diagnostics.push({ code: 'EMPTY_NUMBERING_STYLE_PRESERVED', severity: 'unsupported', scope_id: resolved.document_id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[4]', preservation: 'preserve-verbatim', message: 'Exact empty default numbering style retained' })
+    const result = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(result.ok && result.value.status).toBe('painted')
+    expect(resolved.diagnostics).toHaveLength(1)
+    resolved.diagnostics[0]!.code = 'NUMBERING_STYLE_PRESERVED'
+    const unknown = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(unknown.ok && unknown.value.status).toBe('refused')
+  })
+
   it('bounds paginated-layout hashing and keeps object-key order irrelevant', () => {
     const layout = fixture().paginated_layout
     const reordered = Object.fromEntries(Object.entries(structuredClone(layout)).reverse()) as typeof layout

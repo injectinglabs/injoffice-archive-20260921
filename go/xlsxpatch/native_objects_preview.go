@@ -16,11 +16,12 @@ import (
 // NativeWorkbookObjectsV1 is a read-only supplement, never mutation authority.
 // Chart values come from saved chart caches, not evaluated worksheet formulas.
 type NativeWorkbookObjectsV1 struct {
-	Protocol      string                 `json:"protocol"`
-	Version       int                    `json:"version"`
-	PackageSHA256 string                 `json:"package_sha256"`
-	Tables        []NativeTablePreviewV1 `json:"tables"`
-	Charts        []NativeChartPreviewV1 `json:"charts"`
+	Protocol      string                      `json:"protocol"`
+	Version       int                         `json:"version"`
+	PackageSHA256 string                      `json:"package_sha256"`
+	Tables        []NativeTablePreviewV1      `json:"tables"`
+	Charts        []NativeChartPreviewV1      `json:"charts"`
+	RowGeometry   []NativeStoredRowGeometryV1 `json:"row_geometry,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -53,6 +54,7 @@ type NativeTableNumberFormatV1 struct {
 
 // NativeTableFillPreviewV1 qualifies fills and default-font header text only.
 type NativeTableFillPreviewV1 struct {
+	TotalsBold         bool   `json:"totals_bold,omitempty"`
 	Header             string `json:"header"`
 	Stripe             string `json:"stripe"`
 	Body               string `json:"body"`
@@ -175,6 +177,9 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	result := &NativeWorkbookObjectsV1{Protocol: "injoffice.xlsx.preview-objects", Version: 1, PackageSHA256: workbook.Source.PackageSHA256, Tables: []NativeTablePreviewV1{}, Charts: []NativeChartPreviewV1{}}
 	owners := map[string]string{}
 	for _, sheet := range workbook.Sheets {
+		if len(result.RowGeometry) < 64 {
+			result.RowGeometry = append(result.RowGeometry, previewNativeStoredRows(pkg.files[sheet.PartName], sheet.PartName))
+		}
 		relPart := path.Join(path.Dir(sheet.PartName), "_rels", path.Base(sheet.PartName)+".rels")
 		if raw, ok := pkg.files[relPart]; ok {
 			rels, e := parseRoutingRelationships(raw)

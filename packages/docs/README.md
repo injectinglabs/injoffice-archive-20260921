@@ -271,8 +271,14 @@ Approximate body `PAGE`/`NUMPAGES` fields use the same bounded fixed-point solve
 as strict layout: field text derives from final page placement, not cached
 values, with cycle detection and an eight-pass limit. Original field source,
 read-only policy, settings and integrity hashes remain bound to the preview.
-Combining this approximate body-field path with square wrapping or header/footer
-page fields remains explicitly unsupported.
+The same solve handles page-edge square images with or without body fields,
+revalidating the final source-derived exclusion intervals. It retains the
+single-column, left-aligned LTR, no-table/no-note restrictions; interior islands,
+fully blocked lines and nonconvergence refuse. Repeated header/footer page
+fields expand from the final page count and restarted page numbers, with the
+same source-bound variant coverage, fragment budgets and stale-cache refusals
+as strict rendering. Fields in notes/comments and body table cells remain
+unsupported.
 
 Top-of-page paragraph-before spacing is retained only on the first content page
 of a section and suppressed on later pages, including automatic, explicit, and

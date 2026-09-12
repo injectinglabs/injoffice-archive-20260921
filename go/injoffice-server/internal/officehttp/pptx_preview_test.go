@@ -15,14 +15,14 @@ import (
 )
 
 func TestPPTXPreviewQueryIsClosed(t *testing.T) {
-	for _, query := range []string{"slide=-1", "slide=01", "slide=+1", "slide=", "slide=1&slide=2", "font_manifest_path=/tmp/font.json", "slide=1;foo=2", "slide=%zz"} {
+	for _, query := range []string{"slide=-1", "slide=01", "slide=+1", "slide=", "slide=1&slide=2", "font_manifest_path=/tmp/font.json", "slide=1;foo=2", "slide=%zz", "autofit=true", "autofit=", "autofit=source-frame&autofit=source-frame", "autofit=source-frame&extra=1"} {
 		request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath, nil)
 		request.URL.RawQuery = query
 		if _, err := parsePPTXPreviewSlide(request); err == nil {
 			t.Fatalf("accepted %q", query)
 		}
 	}
-	for _, query := range []string{"", "slide=0", "slide=12"} {
+	for _, query := range []string{"", "slide=0", "slide=12", "autofit=source-frame", "slide=0&autofit=source-frame"} {
 		request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath+"?"+query, nil)
 		if _, err := parsePPTXPreviewSlide(request); err != nil {
 			t.Fatalf("refused %q: %v", query, err)
@@ -114,6 +114,7 @@ func TestPPTXPreviewRejectsStaleOrMissingWorkerIdentity(t *testing.T) {
 		{"wrong-slide", map[string]any{"slide_index": 1}, http.StatusUnprocessableEntity},
 		{"missing-slide", map[string]any{"slide_index": nil}, http.StatusUnprocessableEntity},
 		{"wrong-count", map[string]any{"slide_count": 999}, http.StatusUnprocessableEntity},
+		{"wrong-approximation-count", map[string]any{"source_frame_autofit_count": 1}, http.StatusUnprocessableEntity},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input, err := pptxPreviewInput(context.Background(), data, 0, PPTXPreviewOptions{})

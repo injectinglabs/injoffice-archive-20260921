@@ -112,8 +112,8 @@ type NativeParagraph struct {
 }
 
 // NativeTextBodyLayout is the exact v1 horizontal text-frame slice. Extraction
-// materializes OOXML defaults; the fixed fields deliberately exclude autofit and
-// clipping semantics that the contract cannot represent exactly.
+// materializes OOXML defaults. autoFit=shape-source-frame marks an explicit
+// read-only approximation using the saved frame; it does not model resizing.
 type NativeTextBodyLayout struct {
 	LeftInsetEMU       *int64                   `json:"leftInsetEmu"`
 	RightInsetEMU      *int64                   `json:"rightInsetEmu"`

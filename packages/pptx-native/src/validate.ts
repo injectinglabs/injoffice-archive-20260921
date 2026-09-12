@@ -275,6 +275,9 @@ function validateElement(
   let worst = element.compatibility.status
 
   if (element.kind === 'text' || element.kind === 'shape') {
+    if (element.textBody?.autoFit === 'shape-source-frame' && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.autofit-source-frame-approximate' && diagnostic.severity === 'warning'))) {
+      add(issues, `${path}.textBody.autoFit`, 'native.autofitApproximation', 'source-frame autofit requires a parsed source, non-editable status and explicit approximation warning')
+    }
     validateParagraphMarkers(element.paragraphs, `${path}.paragraphs`, issues)
     for (const paragraph of element.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
@@ -322,6 +325,7 @@ function validateElement(
           if (!tableCellTextMatches(cell.text, cell.paragraphs)) add(issues, `${cellPath}.text`, 'native.tableTextAuthority', 'must equal the newline-joined authoritative paragraph text')
           const width = element.table.columnWidths[columnIndex]
           const height = element.table.rowHeights[rowIndex]
+          if (cell.textBody.autoFit !== 'none') add(issues, `${cellPath}.textBody.autoFit`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
           if (width !== undefined && height !== undefined) validateTextBody(cell.textBody, { x: 0, y: 0, cx: width, cy: height }, `${cellPath}.textBody`, issues)
         } else {
           legacyCells++

@@ -878,7 +878,6 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   const { request } = decodeNativeDocxApproximateComputedPagePaintV1(value, eligibilityValue)
   const settings = request.pagination_request.pagination_settings
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
-  if (hasNativeSquareWrapV1(request.pagination_request.document) || hasNativeDocxPageFieldsV1(request.pagination_request.document)) throw new TypeError('Approximate computed previews currently exclude square wrapping and header/footer page fields')
   const painted = await compileDecodedPagePaint(request, outlineProvider, true)
   if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
   return approximatePagePreviewEnvelope(settings, eligibility, painted.value)

@@ -580,6 +580,10 @@ func (resolver *nativeLayoutResolver) loadStyles(partName string) error {
 				return fmt.Errorf("docxpatch: native style resolution: invalid style at %s", child.Path)
 			}
 			if kind == "numbering" {
+				if nativeEmptyDefaultNumberingStyle(child, root, resolver.wordNS) {
+					resolver.addDiagnostic("EMPTY_NUMBERING_STYLE_PRESERVED", resolver.doc.DocumentID, partName, child, "Default numbering style has only exact UI metadata and no layout properties; source remains preserved")
+					continue
+				}
 				resolver.addDiagnostic("NUMBERING_STYLE_PRESERVED", resolver.doc.DocumentID, partName, child, "Numbering-style linking is preserved and not guessed")
 				continue
 			}

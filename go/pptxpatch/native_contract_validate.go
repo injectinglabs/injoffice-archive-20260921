@@ -293,6 +293,17 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	}
 	v.provenance(origin, element.Provenance, element.Source, element.Passthrough, p)
 	v.sourceState(element.Source, element.Passthrough, p)
+	if element.TextBody != nil && element.TextBody.AutoFit == "shape-source-frame" {
+		warning := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == "pptx.autofit-source-frame-approximate" && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warning = true
+			}
+		}
+		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
+			v.add(p+".textBody.autoFit", "native.autofitApproximation", "source-frame autofit requires a parsed source, non-editable status and explicit approximation warning")
+		}
+	}
 	if element.Provenance == NativeProvenanceParsed && slidePart == "" {
 		v.add(p+".provenance", "native.sourceOwnership", "parsed elements require an owning parsed slide with a source anchor")
 	} else if element.Provenance == NativeProvenanceParsed && element.Source != nil && element.Source.PartName != slidePart {
@@ -502,8 +513,8 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	if body.VerticalAnchor != NativeTextVerticalAnchorTop && body.VerticalAnchor != NativeTextVerticalAnchorCenter && body.VerticalAnchor != NativeTextVerticalAnchorBottom {
 		v.add(p+".verticalAnchor", "schema.enum", "must be top, center, or bottom")
 	}
-	if body.AutoFit != "none" {
-		v.add(p+".autoFit", "schema.const", "must equal none")
+	if body.AutoFit != "none" && body.AutoFit != "shape-source-frame" {
+		v.add(p+".autoFit", "schema.enum", "must be none or shape-source-frame")
 	}
 	if body.HorizontalOverflow != "overflow" {
 		v.add(p+".horizontalOverflow", "schema.const", "must equal overflow")
@@ -753,6 +764,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, p 
 				v.add(cp, "native.tableTextAuthority", "paragraphs and textBody must be supplied together")
 			}
 			if hasParagraphs && hasTextBody {
+				if cell.TextBody.AutoFit != "none" {
+					v.add(cp+".textBody.autoFit", "native.autofitApproximation", "table cell autofit preview is not supported")
+				}
 				authoritativeCells++
 				v.paragraphs(*cell.Paragraphs, cp+".paragraphs")
 				if cell.Align != nil {

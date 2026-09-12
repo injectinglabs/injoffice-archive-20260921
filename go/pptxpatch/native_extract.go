@@ -119,6 +119,9 @@ func (f NativePassthroughTokenFactoryFunc) IssueNativePassthroughToken(request N
 type NativePPTXExtractOptions struct {
 	Previous     *NativePPTXDeck
 	TokenFactory NativePassthroughTokenFactory
+	// Opt-in read-only projection of spAutoFit in its saved source frame.
+	// This does not implement content-dependent resizing or qualify Office fidelity.
+	AllowSourceFrameAutoFitPreview bool
 }
 
 type nativeExtractPackage struct {
@@ -1806,7 +1809,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err := extractor.reserveNativeTextOutput(txBody, dialect); err != nil {
 		return NativeElement{}, err
 	}
-	textBody, textLayoutErr := extractNativeTextBodyLayout(txBody, dialect)
+	textBody, textLayoutErr := extractNativeTextBodyLayoutPolicy(txBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
 	textLayoutMessage := ""
 	if textLayoutErr != nil {
 		if !isNativeTextLayoutUnsupported(textLayoutErr) {
@@ -1856,6 +1859,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		element.Name = stringPointer(name)
 	}
 	if textLayoutMessage == "" && textContentMessage == "" {
+		nativeMarkSourceFrameAutoFit(&element)
 		nativePreserveTextCheckingMetadata(&element, txBody, dialect)
 		_ = fingerprint
 		_ = zIndex

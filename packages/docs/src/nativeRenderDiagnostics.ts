@@ -10,6 +10,10 @@ export function isRenderNeutralLayoutDiagnostic(
   diagnostic: NativeDocxResolvedLayoutInputV1['diagnostics'][number],
   resolved: NativeDocxResolvedLayoutInputV1,
 ): boolean {
+  if (diagnostic.code === 'EMPTY_NUMBERING_STYLE_PRESERVED') return diagnostic.scope_id === resolved.document_id
+    && diagnostic.severity === 'unsupported' && diagnostic.preservation === 'preserve-verbatim'
+    && diagnostic.part_name !== undefined && diagnostic.part_name === resolved.source_parts.styles_part
+    && /^\/w:styles\[1\]\/w:style\[[1-9][0-9]*\]$/.test(diagnostic.path ?? '')
   if (diagnostic.code === 'FONT_MATCHING_METADATA_PRESERVED') return diagnostic.scope_id === resolved.document_id
     && diagnostic.severity === 'unsupported'
     && diagnostic.preservation === 'preserve-verbatim'

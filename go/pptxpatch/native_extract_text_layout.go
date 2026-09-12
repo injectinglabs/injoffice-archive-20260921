@@ -46,6 +46,10 @@ func isNativeTextContentUnsupported(err error) bool {
 }
 
 func extractNativeTextBodyLayout(txBody *nativeXMLNode, dialect nativeExtractDialect) (*NativeTextBodyLayout, error) {
+	return extractNativeTextBodyLayoutPolicy(txBody, dialect, false)
+}
+
+func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtractDialect, allowSourceFrame bool) (*NativeTextBodyLayout, error) {
 	if txBody == nil {
 		return nil, fmt.Errorf("pptxpatch: native extract: missing text body")
 	}
@@ -108,8 +112,15 @@ func extractNativeTextBodyLayout(txBody *nativeXMLNode, dialect nativeExtractDia
 	if normalAutofit != nil {
 		return nil, unsupportedNativeTextLayout("a:normAutofit requires font scaling and line-spacing reduction")
 	}
+	autoFit := "none"
 	if shapeAutofit != nil {
-		return nil, unsupportedNativeTextLayout("a:spAutoFit requires content-dependent shape sizing")
+		if !allowSourceFrame {
+			return nil, unsupportedNativeTextLayout("a:spAutoFit requires content-dependent shape sizing")
+		}
+		if err := requireEmptyNativeElement(shapeAutofit); err != nil {
+			return nil, unsupportedNativeTextLayout("a:spAutoFit contains unsupported markup")
+		}
+		autoFit = "shape-source-frame"
 	}
 	if noAutofit != nil {
 		if err := requireEmptyNativeElement(noAutofit); err != nil {
@@ -218,9 +229,17 @@ func extractNativeTextBodyLayout(txBody *nativeXMLNode, dialect nativeExtractDia
 
 	return &NativeTextBodyLayout{
 		LeftInsetEMU: &left, RightInsetEMU: &right, TopInsetEMU: &top, BottomInsetEMU: &bottom,
-		Wrap: wrap, VerticalAnchor: anchor, AutoFit: "none",
+		Wrap: wrap, VerticalAnchor: anchor, AutoFit: autoFit,
 		HorizontalOverflow: "overflow", VerticalOverflow: "overflow",
 	}, nil
+}
+
+func nativeMarkSourceFrameAutoFit(element *NativeElement) {
+	if element.TextBody == nil || element.TextBody.AutoFit != "shape-source-frame" {
+		return
+	}
+	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.autofit-source-frame-approximate", Message: "Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint."})
 }
 
 func validateNativeTextBodyBounds(layout *NativeTextBodyLayout, transform NativeTransform) error {

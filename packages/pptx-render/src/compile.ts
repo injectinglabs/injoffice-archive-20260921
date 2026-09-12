@@ -75,6 +75,7 @@ interface Budget {
 
 interface CompileState {
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
+  readonly sourceFrameAutoFitPreview: boolean
   readonly deck: NativePptxDeck
   readonly slide: NativeSlide
   readonly options: CompileSlideOptions
@@ -1710,12 +1711,15 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
   const path = `$.elements.${context.elementId}.textBody`
   takeNode(state, path)
   try {
+    const approximateSourceFrame = context.layout?.autoFit === 'shape-source-frame'
+    if (approximateSourceFrame && !state.sourceFrameAutoFitPreview) throw new TextBodyLayoutRefusal('text.sourceFrameAutoFitRequiresOptIn', 'Source-frame autofit is approximate and requires explicit preview opt-in.')
+    if (approximateSourceFrame) state.diagnostics.push({ severity: 'warning', code: 'text.sourceFrameAutoFitApproximate', message: 'Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint.', slideId: state.slide.id, elementId: context.elementId })
     const compiled = await compileParagraphs(paragraphs, context, state)
     const deterministic = Boolean(context.layout && state.lineLayoutPolicy)
     if (deterministic) state.diagnostics.push({severity:'warning',code:'text.deterministicLayout',message:'Measured native glyphs use InjOffice max-run-natural-v1 line boxes and anchor offsets; this policy is not an Office visual-equivalence claim.',slideId:state.slide.id,elementId:context.elementId})
     return {
       kind: 'textBody', sourceElementId: context.elementId, bounds: context.bounds,
-      fidelity: deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
+      fidelity: approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
       ...(deterministic ? {lineLayoutPolicy: state.lineLayoutPolicy} : {}),
       wrap: context.layout?.wrap, verticalAnchor: context.layout?.verticalAnchor, autoFit: context.layout?.autoFit,
       horizontalOverflow: context.layout?.horizontalOverflow, verticalOverflow: context.layout?.verticalOverflow,
@@ -1895,6 +1899,7 @@ function canonicalize(value: unknown): unknown {
 /** Compile one validated native slide into a deterministic, immutable integer-EMU tree. */
 export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: number | string, options: CompileSlideOptions): Promise<SlideRenderTree> {
   const lineLayoutPolicy = options.lineLayoutPolicy
+  if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)
   let deck: NativePptxDeck
@@ -1944,6 +1949,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   checkCoordinate(deck.size.cy, '$.size.cy', budget, true)
   const state: CompileState = {
     lineLayoutPolicy,
+    sourceFrameAutoFitPreview: options.sourceFrameAutoFitPreview === true,
     deck,
     slide: nativeSlide,
     options,

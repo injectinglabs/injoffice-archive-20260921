@@ -20,7 +20,10 @@ const PPTXPreviewPath = "/v1/pptx/slide-preview"
 
 // Paths are operator configuration, never request parameters. The manifest
 // names locally licensed fonts by exact family/style and content digest.
-type PPTXPreviewOptions struct{ WorkerPath, FontManifestPath string }
+type PPTXPreviewOptions struct {
+	WorkerPath, FontManifestPath string
+	SourceFrameAutoFitPreview    bool
+}
 
 func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXPreviewOptions) (map[string]any, error) {
 	if len(data) > 8*1024*1024 {
@@ -35,7 +38,9 @@ func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXP
 	if err := preflightPPTXPreviewZIP(ctx, data); err != nil {
 		return nil, err
 	}
-	deck, err := pptxpatch.ExtractNativePPTX(data, pptxExtractOptions)
+	extractOptions := pptxExtractOptions
+	extractOptions.AllowSourceFrameAutoFitPreview = options.SourceFrameAutoFitPreview
+	deck, err := pptxpatch.ExtractNativePPTX(data, extractOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +53,18 @@ func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXP
 	if err := attachPPTXPreviewImages(ctx, data, &deck, slide); err != nil {
 		return nil, err
 	}
-	return map[string]any{"deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath}, nil
+	return map[string]any{"deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath, "source_frame_autofit_preview": options.SourceFrameAutoFitPreview, "source_frame_autofit_count": pptxSourceFrameCount(deck.Slides[slide].Elements)}, nil
+}
+
+func pptxSourceFrameCount(elements []pptxpatch.NativeElement) int {
+	count := 0
+	for _, element := range elements {
+		if element.TextBody != nil && element.TextBody.AutoFit == "shape-source-frame" {
+			count++
+		}
+		count += pptxSourceFrameCount(element.Children)
+	}
+	return count
 }
 
 func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPreviewOptions, gate chan struct{}) {
@@ -66,6 +82,8 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		xlsxhttp.WriteError(w, http.StatusBadRequest, err)
 		return
 	}
+	// Explicit per-request opt-in, never inherited from operator/default options.
+	options.SourceFrameAutoFitPreview = r.URL.Query().Get("autofit") == "source-frame"
 	select {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
@@ -93,12 +111,13 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		return
 	}
 	var identity struct {
-		Version       int    `json:"version"`
-		PackageSHA256 string `json:"package_sha256"`
-		SlideIndex    *int   `json:"slide_index"`
-		SlideCount    int    `json:"slide_count"`
+		Version                 int    `json:"version"`
+		PackageSHA256           string `json:"package_sha256"`
+		SlideIndex              *int   `json:"slide_index"`
+		SlideCount              int    `json:"slide_count"`
+		SourceFrameAutoFitCount int    `json:"source_frame_autofit_count"`
 	}
-	if json.Unmarshal(result, &identity) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) {
+	if json.Unmarshal(result, &identity) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, errors.New("native preview worker result does not match the source slide"))
 		return
 	}
@@ -113,8 +132,11 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		return 0, err
 	}
 	for key, entries := range values {
-		if key != "slide" || len(entries) != 1 {
-			return 0, errors.New("only one slide query parameter is supported")
+		if (key != "slide" && key != "autofit") || len(entries) != 1 {
+			return 0, errors.New("only one slide and one autofit query parameter are supported")
+		}
+		if key == "autofit" && entries[0] != "source-frame" {
+			return 0, errors.New("autofit must equal source-frame when explicitly requested")
 		}
 	}
 	raw := values.Get("slide")

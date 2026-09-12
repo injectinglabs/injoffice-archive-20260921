@@ -11,6 +11,20 @@ afterAll(()=>rmSync(scratch,{recursive:true,force:true}))
 const font=resolve(root,'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'),digest=`sha256:${createHash('sha256').update(readFileSync(font)).digest('hex')}`
 const manifest=resolve(scratch,'fonts.json')
 writeFileSync(manifest,JSON.stringify({version:1,faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest}]}))
+it('requires explicit source-frame opt-in and retains real glyph paint with a bounded approximation count',async()=>{
+ const request=input(),element=request.deck.slides[0].elements[0]
+ element.textBody.autoFit='shape-source-frame'
+ element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autofit-source-frame-approximate',message:'Source frame approximation'}]}
+ await expect(compilePptxPreview(request)).rejects.toThrow('explicit preview opt-in')
+ const before=JSON.stringify(request)
+ const result=await compilePptxPreview({...request,source_frame_autofit_preview:true})
+ expect(result.source_frame_autofit_count).toBe(1)
+ expect(result.diagnostics.join(' ')).toContain('text.sourceFrameAutoFitApproximate')
+ expect(JSON.stringify(result.nodes)).toContain('contentRun')
+ expect(JSON.stringify(request)).toBe(before)
+ for(const count of [-1,1.5,20001,'1',NaN])expect(()=>decodePptxPreview({...result,source_frame_autofit_count:count})).toThrow()
+ await expect(compilePptxPreview({...request,source_frame_autofit_preview:'true'})).rejects.toThrow('boolean')
+})
 function input(){
  const deck=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))
  deck.assets=[];deck.slides=[deck.slides[0]];const element=deck.slides[0].elements[0];deck.slides[0].elements=[element]

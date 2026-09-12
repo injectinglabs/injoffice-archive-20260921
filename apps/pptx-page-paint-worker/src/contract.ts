@@ -14,6 +14,7 @@ export interface PptxPreview {
  version:1; package_sha256:string;slide_index:number;slide_count:number;
  width:number;height:number;background:string;policy:'max-run-natural-v1';
  nodes:PreviewNode[];diagnostics:string[];font_digests:string[];resources:NativeDocxPagePaintMediaAssetV1[]
+ source_frame_autofit_count?:number
 }
 export function decodePptxPreview(value:unknown):PptxPreview {
  const fail=()=>{throw new TypeError('Native slide preview failed bounded validation.')}
@@ -43,6 +44,7 @@ export function decodePptxPreview(value:unknown):PptxPreview {
   }
  }
  const v=record(value)
+ if(v.source_frame_autofit_count!==undefined){number(v.source_frame_autofit_count,0,20000);if(!Number.isInteger(v.source_frame_autofit_count))fail()}
  if(v.version!==1||typeof v.package_sha256!=='string'||!/^([a-f0-9]{64})$/.test(v.package_sha256)||v.policy!=='max-run-natural-v1')fail()
  number(v.width,1);number(v.height,1);number(v.slide_count,1,10000);number(v.slide_index,0,Number(v.slide_count)-1)
  if(!Number.isInteger(v.slide_count)||!Number.isInteger(v.slide_index))fail()

@@ -104,7 +104,7 @@ export interface NativeTextBodyLayout {
   bottomInsetEmu: number
   wrap: NativeTextWrap
   verticalAnchor: NativeTextVerticalAnchor
-  autoFit: 'none'
+  autoFit: 'none' | 'shape-source-frame'
   horizontalOverflow: 'overflow'
   verticalOverflow: 'overflow'
 }

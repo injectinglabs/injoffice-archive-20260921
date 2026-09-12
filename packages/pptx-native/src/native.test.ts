@@ -20,6 +20,17 @@ function fixture(path: string): unknown {
 }
 
 describe('native PPTX contract', () => {
+  it('requires parsed read-only source evidence for approximate autofit', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text missing')
+    element.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'none',verticalAnchor:'top',autoFit:'shape-source-frame',horizontalOverflow:'overflow',verticalOverflow:'overflow'}
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autofit-source-frame-approximate',message:'Approximate saved frame'}]}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.status='preserveOnly';element.compatibility.diagnostics=[];expect(validateNativePptx(deck).ok).toBe(false)
+  })
   it('retains bounded authored language tags and refuses malformed tags', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!

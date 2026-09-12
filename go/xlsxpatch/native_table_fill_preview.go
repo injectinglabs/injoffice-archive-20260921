@@ -172,6 +172,13 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 	table.FillPreview = &NativeTableFillPreviewV1{Header: accent, Stripe: tableLightenHLS(accent, 0.8), Body: "#FFFFFF", HeaderFontStyleIDs: headerFonts, FillStyleIDs: defaultFills}
 	table.Warnings = []string{"Medium2 header and alternating body fills are previewed from the source theme. Default-font header cells use white bold text; explicit cell formatting retains precedence.", "Table text metrics and unqualified style components are not reproduced. Additional format and border notices describe supported subsets."}
 	qualifyNativeTableBorders(tableXML, table, borderRegistry, borderStyles, accent)
+	// The border qualification already excludes named cell styles and every
+	// differential component except number formatting, including totals fonts.
+	// Reuse the default-font authority list; explicit cell font choices still win.
+	if table.TotalRows == 1 && table.BorderPreview != nil {
+		table.FillPreview.TotalsBold = true
+		table.Warnings = append(table.Warnings, "Medium2 totals use bold text only for source-qualified default-font cells; explicit fonts remain unchanged.")
+	}
 }
 
 // Spreadsheet color tint is a luminance adjustment in HLS (ISO29500 ColorType),

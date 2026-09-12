@@ -245,6 +245,18 @@ host locale are never workbook authority.
 
 ### Supplemental table preview
 
+`nativeStoredRowPreviewV1` reads optional source-bound stored row geometry from
+object inspection. The projection covers the first 32 rows of up to 64 sheets;
+unavailable or uninspected sheets retain host preview sizes. It applies stored
+fixed heights and explicit hidden-row flags only. Automatic heights, unknown
+dimension metadata, default-hidden sheets and ambiguous rows remain unavailable.
+Columns and text metrics are not inferred. The exact `x14ac:dyDescent` attribute
+qualifies fixed-height semantics as specified by
+[MS-XLSX](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-xlsx/f11dfda4-46de-4035-8418-d76b0d3898f1),
+including its `customHeight` side effect; baseline positioning remains a visible
+limitation. Valid `spans` hints do not change stored row geometry. No native
+mutation or exact geometry compiler refusal is weakened.
+
 After source-bound object inspection, `nativeTableFillPreview` returns a qualified
 table background for a cell with default-fill provenance.
 `nativeTableHeaderTextPreview` identifies cells eligible for white bold header
@@ -268,6 +280,12 @@ padding alignment. It does not widen the exact native glyph-paint contract.
 double totals divider in accent1. Source-qualified default border styles are
 required on both sides of an edge. Explicit, unknown, overlapping-table, named
 style and unsupported differential border overrides remain unpainted. Custom
-DXF fonts/fills/borders, totals font styling, accounting positioning and text
+DXF fonts/fills/borders, unqualified totals font styling, accounting positioning and text
 metrics are not fully reproduced. This is partial read-only presentation, not
 an Office-fidelity claim or mutation authority.
+
+`nativeTableTotalsTextPreview` identifies qualified Medium2 totals-row cells for
+bold text. It reuses source-qualified default-font style IDs and requires explicit
+totals evidence, an unambiguous table and the matching package revision. Explicit
+cell fonts and totals DXF/named-style overrides remain unchanged. Font family,
+color, sizing and metrics are not replaced by this helper.

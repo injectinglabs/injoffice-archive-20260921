@@ -352,6 +352,29 @@
 
 .ds .native-grid td > button:hover { background: var(--ds-select-soft); }
 
+/* Stored row boxes are independent of host text metrics and control minimums.
+   Content can clip; the adjacent preview notice keeps that limitation visible. */
+.ds .native-grid .native-stored-row > td,
+.ds .native-grid .native-stored-row > th {
+  position: relative;
+  height: var(--native-stored-row-height);
+  padding: 0;
+}
+.ds .native-grid .native-stored-row > td > button,
+.ds .native-grid .native-stored-row > td > span,
+.ds .native-grid .native-stored-row > th > span {
+  position: absolute;
+  inset: 0;
+  display: block;
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  padding: 0 6px;
+  line-height: 1;
+  align-content: center;
+  overflow: hidden;
+}
+
 .ds .native-cell-active {
   outline: 2px solid var(--ds-select);
   outline-offset: -2px;

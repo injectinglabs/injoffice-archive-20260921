@@ -196,3 +196,9 @@ snapshots make drift visible in tests.
 
 See [PPTX-RENDER-TREE.md](../../docs/PPTX-RENDER-TREE.md) for the website migration
 boundary.
+
+`sourceFrameAutoFitPreview: true` separately opts into rendering explicitly
+marked `shape-source-frame` text bodies. Without it, those bodies remain refused
+even when `lineLayoutPolicy` is set. Opted-in bodies report
+`fidelity: 'approximateSourceFrame'` and a warning; they use the original frame
+without resizing and do not qualify Office-equivalent layout or editing rights.

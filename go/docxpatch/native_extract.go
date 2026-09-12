@@ -107,6 +107,8 @@ type nativeExtractor struct {
 	seenParaIDs         map[string]string
 	themeSrgbColors     map[string]string
 	themeSrgbLoaded     bool
+	tableLookLoaded     bool
+	tableLookStyles     map[string]*nativeXMLNode
 }
 
 // NativeExtractionOptions lets a caller retain durable identity across source
@@ -3295,6 +3297,14 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 				} else {
 					unsafe = true
 				}
+			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblLook"}) {
+				// Conditional-style switches have no visual effect only when
+				// the complete referenced style chain has no conditional layers.
+				// The source remains read-only even for that qualified case.
+				unsafe = true
+				if !extractor.inactiveTableLook(tblPr, property) {
+					extractor.addUnsupported("UNMODELED_TABLE_PROPERTY", "table-properties", id, partName, property, "Table look has active, ambiguous, or unqualified conditional-style semantics")
+				}
 			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblW"}) {
 				width, widthOK := nativeNonnegativeInt64Attr(property, extractor.wordNS, "w")
 				typeValue, typeOK := nativeAttr(property, extractor.wordNS, "type")
@@ -3555,7 +3565,7 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			extractor.addUnsupported("FOREIGN_SECTION_MARKUP", "sections", id, extractor.mainPart, child, "Foreign section markup is preserved verbatim")
 			continue
 		}
-		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" {
+		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" || child.Name.Local == "docGrid" {
 			if seenSingleton[child.Name.Local] {
 				extractor.addUnsupported("DUPLICATE_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Duplicate modeled section-property singletons make exact pagination geometry ambiguous")
 				continue
@@ -3563,6 +3573,10 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			seenSingleton[child.Name.Local] = true
 		}
 		switch child.Name.Local {
+		case "docGrid":
+			if !nativeInactiveSectionGrid(child, extractor.wordNS) {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Active or unqualified document-grid markup remains unsupported")
+			}
 		case "type":
 			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Section break markup has attributes or children outside the exact v1 subset")
@@ -3604,9 +3618,18 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			}
 			section.TitlePage = nativeBool(value)
 		case "pgSz":
-			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "h"}, xml.Name{Space: extractor.wordNS, Local: "orient"}) {
+			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "h"}, xml.Name{Space: extractor.wordNS, Local: "orient"}, xml.Name{Space: extractor.wordNS, Local: "code"}) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Page-size markup has attributes or children outside the exact v1 subset")
 				continue
+			}
+			// MS-OE376 2.1.219: code selects printer paper; w/h remain the
+			// authored page geometry. Retain the source code, never derive size
+			// from a platform-specific printer table. Word bounds code to 0..118.
+			if _, present := nativeAttr(child, extractor.wordNS, "code"); present {
+				if code, ok := nativeNonnegativeInt64Attr(child, extractor.wordNS, "code"); !ok || code > 118 {
+					extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Printer paper code is outside the qualified Word subset")
+					continue
+				}
 			}
 			if value, ok := nativeNonnegativeInt64Attr(child, extractor.wordNS, "w"); ok && value > 0 {
 				section.Page.WidthTwips = nativeInt64(value)
