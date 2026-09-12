@@ -1599,7 +1599,7 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 	resolvedNumbering, numberingP, markerR := resolver.resolveNumbering(numberingReference, levelStyleID, paragraph.ID, numberingState)
 	applyNativeParagraphProperties(&p, numberingP)
 	applyNativeParagraphProperties(&p, directP)
-	if len(p.customTabs) > 0 && (numberingReference.present || !nativePlainParagraphWithoutTabs(paragraphNode, resolver.wordNS)) {
+	if len(p.customTabs) > 0 && (numberingReference.present || !resolver.nativeParagraphWithoutTabConsumers(paragraphNode, paragraph)) {
 		for _, tabs := range p.customTabs {
 			resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", paragraph.ID, tabs.partName, tabs.node, "Custom tab stops remain unqualified for active or uncertain tab consumers")
 		}

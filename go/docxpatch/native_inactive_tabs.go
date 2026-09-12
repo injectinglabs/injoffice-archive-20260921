@@ -6,7 +6,7 @@ import (
 )
 
 // Non-bar stops only affect tab positioning. Keep all source stops intact;
-// qualify their inactivity only for proven plain text, never inferred fields.
+// qualify their inactivity only for proven consumers, never inferred fields.
 func nativeExactInactiveTabCandidates(node *nativeXMLNode, ns string) bool {
 	if owner := node.parent; owner != nil && owner.parent != nil && owner.parent.Name == (xml.Name{Space: ns, Local: "style"}) {
 		if !nativeExactContainer(owner.parent, xml.Name{Space: ns, Local: "type"}, xml.Name{Space: ns, Local: "styleId"}, xml.Name{Space: ns, Local: "default"}, xml.Name{Space: ns, Local: "customStyle"}) {
@@ -63,4 +63,61 @@ func nativePlainParagraphWithoutTabs(node *nativeXMLNode, ns string) bool {
 		}
 	}
 	return true
+}
+
+// Only extraction-qualified decimal page fields can extend the plain-text
+// inactivity proof. The resolver owns both this native paragraph and its raw
+// indexed XML; caller-authored field claims never enter this source join.
+// PAGE/NUMPAGES render generated digits, not their cached result text.
+func (r *nativeLayoutResolver) nativeParagraphWithoutTabConsumers(node *nativeXMLNode, paragraph *NativeParagraphV1) bool {
+	if node == nil || paragraph == nil {
+		return false
+	}
+	fields := map[*nativeXMLNode]string{}
+	for _, run := range paragraph.Runs {
+		if run.PageField != "PAGE" && run.PageField != "NUMPAGES" {
+			continue
+		}
+		if run.Kind != "text" || run.Text == nil || *run.Text != "" || run.Anchor.PartName != paragraph.Anchor.PartName {
+			return false
+		}
+		owner := r.nodeForAnchor(run.Anchor)
+		for owner != nil && owner.Name != (xml.Name{Space: r.wordNS, Local: "r"}) {
+			owner = owner.parent
+		}
+		if owner == nil || fields[owner] != "" {
+			return false
+		}
+		if owner.parent != node && (owner.parent == nil || owner.parent.Name != (xml.Name{Space: r.wordNS, Local: "fldSimple"}) || owner.parent.parent != node) {
+			return false
+		}
+		fields[owner] = run.PageField
+	}
+	if len(fields) == 0 {
+		return nativePlainParagraphWithoutTabs(node, r.wordNS)
+	}
+	projection := *node
+	projection.Children = nil
+	for i := 0; i < len(node.Children); i++ {
+		child := node.Children[i]
+		if child.Name == (xml.Name{Space: r.wordNS, Local: "fldSimple"}) && len(child.Children) == 1 && fields[child.Children[0]] != "" {
+			// This same exact owner/result already passed extractParagraphRuns.
+			delete(fields, child.Children[0])
+			continue
+		}
+		if child.Name == (xml.Name{Space: r.wordNS, Local: "r"}) && hasNativeFieldBegin(child, r.wordNS) && i+4 < len(node.Children) && fields[node.Children[i+3]] != "" {
+			for _, member := range node.Children[i : i+5] {
+				if member.parent != node || member.Name != (xml.Name{Space: r.wordNS, Local: "r"}) {
+					return false
+				}
+			}
+			// extractFlatPageField emits a PageField only for this exact five-run
+			// sequence and preserves the result anchor inside its fourth run.
+			delete(fields, node.Children[i+3])
+			i += 4
+			continue
+		}
+		projection.Children = append(projection.Children, child)
+	}
+	return len(fields) == 0 && nativePlainParagraphWithoutTabs(&projection, r.wordNS)
 }

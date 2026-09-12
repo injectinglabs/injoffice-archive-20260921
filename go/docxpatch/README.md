@@ -3,10 +3,12 @@
 `docxpatch` surgically edits WordprocessingML paragraphs and selected document features without regenerating unrelated DOCX parts.
 
 Custom style/default tab stops do not block proven plain-text paragraphs that
-contain no tab controls, literal tabs, fields, or numbering. This source-consumer
+contain no tab controls, literal tabs, unknown fields, or numbering. Exact
+extractor-qualified decimal PAGE/NUMPAGES fields also cannot consume tab stops;
+their generated digits ignore cached field results. This source-consumer
 qualification covers bounded non-bar stops without leaders only; it does not
 implement active custom tab layout or remove the original stops. Direct table,
-field, drawing, or uncertain consumers retain existing refusal diagnostics and
+unknown-field, drawing, or uncertain consumers retain existing refusal diagnostics and
 editing permissions are unchanged.
 
 Exact disabled section form protection is layout-neutral. Endnote placement

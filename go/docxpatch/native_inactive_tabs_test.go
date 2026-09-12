@@ -20,7 +20,7 @@ func TestNativeUnusedStyleTabs(t *testing.T) {
 			case "literal":
 				content = "<w:r><w:t>Head\ter</w:t></w:r>"
 			case "field":
-				content = `<w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple>`
+				content = `<w:fldSimple w:instr="DATE"><w:r><w:t>1</w:t></w:r></w:fldSimple>`
 			case "numbering":
 				extra = `<w:numPr><w:numId w:val="7"/></w:numPr>`
 			case "bar":
