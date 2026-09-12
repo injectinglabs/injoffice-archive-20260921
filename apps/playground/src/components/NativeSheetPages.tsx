@@ -3,6 +3,7 @@ import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
+  selectNativeSheetPrintAreaV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
@@ -16,7 +17,13 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean }
+type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host' }
+
+function cellAddress(row: number, column: number) {
+  let letters = '', index = column + 1
+  while (index > 0) { letters = String.fromCharCode(65 + (index - 1) % 26) + letters; index = Math.floor((index - 1) / 26) }
+  return `${letters}${row + 1}`
+}
 
 // Key the inner view by source identity: pending font reads and page choices never
 // carry over to a different sheet/revision, even before effect cleanup runs.
@@ -34,6 +41,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [useSource, setUseSource] = useState(true)
   const [useStoredRows, setUseStoredRows] = useState(false)
   const [compactGeneral, setCompactGeneral] = useState(false)
+  const [usePrintArea, setUsePrintArea] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
   const [rangeColumns, setRangeColumns] = useState(String(columns))
   const [result, setResult] = useState<Result | null>(null)
@@ -42,6 +50,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const generation = useRef(0)
   const installed = useRef<FontFace | null>(null)
   const instance = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const savedArea = objects.print_areas?.find(area => area.sheet_id === sheet.id && area.sheet_part === sheet.part_name)
   useEffect(() => () => {
     generation.current++
     if (installed.current) document.fonts.delete(installed.current)
@@ -57,9 +66,13 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       const model = projectNativeWorkbookV2(workbook)
       const authority = createNativeMaximumDigitWidthAuthorityV2(model, bytes)
-      const selectedRows = Number(rangeRows), selectedColumns = Number(rangeColumns)
-      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error('Choose 1–32 rows and 1–26 columns for this bounded preview.')
-      const viewport = { row: 0, column: 0, end_row: selectedRows - 1, end_column: selectedColumns - 1 }
+      const viewport = usePrintArea ? selectNativeSheetPrintAreaV1(model, sheet.id, objects) : {
+        row: 0, column: 0, end_row: Number(rangeRows) - 1, end_column: Number(rangeColumns) - 1,
+      }
+      const selectedRows = viewport.end_row - viewport.row + 1, selectedColumns = viewport.end_column - viewport.column + 1
+      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error(usePrintArea
+        ? 'The saved print area exceeds this demo’s 32-row or 26-column limit. Choose a range from A1 instead; the saved area is not changed.'
+        : 'Choose 1–32 rows and 1–26 columns for this bounded preview.')
       const geometry = useStoredRows
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, viewport, authority, objects)
         : compileNativeSheetGeometryV2(model, sheet.id, viewport, authority)
@@ -79,7 +92,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult({ geometry, plan, fontFamily, drawings, compactGeneral })
+      setResult({ geometry, plan, fontFamily, drawings, compactGeneral, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host' })
       setMessage(`${plan.pages.length} preview pages. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -89,10 +102,15 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   }
   return <section className="ds-panel native-sheet-pages" aria-label="Spreadsheet page preview">
     <h3>Page preview</h3>
-    <p className="ds-muted">Preview a range starting at A1 on paper. Column widths use the exact Normal font; text and cached charts use approximate browser layout. This is not Excel print fidelity.</p>
+    <p className="ds-muted">Preview an A1 range or a supported saved print area on paper. Column widths use the exact Normal font; text and cached charts use approximate browser layout. This is not Excel print fidelity.</p>
     <div className="native-sheet-page-controls">
-      <label>Rows<DsInput type="number" min={1} max={32} step={1} value={rangeRows} onChange={event => { invalidate(); setRangeRows(event.target.value) }}/></label>
-      <label>Columns<DsInput type="number" min={1} max={26} step={1} value={rangeColumns} onChange={event => { invalidate(); setRangeColumns(event.target.value) }}/></label>
+      <label>Preview range<DsSelect aria-label="Preview range" value={usePrintArea ? 'saved' : 'a1'} onChange={event => { invalidate(); setUsePrintArea(event.target.value === 'saved') }}><option value="a1">Choose a range from A1</option><option value="saved">Use saved print area</option></DsSelect></label>
+      {usePrintArea ? <p className="ds-muted">{savedArea?.status === 'available' && savedArea.area
+        ? `Saved print area: ${cellAddress(savedArea.area.row, savedArea.area.column)}:${cellAddress(savedArea.area.end_row, savedArea.area.end_column)}. This preview supports at most 32 rows and 26 columns; larger saved areas are not cropped automatically.`
+        : `No supported saved print area is available. ${savedArea?.warnings.join(' ') ?? ''} Choose a range from A1 to continue.`}</p> : <>
+        <label>Rows<DsInput type="number" min={1} max={32} step={1} value={rangeRows} onChange={event => { invalidate(); setRangeRows(event.target.value) }}/></label>
+        <label>Columns<DsInput type="number" min={1} max={26} step={1} value={rangeColumns} onChange={event => { invalidate(); setRangeColumns(event.target.value) }}/></label>
+      </>}
       <label>Normal font: {workbook.normal_style?.font_name || 'not available'}<input type="file" accept=".ttf,font/ttf" onChange={event => { invalidate(); setFont(event.target.files?.[0] ?? null) }}/></label>
       <label><input type="checkbox" checked={useStoredRows} onChange={event => { invalidate(); setUseStoredRows(event.target.checked) }}/> Allow approximate stored-row layout</label>
       <label><input type="checkbox" checked={compactGeneral} onChange={event => { invalidate(); setCompactGeneral(event.target.checked) }}/> Compact General numbers (host preview)</label>
@@ -108,10 +126,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       </>}
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
-    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Headers, print titles and print areas are not drawn here. Formula values are saved caches, not recalculated results.</p>
+    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Headers and repeated print titles are not drawn here. Saved print areas must be one supported rectangle. Formula values are saved caches, not recalculated results.</p>
     <p role="status">{message}</p>
     {result && <>
       <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scale' : 'Your paper, margins and scale'} · approximate selected-range preview</p>
+      <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
       {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
@@ -139,11 +158,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals }]
   }))
   const disclosures = cells.filter(cell => cell.display.cached || cell.display.warnings.length || cell.display.truncated || cell.display.compacted)
-  const address = (row: number, column: number) => {
-    let letters = '', index = column + 1
-    while (index > 0) { letters = String.fromCharCode(65 + (index - 1) % 26) + letters; index = Math.floor((index - 1) / 26) }
-    return `${letters}${row + 1}`
-  }
+  const address = cellAddress
   return <div className="native-sheet-page-list">
     <section aria-label="Cell display details">
       <p role="status">{cells.filter(c => c.display.cached).length} saved formula results; freshness is unknown and formulas are not recalculated. {cells.filter(c => c.display.warnings.length).length} cells have display warnings. {cells.filter(c => c.display.truncated).length} cells exceed the 2,048-character display limit. {cells.filter(c => c.display.compacted).length} General values use your compact display choice.</p>

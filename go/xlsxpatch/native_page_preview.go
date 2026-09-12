@@ -98,6 +98,6 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	}
 	result.Status = "available"
 	result.Settings = &NativeSheetPageConfigV1{paper, orientation, scale, values["left"], values["right"], values["top"], values["bottom"], order}
-	result.Warnings = []string{"Read-only selected-range page geometry approximation. Native print areas, titles, charts, headers and printer behavior are not reproduced; no Excel fidelity claim."}
+	result.Warnings = []string{"Read-only selected-range page geometry approximation. Page settings do not select a range; repeated titles, chart paint, headers and printer behavior are not reproduced by page settings alone. No Excel fidelity claim."}
 	return result
 }

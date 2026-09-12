@@ -101,6 +101,9 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('type="file"')
     expect(html).toContain('Normal font: Exact Font')
     expect(html).toContain('Use saved page settings')
+    expect(html).toContain('aria-label="Preview range"')
+    expect(html).toContain('value="a1" selected=""')
+    expect(html).toContain('Use saved print area')
     expect(html).toContain('disabled=""')
     expect(html).toContain('not drawn here')
     expect(html).not.toContain('<svg')
@@ -118,6 +121,19 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('scale(0.16666666666666666 0.07692307692307693)')
     drawings[0] = { ...drawings[0]!, clip: { ...drawings[0]!.clip!, y_emu: 381000 } }
     expect(renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))).not.toContain('Source-positioned drawing')
+  })
+  it('keeps non-A1 source addresses while painting in viewport-local coordinates', () => {
+    const props = fixture()
+    props.sheet.cells.push({ row: 2, column: 1, ref: 'B3', style_id: 0, value: { kind: 'string', storage: 'inline-string', text: 'Inside saved area', rich: false } } as NativeSheet['cells'][number])
+    props.geometry = { ...props.geometry, viewport: { row: 2, column: 1, end_row: 2, end_column: 1 }, rows: [{ row: 2, y_emu: 0, height_emu: 190500, hidden: false }], columns: [{ column: 1, x_emu: 0, width_emu: 952500, hidden: false }] } as NativeSheetGeometryV2
+    props.plan.pages[0] = { ...props.plan.pages[0]!, rows: { start: 2, end: 2 }, columns: { start: 1, end: 1 } }
+    const html = render(props)
+    expect(html).toContain('rows 3–3, columns 2–2')
+    expect(html).toContain('<title>B3: Inside saved area</title>')
+    expect(html).toContain('translate(48 48) scale(1)')
+    expect(html).toContain('x="2"')
+    expect(html).not.toContain('Rent')
+    expect(html).not.toContain('Outside page one')
   })
   it('labels cached plots as approximate and never activates source links', () => {
     const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }

@@ -11653,6 +11653,11 @@
               "signature": "export declare function createNativeSheetGeometryRecordingSurfaceV2(maxCommands?: number): NativeSheetGeometryRecordingSurfaceV2"
             },
             {
+              "name": "decodeNativeSheetPrintAreasV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintAreasV1(input: unknown): NativeSheetPrintAreaV1[]"
+            },
+            {
               "name": "decodeNativeWorkbookObjectsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeWorkbookObjectsV1(input: unknown, packageSHA256: string): NativeWorkbookObjectsV1"
@@ -12373,6 +12378,11 @@
               "signature": "NativeSheetPreviewPageV1"
             },
             {
+              "name": "NativeSheetPrintAreaV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
               "name": "NativeSheetRenderModelV1",
               "kind": "type",
               "signature": "NativeSheetRenderModelV1"
@@ -12853,6 +12863,11 @@
               "signature": "RowSetHeightMutation"
             },
             {
+              "name": "selectNativeSheetPrintAreaV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
               "name": "StyleDelta",
               "kind": "type",
               "signature": "StyleDelta"
@@ -13064,6 +13079,11 @@
               "signature": "export declare function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkbookRenderModelV2, fontBytes: Uint8Array): NativeMaximumDigitWidthAuthorityV2"
             },
             {
+              "name": "decodeNativeSheetPrintAreasV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintAreasV1(input: unknown): NativeSheetPrintAreaV1[]"
+            },
+            {
               "name": "decodeNativeWorkbookObjectsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeWorkbookObjectsV1(input: unknown, packageSHA256: string): NativeWorkbookObjectsV1"
@@ -13167,6 +13187,11 @@
               "name": "NativeSheetPreviewPageV1",
               "kind": "type",
               "signature": "NativeSheetPreviewPageV1"
+            },
+            {
+              "name": "NativeSheetPrintAreaV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintAreaV1 ="
             },
             {
               "name": "NativeSheetViewportV2",
@@ -13282,6 +13307,11 @@
               "name": "projectNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function projectNativeWorkbookV2(input: unknown): NativeWorkbookRenderModelV2"
+            },
+            {
+              "name": "selectNativeSheetPrintAreaV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
             },
             {
               "name": "StyleDelta",

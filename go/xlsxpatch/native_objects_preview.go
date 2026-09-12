@@ -24,6 +24,7 @@ type NativeWorkbookObjectsV1 struct {
 	RowGeometry    []NativeStoredRowGeometryV1 `json:"row_geometry,omitempty"`
 	PageSettings   []NativeSheetPageSettingsV1 `json:"page_settings,omitempty"`
 	DrawingObjects []NativeDrawingObjectV1     `json:"drawing_objects,omitempty"`
+	PrintAreas     []NativeSheetPrintAreaV1    `json:"print_areas,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -177,6 +178,12 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		return nil, err
 	}
 	result := &NativeWorkbookObjectsV1{Protocol: "injoffice.xlsx.preview-objects", Version: 1, PackageSHA256: workbook.Source.PackageSHA256, Tables: []NativeTablePreviewV1{}, Charts: []NativeChartPreviewV1{}}
+	read := func(name string) ([]byte, bool) { raw, ok := pkg.files[name]; return raw, ok }
+	workbookPart, err := locateWorkbookPartBytes(pkg.index, read)
+	if err != nil {
+		return nil, err
+	}
+	result.PrintAreas = previewNativePrintAreas(pkg.files[workbookPart.part], workbook.Sheets)
 	owners := map[string]string{}
 	for _, sheet := range workbook.Sheets {
 		if len(result.RowGeometry) < 64 {

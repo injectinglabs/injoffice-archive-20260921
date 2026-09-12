@@ -10,8 +10,16 @@ or `'overThenDown'`; omission keeps down-then-over ordering. An explicit host
 page policy can independently choose page order, paper, scale and four margins.
 Changing order renumbers the same page rectangles; it does not reflow cells.
 The demo exposes these overrides only when saved settings are turned off.
-This does not implement Excel print areas, repeated titles, fit-to-page or printer
-defaults, and does not change strict cell geometry or mutation authority.
+`decodeNativeSheetPrintAreasV1` validates optional saved print-area evidence;
+`selectNativeSheetPrintAreaV1(model, sheetId, objects)` joins it to the projected
+workbook package and worksheet part, then returns its complete zero-based,
+inclusive viewport. Only an available bounded single rectangle is selectable.
+Missing, unavailable or oversized areas throw; hosts must make any fallback range
+an explicit choice. Range origin is independent of page-settings origin. The
+selector enforces native geometry budgets; hosts may impose smaller limits.
+Non-A1 ranges retain their source coordinates. Stored-row approximation still
+supports only the first 32 source rows. Repeated titles, fit-to-page and printer
+defaults are not implemented; strict geometry and mutation authority are unchanged.
 
 ```bash
 npm install @injoffice/sheets

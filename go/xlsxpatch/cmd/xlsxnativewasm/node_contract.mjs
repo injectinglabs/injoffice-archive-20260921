@@ -14,6 +14,7 @@ function usage() {
 
 Usage:
   node node_contract.mjs extract --wasm PATH --wasm-exec PATH --input XLSX [--out FILE]
+  node node_contract.mjs inspect --wasm PATH --wasm-exec PATH --input XLSX [--out FILE]
   node node_contract.mjs apply --wasm PATH --wasm-exec PATH --original XLSX --payload JSON --expected-revision SHA [--out FILE]
   node node_contract.mjs survive --wasm PATH --wasm-exec PATH --input XLSX --payload JSON --expected-revision SHA --rev-token REV --stale-revision SHA [--out FILE]
 
@@ -160,6 +161,12 @@ const out = arg('--out', args, false)
 
 try {
   const { api, go } = await instantiate(wasm, wasmExec)
+  if (command === 'inspect') {
+    const input = readFileSync(resolve(arg('--input', args)))
+    const json = unwrap(api.inspect(new Uint8Array(input)), 'json')
+    writeOutput(Buffer.from(json, 'utf8'), out)
+    process.exit(0)
+  }
   if (command === 'extract') {
     const input = readFileSync(resolve(arg('--input', args)))
     const json = extractJSON(api, new Uint8Array(input))

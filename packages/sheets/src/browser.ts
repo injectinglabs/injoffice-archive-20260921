@@ -41,6 +41,8 @@ export type {NativeDrawingObjectV1,NativeDrawingAnchorV1,NativeDrawingMarkerV1} 
 export type {NativeSheetHostPagePolicyV1,NativeSheetPreviewPageV1,NativeSheetPagePreviewV1} from './nativeSheetPagePreviewV1.js'
 export type { NativeSheetCellDisplayFormatResultV2 } from './nativeCellDisplayV2.js'
 export { decodeNativeWorkbookObjectsV1, layoutNativeCachedChartV1 } from './nativeObjectsPreviewV1.js'
+export {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js'
+export {selectNativeSheetPrintAreaV1} from './nativeSheetPrintAreaSelectionV1.js'
 export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'

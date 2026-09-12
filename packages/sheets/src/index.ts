@@ -334,6 +334,8 @@ export type {
   NativeSheetPaintedGlyphV2,
 } from './nativeSheetCellPaintV2.js'
 export { decodeNativeWorkbookObjectsV1, layoutNativeCachedChartV1 } from './nativeObjectsPreviewV1.js'
+export {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js'
+export {selectNativeSheetPrintAreaV1} from './nativeSheetPrintAreaSelectionV1.js'
 export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'
