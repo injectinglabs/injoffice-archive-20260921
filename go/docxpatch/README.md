@@ -2,6 +2,13 @@
 
 `docxpatch` surgically edits WordprocessingML paragraphs and selected document features without regenerating unrelated DOCX parts.
 
+Font-table matching hints remain source-preserved. Native layout accepts bounded
+ANSI/East-European charset hints only with exact supplied faces; it does not use
+them for font substitution. Valid symbol/legacy descriptors on demonstrably
+unused entries do not block unrelated text. Actual runs, paragraph marks, and
+numbering markers participate in that usage check; missing or uncertain font
+resolution keeps the refusal. Unknown metadata remains unsupported.
+
 Native read-only layout recognizes exact `w:noProof` spelling/grammar preferences
 and explicitly disabled `w:autoSpaceDE` / `w:autoSpaceDN` spacing. These properties
 stay in the source and keep affected paragraphs preservation-only; they do not

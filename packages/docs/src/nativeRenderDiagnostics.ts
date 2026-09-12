@@ -15,7 +15,7 @@ export function isRenderNeutralLayoutDiagnostic(
     && diagnostic.preservation === 'preserve-verbatim'
     && diagnostic.part_name !== undefined
     && diagnostic.part_name === resolved.source_parts.font_table_part
-    && /^\/w:fonts\[1\]\/w:font\[[1-9][0-9]*\]\/w:(?:panose1|charset|family|pitch|sig)\[1\]$/.test(diagnostic.path ?? '')
+    && /^\/w:fonts\[1\]\/w:font\[[1-9][0-9]*\]\/w:(?:panose1|charset|family|pitch|sig|notTrueType)\[1\]$/.test(diagnostic.path ?? '')
   return diagnostic.code === 'LATENT_STYLE_BEHAVIOR_PRESERVED'
     && diagnostic.scope_id === resolved.document_id
     && diagnostic.severity === 'unsupported'

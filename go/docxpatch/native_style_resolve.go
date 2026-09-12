@@ -249,6 +249,7 @@ type nativeLayoutResolver struct {
 	defaultP                string
 	defaultC                string
 	fonts                   []NativeResolvedFontV1
+	unusedFontDescriptors   []nativeUnusedFontDescriptor
 	diagnostics             []NativeResolutionDiagnosticV1
 	diagnosticSet           map[string]bool
 	diagnosticOverflow      bool
@@ -766,8 +767,15 @@ func (resolver *nativeLayoutResolver) loadFonts(partName string) error {
 			}
 		}
 		for _, property := range child.Children {
-			if nativeExactContainer(root) && nativeQualifiedFontDescriptor(property, child, resolver.wordNS) {
+			if nativeQualifiedFontTableOwner(root) && nativeQualifiedFontDescriptor(property, child, resolver.wordNS) {
 				resolver.addDiagnostic("FONT_MATCHING_METADATA_PRESERVED", resolver.doc.DocumentID, partName, property, "Validated font matching metadata is preserved; native painting requires exact supplied faces, not metadata-driven substitution")
+				continue
+			}
+			if nativeQualifiedFontTableOwner(root) && nativePotentiallyUnusedFontDescriptor(property, child, resolver.wordNS) {
+				if len(resolver.unusedFontDescriptors) >= NativeDOCXMaxResolvedDiagnostics {
+					return fmt.Errorf("docxpatch: font descriptor qualification exceeds bounded diagnostic budget")
+				}
+				resolver.unusedFontDescriptors = append(resolver.unusedFontDescriptors, nativeUnusedFontDescriptor{name: name, alias: font.AltName, part: partName, node: property})
 				continue
 			}
 			if property.Name.Space == resolver.wordNS && property.Name.Local == "altName" {
@@ -1250,6 +1258,7 @@ func (resolver *nativeLayoutResolver) resolve() (*NativeResolvedLayoutInputV1, e
 			resolver.resolveBlock(&story.Blocks[index], result, numberingState)
 		}
 	}
+	resolver.resolveUnusedFontDescriptors(result)
 	if resolver.diagnosticOverflow {
 		return nil, fmt.Errorf("docxpatch: native style resolution: diagnostics exceed %d entries", NativeDOCXMaxResolvedDiagnostics)
 	}
