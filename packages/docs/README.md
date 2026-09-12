@@ -255,6 +255,18 @@ explicitly, and content-type identity uses ASCII-only case folding. Explicit
 extractor-owned Word default section
 geometry is accepted; no other geometry is inferred.
 
+The separate opt-in `renderNativeDocxApproximatePagePreviewV1` path may use
+current layout rules for exact legacy mode 12/14 settings. Its extractor-owned
+eligibility can additionally retain bounded known theme-language, locale,
+math-default, shape-ID and compatibility-flag facts in `approximated_settings`.
+These are explicitly disregarded settings, not implemented Word semantics:
+each carries a warning, its original values and source path, while original
+strict diagnostics and source hashes remain attached. Unknown or malformed
+settings still refuse. Active unsupported math, VML content, missing fonts and
+unsupported geometry are not made renderable by this settings policy. The
+result remains a distinct, read-only approximate envelope; strict pagination
+and mutation safety are unchanged.
+
 Top-of-page paragraph-before spacing is retained only on the first content page
 of a section and suppressed on later pages, including automatic, explicit, and
 keep/widow-driven page moves. Keep-chain planning uses one bounded reverse pass.

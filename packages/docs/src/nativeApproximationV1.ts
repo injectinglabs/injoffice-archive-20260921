@@ -2,6 +2,7 @@ import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.
 import type { NativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 import { preflightWire, decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION } from './nativePagePaintWireV1.js'
 import type { NativeDocxValidationIssue } from './nativeContract.js'
+import { nativeApproximationSettingReason, validNativeDocxApproximatedSettingV1, type NativeDocxApproximatedSettingV1 } from './nativeApproximationSettingsV1.js'
 
 export const DOCX_APPROXIMATE_PREVIEW_PROTOCOL = 'injoffice.docx.approximate-page-preview' as const
 export const DOCX_APPROXIMATE_PREVIEW_POLICY = 'current-layout-approximate-v1' as const
@@ -16,6 +17,7 @@ export interface NativeDocxApproximationEligibilityV1 {
   status: 'eligible' | 'ineligible'
   legacy_compatibility_mode: 12 | 14 | null
   reasons: string[]
+  approximated_settings?: NativeDocxApproximatedSettingV1[]
 }
 
 export interface NativeDocxApproximatePagePreviewV1 {
@@ -28,6 +30,7 @@ export interface NativeDocxApproximatePagePreviewV1 {
   source: Pick<NativeDocxApproximationEligibilityV1, 'document_id' | 'revision' | 'package_sha256' | 'settings_sha256'>
   reasons: string[]
   source_settings_diagnostics: NativeDocxPaginationSettingsV1['diagnostics']
+  approximated_settings?: NativeDocxApproximatedSettingV1[]
   rendering_provenance: NativeDocxPagePaintV1['provenance']
   diagnostics: NativeDocxPagePaintV1['diagnostics']
   resources: NativeDocxPagePaintV1['resources']
@@ -41,12 +44,14 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   const issues = preflightWire(value, 'approximation eligibility').filter(issue => !(issue.code === 'INVALID_VALUE' && ((issue.path === '/settings_sha256' && candidate?.settings_sha256 === null) || (issue.path === '/legacy_compatibility_mode' && candidate?.legacy_compatibility_mode === null))))
   if (issues.length) throw new TypeError('invalid approximation eligibility wire')
   const input = structuredClone(value) as NativeDocxApproximationEligibilityV1
-  if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
+  if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
     || input.protocol !== 'injoffice.docx.approximation-eligibility' || input.version !== 1
     || !['eligible', 'ineligible'].includes(input.status) || ![null, 12, 14].includes(input.legacy_compatibility_mode)
     || !Array.isArray(input.reasons) || input.reasons.length > 256 || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)
     || input.document_id !== settings.document_id || input.revision !== settings.revision || input.package_sha256 !== settings.package_sha256 || input.settings_sha256 !== (settings.settings_sha256 ?? null)) throw new TypeError('approximation eligibility does not exact-join original settings')
-  if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || settings.compatibility_mode !== undefined || settings.diagnostics.some(reason => reason.code !== 'COMPATIBILITY_SETTING_UNSUPPORTED') || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
+  const facts = input.approximated_settings ?? []
+  if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
+  if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || settings.compatibility_mode !== undefined || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
   return input
 }
 
@@ -57,6 +62,7 @@ export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSet
     source: { document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256 ?? null },
     reasons: [...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING],
     source_settings_diagnostics: structuredClone(settings.diagnostics),
+    ...(eligibility.approximated_settings ? { approximated_settings: structuredClone(eligibility.approximated_settings) } : {}),
     rendering_provenance: paint.provenance,
     diagnostics: paint.diagnostics, resources: paint.resources, pages: paint.pages,
   }
@@ -71,14 +77,24 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const issues = preflightWire(value, 'approximate page preview').filter(issue => !(issue.code === 'INVALID_VALUE' && issue.path === '/source/settings_sha256' && candidate?.source?.settings_sha256 === null))
     if (issues.length) return { ok: false, issues }
     const input = structuredClone(value) as NativeDocxApproximatePagePreviewV1
-    if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'diagnostics,fidelity,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,version'
+    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings').sort().join(',') !== 'diagnostics,fidelity,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 258 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
     const paint = decodeNativeDocxPagePaintV1({ protocol: DOCX_PAGE_PAINT_PROTOCOL, version: DOCX_PAGE_PAINT_VERSION, status: input.status, provenance: input.rendering_provenance, diagnostics: input.diagnostics, resources: input.resources, pages: input.pages })
     if (!paint.ok) return paint
     const settings = paint.value.provenance.pagination_settings
+    const facts = input.approximated_settings ?? []
+    if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) return invalid('invalid retained approximate settings facts')
+    if (facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || (input.status === 'painted' && !coveredSettingsDiagnostics(settings, facts))) return invalid('missing approximate setting coverage or warning')
     if (paint.value.provenance.document_id !== settings.document_id || paint.value.provenance.revision !== settings.revision || paint.value.provenance.package_sha256 !== settings.package_sha256) return invalid('approximate rendering identity does not match retained source settings')
     if (!input.source || Object.keys(input.source).sort().join(',') !== 'document_id,package_sha256,revision,settings_sha256' || input.source.document_id !== settings.document_id || input.source.revision !== settings.revision || input.source.package_sha256 !== settings.package_sha256 || input.source.settings_sha256 !== (settings.settings_sha256 ?? null) || JSON.stringify(input.source_settings_diagnostics) !== JSON.stringify(settings.diagnostics)) return invalid('approximate source facts and retained settings diagnostics do not exact-join')
     return { ok: true, value: input }
   } catch { return invalid('approximate output could not be safely inspected') }
+}
+
+function coveredSettingsDiagnostics(settings: NativeDocxPaginationSettingsV1, facts: NativeDocxApproximatedSettingV1[]): boolean {
+  return settings.diagnostics.every(reason => {
+    if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && ['/w:settings[1]', '/w:settings[1]/w:compat[1]', '/w:settings[1]/w:compat[1]/w:compatSetting[1]'].includes(reason.path)) return true
+    return facts.some(fact => fact.path === reason.path && reason.code === (fact.kind === 'mathPr' ? 'UNKNOWN_SETTINGS_ELEMENT' : fact.path.includes('/w:compat[1]/') ? 'COMPATIBILITY_SETTING_UNSUPPORTED' : 'PAGINATION_SETTING_UNSUPPORTED'))
+  }) && facts.every(fact => settings.diagnostics.some(reason => reason.path === fact.path))
 }
