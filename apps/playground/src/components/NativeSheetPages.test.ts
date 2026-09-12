@@ -20,6 +20,27 @@ function fixture() {
 const render = (props = fixture()) => renderToStaticMarkup(createElement(NativeSheetPageImages, props))
 
 describe('selected-range page presentation', () => {
+  it('shows visible cache and compact-number disclosures without changing strict default output', () => {
+    const props = fixture()
+    props.workbook.styles[0]!.effective.number_format = 'General'
+    props.sheet.cells[0] = { ...props.sheet.cells[0]!, value: undefined, formula: { type: 'normal', text: '16/3', cached: { kind: 'number', storage: 'number', lexical: '5.3333333333333304', rich: false } } }
+    expect(render(props)).toContain('5.3333333333333304')
+    const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, compactGeneral: true }))
+    expect(html).toContain('>5.333333</text>')
+    expect(html).toContain('1 saved formula results; freshness is unknown')
+    expect(html).toContain('A1: Saved formula result; freshness unknown.')
+    expect(html).toContain('Host rounding applied; not Excel General.')
+    expect(html).toContain('Stored value: 5.3333333333333304')
+  })
+  it('makes unsupported display and truncation visible outside the SVG tooltip', () => {
+    const props = fixture()
+    props.sheet.cells[0] = { ...props.sheet.cells[0]!, value: { kind: 'number', storage: 'number', lexical: '123.45', rich: false } }
+    props.sheet.cells[1] = { ...props.sheet.cells[1]!, value: { kind: 'string', storage: 'shared-string', text: 'x'.repeat(2049), rich: false } } as never
+    const html = render(props)
+    expect(html).toContain('1 cells have display warnings. 1 cells exceed')
+    expect(html).toContain('<li>A1: Number format unavailable; showing the stored value.')
+    expect(html).toContain('<li>A2:  Text is truncated in this preview.')
+  })
   it('escapes text and renders only source cells on the selected page', () => {
     const html = render()
     expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;')
@@ -75,6 +96,8 @@ describe('selected-range page presentation', () => {
     expect(html).not.toContain('<svg')
     expect(html).toContain('max="26"')
     expect(html).toContain('max="32"')
+    expect(html).toContain('Compact General numbers (host preview)')
+    expect(html).not.toContain('checked=""/> Compact General')
   })
   it('draws cache graphics only inside qualified page intersections', () => {
     const props = fixture()

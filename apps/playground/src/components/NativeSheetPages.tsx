@@ -9,14 +9,14 @@ import {
   type NativePositionedDrawingV1, type NativeChartPreviewV1,
 } from '@injoffice/sheets/browser'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
-import { nativeCellPreview } from '../nativeCellPreview'
+import { nativeSheetPageCellPreview } from '../nativeSheetPageCellPreview'
 import { DsButton, DsSelect, DsInput } from '../design-system/primitives'
 import './native-sheet-pages.css'
 
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[] }
+type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean }
 
 // Key the inner view by source identity: pending font reads and page choices never
 // carry over to a different sheet/revision, even before effect cleanup runs.
@@ -31,6 +31,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [scale, setScale] = useState('100')
   const [useSource, setUseSource] = useState(true)
   const [useStoredRows, setUseStoredRows] = useState(false)
+  const [compactGeneral, setCompactGeneral] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
   const [rangeColumns, setRangeColumns] = useState(String(columns))
   const [result, setResult] = useState<Result | null>(null)
@@ -74,7 +75,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult({ geometry, plan, fontFamily, drawings })
+      setResult({ geometry, plan, fontFamily, drawings, compactGeneral })
       setMessage(`${plan.pages.length} preview pages. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -90,6 +91,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <label>Columns<DsInput type="number" min={1} max={26} step={1} value={rangeColumns} onChange={event => { invalidate(); setRangeColumns(event.target.value) }}/></label>
       <label>Normal font: {workbook.normal_style?.font_name || 'not available'}<input type="file" accept=".ttf,font/ttf" onChange={event => { invalidate(); setFont(event.target.files?.[0] ?? null) }}/></label>
       <label><input type="checkbox" checked={useStoredRows} onChange={event => { invalidate(); setUseStoredRows(event.target.checked) }}/> Allow approximate stored-row layout</label>
+      <label><input type="checkbox" checked={compactGeneral} onChange={event => { invalidate(); setCompactGeneral(event.target.checked) }}/> Compact General numbers (host preview)</label>
+      {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
       {!useSource && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
@@ -110,7 +113,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   </section>
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [] }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   const cellMap = new Map(sheet.cells.map(cell => [`${cell.row}:${cell.column}`, cell]))
@@ -121,14 +124,25 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     if (merge && (row.row !== merge.row || column.column !== merge.column)) return []
     const cell = cellMap.get(`${row.row}:${column.column}`), styleId = styleAt(row.row, column.column)
     const style = workbook.styles[styleId]?.effective
-    const display = nativeCellPreview(workbook, cell, objects, sheet.part_name)
+    const display = nativeSheetPageCellPreview(workbook, cell, objects, sheet.part_name, compactGeneral)
     const fill = nativeTableFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId) ?? style?.fill_color ?? '#FFFFFF'
     const header = nativeTableHeaderTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId)
     const totals = nativeTableTotalsTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, styleId)
     const rect = merge?.rect ?? { x_emu: column.x_emu, y_emu: row.y_emu, width_emu: column.width_emu, height_emu: row.height_emu }
     return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals }]
   }))
-  return <div className="native-sheet-page-list">{plan.pages.map(page => {
+  const disclosures = cells.filter(cell => cell.display.cached || cell.display.warnings.length || cell.display.truncated || cell.display.compacted)
+  const address = (row: number, column: number) => {
+    let letters = '', index = column + 1
+    while (index > 0) { letters = String.fromCharCode(65 + (index - 1) % 26) + letters; index = Math.floor((index - 1) / 26) }
+    return `${letters}${row + 1}`
+  }
+  return <div className="native-sheet-page-list">
+    <section aria-label="Cell display details">
+      <p role="status">{cells.filter(c => c.display.cached).length} saved formula results; freshness is unknown and formulas are not recalculated. {cells.filter(c => c.display.warnings.length).length} cells have display warnings. {cells.filter(c => c.display.truncated).length} cells exceed the 2,048-character display limit. {cells.filter(c => c.display.compacted).length} General values use your compact display choice.</p>
+      {!!disclosures.length && <details><summary>Cell display details ({disclosures.length})</summary><ul>{disclosures.slice(0,100).map(cell => <li key={cell.key}>{address(cell.row,cell.column)}: {cell.display.cached && 'Saved formula result; freshness unknown. '}{cell.display.warnings.join(' ')}{cell.display.truncated && ' Text is truncated in this preview. '}{cell.display.compacted && ' Host rounding applied; not Excel General. '}Stored value: {cell.display.stored.slice(0,256)}{cell.display.stored.length > 256 && '… (detail shortened)'}</li>)}</ul>{disclosures.length > 100 && <p>Showing the first 100 of {disclosures.length} cell details.</p>}</details>}
+    </section>
+    {plan.pages.map(page => {
     const clip = `${uid}-page-${page.number}`
     return <figure key={page.number}>
       <figcaption>Page {page.number} · rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
@@ -141,7 +155,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             const id = `${clip}-${cell.key}`, size = (cell.style?.font_size_points ?? 11) * 96 / 72
             const right = cell.style?.horizontal_alignment === 'right', center = cell.style?.horizontal_alignment === 'center'
             const exactNormal = cell.style?.font_name === workbook.normal_style?.font_name && Boolean(cell.style?.bold) === Boolean(workbook.normal_style?.font_bold) && Boolean(cell.style?.italic) === Boolean(workbook.normal_style?.font_italic)
-            return <g key={cell.key}><title>{cell.display.text}{cell.display.warning ? ` — ${cell.display.warning}` : ''}</title>
+            return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
               <rect x={x} y={y} width={w} height={h} fill={cell.fill}/>
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>

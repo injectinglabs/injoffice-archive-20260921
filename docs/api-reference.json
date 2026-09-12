@@ -11498,6 +11498,11 @@
               "signature": "ColumnSetWidthMutation"
             },
             {
+              "name": "compactNativeGeneralNumberPreviewV1",
+              "kind": "function",
+              "signature": "export declare function compactNativeGeneralNumberPreviewV1(lexical: string): NativeCompactGeneralPreviewV1"
+            },
+            {
               "name": "compileNativeSheetCellPaintV2",
               "kind": "function",
               "signature": "export declare function compileNativeSheetCellPaintV2(workbook: NativeWorkbookRenderModelV2, geometry: NativeSheetGeometryV2, fontBytes: Uint8Array, additionalFontBytes?: ReadonlyArray<NativeSheetCellPaintFontAuthorityV2>): NativeSheetCellPaintPlanV2"
@@ -11856,6 +11861,11 @@
               "name": "NativeChartSeriesPreviewV1",
               "kind": "type",
               "signature": "NativeChartSeriesPreviewV1"
+            },
+            {
+              "name": "NativeCompactGeneralPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeCompactGeneralPreviewV1 ="
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -12944,6 +12954,11 @@
               "signature": "export declare function assertNativeWorkbookV2(input: unknown): asserts input is NativeWorkbookV2"
             },
             {
+              "name": "compactNativeGeneralNumberPreviewV1",
+              "kind": "function",
+              "signature": "export declare function compactNativeGeneralNumberPreviewV1(lexical: string): NativeCompactGeneralPreviewV1"
+            },
+            {
               "name": "compileNativeSheetGeometryV2",
               "kind": "function",
               "signature": "export declare function compileNativeSheetGeometryV2(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2): NativeSheetGeometryV2"
@@ -13017,6 +13032,11 @@
               "name": "NativeChartSeriesPreviewV1",
               "kind": "type",
               "signature": "NativeChartSeriesPreviewV1"
+            },
+            {
+              "name": "NativeCompactGeneralPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeCompactGeneralPreviewV1 ="
             },
             {
               "name": "NativeDrawingAnchorV1",
