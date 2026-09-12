@@ -24,6 +24,7 @@ import {
   applyPdfAnnotDelete,
   applyPdfPlacedDrawing,
   applyPdfFormValues,
+  pdfFormResultMessage,
   applyPdfMarkup,
   applyPdfNote,
   applyPdfNoteEdit,
@@ -123,6 +124,7 @@ export default function PdfPage() {
   const [geometry, setGeometry] = useState<PdfDocumentInfo | null>(null)
   const [annots, setAnnots] = useState<PdfAnnot[]>([])
   const [fields, setFields] = useState<PdfFormField[]>([])
+  const [formNotice, setFormNotice] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('Shared note')
   const [hostOld, setHostOld] = useState('InjOffice')
   const [hostNew, setHostNew] = useState('InjOffice PDF')
@@ -163,6 +165,7 @@ export default function PdfPage() {
     if (!bytes || busy) return
     const result = travelPdfHistory(history, { bytes, page, edited }, direction)
     if (!result) return
+    setFormNotice(null)
     setHistory(result.history)
     setPage(result.snapshot.page)
     setEdited(result.snapshot.edited)
@@ -171,11 +174,31 @@ export default function PdfPage() {
 
   const runEdit = async (work: () => Promise<Uint8Array>, message: string) => {
     if (!bytes || busy) return
+    setFormNotice(null)
     setBusy('editing')
     setError(null)
     try {
       const next = await work()
       await applyBytes(next, message)
+    } catch (reason: unknown) {
+      setError(errorMessage(reason))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const applyFormDrafts = async () => {
+    if (!bytes || busy) return
+    setBusy('editing')
+    setError(null)
+    setInfo('')
+    setFormNotice(null)
+    try {
+      const result = await applyPdfFormValues(bytes, fields)
+      const message = pdfFormResultMessage(result)
+      setFormNotice(message)
+      if (result.applied > 0) await applyBytes(result.bytes, message)
+      else setInfo(message)
     } catch (reason: unknown) {
       setError(errorMessage(reason))
     } finally {
@@ -344,6 +367,7 @@ export default function PdfPage() {
     if (!file) return
     if (edited && !window.confirm('Open another PDF and discard your current edits? Download your edited PDF first if you want to keep it.')) return
     setError(null)
+    setFormNotice(null)
     setBusy('loading')
     try {
       const nextBytes = new Uint8Array(await file.arrayBuffer())
@@ -563,6 +587,7 @@ export default function PdfPage() {
           {inspector === 'forms' && (
             <div className="ioc-panel ds-panel">
               <span className="ds-eyebrow">Fill form fields</span>
+              {formNotice && <p role="status" className="ds-muted" aria-live="polite">{formNotice}</p>}
               {fields.length === 0 ? <p className="ds-muted">No form fields in this file.</p> : fields.map((field, index) => (
                 <DsField key={field.name} label={field.name}>
                   {field.kind === 'checkbox' ? (
@@ -572,7 +597,7 @@ export default function PdfPage() {
                   )}
                 </DsField>
               ))}
-              <DsButton variant="outlined" className="workbench-button" disabled={locked || fields.length === 0} onClick={() => void runEdit(() => applyPdfFormValues(bytes!, fields), 'Applied form values.')}>Apply form values</DsButton>
+              <DsButton variant="outlined" className="workbench-button" disabled={locked || fields.length === 0} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
             </div>
           )}
 

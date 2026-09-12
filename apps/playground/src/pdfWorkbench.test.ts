@@ -5,6 +5,7 @@ import {
   applyPdfAnnotDelete,
   applyPdfDrawing,
   applyPdfFormValues,
+  pdfFormResultMessage,
   applyPdfMarkup,
   applyPdfNote,
   applyPdfNoteEdit,
@@ -94,7 +95,9 @@ describe('playground PDF workbench helpers', () => {
       { name: 'agree', kind: 'checkbox', checked: true },
       { name: 'region', kind: 'choice', value: 'UK' },
     ])
-    const nextFields = await listPdfFormFields(filled)
+    const nextFields = await listPdfFormFields(filled.bytes)
+    expect(filled.applied).toBe(3)
+    expect(filled.skipped).toEqual([])
     expect(nextFields).toEqual([
       { name: 'memo', kind: 'text', value: 'InjOffice' },
       { name: 'agree', kind: 'checkbox', checked: true },
@@ -105,6 +108,22 @@ describe('playground PDF workbench helpers', () => {
     const annotArray = signedDoc.getPages()[0]!.node.lookupMaybe(PDFName.of('Annots'), PDFArray)
     expect(annotArray?.size()).toBeGreaterThan(annots.length)
     expect(VISUAL_SIGNATURE_CONTENT_PREFIX.length).toBeGreaterThan(0)
+  })
+
+  it('preserves partial and all-skipped form results without claiming success', async () => {
+    const doc = await PDFDocument.create();doc.addPage()
+    doc.getForm().createTextField('memo')
+    const bytes = await doc.save()
+    const partial = await applyPdfFormValues(bytes, [{ name: 'memo', kind: 'text', value: 'accepted' }, { name: 'missing', kind: 'text', value: 'not accepted' }])
+    expect(partial.applied).toBe(1)
+    expect(partial.skipped).toEqual([{ name: 'missing', reason: 'field not found' }])
+    expect(pdfFormResultMessage(partial)).toBe('Applied 1 form value. Skipped 1: missing: field not found')
+    const skipped = await applyPdfFormValues(bytes, [{ name: 'memo', kind: 'checkbox', checked: true }])
+    expect(skipped.bytes).toBe(bytes)
+    expect(skipped.applied).toBe(0)
+    expect(pdfFormResultMessage(skipped)).toContain('No form values applied. Skipped 1: memo: field is not a checkbox')
+    expect(pdfFormResultMessage({ applied: 2, skipped: [] })).toBe('Applied 2 form values.')
+    await expect(applyPdfFormValues(new Uint8Array([1, 2]), [{ name: 'memo', kind: 'text', value: 'x' }])).rejects.toThrow()
   })
 
   it('computes adjacent page reorderings', () => {

@@ -107,9 +107,13 @@ export async function applyPdfStamp(bytes: Uint8Array, page: number, signature: 
 
 export { VISUAL_SIGNATURE_CONTENT_PREFIX }
 
-export async function applyPdfFormValues(bytes: Uint8Array, values: FormValueSpec[]): Promise<Uint8Array> {
-  const result = await applyFormValues(bytes, values)
-  return result.bytes
+export async function applyPdfFormValues(bytes: Uint8Array, values: FormValueSpec[]) {
+  return applyFormValues(bytes, values)
+}
+
+export function pdfFormResultMessage(result: { applied: number; skipped: { name: string; reason: string }[] }): string {
+  const summary = result.applied === 0 ? 'No form values applied.' : `Applied ${result.applied} form value${result.applied === 1 ? '' : 's'}.`
+  return result.skipped.length === 0 ? summary : `${summary} Skipped ${result.skipped.length}: ${result.skipped.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}`
 }
 
 export async function applyPdfAnnotDelete(bytes: Uint8Array, annot: PdfAnnot): Promise<Uint8Array> {
