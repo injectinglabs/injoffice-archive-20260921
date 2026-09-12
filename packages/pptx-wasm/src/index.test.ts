@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   NATIVE_WASM_WORKER_PROTOCOL,
@@ -29,13 +30,14 @@ class FakeWorker implements NativeWasmWorker {
   private readonly messageListeners = new Set<(event: NativeWasmMessageEvent) => void>()
   private readonly errorListeners = new Set<(event: NativeWasmWorkerErrorEvent) => void>()
 
-  constructor(private readonly extractJson = runtimeFixtureJson) {}
+  constructor(private readonly extractJson = runtimeFixtureJson, private readonly inspectionJson?: string) {}
 
   postMessage(value: unknown, _transfer: ArrayBuffer[]): void {
     const request = value as NativeWasmWorkerRequest
     this.requests.push(request)
     if (request.op === 'init') this.respond(success(request))
     else if (request.op === 'extract') this.respond(success(request, { contractJson: this.extractJson }))
+    else if (request.op === 'inspect') this.respond(success(request, { contractJson: this.inspectionJson ?? '{}' }))
     else this.respond(success(request, { bytes: new Uint8Array([7, 8, 9]).buffer }))
   }
 
@@ -55,6 +57,38 @@ class FakeWorker implements NativeWasmWorker {
     queueMicrotask(() => this.messageListeners.forEach((listener) => listener({ data: response })))
   }
 }
+
+describe('browser table inspection source ownership', () => {
+  const bytes = new Uint8Array([1, 2, 3])
+  const sha = createHash('sha256').update(bytes).digest('hex')
+  const deck = { ...fixtureDeck, sourceRevision: `rev-${sha}` }
+  const inspection = { protocol: 'pptx-table-content-inspection-v1', package_sha256: sha, source_revision: `rev-${sha}`, tables: [], omissions: [] }
+  it('binds its own bytes and returns no extraction capabilities', async () => {
+    const worker = new FakeWorker(JSON.stringify(deck), JSON.stringify(inspection))
+    const client = createPptxWasmClient({ workerFactory: () => worker })
+    const source = new Uint8Array(bytes)
+    const pending = client.inspectTables(source)
+    source.fill(9)
+    await expect(pending).resolves.toEqual(inspection)
+    expect(worker.requests.map(r => r.op)).toEqual(['init', 'extract', 'inspect'])
+    client.terminate()
+  })
+  it('terminates on a hash-mismatched or malformed inspection response', async () => {
+    for (const json of [JSON.stringify({ ...inspection, package_sha256: 'f'.repeat(64) }), '{}', 'invalid json']) {
+      const worker = new FakeWorker(JSON.stringify(deck), json)
+      const client = createPptxWasmClient({ workerFactory: () => worker })
+      await expect(client.inspectTables(bytes)).rejects.toThrow()
+      expect(worker.terminated).toBe(true)
+    }
+  })
+  it('refuses pre-aborted inspection before starting a worker', async () => {
+    let created = false
+    const client = createPptxWasmClient({ workerFactory: () => { created = true; return new FakeWorker() } })
+    const abort = new AbortController(); abort.abort()
+    await expect(client.inspectTables(bytes, { signal: abort.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(created).toBe(false)
+  })
+})
 
 const success = (request: NativeWasmWorkerRequest, result?: unknown): NativeWasmWorkerResponse => ({
   protocol: NATIVE_WASM_WORKER_PROTOCOL,

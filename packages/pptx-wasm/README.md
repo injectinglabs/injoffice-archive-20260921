@@ -4,6 +4,31 @@ Browser-worker distribution of InjOffice's Go PPTX native extractor and surgical
 
 The package truthfully exposes the native mutation subset: exact text replacement and exact AutoShape property replacement on parsed source elements. It refuses slide insertion/removal, pictures, charts, tables, connectors, groups, animation, transitions, and generic render-model write-back.
 
+`await client.inspectTables(original, { signal })` optionally returns plain table
+source text, local cell rectangles and explicit omission warnings. It accepts
+only bounded, unmerged, unrotated top-level source tables; source table styles,
+borders (including dash patterns), fills and text formatting are never rendered
+or translated into Office defaults. Render paragraphs as plain text, and label
+any host geometry guides as guides. Positioned text requires a host-selected
+font and size. The result has no deck, passthrough tokens or mutation authority.
+
+Inspection snapshots the caller's bytes, computes their SHA-256, and joins the
+response to a separate strict extraction of that snapshot. Slide identity,
+source part, XML-root fingerprint and unique source-node fingerprint membership
+must agree. `part_sha256` hashes the complete XML part; `slide_source_sha256`
+hashes its XML root and is the strict-deck join. They are distinct. For refused
+tables the strict deck retains only an opaque node fingerprint, so the original
+object ID and whole-part hash remain native-producer evidence, not independent
+JavaScript ZIP/XML verification. The client checks canonical unique object IDs
+and consistent whole-part hashes. The strict source warnings remain applicable.
+
+Limits include 256 tables plus omissions, 4,096 cells/paragraphs, 65,536 UTF-16
+text units, and 32×32 cells per table. Native inspection additionally budgets
+20,000 source nodes and 16,384 runs before grammar recursion or concatenation,
+with 256 paragraphs per cell and 256 runs per paragraph. The response decoder
+checks exact object/array shapes, prototypes, data properties and complete grids.
+Always terminate the client in `finally` when its host no longer needs it.
+
 ```ts
 import { createPptxWasmClient } from '@injoffice/pptx-wasm'
 

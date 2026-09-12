@@ -66,10 +66,12 @@ async function initialize(assets) {
   importScripts(assets.goRuntimeUrl)
   if (typeof Go !== 'function') throw new Error('Go runtime did not define Go')
   const go = new Go()
+  let readyTimer
   const ready = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('pptxnative WASM init timeout')), 60_000)
-    self.pptxnativeOnReady = () => { clearTimeout(timer); resolve() }
+    readyTimer = setTimeout(() => reject(new Error('pptxnative WASM init timeout')), 60_000)
+    self.pptxnativeOnReady = () => { clearTimeout(readyTimer); resolve() }
   })
+  try {
   const response = await fetch(assets.wasmUrl)
   if (!response.ok) throw new Error(`could not fetch pptxnative.wasm (${response.status})`)
   const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), go.importObject)
@@ -93,6 +95,10 @@ async function initialize(assets) {
   if (!self.pptxnative || typeof self.pptxnative.extract !== 'function' || typeof self.pptxnative.apply !== 'function') throw new Error('pptxnative extract/apply bindings were not installed')
   if (runtimeFailure) throw runtimeFailure
   initialized = true
+  } finally {
+    clearTimeout(readyTimer)
+    delete self.pptxnativeOnReady
+  }
 }
 
 onmessage = async (event) => {
@@ -121,6 +127,12 @@ onmessage = async (event) => {
     if (runtimeFailure) throw runtimeFailure
     if (request.op === 'extract') {
       const contractJson = unwrap(self.pptxnative.extract(new Uint8Array(request.bytes)), 'json')
+      respond(request, { ok: true, result: { contractJson } })
+      return
+    }
+    if (request.op === 'inspect') {
+      if (typeof self.pptxnative.inspect !== 'function') throw new NativeBindingError('pptxnative inspection binding unavailable', false)
+      const contractJson = unwrap(self.pptxnative.inspect(new Uint8Array(request.bytes)), 'json')
       respond(request, { ok: true, result: { contractJson } })
       return
     }

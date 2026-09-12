@@ -1,0 +1,10 @@
+.pptx-table-text { margin-block: 1rem; }
+.pptx-table-text > p { max-width: 72ch; }
+.pptx-table-text-result > section { padding-block: 1rem; border-top: 1px solid var(--ds-line); }
+.pptx-table-text-result h4 { margin: 0 0 .75rem; }
+.pptx-table-text-scroll { max-width: 100%; overflow-x: auto; }
+.pptx-table-text-scroll table { width: 100%; }
+.pptx-table-text-scroll td { min-width: 6rem; max-width: 40rem; vertical-align: top; }
+.pptx-table-text-scroll p { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pptx-table-text-result details { margin-top: .75rem; }
+.pptx-table-text-result details p { overflow-wrap: anywhere; }

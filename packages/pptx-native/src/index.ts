@@ -1,4 +1,6 @@
 export { canonicalizeNativePptx, stringifyNativePptx } from './canonical'
+export { decodeNativePptxTableInspection } from './tableInspection'
+export type { NativePptxInspectionRect, NativePptxInspectedCell, NativePptxInspectedTable, NativePptxTableOmission, NativePptxTableInspection } from './tableInspection'
 export { assertNativePptx, validateNativePptx } from './validate'
 export type { NativeValidationIssue } from './validate'
 export {

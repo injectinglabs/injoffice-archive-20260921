@@ -1,5 +1,14 @@
 # @injoffice/pptx-native
 
+`NativePptxTableInspection` is a separate read-only source inspection contract.
+`decodeNativePptxTableInspection(value, strictDeck, packageSHA256)` validates it
+against the caller's strict extraction and independently computed package hash.
+Its plain paragraphs and stored rectangles carry no native-deck capabilities
+and omit authored table borders, fills and source font styling. Use the browser
+`@injoffice/pptx-wasm` client's `inspectTables` method to own the byte snapshot,
+hashing and strict extraction automatically. The decoder does not parse ZIP/XML;
+opaque object IDs and whole-part hashes remain evidence from the native producer.
+
 Text/shape transforms may include `quarterTurns: 1 | 2 | 3`, clockwise around
 their frame center. Omission means zero rotation. The renderer composes exact
 integer-affine quarter turns; 90/270-degree frames require matching width/height

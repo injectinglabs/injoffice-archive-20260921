@@ -9675,6 +9675,11 @@
               "signature": "export declare const compatibilityStatusValues: readonly [\"editable\", \"preserveOnly\", \"refused\"]"
             },
             {
+              "name": "decodeNativePptxTableInspection",
+              "kind": "function",
+              "signature": "export declare function decodeNativePptxTableInspection(input: unknown, deck: NativePptxDeck, packageSHA256: string): NativePptxTableInspection"
+            },
+            {
               "name": "diagnosticSeverityValues",
               "kind": "const",
               "signature": "export declare const diagnosticSeverityValues: readonly [\"info\", \"warning\", \"refusal\"]"
@@ -9808,6 +9813,31 @@
               "name": "NativePptxDeck",
               "kind": "type",
               "signature": "export interface NativePptxDeck"
+            },
+            {
+              "name": "NativePptxInspectedCell",
+              "kind": "type",
+              "signature": "NativePptxInspectedCell"
+            },
+            {
+              "name": "NativePptxInspectedTable",
+              "kind": "type",
+              "signature": "NativePptxInspectedTable"
+            },
+            {
+              "name": "NativePptxInspectionRect",
+              "kind": "type",
+              "signature": "NativePptxInspectionRect"
+            },
+            {
+              "name": "NativePptxTableInspection",
+              "kind": "type",
+              "signature": "NativePptxTableInspection"
+            },
+            {
+              "name": "NativePptxTableOmission",
+              "kind": "type",
+              "signature": "NativePptxTableOmission"
             },
             {
               "name": "NativeProvenance",

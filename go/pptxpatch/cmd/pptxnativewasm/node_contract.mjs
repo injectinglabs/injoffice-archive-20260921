@@ -13,6 +13,7 @@ function usage() {
 
 Usage:
   node node_contract.mjs extract --wasm PATH --wasm-exec PATH --input PPTX [--out FILE]
+  node node_contract.mjs inspect --wasm PATH --wasm-exec PATH --input PPTX [--out FILE]
   node node_contract.mjs apply --wasm PATH --wasm-exec PATH --original PPTX --payload JSON --expected-revision SHA [--out FILE]
   node node_contract.mjs survive --wasm PATH --wasm-exec PATH --input PPTX --payload JSON --expected-revision SHA --rev-token REV --stale-revision SHA [--out FILE]
 
@@ -143,6 +144,11 @@ try {
   if (command === 'extract') {
     const input = new Uint8Array(readFileSync(resolve(arg('--input', args))))
     writeOutput(Buffer.from(extractJSON(api, input), 'utf8'), output)
+    process.exit(0)
+  }
+  if (command === 'inspect') {
+    const input = new Uint8Array(readFileSync(resolve(arg('--input', args))))
+    writeOutput(Buffer.from(unwrap(api.inspect(input), 'json'), 'utf8'), output)
     process.exit(0)
   }
   if (command === 'apply') {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NativePptxDeck } from '@injoffice/pptx-native'
 import PptxFilePreview from '../components/PptxFilePreview'
 import {NativePptxSlides} from '../components/NativePptxSlides'
+import {NativePptxTableText} from '../components/NativePptxTableText'
 import {
   buildPptxMutationEvidence,
   buildPptxShapeMutation,
@@ -294,6 +295,7 @@ export default function PptxNativePage() {
             <>
               <div className="native-sheet-heading"><div><span className="native-kicker ds-eyebrow">Exact native projection</span><h2>{sourceName}</h2></div><span className="native-muted ds-muted">{deck.slides.length} slide{deck.slides.length === 1 ? '' : 's'} · {deck.origin}</span></div>
               <PptxFilePreview deck={deck} />
+              {authoritativeBytes&&deck.sourceRevision&&<NativePptxTableText bytes={authoritativeBytes} sourceRevision={deck.sourceRevision}/>}
               {SERVER_FALLBACK_CONFIGURED && authoritativeBytes && <NativePptxSlides bytes={authoritativeBytes} slideCount={deck.slides.length} apiBase={API_BASE} source={deck}/>}
               {targets.length > 0 ? (
                 <div className="native-grid-wrap"><table className="native-grid ds-table"><thead><tr><th>Slide</th><th>Exact target</th><th>Operation</th><th>Current value</th></tr></thead><tbody>{targets.map((candidate) => {

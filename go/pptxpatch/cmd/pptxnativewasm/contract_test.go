@@ -91,6 +91,30 @@ func TestWASMExtractMatchesInProcessGo(t *testing.T) {
 	}
 }
 
+func TestWASMInspectionMatchesReadOnlyGo(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	original := contractPPTX(t)
+	want, err := inspectNativeJSON(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(want, []byte(`"token"`)) || bytes.Contains(want, []byte(`"passthrough"`)) {
+		t.Fatal("inspection published preservation capabilities")
+	}
+	input := filepath.Join(t.TempDir(), "contract.pptx")
+	if err := os.WriteFile(input, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("node", script, "inspect", "--wasm", wasm, "--wasm-exec", wasmExec, "--input", input)
+	got, err := command.Output()
+	if err != nil {
+		t.Fatalf("WASM inspection failed: %v\n%s", err, stderrFrom(err))
+	}
+	if !bytes.Equal(bytes.TrimSpace(got), want) {
+		t.Fatal("WASM inspection disagreed with Go")
+	}
+}
+
 func TestWASMApplyMatchesInProcessGo(t *testing.T) {
 	wasm, wasmExec, script := requireNodeHarness(t)
 	original := contractPPTX(t)

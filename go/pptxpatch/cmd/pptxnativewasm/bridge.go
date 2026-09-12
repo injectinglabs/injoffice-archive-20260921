@@ -4,10 +4,19 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"hash"
 
 	"github.com/injectinglabs/injoffice/go/pptxpatch"
 )
+
+func inspectNativeJSON(data []byte) ([]byte, error) {
+	result, err := pptxpatch.InspectNativePPTXTables(data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(result)
+}
 
 func extractNativeJSON(data []byte) ([]byte, error) {
 	deck, err := pptxpatch.ExtractNativePPTX(data, pptxpatch.NativePPTXExtractOptions{

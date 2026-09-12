@@ -6,6 +6,7 @@ const workerSource = readFileSync(new URL('../worker/pptxnative.worker.js', impo
 
 type Binding = {
   extract(bytes: Uint8Array): unknown
+  inspect?(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
 }
 
@@ -43,10 +44,21 @@ function createWorkerHarness(binding: Binding, runResult?: () => Promise<unknown
     isClosed: () => closed,
     init: () => send({ ...base, id: 'init-1', op: 'init', assets: { wasmUrl: '/engine.wasm', goRuntimeUrl: '/wasm_exec.js' } }),
     extract: (id: string) => send({ ...base, id, op: 'extract', bytes: new Uint8Array([1]).buffer }),
+    inspect: (id: string) => send({ ...base, id, op: 'inspect', bytes: new Uint8Array([1]).buffer }),
   }
 }
 
 describe('PPTX WASM worker binding envelopes', () => {
+  it('routes inspection and preserves recoverable refusals', async () => {
+    let calls = 0
+    const worker = createWorkerHarness({ extract: () => ({ ok: true, value: '{}' }), apply: () => ({ ok: true, value: new Uint8Array([1]) }),
+      inspect: () => ++calls === 1 ? { ok: false, error: 'budget refused', fatal: false } : { ok: true, value: '{"tables":[]}' },
+    })
+    await worker.init()
+    await expect(worker.inspect('inspect-1')).resolves.toMatchObject({ ok: false, error: { code: 'NATIVE_REFUSED', fatal: false } })
+    await expect(worker.inspect('inspect-2')).resolves.toMatchObject({ ok: true, result: { contractJson: '{"tables":[]}' } })
+    expect(worker.isClosed()).toBe(false)
+  })
   it('closes after a fatal Go response', async () => {
     const worker = createWorkerHarness({
       extract: () => ({ ok: false, error: 'pptxnative panic: boom', fatal: true }),

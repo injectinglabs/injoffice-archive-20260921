@@ -272,6 +272,12 @@ func (err nativeDuplicateSingletonError) Error() string {
 // and namespaces into the validated native v1 contract. It is intentionally
 // independent from the permissive reconstructive ParsePPTX reader.
 func ExtractNativePPTX(data []byte, options NativePPTXExtractOptions) (NativePPTXDeck, error) {
+	return extractNativePPTXWithInspection(data, options, nil)
+}
+
+// inspect runs only after complete strict extraction and validation. It never
+// publishes the staged capabilities or exposes the private deck to callers.
+func extractNativePPTXWithInspection(data []byte, options NativePPTXExtractOptions, inspect func(*nativeExtractor, NativePPTXDeck) error) (NativePPTXDeck, error) {
 	if len(data) == 0 || len(data) > NativePPTXMaxPackageBytes {
 		return NativePPTXDeck{}, fmt.Errorf("pptxpatch: native extract: package size must be 1..%d bytes", NativePPTXMaxPackageBytes)
 	}
@@ -308,6 +314,9 @@ func ExtractNativePPTX(data []byte, options NativePPTXExtractOptions) (NativePPT
 	}
 	if _, err := MarshalNativePPTXJSON(deck); err != nil {
 		return NativePPTXDeck{}, fmt.Errorf("pptxpatch: native extract canonical validation: %w", err)
+	}
+	if inspect != nil {
+		return NativePPTXDeck{}, inspect(&extractor, deck)
 	}
 	return extractor.publishNativePassthroughTokens(deck, externalTokenFactory)
 }

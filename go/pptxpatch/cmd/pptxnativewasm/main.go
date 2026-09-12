@@ -12,6 +12,7 @@ import (
 func main() {
 	api := js.Global().Get("Object").New()
 	api.Set("extract", guarded(jsExtract))
+	api.Set("inspect", guarded(jsInspect))
 	api.Set("apply", guarded(jsApply))
 	js.Global().Set("pptxnative", api)
 	if ready := js.Global().Get("pptxnativeOnReady"); ready.Type() == js.TypeFunction {
@@ -71,6 +72,21 @@ func jsExtract(_ js.Value, args []js.Value) any {
 		return fail(err.Error())
 	}
 	encoded, err := extractNativeJSON(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
+}
+
+func jsInspect(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return fail("inspect(bytes) requires 1 argument")
+	}
+	data, err := bytesFromJS(args[0])
+	if err != nil {
+		return fail(err.Error())
+	}
+	encoded, err := inspectNativeJSON(data)
 	if err != nil {
 		return fail(err.Error())
 	}
