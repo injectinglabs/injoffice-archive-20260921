@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const workerSource = readFileSync(new URL('../worker/docxnative.worker.js', import.meta.url), 'utf8')
 
 type Binding = {
+  inspect?(bytes:Uint8Array):unknown
   extract(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
 }
@@ -47,10 +48,19 @@ function createWorkerHarness(binding: Binding) {
     isClosed: () => closed,
     init: () => send({ ...base, id: 'init-1', op: 'init', assets: { wasmUrl: '/engine.wasm', goRuntimeUrl: '/wasm_exec.js' } }),
     extract: (id: string) => send({ ...base, id, op: 'extract', bytes: new Uint8Array([1]).buffer }),
+    inspect: (id:string)=>send({...base,id,op:'inspect',bytes:new Uint8Array([1]).buffer}),
   }
 }
 
 describe('DOCX WASM worker binding envelopes', () => {
+  it('keeps inspection a separate read-only operation and refuses missing matching engines',async()=>{
+    const bindings={extract:()=>({ok:true,value:'extract'}),apply:()=>({ok:true,value:new Uint8Array([1])})}
+    const missing=createWorkerHarness(bindings);await missing.init()
+    await expect(missing.inspect('inspect-missing')).resolves.toMatchObject({op:'inspect',ok:false,error:{fatal:true}})
+    const worker=createWorkerHarness({...bindings,inspect:()=>({ok:true,value:'{"protocol":"injoffice.docx.partial-source"}'})});await worker.init()
+    await expect(worker.inspect('inspect-1')).resolves.toMatchObject({op:'inspect',ok:true,result:{contractJson:'{"protocol":"injoffice.docx.partial-source"}'}})
+    await expect(worker.extract('extract-1')).resolves.toMatchObject({op:'extract',ok:true,result:{contractJson:'extract'}})
+  })
   it('propagates a recovered Go panic as fatal and closes the worker', async () => {
     const worker = createWorkerHarness({
       extract: () => ({ ok: false, error: 'docxnative panic: boom', fatal: true }),

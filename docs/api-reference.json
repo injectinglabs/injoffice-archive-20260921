@@ -3182,6 +3182,11 @@
               "signature": "export declare function createNativeDocxEmbeddedFontResolverV1(inventory: NativeDOCXFontInventoryV1, assetsValue: readonly NativeDocxAuthoritativeFontAssetV1[]): NativeFontResolver"
             },
             {
+              "name": "createNativeDocxEquationPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown): NativeDocxEquationPreviewV1[]"
+            },
+            {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown): NativeDocxPartialContentV1"
@@ -3787,6 +3792,11 @@
               "signature": "export interface NativeDOCXEmbeddedFontSourceV1"
             },
             {
+              "name": "NativeDocxEquationPreviewV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxEquationPreviewV1"
+            },
+            {
               "name": "NativeDocxFillGlyphPathCommandV1",
               "kind": "interface",
               "signature": "export interface NativeDocxFillGlyphPathCommandV1"
@@ -3940,6 +3950,11 @@
               "name": "nativeDocxListSuffixTabTargetV1",
               "kind": "function",
               "signature": "export declare function nativeDocxListSuffixTabTargetV1(currentMilliPoints: number, bodyTextStartMilliPoints: number, defaultIntervalMilliPoints: number, numberingTabMilliPoints?: number): number | undefined"
+            },
+            {
+              "name": "NativeDocxMathNodeV1",
+              "kind": "type",
+              "signature": "export type NativeDocxMathNodeV1 ="
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
@@ -4172,6 +4187,11 @@
               "signature": "export interface NativeDocxParagraphV1"
             },
             {
+              "name": "NativeDocxPartialCellV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCellV1 ="
+            },
+            {
               "name": "NativeDocxPartialContentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialContentV1"
@@ -4179,7 +4199,12 @@
             {
               "name": "NativeDocxPartialOmissionCode",
               "kind": "type",
-              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit'"
+              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit'"
+            },
+            {
+              "name": "NativeDocxPartialParagraphV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialParagraphV1 ="
             },
             {
               "name": "NativeDocxPartialSegmentV1",
@@ -4758,6 +4783,11 @@
               "signature": "export declare function adaptNativeDocxProseMirrorTransactionWithHostV1<Transaction>(document: NativeDocxDocumentV1, transaction: Transaction, projector: NativeDocxProseMirrorTransactionProjectorV1<Transaction>): NativeDocxTransactionAdapterResultV1"
             },
             {
+              "name": "createNativeDocxEquationPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown): NativeDocxEquationPreviewV1[]"
+            },
+            {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown): NativeDocxPartialContentV1"
@@ -4781,6 +4811,11 @@
               "name": "decodeNativeDocxProseMirrorTransactionV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxProseMirrorTransactionV1(value: unknown): NativeDocxProseMirrorTransactionV1 | NativeDocxTransactionAdapterIssueV1[]"
+            },
+            {
+              "name": "decodeNativeDocxResolvedLayout",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxResolvedLayout(value: unknown): DecodeNativeDocxResolvedLayoutResult"
             },
             {
               "name": "DecodeNativeDocxResult",
@@ -4898,6 +4933,11 @@
               "signature": "export interface NativeDocxEditPolicyV1"
             },
             {
+              "name": "NativeDocxEquationPreviewV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxEquationPreviewV1"
+            },
+            {
               "name": "NativeDocxHeaderFooterReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHeaderFooterReferenceV1"
@@ -4906,6 +4946,11 @@
               "name": "NativeDocxIssueCode",
               "kind": "type",
               "signature": "export type NativeDocxIssueCode = 'UNKNOWN_FIELD' | 'REQUIRED' | 'INVALID_TYPE' | 'INVALID_VALUE' | 'OUT_OF_RANGE' | 'UNSUPPORTED_PROTOCOL' | 'UNSUPPORTED_VERSION' | 'DUPLICATE_ID' | 'BROKEN_REFERENCE' | 'INVALID_UNION' | 'LIMIT_EXCEEDED'"
+            },
+            {
+              "name": "NativeDocxMathNodeV1",
+              "kind": "type",
+              "signature": "export type NativeDocxMathNodeV1 ="
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
@@ -4938,6 +4983,11 @@
               "signature": "export interface NativeDocxParagraphV1"
             },
             {
+              "name": "NativeDocxPartialCellV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCellV1 ="
+            },
+            {
               "name": "NativeDocxPartialContentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialContentV1"
@@ -4945,7 +4995,12 @@
             {
               "name": "NativeDocxPartialOmissionCode",
               "kind": "type",
-              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit'"
+              "signature": "export type NativeDocxPartialOmissionCode = 'unsupported-source' | 'unqualified-text-visibility' | 'hidden-text' | 'drawing' | 'field' | 'reference' | 'control' | 'table' | 'nonbody-story' | 'block-limit' | 'text-limit' | 'merged-cell' | 'cell-limit'"
+            },
+            {
+              "name": "NativeDocxPartialParagraphV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialParagraphV1 ="
             },
             {
               "name": "NativeDocxPartialSegmentV1",
@@ -5006,6 +5061,11 @@
               "name": "NativeDocxRefusalV1",
               "kind": "interface",
               "signature": "export interface NativeDocxRefusalV1"
+            },
+            {
+              "name": "NativeDocxResolvedLayoutInputV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxResolvedLayoutInputV1"
             },
             {
               "name": "NativeDocxRunPropertiesV1",

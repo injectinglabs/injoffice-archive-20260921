@@ -14,6 +14,7 @@ import (
 func main() {
 	obj := js.Global().Get("Object").New()
 	obj.Set("extract", guarded(jsExtract))
+	obj.Set("inspect", guarded(jsInspect))
 	obj.Set("apply", guarded(jsApply))
 	js.Global().Set("docxnative", obj)
 	if ready := js.Global().Get("docxnativeOnReady"); ready.Type() == js.TypeFunction {
@@ -83,8 +84,23 @@ func jsExtract(_ js.Value, args []js.Value) any {
 	return ok(string(encoded))
 }
 
-// apply(original, payload, expectedRevision) ->
-// {ok:true, value: Uint8Array} | {ok:false, error: string, fatal: boolean}.
+// inspect(bytes) -> same-source read-only document and resolved layout JSON.
+func jsInspect(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return fail("inspect(bytes) requires 1 argument")
+	}
+	data, err := bytesFromJS(args[0])
+	if err != nil {
+		return fail(err.Error())
+	}
+	encoded, err := docxpatch.InspectNativePartialSourceV1(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
+}
+
+// apply(original, payload, expectedRevision) returns mutated DOCX bytes.
 func jsApply(_ js.Value, args []js.Value) any {
 	if len(args) != 3 {
 		return fail("apply(original, payload, expectedRevision) requires 3 arguments")

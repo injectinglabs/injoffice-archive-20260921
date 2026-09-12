@@ -841,6 +841,11 @@ func rejectNativeNamespaceSpoofing(root *nativeXMLNode, wordNS string) error {
 	known := map[string]bool{"document": true, "body": true, "p": true, "r": true, "t": true, "tbl": true, "tr": true, "tc": true, "sectPr": true, "hdr": true, "ftr": true, "footnotes": true, "footnote": true, "endnotes": true, "endnote": true, "comments": true, "comment": true}
 	var visit func(*nativeXMLNode) error
 	visit = func(node *nativeXMLNode) error {
+		// Genuine direct paragraph math is opaque source, not Word runs. The
+		// paragraph extractor retains an unsupported diagnostic and read-only policy.
+		if nativeDirectMathRoot(node, wordNS) {
+			return nil
+		}
 		if known[node.Name.Local] && node.Name.Space != wordNS {
 			return fmt.Errorf("namespace spoofing at %s: {%s}%s", node.Path, node.Name.Space, node.Name.Local)
 		}

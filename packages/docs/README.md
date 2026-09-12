@@ -2,6 +2,18 @@
 
 ### Read-only partial source-content projection
 
+The optional same-byte DOCX inspection response also carries source-bound basic
+equation evidence. `createNativeDocxEquationPreviewsV1` validates its package,
+paragraph, original unsupported diagnostic and exact anchor before exposing a
+bounded JSON tree. Rows, literal math text, fractions, superscripts, subscripts
+and explicit square roots can be shown by a host through fixed MathML elements.
+Unknown formatting, revisions, attributes, constructs, malformed child order or
+unqualified visibility omit the whole equation. This is browser math layout,
+not Word typography, font fidelity or native pagination. The demo lists these
+equations separately under its explicit read-only partial-text preview. Strict
+painting and equation-paragraph mutations remain refused. No HTML strings,
+links, arbitrary MathML attributes or source font assets are exposed.
+
 `createNativeDocxPartialContentPreviewV1(document,
 { policy: 'source-text-with-omissions-v1', read_only: true }, resolvedLayout?)`
 is available from the browser-safe `@injoffice/docs/native-docx` entry. It
@@ -11,13 +23,16 @@ source projection with source-bound omission placeholders, **not paginated
 native paint, an editable document, or a substitute persistence format**.
 Text segments are literal source strings: render them as text, never as HTML.
 
-The first profile includes ordinary body text only. Hidden text, fields,
-controls, drawings, tables and nonbody stories receive explicit placeholders;
+The profile includes ordinary body text and unmerged table-cell source text,
+grouped by source row/cell ordinals without reconstructing table geometry.
+Qualified authored drawing descriptions appear as labeled alternative text
+alongside the retained drawing omission. Hidden text, fields, controls, drawing
+geometry, merged cells, table layout and nonbody stories receive placeholders;
 source diagnostics remain attached. Unknown document-wide diagnostics prevent
 text qualification. Without resolved layout, inherited visibility is unknown,
 so the result provides an inventory only and exposes no text. Formatting,
 numbering and document layout are not reconstructed. A 200-body-block and
-100,000-text-unit budget produces explicit truncation placeholders rather than
+200-table-cell and 100,000-text-unit budget produces explicit truncation placeholders rather than
 silently dropping source content. The original source and mutation guards are
 unchanged; package hashes remain trusted native-extractor evidence, not XML
 bytes independently re-hashed by this consumer.
@@ -29,6 +44,10 @@ were extracted from particular package bytes.
 The playground displays this inventory separately from its existing richer
 continuous editor; limitations of this reusable projection do not imply that
 the editor omits the same content.
+Its explicit partial-text button uses `@injoffice/docx-wasm` inspection to
+resolve the same source bytes locally, even while the editor uses server mode.
+It never uploads source bytes or changes editing authority. Equations remain
+unsupported: no cached equation text is invented from unmodeled XML.
 
 Native DOCX text shaping honors inherited `w:kern` minimum sizes in bounded whole half-points (1–3276). The resolved `kerning_min_size_half_points` threshold enables kerning when the resolved `w:sz` is at least that threshold; absent thresholds explicitly disable kerning, as specified by ECMA-376 §17.3.2.19. Direct kerning markup remains source-preserved and does not grant replacement permission. Unit-bearing, malformed, duplicate, and out-of-range thresholds remain unqualified. This may change advances from earlier previews that inherited HarfBuzz's default kerning without an authored DOCX setting.
 

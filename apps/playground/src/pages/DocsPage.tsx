@@ -14,6 +14,7 @@ import './docs-workspace.css'
 import { extractDocxPreviewImages } from '../docxPreviewImages'
 import { NativeDocxPages } from '../components/NativeDocxPages'
 import {NativeDocxPartialCoverage} from '../components/NativeDocxPartialCoverage'
+import {NativeDocxPartialText} from '../components/NativeDocxPartialText'
 import {
   DOCX_MEDIA_TYPE,
   nativeDocxHighlight,
@@ -496,6 +497,7 @@ export default function DocsPage() {
               <p className="native-muted ds-muted">Select a passage to edit. The selected passage is highlighted.</p>
               <p className="docx-preview-boundary">Continuous content view. Fonts and wrapping may differ; supported embedded PNG/JPEG images appear inline, other drawings use placeholders. List markers are unresolved, and headers/footers appear below the body. Unsupported content remains in the original file.</p>
               {partialCoverage&&(partialCoverage.value?<NativeDocxPartialCoverage coverage={partialCoverage.value}/>:<p role="status">Preview coverage is unavailable. The existing editor and source file are unchanged.</p>)}
+              {authoritativeBytes&&<NativeDocxPartialText bytes={authoritativeBytes} packageDigest={document.source.package_sha256}/>}
               {preview.blocks.map((block) => <BlockView key={block.id} block={block} />)}
               {preview.omitted > 0 && <p className="docx-omitted">Preview stopped after 200 body blocks; {preview.omitted} remain in the validated contract.</p>}
               {selectedOutsidePreview && <section className="docx-preview-story" aria-label="Selected passage outside the preview"><h5>Selected passage</h5><BlockView block={selectedOutsidePreview} /></section>}

@@ -162,6 +162,11 @@ try {
     writeOutput(Buffer.from(extractJSON(api, new Uint8Array(input)), 'utf8'), out)
     process.exit(0)
   }
+  if(command==='inspect'){
+    const input=readFileSync(resolve(arg('--input',args)))
+    writeOutput(Buffer.from(unwrap(api.inspect(new Uint8Array(input)),'json'),'utf8'),out)
+    process.exit(0)
+  }
   if (command === 'apply') {
     const original = readFileSync(resolve(arg('--original', args)))
     const payload = readPayload(arg('--payload', args))

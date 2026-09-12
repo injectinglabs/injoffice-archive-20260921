@@ -23,7 +23,7 @@ const (
 	officeRels       = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
 )
 
-func buildContractDOCX(t *testing.T) []byte {
+func buildContractDOCX(t *testing.T, math ...string) []byte {
 	t.Helper()
 	parts := []struct {
 		name string
@@ -49,6 +49,10 @@ func buildContractDOCX(t *testing.T) []byte {
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
 	for _, part := range parts {
+		if part.name == "word/document.xml" && len(math) > 0 {
+			part.data = strings.Replace(part.data, "</w:p>", math[0]+"</w:p>", 1)
+			part.data = strings.Replace(part.data, "</w:body>", `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body>`, 1)
+		}
 		header := &zip.FileHeader{Name: part.name, Method: zip.Store}
 		entry, err := writer.CreateHeader(header)
 		if err != nil {
@@ -257,6 +261,56 @@ func TestWASMExtractMatchesInProcessGo(t *testing.T) {
 	}
 	if !bytes.Equal(bytes.TrimSpace(got), wanted) {
 		t.Fatalf("WASM extract JSON disagreed with in-process Go (%d vs %d bytes)", len(bytes.TrimSpace(got)), len(wanted))
+	}
+}
+
+func TestWASMPartialInspectionMatchesSameByteGoSource(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	original := buildContractDOCX(t)
+	before := append([]byte(nil), original...)
+	wanted, err := docxpatch.InspectNativePartialSourceV1(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalPath, _ := writeContractInputs(t, original, []byte(`{}`))
+	got, err := exec.Command("node", script, "inspect", "--wasm", wasm, "--wasm-exec", wasmExec, "--input", originalPath).Output()
+	if err != nil {
+		t.Fatalf("WASM inspection: %v\n%s", err, stderrFrom(err))
+	}
+	if !bytes.Equal(bytes.TrimSpace(got), wanted) || !bytes.Equal(original, before) {
+		t.Fatal("read-only inspection changed source or disagreed with Go")
+	}
+	var envelope struct {
+		Protocol      string                                `json:"protocol"`
+		PackageSHA256 string                                `json:"package_sha256"`
+		Document      docxpatch.NativeDocumentV1            `json:"document"`
+		Resolved      docxpatch.NativeResolvedLayoutInputV1 `json:"resolved_layout"`
+	}
+	if err := json.Unmarshal(got, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Protocol != "injoffice.docx.partial-source" || envelope.PackageSHA256 != envelope.Document.Source.PackageSHA256 || envelope.Document.DocumentID != envelope.Resolved.DocumentID || envelope.Document.Revision != envelope.Resolved.Revision {
+		t.Fatal("partial source identity mismatch")
+	}
+	if _, err := docxpatch.InspectNativePartialSourceV1([]byte("not a zip")); err == nil {
+		t.Fatal("malformed bytes accepted")
+	}
+}
+
+func TestWASMEquationInspectionMatchesGo(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	original := buildContractDOCX(t, `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:f><m:num><m:r><m:t>1</m:t></m:r></m:num><m:den><m:r><m:t>2</m:t></m:r></m:den></m:f></m:oMath>`)
+	expected, err := docxpatch.InspectNativePartialSourceV1(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, _ := writeContractInputs(t, original, []byte(`{}`))
+	got, err := exec.Command("node", script, "inspect", "--wasm", wasm, "--wasm-exec", wasmExec, "--input", path).Output()
+	if err != nil {
+		t.Fatal(err, stderrFrom(err))
+	}
+	if !bytes.Equal(bytes.TrimSpace(got), expected) || !bytes.Contains(got, []byte(`"kind":"fraction"`)) {
+		t.Fatal("equation transport differs or lost tree")
 	}
 }
 

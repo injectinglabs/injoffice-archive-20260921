@@ -140,6 +140,12 @@ onmessage = async (event) => {
       respond(request, { ok: true, result: { contractJson } })
       return
     }
+    if (request.op === 'inspect') {
+      if(typeof self.docxnative.inspect!=='function')throw new NativeBindingError('Matching DOCX engine inspection binding is unavailable',true)
+      const contractJson=unwrap(self.docxnative.inspect(new Uint8Array(request.bytes)),'json')
+      respond(request,{ok:true,result:{contractJson}})
+      return
+    }
     if (request.op === 'apply') {
       const payload = typeof request.payload === 'string' ? request.payload : new Uint8Array(request.payload)
       const produced = unwrap(self.docxnative.apply(new Uint8Array(request.original), payload, request.expectedRevision), 'bytes')

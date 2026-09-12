@@ -135,18 +135,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-      - name: Build DOCX WASM
+      - name: Build DOCX WASM and enforce shared size ceiling
         run: ./go/docxpatch/cmd/docxnativewasm/build.sh
-      - name: Enforce DOCX WASM size ceiling
-        run: |
-          wasm=go/docxpatch/cmd/docxnativewasm/dist/docxnative.wasm
-          actual_bytes=$(wc -c < "$wasm" | tr -d ' ')
-          max_bytes=$((6 * 1024 * 1024))
-          echo "docxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
-          if (( actual_bytes > max_bytes )); then
-            echo "docxnative.wasm exceeds the 6 MiB size ceiling" >&2
-            exit 1
-          fi
       - name: Run mandatory DOCX WASM contract
         working-directory: go/docxpatch
         env:

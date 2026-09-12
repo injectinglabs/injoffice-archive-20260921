@@ -19,6 +19,7 @@ const envelope = buildDocxRunMutation(document, target, 'After', 'save-1')
 describe('DOCX round-trip runtimes', () => {
   it('keeps the browser path entirely inside the injected WASM client', async () => {
     const client: DocxWasmClient = {
+      inspectPartialContent:vi.fn(),
       extract: vi.fn(async () => document),
       apply: vi.fn(async () => new Uint8Array([4, 5, 6])),
       terminate: vi.fn(),
@@ -37,6 +38,7 @@ describe('DOCX round-trip runtimes', () => {
   it('does not introduce a remote retry when browser extraction fails', async () => {
     const refusal = new Error('native refusal')
     const client: DocxWasmClient = {
+      inspectPartialContent:vi.fn(),
       extract: vi.fn(async () => { throw refusal }),
       apply: vi.fn(),
       terminate: vi.fn(),
