@@ -301,7 +301,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 }
 
 func previewChart(root *previewXML, part string) NativeChartPreviewV1 {
-	result := NativeChartPreviewV1{Part: part, Type: "unsupported", Series: []NativeChartSeriesPreviewV1{}, Warnings: []string{"Saved chart caches may be stale. No formulas or external links are evaluated.", "Data preview only: Office chart styling, axes, titles, hyperlinks and drawing placement are not reproduced.", "Category labels are not interpreted; point numbers are saved cache indices, not category names."}}
+	result := NativeChartPreviewV1{Part: part, Type: "unsupported", Series: []NativeChartSeriesPreviewV1{}, Warnings: []string{"Saved chart caches may be stale. No formulas or external links are evaluated.", "Data preview only: Office chart styling, axes, titles, hyperlinks and drawing placement are not reproduced.", "When saved category labels or series names are absent, numbered preview labels identify cache positions only."}}
 	plot := root.child("chart").child("plotArea")
 	if plot == nil {
 		return result
@@ -345,16 +345,75 @@ func previewChart(root *previewXML, part string) NativeChartPreviewV1 {
 			result.Warnings = append(result.Warnings, "A complete bounded saved numeric cache is required for every series.")
 			return result
 		}
-		name := series.textAt("tx", "v")
-		if name == "" {
-			name = series.textAt("tx", "strRef", "strCache", "pt", "v")
+		name := ""
+		if tx := series.child("tx"); tx != nil {
+			if v := tx.child("v"); v != nil && len(tx.children) == 1 && len(v.children) == 0 && len(v.attrs) == 0 && len(v.text) <= 256 {
+				name = v.text
+			} else if names, valid := previewStringReference(tx, 1); valid {
+				name = names[0]
+			} else {
+				result.Warnings = append(result.Warnings, "Series name unavailable: ambiguous or unsupported saved text.")
+			}
 		}
-		result.Series = append(result.Series, NativeChartSeriesPreviewV1{Name: name, Values: values, Labels: []string{}})
+		labels := []string{}
+		if cat := series.child("cat"); cat != nil {
+			if saved, valid := previewStringReference(cat, len(values)); valid {
+				labels = saved
+			} else {
+				result.Warnings = append(result.Warnings, "Category labels unavailable: a complete matching saved string cache is required.")
+			}
+		}
+		result.Series = append(result.Series, NativeChartSeriesPreviewV1{Name: name, Values: values, Labels: labels})
 	}
 	if len(result.Series) == 0 {
 		result.Type = "unsupported"
 	}
 	return result
+}
+
+// Cache indices, not XML order, associate category text with numeric values.
+// Never dereference the formula or substitute missing entries with another label.
+func previewStringReference(parent *previewXML, count int) ([]string, bool) {
+	if parent == nil || len(parent.children) != 1 {
+		return nil, false
+	}
+	ref := parent.child("strRef")
+	if ref == nil || len(ref.children) != 2 || ref.child("f") == nil || ref.child("strCache") == nil {
+		return nil, false
+	}
+	return previewStringCache(ref.child("strCache"), count)
+}
+
+func previewStringCache(cache *previewXML, count int) ([]string, bool) {
+	if cache == nil || count < 1 || count > 1024 {
+		return nil, false
+	}
+	n := cache.child("ptCount")
+	if n == nil || n.attr("val") != strconv.Itoa(count) || len(n.attrs) != 1 || len(n.children) != 0 || strings.TrimSpace(n.text) != "" {
+		return nil, false
+	}
+	values := make([]string, count)
+	seen := make([]bool, count)
+	for _, pt := range cache.children {
+		if pt == n {
+			continue
+		}
+		if pt.name.Space != cache.name.Space || pt.name.Local != "pt" {
+			return nil, false
+		}
+		idx, err := strconv.Atoi(pt.attr("idx"))
+		v := pt.child("v")
+		if err != nil || idx < 0 || idx >= count || seen[idx] || len(pt.attrs) != 1 || len(pt.children) != 1 || v == nil || len(v.children) != 0 || len(v.attrs) != 0 || len(v.text) > 256 {
+			return nil, false
+		}
+		seen[idx], values[idx] = true, v.text
+	}
+	for _, present := range seen {
+		if !present {
+			return nil, false
+		}
+	}
+	return values, true
 }
 
 func previewNumericCache(cache *previewXML) ([]*float64, bool) {

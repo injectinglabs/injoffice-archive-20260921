@@ -9,6 +9,78 @@ import (
 func previewChartFixture() string {
 	return `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:tx><c:v>Saved series</c:v></c:tx><c:val><c:numRef><c:f>[external.xlsx]Sheet1!A1:A2</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1.25</c:v></c:pt><c:pt idx="1"><c:v>-3</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>`
 }
+
+func TestNativeChartCategoryCacheUsesIndicesAndPreservesSource(t *testing.T) {
+	category := `<c:cat><c:strRef><c:f>[external.xlsx]Sheet1!A1:A2</c:f><c:strCache><c:ptCount val="2"/><c:pt idx="1"><c:v>February</c:v></c:pt><c:pt idx="0"><c:v>January</c:v></c:pt></c:strCache></c:strRef></c:cat>`
+	for _, tc := range []struct {
+		name, category string
+		valid          bool
+	}{
+		{"ordered-by-index", category, true},
+		{"missing", strings.Replace(category, `<c:pt idx="0"><c:v>January</c:v></c:pt>`, "", 1), false},
+		{"duplicate", strings.Replace(category, `idx="0"`, `idx="1"`, 1), false},
+		{"count-mismatch", strings.Replace(category, `val="2"`, `val="3"`, 1), false},
+		{"foreign", strings.Replace(category, `<c:strCache>`, `<c:strCache xmlns:c="urn:foreign">`, 1), false},
+		{"overlong", strings.Replace(category, "January", strings.Repeat("x", 257), 1), false},
+		{"mixed-category", strings.Replace(category, `</c:cat>`, `<c:numLit/></c:cat>`, 1), false},
+		{"duplicate-count", strings.Replace(category, `<c:ptCount val="2"/>`, `<c:ptCount val="2"/><c:ptCount val="2"/>`, 1), false},
+		{"duplicate-value", strings.Replace(category, `<c:v>January</c:v>`, `<c:v>January</c:v><c:v>other</c:v>`, 1), false},
+		{"foreign-extra", strings.Replace(category, `</c:strCache>`, `<evil xmlns="urn:foreign"/></c:strCache>`, 1), false},
+		{"duplicate-cache", strings.Replace(category, `</c:strRef>`, `<c:strCache/></c:strRef>`, 1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parts := nativeWorkbookFixture(false)
+			parts["Charts/chart1.xml"] = strings.Replace(previewChartFixture(), `<c:val>`, tc.category+`<c:val>`, 1)
+			source := buildZip(t, parts)
+			before := bytes.Clone(source)
+			got, err := InspectNativeWorkbookObjectsV1(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			chart := got.Charts[0]
+			if chart.Type != "col" || len(chart.Series) != 1 || !bytes.Equal(before, source) {
+				t.Fatal("lost numeric preview or mutated source")
+			}
+			labels := chart.Series[0].Labels
+			if tc.valid {
+				if len(labels) != 2 || labels[0] != "January" || labels[1] != "February" {
+					t.Fatalf("wrong labels: %v", labels)
+				}
+			} else if len(labels) != 0 || !strings.Contains(strings.Join(chart.Warnings, " "), "Category labels unavailable") {
+				t.Fatal("ambiguous labels accepted or warning missing")
+			}
+		})
+	}
+}
+
+func TestNativeChartCachedSeriesNameRequiresOneUnambiguousPoint(t *testing.T) {
+	name := `<c:tx><c:strRef><c:f>[external.xlsx]Sheet1!A1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>`
+	for _, tc := range []struct {
+		raw   string
+		valid bool
+	}{
+		{name, true},
+		{strings.Replace(name, `idx="0"`, `idx="1"`, 1), false},
+		{strings.Replace(name, `</c:tx>`, `<c:v>other</c:v></c:tx>`, 1), false},
+		{strings.Replace(name, `</c:strRef>`, `<c:strCache/></c:strRef>`, 1), false},
+	} {
+		raw := strings.Replace(previewChartFixture(), `<c:tx><c:v>Saved series</c:v></c:tx>`, tc.raw, 1)
+		root, err := parsePreviewXML([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		chart := previewChart(root, "chart.xml")
+		if chart.Type != "col" {
+			t.Fatal("numeric cache lost")
+		}
+		if tc.valid && chart.Series[0].Name != "Revenue" {
+			t.Fatal("saved name lost")
+		}
+		if !tc.valid && (chart.Series[0].Name != "" || !strings.Contains(strings.Join(chart.Warnings, " "), "Series name unavailable")) {
+			t.Fatal("ambiguous name accepted")
+		}
+	}
+}
 func TestNativeObjectsPreviewUsesSavedCachesWithoutMutation(t *testing.T) {
 	parts := nativeWorkbookFixture(false)
 	parts["Charts/chart1.xml"] = previewChartFixture()

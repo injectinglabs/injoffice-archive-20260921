@@ -288,10 +288,12 @@ export function decodeNativeWorkbookObjectsV1(
           ? v
           : fail();
       });
+      const labels = list(s.labels, 1024).map((x) => text(x, 256));
+      if (labels.length !== 0 && labels.length !== values.length) return fail();
       return {
         name: text(s.name),
         values,
-        labels: list(s.labels, 1024).map((x) => text(x, 256)),
+        labels,
       };
     });
     return {
