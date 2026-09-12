@@ -59,6 +59,8 @@ func TestNativeLatentStyleBehaviorIsRenderNeutralButPreserved(t *testing.T) {
 
 func TestNativeStyleDiagnosticsFollowOnlyActiveCascadeConsumers(t *testing.T) {
 	styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:styleId="Unused"><w:pPr><w:tabs><w:tab w:val="right" w:pos="1000"/></w:tabs></w:pPr><w:rPr><w:szCs w:val="24"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Child"><w:basedOn w:val="Unused"/></w:style></w:styles>`
+	// Use an active unsupported effect; szCs is inactive for this Latin fixture.
+	styles = strings.Replace(styles, `<w:szCs w:val="24"/>`, `<w:emboss/>`, 1)
 	for _, active := range []bool{false, true} {
 		parts := resolvedStylesTestParts(styles)
 		if active {

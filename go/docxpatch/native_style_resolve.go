@@ -321,6 +321,7 @@ type nativeBoolProperty struct {
 }
 
 type nativeRunProperties struct {
+	scriptProperties  map[string]nativeDeferredNumberingDiagnostic
 	fontFamily        *string
 	asciiFamily       *string
 	hAnsiFamily       *string
@@ -1577,7 +1578,18 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 			resolvedNumbering = nil
 		}
 	}
-	resolver.resolveLatinRunFont(&paragraphMark, "\r", paragraph.ID, paragraph.Anchor.PartName)
+	markScriptUncertain := p.bidi.value
+	for _, run := range paragraph.Runs {
+		if run.Text != nil {
+			for _, character := range *run.Text {
+				if character > 0x7f {
+					markScriptUncertain = true
+					break
+				}
+			}
+		}
+	}
+	resolver.resolveLatinRunFont(&paragraphMark, "\r", paragraph.ID, paragraph.Anchor.PartName, markScriptUncertain)
 	resolvedParagraph := NativeResolvedParagraphV1{
 		ParagraphID: paragraph.ID, AppliedStyles: applied,
 		Properties:              nativeExportParagraphProperties(p),
@@ -1822,7 +1834,31 @@ func (resolver *nativeLayoutResolver) styleChain(kind, id, scopeID string) []*na
 	return chain
 }
 
-func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string) {
+func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string, scriptContextUncertain ...bool) {
+	// MS-OI29500 17.3.2.26 assigns Basic Latin to ascii regardless of
+	// inactive East-Asia/complex-script slots. Forced cs remains an unmodeled
+	// run property; rtl and non-Basic-Latin text still require script shaping.
+	basicLatin := !properties.rtl.value
+	if len(scriptContextUncertain) > 0 && scriptContextUncertain[0] {
+		basicLatin = false
+	}
+	for _, character := range text {
+		if character > 0x7f {
+			basicLatin = false
+			break
+		}
+	}
+	if !basicLatin {
+		keys := make([]string, 0, len(properties.scriptProperties))
+		for key := range properties.scriptProperties {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			diagnostic := properties.scriptProperties[key]
+			resolver.addDiagnostic(diagnostic.code, scopeID, diagnostic.partName, diagnostic.node, diagnostic.message)
+		}
+	}
 	ascii, hAnsi := properties.asciiFamily, properties.hAnsiFamily
 	if ascii == nil && hAnsi == nil {
 		return
@@ -1884,7 +1920,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			// The style reference is consumed from the native run contract.
 		case "rFonts":
 			allowed := []xml.Name{}
-			for _, local := range []string{"ascii", "hAnsi", "asciiTheme", "hAnsiTheme", "eastAsia", "eastAsiaTheme", "cs", "csTheme", "hint"} {
+			for _, local := range []string{"ascii", "hAnsi", "asciiTheme", "hAnsiTheme", "eastAsia", "eastAsiaTheme", "cs", "cstheme", "hint"} {
 				allowed = append(allowed, xml.Name{Space: resolver.wordNS, Local: local})
 			}
 			if !nativeExactLeaf(child, allowed...) {
@@ -1898,13 +1934,35 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			_, eastAsia := nativeAttr(child, resolver.wordNS, "eastAsia")
 			_, eastAsiaTheme := nativeAttr(child, resolver.wordNS, "eastAsiaTheme")
 			_, cs := nativeAttr(child, resolver.wordNS, "cs")
-			_, csTheme := nativeAttr(child, resolver.wordNS, "csTheme")
-			_, hint := nativeAttr(child, resolver.wordNS, "hint")
+			_, csTheme := nativeAttr(child, resolver.wordNS, "cstheme")
+			hintValue, hint := nativeAttr(child, resolver.wordNS, "hint")
+			validScript := true
+			for _, local := range []string{"eastAsia", "cs"} {
+				if value, present := nativeAttr(child, resolver.wordNS, local); present && !nativeBoundedResolvedString(value, 256) {
+					validScript = false
+				}
+			}
+			for _, local := range []string{"eastAsiaTheme", "cstheme"} {
+				if value, present := nativeAttr(child, resolver.wordNS, local); present {
+					switch value {
+					case "majorAscii", "majorHAnsi", "majorEastAsia", "majorBidi", "minorAscii", "minorHAnsi", "minorEastAsia", "minorBidi":
+					default:
+						validScript = false
+					}
+				}
+			}
+			if hint && hintValue != "default" && hintValue != "eastAsia" && hintValue != "cs" {
+				validScript = false
+			}
+			if !validScript {
+				resolver.addDiagnostic("UNMODELED_FONT_SELECTION", scopeID, partName, child, "Invalid script font slot or hint is preserved and not resolved")
+				continue
+			}
 			if eastAsia || eastAsiaTheme || cs || csTheme {
-				resolver.addDiagnostic("SCRIPT_FONT_PRESERVED", scopeID, partName, child, "East-Asia/complex-script font selection requires script shaping and is not guessed")
+				properties.deferScriptProperty("fonts", "SCRIPT_FONT_PRESERVED", partName, child, "East-Asia/complex-script font selection requires script shaping and is not guessed")
 			}
 			if hint {
-				resolver.addDiagnostic("FONT_HINT_PRESERVED", scopeID, partName, child, "Font hint selection is preserved for a future script-aware shaper")
+				properties.deferScriptProperty("hint", "FONT_HINT_PRESERVED", partName, child, "Font hint selection is preserved for a future script-aware shaper")
 			}
 			validASCII := !hasASCII || nativeBoundedResolvedString(ascii, 256)
 			validHAnsi := !hasHAnsi || nativeBoundedResolvedString(hAnsi, 256)
@@ -1947,10 +2005,14 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("INVALID_FONT_SIZE", scopeID, partName, child, "Invalid font size is preserved and ignored")
 			}
 		case "szCs":
-			resolver.addDiagnostic("COMPLEX_SCRIPT_SIZE_PRESERVED", scopeID, partName, child, "Complex-script font size is preserved for a future shaper")
+			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); !ok || value > 3276 || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
+				resolver.addDiagnostic("INVALID_FONT_SIZE", scopeID, partName, child, "Invalid complex-script size is preserved and not resolved")
+			} else {
+				properties.deferScriptProperty("size", "COMPLEX_SCRIPT_SIZE_PRESERVED", partName, child, "Complex-script font size is preserved for a future shaper")
+			}
 		case "b", "i", "rtl", "vanish":
 			value, ok := nativeOnOff(child, resolver.wordNS)
-			if !ok {
+			if !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
 				resolver.addDiagnostic("INVALID_ON_OFF_PROPERTY", scopeID, partName, child, "Invalid on/off property is preserved and ignored")
 				continue
 			}
@@ -1966,7 +2028,11 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				properties.hidden = property
 			}
 		case "bCs", "iCs":
-			resolver.addDiagnostic("COMPLEX_SCRIPT_TOGGLE_PRESERVED", scopeID, partName, child, "Complex-script toggles are preserved for a future shaper")
+			if _, ok := nativeOnOff(child, resolver.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
+				resolver.addDiagnostic("INVALID_ON_OFF_PROPERTY", scopeID, partName, child, "Invalid complex-script toggle is preserved and not resolved")
+			} else {
+				properties.deferScriptProperty(child.Name.Local, "COMPLEX_SCRIPT_TOGGLE_PRESERVED", partName, child, "Complex-script toggles are preserved for a future shaper")
+			}
 		case "u":
 			value, ok := nativeAttr(child, resolver.wordNS, "val")
 			if !ok {
@@ -1994,6 +2060,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("UNSUPPORTED_HIGHLIGHT", scopeID, partName, child, "This highlight value is preserved and not resolved")
 			}
 		case "lang":
+			if !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}, xml.Name{Space: resolver.wordNS, Local: "eastAsia"}, xml.Name{Space: resolver.wordNS, Local: "bidi"}) {
+				resolver.addDiagnostic("INVALID_LANGUAGE", scopeID, partName, child, "Unknown language markup is preserved and not resolved")
+				continue
+			}
 			value, ok := nativeAttr(child, resolver.wordNS, "val")
 			_, eastAsia := nativeAttr(child, resolver.wordNS, "eastAsia")
 			_, bidi := nativeAttr(child, resolver.wordNS, "bidi")
@@ -2003,7 +2073,17 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("INVALID_LANGUAGE", scopeID, partName, child, "Invalid language metadata is preserved and ignored")
 			}
 			if eastAsia || bidi {
-				resolver.addDiagnostic("SCRIPT_LANGUAGE_PRESERVED", scopeID, partName, child, "East-Asia/bidi language metadata is preserved for script shaping")
+				valid := true
+				for _, local := range []string{"eastAsia", "bidi"} {
+					if value, present := nativeAttr(child, resolver.wordNS, local); present && !nativeScriptLanguageTag(value) {
+						valid = false
+					}
+				}
+				if !valid {
+					resolver.addDiagnostic("INVALID_LANGUAGE", scopeID, partName, child, "Invalid script language is preserved and not resolved")
+				} else {
+					properties.deferScriptProperty("language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "East-Asia/bidi language metadata is preserved for script shaping")
+				}
 			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)
@@ -2351,7 +2431,43 @@ func applyNativeNumberingProperties(target *nativeNumberingProperties, layer nat
 	}
 }
 
+func (properties *nativeRunProperties) deferScriptProperty(key, code, partName string, node *nativeXMLNode, message string) {
+	if properties.scriptProperties == nil {
+		properties.scriptProperties = map[string]nativeDeferredNumberingDiagnostic{}
+	}
+	properties.scriptProperties[key] = nativeDeferredNumberingDiagnostic{code: code, partName: partName, node: node, message: message}
+}
+
+// Conservative language-tag shape for inactive script attributes. This is not
+// a registry lookup; malformed or non-tag values remain explicitly refused.
+func nativeScriptLanguageTag(value string) bool {
+	if !nativeBoundedResolvedString(value, 256) {
+		return false
+	}
+	for index, part := range strings.Split(value, "-") {
+		if len(part) == 0 || len(part) > 8 {
+			return false
+		}
+		for _, character := range part {
+			if (character < 'A' || character > 'Z') && (character < 'a' || character > 'z') && (index == 0 || character < '0' || character > '9') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProperties, styleToggle bool) {
+	if len(layer.scriptProperties) > 0 {
+		merged := make(map[string]nativeDeferredNumberingDiagnostic, len(target.scriptProperties)+len(layer.scriptProperties))
+		for key, value := range target.scriptProperties {
+			merged[key] = value
+		}
+		for key, value := range layer.scriptProperties {
+			merged[key] = value
+		}
+		target.scriptProperties = merged
+	}
 	if layer.verticalAlignment != nil {
 		target.verticalAlignment = nativeString(*layer.verticalAlignment)
 	}
