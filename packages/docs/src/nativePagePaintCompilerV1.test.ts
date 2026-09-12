@@ -1513,6 +1513,45 @@ describe('native DOCX page-paint compiler v1', () => {
       expect(automatic.tables[0]!.grid_widths_millipoints[0]).toBeLessThan(automatic.tables[0]!.grid_widths_millipoints[1]!)
     }
   }, 15_000)
+  it.each([false,true])('preserves agreed source widths and an empty column with inherited geometry %s', async inherited=>{
+    const input=tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const table=document.body.blocks[0]!.table!,left=table.rows[0]!.cells[0]!
+    table.layout='autofit';delete table.width_twips;table.grid_widths_twips=[2000,3000];left.width_twips=2000;left.paragraphs[0]!.runs[0]!.text='ID'
+    const right=structuredClone(left),p=right.paragraphs[0]!,oldP=p.id,oldR=p.runs[0]!.id
+    right.id+=':empty';right.width_twips=3000;p.id+=':empty';p.runs[0]!.id+=':empty';p.runs[0]!.text='';table.rows[0]!.cells.push(right)
+    resolved.paragraphs.push({...structuredClone(resolved.paragraphs.find(x=>x.paragraph_id===oldP)!),paragraph_id:p.id})
+    resolved.runs.push({...structuredClone(resolved.runs.find(x=>x.run_id===oldR)!),paragraph_id:p.id,run_id:p.runs[0]!.id})
+    rewriteInventory(input,i=>{i.references[0]!.scope_ids.push(p.id,p.runs[0]!.id);i.references[0]!.scope_ids.sort()})
+    if(inherited){
+      resolved.tables[0]!.geometry={layout:'autofit',alignment:'left',indent_twips:table.indent_twips!,width_type:'auto',width_value:0,cell_margins:{...table.cell_margins!}}
+      delete table.layout;delete table.alignment;delete table.indent_twips;delete table.cell_margins
+    }
+    const before=JSON.stringify(input),prepared=await prepareNativeDocxPagePaintV1(input),shaped=prepared.page_paint_request.pagination_request.shaped_lines
+    const q=qualifyNativeDocxTablesV1(document,resolved,shaped)
+    expect(q).toMatchObject({status:'qualified',tables:[{width_millipoints:250000,grid_widths_millipoints:[100000,150000],width_policy:{name:'source-preferred-nonconflicting-v1',source_grid_widths_twips:[2000,3000],source_cell_widths_twips:[[2000,3000]],preferred_width_twips:null}}]})
+    const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const completed=await completeNativeDocxPagePaintV1({prepared,outline_results:prepared.outline_requests.map(request=>{const o=provider.outline(request.glyph_id);return o.path.length?{status:'outlined' as const,...request,...o}:{status:'empty' as const,...request,units_per_em:o.units_per_em}})})
+    if(completed.page_paint_output.status!=='painted'||q.status!=='qualified')throw new Error('Source-preferred paint refused')
+    expect(completed.page_paint_output.pages[0]!.commands.filter(c=>c.kind==='fill_table_cell').map(c=>c.width_millipoints)).toEqual([100000,150000])
+    expect(completed.page_paint_output.provenance.table_projection.sha256).toBe(q.sha256)
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(true)
+    expect(JSON.stringify(input)).toBe(before)
+    expect(qualifyNativeDocxTablesV1(document,{...resolved,revision:'stale'},shaped).status).toBe('refused')
+    expect(qualifyNativeDocxTablesV1(document,resolved,{...shaped,document_id:'foreign'}).status).toBe('refused')
+    const tampered=structuredClone(completed.page_paint_output)
+    tampered.provenance.table_projection.sha256='sha256:'+'0'.repeat(64)
+    expect(decodeNativeDocxPagePaintForRequestV1(tampered,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
+    for(const change of ['missing','conflicting','explicit-table','section-overflow','content-overflow'] as const){
+      const d=structuredClone(document),r=structuredClone(resolved),s=structuredClone(shaped),t=d.body.blocks[0]!.table!
+      if(change==='missing')delete t.rows[0]!.cells[1]!.width_twips
+      if(change==='conflicting')t.rows[0]!.cells[1]!.width_twips=2999
+      if(change==='explicit-table')t.width_twips=5000
+      if(change==='section-overflow'){t.grid_widths_twips=[10000,10000];for(const cell of t.rows[0]!.cells)cell.width_twips=10000}
+      if(change==='content-overflow')s.paragraphs[0]!.lines[0]!.fragments[0]!.advance_inline_millipoints=150000
+      const fallback=qualifyNativeDocxTablesV1(d,r,s);expect(fallback.status).toBe('qualified')
+      if(fallback.status==='qualified'){expect(fallback.tables[0]!.width_policy?.name).toBe('shaped-content-minmax-v1');expect(fallback.sha256).not.toBe(q.sha256)}
+    }
+  },15000)
   it('composes content autofit with a pagination-dependent body field without changing either source', async () => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     const table = document.body.blocks[0]!.table!

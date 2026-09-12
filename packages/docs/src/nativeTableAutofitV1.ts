@@ -4,7 +4,7 @@ import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 
 export interface NativeDocxTableAutofitPolicyV1 {
-  name: 'shaped-content-minmax-v1'
+  name: 'shaped-content-minmax-v1' | 'source-preferred-nonconflicting-v1'
   section_id: string
   container_width_twips: number
   source_grid_widths_twips: number[]
@@ -63,6 +63,22 @@ export function resolveNativeDocxTableAutofitV1(table: NativeDocxTableV1, contai
   }
   const minimum = min.reduce((a,b) => a+b,0), maximum = max.reduce((a,b) => a+b,0)
   if (minimum > available || maximum > LIMIT || available <= 0) return undefined
+  // Auto width is not permission to discard consistent authored preferences.
+  // Qualify only the non-conflicting case: every cell repeats its grid width,
+  // all unwrapped content fits that preference, and the complete grid fits the
+  // section. This is not a general Word autofit algorithm or a fixed-grid
+  // override: explicit table widths and conflicting/wrapping preferences keep
+  // the existing content policy below. Final source-bound shaping replays this
+  // same decision, and the named policy enters the table projection hash.
+  const preferredGridWidth = grid.reduce((a,b) => a+b,0)
+  const preservePreferences = table.width_twips === undefined
+    && preferredGridWidth <= available
+    && grid.every((width,index) => max[index]! <= width)
+    && table.rows.every(row => row.cells.every((cell,index) => cell.width_twips === grid[index]))
+  if (preservePreferences) {
+    const policy: NativeDocxTableAutofitPolicyV1 = { name:'source-preferred-nonconflicting-v1', section_id:sectionID, container_width_twips:containerWidth, source_grid_widths_twips:[...grid], source_cell_widths_twips:table.rows.map(row=>row.cells.map(cell=>cell.width_twips??null)), preferred_width_twips:null, minimum_widths_twips:min, maximum_widths_twips:max }
+    return { policy, table:{ ...table, layout:'fixed', width_twips:preferredGridWidth, grid_widths_twips:[...grid], rows:table.rows.map(row=>({ ...row,cells:row.cells.map((cell,index)=>({...cell,width_twips:grid[index]!})) })) } }
+  }
   // Authored table width is a preferred target, clamped to intrinsic min/max
   // and the source section. Cell/grid preferences are preserved in provenance,
   // not treated as immutable column widths (that would be fixed-grid sizing).

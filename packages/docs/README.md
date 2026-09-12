@@ -402,6 +402,16 @@ The table's absolute preferred width is clamped between these intrinsic bounds
 and its owning section; omitted/auto preferred width uses the maximum that fits.
 Remaining width is distributed in proportion to each column's min/max headroom,
 with deterministic largest-remainder allocation and source-order ties.
+For omitted/auto table width, a separate
+`source-preferred-nonconflicting-v1` policy preserves the authored grid when every
+cell in every unmerged row explicitly repeats its column's preferred width,
+each column's shaped maximum content plus margins fits that width, and the
+complete grid fits the owning section. Empty columns therefore retain their
+consistent authored preferences. Explicit absolute table widths, missing or
+conflicting cell preferences, and content requiring wrapping at those preferences
+continue through the existing content policy and its refusal boundaries. This
+bounded case does not establish general Word autofit fidelity. Its named policy
+and source preferences enter the same independently re-derived table hash.
 Authored grid/cell widths remain source preferences recorded in the policy;
 they are not immutable column widths. Final wrapped glyph clusters independently
 rederive the same allocation during source-bound pagination and paint validation.
