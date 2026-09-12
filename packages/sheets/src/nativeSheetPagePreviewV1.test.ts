@@ -1,17 +1,87 @@
 import {createRequire} from 'node:module'
+import {createHash} from 'node:crypto'
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
 import {projectNativeWorkbookV2,createNativeMaximumDigitWidthAuthorityV2,compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeSheetGeometryV2,validateNativeSheetGeometryV2,compileNativeSheetPagePreviewV1,type NativeWorkbookV2,type NativeWorkbookObjectsV1} from './index.js'
 const require=createRequire(import.meta.url)
-function fixture(){
+function fixture(change?:(workbook:NativeWorkbookV2)=>void){
  const workbook=JSON.parse(readFileSync(new URL('../../../go/xlsxpatch/testdata/native-xlsx-v2/valid/lexical-render.json',import.meta.url),'utf8')) as NativeWorkbookV2
  Object.assign(workbook,{normal_style:{style_xf_id:0,font_id:0,font_name:'DejaVu Sans',font_size_points:11,font_bold:false,font_italic:false,font_record_sha256:`sha256:${'e'.repeat(64)}`}})
+ change?.(workbook)
  const model=projectNativeWorkbookV2(workbook),font=new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
  const geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:2,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font))
  const objects:NativeWorkbookObjectsV1={protocol:'injoffice.xlsx.preview-objects',version:1,package_sha256:geometry.source_package_sha256,tables:[],charts:[],page_settings:[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',warnings:['Source settings'],settings:{paper:'Letter',orientation:'portrait',scale:100,left_inches:1,right_inches:1,top_inches:1,bottom_inches:1}}]}
  return {geometry,objects,model,font}
 }
 describe('source-bound selected worksheet page geometry',()=>{
+ it('searches lower scales when a merged cell would cross an otherwise valid fit boundary',()=>{
+  const {geometry,objects}=fixture(workbook=>{
+   Object.assign(workbook.sheets[0]!,{merged_ranges:[{ref:'B2:C3',row:1,column:1,end_row:2,end_column:2,editable:false}]})
+   const location=['MERGED_CELLS','merges','sheet:7','Worksheets/Sheet1.xml','',''].join('\0')
+   Object.assign(workbook,{unsupported:[...workbook.unsupported,{id:`unsupported:${createHash('sha256').update(location).digest('hex')}`,code:'MERGED_CELLS',capability:'merges',scope_id:'sheet:7',part_name:'Worksheets/Sheet1.xml',preservation:'preserve-exact',message:'Merged source geometry'}]})
+  })
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,fit_to_page:{width:3,height:3}})
+  const p=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(p.pages[0]!.scale).toBeLessThan(1)
+  const m=geometry.merged_ranges[0]!.rect
+  expect(p.pages.some(({source_clip:c})=>m.x_emu>=c.x_emu&&m.y_emu>=c.y_emu&&m.x_emu+m.width_emu<=c.x_emu+c.width_emu&&m.y_emu+m.height_emu<=c.y_emu+c.height_emu)).toBe(true)
+ })
+ it('bounds the largest supported viewport search and enforces the 100-page budget',()=>{
+  const {model,font,objects}=fixture(),geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:3999,end_column:24},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:{width:100,height:0}})
+  const p=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(p.pages.length).toBeLessThanOrEqual(100);expect(p.pages[0]!.scale).toBeLessThan(1)
+  expect(Math.max(...p.pages.map(p=>p.rows.end))).toBe(3999)
+  expect(Math.max(...p.pages.map(p=>p.columns.end))).toBe(24)
+ })
+ it('fits actual whole bands using the largest shrink percentage and retains source metadata',()=>{
+  const {geometry,objects}=fixture(),settings=objects.page_settings![0]!.settings!
+  Object.assign(settings,{scale:400,left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,fit_to_page:{width:1,height:1}})
+  const before=JSON.stringify(objects),p=compileNativeSheetPagePreviewV1(geometry,objects),page=p.pages[0]!
+  expect(p.pages).toHaveLength(1);expect(page.scale).toBeLessThan(1);expect(page.scale).toBeGreaterThanOrEqual(.1)
+  expect(page.source_clip).toEqual(geometry.bounds);expect(p.settings.scale).toBe(400)
+  expect(page.source_clip.width_emu*page.scale).toBeLessThanOrEqual(page.content_clip.width_emu)
+  expect(page.source_clip.height_emu*page.scale).toBeLessThanOrEqual(page.content_clip.height_emu)
+  expect(geometry.bounds.width_emu*(page.scale+.01)>page.content_clip.width_emu||geometry.bounds.height_emu*(page.scale+.01)>page.content_clip.height_emu).toBe(true)
+  expect(p.warnings.join(' ')).toContain("not Excel's fit algorithm");expect(JSON.stringify(objects)).toBe(before)
+ })
+ it('treats zero as unconstrained, never enlarges, and accepts explicit host fit independently',()=>{
+  const {geometry,objects}=fixture(),settings=objects.page_settings![0]!.settings!
+  Object.assign(settings,{fit_to_page:{width:1,height:0},scale:10})
+  expect(compileNativeSheetPagePreviewV1(geometry,objects).pages[0]!.scale).toBe(1)
+  const p=compileNativeSheetPagePreviewV1(geometry,objects,{...settings,kind:'explicit-host-page-policy-v1',left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,fit_to_page:{width:0,height:1}})
+  expect(new Set(p.pages.map(p=>p.rows.start)).size).toBe(1)
+  expect(new Set(p.pages.map(p=>p.columns.start)).size).toBeGreaterThan(1)
+  expect(p.settings_origin).toBe('explicit-host')
+ })
+ it('refuses malformed fit choices, accessors and source mismatches without invoking getters',()=>{
+  const invalid=[{},null,undefined,{width:0,height:0},{width:-0,height:1},{width:-1,height:1},{width:101,height:1},{width:1.5,height:1},{width:'1',height:1},{width:1,height:Infinity},{width:1,height:1,extra:1},Object.assign(Object.create({}),{width:1,height:1})]
+  let invoked=false
+  invalid.push(Object.defineProperty({height:1},'width',{enumerable:true,get(){invoked=true;return 1}}))
+  for(const fit of invalid){
+   const {geometry,objects}=fixture();Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:fit})
+   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow()
+   expect(()=>compileNativeSheetPagePreviewV1(geometry,fixture().objects,{...objects.page_settings![0]!.settings!,kind:'explicit-host-page-policy-v1'})).toThrow()
+  }
+  expect(invoked).toBe(false)
+  const {geometry,objects}=fixture();objects.page_settings![0]!.sheet_part='wrong.xml'
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow('worksheet part')
+ })
+ it('refuses targets below the minimum scale rather than silently clipping or missing targets',()=>{
+  const {geometry,objects}=fixture();Object.assign(objects.page_settings![0]!.settings!,{left_inches:4.249,right_inches:4.249,fit_to_page:{width:1,height:0}})
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow('cannot be met')
+ })
+ it('fits non-A1 geometry and transforms viewport-local drawing coordinates uniformly',()=>{
+  const {model,font,objects}=fixture(),geometry=compileNativeSheetGeometryV2(model,'7',{row:1,column:1,end_row:3,end_column:3},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,fit_to_page:{width:1,height:1}})
+  const page=compileNativeSheetPagePreviewV1(geometry,objects).pages[0]!
+  expect(page.rows).toEqual({start:1,end:3});expect(page.columns).toEqual({start:1,end:3})
+  expect(page.source_clip.x_emu*page.scale+page.translate_x_emu).toBe(page.content_clip.x_emu)
+  const chart={x:geometry.bounds.width_emu/4,y:geometry.bounds.height_emu/4,width:geometry.bounds.width_emu/2,height:geometry.bounds.height_emu/2}
+  const painted={x:chart.x*page.scale+page.translate_x_emu,y:chart.y*page.scale+page.translate_y_emu,width:chart.width*page.scale,height:chart.height*page.scale}
+  expect(painted.x+painted.width).toBeLessThanOrEqual(page.content_clip.x_emu+page.content_clip.width_emu)
+  expect(painted.y+painted.height).toBeLessThanOrEqual(page.content_clip.y_emu+page.content_clip.height_emu)
+ })
  it('honors source and explicit host page order without changing page geometry or source settings',()=>{
   const {geometry,objects}=fixture()
   Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,page_order:'overThenDown'})

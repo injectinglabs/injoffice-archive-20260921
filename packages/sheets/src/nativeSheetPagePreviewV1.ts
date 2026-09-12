@@ -1,4 +1,4 @@
-import {isCompiledNativeSheetGeometryV2,isCompiledNativeStoredRowSheetGeometryV1,type NativeSheetGeometryV2,type NativeSheetGeometryRectV2} from './nativeSheetGeometryV2.js'
+import {compiledNativeSheetGeometrySourcePart,isCompiledNativeSheetGeometryV2,isCompiledNativeStoredRowSheetGeometryV1,type NativeSheetGeometryV2,type NativeSheetGeometryRectV2} from './nativeSheetGeometryV2.js'
 import {decodeNativeWorkbookObjectsV1,type NativeWorkbookObjectsV1} from './nativeObjectsPreviewV1.js'
 import {decodeNativeSheetPageSettingsV1,type NativeSheetPageConfigV1} from './nativeSheetPageSettingsV1.js'
 import {snapshotNativePlainData} from './nativePlainData.js'
@@ -37,11 +37,12 @@ export function compileNativeSheetPagePreviewV1(
  const candidates=source.page_settings?.filter(s=>s.sheet_id===geometry.sheet_id)??[]
  if(candidates.length!==1)throw new TypeError('Page settings do not join the source worksheet')
  const pageSettings=candidates[0]!
+ if(pageSettings.sheet_part!==compiledNativeSheetGeometrySourcePart(geometry))throw new TypeError('Page settings do not join the source worksheet part')
  let settings:NativeSheetPageConfigV1
  if(hostPolicy!==undefined){
   hostPolicy=snapshotNativePlainData(hostPolicy,{maxDepth:4,maxNodes:64}) as NativeSheetHostPagePolicyV1
   const copy=Object.getOwnPropertyDescriptors(hostPolicy)
-  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==(Object.hasOwn(copy,'page_order')?9:8)||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
+  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==8+Number(Object.hasOwn(copy,'page_order'))+Number(Object.hasOwn(copy,'fit_to_page'))||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
   const {kind:_,...config}=hostPolicy
   settings=decodeNativeSheetPageSettingsV1([{sheet_id:pageSettings.sheet_id,sheet_part:pageSettings.sheet_part,status:'available',settings:config,warnings:['Explicit host choices']}])[0]!.settings!
  }else{
@@ -53,7 +54,8 @@ export function compileNativeSheetPagePreviewV1(
  const [width,height]=settings.orientation==='landscape'?[size[1]!,size[0]!]:[size[0]!,size[1]!]
  const inch=(n:number)=>Math.round(n*914400)
  const left=inch(settings.left_inches),right=inch(settings.right_inches),top=inch(settings.top_inches),bottom=inch(settings.bottom_inches)
- const cw=width-left-right,ch=height-top-bottom,scale=settings.scale/100
+ const cw=width-left-right,ch=height-top-bottom
+ let scale=settings.scale/100
  if(cw<=0||ch<=0)throw new RangeError('Page margins leave no printable area')
  const split=(bands:readonly {index:number;at:number;length:number}[],capacity:number)=>{
   const result:{start:number;end:number;at:number;length:number}[]=[]
@@ -66,8 +68,25 @@ export function compileNativeSheetPagePreviewV1(
   }
   return result
  }
- const rows=split(geometry.rows.map(r=>({index:r.row,at:r.y_emu,length:r.height_emu})),Math.floor(ch/scale))
- const columns=split(geometry.columns.map(c=>({index:c.column,at:c.x_emu,length:c.width_emu})),Math.floor(cw/scale))
+ const rowBands=geometry.rows.map(r=>({index:r.row,at:r.y_emu,length:r.height_emu}))
+ const columnBands=geometry.columns.map(c=>({index:c.column,at:c.x_emu,length:c.width_emu}))
+ const mergesFit=(rows:ReturnType<typeof split>,columns:ReturnType<typeof split>)=>geometry.merged_ranges.every(({rect:r})=>
+  rows.some(b=>r.y_emu>=b.at&&r.y_emu+r.height_emu<=b.at+b.length)&&columns.some(b=>r.x_emu>=b.at&&r.x_emu+r.width_emu<=b.at+b.length))
+ const fit=settings.fit_to_page
+ if(fit){
+  // Bounded, explicit approximation: greatest whole-percent shrink satisfying
+  // actual whole-band pagination. Source percentage is retained but not applied.
+  let found=false
+  for(let percent=100;percent>=10;percent--){
+   const candidate=percent/100,rc=Math.floor(ch/candidate),cc=Math.floor(cw/candidate)
+   if(rowBands.some(b=>b.length>rc)||columnBands.some(b=>b.length>cc))continue
+   const r=split(rowBands,rc),c=split(columnBands,cc)
+   if((fit.height===0||r.length<=fit.height)&&(fit.width===0||c.length<=fit.width)&&r.length*c.length<=100&&mergesFit(r,c)){scale=candidate;found=true;break}
+  }
+  if(!found)throw new RangeError('Fit-to-page target cannot be met between 10% and 100% within the 100-page preview budget without splitting merged cells')
+ }
+ const rows=split(rowBands,Math.floor(ch/scale))
+ const columns=split(columnBands,Math.floor(cw/scale))
  if(rows.length*columns.length>100)throw new RangeError('Worksheet page preview exceeds 100 pages')
  for(const merge of geometry.merged_ranges){
   const r=merge.rect
@@ -78,5 +97,5 @@ export function compileNativeSheetPagePreviewV1(
  if(settings.page_order==='overThenDown'){for(const r of rows)for(const c of columns)addPage(c,r)}
  else {for(const c of columns)for(const r of rows)addPage(c,r)}
  const policy=settings.page_order==='overThenDown'?'whole-bands-over-then-down-v1':'whole-bands-down-then-over-v1'
- return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.',...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
+ return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(fit?[`Approximate fit-to-page: greatest whole-percent shrink from 100% to 10% meeting the selected-range whole-band targets. Effective scale is ${Math.round(scale*100)}%; stored percentage is not applied. This is not Excel's fit algorithm.`]:[]),...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.',...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
 }

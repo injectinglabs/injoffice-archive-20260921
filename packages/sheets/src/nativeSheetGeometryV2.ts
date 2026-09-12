@@ -19,6 +19,11 @@ export const NATIVE_SHEET_GEOMETRY_V2_LIMITS = Object.freeze({
 })
 const compiledNativeSheetGeometries = new WeakSet<object>()
 const compiledStoredRowGeometries = new WeakSet<object>()
+const compiledGeometrySourceParts = new WeakMap<object,string>()
+/** Internal source join; deliberately not part of the serializable geometry digest. */
+export function compiledNativeSheetGeometrySourcePart(geometry:NativeSheetGeometryV2):string|undefined {
+ return compiledGeometrySourceParts.get(geometry)
+}
 export interface NativeStoredRowSheetGeometryV1 extends NativeSheetGeometryV2 {
  readonly approximation:{readonly policy:'source-stored-rows-v1';readonly read_only:true;readonly source:NativeStoredRowGeometryV1}
 }
@@ -261,6 +266,7 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
     geometry_sha256: geometryDigest(unsigned),
   }
   const frozen = deepFreeze(result)
+  compiledGeometrySourceParts.set(frozen,sheet.mutation_authority.source_part)
   if(storedRows)compiledStoredRowGeometries.add(frozen)
   else compiledNativeSheetGeometries.add(frozen)
   return frozen

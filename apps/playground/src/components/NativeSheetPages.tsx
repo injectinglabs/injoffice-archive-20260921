@@ -11,6 +11,7 @@ import {
 } from '@injoffice/sheets/browser'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
 import { nativeSheetPageCellPreview } from '../nativeSheetPageCellPreview'
+import { nativeSheetPageFitChoice } from '../nativeSheetPageFitChoice'
 import { DsButton, DsSelect, DsInput } from '../design-system/primitives'
 import './native-sheet-pages.css'
 
@@ -36,6 +37,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [paper, setPaper] = useState<'A4' | 'Letter'>('A4')
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
   const [scale, setScale] = useState('100')
+  const [scaling, setScaling] = useState<'percent' | 'fit'>('percent')
+  const [fitWidth, setFitWidth] = useState('1')
+  const [fitHeight, setFitHeight] = useState('1')
   const [pageOrder, setPageOrder] = useState<'downThenOver' | 'overThenDown'>('downThenOver')
   const [margins, setMargins] = useState({ left: '0.5', right: '0.5', top: '0.5', bottom: '0.5' })
   const [useSource, setUseSource] = useState(true)
@@ -78,7 +82,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         : compileNativeSheetGeometryV2(model, sheet.id, viewport, authority)
       if (!useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
       const host: NativeSheetHostPagePolicyV1 | undefined = useSource ? undefined : {
-        kind: 'explicit-host-page-policy-v1', paper, orientation, scale: Number(scale),
+        kind: 'explicit-host-page-policy-v1', paper, orientation, scale: scaling === 'fit' ? 100 : Number(scale),
+        ...(scaling === 'fit' ? { fit_to_page: nativeSheetPageFitChoice(fitWidth, fitHeight) } : {}),
         page_order: pageOrder,
         left_inches: Number(margins.left), right_inches: Number(margins.right), top_inches: Number(margins.top), bottom_inches: Number(margins.bottom),
       }
@@ -119,7 +124,12 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       {!useSource && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
-        <label>Scale (%)<DsInput type="number" min={10} max={400} step={1} value={scale} onChange={event => { invalidate(); setScale(event.target.value) }}/></label>
+        <label>Scaling<DsSelect aria-label="Scaling" value={scaling} onChange={event => { invalidate(); setScaling(event.target.value as 'percent' | 'fit') }}><option value="percent">Scale percentage</option><option value="fit">Fit to page limits</option></DsSelect></label>
+        {scaling === 'percent' ? <label>Scale (%)<DsInput type="number" min={10} max={400} step={1} value={scale} onChange={event => { invalidate(); setScale(event.target.value) }}/></label> : <>
+          <label>Pages wide<DsInput aria-label="Pages wide" type="number" min={0} max={100} step={1} value={fitWidth} onChange={event => { invalidate(); setFitWidth(event.target.value) }}/></label>
+          <label>Pages tall<DsInput aria-label="Pages tall" type="number" min={0} max={100} step={1} value={fitHeight} onChange={event => { invalidate(); setFitHeight(event.target.value) }}/></label>
+          <p className="ds-muted">Use 0 for an unlimited dimension, with at least one positive limit. Fit reduces the preview in whole-percent steps from 100% to 10%; it never enlarges content. Limits apply only to the selected range, not the whole workbook.</p>
+        </>}
         <label>Page order<DsSelect value={pageOrder} onChange={event => { invalidate(); setPageOrder(event.target.value as 'downThenOver' | 'overThenDown') }}><option value="downThenOver">Down, then across</option><option value="overThenDown">Across, then down</option></DsSelect></label>
         {(['left', 'right', 'top', 'bottom'] as const).map(side => <label key={side}>{side[0]!.toUpperCase() + side.slice(1)} margin (inches)<DsInput type="number" min={0} max={20} step="0.05" value={margins[side]} onChange={event => { invalidate(); setMargins(current => ({ ...current, [side]: event.target.value })) }}/></label>)}
         <p className="ds-muted">Paper, margins, scale and page order are your preview choices, not workbook defaults.</p>
@@ -129,7 +139,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Headers and repeated print titles are not drawn here. Saved print areas must be one supported rectangle. Formula values are saved caches, not recalculated results.</p>
     <p role="status">{message}</p>
     {result && <>
-      <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scale' : 'Your paper, margins and scale'} · approximate selected-range preview</p>
+      <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scaling' : 'Your paper, margins and scaling'} · approximate selected-range preview</p>
+      {result.plan.settings.fit_to_page && <p>Fit limits: {result.plan.settings.fit_to_page.width || 'unlimited'} wide × {result.plan.settings.fit_to_page.height || 'unlimited'} tall. Effective preview scale: {result.plan.pages.length ? `${Math.round(result.plan.pages[0]!.scale * 100)}%` : 'no visible cells'}.</p>}
       <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>

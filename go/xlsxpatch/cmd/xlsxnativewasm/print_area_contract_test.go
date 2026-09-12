@@ -17,11 +17,16 @@ import (
 func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 	wasm, wasmExec, script := requireNodeHarness(t)
 	for _, tc := range []struct {
-		name, ref string
-		available bool
+		name, ref    string
+		available    bool
+		fit          string
+		fitAvailable bool
 	}{
-		{"rectangle", `Sheet1!$B$2:$D$4`, true},
-		{"union", `Sheet1!$B$2:$D$4,Sheet1!$F$6`, false},
+		{"rectangle", `Sheet1!$B$2:$D$4`, true, "", false},
+		{"union", `Sheet1!$B$2:$D$4,Sheet1!$F$6`, false, "", false},
+		{"fit", `Sheet1!$B$2:$D$4`, true, "1", true},
+		{"fit-unbounded", `Sheet1!$B$2:$D$4`, true, "0", true},
+		{"fit-invalid", `Sheet1!$B$2:$D$4`, true, "101", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			parts := map[string]string{
@@ -30,6 +35,9 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 				"xl/workbook.xml":            `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="17" r:id="r1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">` + tc.ref + `</definedName></definedNames></workbook>`,
 				"xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
 				"xl/worksheets/sheet1.xml":   `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2"><c r="B2" t="inlineStr"><is><t>Inside</t></is></c></row></sheetData></worksheet>`,
+			}
+			if tc.fit != "" {
+				parts["xl/worksheets/sheet1.xml"] = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="true"/></sheetPr><sheetData/><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="` + tc.fit + `"/></worksheet>`
 			}
 			var buf bytes.Buffer
 			z := zip.NewWriter(&buf)
@@ -55,6 +63,9 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 			}
 			if len(want.PrintAreas) != 1 || (want.PrintAreas[0].Status == "available") != tc.available {
 				t.Fatalf("%+v", want.PrintAreas)
+			}
+			if tc.fit != "" && (len(want.PageSettings) != 1 || (want.PageSettings[0].Status == "available") != tc.fitAvailable) {
+				t.Fatalf("unexpected Go fit settings: %+v", want.PageSettings)
 			}
 			encoded, e := json.Marshal(want)
 			if e != nil {

@@ -22,10 +22,17 @@ type NativeSheetPageConfigV1 struct {
 	Top         float64 `json:"top_inches"`
 	Bottom      float64 `json:"bottom_inches"`
 	PageOrder   string  `json:"page_order,omitempty"`
+	// Scale remains a compatibility value; fit mode ignores it.
+	FitToPage *NativeSheetFitToPageV1 `json:"fit_to_page,omitempty"`
+}
+
+type NativeSheetFitToPageV1 struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
 }
 
 func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSettingsV1 {
-	result := NativeSheetPageSettingsV1{SheetID: id, SheetPart: part, Status: "unavailable", Warnings: []string{"Worksheet page preview requires explicit bounded paper, orientation, scale and margins; printer defaults and unsupported print options are not inferred."}}
+	result := NativeSheetPageSettingsV1{SheetID: id, SheetPart: part, Status: "unavailable", Warnings: []string{"Worksheet page preview requires explicit bounded paper, orientation, margins and percentage scale or fit-to-page settings; printer defaults and unsupported print options are not inferred."}}
 	root, err := parsePreviewXML(raw)
 	if err != nil || root.name.Local != "worksheet" || !isSpreadsheetMLNamespace(root.name.Space) {
 		return result
@@ -34,6 +41,8 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	if setup == nil || margins == nil {
 		return result
 	}
+	var fitPr *previewXML
+	sheetPrCount := 0
 	// Do not silently ignore alternate/foreign settings or page-affecting data.
 	for _, child := range root.children {
 		switch child.name.Local {
@@ -41,15 +50,44 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 			if child.name.Space != root.name.Space {
 				return result
 			}
-		case "rowBreaks", "colBreaks", "headerFooter", "printOptions":
+		case "rowBreaks", "colBreaks", "headerFooter", "printOptions", "pageSetUpPr":
 			return result
 		case "sheetPr":
+			sheetPrCount++
+			if sheetPrCount > 1 || child.name.Space != root.name.Space {
+				return result
+			}
 			for _, p := range child.children {
 				if p.name.Local == "pageSetUpPr" {
-					return result
+					if fitPr != nil || p.name.Space != root.name.Space || len(child.children) != 1 || strings.TrimSpace(child.text) != "" {
+						return result
+					}
+					for _, a := range child.attrs {
+						if !isPreviewNamespaceDeclaration(a) {
+							return result
+						}
+					}
+					fitPr = p
 				}
 			}
 		}
+	}
+	// Reject a second or misplaced activation flag rather than treating it as
+	// inactive percentage settings. Local-name matching also catches foreign XML.
+	var misplacedFit func(*previewXML) bool
+	misplacedFit = func(n *previewXML) bool {
+		if n.name.Local == "pageSetUpPr" && n != fitPr {
+			return true
+		}
+		for _, child := range n.children {
+			if misplacedFit(child) {
+				return true
+			}
+		}
+		return false
+	}
+	if misplacedFit(root) {
+		return result
 	}
 	exactLeaf := func(n *previewXML, names ...string) bool {
 		if len(n.children) != 0 || strings.TrimSpace(n.text) != "" {
@@ -71,7 +109,23 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		}
 		return count == len(names)
 	}
-	setupFields := []string{"paperSize", "orientation", "scale"}
+	setupFields := []string{"paperSize", "orientation"}
+	var fit *NativeSheetFitToPageV1
+	if fitPr != nil {
+		if !exactLeaf(fitPr, "fitToPage") || (fitPr.attr("fitToPage") != "true" && fitPr.attr("fitToPage") != "1") {
+			return result
+		}
+		width, ew := strconv.Atoi(setup.attr("fitToWidth"))
+		height, eh := strconv.Atoi(setup.attr("fitToHeight"))
+		if ew != nil || eh != nil || width < 0 || width > 100 || height < 0 || height > 100 || width+height == 0 || strconv.Itoa(width) != setup.attr("fitToWidth") || strconv.Itoa(height) != setup.attr("fitToHeight") {
+			return result
+		}
+		fit = &NativeSheetFitToPageV1{Width: width, Height: height}
+		setupFields = append(setupFields, "fitToWidth", "fitToHeight")
+	}
+	if fit == nil || setup.attr("scale") != "" {
+		setupFields = append(setupFields, "scale")
+	}
 	order := setup.attr("pageOrder")
 	if order != "" {
 		if order != "downThenOver" && order != "overThenDown" {
@@ -84,8 +138,12 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	}
 	paper := map[string]string{"1": "Letter", "9": "A4"}[setup.attr("paperSize")]
 	orientation := setup.attr("orientation")
-	scale, err := strconv.Atoi(setup.attr("scale"))
-	if paper == "" || (orientation != "portrait" && orientation != "landscape") || err != nil || scale < 10 || scale > 400 || strconv.Itoa(scale) != setup.attr("scale") {
+	scaleText := setup.attr("scale")
+	if fit != nil && scaleText == "" {
+		scaleText = "100"
+	}
+	scale, err := strconv.Atoi(scaleText)
+	if paper == "" || (orientation != "portrait" && orientation != "landscape") || err != nil || scale < 10 || scale > 400 || strconv.Itoa(scale) != scaleText {
 		return result
 	}
 	values := map[string]float64{}
@@ -97,7 +155,10 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		values[name] = value
 	}
 	result.Status = "available"
-	result.Settings = &NativeSheetPageConfigV1{paper, orientation, scale, values["left"], values["right"], values["top"], values["bottom"], order}
+	result.Settings = &NativeSheetPageConfigV1{Paper: paper, Orientation: orientation, Scale: scale, Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], PageOrder: order, FitToPage: fit}
 	result.Warnings = []string{"Read-only selected-range page geometry approximation. Page settings do not select a range; repeated titles, chart paint, headers and printer behavior are not reproduced by page settings alone. No Excel fidelity claim."}
+	if fit != nil {
+		result.Warnings = append(result.Warnings, "Explicit fit-to-page dimensions apply to the selected preview range. A zero dimension is unconstrained. Percentage scale is ignored in fit mode; absent source scale is represented as 100 for compatibility.")
+	}
 	return result
 }

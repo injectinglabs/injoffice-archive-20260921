@@ -135,6 +135,17 @@ describe('selected-range page presentation', () => {
     expect(html).not.toContain('Rent')
     expect(html).not.toContain('Outside page one')
   })
+  it('applies the same effective fit transform to cells and positioned drawings', () => {
+    const props = fixture()
+    props.plan.pages[0]!.scale = 0.37
+    const drawings: NativePositionedDrawingV1[] = [{ source: { sheet_id: '1', sheet_part: props.sheet.part_name, drawing_part: 'xl/drawings/drawing1.xml', ordinal: 1, kind: 'unsupported', warnings: ['Unmodeled picture'] }, status: 'positioned', rect: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 }, clip: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 } }]
+    const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))
+    expect(html).toContain('translate(48 48) scale(0.37)')
+    expect(html).toContain('Source-positioned drawing 1')
+    expect(html).toContain('Rent &lt;script&gt;bad&lt;/script&gt;')
+    expect(html).not.toContain('Outside page one')
+    expect(html.indexOf('scale(0.37)')).toBeLessThan(html.indexOf('Source-positioned drawing 1'))
+  })
   it('labels cached plots as approximate and never activates source links', () => {
     const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }
     const html = renderToStaticMarkup(createElement('svg', null, createElement(NativePositionedChartPlot, { chart, index: 0 })))

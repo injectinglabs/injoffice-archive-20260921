@@ -18,8 +18,17 @@ Missing, unavailable or oversized areas throw; hosts must make any fallback rang
 an explicit choice. Range origin is independent of page-settings origin. The
 selector enforces native geometry budgets; hosts may impose smaller limits.
 Non-A1 ranges retain their source coordinates. Stored-row approximation still
-supports only the first 32 source rows. Repeated titles, fit-to-page and printer
-defaults are not implemented; strict geometry and mutation authority are unchanged.
+supports only the first 32 source rows. Optional `fit_to_page: {width, height}`
+accepts whole-number page targets from 0 to 100, with at least one positive target;
+zero leaves that axis unconstrained. Both source settings and explicit host policy
+use the largest whole-percent scale from 100% down to 10% that meets the actual
+whole-row/column page counts and 100-page budget. This never enlarges content.
+The required `scale` percentage remains metadata but is not applied in fit mode;
+each output page records its effective scale. Impossible targets and merged cells
+crossing a resulting page boundary still refuse without clipping. This is an
+explicit approximation, not Excel's fit algorithm or printer pagination fidelity.
+Repeated titles and printer defaults are not implemented; strict geometry and
+mutation authority are unchanged.
 
 ```bash
 npm install @injoffice/sheets

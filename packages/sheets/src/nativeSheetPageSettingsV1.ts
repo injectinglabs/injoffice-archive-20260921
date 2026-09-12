@@ -5,6 +5,8 @@ export interface NativeSheetPageConfigV1 {
  left_inches:number;right_inches:number;top_inches:number;bottom_inches:number;
  /** Omission retains down-then-over ordering. */
  page_order?:'downThenOver'|'overThenDown';
+ /** Read-only shrink-to-fit target; zero leaves that dimension unconstrained. */
+ fit_to_page?:{width:number;height:number};
 }
 export interface NativeSheetPageSettingsV1 {
  sheet_id:string;sheet_part:string;status:'available'|'unavailable';
@@ -31,7 +33,12 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
   let settings:NativeSheetPageConfigV1|undefined
   if(status==='available'){
    const hasOrder=!!o.settings&&typeof o.settings==='object'&&Object.hasOwn(o.settings,'page_order')
-   const s=exact(o.settings,['paper','orientation','scale','left_inches','right_inches','top_inches','bottom_inches',...(hasOrder?['page_order']:[])])
+   const hasFit=!!o.settings&&typeof o.settings==='object'&&Object.hasOwn(o.settings,'fit_to_page')
+   const s=exact(o.settings,['paper','orientation','scale','left_inches','right_inches','top_inches','bottom_inches',...(hasOrder?['page_order']:[]),...(hasFit?['fit_to_page']:[])])
+   if(hasFit){
+    const fit=exact(s.fit_to_page,['width','height'])
+    if(['width','height'].some(k=>!Number.isInteger(fit[k])||Object.is(fit[k],-0)||Number(fit[k])<0||Number(fit[k])>100)||!(Number(fit.width)>0||Number(fit.height)>0))return fail()
+   }
    if(hasOrder&&s.page_order!=='downThenOver'&&s.page_order!=='overThenDown')return fail()
    if((s.paper!=='Letter'&&s.paper!=='A4')||(s.orientation!=='portrait'&&s.orientation!=='landscape')||!Number.isInteger(s.scale)||Number(s.scale)<10||Number(s.scale)>400)return fail()
    for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof s[key]!=='number'||!Number.isFinite(s[key])||Number(s[key])<0||Number(s[key])>20)return fail()
