@@ -109,6 +109,8 @@ type nativeExtractor struct {
 	themeSrgbLoaded     bool
 	tableLookLoaded     bool
 	tableLookStyles     map[string]*nativeXMLNode
+	noEndnotesChecked   bool
+	noEndnotesProven    bool
 }
 
 // NativeExtractionOptions lets a caller retain durable identity across source
@@ -1398,7 +1400,9 @@ func nativeExactNoteSentinel(node *nativeXMLNode, wordNS, role string) bool {
 		instruction = "continuationSeparator"
 	}
 	paragraphs := directNativeChildren(node, wordNS, "p")
-	if len(node.Children) != 1 || len(paragraphs) != 1 || !nativeExactContainer(paragraphs[0]) {
+	// Word records revision-session identifiers on otherwise exact reserved
+	// separators. These source-preserved hex IDs do not alter separator layout.
+	if len(node.Children) != 1 || len(paragraphs) != 1 || !nativeExactRevisionContainer(paragraphs[0], wordNS, "rsidR", "rsidRDefault", "rsidP") {
 		return false
 	}
 	runs := directNativeChildren(paragraphs[0], wordNS, "r")
@@ -1411,6 +1415,9 @@ func nativeExactNoteSentinel(node *nativeXMLNode, wordNS, role string) bool {
 		return false
 	}
 	if len(properties) == 1 {
+		if !nativeExactContainer(properties[0]) {
+			return false
+		}
 		spacing := directNativeChildren(properties[0], wordNS, "spacing")
 		after, hasAfter := "", false
 		line, hasLine := "", false
@@ -2007,7 +2014,7 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			if !nativeExactParagraphMarkProperties(child, extractor.wordNS) {
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_MARK_PROPERTIES", "paragraph-properties", paragraphID, partName, child, "Paragraph-mark formatting has unknown, duplicate, or noncanonical source structure")
-			} else if _, invalid := extractor.extractRunProperties(partName, paragraphID, child); invalid {
+			} else if _, invalid, _ := extractor.extractRunPropertiesState(partName, paragraphID, child); invalid {
 				unsafe = true
 			}
 		case "ind":
@@ -2032,11 +2039,11 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			case "widowControl":
 				properties.WidowControl = nativeBool(value)
 			}
-		case "autoSpaceDE", "autoSpaceDN":
+		case "autoSpaceDE", "autoSpaceDN", "adjustRightInd":
 			preserveOnly = true
 			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
 				unsafe = true
-				extractor.addUnsupported("UNMODELED_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "Automatic East Asian spacing is supported only as an exact explicit disabled setting")
+				extractor.addUnsupported("UNMODELED_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "Automatic spacing or grid indent adjustment is supported only as an exact explicit disabled setting")
 			}
 		case "bidi":
 			preserveOnly = true
@@ -2071,14 +2078,29 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 			// Preserve the bounded complex-script slot without treating it as
 			// active. The resolver still qualifies the paragraph mark's script
 			// context; RTL/mixed-script uncertainty retains its diagnostic.
-			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}, xml.Name{Space: wordNS, Local: "cs"}) {
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}, xml.Name{Space: wordNS, Local: "cs"}, xml.Name{Space: wordNS, Local: "eastAsia"}) {
 				return false
 			}
-			if value, present := nativeAttr(property, wordNS, "cs"); present && !nativeBoundedResolvedString(value, 256) {
+			for _, slot := range []string{"cs", "eastAsia"} {
+				if value, present := nativeAttr(property, wordNS, slot); present && !nativeBoundedResolvedString(value, 256) {
+					return false
+				}
+			}
+		case "lang":
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}, xml.Name{Space: wordNS, Local: "eastAsia"}, xml.Name{Space: wordNS, Local: "bidi"}) {
 				return false
 			}
-		case "sz", "b", "i", "rtl", "vanish", "color", "lang":
+			for _, slot := range []string{"eastAsia", "bidi"} {
+				if value, present := nativeAttr(property, wordNS, slot); present && !nativeScriptLanguageTag(value) {
+					return false
+				}
+			}
+		case "sz", "b", "i", "rtl", "vanish", "color":
 			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}) {
+				return false
+			}
+		case "kern":
+			if _, ok := nativeKerningThreshold(property, wordNS); !ok {
 				return false
 			}
 		case "szCs":
@@ -2179,6 +2201,11 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 			continue
 		}
 		switch {
+		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "bookmarkStart"}) && nativeExactEmptyBookmark(paragraph.Children[childIndex:], extractor.wordNS):
+			// A closed, empty bookmark has no painted content. Its source is
+			// retained and the containing paragraph remains non-editable.
+			unsafe = true
+			childIndex++
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "r"}):
 			if hasNativeFieldBegin(child, extractor.wordNS) {
 				unsafe = true
@@ -2458,8 +2485,21 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	if !okWidth || !okHeight {
 		return refuse("INVALID_DRAWING_EXTENT", "Picture extent must contain positive safe cx/cy values", extent)
 	}
-	if effects := directNativeChildren(container, wpNS, "effectExtent"); len(effects) > 1 || (len(effects) == 1 && !nativeZeroExtent(effects[0])) {
-		return refuse("DRAWING_EFFECTS_PRESERVED", "Non-zero DrawingML effect extents are preserved but not projected", container)
+	var inlineEffects *NativeDrawingCropV1
+	if effects := directNativeChildren(container, wpNS, "effectExtent"); len(effects) > 0 {
+		if len(effects) != 1 {
+			return refuse("DRAWING_EFFECTS_PRESERVED", "Ambiguous drawing effect extents", container)
+		}
+		if !nativeZeroExtent(effects[0]) {
+			if container.Name.Local != "inline" {
+				return refuse("DRAWING_EFFECTS_PRESERVED", "Floating drawing effect extents remain unqualified", container)
+			}
+			var valid bool
+			inlineEffects, valid = nativeInlineEffectExtents(effects[0])
+			if !valid {
+				return refuse("DRAWING_EFFECTS_PRESERVED", "Inline effect extents must be exact bounded nonnegative EMUs", container)
+			}
+		}
 	}
 	for _, attrName := range []string{"distT", "distB", "distL", "distR"} {
 		if raw, present := nativeUnqualifiedAttr(container, attrName); present && raw != "0" {
@@ -2524,8 +2564,9 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		ID: extractor.objectID("drawing", partName, node, ""), Anchor: extractor.anchor(partName, node),
 		RelationshipID: nativeString(relID), MediaPart: nativeString(mediaPart), ContentType: nativeString(contentType),
 		Placement: "inline", WidthEMU: nativeInt64(width), HeightEMU: nativeInt64(height),
-		SourceCrop: crop,
-		EditPolicy: nativeReadOnlyPolicy("EXTRACT_ONLY", "Native picture extraction does not yet expose guarded drawing replacement"),
+		SourceCrop:            crop,
+		InlineEffectExtentEMU: inlineEffects,
+		EditPolicy:            nativeReadOnlyPolicy("EXTRACT_ONLY", "Native picture extraction does not yet expose guarded drawing replacement"),
 	}
 	xfrm := firstDirectNativeChild(firstDirectNativeChild(picture, picNS, "spPr"), aNS, "xfrm")
 	if rotation, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok {
@@ -2786,6 +2827,9 @@ func nativePositiveInt64Attr(node *nativeXMLNode, namespace, local string) (int6
 }
 
 func nativeZeroExtent(node *nativeXMLNode) bool {
+	if !nativeExactLeaf(node, xml.Name{Local: "l"}, xml.Name{Local: "t"}, xml.Name{Local: "r"}, xml.Name{Local: "b"}) {
+		return false
+	}
 	for _, name := range []string{"l", "t", "r", "b"} {
 		value, ok := nativeUnqualifiedAttr(node, name)
 		if !ok || value != "0" {
@@ -2934,6 +2978,13 @@ func nativeVerticalAlignmentValue(node *nativeXMLNode, wordNS string) (string, b
 }
 
 func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID string, node *nativeXMLNode) (*NativeRunPropertiesV1, bool) {
+	properties, unsafe, preserveOnly := extractor.extractRunPropertiesState(partName, paragraphID, node)
+	return properties, unsafe || preserveOnly
+}
+
+// Keep source-layout invalidity separate from valid but noneditable metadata.
+// Paragraph marks already retain a read-only policy even when fully qualified.
+func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphID string, node *nativeXMLNode) (*NativeRunPropertiesV1, bool, bool) {
 	properties := &NativeRunPropertiesV1{}
 	unsafe := false
 	preserveOnly := false
@@ -3015,6 +3066,21 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 			} else {
 				unsafe = true
 			}
+		case "kern":
+			preserveOnly = true
+			if _, ok := nativeKerningThreshold(child, extractor.wordNS); !ok || len(directNativeChildren(node, extractor.wordNS, "kern")) != 1 {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Kerning threshold is malformed, duplicate or outside the bounded whole half-point subset")
+			}
+		case "szCs":
+			// The resolved source context, not extraction, determines whether
+			// this preserved script slot is inactive. Never expose it for edits.
+			preserveOnly = true
+			value, ok := nativePositiveIntAttr(child, extractor.wordNS, "val")
+			if !ok || value > 3276 || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || len(directNativeChildren(node, extractor.wordNS, "szCs")) != 1 {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Complex-script size is malformed, duplicate or outside the bounded whole half-point subset")
+			}
 		case "noProof":
 			preserveOnly = true
 			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
@@ -3038,7 +3104,7 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 	if unsafe {
 		extractor.addUnsupported("PARTIAL_RUN_PROPERTIES", "run-properties", paragraphID, partName, node, "Only the conservative v1 run-property subset is exposed")
 	}
-	return properties, unsafe || preserveOnly
+	return properties, unsafe, preserveOnly
 }
 
 func nativeOnOff(node *nativeXMLNode, namespace string) (bool, bool) {
@@ -3358,6 +3424,7 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 					table.Borders = borders
 				} else {
 					unsafe = true
+					extractor.addUnsupported("UNMODELED_TABLE_PROPERTY", "table-properties", id, partName, property, "Table borders do not have an exact supported source color and structure")
 				}
 			} else {
 				unsafe = true
@@ -3572,7 +3639,7 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			extractor.addUnsupported("FOREIGN_SECTION_MARKUP", "sections", id, extractor.mainPart, child, "Foreign section markup is preserved verbatim")
 			continue
 		}
-		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" || child.Name.Local == "docGrid" {
+		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" || child.Name.Local == "docGrid" || child.Name.Local == "formProt" || child.Name.Local == "noEndnote" {
 			if seenSingleton[child.Name.Local] {
 				extractor.addUnsupported("DUPLICATE_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Duplicate modeled section-property singletons make exact pagination geometry ambiguous")
 				continue
@@ -3580,6 +3647,17 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			seenSingleton[child.Name.Local] = true
 		}
 		switch child.Name.Local {
+		case "formProt":
+			value, present := nativeAttr(child, extractor.wordNS, "val")
+			enabled, valid := nativeOnOff(child, extractor.wordNS)
+			if !present || value == "" || !valid || enabled || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Only exact explicitly disabled section form protection is layout-neutral")
+			}
+		case "noEndnote":
+			_, valid := nativeOnOff(child, extractor.wordNS)
+			if !valid || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || !extractor.proveNoContentEndnotes() {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Endnote placement remains unqualified unless the package proves no content endnotes or references")
+			}
 		case "docGrid":
 			if !nativeInactiveSectionGrid(child, extractor.wordNS) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Active or unqualified document-grid markup remains unsupported")

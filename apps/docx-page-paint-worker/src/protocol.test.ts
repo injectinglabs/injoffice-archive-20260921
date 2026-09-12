@@ -7,6 +7,19 @@ import {
 } from './protocol.js'
 
 describe('native DOCX page-paint worker protocol', () => {
+  it('refuses undeclared or malformed host-size policy objects', async () => {
+    for (const font_size_policy of [{ kind: 'word-default', half_points: 22 }, { kind: 'host-default-size-v1', half_points: 24 }, { kind: 'host-default-size-v1', half_points: 22, extra: true }]) {
+      const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'size:malformed', op: 'render-approximate', input: { prepare: {}, eligibility: {}, font_size_policy } })
+      expect(response).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED' } })
+    }
+  })
+  it('keeps automatic-border approximation opt-in and rejects caller policy/font overrides', async () => {
+    for (const input of [{}, { prepare: {}, eligibility: {} }, { prepare: {}, legacy_eligibility: {}, policy: 'auto-is-black' }, { prepare: {}, host_font_manifest_path: '/caller/fonts.json' }, { prepare: { font_manifest: {} } }]) {
+      const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'automatic:malformed', op: 'render-auto-borders', input })
+      expect(response).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED' } })
+      expect(response).not.toHaveProperty('result')
+    }
+  })
   it('requires an explicit exact approximate envelope and rejects caller font overrides', async () => {
     for (const input of [{}, { prepare: {}, eligibility: {}, host_font_manifest_path: '/caller/fonts.json' }, { prepare: { font_manifest: {} }, eligibility: {} }]) {
       const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'approximate:malformed', op: 'render-approximate', input })

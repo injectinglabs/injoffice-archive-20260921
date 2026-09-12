@@ -26,6 +26,19 @@ function setPointer(root: Record<string, any>, pointer: string, value: unknown):
 }
 
 describe('native DOCX contract v1', () => {
+  it('bounds inline effect extents and rejects malformed or floating projections', () => {
+    for (const effect of [{left:0,top:0,right:0}, {left:-1,top:0,right:0,bottom:0}, {left:0.5,top:0,right:0,bottom:0}, {left:91_440_001,top:0,right:0,bottom:0}, {left:0,top:0,right:0,bottom:0,extra:1}]) {
+      const value = structuredClone(fixture)
+      const drawing = value.body.blocks[0]!.paragraph!.runs.find(run => run.drawing)!.drawing!
+      drawing.inline_effect_extent_emu = effect as any
+      expect(decodeNativeDocxDocument(value).ok).toBe(false)
+    }
+    const value = structuredClone(fixture)
+    const drawing = value.body.blocks[0]!.paragraph!.runs.find(run => run.drawing)!.drawing!
+    drawing.inline_effect_extent_emu = {left:0,top:0,right:0,bottom:0}
+    drawing.placement = 'floating'
+    expect(decodeNativeDocxDocument(value).ok).toBe(false)
+  })
   it('accepts the cross-language fixture with native stories, references, tables, and drawings', () => {
     const decoded = decodeNativeDocxDocument(fixture)
     expect(decoded.ok).toBe(true)

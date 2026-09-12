@@ -210,6 +210,21 @@ describe('canonical HarfBuzz text shaper v1', () => {
     if (!('status' in kerned) && !('status' in unkerned)) expect(kerned.advanceInlineMilliPoints).toBeLessThan(unkerned.advanceInlineMilliPoints)
   })
 
+  it('allows disabling absent kern without enabling unadvertised features', () => {
+    const noKern = mutatedResource(bytes => {
+      for (const tag of ['GPOS','kern']) {
+        const record = tableRecord(bytes,tag)
+        bytes[record+3] = 'X'.charCodeAt(0)
+      }
+    })
+    const shaper = createHarfBuzzTextShaperV1({sourceRevision:'git:no-kern'})
+    const disabled = run('AV',{features:[{tag:'kern',value:0}]})
+    const result = shaper.shape({run:disabled,startUtf16:0,endUtf16:2,font:noKern})
+    expect('status' in result).toBe(false)
+    const enabled = run('AV',{features:[{tag:'kern',value:1}]})
+    expect(refusalCode(shaper.shape({run:enabled,startUtf16:0,endUtf16:2,font:noKern}))).toBe('unsupported-feature')
+  })
+
   it('keeps combining marks and supplementary Unicode on complete UTF-16 clusters', () => {
     const combining = shape('A\u0301')
     expect('status' in combining).toBe(false)

@@ -102,6 +102,7 @@ export interface NativeDocxDrawingV1 {
   flip_horizontal?: boolean
   flip_vertical?: boolean
   source_crop?: { left: number; top: number; right: number; bottom: number }
+  inline_effect_extent_emu?: { left: number; top: number; right: number; bottom: number }
   x_emu?: number
   y_emu?: number
   horizontal_relative_from?: string
@@ -373,7 +374,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
   RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'floating_layer', 'stacking_order'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
@@ -631,6 +632,14 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
   const placement = enumValue(entry.placement, `${path}/placement`, ['inline', 'floating'], issues)
   integer(entry.width_emu, `${path}/width_emu`, issues, 1)
   integer(entry.height_emu, `${path}/height_emu`, issues, 1)
+  if (entry.inline_effect_extent_emu !== undefined) {
+    const effect = object(entry.inline_effect_extent_emu, `${path}/inline_effect_extent_emu`, DOCX_NATIVE_V1_BINDING_FIELDS.DrawingCropV1, issues)
+    if (placement !== 'inline') add(issues, 'INVALID_VALUE', `${path}/inline_effect_extent_emu`, 'effect extents are inline-only')
+    if (effect) for (const key of ['left','top','right','bottom'] as const) {
+      const value = integer(effect[key], `${path}/inline_effect_extent_emu/${key}`, issues, 0)
+      if (typeof value === 'number' && value > 91_440_000) add(issues, 'OUT_OF_RANGE', `${path}/inline_effect_extent_emu/${key}`, 'effect extent exceeds 100 inches')
+    }
+  }
   if (entry.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(entry.rotation_degrees as number)) add(issues, 'INVALID_VALUE', `${path}/rotation_degrees`, 'must equal 0, 90, 180 or 270')
   booleanValue(entry.flip_horizontal, `${path}/flip_horizontal`, issues, false)
   booleanValue(entry.flip_vertical, `${path}/flip_vertical`, issues, false)

@@ -100,6 +100,7 @@ type NativeDrawingV1 struct {
 	FlipHorizontal         *bool                `json:"flip_horizontal,omitempty"`
 	FlipVertical           *bool                `json:"flip_vertical,omitempty"`
 	SourceCrop             *NativeDrawingCropV1 `json:"source_crop,omitempty"`
+	InlineEffectExtentEMU  *NativeDrawingCropV1 `json:"inline_effect_extent_emu,omitempty"`
 	XEMU                   *int64               `json:"x_emu,omitempty"`
 	YEMU                   *int64               `json:"y_emu,omitempty"`
 	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
@@ -1047,6 +1048,20 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 	v.oneOf(drawing.Placement, path+"/placement", "inline", "floating")
 	v.positive(drawing.WidthEMU, path+"/width_emu")
 	v.positive(drawing.HeightEMU, path+"/height_emu")
+	if effect := drawing.InlineEffectExtentEMU; effect != nil {
+		if drawing.Placement != "inline" {
+			v.add("INVALID_VALUE", path+"/inline_effect_extent_emu", "effect extent projection is inline-only")
+		}
+		for _, field := range []struct {
+			name  string
+			value *int64
+		}{{"left", effect.Left}, {"top", effect.Top}, {"right", effect.Right}, {"bottom", effect.Bottom}} {
+			v.nonnegative(field.value, path+"/inline_effect_extent_emu/"+field.name)
+			if field.value != nil && *field.value > 91440000 {
+				v.add("OUT_OF_RANGE", path+"/inline_effect_extent_emu/"+field.name, "effect extent exceeds 100 inches")
+			}
+		}
+	}
 	if drawing.RotationDegrees != nil && *drawing.RotationDegrees != 0 && *drawing.RotationDegrees != 90 && *drawing.RotationDegrees != 180 && *drawing.RotationDegrees != 270 {
 		v.add("INVALID_VALUE", path+"/rotation_degrees", "bounded inline transforms support only quarter turns")
 	}

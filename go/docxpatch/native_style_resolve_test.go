@@ -65,6 +65,9 @@ func TestNativeStyleDiagnosticsFollowOnlyActiveCascadeConsumers(t *testing.T) {
 		parts := resolvedStylesTestParts(styles)
 		if active {
 			parts["word/document.xml"] = strings.Replace(parts["word/document.xml"], "<w:p>", `<w:p><w:pPr><w:pStyle w:val="Child"/></w:pPr>`, 1)
+			// Tab stops now qualify for plain text; retain an actual active tab
+			// consumer here so this test still checks source-scoped refusal.
+			parts["word/document.xml"] = strings.Replace(parts["word/document.xml"], "<w:r>", "<w:r><w:tab/>", 1)
 		}
 		data := buildNativeDOCX(t, nativeEntries(parts))
 		before := append([]byte(nil), data...)

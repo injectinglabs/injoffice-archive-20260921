@@ -8,7 +8,7 @@ import (
 
 func TestNativeNeutralSourceProperties(t *testing.T) {
 	for _, ns := range []string{wordMLTransitional, wordMLStrict} {
-		for _, name := range []string{"noProof", "autoSpaceDE", "autoSpaceDN"} {
+		for _, name := range []string{"noProof", "autoSpaceDE", "autoSpaceDN", "adjustRightInd"} {
 			for _, value := range []string{"0", "false", "off", "1", "true", "on", "bad", ""} {
 				attr := ` w:val="` + value + `"`
 				if value == "" {
@@ -44,7 +44,7 @@ func TestNativeNeutralSourceProperties(t *testing.T) {
 }
 
 func TestNativeNeutralPropertiesPreserveMutationBoundary(t *testing.T) {
-	for _, name := range []string{"noProof", "autoSpaceDE", "autoSpaceDN"} {
+	for _, name := range []string{"noProof", "autoSpaceDE", "autoSpaceDN", "adjustRightInd"} {
 		for _, malformed := range []bool{false, true} {
 			property := `<w:` + name + ` w:val="0"/>`
 			if malformed {

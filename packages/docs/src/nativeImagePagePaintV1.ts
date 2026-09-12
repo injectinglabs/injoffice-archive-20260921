@@ -60,6 +60,10 @@ export interface NativeDocxQualifiedInlineImageV1 {
   height_emu: number
   width_millipoints: number
   height_millipoints: number
+  layout_width_millipoints: number
+  layout_ascent_millipoints: number
+  layout_descent_millipoints: number
+  content_offset_x_millipoints: number
   source_crop: { left: number; top: number; right: number; bottom: number; unit: 'one-hundred-thousandth' }
   transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
 }
@@ -247,6 +251,20 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
   const width = emuToMilliPoints(drawing.width_emu)
   const height = emuToMilliPoints(drawing.height_emu)
   if (width === undefined || height === undefined) return { ok: false, code: 'unsupported-image', message: 'Picture EMU extent is not exactly representable in integer milli-points within the geometry bound' }
+  const extent = drawing.inline_effect_extent_emu
+  const effects = { left: 0, top: 0, right: 0, bottom: 0 }
+  if (extent) {
+    if (floating || Object.keys(extent).sort().join(',') !== 'bottom,left,right,top') return { ok: false, code: 'unsupported-image', message: 'Effect extents require one exact inline layout box' }
+    for (const key of ['left','top','right','bottom'] as const) {
+      const value = extent[key]
+      const converted = value === 0 ? 0 : emuToMilliPoints(value)
+      if (converted === undefined || value > 91_440_000) return { ok: false, code: 'unsupported-image', message: 'Inline effect extents are not exact bounded nonnegative milli-points' }
+      effects[key] = converted
+    }
+  }
+  const layoutWidth = width + effects.left + effects.right
+  const layoutAscent = height + effects.top
+  if (layoutWidth > DOCX_INLINE_IMAGE_LIMITS.maxGeometryMilliPoints || layoutAscent + effects.bottom > DOCX_INLINE_IMAGE_LIMITS.maxGeometryMilliPoints) return { ok: false, code: 'resource-limit', message: 'Inline effect layout box exceeds geometry bounds' }
   return {
     ok: true,
     value: {
@@ -265,6 +283,10 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       height_emu: drawing.height_emu,
       width_millipoints: width,
       height_millipoints: height,
+      layout_width_millipoints: layoutWidth,
+      layout_ascent_millipoints: layoutAscent,
+      layout_descent_millipoints: effects.bottom === 0 ? 0 : -effects.bottom,
+      content_offset_x_millipoints: effects.left,
       source_crop: { left: crop.left, top: crop.top, right: crop.right, bottom: crop.bottom, unit: 'one-hundred-thousandth' },
       transform: { rotation_degrees: drawing.rotation_degrees ?? 0, flip_horizontal: drawing.flip_horizontal ?? false, flip_vertical: drawing.flip_vertical ?? false },
     },

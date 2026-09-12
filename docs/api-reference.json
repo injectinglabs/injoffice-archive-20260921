@@ -3202,6 +3202,11 @@
               "signature": "export declare function decodeNativeDocxApproximatePaginatedLayoutForRequest(value: unknown, requestValue: unknown, eligibility: unknown): DecodeNativeDocxPaginatedLayoutResult"
             },
             {
+              "name": "decodeNativeDocxAutomaticBorderPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxAutomaticBorderPreviewV1(value: unknown):"
+            },
+            {
               "name": "decodeNativeDocxDocument",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult"
@@ -3345,6 +3350,21 @@
               "name": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL",
               "kind": "export",
               "signature": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL"
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_POLICY: \"auto-border-on-qualified-white-v1\""
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_PREVIEW_PROTOCOL: \"injoffice.docx.auto-border-preview\""
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_WARNING: \"Approximate read-only preview: automatic table borders use black against a source-qualified white preview background; this is not Microsoft Word color fidelity.\""
             },
             {
               "name": "DOCX_DEFAULT_TAB_STOP_TWIPS",
@@ -3647,9 +3667,24 @@
               "signature": "export declare const NATIVE_DOCX_FONT_INVENTORY_VERSION: 1"
             },
             {
+              "name": "NativeDocxAbsentFontSizeV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximatedFontSizeV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatePagePreviewV1"
+            },
+            {
+              "name": "NativeDocxApproximateRuntimeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxApproximateRuntimeV1"
             },
             {
               "name": "NativeDocxApproximationEligibilityV1",
@@ -3665,6 +3700,16 @@
               "name": "NativeDocxAuthoritativeMediaAssetV1",
               "kind": "interface",
               "signature": "export interface NativeDocxAuthoritativeMediaAssetV1"
+            },
+            {
+              "name": "NativeDocxAutomaticBorderEvidenceV1",
+              "kind": "type",
+              "signature": "NativeDocxAutomaticBorderEvidenceV1"
+            },
+            {
+              "name": "NativeDocxAutomaticBorderPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxAutomaticBorderPreviewV1"
             },
             {
               "name": "NativeDocxBlockV1",
@@ -3840,6 +3885,11 @@
               "name": "NativeDocxHeaderFooterRegionV1",
               "kind": "type",
               "signature": "export type NativeDocxHeaderFooterRegionV1 = 'header' | 'footer'"
+            },
+            {
+              "name": "NativeDocxHostDefaultSizePolicyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxHostDefaultSizePolicyV1"
             },
             {
               "name": "NativeDocxHostFontsV1",
@@ -4609,7 +4659,12 @@
             {
               "name": "renderNativeDocxApproximatePagePreviewV1",
               "kind": "function",
-              "signature": "export declare function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1; }): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1>"
+              "signature": "export declare function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibilityValue: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1>"
+            },
+            {
+              "name": "renderNativeDocxAutomaticBorderPreviewV1",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1, legacyEligibility?: unknown): Promise<NativeDocxAutomaticBorderPreviewV1>"
             },
             {
               "name": "ShapeNativeDocxLinesResult",
@@ -4645,6 +4700,11 @@
               "name": "validateNativeDocxPaginatedLayoutSourceV1",
               "kind": "function",
               "signature": "export declare function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1): NativeDocxValidationIssue[]"
+            },
+            {
+              "name": "validNativeDocxHostDefaultSizePolicyV1",
+              "kind": "export",
+              "signature": "validNativeDocxHostDefaultSizePolicyV1"
             }
           ]
         },
@@ -5014,6 +5074,11 @@
               "signature": "decodeNativeDocxApproximatePagePreviewV1"
             },
             {
+              "name": "decodeNativeDocxAutomaticBorderPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxAutomaticBorderPreviewV1(value: unknown):"
+            },
+            {
               "name": "decodeNativeDOCXFontInventoryV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDOCXFontInventoryV1(json: string): NativeDOCXFontInventoryV1"
@@ -5027,6 +5092,21 @@
               "name": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL",
               "kind": "export",
               "signature": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL"
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_POLICY: \"auto-border-on-qualified-white-v1\""
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_PREVIEW_PROTOCOL: \"injoffice.docx.auto-border-preview\""
+            },
+            {
+              "name": "DOCX_AUTO_BORDER_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_WARNING: \"Approximate read-only preview: automatic table borders use black against a source-qualified white preview background; this is not Microsoft Word color fidelity.\""
             },
             {
               "name": "DOCX_EMBEDDED_FONT_RESOLVER_ID",
@@ -5049,9 +5129,24 @@
               "signature": "export declare const DOCX_PAGE_PAINT_COMPILER_VERSION: 1"
             },
             {
+              "name": "NativeDocxAbsentFontSizeV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximatedFontSizeV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatePagePreviewV1"
+            },
+            {
+              "name": "NativeDocxApproximateRuntimeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxApproximateRuntimeV1"
             },
             {
               "name": "NativeDocxApproximationEligibilityV1",
@@ -5067,6 +5162,21 @@
               "name": "NativeDocxAuthoritativeMediaAssetV1",
               "kind": "type",
               "signature": "NativeDocxAuthoritativeMediaAssetV1"
+            },
+            {
+              "name": "NativeDocxAutomaticBorderEvidenceV1",
+              "kind": "type",
+              "signature": "NativeDocxAutomaticBorderEvidenceV1"
+            },
+            {
+              "name": "NativeDocxAutomaticBorderPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxAutomaticBorderPreviewV1"
+            },
+            {
+              "name": "NativeDocxHostDefaultSizePolicyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxHostDefaultSizePolicyV1"
             },
             {
               "name": "NativeDocxHostFontsV1",
@@ -5101,7 +5211,17 @@
             {
               "name": "renderNativeDocxApproximatePagePreviewV1",
               "kind": "function",
-              "signature": "export declare function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1; }): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1>"
+              "signature": "export declare function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibilityValue: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1>"
+            },
+            {
+              "name": "renderNativeDocxAutomaticBorderPreviewV1",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1, legacyEligibility?: unknown): Promise<NativeDocxAutomaticBorderPreviewV1>"
+            },
+            {
+              "name": "validNativeDocxHostDefaultSizePolicyV1",
+              "kind": "export",
+              "signature": "validNativeDocxHostDefaultSizePolicyV1"
             }
           ]
         },
@@ -5113,6 +5233,11 @@
               "name": "decodeNativeDocxApproximatePagePreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxApproximatePagePreviewV1(value: unknown):"
+            },
+            {
+              "name": "decodeNativeDocxAutomaticBorderPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxAutomaticBorderPreviewV1(value: unknown):"
             },
             {
               "name": "decodeNativeDocxPagePaintV1",
@@ -5140,6 +5265,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_PREVIEW_WARNING: 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.'"
             },
             {
+              "name": "DOCX_AUTO_BORDER_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_AUTO_BORDER_PREVIEW_PROTOCOL: \"injoffice.docx.auto-border-preview\""
+            },
+            {
               "name": "DOCX_PAGE_PAINT_LIMITS",
               "kind": "const",
               "signature": "export declare const DOCX_PAGE_PAINT_LIMITS: Readonly<"
@@ -5158,6 +5288,11 @@
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "NativeDocxApproximatePagePreviewV1"
+            },
+            {
+              "name": "NativeDocxAutomaticBorderPreviewV1",
+              "kind": "type",
+              "signature": "NativeDocxAutomaticBorderPreviewV1"
             },
             {
               "name": "NativeDocxFillTextHighlightCommandV1",

@@ -162,6 +162,35 @@ function makeTextOnly(document: NativeDocxDocumentV1, text: string): void {
   paragraph.runs[0]!.text = text
 }
 
+describe('authored DOCX kerning threshold', () => {
+  it('rejects malformed thresholds for runs and paragraph marks', () => {
+    for(const value of [0,-1,3277,1.5,'20',null]) {
+      for(const target of ['run','mark']) {
+        const resolved=resolvedLayout(nativeDocument())
+        const props=target==='run'?resolved.runs[0]!.properties:resolved.paragraphs[0]!.paragraph_mark_properties
+        Object.assign(props,{kerning_min_size_half_points:value})
+        expect(decodeNativeDocxResolvedLayout(resolved).ok).toBe(false)
+      }
+    }
+  })
+  it('explicitly disables absent/below-threshold kerning and enables inclusive thresholds', async () => {
+    for (const [threshold, expected] of [[undefined,0],[21,0],[20,1],[1,1]] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document,'AV')
+      const resolved = resolvedLayout(document)
+      resolved.runs[0]!.properties.kerning_min_size_half_points = threshold
+      const providers = fakeProviders([])
+      const seen: number[] = []
+      const originalShape = providers.shaper.shape.bind(providers.shaper)
+      providers.shaper.shape = input => { if(input.run.text==='AV')seen.push(input.run.features?.find(feature=>feature.tag==='kern')?.value ?? -1); return originalShape(input) }
+      const result = await shapeNativeDocxLinesV1(request(document,resolved),providers)
+      expect(result.ok).toBe(true)
+      expect(seen.length).toBeGreaterThan(0)
+      expect(seen.every(value=>value===expected)).toBe(true)
+    }
+  })
+})
+
 function appendParagraph(document: NativeDocxDocumentV1, id: string, runID: string, text: string): void {
   const source = document.body.blocks[0]!.paragraph!
   const paragraph = structuredClone(source)
@@ -395,6 +424,17 @@ describe('shapeNativeDocxLinesV1', () => {
     const fragments = result.value.paragraphs[0]!.lines.flatMap((line) => line.fragments)
     expect(fragments.flatMap((fragment) => fragment.glyphs).map((glyph) => glyph.glyph_id)).toContain(5_044)
     expect(fragments.every((fragment) => fragment.face_id === realFace.faceId)).toBe(true)
+    makeTextOnly(document,'AV')
+    const advances: number[] = []
+    for (const threshold of [undefined,21,20,1]) {
+      resolved.runs[0]!.properties.kerning_min_size_half_points = threshold
+      const shaped = await shapeNativeDocxLinesV1(input,{resolver,shaper})
+      expect(shaped.ok).toBe(true)
+      if(shaped.ok) advances.push(shaped.value.paragraphs[0]!.lines.flatMap(line=>line.fragments).flatMap(fragment=>fragment.glyphs).reduce((sum,glyph)=>sum+glyph.advance_x_millipoints,0))
+    }
+    expect(advances[0]).toBe(advances[1])
+    expect(advances[2]).toBe(advances[3])
+    expect(advances[2]).toBeLessThan(advances[0]!)
   })
 
   it('joins durable ids, uses resolved properties, converts units, wraps clusters, and honors hard breaks', async () => {

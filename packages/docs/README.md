@@ -1,5 +1,7 @@
 # @injoffice/docs
 
+Native DOCX text shaping honors inherited `w:kern` minimum sizes in bounded whole half-points (1–3276). The resolved `kerning_min_size_half_points` threshold enables kerning when the resolved `w:sz` is at least that threshold; absent thresholds explicitly disable kerning, as specified by ECMA-376 §17.3.2.19. Direct kerning markup remains source-preserved and does not grant replacement permission. Unit-bearing, malformed, duplicate, and out-of-range thresholds remain unqualified. This may change advances from earlier previews that inherited HarfBuzz's default kerning without an authored DOCX setting.
+
 Renderer-independent Docs contracts and layout helpers. Native DOCX v1 is the
 strict JSON boundary between authoritative `go/docxpatch` parsing/persistence
 and future browser layout and ProseMirror adapters.
@@ -266,6 +268,31 @@ settings still refuse. Active unsupported math, VML content, missing fonts and
 unsupported geometry are not made renderable by this settings policy. The
 result remains a distinct, read-only approximate envelope; strict pagination
 and mutation safety are unchanged.
+
+Current-layout approximation reserves expanded line boxes using natural ascent
+from the top and leaves extra leading below the text. This declared host policy
+is not Word baseline fidelity; strict rendering still requires natural line
+height, and compressed line boxes remain refused in both paths.
+
+The same current-layout approximation can accept an explicit host-selected
+`fontSizePolicy: { kind: 'host-default-size-v1', half_points: 22 }` only for
+native-source-attested missing sizes (`absent_font_sizes` eligibility facts).
+This is an 11 pt consumer choice, not an authored or Microsoft default.
+The output retains the source omissions, chosen sizes and a visible warning;
+existing sizes and malformed/unsupported source diagnostics are never replaced.
+Strict rendering continues to refuse missing required font metrics.
+
+`renderNativeDocxAutomaticBorderPreviewV1` is a separate opt-in read-only
+contrast policy for native-source-qualified automatic table borders. It uses
+black only on a proven white preview surface with absent or exact white
+effective table/cell fills. Unknown backgrounds, conflicting borders and
+unqualified style effects remain refused. The source model and strict
+diagnostics are unchanged; the distinct `injoffice.docx.auto-border-preview`
+envelope retains the policy, source-bound evidence and original diagnostic
+identities. Consumers must render its pages on the declared opaque white
+surface and display its approximation warning. This is not a claim of Word
+automatic-color fidelity. Optional legacy-settings eligibility is validated
+independently; this rendering policy does not grant a settings exception.
 
 Approximate body `PAGE`/`NUMPAGES` fields use the same bounded fixed-point solver
 as strict layout: field text derives from final page placement, not cached

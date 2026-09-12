@@ -973,7 +973,11 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       const coveragePrefix = request.page_field_variants && 'region' in placed ? `${page.id}:` : ''
       selectedParagraphIDs.set(coveragePrefix + paragraph.paragraph_id, { paragraphID: paragraph.paragraph_id, prefix: coveragePrefix, ordinal: page.ordinal })
       if (paragraph.alignment === 'distribute') return { ok: true, value: refusal(provenance, 'unsupported-source', paragraph.paragraph_id, 'Distributed character expansion is outside page-paint v1') }
-      if (line.line_height_millipoints !== line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline') }
+      const naturalHeight = line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints
+      // Current-layout approximation deliberately anchors natural ascent at
+      // the top of an expanded line box. It does not claim Word leading
+      // distribution or permit clipping/compressed-line semantics.
+      if (line.line_height_millipoints !== naturalHeight && !(approximateLegacySettings && line.line_height_millipoints >= naturalHeight)) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline; only explicit current-layout approximation supports expanded line boxes') }
       if (line.hard_break_after && !coveredLineIDs.has(coveragePrefix + line.id)) sourceHardBreakCounts.set(coveragePrefix + line.hard_break_after.source_run_id, (sourceHardBreakCounts.get(coveragePrefix + line.hard_break_after.source_run_id) ?? 0) + 1)
       coveredLineIDs.add(coveragePrefix + line.id)
       let fragmentX = placed.x_millipoints
@@ -1028,9 +1032,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             const image = qualified.value
             const asset = mediaAssets.get(image.asset_id)
             if (!asset || asset.part_name !== image.part_name || asset.content_type !== image.content_type || asset.content_digest !== image.content_digest) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment does not exact-join one canonical content-addressed media asset') }
-            if (fragment.advance_inline_millipoints !== (image.floating ? 0 : image.width_millipoints) || fragment.ascent_millipoints !== (image.floating ? 0 : image.height_millipoints) || fragment.descent_millipoints !== 0 || fragment.line_gap_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment geometry changed after exact EMU projection') }
+            if (fragment.advance_inline_millipoints !== (image.floating ? 0 : image.layout_width_millipoints) || fragment.ascent_millipoints !== (image.floating ? 0 : image.layout_ascent_millipoints) || fragment.descent_millipoints !== (image.floating ? 0 : image.layout_descent_millipoints) || fragment.line_gap_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment geometry changed after exact EMU projection') }
             const y = image.floating?.y_millipoints ?? baselineY - image.height_millipoints
-            const x = image.floating?.x_millipoints ?? fragmentX
+            const x = image.floating?.x_millipoints ?? fragmentX + image.content_offset_x_millipoints
             if (image.floating && (x + image.width_millipoints > page.width_millipoints || y + image.height_millipoints > page.height_millipoints)) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.id, 'Floating image must fit entirely inside its anchor paragraph page') }
             if (!Number.isSafeInteger(y) || y < 0) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Image placement exceeds bounded non-negative page coordinates') }
             contentCommands.push({
@@ -1295,7 +1299,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             if (fragment.source_kind === 'image') {
               const run = nativeRuns.get(fragment.source_id)
               const qualified = run?.drawing ? qualifyNativeDocxInlineImageV1(request.value.pagination_request.document, run.id, run.drawing) : undefined
-              if (qualified?.ok) expectedImages.push({ floating: qualified.value.floating, pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: qualified.value.floating?.x_millipoints ?? fragmentX, y: qualified.value.floating?.y_millipoints ?? placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
+              if (qualified?.ok) expectedImages.push({ floating: qualified.value.floating, pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: qualified.value.floating?.x_millipoints ?? fragmentX + qualified.value.content_offset_x_millipoints, y: qualified.value.floating?.y_millipoints ?? placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
             }
             fragmentX += fragment.advance_inline_millipoints
           })

@@ -79,11 +79,12 @@ type NativeResolvedRunV1 struct {
 }
 
 type NativeResolvedTableV1 struct {
-	Geometry       *NativeResolvedTableGeometryV1 `json:"geometry,omitempty"`
-	TableID        string                         `json:"table_id"`
-	StyleID        *string                        `json:"style_id,omitempty"`
-	Borders        *NativeTableBordersV1          `json:"borders,omitempty"`
-	CellShadingRGB *string                        `json:"cell_shading_rgb,omitempty"`
+	AutomaticBorderPreview *NativeAutomaticTableBorderPreviewV1 `json:"automatic_border_preview,omitempty"`
+	Geometry               *NativeResolvedTableGeometryV1       `json:"geometry,omitempty"`
+	TableID                string                               `json:"table_id"`
+	StyleID                *string                              `json:"style_id,omitempty"`
+	Borders                *NativeTableBordersV1                `json:"borders,omitempty"`
+	CellShadingRGB         *string                              `json:"cell_shading_rgb,omitempty"`
 }
 
 type NativeResolvedParagraphPropertiesV1 struct {
@@ -106,17 +107,18 @@ type NativeResolvedParagraphPropertiesV1 struct {
 }
 
 type NativeResolvedRunPropertiesV1 struct {
-	FontFamily        *string `json:"font_family,omitempty"`
-	FontSizeHalfPoint *int    `json:"font_size_half_points,omitempty"`
-	Bold              *bool   `json:"bold,omitempty"`
-	Italic            *bool   `json:"italic,omitempty"`
-	Underline         *string `json:"underline,omitempty"`
-	VerticalAlignment *string `json:"vertical_alignment,omitempty"`
-	Color             *string `json:"color,omitempty"`
-	Highlight         *string `json:"highlight,omitempty"`
-	Language          *string `json:"language,omitempty"`
-	RTL               *bool   `json:"rtl,omitempty"`
-	Hidden            *bool   `json:"hidden,omitempty"`
+	KerningMinSizeHalfPoints *int    `json:"kerning_min_size_half_points,omitempty"`
+	FontFamily               *string `json:"font_family,omitempty"`
+	FontSizeHalfPoint        *int    `json:"font_size_half_points,omitempty"`
+	Bold                     *bool   `json:"bold,omitempty"`
+	Italic                   *bool   `json:"italic,omitempty"`
+	Underline                *string `json:"underline,omitempty"`
+	VerticalAlignment        *string `json:"vertical_alignment,omitempty"`
+	Color                    *string `json:"color,omitempty"`
+	Highlight                *string `json:"highlight,omitempty"`
+	Language                 *string `json:"language,omitempty"`
+	RTL                      *bool   `json:"rtl,omitempty"`
+	Hidden                   *bool   `json:"hidden,omitempty"`
 }
 
 type NativeResolvedNumberingV1 struct {
@@ -181,6 +183,21 @@ func ResolveNativeDocumentLayout(data []byte) (*NativeResolvedLayoutInputV1, err
 // ResolveNativeDocumentLayoutV1WithOptions preserves the extractor's durable
 // identity options while returning a separate, derived layout-input model.
 func ResolveNativeDocumentLayoutV1WithOptions(data []byte, options NativeExtractionOptions) (*NativeResolvedLayoutInputV1, error) {
+	resolver, err := newNativeLayoutResolver(data, options)
+	if err != nil {
+		return nil, err
+	}
+	result, err := resolver.resolve()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := EncodeNativeResolvedLayoutInputV1(result); err != nil {
+		return nil, fmt.Errorf("docxpatch: native style resolution output is invalid: %w", err)
+	}
+	return result, nil
+}
+
+func newNativeLayoutResolver(data []byte, options NativeExtractionOptions) (*nativeLayoutResolver, error) {
 	doc, err := ExtractNativeDocumentV1WithOptions(data, options)
 	if err != nil {
 		return nil, err
@@ -208,14 +225,7 @@ func ResolveNativeDocumentLayoutV1WithOptions(data []byte, options NativeExtract
 	if err := resolver.loadParts(); err != nil {
 		return nil, err
 	}
-	result, err := resolver.resolve()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := EncodeNativeResolvedLayoutInputV1(result); err != nil {
-		return nil, fmt.Errorf("docxpatch: native style resolution output is invalid: %w", err)
-	}
-	return result, nil
+	return resolver, nil
 }
 
 // EncodeNativeResolvedLayoutInputV1 validates and deterministically encodes a
@@ -258,6 +268,9 @@ type nativeLayoutResolver struct {
 	deferredDiagnosticCount int
 	numberingRootDeferred   []nativeDeferredNumberingDiagnostic
 	nodeByAnchor            map[string]*nativeXMLNode
+	mainRoot                *nativeXMLNode
+	autoBorderWhiteChecked  bool
+	autoBorderWhite         bool
 	themeSrgb               map[string]string
 	themeLatinFonts         nativeThemeLatinFonts
 }
@@ -323,6 +336,7 @@ type nativeBoolProperty struct {
 }
 
 type nativeRunProperties struct {
+	kerningMinSize    *int
 	scriptProperties  map[string]nativeDeferredNumberingDiagnostic
 	fontFamily        *string
 	asciiFamily       *string
@@ -340,6 +354,7 @@ type nativeRunProperties struct {
 }
 
 type nativeParagraphProperties struct {
+	customTabs      []nativeDeferredNumberingDiagnostic
 	numbering       nativeNumberingProperties
 	alignment       *string
 	spacingBefore   *int64
@@ -476,6 +491,9 @@ func (resolver *nativeLayoutResolver) indexStoryNodes() error {
 		root, err := parseNativeXML(partName, resolver.pkg.files[partName])
 		if err != nil {
 			return err
+		}
+		if partName == resolver.mainPart {
+			resolver.mainRoot = root
 		}
 		var visit func(*nativeXMLNode)
 		visit = func(node *nativeXMLNode) {
@@ -1460,8 +1478,13 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 	if !simple {
 		resolved.Borders = nil
 		resolved.CellShadingRGB = nil
+		resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
+		if resolved.AutomaticBorderPreview != nil {
+			return resolved, chain
+		}
 		return resolved, nil
 	}
+	resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
 	return resolved, chain
 }
 
@@ -1576,6 +1599,11 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 	resolvedNumbering, numberingP, markerR := resolver.resolveNumbering(numberingReference, levelStyleID, paragraph.ID, numberingState)
 	applyNativeParagraphProperties(&p, numberingP)
 	applyNativeParagraphProperties(&p, directP)
+	if len(p.customTabs) > 0 && (numberingReference.present || !nativePlainParagraphWithoutTabs(paragraphNode, resolver.wordNS)) {
+		for _, tabs := range p.customTabs {
+			resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", paragraph.ID, tabs.partName, tabs.node, "Custom tab stops remain unqualified for active or uncertain tab consumers")
+		}
+	}
 	paragraphMark := runBase
 	var directParagraphMark nativeRunProperties
 	if directPPr != nil {
@@ -1922,7 +1950,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 	modeledSingleton := map[string]bool{
 		"rStyle": true, "rFonts": true, "sz": true, "szCs": true, "b": true, "i": true,
 		"rtl": true, "vanish": true, "bCs": true, "iCs": true, "u": true, "color": true,
-		"highlight": true, "lang": true, "vertAlign": true,
+		"highlight": true, "lang": true, "vertAlign": true, "kern": true,
 	}
 	for _, child := range node.Children {
 		if child.Name.Space != resolver.wordNS {
@@ -2018,6 +2046,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				if hAnsiFace != "" {
 					properties.hAnsiFamily = nativeString(hAnsiFace)
 				}
+			}
+		case "kern":
+			if value, ok := nativeKerningThreshold(child, resolver.wordNS); ok {
+				properties.kerningMinSize = nativeInt(value)
+			} else {
+				resolver.addDiagnostic("INVALID_KERNING_THRESHOLD", scopeID, partName, child, "Kerning requires one exact bounded half-point threshold; unqualified values remain preserved")
 			}
 		case "sz":
 			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); ok && value <= 3276 {
@@ -2131,7 +2165,7 @@ func (resolver *nativeLayoutResolver) parseParagraphProperties(partName string, 
 	modeledSingleton := map[string]bool{
 		"pStyle": true, "numPr": true, "rPr": true, "sectPr": true, "jc": true,
 		"spacing": true, "ind": true, "keepNext": true, "keepLines": true,
-		"pageBreakBefore": true, "widowControl": true, "bidi": true,
+		"pageBreakBefore": true, "widowControl": true, "bidi": true, "tabs": true,
 	}
 	for _, child := range node.Children {
 		if child.Name.Space != resolver.wordNS {
@@ -2148,6 +2182,12 @@ func (resolver *nativeLayoutResolver) parseParagraphProperties(partName string, 
 		switch child.Name.Local {
 		case "pStyle", "rPr", "sectPr":
 			// Consumed elsewhere by the style/section cascade.
+		case "tabs":
+			if nativeExactContainer(node) && nativeExactInactiveTabCandidates(child, resolver.wordNS) {
+				properties.customTabs = append(properties.customTabs, nativeDeferredNumberingDiagnostic{partName: partName, node: child})
+			} else {
+				resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", scopeID, partName, child, "Custom tab stop markup is malformed or outside the bounded inactive subset")
+			}
 		case "numPr":
 			properties.numbering = resolver.parseNumberingProperties(partName, child, scopeID)
 		case "jc":
@@ -2160,9 +2200,9 @@ func (resolver *nativeLayoutResolver) parseParagraphProperties(partName string, 
 			resolver.parseSpacing(child, scopeID, partName, &properties)
 		case "ind":
 			resolver.parseIndent(child, scopeID, partName, &properties)
-		case "autoSpaceDE", "autoSpaceDN":
+		case "autoSpaceDE", "autoSpaceDN", "adjustRightInd":
 			if !nativeNeutralSourceProperty(child, node, resolver.wordNS) {
-				resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", scopeID, partName, child, "Automatic East Asian spacing is supported only as an exact explicit disabled setting")
+				resolver.addDiagnostic("UNMODELED_PARAGRAPH_PROPERTY", scopeID, partName, child, "Automatic spacing or grid indent adjustment is supported only as an exact explicit disabled setting")
 			}
 		case "keepNext", "keepLines", "pageBreakBefore", "widowControl", "bidi":
 			value, ok := nativeOnOff(child, resolver.wordNS)
@@ -2391,6 +2431,9 @@ func nativeRunPropertiesFromContract(properties *NativeRunPropertiesV1) nativeRu
 }
 
 func applyNativeParagraphProperties(target *nativeParagraphProperties, layer nativeParagraphProperties) {
+	if len(layer.customTabs) > 0 {
+		target.customTabs = append(append([]nativeDeferredNumberingDiagnostic{}, target.customTabs...), layer.customTabs...)
+	}
 	applyNativeNumberingProperties(&target.numbering, layer.numbering)
 	if layer.alignment != nil {
 		target.alignment = nativeString(*layer.alignment)
@@ -2487,6 +2530,9 @@ func nativeScriptLanguageTag(value string) bool {
 }
 
 func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProperties, styleToggle bool) {
+	if layer.kerningMinSize != nil {
+		target.kerningMinSize = nativeInt(*layer.kerningMinSize)
+	}
 	if len(layer.scriptProperties) > 0 {
 		merged := make(map[string]nativeDeferredNumberingDiagnostic, len(target.scriptProperties)+len(layer.scriptProperties))
 		for key, value := range target.scriptProperties {
@@ -2572,7 +2618,8 @@ func nativeExportParagraphProperties(properties nativeParagraphProperties) Nativ
 
 func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRunPropertiesV1 {
 	result := NativeResolvedRunPropertiesV1{
-		FontFamily: properties.fontFamily, FontSizeHalfPoint: properties.fontSize,
+		KerningMinSizeHalfPoints: properties.kerningMinSize,
+		FontFamily:               properties.fontFamily, FontSizeHalfPoint: properties.fontSize,
 		Underline: properties.underline, VerticalAlignment: properties.verticalAlignment, Color: properties.color, Highlight: properties.highlight,
 		Language: properties.language,
 	}
@@ -2836,6 +2883,9 @@ func ValidateNativeResolvedLayoutInputV1(input *NativeResolvedLayoutInputV1) err
 	}
 	tables := map[string]bool{}
 	for _, table := range input.Tables {
+		if table.AutomaticBorderPreview != nil && !nativeValidAutomaticBorderPreview(table.AutomaticBorderPreview, table.TableID) {
+			return fmt.Errorf("invalid automatic table border preview evidence")
+		}
 		if table.Geometry != nil && !nativeValidResolvedTableGeometry(table.Geometry) {
 			return fmt.Errorf("invalid resolved table geometry")
 		}
@@ -2933,6 +2983,9 @@ func validateNativeResolvedParagraphProperties(properties NativeResolvedParagrap
 }
 
 func validateNativeResolvedRunProperties(properties NativeResolvedRunPropertiesV1) error {
+	if properties.KerningMinSizeHalfPoints != nil && (*properties.KerningMinSizeHalfPoints < 1 || *properties.KerningMinSizeHalfPoints > 3276) {
+		return fmt.Errorf("invalid kerning threshold")
+	}
 	if properties.FontFamily != nil && !nativeBoundedResolvedString(*properties.FontFamily, 256) {
 		return fmt.Errorf("invalid font family")
 	}

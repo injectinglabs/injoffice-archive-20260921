@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
 import { decodeNativeDocxPagePaintV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
-import { decodeNativeDocxApproximatePagePreviewV1 } from '@injoffice/docs/native-page-paint-output'
+import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from '@injoffice/docs/native-page-paint-output'
 import { DsButton } from '../design-system/primitives'
 
 export function NativeDocxImage({ command, base64, contentType = 'image/png', onError }: { command: NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1; base64: string; contentType?: 'image/png' | 'image/jpeg'; onError?: () => void }) {
@@ -122,7 +122,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
       if (!response.ok) throw new Error(typeof value.error === 'string' ? value.error : 'Native preview was refused by the helper.')
       let next: NonNullable<typeof paint>
       if (approximate) {
-        const decoded = decodeNativeDocxApproximatePagePreviewV1(value)
+        const decoded = value.protocol === DOCX_AUTO_BORDER_PREVIEW_PROTOCOL ? decodeNativeDocxAutomaticBorderPreviewV1(value) : decodeNativeDocxApproximatePagePreviewV1(value)
         if (!decoded.ok) throw new Error('Approximate preview failed schema validation.')
         if (decoded.value.source.package_sha256 !== packageDigest) throw new Error('Approximate pages do not match the currently opened document.')
         next = { ...decoded.value, approximate: true }
@@ -155,7 +155,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
     <p role="status">{message}</p>
     <DsButton disabled={busy} onClick={() => void render()}>{busy ? 'Rendering native pages…' : 'Upload to helper and render native pages'}</DsButton>
     <DsButton disabled={busy} onClick={() => void render(true)}>Upload to helper and try approximate pages</DsButton>
-    <p>Approximate pages explicitly use the current layout rules for eligible older Word compatibility settings. This does not reproduce older Word pagination or enable otherwise unsupported document features.</p>
+    <p>Approximate pages may use current layout rules for eligible older Word settings, an explicit 11 pt host default where the source has no font size, and black automatic table borders on a source-qualified white background. This does not reproduce older Word pagination. Each applied policy is disclosed below. Other unsupported features remain refused; the original file is unchanged.</p>
     {paint?.approximate && <aside aria-label="Approximate page limitations"><strong>Approximate · read-only · not Word-validated</strong><ul>{paint.reasons.slice(0, 20).map((reason, index) => <li key={index}>{reason}</li>)}</ul>{paint.reasons.length > 20 && <p>{paint.reasons.length - 20} additional limitations.</p>}</aside>}
     {paint?.status === 'painted' && <nav aria-label={`${paint.approximate ? 'Approximate' : 'Native'} document page navigation`}><DsButton disabled={pageIndex === 0} onClick={() => setPageIndex((index) => index - 1)}>Previous {paint.approximate ? 'approximate' : 'native'} page</DsButton><span>Page {pageIndex + 1} of {paint.pages.length}</span><DsButton disabled={pageIndex >= paint.pages.length - 1} onClick={() => setPageIndex((index) => index + 1)}>Next {paint.approximate ? 'approximate' : 'native'} page</DsButton></nav>}
     {paint?.status === 'painted' && paint.pages.slice(pageIndex, pageIndex + 1).map((page) => <figure key={page.id}>

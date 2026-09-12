@@ -245,7 +245,8 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 		if options.FontManifestPath != "" {
 			args = append(args, "--font-manifest", options.FontManifestPath)
 		}
-		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-approximate", map[string]any{"prepare": input, "eligibility": eligibility}, 192*1024*1024, 64*1024*1024, args...)
+		operation, workerInput := docxApproximateWorkerInput(input, eligibility)
+		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", operation, workerInput, 192*1024*1024, 64*1024*1024, args...)
 	} else {
 		result, err = compileDOCXPreview(ctx, options, input)
 	}
@@ -256,4 +257,29 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(result)
+}
+
+func docxApproximateWorkerInput(input map[string]any, eligibility *docxpatch.NativeDocxApproximationEligibilityV1) (string, map[string]any) {
+	addFontPolicy := func(request map[string]any) map[string]any {
+		if eligibility != nil && eligibility.Status == "eligible" && len(eligibility.AbsentFontSizes) > 0 {
+			// A declared preview-host choice, never an authored or Word default.
+			request["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
+		}
+		return request
+	}
+	layout, _ := input["resolved_layout"].(*docxpatch.NativeResolvedLayoutInputV1)
+	if layout != nil {
+		for _, table := range layout.Tables {
+			if table.AutomaticBorderPreview == nil {
+				continue
+			}
+			request := map[string]any{"prepare": input}
+			settings, _ := input["pagination_settings"].(*docxpatch.NativePaginationSettingsV1)
+			if settings == nil || settings.Profile != "word-modern-default" {
+				request["legacy_eligibility"] = eligibility
+			}
+			return "render-auto-borders", addFontPolicy(request)
+		}
+	}
+	return "render-approximate", addFontPolicy(map[string]any{"prepare": input, "eligibility": eligibility})
 }

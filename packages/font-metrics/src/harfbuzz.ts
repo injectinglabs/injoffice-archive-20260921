@@ -562,7 +562,9 @@ function canonicalFeatures(run: ShapeProviderRequest['run'], advertised: Readonl
     || left.value - right.value)
   for (const feature of features) {
     if (!QUALIFIED_FEATURE_SET.has(feature.tag)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is outside the qualified explicit feature set`, faceId, feature.startUtf16, feature.endUtf16)
-    if (!advertised.has(feature.tag)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is not advertised by this exact font face`, faceId, feature.startUtf16, feature.endUtf16)
+    // Disabling kerning is safe even without advertised GPOS kern: it also
+    // suppresses legacy kern-table defaults and cannot invent glyph behavior.
+    if (!advertised.has(feature.tag) && !(feature.tag === 'kern' && feature.value === 0)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is not advertised by this exact font face`, faceId, feature.startUtf16, feature.endUtf16)
   }
   return features.map((feature) => new hb.Feature(feature.tag, feature.value, feature.startUtf16 ?? hb.Feature.GLOBAL_START, feature.endUtf16 ?? hb.Feature.GLOBAL_END))
 }

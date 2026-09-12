@@ -152,11 +152,82 @@ export interface NativeDocxPagePaintCompleteInputV1 {
 
 export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
-import { decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
+import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import { projectNativeDocxAbsentFontSizesV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
+export interface NativeDocxApproximateRuntimeV1 {
+  createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1
+  fonts?: NativeDocxHostFontsV1
+  fontSizePolicy?: NativeDocxHostDefaultSizePolicyV1
+}
+import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, type NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
+import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
+export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from './nativeAutomaticBorderPreviewV1.js'
+export type { NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
+export { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
+export type { NativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
+
+/** Opt-in consumer contrast policy. Only the final visibly approximate envelope
+ * escapes; neither transformed source nor strict prepared artifacts are public. */
+export async function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocxPagePaintPrepareInputV1, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1, legacyEligibility?: unknown): Promise<NativeDocxAutomaticBorderPreviewV1> {
+  if (runtime?.fontSizePolicy !== undefined && legacyEligibility === undefined) throw new TypeError('Host default size requires independently eligible current-layout approximation')
+  const projection = projectNativeDocxAutomaticBordersV1(input.document, input.resolved_layout)
+  const projectedInput = { ...input, document: projection.document, resolved_layout: projection.resolved }
+  let paint: Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources' | 'diagnostics'>
+  let provenance: NativeDocxPagePaintV1['provenance']
+  let eligibility: import('./nativeApproximationV1.js').NativeDocxApproximationEligibilityV1 | undefined
+  let approximatedFontSizes: NativeDocxApproximatedFontSizeV1[] | undefined
+  const reasons = [DOCX_AUTO_BORDER_WARNING as string]
+  if (legacyEligibility !== undefined) {
+    const legacy = await renderNativeDocxApproximatePagePreviewV1(projectedInput, legacyEligibility, outlineProvider, runtime)
+    eligibility = decodeNativeDocxApproximationEligibilityV1(legacyEligibility, legacy.rendering_provenance.pagination_settings)
+    paint = legacy; provenance = legacy.rendering_provenance
+    approximatedFontSizes = legacy.approximated_font_sizes
+    reasons.push(...legacy.reasons)
+  } else {
+    const prepared = await prepareNativeDocxPagePaintV1(projectedInput, runtime)
+    const painted = await compileNativeDocxPagePaintV1(prepared.page_paint_request, outlineProvider)
+    if (!painted.ok) throw new TypeError('Automatic-border painting failed validation')
+    paint = painted.value; provenance = painted.value.provenance
+  }
+  const result: NativeDocxAutomaticBorderPreviewV1 = {
+    protocol: DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, version: 1, fidelity: 'approximate', read_only: true,
+    policy: DOCX_AUTO_BORDER_POLICY, page_background_rgb: 'FFFFFF', source: projection.source,
+    approximated_render_properties: projection.facts, source_diagnostics: projection.source_diagnostics, reasons,
+    ...(eligibility ? { legacy_eligibility: eligibility } : {}),
+    ...(approximatedFontSizes ? { approximated_font_sizes: approximatedFontSizes } : {}),
+    status: paint.status, pages: paint.pages, resources: paint.resources, diagnostics: paint.diagnostics, rendering_provenance: provenance,
+  }
+  const validated = decodeNativeDocxAutomaticBorderPreviewV1(result)
+  if (!validated.ok) throw new TypeError('Automatic-border output failed distinct approximate validation')
+  return validated.value
+}
 
 /** Explicit read-only legacy-settings preview. The strict preparation and
  * original settings remain intact; only the separate result is approximate. */
-export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: { createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1; fonts?: NativeDocxHostFontsV1 }): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
+export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibilityValue: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
+  const settings = decodeNativeDocxPaginationSettings(input.pagination_settings)
+  if (!settings.ok) failIssues('Approximate settings are invalid', settings.issues)
+  const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings.value)
+  let applied: NativeDocxApproximatedFontSizeV1[] = []
+  if (runtime?.fontSizePolicy !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Host size policy requires independently eligible approximate settings')
+    const projected = projectNativeDocxAbsentFontSizesV1(input.document, input.resolved_layout, eligibility.absent_font_sizes ?? [], runtime.fontSizePolicy)
+    input = { ...input, resolved_layout: projected.resolved }
+    applied = projected.applied
+  }
+  const result = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
+  if (applied.length > 0) {
+    result.approximated_font_sizes = applied
+    result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
+  }
+  const validated = decodeNativeDocxApproximatePagePreviewV1(result)
+  if (!validated.ok) throw new TypeError('Approximate output omitted its source absence or explicit host-size policy')
+  return validated.value
+}
+
+async function renderNativeDocxApproximatePagePreviewInternalV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
   const document = decodeNativeDocxDocument(input.document)
   if (!document.ok) failIssues('native document is invalid', document.issues)
   const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
