@@ -2066,7 +2066,13 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 		seen[property.Name.Local] = true
 		switch property.Name.Local {
 		case "rFonts":
-			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}) {
+			// Preserve the bounded complex-script slot without treating it as
+			// active. The resolver still qualifies the paragraph mark's script
+			// context; RTL/mixed-script uncertainty retains its diagnostic.
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}, xml.Name{Space: wordNS, Local: "cs"}) {
+				return false
+			}
+			if value, present := nativeAttr(property, wordNS, "cs"); present && !nativeBoundedResolvedString(value, 256) {
 				return false
 			}
 		case "sz", "b", "i", "rtl", "vanish", "color", "lang":
