@@ -32,4 +32,5 @@ export type {
 export { formatNativeSheetCellDisplayV2 } from './nativeCellDisplayV2.js'
 export type { NativeSheetCellDisplayFormatResultV2 } from './nativeCellDisplayV2.js'
 export { decodeNativeWorkbookObjectsV1, layoutNativeCachedChartV1 } from './nativeObjectsPreviewV1.js'
+export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export type { NativeWorkbookObjectsV1, NativeTablePreviewV1, NativeChartPreviewV1, NativeChartSeriesPreviewV1, NativeCachedChartMarkV1 } from './nativeObjectsPreviewV1.js'

@@ -2,15 +2,15 @@ import {useEffect,useRef,useState} from 'react'
 import {layoutNativeCachedChartV1,type NativeWorkbookObjectsV1} from '@injoffice/sheets/browser'
 import {DsButton} from '../design-system/primitives'
 
-export function NativeWorkbookObjects({bytes,revision,inspect,mode}:{bytes:Uint8Array;revision:string;inspect:(bytes:Uint8Array,revision:string)=>Promise<NativeWorkbookObjectsV1>;mode:string}){
+export function NativeWorkbookObjects({bytes,revision,inspect,mode,onInspection}:{bytes:Uint8Array;revision:string;inspect:(bytes:Uint8Array,revision:string)=>Promise<NativeWorkbookObjectsV1>;mode:string;onInspection?:(result:NativeWorkbookObjectsV1|null)=>void}){
  const [result,setResult]=useState<NativeWorkbookObjectsV1|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
  const generation=useRef(0)
  useEffect(()=>{generation.current++;setResult(null);setMessage('');setBusy(false);return()=>{generation.current++}},[bytes,revision,mode])
- async function run(){const token=++generation.current;setBusy(true);setResult(null);setMessage('Reading saved chart data and table metadata…');try{const output=await inspect(bytes,revision);if(token!==generation.current)return;if(output.package_sha256!==revision)throw new Error('Object preview does not match this workbook');setResult(output);setMessage(`${output.charts.length} chart parts and ${output.tables.length} table parts inspected. Read-only data preview; Office rendering fidelity is not established.`)}catch(e){if(token===generation.current)setMessage(e instanceof Error?e.message:'Object preview unavailable')}finally{if(token===generation.current)setBusy(false)}}
+ async function run(){const token=++generation.current;setBusy(true);setResult(null);onInspection?.(null);setMessage('Reading saved chart data and table metadata…');try{const output=await inspect(bytes,revision);if(token!==generation.current)return;if(output.package_sha256!==revision)throw new Error('Object preview does not match this workbook');setResult(output);onInspection?.(output);setMessage(`${output.charts.length} chart parts and ${output.tables.length} table parts inspected. Read-only data preview; Office rendering fidelity is not established.`)}catch(e){if(token===generation.current)setMessage(e instanceof Error?e.message:'Object preview unavailable')}finally{if(token===generation.current)setBusy(false)}}
  return <section className="ds-panel" aria-label="Workbook charts and tables">
-  <h3>Saved charts and table metadata</h3>
+  <h3>Saved charts and table styles</h3>
   <p className="ds-muted">{mode==='server'?'This uploads the workbook to the configured helper when you choose the button.':'Inspection runs in the browser-local engine.'} Saved caches may be stale. No recalculation or external-link requests.</p>
-  <DsButton disabled={busy} onClick={()=>void run()}>{busy?'Inspecting…':'Preview saved chart data'}</DsButton><p role="status">{message}</p>
+  <DsButton disabled={busy} onClick={()=>void run()}>{busy?'Inspecting…':'Preview charts and table styles'}</DsButton><p role="status">{message}</p>
   {(result?.charts.length??0)>8&&<p role="note">Only the first 8 chart parts are plotted to bound browser rendering. Other chart parts: {result!.charts.slice(8).map(c=>c.part).join(', ')}.</p>}
   {result?.charts.slice(0,8).map((chart,index)=>{const layout=layoutNativeCachedChartV1(chart);return <section key={chart.part} aria-label={`Saved chart ${index+1}`}>
    <h4>Chart {index+1} · {layout?'cached data preview':'preview unavailable'}</h4><p className="ds-muted">{chart.part} · preview colors, not Office theme or positioning</p>
@@ -22,6 +22,6 @@ export function NativeWorkbookObjects({bytes,revision,inspect,mode}:{bytes:Uint8
    {layout&&<details><summary>Saved chart values and series (first 100 of {chart.series.reduce((sum,s)=>sum+s.values.length,0)} values)</summary><table className="ds-table"><thead><tr><th>Series</th><th>Cache point</th><th>Saved value</th></tr></thead><tbody>{chart.series.flatMap((s,si)=>s.values.map((v,pi)=>({s,si,v,pi}))).slice(0,100).map(({s,si,v,pi})=><tr key={`${si}:${pi}`}><td>{s.name||`Unnamed series ${si+1}`}</td><td>{pi+1}</td><td>{v??'Missing'}</td></tr>)}</tbody></table></details>}
    <ul>{chart.warnings.map((warning,i)=><li key={i}>{warning}</li>)}</ul>
   </section>})}
-  {!!result?.tables.length&&<details><summary>Table style metadata — rendering still incomplete</summary><ul>{result.tables.map(table=><li key={table.part}>{table.name||table.part} · {table.ref} · {table.style||'No named style'}<ul>{table.warnings.map((warning,i)=><li key={i}>{warning}</li>)}</ul></li>)}</ul></details>}
+  {!!result?.tables.length&&<details open><summary>Table styles — rendering still incomplete</summary><ul>{result.tables.map(table=><li key={table.part}>{table.name||table.part} · {table.ref} · {table.style||'No named style'} · {table.fill_preview?'Qualified fills only':'Style preview unavailable'}<ul>{table.warnings.map((warning,i)=><li key={i}>{warning}</li>)}</ul></li>)}</ul></details>}
  </section>
 }

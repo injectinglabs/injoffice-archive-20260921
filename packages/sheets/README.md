@@ -242,3 +242,15 @@ does not advertise glyph-paint identity.
 
 DOM/HTML, Canvas measurement, screenshots, PDF rendering, system fonts, and the
 host locale are never workbook authority.
+
+### Supplemental table preview
+
+After source-bound object inspection, `nativeTableFillPreview` returns a qualified
+table background for a cell with default-fill provenance.
+`nativeTableHeaderTextPreview` identifies cells eligible for white bold header
+text, without replacing explicitly selected font styles. Both require the source
+revision, worksheet part, zero-based coordinates and cell style ID. A fill record
+ID alone is not default-format authority: the cell style must appear in the
+engine's source-qualified eligible list. Neither changes the workbook or grants
+edit support. Overlapping tables, missing provenance and unsupported
+styles remain unpainted; table warnings describe the partial result.

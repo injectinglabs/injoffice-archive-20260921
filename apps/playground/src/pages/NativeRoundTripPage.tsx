@@ -28,6 +28,7 @@ import {
 } from '../xlsxRoundTripRuntime'
 import { nativeCellPreview } from '../nativeCellPreview'
 import { NativeWorkbookObjects } from '../components/NativeWorkbookObjects'
+import {nativeTableFillPreview,nativeTableHeaderTextPreview,type NativeWorkbookObjectsV1} from '@injoffice/sheets/browser'
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const SAMPLE_PATH = `${import.meta.env.BASE_URL}native-fixture/launch-readiness-plan.xlsx`
@@ -108,6 +109,8 @@ export default function NativeRoundTripPage() {
   const serverRuntimeRef = useRef<XlsxRoundTripRuntime | null>(null)
   const [mode, setMode] = useState<XlsxRoundTripMode>('browser')
   const [workbook, setWorkbook] = useState<NativeWorkbook | null>(null)
+  const [objects,setObjects]=useState<NativeWorkbookObjectsV1|null>(null)
+  useEffect(()=>setObjects(null),[workbook,mode])
   const [authoritativeBytes, setAuthoritativeBytes] = useState<Uint8Array | null>(null)
   const [artifactId, setArtifactId] = useState('')
   const [sourceName, setSourceName] = useState('workbook.xlsx')
@@ -399,10 +402,12 @@ export default function NativeRoundTripPage() {
                           const candidate = activeSheet ? editableMap.get(targetKey({ sheetId: activeSheet.id, row, column })) : undefined
                           const active = candidate && targetKey(candidate) === targetKey(target ?? candidate)
                           const preview = nativeCellPreview(workbook, cell)
+                          const tableFill=objects?nativeTableFillPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,cell?workbook.styles[cell.style_id]?.effective.fill:undefined,cell?.style_id??-1):undefined
+                          const tableHeader=objects&&cell?nativeTableHeaderTextPreview(objects,workbook.source.package_sha256,activeSheet.part_name,row,column,workbook.styles[cell.style_id]?.effective.fill,cell.style_id):false
                           return (
-                            <td key={column} className={active ? 'native-cell-active' : undefined} style={previewCellStyle(workbook, cell)} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
+                            <td key={column} className={active ? 'native-cell-active' : undefined} style={{...previewCellStyle(workbook, cell),...(tableFill?{backgroundColor:tableFill}:{}),...(tableHeader?{color:'#FFFFFF',fontWeight:700}:{})}} title={preview.warning ?? (preview.cached ? 'Saved formula result; not recalculated.' : undefined)}>
                               {candidate ? (
-                                <button type="button" onClick={() => chooseTarget(candidate)} aria-label={`Edit ${activeSheet.name} ${cell?.ref ?? `${columnName(column)}${row + 1}`}`}>
+                                <button type="button" style={tableFill?{background:'transparent'}:undefined} onClick={() => chooseTarget(candidate)} aria-label={`Edit ${activeSheet.name} ${cell?.ref ?? `${columnName(column)}${row + 1}`}`}>
                                   {preview.text || '\u00a0'}
                                   {preview.warning && <sup role="img" aria-label={preview.warning}> ⚠</sup>}
                                 </button>
@@ -416,7 +421,7 @@ export default function NativeRoundTripPage() {
                 </table>
               </div>
               <p className="ds-muted">Formula cells show saved results, which may be stale; this preview does not recalculate. Warning markers identify raw values or missing saved results.</p>
-              {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
+              {authoritativeBytes&&<NativeWorkbookObjects bytes={authoritativeBytes} revision={workbook.source.package_sha256} mode={mode} onInspection={setObjects} inspect={(bytes,revision)=>{const inspect=runtimeFor(mode).inspectObjects;if(!inspect)return Promise.reject(new Error('This runtime does not support object inspection'));return inspect(bytes,revision)}}/>}
               {previewWarnings.length > 0 && <details className="ds-muted">
                 <summary>{previewWarnings.length} preview cell warnings</summary>
                 <ul>{previewWarnings.slice(0, 12).map(({ ref, warning }) => <li key={ref}><strong>{ref}:</strong> {warning}</li>)}</ul>

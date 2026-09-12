@@ -23,16 +23,26 @@ type NativeWorkbookObjectsV1 struct {
 	Charts        []NativeChartPreviewV1 `json:"charts"`
 }
 type NativeTablePreviewV1 struct {
-	Part          string   `json:"part"`
-	SheetPart     string   `json:"sheet_part"`
-	Name          string   `json:"name"`
-	Ref           string   `json:"ref"`
-	Style         string   `json:"style"`
-	HeaderRows    int      `json:"header_rows"`
-	TotalRows     int      `json:"total_rows"`
-	RowStripes    bool     `json:"row_stripes"`
-	ColumnStripes bool     `json:"column_stripes"`
-	Warnings      []string `json:"warnings"`
+	Part          string                    `json:"part"`
+	SheetPart     string                    `json:"sheet_part"`
+	Name          string                    `json:"name"`
+	Ref           string                    `json:"ref"`
+	Style         string                    `json:"style"`
+	HeaderRows    int                       `json:"header_rows"`
+	TotalRows     int                       `json:"total_rows"`
+	RowStripes    bool                      `json:"row_stripes"`
+	ColumnStripes bool                      `json:"column_stripes"`
+	Warnings      []string                  `json:"warnings"`
+	FillPreview   *NativeTableFillPreviewV1 `json:"fill_preview,omitempty"`
+}
+
+// NativeTableFillPreviewV1 qualifies fills and default-font header text only.
+type NativeTableFillPreviewV1 struct {
+	Header             string `json:"header"`
+	Stripe             string `json:"stripe"`
+	Body               string `json:"body"`
+	HeaderFontStyleIDs []int  `json:"header_font_style_ids"`
+	FillStyleIDs       []int  `json:"fill_style_ids"`
 }
 type NativeChartPreviewV1 struct {
 	Part     string                       `json:"part"`
@@ -237,12 +247,16 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 			if table.SheetPart == "" {
 				table.Warnings = append(table.Warnings, "Table has no unambiguous worksheet relationship; no grid styling is applied.")
 			}
+			qualifyNativeTableFillPreview(pkg, root, &table)
 			result.Tables = append(result.Tables, table)
 		case xml.Name{Space: "http://schemas.openxmlformats.org/drawingml/2006/chart", Local: "chartSpace"}, xml.Name{Space: "http://purl.oclc.org/ooxml/drawingml/chart", Local: "chartSpace"}:
 			result.Charts = append(result.Charts, previewChart(root, actual))
 		default:
 			return nil, fmt.Errorf("unexpected chart/table root in %s", actual)
 		}
+	}
+	if !nativeTableStyleIDsWithinBudget(result.Tables) {
+		return nil, fmt.Errorf("table preview style IDs exceed cumulative limit 16384")
 	}
 	points := 0
 	for _, chart := range result.Charts {

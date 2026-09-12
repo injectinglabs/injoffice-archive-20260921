@@ -334,4 +334,5 @@ export type {
   NativeSheetPaintedGlyphV2,
 } from './nativeSheetCellPaintV2.js'
 export { decodeNativeWorkbookObjectsV1, layoutNativeCachedChartV1 } from './nativeObjectsPreviewV1.js'
+export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export type { NativeWorkbookObjectsV1, NativeTablePreviewV1, NativeChartPreviewV1, NativeChartSeriesPreviewV1, NativeCachedChartMarkV1 } from './nativeObjectsPreviewV1.js'

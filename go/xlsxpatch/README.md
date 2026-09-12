@@ -386,3 +386,12 @@ source axes, theme, category labels, chart titles, and placement are not replaye
 Table metadata is supplemental evidence, not a claim of table-style fidelity.
 Limits include 64 object parts, 2 MiB per object XML, 32 series per chart, 1,024
 points per series, 65,536 cumulative cache points, and 8 MiB output JSON.
+
+The supplemental table projection can include `fill_preview` for the qualified
+`TableStyleMedium2` subset: a source-theme accent header, alternating body fills,
+and eligible default-font header style IDs. The HLS tint arithmetic is checked
+against original synthetic Excel color probes; this is not a full table renderer.
+Custom table styles, conditional formatting, header/data DXFs, unqualified theme
+colors and ambiguous style options leave the palette unavailable. Explicit cell
+formatting keeps precedence. Borders, totals formatting and missing-cell paint
+remain unsupported. This projection never modifies native mutation authority.
