@@ -45,6 +45,7 @@ export interface NativeDocxQualifiedTableRowV1 {
 
 export interface NativeDocxQualifiedTableV1 {
   origin_policy?: {name:'legacy-content-aligned-origin-v1';source:import('./nativeLegacyTableOriginV1.js').NativeDocxLegacyTableOriginV1;delta_millipoints:number}
+  border_reservation_policy?: {name:'collapsed-horizontal-border-reservation-v1';above_content_millipoints:number}
   width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1
   table: NativeDocxTableV1
   width_millipoints: number
@@ -119,6 +120,7 @@ function canonical(value: unknown, active = new WeakSet<object>(), depth = 0, st
 function projection(tables: readonly NativeDocxQualifiedTableV1[]): unknown {
   return tables.map((entry) => ({
     ...(entry.origin_policy ? {origin_policy:entry.origin_policy} : {}),
+    ...(entry.border_reservation_policy ? {border_reservation_policy:entry.border_reservation_policy} : {}),
     ...(entry.width_policy ? { width_policy: entry.width_policy } : {}),
     table_id: entry.table.id,
     width_twips: entry.table.width_twips,
@@ -407,7 +409,7 @@ export function nativeDocxTableRowGroupSizeV1(table: NativeDocxQualifiedTableV1,
 export function layoutNativeDocxTableRowsV1(table: NativeDocxQualifiedTableV1, shaped: NativeDocxShapedLinesV1): NativeDocxTableRowGeometryV1[] | undefined {
   const paragraphs = new Map(shaped.paragraphs.map((entry) => [entry.paragraph_id, entry]))
   const margins = table.table.cell_margins!
-  const top = twips(margins.top_twips)!
+  const top = checked(twips(margins.top_twips)!, table.border_reservation_policy?.above_content_millipoints ?? 0)!
   const right = twips(margins.right_twips)!
   const bottom = twips(margins.bottom_twips)!
   const left = twips(margins.left_twips)!

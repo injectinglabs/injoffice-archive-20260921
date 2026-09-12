@@ -23,6 +23,7 @@ const PPTXPreviewPath = "/v1/pptx/slide-preview"
 type PPTXPreviewOptions struct {
 	WorkerPath, FontManifestPath string
 	SourceFrameAutoFitPreview    bool
+	InheritedTextPreview         bool
 }
 
 func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXPreviewOptions) (map[string]any, error) {
@@ -40,6 +41,7 @@ func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXP
 	}
 	extractOptions := pptxExtractOptions
 	extractOptions.AllowSourceFrameAutoFitPreview = options.SourceFrameAutoFitPreview
+	extractOptions.AllowInheritedTextPreview = options.InheritedTextPreview
 	deck, err := pptxpatch.ExtractNativePPTX(data, extractOptions)
 	if err != nil {
 		return nil, err
@@ -53,7 +55,21 @@ func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXP
 	if err := attachPPTXPreviewImages(ctx, data, &deck, slide); err != nil {
 		return nil, err
 	}
-	return map[string]any{"deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath, "source_frame_autofit_preview": options.SourceFrameAutoFitPreview, "source_frame_autofit_count": pptxSourceFrameCount(deck.Slides[slide].Elements)}, nil
+	return map[string]any{"deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath, "source_frame_autofit_preview": options.SourceFrameAutoFitPreview, "source_frame_autofit_count": pptxSourceFrameCount(deck.Slides[slide].Elements), "inherited_text_preview": options.InheritedTextPreview, "inherited_text_preview_count": pptxInheritedTextCount(deck.Slides[slide].Elements)}, nil
+}
+
+func pptxInheritedTextCount(elements []pptxpatch.NativeElement) int {
+	count := 0
+	for _, e := range elements {
+		for _, d := range e.Compatibility.Diagnostics {
+			if d.Code == "pptx.source-inherited-text-approximate" {
+				count++
+				break
+			}
+		}
+		count += pptxInheritedTextCount(e.Children)
+	}
+	return count
 }
 
 func pptxSourceFrameCount(elements []pptxpatch.NativeElement) int {
@@ -84,6 +100,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 	}
 	// Explicit per-request opt-in, never inherited from operator/default options.
 	options.SourceFrameAutoFitPreview = r.URL.Query().Get("autofit") == "source-frame"
+	options.InheritedTextPreview = r.URL.Query().Get("text") == "source-inherited"
 	select {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
@@ -116,8 +133,10 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		SlideIndex              *int   `json:"slide_index"`
 		SlideCount              int    `json:"slide_count"`
 		SourceFrameAutoFitCount int    `json:"source_frame_autofit_count"`
+		InheritedTextCount      int    `json:"inherited_text_preview_count"`
+		InheritedTextPolicy     string `json:"inherited_text_policy"`
 	}
-	if json.Unmarshal(result, &identity) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) {
+	if json.Unmarshal(result, &identity) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) || identity.InheritedTextCount != input["inherited_text_preview_count"].(int) || identity.InheritedTextCount > 0 && identity.InheritedTextPolicy != "source-latin-inheritance-approximate-v1" || identity.InheritedTextCount == 0 && identity.InheritedTextPolicy != "" {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, errors.New("native preview worker result does not match the source slide"))
 		return
 	}
@@ -132,11 +151,14 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		return 0, err
 	}
 	for key, entries := range values {
-		if (key != "slide" && key != "autofit") || len(entries) != 1 {
+		if (key != "slide" && key != "autofit" && key != "text") || len(entries) != 1 {
 			return 0, errors.New("only one slide and one autofit query parameter are supported")
 		}
 		if key == "autofit" && entries[0] != "source-frame" {
 			return 0, errors.New("autofit must equal source-frame when explicitly requested")
+		}
+		if key == "text" && entries[0] != "source-inherited" {
+			return 0, errors.New("text must equal source-inherited when explicitly requested")
 		}
 	}
 	raw := values.Get("slide")

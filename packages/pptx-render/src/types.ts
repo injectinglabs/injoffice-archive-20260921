@@ -180,7 +180,7 @@ export interface RenderTextBodyNode {
   readonly bounds: RenderRect
   /** Text-only physical mapping; parent shape/group transforms remain separate. */
   readonly transform?: RenderTransform
-  readonly fidelity: 'native' | 'deterministicNative' | 'approximateSourceFrame' | 'nativeUnavailable' | 'legacyUnavailable'
+  readonly fidelity: 'native' | 'deterministicNative' | 'approximateSourceFrame' | 'approximateInheritedText' | 'nativeUnavailable' | 'legacyUnavailable'
   /** Explicit InjOffice line-box policy; does not attest Office visual parity. */
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly wrap?: 'square' | 'none'
@@ -345,6 +345,8 @@ export interface CompileSlideOptions {
   readonly textLayout: NativePptxTextLayout
   /** Read-only saved-frame preview of explicitly marked spAutoFit projections; never resizes or qualifies Office fidelity. */
   readonly sourceFrameAutoFitPreview?: boolean
+	/** Explicit opt-in to the declared source Latin inheritance approximation. */
+	readonly inheritedTextPreview?: boolean
   /** Opt into measured mixed-run line boxes and anchors, labeled deterministicNative. Omission retains strict qualification. */
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly maxDepth?: number

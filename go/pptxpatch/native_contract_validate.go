@@ -293,6 +293,11 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	}
 	v.provenance(origin, element.Provenance, element.Source, element.Passthrough, p)
 	v.sourceState(element.Source, element.Passthrough, p)
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		if diagnostic.Code == nativeInheritedTextPreviewCode && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+			v.add(p+".compatibility", "native.inheritedTextApproximation", "inherited text approximation requires parsed source and explicit read-only warning")
+		}
+	}
 	if element.TextBody != nil && element.TextBody.AutoFit == "shape-source-frame" {
 		warning := false
 		for _, diagnostic := range element.Compatibility.Diagnostics {

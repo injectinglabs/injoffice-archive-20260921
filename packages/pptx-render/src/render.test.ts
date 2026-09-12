@@ -142,6 +142,22 @@ it('never lays out source-frame autofit without opt-in and labels opted-in paint
  await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(),sourceFrameAutoFitPreview:'true' as never})).rejects.toMatchObject({path:'$.options.sourceFrameAutoFitPreview'})
 })
 
+it('requires inherited text opt-in and disables kerning in actual shaping',async()=>{
+ const deck=structuredClone(parsedFull),element=deck.slides[0]!.elements.find(e=>e.kind==='text')!
+ if(element.kind!=='text')throw new Error('text missing')
+ const authored=nativeTextElement(element.id,'Hi',nativeTextBody(),element.transform)
+ element.paragraphs=authored.paragraphs;element.textBody=authored.textBody;element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.source-inherited-text-approximate',message:'source-latin-inheritance-approximate-v1; kerning disabled'}]};deck.slides[0]!.elements=[element]
+ const before=JSON.stringify(deck),base=fixtureShaper(),features:unknown[]=[]
+ const shaper:NativeTextShaper={...base,shape(request){features.push(request.run.features);return base.shape(request)}}
+ await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(shaper),lineLayoutPolicy:'max-run-natural-v1'})).rejects.toMatchObject({path:'$.options.inheritedTextPreview'})
+ const options={textLayout:textLayout(shaper,()=>({features:[{tag:'kern',value:1}]})),lineLayoutPolicy:'max-run-natural-v1' as const,inheritedTextPreview:true}
+ const result=await compileNativePptxSlide(deck,0,options)
+ expect(findNode(result,'text',element.id).textBody.fidelity).toBe('approximateInheritedText')
+ expect(features.length).toBeGreaterThan(0);expect(features.every(value=>JSON.stringify(value)==='[{"tag":"kern","value":0}]')).toBe(true)
+ const paint=createRecordingPaintSurface();paintSlideRenderTree(result,paint);expect(paint.finish().some(c=>c.kind==='glyphRun')).toBe(true)
+ expect(stringifySlideRenderTree(await compileNativePptxSlide(deck,0,options))).toBe(stringifySlideRenderTree(result));expect(JSON.stringify(deck)).toBe(before)
+})
+
 it('passes authored language to actual native shaping and retains glyph paint', async () => {
   const base=fixtureShaper(),languages:string[]=[]
   const shaper:NativeTextShaper={...base,shape(request){languages.push(request.run.language);return base.shape(request)}}

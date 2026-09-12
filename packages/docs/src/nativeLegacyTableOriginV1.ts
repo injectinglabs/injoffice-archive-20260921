@@ -3,6 +3,7 @@ import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 import type {NativeDocxShapedLinesV1} from './nativeShapingLines.js'
 import {qualifyNativeDocxTablesV1,nativeDocxTableProjectionSha256V1} from './nativeTablePagePaintV1.js'
 export const DOCX_LEGACY_TABLE_ORIGIN_WARNING='Approximate read-only preview: eligible legacy tables align their leading cell content to the source indent by shifting the table left by its explicit cell margin; this is not Word-validated layout.'
+export const DOCX_TABLE_BORDER_RESERVATION_WARNING='Approximate read-only preview: eligible legacy tables reserve one authored horizontal border width above each row’s content; this is a declared collapsed-border layout policy, not Word-validated layout.'
 export interface NativeDocxLegacyTableOriginV1 {table_id:string;package_sha256:string;indent_twips:number;left_margin_twips:number;source_indent:{part_name:string;path:string;sha256:string};source_margin:{part_name:string;path:string;sha256:string}}
 const keys=(v:object,names:string)=>Object.keys(v).sort().join(',')===names
 export function validLegacyTableOrigins(value:unknown,hash:string):value is NativeDocxLegacyTableOriginV1[]{
@@ -18,12 +19,24 @@ export function validLegacyTableOrigins(value:unknown,hash:string):value is Nati
 /** Internal explicit approximation. The public strict qualifier remains unchanged. */
 export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,resolved:NativeDocxResolvedLayoutInputV1,shaped:NativeDocxShapedLinesV1|undefined,eligibility?:{legacy_compatibility_mode:number|null;legacy_table_origins?:NativeDocxLegacyTableOriginV1[]}){
  const result=qualifyNativeDocxTablesV1(document,resolved,shaped),facts=eligibility?.legacy_table_origins??[]
- if(!facts.length||result.status!=='qualified')return result
+ if(result.status!=='qualified'||eligibility?.legacy_compatibility_mode!==12&&!facts.length)return result
  if(eligibility?.legacy_compatibility_mode!==12||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
  const tables=structuredClone(result.tables),sections=new Map(document.sections.map(s=>[s.starts_at_block_id,s]))
+ const shapedParagraphs=new Map(shaped?.paragraphs.map(paragraph=>[paragraph.paragraph_id,paragraph]))
  let section:NativeDocxDocumentV1['sections'][number]|undefined
  const owners=new Map<string,NativeDocxDocumentV1['sections'][number]>()
  for(const block of document.body.blocks){section=sections.get(block.id)??section;if(block.table&&section)owners.set(block.table.id,section)}
+ for(const entry of tables){
+  const owner=owners.get(entry.table.id)
+  if(!owner||owner.page.columns!==1||owner.page.margins.gutter_twips!==0)continue
+  const borders=entry.table.borders,top=borders?.top,inside=borders?.inside_horizontal,bottom=borders?.bottom
+  // The strict qualifier already excludes floating/spacing/unknown geometry.
+  // Keep the first policy bounded to identical, explicit single horizontal
+  // borders and automatic unmerged rows; do not infer conflict resolution.
+  if(top?.style==='single'&&inside?.style==='single'&&bottom?.style==='single'&&top.size_eighth_points===inside.size_eighth_points&&top.size_eighth_points===bottom.size_eighth_points&&entry.table.rows.every(row=>row.height_rule===undefined&&row.height_twips===undefined&&row.cells.every(cell=>cell.grid_span===1&&cell.vertical_merge==='none'&&cell.paragraphs.length===1&&shapedParagraphs.get(cell.paragraphs[0]!.id)?.lines.length===1))){
+   entry.border_reservation_policy={name:'collapsed-horizontal-border-reservation-v1',above_content_millipoints:top.size_eighth_points*125}
+  }
+ }
  for(const fact of facts){
   const entry=tables.find(t=>t.table.id===fact.table_id),owner=owners.get(fact.table_id)
   if(!entry||!owner||owner.page.columns!==1||owner.page.margins.gutter_twips!==0||entry.table.alignment!=='left'||entry.table.indent_twips!==fact.indent_twips||entry.table.cell_margins?.left_twips!==fact.left_margin_twips)throw new TypeError('Legacy origin does not join qualified source geometry')

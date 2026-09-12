@@ -122,6 +122,8 @@ type NativePPTXExtractOptions struct {
 	// Opt-in read-only projection of spAutoFit in its saved source frame.
 	// This does not implement content-dependent resizing or qualify Office fidelity.
 	AllowSourceFrameAutoFitPreview bool
+	// Separate read-only declared approximation, never strict fidelity.
+	AllowInheritedTextPreview bool
 }
 
 type nativeExtractPackage struct {
@@ -176,37 +178,38 @@ type nativeIdentityIndex struct {
 }
 
 type nativeExtractor struct {
-	pkg                     nativeExtractPackage
-	options                 NativePPTXExtractOptions
-	sourceRevision          string
-	identities              nativeIdentityIndex
-	passthroughUsed         int
-	relationshipsUsed       int
-	relationshipCache       map[string][]nativeExtractRelationship
-	passthroughCache        map[string]NativePassthroughRef
-	tokenOwners             map[string]string
-	documentID              string
-	passthroughRefsEmitted  int
-	elementsEmitted         int
-	outputNodesEmitted      int
-	textCodeUnitsEmitted    int64
-	tableCellsEmitted       int
-	assets                  []NativeAsset
-	assetByAlias            map[string]int
-	assetIDOwners           map[string]string
-	mediaBytesEmitted       int64
-	assetBase64Emitted      int64
-	mediaBytesInspected     int64
-	picturePartInspections  map[string]nativePicturePartInspection
-	passthroughCacheJournal []string
-	tokenOwnerJournal       []string
-	assetAliasJournal       []string
-	assetIDOwnerJournal     []string
-	tokenStager             *nativePassthroughTokenStager
-	groupProjectionSeen     bool
-	theme                   nativeResolvedTheme
-	slideDependencies       nativeSlideDependencyGraph
-	fontReferenceBlocked    bool
+	pkg                          nativeExtractPackage
+	options                      NativePPTXExtractOptions
+	sourceRevision               string
+	identities                   nativeIdentityIndex
+	passthroughUsed              int
+	relationshipsUsed            int
+	relationshipCache            map[string][]nativeExtractRelationship
+	passthroughCache             map[string]NativePassthroughRef
+	tokenOwners                  map[string]string
+	documentID                   string
+	passthroughRefsEmitted       int
+	elementsEmitted              int
+	outputNodesEmitted           int
+	textCodeUnitsEmitted         int64
+	tableCellsEmitted            int
+	assets                       []NativeAsset
+	assetByAlias                 map[string]int
+	assetIDOwners                map[string]string
+	mediaBytesEmitted            int64
+	assetBase64Emitted           int64
+	mediaBytesInspected          int64
+	picturePartInspections       map[string]nativePicturePartInspection
+	passthroughCacheJournal      []string
+	tokenOwnerJournal            []string
+	assetAliasJournal            []string
+	assetIDOwnerJournal          []string
+	tokenStager                  *nativePassthroughTokenStager
+	groupProjectionSeen          bool
+	theme                        nativeResolvedTheme
+	slideDependencies            nativeSlideDependencyGraph
+	fontReferenceBlocked         bool
+	presentationTextPreviewStyle *nativeXMLNode
 }
 
 type nativeStagedPassthroughToken struct {
@@ -1242,6 +1245,17 @@ func (extractor *nativeExtractor) extract() (NativePPTXDeck, error) {
 		return NativePPTXDeck{}, err
 	}
 	extractor.fontReferenceBlocked = !nativeShapeReferenceEmptyLayer(presentationRoot, dialect.presentation, "defaultTextStyle", false, dialect)
+	if extractor.options.AllowInheritedTextPreview {
+		for _, child := range presentationRoot.Children {
+			if child.Name.Local == "defaultTextStyle" && child.Name.Space != dialect.presentation {
+				return NativePPTXDeck{}, fmt.Errorf("foreign presentation text defaults")
+			}
+		}
+		extractor.presentationTextPreviewStyle, err = nativeSingleton(presentationRoot, dialect.presentation, "defaultTextStyle", false)
+		if err != nil {
+			return NativePPTXDeck{}, err
+		}
+	}
 	presentationUnsupported := []nativeUnsupportedSource{}
 	if hasNativeSemanticAttrs(presentationRoot) || !onlyNativeXMLSpace(presentationRoot.Text) {
 		unsupported, unsupportedErr := makeNativeUnsupportedSource(extractor.pkg.parts[officeDocument.Part], presentationRoot, officeDocument.Part, "presentation-root", "pptx.unsupported-presentation-markup", "presentation root contains unmodeled markup")
@@ -1820,7 +1834,15 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		textLayoutMessage = textLayoutErr.Error()
 		textBody = nil
 	}
-	paragraphs, paragraphErr := extractor.extractNativeParagraphs(txBody, dialect)
+	paintText := txBody
+	var paragraphErr error
+	if extractor.options.AllowInheritedTextPreview && inheritedPlaceholder == nil {
+		paintText, paragraphErr = extractor.inheritedTextPreview(txBody, nil, false, dialect)
+	}
+	var paragraphs []NativeParagraph
+	if paragraphErr == nil {
+		paragraphs, paragraphErr = extractor.extractNativeParagraphs(paintText, dialect)
+	}
 	textContentMessage := ""
 	if paragraphErr != nil {
 		if !isNativeTextContentUnsupported(paragraphErr) {
@@ -1863,6 +1885,9 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	// The retained source-frame layout is approximate even when an independent
 	// content refusal prevents painting text. Keep that provenance in both paths.
 	nativeMarkSourceFrameAutoFit(&element)
+	if extractor.options.AllowInheritedTextPreview && inheritedPlaceholder == nil {
+		nativeMarkInheritedTextPreview(&element)
+	}
 	if textLayoutMessage == "" && textContentMessage == "" {
 		nativeMarkVerticalTextPreview(&element)
 		nativePreserveTextCheckingMetadata(&element, txBody, dialect)

@@ -287,6 +287,18 @@ with automatic-border preview. This is not a Word-layout equivalence claim.
 Modeled main-part digests are trusted native-extractor evidence joined to the
 package; the TypeScript consumer does not independently hash absent XML bytes.
 
+Mode-12 current-layout previews additionally use the declared
+`collapsed-horizontal-border-reservation-v1` policy for automatic-height,
+unmerged tables with one shaped line per cell and equal explicit single top,
+inside-horizontal and bottom borders. Each row reserves one authored border
+width above its content, independently of font metrics and cell padding.
+This bounded approximation follows collapsed-border space accounting, not a
+Word-validated baseline rule. Unequal borders, multiple lines, explicit row
+heights and other unqualified geometry retain their existing behavior. The
+named policy enters the table projection hash and deterministic placement
+replay; strict rendering and source bytes remain unchanged. The approximate
+envelope declares this policy alongside its other fidelity warnings.
+
 The same current-layout approximation can accept an explicit host-selected
 `fontSizePolicy: { kind: 'host-default-size-v1', half_points: 22 }` only for
 native-source-attested missing sizes (`absent_font_sizes` eligibility facts).

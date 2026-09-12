@@ -216,6 +216,14 @@ snapshots make drift visible in tests.
 See [PPTX-RENDER-TREE.md](../../docs/PPTX-RENDER-TREE.md) for the website migration
 boundary.
 
+`inheritedTextPreview: true` separately permits source-marked, read-only
+`source-latin-inheritance-approximate-v1` projections. Their text bodies remain
+`approximateInheritedText`, never exact. The renderer disables kerning for these
+text runs, including when the caller requests it; the isolated symbol-bullet
+metrics path remains unchanged. Source style ordering, omitted terminal metadata
+and possible wrapping/metrics differences must remain visible to users. This
+option does not enable source-frame autofit or grant editing permission.
+
 `sourceFrameAutoFitPreview: true` separately opts into rendering explicitly
 marked `shape-source-frame` text bodies. Without it, those bodies remain refused
 even when `lineLayoutPolicy` is set. Opted-in bodies report

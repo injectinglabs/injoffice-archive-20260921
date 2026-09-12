@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
-import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING} from './nativeLegacyTableOriginV1.js'
+import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING} from './nativeLegacyTableOriginV1.js'
 import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, inspectHarfBuzzFontMetricsV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
@@ -21,7 +21,7 @@ import {
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { paginateNativeDocxV1, paginateNativeDocxApproximateLegacyV1 } from './nativePaginationV1.js'
-import { qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
+import { qualifyNativeDocxTablesV1,layoutNativeDocxTableRowsV1 } from './nativeTablePagePaintV1.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1, decodeNativeDocxApproximateComputedPagePaintV1, nativeDocxPagePaintPaginatedLayoutSha256V1 } from './nativePagePaintV1.js'
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
@@ -373,6 +373,103 @@ function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV
   return input
 }
 describe('native DOCX page-paint compiler v1', () => {
+  it.each([true,false])('replays border reservation in glyphs, following paragraphs and page breaks, cant_split %s',async(cantSplit)=>{
+    const input=tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+    const table=document.body.blocks[0]!.table!
+    table.rows[0]!.cant_split=cantSplit
+    table.borders!.top!.size_eighth_points=4;table.borders!.bottom!.size_eighth_points=4;table.borders!.inside_horizontal={...table.borders!.top!}
+    table.cell_margins!.top_twips=0;table.cell_margins!.bottom_twips=0
+    const following=structuredClone(table.rows[0]!.cells[0]!.paragraphs[0]!);following.id='paragraph:following';following.runs[0]!.id='run:following'
+    following.anchor=anchor('/w:document[1]/w:body[1]/w:p[1]',201,299);following.runs[0]!.anchor=anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]',210,290)
+    document.body.blocks.push({kind:'paragraph',id:following.id,paragraph:following})
+    resolved.paragraphs.push({...structuredClone(resolved.paragraphs[0]!),paragraph_id:following.id})
+    resolved.runs.push({...structuredClone(resolved.runs[0]!),run_id:following.runs[0]!.id,paragraph_id:following.id})
+    rewriteInventory(input,i=>{i.references[0]!.scope_ids.push(following.id,following.runs[0]!.id);i.references[0]!.scope_ids.sort()})
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy mode'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:HASH,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy mode']}
+    const outlines=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const provider={providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1){const o=outlines.outline(request.glyph_id);return o.path.length?{status:'outlined' as const,...request,...o}:{status:'empty' as const,...request,units_per_em:o.units_per_em}}}
+    const before=structuredClone(input),paint=await renderNativeDocxApproximatePagePreviewV1(input,eligibility,provider),baseline=await renderNativeDocxApproximatePagePreviewV1(input,{...eligibility,legacy_compatibility_mode:14},provider)
+    expect(paint.status).toBe('painted');expect(baseline.status).toBe('painted')
+    expect(paint.reasons).toContain(DOCX_TABLE_BORDER_RESERVATION_WARNING)
+    const topBorder=(value:typeof paint)=>value.pages[0]!.commands.find(c=>c.kind==='stroke_table_border'&&c.edge==='top')
+    expect(topBorder(paint)).toEqual(topBorder(baseline))
+    const fill=(value:typeof paint)=>{const command=value.pages[0]!.commands.find(c=>c.kind==='fill_table_cell');if(!command||command.kind!=='fill_table_cell')throw new Error('Expected table fill');return command}
+    expect(fill(paint)).toEqual({...fill(baseline),height_millipoints:fill(baseline).height_millipoints+500})
+    expect(decodeNativeDocxApproximatePagePreviewV1({...paint,reasons:paint.reasons.filter(r=>r!==DOCX_TABLE_BORDER_RESERVATION_WARNING)}).ok).toBe(false)
+    const glyphs=paint.pages[0]!.commands.filter(c=>c.kind==='fill_glyph_path'),oldGlyphs=baseline.pages[0]!.commands.filter(c=>c.kind==='fill_glyph_path')
+    expect(glyphs.length).toBeGreaterThan(1)
+    for(const [i,g]of glyphs.entries())expect(g.path).toEqual(oldGlyphs[i]!.path.map(part=>Object.fromEntries(Object.entries(part).map(([k,v])=>[k,k.endsWith('y_millipoints')?(v as number)+500:v]))))
+    const strict=await prepareNativeDocxPagePaintV1(input),request=structuredClone(strict.page_paint_request)
+    expect(request.paginated_layout.status).toBe('refused')
+    const q=qualifyApproximateLegacyTables(document,resolved,request.pagination_request.shaped_lines,eligibility)
+    if(q.status!=='qualified')throw new Error('Expected policy table')
+    request.paginated_layout=paginateNativeDocxApproximateLegacyV1(request.pagination_request,eligibility).layout
+    request.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(request.paginated_layout);request.integrity.table_projection_sha256=q.sha256
+    expect(decodeNativeDocxApproximateComputedPagePaintV1(request,eligibility).fidelity).toBe('approximate')
+    const forged=structuredClone(request);forged.paginated_layout.pages[0]!.lines[0]!.y_millipoints-=500;forged.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(forged.paginated_layout)
+    expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(forged,eligibility)).toThrow()
+    const short=structuredClone(request.pagination_request),oldLayout=paginateNativeDocxApproximateLegacyV1(short,{...eligibility,legacy_compatibility_mode:14}).layout
+    const last=oldLayout.pages[0]!.lines.at(-1)!,page=short.document.sections[0]!.page
+    page.margins.bottom_twips=page.height_twips-Math.ceil((last.y_millipoints+last.height_millipoints)/50)
+    const shortBaseline=paginateNativeDocxApproximateLegacyV1(short,{...eligibility,legacy_compatibility_mode:14}).layout
+    expect(shortBaseline.pages,JSON.stringify(shortBaseline.diagnostics)).toHaveLength(1)
+    expect(paginateNativeDocxApproximateLegacyV1(short,eligibility).layout.pages).toHaveLength(2)
+    const fieldInput=structuredClone(input),fieldDocument=fieldInput.document as NativeDocxDocumentV1
+    const field=fieldDocument.body.blocks[1]!.paragraph!.runs[0]!;field.page_field='PAGE';field.text=''
+    const fieldPaint=await renderNativeDocxApproximatePagePreviewV1(fieldInput,eligibility,provider)
+    expect(fieldPaint.status).toBe('painted')
+    expect(fieldPaint.rendering_provenance.body_field_source_sha256).toBeDefined()
+    expect(topBorder(fieldPaint)).toEqual(topBorder(paint))
+    if(cantSplit){
+      const wrapped=structuredClone(fieldInput),wrappedDocument=wrapped.document as NativeDocxDocumentV1,t=wrappedDocument.body.blocks[0]!.table!
+      t.layout='autofit';t.width_twips=1000;t.rows[0]!.cells[0]!.paragraphs[0]!.runs[0]!.text='A A A A A A A A A A A A A A A A A A A A'
+      const modernInput={...wrapped,pagination_settings:fixture().pagination_settings},modern=await prepareNativeDocxPagePaintV1(modernInput),shaped=modern.page_paint_request.pagination_request.shaped_lines
+      expect(shaped.paragraphs.find(p=>p.paragraph_id===t.rows[0]!.cells[0]!.paragraphs[0]!.id)!.lines.length).toBeGreaterThan(1)
+      const finalTables=qualifyApproximateLegacyTables(wrappedDocument,wrapped.resolved_layout as NativeDocxResolvedLayoutInputV1,shaped,eligibility)
+      if(finalTables.status!=='qualified')throw new Error('Expected wrapped autofit')
+      expect(finalTables.tables[0]!.border_reservation_policy).toBeUndefined()
+      expect((await renderNativeDocxApproximatePagePreviewV1(wrapped,eligibility,provider)).status).toBe('painted')
+    }
+    expect(input).toEqual(before)
+  },20000)
+  it.each([2,4,8])('reserves authored %s eighth-point horizontal borders only in legacy approximation',async size=>{
+    const input=tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const table=document.body.blocks[0]!.table!
+    table.borders!.top!.size_eighth_points=size;table.borders!.bottom!.size_eighth_points=size
+    table.borders!.inside_horizontal={...table.borders!.top!}
+    // Unequal padding discriminates the content top from the bottom limit.
+    table.cell_margins!.top_twips=40;table.cell_margins!.bottom_twips=80
+    const before=structuredClone(input),prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request.pagination_request
+    const strict=qualifyNativeDocxTablesV1(document,resolved,request.shaped_lines),approx=qualifyApproximateLegacyTables(document,resolved,request.shaped_lines,{legacy_compatibility_mode:12})
+    if(strict.status!=='qualified'||approx.status!=='qualified')throw new Error('Expected tables')
+    const a=layoutNativeDocxTableRowsV1(approx.tables[0]!,request.shaped_lines)![0]!,b=layoutNativeDocxTableRowsV1(strict.tables[0]!,request.shaped_lines)![0]!
+    expect(a.height_millipoints-b.height_millipoints).toBe(size*125)
+    expect(a.cells[0]!.content_y_millipoints-b.cells[0]!.content_y_millipoints).toBe(size*125)
+    expect(a.cells[0]!.content_height_millipoints).toBe(b.cells[0]!.content_height_millipoints)
+    expect(a.cells[0]!.width_millipoints).toBe(b.cells[0]!.width_millipoints)
+    expect(approx.sha256).not.toBe(strict.sha256)
+    expect(strict.tables[0]!.border_reservation_policy).toBeUndefined()
+    expect(qualifyApproximateLegacyTables(document,resolved,request.shaped_lines,{legacy_compatibility_mode:14})).toEqual(strict)
+    const taller=structuredClone(request.shaped_lines);taller.paragraphs[0]!.lines[0]!.line_height_millipoints+=2000
+    expect(layoutNativeDocxTableRowsV1(approx.tables[0]!,taller)![0]!.height_millipoints-a.height_millipoints).toBe(2000)
+    const multiline=structuredClone(request.shaped_lines);multiline.paragraphs[0]!.lines.push({...multiline.paragraphs[0]!.lines[0]!,id:'line:extra',ordinal:1})
+    const outOfProfile=qualifyApproximateLegacyTables(document,resolved,multiline,{legacy_compatibility_mode:12})
+    if(outOfProfile.status!=='qualified')throw new Error('Expected unchanged strict table geometry')
+    expect(outOfProfile.tables[0]!.border_reservation_policy).toBeUndefined()
+    for(const change of ['missing','unequal','none','exact','minimum','merged'] as const){
+      const copy=structuredClone(document),t=copy.body.blocks[0]!.table!
+      if(change==='missing')delete t.borders!.inside_horizontal
+      if(change==='unequal')t.borders!.bottom!.size_eighth_points+=1
+      if(change==='none')t.borders!.bottom={style:'none',size_eighth_points:0}
+      if(change==='exact'||change==='minimum'){t.rows[0]!.height_rule=change==='exact'?'exact':'atLeast';t.rows[0]!.height_twips=1000}
+      if(change==='merged')t.rows[0]!.cells[0]!.vertical_merge='restart'
+      const q=qualifyApproximateLegacyTables(copy,resolved,request.shaped_lines,{legacy_compatibility_mode:12})
+      if(q.status==='qualified')expect(q.tables[0]!.border_reservation_policy).toBeUndefined()
+    }
+    expect(input).toEqual(before)
+  },15000)
   it('limits note host-size policy to clean empty reserved separator paragraphs', () => {
     const input = noteFixture()
     const document = input.document as NativeDocxDocumentV1
@@ -485,6 +582,13 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(input).toEqual(before)
     const decode=automatic?decodeNativeDocxAutomaticBorderPreviewV1:decodeNativeDocxApproximatePagePreviewV1
     expect(decode(shifted).ok).toBe(true)
+    expect(decode({...shifted,table_border_layout_policy:'unknown'}).ok).toBe(false)
+    const oldEnvelope=structuredClone(shifted);delete oldEnvelope.table_border_layout_policy;oldEnvelope.reasons=oldEnvelope.reasons.filter(r=>r!==DOCX_TABLE_BORDER_RESERVATION_WARNING)
+    expect(decode(oldEnvelope).ok).toBe(true)
+    // 256 bounded source reasons plus all optional host-policy warnings fit.
+    const maximumReasons=[...Array.from({length:255},(_,i)=>`Source reason ${i}`),...shifted.reasons,'Optional host font-size policy warning']
+    expect(decode({...shifted,reasons:maximumReasons}).ok).toBe(true)
+    expect(decode({...shifted,reasons:[...maximumReasons,...Array(301).fill('excess')]}).ok).toBe(false)
     expect(decode({...shifted,reasons:shifted.reasons.filter(r=>r!==DOCX_LEGACY_TABLE_ORIGIN_WARNING)}).ok).toBe(false)
     for(const changed of [{...fact,left_margin_twips:101},{...fact,table_id:'other'},{...fact,source_margin:{...fact.source_margin,path:'/wrong'}}])await expect(render({...eligibility,legacy_table_origins:[changed]})).rejects.toThrow()
     await expect(render({...eligibility,legacy_compatibility_mode:14})).rejects.toThrow()

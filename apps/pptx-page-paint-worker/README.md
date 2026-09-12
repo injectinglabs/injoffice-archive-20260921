@@ -1,5 +1,14 @@
 # Native PPTX preview worker
 
+The optional Boolean request `inherited_text_preview` permits explicitly marked
+read-only inherited text approximations. Positive responses include
+`inherited_text_preview_count` and the exact `inherited_text_policy` value
+`source-latin-inheritance-approximate-v1`; absent markers omit both. The HTTP
+preview selects this separately with `text=source-inherited` and validates those
+fields against the extracted source, revision and slide inventory. It does not
+implicitly enable `autofit=source-frame`. Callers must show the persistent
+approximation warning, not report complete native fidelity.
+
 Private Node 22+ adapter for real PPTX uploads. The Go helper extracts the original
 package and invokes this worker through bounded, length-prefixed JSON. No hosted
 service is required. Enable the helper with `-pptx-preview-worker` pointing to

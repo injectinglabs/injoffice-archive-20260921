@@ -78,6 +78,7 @@ interface Budget {
 interface CompileState {
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly sourceFrameAutoFitPreview: boolean
+	readonly inheritedTextElements: ReadonlySet<string>
   readonly deck: NativePptxDeck
   readonly slide: NativeSlide
   readonly options: CompileSlideOptions
@@ -1013,7 +1014,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
     script: override.script ?? state.textDefaults.script,
     language: override.language ?? nativeRun.language ?? state.textDefaults.language,
     direction: override.direction ?? state.textDefaults.direction,
-    features: override.features?.map((feature) => ({ ...feature })),
+    features: state.inheritedTextElements.has(context.elementId) && !symbolEncoding ? [...(override.features??[]).filter(feature=>feature.tag!=='kern').map(feature=>({...feature})),{tag:'kern',value:0}] : override.features?.map((feature) => ({ ...feature })),
     variations: override.variations?.map((variation) => ({ ...variation })),
     letterSpacingMilliPoints: override.letterSpacingMilliPoints,
     wordSpacingMilliPoints: override.wordSpacingMilliPoints,
@@ -1746,7 +1747,7 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     return {
       kind: 'textBody', sourceElementId: context.elementId, bounds: context.bounds,
       ...(transform?{transform}:{}),
-      fidelity: approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
+      fidelity: state.inheritedTextElements.has(context.elementId) ? 'approximateInheritedText' : approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
       ...(deterministic ? {lineLayoutPolicy: state.lineLayoutPolicy} : {}),
       wrap: context.layout?.wrap, verticalAnchor: context.layout?.verticalAnchor, autoFit: context.layout?.autoFit,
       horizontalOverflow: context.layout?.horizontalOverflow, verticalOverflow: context.layout?.verticalOverflow,
@@ -1931,6 +1932,7 @@ function canonicalize(value: unknown): unknown {
 export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: number | string, options: CompileSlideOptions): Promise<SlideRenderTree> {
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
+	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)
   let deck: NativePptxDeck
@@ -1962,6 +1964,9 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
     throw new RenderCompileError('render.slideReference', '$.slide', `slide ${String(slide)} does not exist`)
   }
   const nativeSlide = deck.slides[slideIndex]!
+	const inheritedTextElements=new Set<string>()
+	const collectInherited=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')){if(options.inheritedTextPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','source inherited text requires explicit read-only approximation opt-in');inheritedTextElements.add(element.id)}if(element.kind==='group')collectInherited(element.children)}}
+	collectInherited(nativeSlide.elements)
   const budget: Budget = {
     nodes: 0,
     glyphs: 0,
@@ -1981,6 +1986,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const state: CompileState = {
     lineLayoutPolicy,
     sourceFrameAutoFitPreview: options.sourceFrameAutoFitPreview === true,
+		inheritedTextElements,
     deck,
     slide: nativeSlide,
     options,

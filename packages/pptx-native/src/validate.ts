@@ -271,6 +271,7 @@ function validateElement(
     add(issues, `${path}.source.partName`, 'native.sourcePart', 'parsed elements must be anchored to their owning slide part')
   }
   validateCompatibility(element.compatibility, `${path}.compatibility`, issues)
+  for(const diagnostic of element.compatibility.diagnostics){if(diagnostic.code==='pptx.source-inherited-text-approximate'&&(element.provenance!=='parsed'||!element.source||element.compatibility.status==='editable'||diagnostic.severity!=='warning'))add(issues,`${path}.compatibility`,'native.inheritedTextApproximation','inherited text approximation requires parsed source and explicit read-only warning')}
   validateAnimation(element.animation, `${path}.animation`, issues)
   let worst = element.compatibility.status
 

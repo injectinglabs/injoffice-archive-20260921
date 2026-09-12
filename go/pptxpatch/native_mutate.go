@@ -549,6 +549,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 			return nil, fmt.Errorf("%s: vertical text is preview-only", prefix)
 		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeInheritedTextPreviewCode {
+				return nil, fmt.Errorf("%s: inherited text approximation is preview-only", prefix)
+			}
 			switch diagnostic.Code {
 			case "pptx.end-paragraph-metadata-preserved", "pptx.autofit-source-frame-approximate", "pptx.shape-font-reference-preview", "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
 				return nil, fmt.Errorf("%s: projected shape styles or omitted text are preview-only", prefix)

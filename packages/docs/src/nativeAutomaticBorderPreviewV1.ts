@@ -1,4 +1,4 @@
-import {DOCX_LEGACY_TABLE_ORIGIN_WARNING} from './nativeLegacyTableOriginV1.js'
+import {DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING} from './nativeLegacyTableOriginV1.js'
 import {
   decodeNativeDocxDocument,
   type NativeDocxDocumentV1,
@@ -29,6 +29,7 @@ import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxApproximatedFontSizesV1, 
 export const DOCX_AUTO_BORDER_PREVIEW_PROTOCOL =
   "injoffice.docx.auto-border-preview" as const;
 export interface NativeDocxAutomaticBorderPreviewV1 {
+  table_border_layout_policy?: 'collapsed-horizontal-border-reservation-v1';
   protocol: typeof DOCX_AUTO_BORDER_PREVIEW_PROTOCOL;
   version: 1;
   fidelity: "approximate";
@@ -259,7 +260,7 @@ export function decodeNativeDocxAutomaticBorderPreviewV1(
     if (legacy !== undefined) input.legacy_eligibility = legacy;
     if (
       Object.keys(input)
-        .filter((key) => key !== "legacy_eligibility" && key !== 'approximated_font_sizes')
+        .filter((key) => key !== "legacy_eligibility" && key !== 'approximated_font_sizes' && key !== 'table_border_layout_policy')
         .sort()
         .join(",") !==
         [
@@ -370,6 +371,7 @@ export function decodeNativeDocxAutomaticBorderPreviewV1(
       cells += fact.evidence.cell_ids.length;
       if (cells > 100_000) return { ok: false };
     }
+    if(input.table_border_layout_policy!==undefined&&(input.table_border_layout_policy!=='collapsed-horizontal-border-reservation-v1'||!input.reasons.includes(DOCX_TABLE_BORDER_RESERVATION_WARNING)))return {ok:false}
     if (input.legacy_eligibility !== undefined) {
       const eligibility = decodeNativeDocxApproximationEligibilityV1(
         input.legacy_eligibility,

@@ -787,7 +787,7 @@ function tableCommandsByPage(
         ? fragmentsByRow.get(JSON.stringify([table.table.id, row.row_id]))
         : firstParagraph ? placementsByParagraph.get(firstParagraph.id) : undefined
       if (!placements || !firstShaped) continue
-      const topMargin = table.table.cell_margins!.top_twips * 50
+      const topMargin = table.table.cell_margins!.top_twips * 50 + (table.border_reservation_policy?.above_content_millipoints ?? 0)
       for (const placement of placements) {
         const page = pageByID.get(placement.pageID)
         const target = commands.get(placement.pageID)

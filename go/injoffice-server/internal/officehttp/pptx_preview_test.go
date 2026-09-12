@@ -15,6 +15,18 @@ import (
 )
 
 func TestPPTXPreviewQueryIsClosed(t *testing.T) {
+	for _, query := range []string{"text=", "text=true", "text=source-inherited&text=source-inherited", "text=source-inherited&unknown=1"} {
+		request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath+"?"+query, nil)
+		if _, err := parsePPTXPreviewSlide(request); err == nil {
+			t.Fatalf("accepted inherited query %s", query)
+		}
+	}
+	for _, query := range []string{"text=source-inherited", "slide=0&text=source-inherited&autofit=source-frame"} {
+		request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath+"?"+query, nil)
+		if _, err := parsePPTXPreviewSlide(request); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, query := range []string{"slide=-1", "slide=01", "slide=+1", "slide=", "slide=1&slide=2", "font_manifest_path=/tmp/font.json", "slide=1;foo=2", "slide=%zz", "autofit=true", "autofit=", "autofit=source-frame&autofit=source-frame", "autofit=source-frame&extra=1"} {
 		request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath, nil)
 		request.URL.RawQuery = query
@@ -115,6 +127,8 @@ func TestPPTXPreviewRejectsStaleOrMissingWorkerIdentity(t *testing.T) {
 		{"missing-slide", map[string]any{"slide_index": nil}, http.StatusUnprocessableEntity},
 		{"wrong-count", map[string]any{"slide_count": 999}, http.StatusUnprocessableEntity},
 		{"wrong-approximation-count", map[string]any{"source_frame_autofit_count": 1}, http.StatusUnprocessableEntity},
+		{"unsolicited-inherited-count", map[string]any{"inherited_text_preview_count": 1, "inherited_text_policy": "source-latin-inheritance-approximate-v1"}, http.StatusUnprocessableEntity},
+		{"orphan-inherited-policy", map[string]any{"inherited_text_policy": "source-latin-inheritance-approximate-v1"}, http.StatusUnprocessableEntity},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input, err := pptxPreviewInput(context.Background(), data, 0, PPTXPreviewOptions{})
@@ -146,6 +160,40 @@ func TestPPTXPreviewRejectsStaleOrMissingWorkerIdentity(t *testing.T) {
 			handlePPTXPreview(response, request, PPTXPreviewOptions{WorkerPath: worker.WorkerPath, FontManifestPath: "/operator/fonts.json"}, gate)
 			if response.Code != test.want || len(gate) != 0 || response.Header().Get("Cache-Control") != "no-store" {
 				t.Fatalf("response=%d gate=%d body=%s", response.Code, len(gate), response.Body.String())
+			}
+		})
+	}
+}
+
+func TestPPTXInheritedPreviewWorkerPolicyJoin(t *testing.T) {
+	data := readPinned(t, commonPPTXSHA, "officecompat", "corpus", "generated", "packages", "pptx-transitional-common.pptx")
+	input, err := pptxPreviewInput(context.Background(), data, 0, PPTXPreviewOptions{InheritedTextPreview: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := input["inherited_text_preview_count"].(int)
+	if count == 0 {
+		t.Fatal("synthetic source has no inherited preview elements")
+	}
+	for _, tc := range []struct {
+		name   string
+		count  any
+		policy any
+		want   int
+	}{{"matching", count, "source-latin-inheritance-approximate-v1", 200}, {"wrong count", count + 1, "source-latin-inheritance-approximate-v1", 422}, {"missing policy", count, nil, 422}, {"wrong policy", count, "future", 422}, {"fractional count", 1.5, "source-latin-inheritance-approximate-v1", 422}} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := map[string]any{"version": 1, "package_sha256": input["package_sha256"], "slide_index": 0, "slide_count": 1, "inherited_text_preview_count": tc.count}
+			if tc.policy != nil {
+				result["inherited_text_policy"] = tc.policy
+			}
+			payload, _ := json.Marshal(map[string]any{"protocol": "injoffice.pptx.preview-worker", "version": 1, "id": "preview", "ok": true, "result": result})
+			worker := previewFixtureWorker(t, fmt.Sprintf("const p=Buffer.from(%q);const h=Buffer.alloc(4);h.writeUInt32BE(p.length);process.stdout.write(Buffer.concat([h,p]));", string(payload)))
+			request := httptest.NewRequest(http.MethodPost, PPTXPreviewPath+"?text=source-inherited", bytes.NewReader(data))
+			request.Header.Set("Content-Type", PPTXContentType)
+			response := httptest.NewRecorder()
+			handlePPTXPreview(response, request, PPTXPreviewOptions{WorkerPath: worker.WorkerPath, FontManifestPath: "/operator/fonts.json"}, make(chan struct{}, 1))
+			if response.Code != tc.want {
+				t.Fatalf("status %d body %s", response.Code, response.Body.String())
 			}
 		})
 	}

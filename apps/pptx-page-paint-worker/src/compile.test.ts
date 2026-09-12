@@ -32,6 +32,18 @@ function input(){
  element.paragraphs=[{align:'left',level:0,bullet:false,runs:[{text:'Small ',fontFamily:'DejaVu Sans',fontSizeHundredthPt:1200,bold:false,italic:false,color:'123456'},{text:'large',fontFamily:'DejaVu Sans',fontSizeHundredthPt:2400,bold:false,italic:false,color:'123456'}]}]
  return {deck,slide_index:0,package_sha256:'a'.repeat(64),font_manifest_path:manifest}
 }
+it('binds inherited approximation to opt-in, read-only source and closed transport policy',async()=>{
+ for(const value of ['yes',1,null])await expect(compilePptxPreview({...input(),inherited_text_preview:value})).rejects.toThrow('boolean')
+ const request=input(),element=request.deck.slides[0].elements[0]
+ element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.source-inherited-text-approximate',message:'source-latin-inheritance-approximate-v1; kerning disabled'}]}
+ await expect(compilePptxPreview(request)).rejects.toThrow('explicit preview opt-in')
+ const result=await compilePptxPreview({...request,inherited_text_preview:true})
+ expect(result.inherited_text_preview_count).toBe(1);expect(result.inherited_text_policy).toBe('source-latin-inheritance-approximate-v1');expect(JSON.stringify(result.nodes)).toContain('contentRun')
+ for(const count of [0,-1,1.5,20001,'1',NaN])expect(()=>decodePptxPreview({...result,inherited_text_preview_count:count})).toThrow()
+ for(const policy of [undefined,'unknown'])expect(()=>decodePptxPreview({...result,inherited_text_policy:policy})).toThrow()
+ expect(()=>decodePptxPreview({...result,inherited_text_preview_count:undefined})).toThrow()
+ element.compatibility.status='editable';await expect(compilePptxPreview({...request,inherited_text_preview:true})).rejects.toThrow()
+})
 describe('actual source-font native PPTX worker',()=>{
  it('replays source crop within the rounded local clip and bounds untrusted radii',async()=>{
   const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))

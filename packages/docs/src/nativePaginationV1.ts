@@ -1330,7 +1330,8 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
       for (const line of paragraph.lines) {
         const x = checkedSum(targetColumn.x_millipoints, cell.content_x_millipoints, line.inline_offset_millipoints)
         const y = checkedSum(targetColumn.y_millipoints, rowTop, localY)
-        if (x === undefined || y === undefined || line.available_width_millipoints !== cell.content_width_millipoints || line.advance_inline_millipoints + line.inline_offset_millipoints > cell.content_width_millipoints || localY + line.line_height_millipoints > cell.height_millipoints - cell.content_y_millipoints) {
+        const bottomInset = table.border_reservation_policy ? table.table.cell_margins!.bottom_twips * 50 : cell.content_y_millipoints
+        if (x === undefined || y === undefined || line.available_width_millipoints !== cell.content_width_millipoints || line.advance_inline_millipoints + line.inline_offset_millipoints > cell.content_width_millipoints || localY + line.line_height_millipoints > cell.height_millipoints - bottomInset) {
           refuse(context, 'line-geometry-invalid', line.id, 'Cell line escapes its exact qualified content box')
           return
         }

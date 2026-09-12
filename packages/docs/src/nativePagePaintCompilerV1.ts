@@ -196,7 +196,7 @@ export async function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocx
     protocol: DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, version: 1, fidelity: 'approximate', read_only: true,
     policy: DOCX_AUTO_BORDER_POLICY, page_background_rgb: 'FFFFFF', source: projection.source,
     approximated_render_properties: projection.facts, source_diagnostics: projection.source_diagnostics, reasons,
-    ...(eligibility ? { legacy_eligibility: eligibility } : {}),
+    ...(eligibility ? { legacy_eligibility: eligibility,table_border_layout_policy:'collapsed-horizontal-border-reservation-v1' as const } : {}),
     ...(approximatedFontSizes ? { approximated_font_sizes: approximatedFontSizes } : {}),
     status: paint.status, pages: paint.pages, resources: paint.resources, diagnostics: paint.diagnostics, rendering_provenance: provenance,
   }
@@ -666,6 +666,10 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
       pageFieldVariants.push({ page_id: page.id, shaped_lines: variant.value })
     }
   }
+  // Width probes may be unwrapped, and fixed tables have no intrinsic probe.
+  // Policies depending on final line geometry must hash the final projection
+  // independently reproduced by pagination/paint validation.
+  const finalQualifiedTables = approximateEligibility === undefined ? qualifiedTables : qualifyApproximateLegacyTables(decodedPagination.value.document,resolved.value,shaped.value,decodeNativeDocxApproximationEligibilityV1(approximateEligibility,settings.value))
   const pagePaintRequest: NativeDocxPagePaintRequestV1 = {
     protocol: DOCX_PAGE_PAINT_REQUEST_PROTOCOL,
     version: DOCX_PAGE_PAINT_REQUEST_VERSION,
@@ -679,7 +683,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
       ...(bodyFields.length ? { body_field_source_sha256: canonicalWireSha256(document.value) } : {}),
       font_manifest_sha256: nativeDocxPagePaintFontManifestSha256V1(manifest.value),
       shaped_lines_sha256: nativeDocxPagePaintShapedLinesSha256V1(shaped.value, pageFieldVariants),
-      table_projection_sha256: qualifiedTables.status === 'qualified' ? qualifiedTables.sha256 : nativeDocxTableProjectionSha256V1([]),
+      table_projection_sha256: finalQualifiedTables.status === 'qualified' ? finalQualifiedTables.sha256 : nativeDocxTableProjectionSha256V1([]),
       media_assets_sha256: nativeDocxPagePaintMediaAssetsSha256V1(mediaAssets),
       paginated_layout_sha256: nativeDocxPagePaintPaginatedLayoutSha256V1(paginated.value),
     },

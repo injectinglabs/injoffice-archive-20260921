@@ -149,7 +149,18 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		paintText := textBody
 		fontReferenceUsed := false
 		var parseErr error
-		if style != nil && styleErr == nil {
+		if extractor.options.AllowInheritedTextPreview {
+			placeholder, err := nativeTextPlaceholder(node, dialect)
+			if err != nil {
+				parseErr = err
+			} else if placeholder != nil {
+				parseErr = unsupportedNativeTextContent("placeholder inherited preview unsupported")
+			} else if styleErr != nil {
+				parseErr = styleErr
+			} else {
+				paintText, parseErr = extractor.inheritedTextPreview(textBody, style, true, dialect)
+			}
+		} else if style != nil && styleErr == nil {
 			placeholder, placeholderErr := nativeTextPlaceholder(node, dialect)
 			if placeholderErr != nil {
 				parseErr = placeholderErr
@@ -198,6 +209,9 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
+	}
+	if extractor.options.AllowInheritedTextPreview && textBody != nil {
+		nativeMarkInheritedTextPreview(&element)
 	}
 	if name != "" {
 		element.Name = stringPointer(name)

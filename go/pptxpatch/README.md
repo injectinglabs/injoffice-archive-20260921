@@ -2,6 +2,19 @@
 
 `pptxpatch` reads and writes a bounded, editable PowerPoint OOXML model.
 
+`NativePPTXExtractOptions.AllowInheritedTextPreview` separately enables a read-only
+`source-latin-inheritance-approximate-v1` preview. This declared policy combines
+presentation defaults, non-placeholder shape master `otherStyle`, shape `fontRef`,
+local list styles, and direct paragraph/run properties, in that order. It is not
+a qualification of PowerPoint's general inheritance precedence. Each layer is
+validated before projection; font, size and color must come from source. Missing
+bold/italic resolve to false, and source paragraph defaults supply left alignment
+and no bullet only when not authored. The bounded profile accepts graphic ASCII
+Latin text, disables authored kerning, and omits validated terminal language and
+checking metadata from layout. Font metrics, wrapping and terminal metrics can
+differ. Unknown or active unsupported source still refuses; source bytes and
+mutation safety remain unchanged. Shape autofit requires its separate opt-in.
+
 `NativePPTXExtractOptions.AllowSourceFrameAutoFitPreview` explicitly permits a
 read-only preview of otherwise supported `spAutoFit` text in its saved source
 frame. Its native `textBody.autoFit` is `shape-source-frame`, with a persistent

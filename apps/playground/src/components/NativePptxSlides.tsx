@@ -30,6 +30,7 @@ export function NativePptxPreviewResult({preview,source,onImageError}:{preview:P
  const limit=50
  return <section aria-label={`Native preview result for slide ${preview.slide_index+1}`} data-native-preview-status={coverage.status}>
   <h4>{coverage.label} · slide {preview.slide_index+1} of {preview.slide_count}</h4>
+  {(preview.inherited_text_preview_count??0)>0&&<p role="note" data-inherited-text-approximation>Approximate inherited text preview. Uses a declared source-style ordering, not qualified PowerPoint precedence. Kerning is disabled; terminal language metadata is preserved without layout. Text metrics, wrapping, and terminal spacing may differ. Read-only; the original file is unchanged.</p>}
   {(preview.source_frame_autofit_count??0)>0&&<p role="note" data-autofit-approximation>Approximate autofit preview. Text uses the saved source frame without resizing. Frame size, layout, and overflow or clipping may differ from PowerPoint. Read-only; editing permissions are unchanged.</p>}
   <p className="ds-muted">Supported paint is retained alongside identified gaps. Native line layout uses the InjOffice policy; complete source coverage and PowerPoint equivalence are not established. Read-only; the original file and editing permissions are unchanged.</p>
   <NativePptxVector preview={preview} onImageError={onImageError}/>
@@ -42,10 +43,11 @@ export function NativePptxPreviewResult({preview,source,onImageError}:{preview:P
 export function NativePptxSlides({bytes,slideCount,apiBase,source}:{bytes:Uint8Array;slideCount:number;apiBase:string;source?:NativePptxDeck}){
  const [paint,setPaint]=useState<PptxPreview|null>(null),[busy,setBusy]=useState(false),[at,setAt]=useState(0)
  const [approximateAutoFit,setApproximateAutoFit]=useState(false)
+ const [inheritedText,setInheritedText]=useState(false)
  const consent=`Native slides require uploading this presentation to ${apiBase}. Nothing is uploaded until you choose the button below.`
  const [message,setMessage]=useState(consent)
  const generation=useRef(0),pending=useRef<AbortController|null>(null)
- useEffect(()=>{generation.current++;pending.current?.abort();setPaint(null);setBusy(false);setAt(0);setApproximateAutoFit(false);setMessage(consent);return()=>{generation.current++;pending.current?.abort()}},[bytes,apiBase])
+ useEffect(()=>{generation.current++;pending.current?.abort();setPaint(null);setBusy(false);setAt(0);setApproximateAutoFit(false);setInheritedText(false);setMessage(consent);return()=>{generation.current++;pending.current?.abort()}},[bytes,apiBase])
  async function render(){
   pending.current?.abort()
   const token=++generation.current,controller=new AbortController();pending.current=controller
@@ -53,11 +55,12 @@ export function NativePptxSlides({bytes,slideCount,apiBase,source}:{bytes:Uint8A
   try{
    const owned=Uint8Array.from(bytes),hash=await crypto.subtle.digest('SHA-256',owned.buffer),digest=[...new Uint8Array(hash)].map(n=>n.toString(16).padStart(2,'0')).join('')
    if(controller.signal.aborted||token!==generation.current)return
-   const response=await fetch(`${apiBase}/v1/pptx/slide-preview?slide=${at}${approximateAutoFit?'&autofit=source-frame':''}`,{method:'POST',headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.presentationml.presentation'},body:new Blob([owned.buffer]),credentials:'omit',redirect:'error',signal:controller.signal})
+   const response=await fetch(`${apiBase}/v1/pptx/slide-preview?slide=${at}${approximateAutoFit?'&autofit=source-frame':''}${inheritedText?'&text=source-inherited':''}`,{method:'POST',headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.presentationml.presentation'},body:new Blob([owned.buffer]),credentials:'omit',redirect:'error',signal:controller.signal})
    const result=await readNativePreviewResponse(response)
    if(!response.ok)throw new Error(typeof (result as {error?:unknown})?.error==='string'?(result as {error:string}).error:'Native slide preview was refused by the helper.')
    const decoded=decodePptxPreview(result)
    if(!approximateAutoFit&&(decoded.source_frame_autofit_count??0)>0)throw new Error('The helper returned an autofit approximation without your opt-in.')
+   if(!inheritedText&&(decoded.inherited_text_preview_count??0)>0)throw new Error('The helper returned an inherited text approximation without your opt-in.')
    if(decoded.package_sha256!==digest||decoded.slide_index!==at||decoded.slide_count!==slideCount)throw new Error('Native slide does not match the opened source.')
    if(!nativeDocxImagesWithinBudget(decoded.resources))throw new Error('Native slide image pixel budget exceeded.')
    await decodeNativeDocxImages(decoded.resources,controller.signal)
@@ -68,8 +71,11 @@ export function NativePptxSlides({bytes,slideCount,apiBase,source}:{bytes:Uint8A
  }
  function changeSlide(index:number){generation.current++;pending.current?.abort();setBusy(false);setPaint(null);setAt(index);setMessage(consent)}
  function changeAutoFit(enabled:boolean){generation.current++;pending.current?.abort();setBusy(false);setPaint(null);setApproximateAutoFit(enabled);setMessage(consent)}
+ function changeInheritedText(enabled:boolean){generation.current++;pending.current?.abort();setBusy(false);setPaint(null);setInheritedText(enabled);setMessage(consent)}
  return <section aria-label="Measured native presentation" className="ds-panel">
   <h3>Measured native slide</h3><p className="ds-status" role="status">{message}</p>
+  <label><input type="checkbox" checked={inheritedText} onChange={event=>changeInheritedText(event.target.checked)}/> Allow read-only approximate inherited text</label>
+  {inheritedText&&<p className="ds-muted">Source-style ordering and font metrics are approximate; kerning is disabled and terminal metadata is not laid out. Text may wrap differently. Nothing is uploaded until you choose the button.</p>}
   <label><input type="checkbox" checked={approximateAutoFit} onChange={event=>changeAutoFit(event.target.checked)}/> Allow read-only approximate autofit in the saved source frame</label>
   {approximateAutoFit&&<p className="ds-muted">No resizing is performed. Text may overflow or clip, and frame size or layout may differ from PowerPoint. Rendering starts only when you choose the upload button.</p>}
   <div className="ds-workstrip"><DsField label="Native slide"><DsSelect value={at} onChange={event=>changeSlide(Number(event.target.value))}>{Array.from({length:Math.min(slideCount,10000)},(_,i)=><option key={i} value={i}>{i+1} of {slideCount}</option>)}</DsSelect></DsField>

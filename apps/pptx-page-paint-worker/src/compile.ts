@@ -48,6 +48,7 @@ function fontProviders(path:string){
 export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const request=object(input)
  if(request.source_frame_autofit_preview!==undefined&&typeof request.source_frame_autofit_preview!=='boolean')throw new Error('Autofit preview requires a boolean opt-in')
+ if(request.inherited_text_preview!==undefined&&typeof request.inherited_text_preview!=='boolean')throw new Error('Inherited text preview requires a boolean opt-in')
  if(typeof request.package_sha256!=='string'||!/^[a-f0-9]{64}$/.test(request.package_sha256)||typeof request.font_manifest_path!=='string'||!Number.isSafeInteger(request.slide_index))throw new Error('Invalid source-bound preview input')
  assertNativePptx(request.deck)
  const deck=request.deck as NativePptxDeck
@@ -59,8 +60,11 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  checkElements(deck.slides[request.slide_index as number]!.elements)
  const countSourceFrames=(elements:readonly NativeElement[]):number=>elements.reduce((count,element)=>count+((element.kind==='text'||element.kind==='shape')&&element.textBody?.autoFit==='shape-source-frame'?1:0)+(element.kind==='group'?countSourceFrames(element.children):0),0)
  const sourceFrameAutoFitCount=countSourceFrames(deck.slides[request.slide_index as number]!.elements)
+ const countInherited=(elements:readonly NativeElement[]):number=>elements.reduce((n,e)=>n+(e.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')?1:0)+(e.kind==='group'?countInherited(e.children):0),0)
+ const inheritedTextCount=countInherited(deck.slides[request.slide_index as number]!.elements)
+ if(inheritedTextCount>0&&request.inherited_text_preview!==true)throw new Error('Inherited text requires explicit preview opt-in')
  if(sourceFrameAutoFitCount>0&&request.source_frame_autofit_preview!==true)throw new Error('Source-frame autofit requires explicit preview opt-in')
- const tree=await compileNativePptxSlide(deck,request.slide_index as number,{sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
+ const tree=await compileNativePptxSlide(deck,request.slide_index as number,{inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
  const recording=createRecordingPaintSurface();paintSlideRenderTree(tree,recording)
  const root:Extract<PreviewNode,{kind:'group'}>={kind:'group',transform:[1,0,0,1,0,0],children:[]}
  const stack=[root],diagnostics=tree.diagnostics.map(d=>`${d.code}: ${d.message}`)
@@ -123,6 +127,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const result:PptxPreview={version:1,package_sha256:request.package_sha256,slide_index:request.slide_index as number,slide_count:deck.slides.length,width:tree.size.cx,height:tree.size.cy,background:tree.background.color,policy:'max-run-natural-v1',nodes:root.children,diagnostics,font_digests:[...fonts.resources.values()].map(r=>r.face.contentDigest),resources:[]}
  result.resources=[...resources.values()].sort((a,b)=>a.part_name.toLowerCase()<b.part_name.toLowerCase()?-1:1)
  if(sourceFrameAutoFitCount>0)result.source_frame_autofit_count=sourceFrameAutoFitCount
+ if(inheritedTextCount>0){result.inherited_text_preview_count=inheritedTextCount;result.inherited_text_policy='source-latin-inheritance-approximate-v1'}
  return decodePptxPreview(result)
 }
 function pathPart(p:RenderPathCommand):string {switch(p.kind){case 'moveTo':return `M${p.x} ${p.y}`;case 'lineTo':return `L${p.x} ${p.y}`;case 'close':return 'Z';default:throw new Error('Unmodeled path command')}}
