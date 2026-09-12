@@ -1,3 +1,4 @@
+import {DOCX_LEGACY_TABLE_ORIGIN_WARNING} from './nativeLegacyTableOriginV1.js'
 import {
   decodeNativeDocxDocument,
   type NativeDocxDocumentV1,
@@ -380,6 +381,7 @@ export function decodeNativeDocxAutomaticBorderPreviewV1(
       )
         return { ok: false };
       const absent = eligibility.absent_font_sizes ?? []
+      if(eligibility.legacy_table_origins?.length&&!input.reasons.includes(DOCX_LEGACY_TABLE_ORIGIN_WARNING))return {ok:false}
       if (input.approximated_font_sizes !== undefined) {
         if (!validNativeDocxApproximatedFontSizesV1(input.approximated_font_sizes, absent, input.source.package_sha256) || !input.reasons.includes(DOCX_ABSENT_FONT_SIZE_WARNING)) return { ok: false }
       } else if (input.status === 'painted' && absent.length > 0) return { ok: false }

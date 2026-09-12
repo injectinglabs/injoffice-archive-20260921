@@ -41,6 +41,7 @@ import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.
 import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
 import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
 import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1, nativeDocxTableGeometryV1 } from './nativeTablePagePaintV1.js'
+import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { decodeNativeDOCXFontInventoryV1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 export { decodeNativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
@@ -615,7 +616,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     layoutFragmentWork += measured.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
     if (bodyFields.length && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Body-field layout probe exceeds cumulative shaping fragment budget')
   }
-  const qualifiedTables = qualifyNativeDocxTablesV1(document.value, resolved.value, measuredTables)
+  const qualifiedTables = approximateEligibility===undefined?qualifyNativeDocxTablesV1(document.value,resolved.value,measuredTables):qualifyApproximateLegacyTables(document.value,resolved.value,measuredTables,decodeNativeDocxApproximationEligibilityV1(approximateEligibility,settings.value))
   if (measuredTables && qualifiedTables.status !== 'qualified') throw new TypeError('Content autofit refused unsupported source geometry or unsatisfied intrinsic widths')
   if (document.value.body.blocks.some((block) => block.table !== undefined) && document.value.sections.some((section) => section.page.columns > 1)) {
     throw new TypeError('native page-paint compiler refuses table content when any section uses multi-column flow')

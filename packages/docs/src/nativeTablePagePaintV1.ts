@@ -44,6 +44,7 @@ export interface NativeDocxQualifiedTableRowV1 {
 }
 
 export interface NativeDocxQualifiedTableV1 {
+  origin_policy?: {name:'legacy-content-aligned-origin-v1';source:import('./nativeLegacyTableOriginV1.js').NativeDocxLegacyTableOriginV1;delta_millipoints:number}
   width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1
   table: NativeDocxTableV1
   width_millipoints: number
@@ -117,6 +118,7 @@ function canonical(value: unknown, active = new WeakSet<object>(), depth = 0, st
 
 function projection(tables: readonly NativeDocxQualifiedTableV1[]): unknown {
   return tables.map((entry) => ({
+    ...(entry.origin_policy ? {origin_policy:entry.origin_policy} : {}),
     ...(entry.width_policy ? { width_policy: entry.width_policy } : {}),
     table_id: entry.table.id,
     width_twips: entry.table.width_twips,

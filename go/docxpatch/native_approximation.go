@@ -16,6 +16,7 @@ type NativeDocxApproximationEligibilityV1 struct {
 	Reasons                 []string                          `json:"reasons"`
 	ApproximatedSettings    []NativeDocxApproximatedSettingV1 `json:"approximated_settings,omitempty"`
 	AbsentFontSizes         []NativeDocxAbsentFontSizeV1      `json:"absent_font_sizes,omitempty"`
+	LegacyTableOrigins      []NativeDocxLegacyTableOriginV1   `json:"legacy_table_origins,omitempty"`
 }
 
 // ExtractNativeDocxApproximationEligibilityV1 allows exact legacy mode selection
@@ -121,6 +122,12 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 	result.AbsentFontSizes, err = nativeAbsentFontSizes(data)
 	if err != nil {
 		return nil, err
+	}
+	if mode == 12 {
+		result.LegacyTableOrigins, err = nativeLegacyTableOrigins(data)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }

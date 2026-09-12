@@ -8,6 +8,8 @@
  */
 
 import { decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
+import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
+import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {
   DOCX_NATIVE_LIMITS,
   DOCX_MAX_TWIPS_FOR_MILLIPOINTS,
@@ -291,7 +293,7 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
-  approximateLegacySettings?: boolean
+  approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
   diagnostics: NativeDocxPaginationDiagnosticV1[]
@@ -831,7 +833,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   if (expectedTabInterval === undefined || expectedTabInterval !== shaped.tab_interval_millipoints) {
     refuse(context, 'default-tab-stop-mismatch', document.document_id, `Shaped tab interval ${shaped.tab_interval_millipoints} does not match the attested Word default tab stop ${settings.default_tab_stop_twips} twips`)
   }
-  const qualified = qualifyNativeDocxTablesV1(document, context.request.resolved_layout, shaped)
+  const qualified = qualifyApproximateLegacyTables(document, context.request.resolved_layout, shaped,context.approximateLegacySettings||undefined)
   if (qualified.status === 'refused') for (const diagnostic of qualified.diagnostics) refuse(context, 'body-table-unsupported', diagnostic.scope_id, diagnostic.message)
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
@@ -1688,7 +1690,7 @@ function expectedSectionGeometry(section: NativeDocxSectionV1): { width: number;
 }
 
 /** Deterministic core for an already decoded and joined pagination request. */
-function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, approximateLegacySettings = false): NativeDocxPaginatedLayoutV1 {
+function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false): NativeDocxPaginatedLayoutV1 {
   const context: PaginationContext = {
     approximateLegacySettings,
     request,
@@ -1757,10 +1759,10 @@ export function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPagi
 export function validateNativeDocxApproximatePaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, eligibilityValue: unknown): NativeDocxValidationIssue[] {
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, request.pagination_settings)
   if (eligibility.status !== 'eligible') return [issue('BROKEN_REFERENCE', '', 'ineligible source settings for current-policy layout')]
-  return validatePaginatedLayoutSource(output, request, true)
+  return validatePaginatedLayoutSource(output, request, eligibility)
 }
 
-function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, approximateLegacySettings: boolean): NativeDocxValidationIssue[] {
+function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1, approximateLegacySettings: NativeDocxApproximationEligibilityV1|false): NativeDocxValidationIssue[] {
   const issues: NativeDocxValidationIssue[] = []
   const add = (code: NativeDocxValidationIssue['code'], path: string, message: string): void => {
     if (issues.length < DOCX_NATIVE_LIMITS.maxIssues) issues.push(issue(code, path, message))
@@ -1827,7 +1829,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
   // Exact replay above validates every repeated placement. The independent
   // source coverage audit below counts original body lines only.
   const actualLines = output.pages.flatMap((page, pageIndex) => page.lines.filter((line) => !line.repeated_table_header).map((line) => ({ page, pageIndex, line })))
-  const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+  const qualified = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines,approximateLegacySettings||undefined)
   const cellContentX = new Map<string, number>()
   if (qualified.status === 'qualified') for (const table of qualified.tables) for (const row of table.rows) for (const cell of row.cells) for (const paragraph of cell.cell.paragraphs) cellContentX.set(paragraph.id, cell.content_x_millipoints)
   if (actualLines.length !== expectedLines.length) add('BROKEN_REFERENCE', '/pages', 'placed lines must exactly cover every shaped body line once')
@@ -1874,7 +1876,7 @@ export function paginateNativeDocxApproximateLegacyV1(value: unknown, eligibilit
   if (!decoded.ok || !('request' in decoded)) throw new TypeError('approximate pagination request failed strict structural/source validation')
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, decoded.request.pagination_settings)
   if (eligibility.status !== 'eligible') throw new TypeError('source settings are ineligible for approximate legacy pagination')
-  const layout = paginateDecodedNativeDocxV1(decoded.request, true)
-  if (validatePaginatedLayoutSource(layout, decoded.request, true).length) throw new TypeError('approximate pagination failed deterministic policy/source validation')
+  const layout = paginateDecodedNativeDocxV1(decoded.request, eligibility)
+  if (validatePaginatedLayoutSource(layout, decoded.request, eligibility).length) throw new TypeError('approximate pagination failed deterministic policy/source validation')
   return { fidelity: 'approximate', layout }
 }

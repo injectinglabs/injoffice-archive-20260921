@@ -274,6 +274,19 @@ from the top and leaves extra leading below the text. This declared host policy
 is not Word baseline fidelity; strict rendering still requires natural line
 height, and compressed line boxes remain refused in both paths.
 
+Eligible mode-12 previews can also carry `legacy_table_origins` source facts.
+For a qualified unmerged, left-aligned table in a single page column, the
+read-only `legacy-content-aligned-origin-v1` policy shifts the table and its
+cell content left by its explicitly authored leading cell margin. It does not
+change widths, row heights, source indents, or document bytes. The source
+indent/margin paths and part digests enter the table projection hash; placement
+is re-derived and bounded against the page. Mode 14/15, ambiguous source
+properties, and page-underflow cases do not receive this policy. The output
+retains the facts and a visible approximation warning, including when combined
+with automatic-border preview. This is not a Word-layout equivalence claim.
+Modeled main-part digests are trusted native-extractor evidence joined to the
+package; the TypeScript consumer does not independently hash absent XML bytes.
+
 The same current-layout approximation can accept an explicit host-selected
 `fontSizePolicy: { kind: 'host-default-size-v1', half_points: 22 }` only for
 native-source-attested missing sizes (`absent_font_sizes` eligibility facts).

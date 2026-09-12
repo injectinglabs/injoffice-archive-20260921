@@ -22,6 +22,8 @@ import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import {deriveNativeSquareWrapPlanV1, hasNativeSquareWrapV1} from './nativeSquareWrapV1.js'
 import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
 import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
+import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 export {
   DOCX_PAGE_PAINT_REQUEST_PROTOCOL, DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS,
@@ -500,7 +502,7 @@ function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown):
     if (manifest.ok && integrity.font_manifest_sha256 !== nativeDocxPagePaintFontManifestSha256V1(manifest.value)) add(issues, 'BROKEN_REFERENCE', '/integrity/font_manifest_sha256', 'must attest the complete validated font manifest carried by this request')
     if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines, root.page_field_variants as NativeDocxPageFieldVariantV1[] | undefined)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines and page-field variants carried by this request')
     if (pagination.ok) {
-      const qualified = qualifyNativeDocxTablesV1(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines)
+      const qualified = qualifyApproximateLegacyTables(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines,eligibility===undefined?undefined:decodeNativeDocxApproximationEligibilityV1(eligibility,pagination.value.pagination_settings))
       const expected = qualified.status === 'qualified' ? qualified.sha256 : nativeDocxTableProjectionSha256V1([])
       if (integrity.table_projection_sha256 !== expected) add(issues, 'BROKEN_REFERENCE', '/integrity/table_projection_sha256', 'must attest the exact qualified table projection or the canonical empty projection for an upstream refusal')
     }
@@ -867,7 +869,9 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   const approximate = paginateNativeDocxApproximateLegacyV1(request.pagination_request, eligibility)
   request.paginated_layout = approximate.layout
   request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(approximate.layout)
-  const painted = await compileDecodedPagePaint(request, outlineProvider, true)
+  const originTables=qualifyApproximateLegacyTables(request.pagination_request.document,request.pagination_request.resolved_layout,request.pagination_request.shaped_lines,eligibility)
+  request.integrity.table_projection_sha256=originTables.status==='qualified'?originTables.sha256:nativeDocxTableProjectionSha256V1([])
+  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
   return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
 }
@@ -878,12 +882,12 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   const { request } = decodeNativeDocxApproximateComputedPagePaintV1(value, eligibilityValue)
   const settings = request.pagination_request.pagination_settings
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
-  const painted = await compileDecodedPagePaint(request, outlineProvider, true)
+  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
   return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
 }
 
-async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings = false): Promise<CompileNativeDocxPagePaintV1Result> {
+async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false): Promise<CompileNativeDocxPagePaintV1Result> {
   const providerResult = snapshotProvider(outlineProvider)
   if (!providerResult.ok) return providerResult
   const provider = providerResult.value
@@ -916,7 +920,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]
     return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires no blocking shaping/resolution diagnostics and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }
   }
-  const qualifiedTables = qualifyNativeDocxTablesV1(pagination.document, pagination.resolved_layout, pagination.shaped_lines)
+  const qualifiedTables = qualifyApproximateLegacyTables(pagination.document, pagination.resolved_layout, pagination.shaped_lines,approximateLegacySettings||undefined)
   if (qualifiedTables.status !== 'qualified') return { ok: true, value: refusal(provenance, 'unsupported-source', qualifiedTables.diagnostics[0]!.scope_id, qualifiedTables.diagnostics[0]!.message) }
   const tableCommandsIndex = tableCommandsByPage(request, layout.pages, qualifiedTables.tables)
   if (!tableCommandsIndex) return { ok: true, value: refusal(provenance, 'resource-limit', documentID, 'Table paint indexing exceeded its bounded work or geometry contract') }

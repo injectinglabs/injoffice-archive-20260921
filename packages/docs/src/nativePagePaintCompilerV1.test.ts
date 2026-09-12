@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
+import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING} from './nativeLegacyTableOriginV1.js'
 import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, inspectHarfBuzzFontMetricsV1 } from '@injoffice/font-metrics/harfbuzz'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
@@ -451,6 +452,69 @@ describe('native DOCX page-paint compiler v1', () => {
     return input
   }
 
+  it.each([false,true])('applies source-qualified legacy origin only in approximate paint, automatic borders %s',async automatic=>{
+    const input=automatic?autoBorderFixture():tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy12'}]
+    const table=document.body.blocks[0]!.table!,part=table.anchor.part_name,base=table.anchor.path+'/w:tblPr[1]'
+    const fact={table_id:table.id,package_sha256:HASH,indent_twips:0,left_margin_twips:100,source_indent:{part_name:part,path:base+'/w:tblInd[1]',sha256:HASH},source_margin:{part_name:part,path:base+'/w:tblCellMar[1]/w:left[1]',sha256:HASH}}
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:HASH,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy12'],legacy_table_origins:[fact]}
+    const outlines=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const provider={providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1){const o=outlines.outline(request.glyph_id);return o.path.length?{status:'outlined' as const,...request,...o}:{status:'empty' as const,...request,units_per_em:o.units_per_em}}}
+    const before=structuredClone(input)
+    const {legacy_table_origins: _origins,...baselineEligibility}=eligibility
+    const render=(e:unknown)=>automatic?renderNativeDocxAutomaticBorderPreviewV1(input,provider,undefined,e):renderNativeDocxApproximatePagePreviewV1(input,e,provider)
+    const baseline=await render(baselineEligibility),shifted=await render(eligibility)
+    expect(shifted.status).toBe('painted');expect(baseline.status).toBe('painted')
+    expect(shifted.reasons).toContain(DOCX_LEGACY_TABLE_ORIGIN_WARNING)
+    const border=(p:typeof shifted)=>p.pages[0]!.commands.find(c=>c.kind==='stroke_table_border')!
+    const a=border(shifted),b=border(baseline)
+    expect(a).toMatchObject({...b,x1_millipoints:(b as any).x1_millipoints-5000,x2_millipoints:(b as any).x2_millipoints-5000})
+    expect(shifted.pages.map(p=>[p.width_millipoints,p.height_millipoints])).toEqual(baseline.pages.map(p=>[p.width_millipoints,p.height_millipoints]))
+    for(const [index,command] of shifted.pages[0]!.commands.entries()){
+      const original=baseline.pages[0]!.commands[index]!
+      if(command.kind==='fill_glyph_path'&&original.kind==='fill_glyph_path'){
+        expect(command.path).toEqual(original.path.map(part=>Object.fromEntries(Object.entries(part).map(([key,value])=>[key,key.endsWith('x_millipoints')?(value as number)-5000:value]))))
+      }else if(command.kind==='stroke_table_border'&&original.kind==='stroke_table_border'){
+        expect(command).toEqual({...original,x1_millipoints:original.x1_millipoints-5000,x2_millipoints:original.x2_millipoints-5000})
+      }else if(command.kind==='fill_table_cell'&&original.kind==='fill_table_cell'){
+        expect(command).toEqual({...original,x_millipoints:original.x_millipoints-5000})
+      }
+    }
+    expect(shifted.rendering_provenance.table_projection.sha256).not.toBe(baseline.rendering_provenance.table_projection.sha256)
+    expect(input).toEqual(before)
+    const decode=automatic?decodeNativeDocxAutomaticBorderPreviewV1:decodeNativeDocxApproximatePagePreviewV1
+    expect(decode(shifted).ok).toBe(true)
+    expect(decode({...shifted,reasons:shifted.reasons.filter(r=>r!==DOCX_LEGACY_TABLE_ORIGIN_WARNING)}).ok).toBe(false)
+    for(const changed of [{...fact,left_margin_twips:101},{...fact,table_id:'other'},{...fact,source_margin:{...fact.source_margin,path:'/wrong'}}])await expect(render({...eligibility,legacy_table_origins:[changed]})).rejects.toThrow()
+    await expect(render({...eligibility,legacy_compatibility_mode:14})).rejects.toThrow()
+    if(!automatic){
+      const strict=await prepareNativeDocxPagePaintV1(input)
+      expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
+      const strictTables=qualifyNativeDocxTablesV1(document,resolved,strict.page_paint_request.pagination_request.shaped_lines)
+      const approximateTables=qualifyApproximateLegacyTables(document,resolved,strict.page_paint_request.pagination_request.shaped_lines,eligibility)
+      expect(strictTables).toMatchObject({status:'qualified',tables:[{x_millipoints:0}]})
+      expect(approximateTables).toMatchObject({status:'qualified',tables:[{x_millipoints:-5000}]})
+      if(approximateTables.status!=='qualified')throw new Error('Expected approximate table')
+      expect((await render({...eligibility,legacy_table_origins:[]})).status).toBe('painted')
+      const computed=structuredClone(strict.page_paint_request)
+      computed.paginated_layout=paginateNativeDocxApproximateLegacyV1(computed.pagination_request,eligibility).layout
+      computed.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(computed.paginated_layout)
+      computed.integrity.table_projection_sha256=approximateTables.sha256
+      expect(decodeNativeDocxApproximateComputedPagePaintV1(computed,eligibility).fidelity).toBe('approximate')
+      expect(decodeNativeDocxPagePaintRequestV1(computed).ok).toBe(false)
+      const forged=structuredClone(computed);forged.paginated_layout.pages[0]!.lines[0]!.x_millipoints+=1
+      forged.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(forged.paginated_layout)
+      expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(forged,eligibility)).toThrow()
+      const changedDigest={...eligibility,legacy_table_origins:[{...fact,source_indent:{...fact.source_indent,sha256:`sha256:${'f'.repeat(64)}`}}]}
+      const digestProjection=qualifyApproximateLegacyTables(document,resolved,strict.page_paint_request.pagination_request.shaped_lines,changedDigest)
+      if(digestProjection.status!=='qualified')throw new Error('Expected declared digest projection')
+      expect(digestProjection.sha256).not.toBe(approximateTables.sha256)
+      expect(()=>decodeNativeDocxApproximateComputedPagePaintV1(computed,changedDigest)).toThrow()
+      const underflow=structuredClone(document);underflow.sections[0]!.page.margins.left_twips=0
+      expect(()=>qualifyApproximateLegacyTables(underflow,resolved,strict.page_paint_request.pagination_request.shaped_lines,eligibility)).toThrow('page bounds')
+    }
+  },20000)
   it.each([undefined, 12] as const)('renders source-qualified automatic borders only as a distinct white-background approximation (legacy %s)', async (mode) => {
     const input = autoBorderFixture()
     const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
