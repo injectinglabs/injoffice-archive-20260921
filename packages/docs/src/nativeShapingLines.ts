@@ -1174,6 +1174,10 @@ async function resolveFontResource(context: NativeShapingContext, run: TextRunIn
     addDiagnostic(context, { code: 'invalid-provider-output', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Injected resolver returned a face that is invalid, not manifest-backed, or not matched to the authored family request' })
     return null
   }
+  if (context.request.resolved_layout.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED') && resolution.face.resolution !== 'exact') {
+    addDiagnostic(context, { code: 'provider-refusal', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Preserved font matching metadata requires an exact supplied font; metadata-driven substitution is not implemented' })
+    return null
+  }
   for (const decision of resolution.decisions) addDiagnostic(context, { code: 'provider-decision', severity: 'deferred', scope_id: sourceID, source_id: sourceID, message: `${decision.code}: ${decision.message}` })
   const cacheKey = resolvedFaceCacheKey(resolution.face)
   const cached = context.fontResources.get(cacheKey)

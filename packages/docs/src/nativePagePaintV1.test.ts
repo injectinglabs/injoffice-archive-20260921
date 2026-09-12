@@ -371,6 +371,21 @@ describe('native DOCX page-paint v1', () => {
     const unknown = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
     expect(unknown.ok && unknown.value.status).toBe('refused')
   })
+  it('retains qualified font matching diagnostics while painting supplied glyphs', async () => {
+    const request = fixture()
+    const resolved = request.pagination_request.resolved_layout
+    resolved.source_parts.font_table_part = 'word/fonts.xml'
+    resolved.diagnostics.push({ code: 'FONT_MATCHING_METADATA_PRESERVED', severity: 'unsupported', scope_id: resolved.document_id, part_name: 'word/fonts.xml', path: '/w:fonts[1]/w:font[1]/w:panose1[1]', preservation: 'preserve-verbatim', message: 'Matching metadata retained' })
+    const before = JSON.stringify(request.pagination_request.document)
+    const result = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(result.ok && result.value.status).toBe('painted')
+    expect(resolved.diagnostics).toHaveLength(1)
+    expect(JSON.stringify(request.pagination_request.document)).toBe(before)
+    resolved.diagnostics[0]!.code = 'UNMODELED_FONT_METADATA'
+    const unknown = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(unknown.ok && unknown.value.status).toBe('refused')
+  })
+
   it('bounds paginated-layout hashing and keeps object-key order irrelevant', () => {
     const layout = fixture().paginated_layout
     const reordered = Object.fromEntries(Object.entries(structuredClone(layout)).reverse()) as typeof layout

@@ -282,7 +282,7 @@ func TestResolveNativeDocumentLayoutV1StrictRelocatedThemeAndFontTable(t *testin
 	if paragraph.Bidi == nil || !*paragraph.Bidi || paragraph.IndentStartTwips == nil || *paragraph.IndentStartTwips != 900 || paragraph.IndentEndTwips == nil || *paragraph.IndentEndTwips != -120 {
 		t.Fatalf("paragraph bidi/logical indents were dropped: %#v", paragraph)
 	}
-	for _, code := range []string{"THEME_FONT_PRESERVED", "THEME_COLOR_PRESERVED", "SCRIPT_FONT_PRESERVED", "SCRIPT_LANGUAGE_PRESERVED", "UNSUPPORTED_HIGHLIGHT", "FOREIGN_FONT_TABLE_MARKUP", "UNMODELED_FONT_METADATA"} {
+	for _, code := range []string{"THEME_FONT_PRESERVED", "THEME_COLOR_PRESERVED", "SCRIPT_FONT_PRESERVED", "SCRIPT_LANGUAGE_PRESERVED", "UNSUPPORTED_HIGHLIGHT", "FOREIGN_FONT_TABLE_MARKUP", "FONT_MATCHING_METADATA_PRESERVED"} {
 		if !hasResolutionDiagnostic(resolved, code) {
 			t.Fatalf("missing %s diagnostic: %#v", code, resolved.Diagnostics)
 		}

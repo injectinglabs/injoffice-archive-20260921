@@ -369,6 +369,7 @@ async function attestResolvedFontReferencesBeforeBidi(
   resolver: NativeFontResolver,
   manifest: NativeFontManifest,
   references: NativeDOCXFontInventoryV1['references'],
+  requireExactMatching = false,
 ): Promise<void> {
   const loadedFaces = new Set<string>()
   let totalBytes = 0
@@ -385,6 +386,7 @@ async function attestResolvedFontReferencesBeforeBidi(
     const resolution = await resolver.resolve(Object.freeze({ manifest, run }))
     if (!resolution || typeof resolution !== 'object' || 'status' in resolution && resolution.status === 'refused' || !('face' in resolution)) throw new TypeError('every authored font reference must resolve through the attested font provider before bidi')
     const face = resolution.face
+    if (requireExactMatching && face.resolution !== 'exact') throw new TypeError('Preserved font matching metadata requires exact supplied font faces; substitution is not implemented')
     const manifestFace = manifest.faces.find((candidate) => candidate.faceId === face.faceId)
     if (!manifestFace || face.sourceKind === 'system' || !face.contentDigest || manifestFace.source.contentDigest !== face.contentDigest || face.weight !== reference.weight || face.style !== reference.style || face.stretch !== 100) throw new TypeError('pre-bidi font resolution does not exact-join one content-addressed manifest face')
     if (loadedFaces.has(face.faceId)) continue
@@ -497,7 +499,7 @@ export async function prepareNativeDocxPagePaintV1(input: NativeDocxPagePaintPre
   const mediaAssets = prepareNativeDocxPagePaintMediaAssetsV1(document.value, input.media_assets)
   const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
   if (!isCanonicalHarfBuzzTextShaperV1(shaper, input.source_revision)) throw new TypeError('HarfBuzz shaper provenance does not attest the exact pinned runtime and requested engine source revision')
-  await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references)
+  await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references, resolved.value.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED'))
   const dimensions = shapingDimensions(document.value, settings.value)
   const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
   const initialBodyFieldValues = Object.fromEntries(bodyFields.map(run => [run.id, '1']))

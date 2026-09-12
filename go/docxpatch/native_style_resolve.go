@@ -766,6 +766,10 @@ func (resolver *nativeLayoutResolver) loadFonts(partName string) error {
 			}
 		}
 		for _, property := range child.Children {
+			if nativeExactContainer(root) && nativeQualifiedFontDescriptor(property, child, resolver.wordNS) {
+				resolver.addDiagnostic("FONT_MATCHING_METADATA_PRESERVED", resolver.doc.DocumentID, partName, property, "Validated font matching metadata is preserved; native painting requires exact supplied faces, not metadata-driven substitution")
+				continue
+			}
 			if property.Name.Space == resolver.wordNS && property.Name.Local == "altName" {
 				continue
 			}

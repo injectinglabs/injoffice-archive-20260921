@@ -1309,6 +1309,31 @@ describe('shapeNativeDocxLinesV1', () => {
     }
   })
 
+  it('preserves qualified font descriptors and requires exact supplied faces', async () => {
+    for (const variant of ['qualified', 'unknown', 'wrong-part', 'wrong-path', 'substitute', 'fallback'] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'Font descriptors do not supply glyphs')
+      const resolved = resolvedLayout(document)
+      resolved.source_parts.font_table_part = 'word/fonts.xml'
+      resolved.diagnostics.push({
+        code: variant === 'unknown' ? 'UNMODELED_FONT_METADATA' : 'FONT_MATCHING_METADATA_PRESERVED',
+        severity: 'unsupported', preservation: 'preserve-verbatim', scope_id: document.document_id,
+        part_name: variant === 'wrong-part' ? 'word/document.xml' : 'word/fonts.xml',
+        path: variant === 'wrong-path' ? '/w:fonts[1]/w:font[1]/w:unknown[1]' : '/w:fonts[1]/w:font[1]/w:panose1[1]',
+        message: 'Validated matching hints retained',
+      })
+      const providers = fakeProviders([])
+      if (variant === 'substitute' || variant === 'fallback') providers.resolver.resolve = () => ({ status: 'resolved', face: { ...face, resolution: variant }, attemptedFaceIds: [face.faceId], decisions: [] })
+      const before = JSON.stringify(resolved)
+      const result = await shapeNativeDocxLinesV1(request(document, resolved), providers)
+      expect(result.ok, variant).toBe(true)
+      if (!result.ok) continue
+      expect(result.value.paragraphs.length > 0, variant).toBe(variant === 'qualified')
+      if (variant === 'substitute' || variant === 'fallback') expect(result.value.diagnostics.some((entry) => entry.code === 'provider-refusal')).toBe(true)
+      expect(JSON.stringify(resolved)).toBe(before)
+    }
+  })
+
   it('emits pagination-policy diagnostics without attempting pagination', async () => {
     const document = nativeDocument()
     makeTextOnly(document, 'policy')
