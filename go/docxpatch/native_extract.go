@@ -1013,7 +1013,7 @@ func nativeExactThemeLatinTypeface(fontSet *nativeXMLNode, drawingNS string) (st
 	if fontSet == nil {
 		return "", false
 	}
-	latin := firstDirectNativeChild(fontSet, drawingNS, "latin")
+	latin := nativeUniqueThemeFontChild(fontSet, drawingNS, "latin")
 	if latin == nil || !nativeExactLeaf(latin,
 		xml.Name{Local: "typeface"}, xml.Name{Space: drawingNS, Local: "typeface"},
 		xml.Name{Local: "panose"}, xml.Name{Space: drawingNS, Local: "panose"},
@@ -1032,21 +1032,36 @@ func nativeParseThemeLatinFonts(root *nativeXMLNode, drawingNS string) nativeThe
 	if root == nil {
 		return fonts
 	}
-	elements := firstDirectNativeChild(root, drawingNS, "themeElements")
+	elements := nativeUniqueThemeFontChild(root, drawingNS, "themeElements")
 	if elements == nil {
 		return fonts
 	}
-	scheme := firstDirectNativeChild(elements, drawingNS, "fontScheme")
+	scheme := nativeUniqueThemeFontChild(elements, drawingNS, "fontScheme")
 	if scheme == nil {
 		return fonts
 	}
-	if majors := directNativeChildren(scheme, drawingNS, "majorFont"); len(majors) == 1 {
-		fonts.major, _ = nativeExactThemeLatinTypeface(majors[0], drawingNS)
+	if major := nativeUniqueThemeFontChild(scheme, drawingNS, "majorFont"); major != nil {
+		fonts.major, _ = nativeExactThemeLatinTypeface(major, drawingNS)
 	}
-	if minors := directNativeChildren(scheme, drawingNS, "minorFont"); len(minors) == 1 {
-		fonts.minor, _ = nativeExactThemeLatinTypeface(minors[0], drawingNS)
+	if minor := nativeUniqueThemeFontChild(scheme, drawingNS, "minorFont"); minor != nil {
+		fonts.minor, _ = nativeExactThemeLatinTypeface(minor, drawingNS)
 	}
 	return fonts
+}
+
+// A duplicated or namespace-spoofed font branch has no single authored answer.
+func nativeUniqueThemeFontChild(parent *nativeXMLNode, drawingNS, local string) *nativeXMLNode {
+	var result *nativeXMLNode
+	for _, child := range parent.Children {
+		if child.Name.Local != local {
+			continue
+		}
+		if child.Name.Space != drawingNS || result != nil {
+			return nil
+		}
+		result = child
+	}
+	return result
 }
 
 func nativeThemeLatinTypeface(theme string, fonts nativeThemeLatinFonts) (string, bool) {

@@ -403,6 +403,13 @@ func (resolver *nativeLayoutResolver) loadParts() error {
 			}
 		}
 	}
+	// Style/default and numbering properties resolve theme references while
+	// parsing, so the validated related theme must be available first.
+	if resolver.parts.ThemePart != nil {
+		if err := resolver.loadTheme(*resolver.parts.ThemePart); err != nil {
+			return err
+		}
+	}
 	if resolver.parts.StylesPart != nil {
 		if err := resolver.loadStyles(*resolver.parts.StylesPart); err != nil {
 			return err
@@ -410,11 +417,6 @@ func (resolver *nativeLayoutResolver) loadParts() error {
 	}
 	if resolver.parts.NumberingPart != nil {
 		if err := resolver.loadNumbering(*resolver.parts.NumberingPart); err != nil {
-			return err
-		}
-	}
-	if resolver.parts.ThemePart != nil {
-		if err := resolver.loadTheme(*resolver.parts.ThemePart); err != nil {
 			return err
 		}
 	}
