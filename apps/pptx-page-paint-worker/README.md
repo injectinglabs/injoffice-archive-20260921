@@ -1,5 +1,23 @@
 # Native PPTX preview worker
 
+`font_substitution_preview: true` separately opts into operator-configured
+whole-run font substitution (`fonts=operator-substitution` on the HTTP preview).
+The operator font JSON may add `substitutions` with a version-1 explicit policy:
+
+```json
+{"version":1,"mappings":[{"sourceFamily":"Missing Family","weight":400,"style":"normal","targetFamily":"Supplied Family"}]}
+```
+
+The target must already be a digest-verified configured face. No default mapping,
+system discovery or proprietary font bundle is supplied. Exact faces win;
+symbol bullets and table fonts stay exact in this bounded transport version.
+Only painted text/shape runs produce `font_substitutions` with source identities,
+authored and selected family, face identity and digest. The policy identifier and
+canonical policy SHA-256 accompany those records. The HTTP boundary independently
+checks source run coordinates, operator mapping, style, selected face and hashes.
+The UI labels this read-only approximate rendering; wrapping and metrics may
+differ. Source bytes, authored font names and editing permission do not change.
+
 The optional Boolean request `inherited_text_preview` permits explicitly marked
 read-only inherited text approximations. Positive responses include
 `inherited_text_preview_count` and the exact `inherited_text_policy` value

@@ -2,6 +2,25 @@
 
 Font discovery plus InjOffice's renderer-neutral native text-layout contract.
 
+### Explicit font substitution
+
+The browser-safe `@injoffice/font-metrics/layout` export provides
+`decodeExplicitFontPolicyV1`, `canonicalExplicitFontPolicyV1` and
+`selectExplicitFontV1`. An explicit version-1 policy contains at most 32 mappings:
+
+```json
+{"version":1,"mappings":[{"sourceFamily":"Missing Family","weight":400,"style":"normal","targetFamily":"Supplied Family"}]}
+```
+
+This is an operator choice, not Microsoft font-matching behavior. The bounded
+profile uses printable ASCII family names, Latin left-to-right whole runs and
+identical supplied weight/style/stretch. Exact fonts always win. No font is
+downloaded, discovered, synthesized, recursively substituted or bundled by this
+policy. Targets must be digest-bound host faces; shaping still refuses missing
+glyphs and unsupported scripts. Resolved faces retain `matchedFamily` as the
+authored request and `family`/digest as the selected resource. Hash the canonical
+policy into the resolver revision; keep substitution and layout warnings visible.
+
 The package has two boundaries:
 
 - `@injoffice/font-metrics` exposes Node.js system-font discovery for document pipelines.

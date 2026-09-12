@@ -466,6 +466,17 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(result.value.font_manifest).toEqual({ manifest_id: manifest.manifestId, revision: manifest.revision })
     expect(result.value.providers).toEqual(expect.objectContaining({ resolver_id: 'fixture-resolver', resolver_revision: '1', shaper_id: 'fixture-shaper', shaper_revision: '1', bidi_id: 'injoffice.bidi-js', bidi_unicode_version: '13.0.0' }))
   })
+  it('derives font substitution disclosure even when a resolver supplies no decisions',async()=>{
+    const document=nativeDocument(),providers=fakeProviders([]),selected={...face,resolution:'substitute' as const}
+    const baseLoad=providers.resolver.load,baseShape=providers.shaper.shape
+    providers.resolver.resolve=()=>({status:'resolved',face:selected,attemptedFaceIds:[face.faceId],decisions:[]})
+    providers.resolver.load=async requested=>({...await baseLoad(requested),face:selected}) as FontResource
+    providers.shaper.shape=async input=>({...await baseShape(input),face:selected}) as ShapedSegment
+    const result=await shapeNativeDocxLinesV1(request(document),providers)
+    expect(result.ok).toBe(true);if(!result.ok)return
+    expect(result.value.paragraphs.length).toBeGreaterThan(0)
+    expect(result.value.diagnostics.some(d=>d.message.includes('font-substitution-approximate')&&d.message.includes(digest))).toBe(true)
+  })
 
   it('rejects mismatched durable identities before invoking providers', async () => {
     const document = nativeDocument()

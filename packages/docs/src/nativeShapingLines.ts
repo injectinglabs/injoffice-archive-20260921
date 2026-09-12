@@ -1180,6 +1180,7 @@ async function resolveFontResource(context: NativeShapingContext, run: TextRunIn
     return null
   }
   for (const decision of resolution.decisions) addDiagnostic(context, { code: 'provider-decision', severity: 'deferred', scope_id: sourceID, source_id: sourceID, message: `${decision.code}: ${decision.message}` })
+  if(resolution.face.resolution!=='exact') addDiagnostic(context,{code:'provider-decision',severity:'deferred',scope_id:sourceID,source_id:sourceID,message:`font-substitution-approximate: ${resolution.face.matchedFamily} -> ${resolution.face.family}; ${resolution.face.faceId}; ${resolution.face.contentDigest}. Read-only preview; metrics and layout may differ.`})
   const cacheKey = resolvedFaceCacheKey(resolution.face)
   const cached = context.fontResources.get(cacheKey)
   if (cached) {

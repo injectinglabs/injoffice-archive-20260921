@@ -134,7 +134,7 @@ it('never lays out source-frame autofit without opt-in and labels opted-in paint
  const strict=await compileNativePptxSlide(deck,0,{textLayout:textLayout(),lineLayoutPolicy:'max-run-natural-v1'})
  expect(findNode(strict,'text',element.id).textBody).toMatchObject({status:'refused',fidelity:'nativeUnavailable'})
  const approximate=await compileNativePptxSlide(deck,0,{textLayout:textLayout(),lineLayoutPolicy:'max-run-natural-v1',sourceFrameAutoFitPreview:true})
- expect(findNode(approximate,'text',element.id).textBody).toMatchObject({status:'laidOut',fidelity:'approximateSourceFrame',autoFit:'shape-source-frame'})
+ expect(findNode(approximate,'text',element.id).textBody).toMatchObject({status:'laidOut',fidelity:'approximateFontSubstitution',autoFit:'shape-source-frame'})
  const paint=createRecordingPaintSurface();paintSlideRenderTree(approximate,paint)
  expect(paint.finish().some(command=>command.kind==='glyphRun')).toBe(true)
  expect(approximate.diagnostics.some(diagnostic=>diagnostic.code==='text.sourceFrameAutoFitApproximate')).toBe(true)
@@ -152,7 +152,7 @@ it('requires inherited text opt-in and disables kerning in actual shaping',async
  await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(shaper),lineLayoutPolicy:'max-run-natural-v1'})).rejects.toMatchObject({path:'$.options.inheritedTextPreview'})
  const options={textLayout:textLayout(shaper,()=>({features:[{tag:'kern',value:1}]})),lineLayoutPolicy:'max-run-natural-v1' as const,inheritedTextPreview:true}
  const result=await compileNativePptxSlide(deck,0,options)
- expect(findNode(result,'text',element.id).textBody.fidelity).toBe('approximateInheritedText')
+ expect(findNode(result,'text',element.id).textBody.fidelity).toBe('approximateFontSubstitution')
  expect(features.length).toBeGreaterThan(0);expect(features.every(value=>JSON.stringify(value)==='[{"tag":"kern","value":0}]')).toBe(true)
  const paint=createRecordingPaintSurface();paintSlideRenderTree(result,paint);expect(paint.finish().some(c=>c.kind==='glyphRun')).toBe(true)
  expect(stringifySlideRenderTree(await compileNativePptxSlide(deck,0,options))).toBe(stringifySlideRenderTree(result));expect(JSON.stringify(deck)).toBe(before)
@@ -406,7 +406,9 @@ describe('native PPTX RenderTree', () => {
     expect(Object.isFrozen(tree.nodes)).toBe(true)
     const canonical = stringifySlideRenderTree(tree)
     expect(stringifySlideRenderTree(await compileNativePptxSlide(parsedFull, 0, { textLayout: textLayout() }))).toBe(canonical)
-    expect(createHash('sha256').update(canonical).digest('hex')).toBe('90501a2ed003730b6092d839e330fe7e9bab3591d8b8a941e4a08719454d0698')
+    // Fixture resolver substitutes Aptos with Fixture Sans: source/selected
+    // evidence and approximate labels are now part of the replay identity.
+    expect(createHash('sha256').update(canonical).digest('hex')).toBe('752e84e2159ab169ea2039f176067fb68ff81365520ebad0f1c2a3c5bed94daa')
   })
 
   it('compiles and paints exact table cells from renderer-neutral native text commands without cell or table clipping', async () => {
@@ -445,7 +447,7 @@ describe('native PPTX RenderTree', () => {
     ])
     expect(node.cells[0]).not.toHaveProperty('paragraph')
     expect(node.cells[0]!.textBody).toMatchObject({
-      fidelity: 'native', status: 'laidOut', wrap: 'square', verticalAnchor: 'top',
+      fidelity: 'approximateFontSubstitution', status: 'laidOut', wrap: 'square', verticalAnchor: 'top',
       bounds: { x: 10_000, y: 30_000, cx: 120_000, cy: 130_000 },
     })
     expect(tree.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain('text.layoutMetadataUnavailable')
@@ -631,7 +633,7 @@ describe('native PPTX RenderTree', () => {
       const node = findNode(tree, 'text', `anchor-${verticalAnchor}`)
       expect(node.clip).toBeUndefined()
       expect(node.textBody).toMatchObject({
-        fidelity: verticalAnchor === 'top' ? 'native' : 'nativeUnavailable', status: verticalAnchor === 'top' ? 'laidOut' : 'refused', wrap: 'none', verticalAnchor,
+        fidelity: verticalAnchor === 'top' ? 'approximateFontSubstitution' : 'nativeUnavailable', status: verticalAnchor === 'top' ? 'laidOut' : 'refused', wrap: 'none', verticalAnchor,
         autoFit: 'none', horizontalOverflow: 'overflow', verticalOverflow: 'overflow',
         bounds: { x: 10_000, y: 30_000, cx: 470_000, cy: 430_000 },
       })
@@ -1363,7 +1365,7 @@ describe('native PPTX RenderTree', () => {
     deck.slides[0]!.compatibility = { status: 'preserveOnly', diagnostics }
     const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout() })
     const textBody = findNode(tree, 'text', element.id).textBody
-    expect(textBody).toMatchObject({ fidelity: 'native', status: 'laidOut' })
+    expect(textBody).toMatchObject({ fidelity: 'approximateFontSubstitution', status: 'laidOut' })
     expect(textBody.paragraphs.flatMap((paragraph) => paragraph.runs.map((run) => run.text)).join('')).toBe('AB')
     expect(tree.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain('text.inheritanceUnavailable')
   })

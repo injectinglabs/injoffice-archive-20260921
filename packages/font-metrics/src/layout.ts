@@ -11,6 +11,9 @@ export const MAX_TEXT_RUN_UTF16 = 262_144
 export const MAX_FONT_FACES = 4_096
 export const MAX_FALLBACK_CHAINS = 256
 
+export {EXPLICIT_FONT_POLICY_V1, decodeExplicitFontPolicyV1, canonicalExplicitFontPolicyV1, selectExplicitFontV1} from './explicitFontPolicy.js'
+export type {ExplicitFontPolicyV1, ExplicitFontMappingV1, ExplicitFontSelectionV1} from './explicitFontPolicy.js'
+
 export type NativeTextLayoutVersion = typeof NATIVE_TEXT_LAYOUT_VERSION
 export type MaybePromise<T> = T | Promise<T>
 export type FontStyle = 'normal' | 'italic' | 'oblique'

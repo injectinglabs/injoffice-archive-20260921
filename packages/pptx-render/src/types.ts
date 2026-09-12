@@ -134,6 +134,8 @@ export interface RenderTextRunNode {
   readonly direction: TextDirection
   readonly fontSizeMilliPoints: number
   readonly faceId?: string
+  /** Authored-vs-selected evidence; non-exact resolution is always approximate. */
+  readonly fontSelection?: {readonly sourceFamily:string;readonly selectedFamily:string;readonly resolution:'exact'|'substitute'|'fallback'}
   readonly contentDigest?: string
   readonly color: string
   readonly bold: boolean
@@ -180,7 +182,7 @@ export interface RenderTextBodyNode {
   readonly bounds: RenderRect
   /** Text-only physical mapping; parent shape/group transforms remain separate. */
   readonly transform?: RenderTransform
-  readonly fidelity: 'native' | 'deterministicNative' | 'approximateSourceFrame' | 'approximateInheritedText' | 'nativeUnavailable' | 'legacyUnavailable'
+  readonly fidelity: 'native' | 'deterministicNative' | 'approximateSourceFrame' | 'approximateInheritedText' | 'approximateFontSubstitution' | 'nativeUnavailable' | 'legacyUnavailable'
   /** Explicit InjOffice line-box policy; does not attest Office visual parity. */
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly wrap?: 'square' | 'none'

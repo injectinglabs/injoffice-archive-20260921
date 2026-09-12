@@ -6,6 +6,7 @@ export interface NativeStoredRowV1 {
   hidden: boolean;
 }
 export interface NativeStoredRowGeometryV1 {
+  root_policy?: 'x14ac-descent-only-v1';
   sheet_part: string;
   rows: NativeStoredRowV1[];
   warnings: string[];
@@ -32,7 +33,9 @@ export function decodeNativeStoredRowGeometryV1(
   if (!Array.isArray(value) || value.length > 64) return fail();
   const seen = new Set<string>();
   return value.map((input) => {
-    const sheet = exact(input, ["sheet_part", "rows", "warnings"]);
+    const hasPolicy = !!input && typeof input === 'object' && Object.hasOwn(input,'root_policy');
+    const sheet = exact(input, ["sheet_part", "rows", "warnings", ...(hasPolicy?['root_policy']:[])]);
+    if(hasPolicy && sheet.root_policy !== 'x14ac-descent-only-v1') return fail();
     const part = sheet.sheet_part;
     if (
       typeof part !== "string" ||
@@ -80,7 +83,7 @@ export function decodeNativeStoredRowGeometryV1(
         ? value
         : fail(),
     );
-    return { sheet_part: part, rows, warnings };
+    return { sheet_part: part, rows, warnings, ...(hasPolicy?{root_policy:'x14ac-descent-only-v1' as const}:{}) };
   });
 }
 

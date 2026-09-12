@@ -32,6 +32,29 @@ function input(){
  element.paragraphs=[{align:'left',level:0,bullet:false,runs:[{text:'Small ',fontFamily:'DejaVu Sans',fontSizeHundredthPt:1200,bold:false,italic:false,color:'123456'},{text:'large',fontFamily:'DejaVu Sans',fontSizeHundredthPt:2400,bold:false,italic:false,color:'123456'}]}]
  return {deck,slide_index:0,package_sha256:'a'.repeat(64),font_manifest_path:manifest}
 }
+it('requires explicit operator mapping and reports only source-bound painted substitutions',async()=>{
+ const configured=resolve(scratch,'substitution-fonts.json')
+ writeFileSync(configured,JSON.stringify({version:1,faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest}],substitutions:{version:1,mappings:[{sourceFamily:'Missing Authored',targetFamily:'DejaVu Sans',weight:400,style:'normal'}]}}))
+ const request=input();request.font_manifest_path=configured
+ for(const r of request.deck.slides[0].elements[0].paragraphs[0].runs)r.fontFamily='Missing Authored'
+ const before=JSON.stringify(request)
+ await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator font unavailable')
+ for(const v of ['yes',1,null])await expect(compilePptxPreview({...request,font_substitution_preview:v})).rejects.toThrow('boolean')
+ const painted=await compilePptxPreview({...request,font_substitution_preview:true})
+ expect(painted.font_substitutions).toHaveLength(2)
+ expect(painted.font_substitutions![0]).toMatchObject({source_id:request.deck.slides[0].elements[0].id,source_family:'Missing Authored',selected_family:'DejaVu Sans',font_digest:digest})
+ expect(painted.font_substitution_policy).toBe('explicit-whole-run-font-substitution-v1')
+ expect(painted.diagnostics.join(' ')).toContain('fontSubstitutionApproximate')
+ expect(JSON.stringify(painted.nodes)).toContain('contentRun')
+ expect(JSON.stringify(request)).toBe(before)
+ for(const mutation of [{font_substitution_policy:undefined},{font_substitution_policy_sha256:'bad'},{font_substitutions:[]},{font_substitutions:[{...painted.font_substitutions![0],run_index:-1}]}])expect(()=>decodePptxPreview({...painted,...mutation})).toThrow()
+ expect(()=>decodePptxPreview({...painted,font_digests:[]})).toThrow()
+ expect(()=>decodePptxPreview({...painted,font_substitutions:[painted.font_substitutions![0],{...painted.font_substitutions![0],selected_family:'Forged'}]})).toThrow()
+ const p=request.deck.slides[0].elements[0].paragraphs[0];Object.assign(p,{bullet:true,bulletCharacter:'q',bulletFontFamily:'Missing Authored'})
+ const bullet=await compilePptxPreview({...request,font_substitution_preview:true})
+ expect(JSON.stringify(bullet.nodes)).not.toContain('paragraphBullet')
+ expect(bullet.font_substitutions).toBeUndefined()
+})
 it('binds inherited approximation to opt-in, read-only source and closed transport policy',async()=>{
  for(const value of ['yes',1,null])await expect(compilePptxPreview({...input(),inherited_text_preview:value})).rejects.toThrow('boolean')
  const request=input(),element=request.deck.slides[0].elements[0]

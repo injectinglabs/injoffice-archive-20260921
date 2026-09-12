@@ -63,6 +63,7 @@ export function nativePptxPreviewStatus(preview:PptxPreview,source?:NativePptxDe
   elementDiagnostics(slide.elements)
  }else reasons.add('Source-object coverage could not be joined to this response; no source object counts are claimed.')
  let runtimeGap=(preview.source_frame_autofit_count??0)>0
+ if(preview.font_substitutions?.length){runtimeGap=true;reasons.add('Operator-configured font substitution: selected font metrics, wrapping and layout may differ from the authored font.')}
  if((preview.inherited_text_preview_count??0)>0){runtimeGap=true;reasons.add('Approximate inherited text: declared source-style ordering, disabled kerning, and terminal metadata can change text metrics and wrapping.')}
  if((preview.source_frame_autofit_count??0)>0)reasons.add('Approximate source-frame autofit: saved frame size, layout, and overflow or clipping may differ from PowerPoint. No content-dependent resizing is performed.')
  for(const message of preview.diagnostics){

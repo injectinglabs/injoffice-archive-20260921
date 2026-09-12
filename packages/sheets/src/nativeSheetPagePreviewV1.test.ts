@@ -32,6 +32,11 @@ describe('source-bound selected worksheet page geometry',()=>{
   const g=compileNativeStoredRowSheetGeometryV1(model,'7',viewport,metric,objects)
   expect(g.rows[0]!.height_emu).toBe(182880);expect(g.rows[1]!.height_emu).toBe(0)
   expect(g.approximation.policy).toBe('source-stored-rows-v1');expect(isCompiledNativeSheetGeometryV2(g)).toBe(false)
+  objects.row_geometry[0]!.root_policy='x14ac-descent-only-v1'
+  const rootQualified=compileNativeStoredRowSheetGeometryV1(model,'7',viewport,metric,objects)
+  expect(rootQualified.approximation.source.root_policy).toBe('x14ac-descent-only-v1')
+  expect(JSON.stringify(rootQualified)).not.toBe(JSON.stringify(g))
+  expect(()=>compileNativeStoredRowSheetGeometryV1(model,'7',viewport,metric,{...objects,row_geometry:[{...objects.row_geometry![0]!,root_policy:'ignore-anything'}]} as any)).toThrow()
   expect(()=>validateNativeSheetGeometryV2(g)).toThrow()
   expect(compileNativeSheetPagePreviewV1(g,objects).warnings.join(' ')).toContain('baselines are not qualified')
   expect(()=>compileNativeStoredRowSheetGeometryV1(model,'7',{...viewport,end_row:32},metric,objects)).toThrow('first 32')

@@ -224,6 +224,13 @@ metrics path remains unchanged. Source style ordering, omitted terminal metadata
 and possible wrapping/metrics differences must remain visible to users. This
 option does not enable source-frame autofit or grant editing permission.
 
+Every resolved text run records authored/selected font identity in
+`fontSelection`. A substituted/fallback face (including an explicit host family
+override) produces an independent diagnostic and `approximateFontSubstitution`
+text-body fidelity even if the resolver supplied no decisions. Existing
+source-frame and inherited-text diagnostics remain visible when policies combine.
+Digest-backed shaping is not a claim that substitute font metrics equal Office.
+
 `sourceFrameAutoFitPreview: true` separately opts into rendering explicitly
 marked `shape-source-frame` text bodies. Without it, those bodies remain refused
 even when `lineLayoutPolicy` is set. Opted-in bodies report

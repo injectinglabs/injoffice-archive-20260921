@@ -1108,6 +1108,9 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
     throw new TextBodyLayoutRefusal('text.refused', `injected native text provider failed: ${boundedProviderError(error)}`)
   }
   const resolutionDecisions = resolution.decisions
+  const sourceFamily=nativeRun.fontFamily??resolution.face.matchedFamily
+  const selectedResolution=normalizedFamily(sourceFamily)!==normalizedFamily(resolution.face.matchedFamily)?'substitute':resolution.face.resolution
+  if(selectedResolution!=='exact')state.diagnostics.push({severity:'warning',code:'text.fontSubstitutionApproximate',message:`Read-only font substitution: ${sourceFamily} -> ${resolution.face.family}. Metrics, wrapping and layout may differ.`,slideId:state.slide.id,elementId:context.elementId})
   takeGlyphs(state, shaped.glyphs.length, path)
   takeClusters(state, shaped.clusters.length, path)
   let cursorX = 0
@@ -1179,6 +1182,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
       direction: input.direction,
       fontSizeMilliPoints: input.fontSizeMilliPoints,
       faceId: resolution.face.faceId,
+      fontSelection:{sourceFamily,selectedFamily:resolution.face.family,resolution:selectedResolution},
       contentDigest: resolution.face.contentDigest,
       color,
       bold: nativeRun.bold ?? false,
@@ -1747,7 +1751,7 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     return {
       kind: 'textBody', sourceElementId: context.elementId, bounds: context.bounds,
       ...(transform?{transform}:{}),
-      fidelity: state.inheritedTextElements.has(context.elementId) ? 'approximateInheritedText' : approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
+      fidelity: compiled.some(p=>p.runs.some(r=>r.fontSelection&&r.fontSelection.resolution!=='exact')) ? 'approximateFontSubstitution' : state.inheritedTextElements.has(context.elementId) ? 'approximateInheritedText' : approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
       ...(deterministic ? {lineLayoutPolicy: state.lineLayoutPolicy} : {}),
       wrap: context.layout?.wrap, verticalAnchor: context.layout?.verticalAnchor, autoFit: context.layout?.autoFit,
       horizontalOverflow: context.layout?.horizontalOverflow, verticalOverflow: context.layout?.verticalOverflow,

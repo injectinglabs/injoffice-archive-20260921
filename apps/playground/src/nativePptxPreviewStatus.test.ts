@@ -14,6 +14,12 @@ function source():NativePptxDeck{return {contractVersion:'pptx-native/v1',docume
 function refused():NativeElement{return {kind:'text',id:'text-2',name:'Budget notes',provenance:'parsed',transform:{x:60,y:10,cx:30,cy:20},paragraphs:[],passthrough:[],compatibility:{status:'refused',diagnostics:[{severity:'refusal',code:'pptx.text-layout-unavailable',message:'Shape autofit is not supported',scope:{slideId:'slide-1',elementId:'text-2'}}]}}}
 
 describe('native PPTX preview coverage reporting',()=>{
+ it('shows source and selected fonts outside details and never calls substitution complete',()=>{
+  const result:PptxPreview={...preview(),font_substitutions:[{source_id:'text',paragraph_index:0,run_index:0,source_family:'Authored',selected_family:'Selected',face_id:'font-0',font_digest:`sha256:${hash}`}],font_substitution_policy:'explicit-whole-run-font-substitution-v1',font_substitution_policy_sha256:`sha256:${hash}`}
+  expect(nativePptxPreviewStatus(result).status).toBe('partial')
+  const html=renderToStaticMarkup(createElement(NativePptxPreviewResult,{preview:result}))
+  expect(html).toContain('Authored → Selected');expect(html).toContain('Font substitution preview');expect(html.indexOf('Font substitution preview')).toBeLessThan(html.indexOf('<details'))
+ })
  it('keeps inherited text approximation visible and partial',()=>{
   const result={...preview(),inherited_text_preview_count:1,inherited_text_policy:'source-latin-inheritance-approximate-v1' as const}
   expect(nativePptxPreviewStatus(result,source()).status).toBe('partial')

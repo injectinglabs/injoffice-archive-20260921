@@ -16,9 +16,10 @@ var nativeStoredRowDecimal = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.
 // Only the first 32 rows are projected. This is stored row geometry, not font
 // metrics, column sizing, baseline positioning, or automatic row fitting.
 type NativeStoredRowGeometryV1 struct {
-	SheetPart string              `json:"sheet_part"`
-	Rows      []NativeStoredRowV1 `json:"rows"`
-	Warnings  []string            `json:"warnings"`
+	RootPolicy string              `json:"root_policy,omitempty"`
+	SheetPart  string              `json:"sheet_part"`
+	Rows       []NativeStoredRowV1 `json:"rows"`
+	Warnings   []string            `json:"warnings"`
 }
 type NativeStoredRowV1 struct {
 	Row          int     `json:"row"`
@@ -36,6 +37,9 @@ func previewNativeStoredRows(raw []byte, part string) NativeStoredRowGeometryV1 
 	root, err := parsePreviewXML(raw)
 	if err != nil || (root.name != (xml.Name{Space: spreadsheetMLTransitional, Local: "worksheet"}) && root.name != (xml.Name{Space: spreadsheetMLStrict, Local: "worksheet"})) {
 		return unavailable()
+	}
+	if previewStoredRowRootPolicy(root) {
+		result.RootPolicy = "x14ac-descent-only-v1"
 	}
 	format := root.child("sheetFormatPr")
 	data := root.child("sheetData")
@@ -146,6 +150,58 @@ func previewNativeStoredRows(raw []byte, part string) NativeStoredRowGeometryV1 
 		result.Warnings = append(result.Warnings, "Source dyDescent fixes stored row height; its text-baseline positioning remains unmodeled.")
 	}
 	return result
+}
+
+// This attests only the exact ignorable descent extension, not general markup
+// compatibility preprocessing. Geometry consumers still require row evidence.
+func previewStoredRowRootPolicy(root *previewXML) bool {
+	const mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+	declared, ignorable := false, false
+	for _, a := range root.attrs {
+		if a.Name.Space == "xmlns" && a.Name.Local == "x14ac" {
+			declared = a.Value == nativeRowDescentNamespace
+		}
+		if isPreviewNamespaceDeclaration(a) {
+			continue
+		}
+		if a.Name != (xml.Name{Space: mc, Local: "Ignorable"}) || a.Value != "x14ac" {
+			return false
+		}
+		ignorable = true
+	}
+	if !declared || !ignorable {
+		return false
+	}
+	var walk func(*previewXML, string) bool
+	walk = func(n *previewXML, parent string) bool {
+		if n.name.Space != root.name.Space {
+			return false
+		}
+		for _, a := range n.attrs {
+			if isPreviewNamespaceDeclaration(a) || a.Name.Space == "" {
+				continue
+			}
+			if n == root && a.Name == (xml.Name{Space: mc, Local: "Ignorable"}) {
+				continue
+			}
+			if a.Name.Space == nativeRowDescentNamespace && a.Name.Local == "dyDescent" && ((n.name.Local == "row" && parent == "sheetData") || (n.name.Local == "sheetFormatPr" && parent == "worksheet")) {
+				if _, ok := boundedPreviewRowNumber(a.Value, 409); ok {
+					continue
+				}
+			}
+			if n.name.Local == "drawing" && parent == "worksheet" && a.Name.Local == "id" && (a.Name.Space == officeRelNamespaceStrict || a.Name.Space == officeRelNamespaceTransitional) {
+				continue
+			}
+			return false
+		}
+		for _, child := range n.children {
+			if !walk(child, n.name.Local) {
+				return false
+			}
+		}
+		return true
+	}
+	return walk(root, "")
 }
 func isPreviewNamespaceDeclaration(attr xml.Attr) bool {
 	return attr.Name.Space == "xmlns" || (attr.Name.Space == "" && attr.Name.Local == "xmlns")

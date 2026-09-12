@@ -192,7 +192,7 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   const format = sheet.sheet_format
   if (!format) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format', 'source worksheet has no authoritative sheetFormatPr geometry')
   if (format.zero_height) throw new NativeSheetGeometryV2Error('geometry.zeroHeightUnavailable', '$.sheet.sheet_format.zero_height', 'zeroHeight needs explicit-row visibility provenance not available in native v2')
-  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && !(storedRows&&(item.code==='SHEET_FORMAT_EXTRAS'||item.code==='ROW_DIMENSION_EXTRAS')) && (
+  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && !(storedRows&&(item.code==='SHEET_FORMAT_EXTRAS'||item.code==='ROW_DIMENSION_EXTRAS'||(item.code==='WORKSHEET_ATTRIBUTES'&&storedRows.root_policy==='x14ac-descent-only-v1'))) && (
     item.code === 'SHEET_FORMAT_EXTRAS' || item.code === 'ROW_DIMENSION_EXTRAS' || item.code === 'COLUMN_DIMENSION_EXTRAS' || item.code === 'COLS_ATTRIBUTES'
     || item.code === 'SHEET_VIEW_GEOMETRY' || item.code === 'WORKSHEET_ATTRIBUTES' || item.code === 'FOREIGN_WORKSHEET_MARKUP'
   ))

@@ -1,9 +1,9 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { NativeSheetPageImages, NativeSheetPages } from './NativeSheetPages'
+import { NativeSheetPageImages, NativeSheetPages, NativePositionedChartPlot } from './NativeSheetPages'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
-import type { NativeWorkbookObjectsV1, NativeSheetGeometryV2, NativeSheetPagePreviewV1 } from '@injoffice/sheets/browser'
+import type { NativeWorkbookObjectsV1, NativeSheetGeometryV2, NativeSheetPagePreviewV1, NativeChartPreviewV1, NativePositionedDrawingV1 } from '@injoffice/sheets/browser'
 
 function fixture() {
   const revision = `sha256:${'a'.repeat(64)}`
@@ -73,5 +73,26 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('disabled=""')
     expect(html).toContain('not drawn here')
     expect(html).not.toContain('<svg')
+    expect(html).toContain('max="26"')
+    expect(html).toContain('max="32"')
+  })
+  it('draws cache graphics only inside qualified page intersections', () => {
+    const props = fixture()
+    const drawings: NativePositionedDrawingV1[] = [{ source: { sheet_id: '1', sheet_part: props.sheet.part_name, drawing_part: 'xl/drawings/drawing1.xml', ordinal: 1, kind: 'unsupported', warnings: ['Unmodeled picture'] }, status: 'positioned', rect: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 }, clip: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 } }]
+    const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))
+    expect(html).toContain('Source-positioned drawing 1')
+    expect(html).toContain('Drawing preview unavailable')
+    expect(html).toContain('scale(0.16666666666666666 0.07692307692307693)')
+    drawings[0] = { ...drawings[0]!, clip: { ...drawings[0]!.clip!, y_emu: 381000 } }
+    expect(renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))).not.toContain('Source-positioned drawing')
+  })
+  it('labels cached plots as approximate and never activates source links', () => {
+    const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }
+    const html = renderToStaticMarkup(createElement('svg', null, createElement(NativePositionedChartPlot, { chart, index: 0 })))
+    expect(html).toContain('saved data, approximate plot')
+    expect(html).toContain('&lt;a href=')
+    expect(html).not.toContain('<a ')
+    expect(html).not.toContain('<image')
+    expect(html).toContain('Saved value range:')
   })
 })

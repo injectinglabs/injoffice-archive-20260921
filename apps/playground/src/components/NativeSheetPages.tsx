@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react'
 import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
+  layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
+  type NativePositionedDrawingV1, type NativeChartPreviewV1,
 } from '@injoffice/sheets/browser'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
 import { nativeCellPreview } from '../nativeCellPreview'
@@ -14,7 +16,7 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string }
+type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[] }
 
 // Key the inner view by source identity: pending font reads and page choices never
 // carry over to a different sheet/revision, even before effect cleanup runs.
@@ -29,6 +31,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [scale, setScale] = useState('100')
   const [useSource, setUseSource] = useState(true)
   const [useStoredRows, setUseStoredRows] = useState(false)
+  const [rangeRows, setRangeRows] = useState(String(rows))
+  const [rangeColumns, setRangeColumns] = useState(String(columns))
   const [result, setResult] = useState<Result | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -50,7 +54,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       const model = projectNativeWorkbookV2(workbook)
       const authority = createNativeMaximumDigitWidthAuthorityV2(model, bytes)
-      const viewport = { row: 0, column: 0, end_row: rows - 1, end_column: columns - 1 }
+      const selectedRows = Number(rangeRows), selectedColumns = Number(rangeColumns)
+      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error('Choose 1–32 rows and 1–26 columns for this bounded preview.')
+      const viewport = { row: 0, column: 0, end_row: selectedRows - 1, end_column: selectedColumns - 1 }
       const geometry = useStoredRows
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, viewport, authority, objects)
         : compileNativeSheetGeometryV2(model, sheet.id, viewport, authority)
@@ -59,6 +65,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         left_inches: 0.5, right_inches: 0.5, top_inches: 0.5, bottom_inches: 0.5,
       }
       const plan = compileNativeSheetPagePreviewV1(geometry, objects, host)
+      const drawings = layoutNativeDrawingObjectsV1(geometry, objects)
       const fontFamily = `injoffice-sheet-${instance}-${token}`
       loaded = await new FontFace(fontFamily, bytes.buffer, {
         weight: model.normal_style?.font_bold ? '700' : '400',
@@ -67,7 +74,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult({ geometry, plan, fontFamily })
+      setResult({ geometry, plan, fontFamily, drawings })
       setMessage(`${plan.pages.length} preview pages. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -77,8 +84,10 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   }
   return <section className="ds-panel native-sheet-pages" aria-label="Spreadsheet page preview">
     <h3>Page preview</h3>
-    <p className="ds-muted">Preview the first {rows} rows and {columns} columns on paper. Column widths use the exact Normal font; text uses approximate browser layout. This is not Excel print fidelity.</p>
+    <p className="ds-muted">Preview a range starting at A1 on paper. Column widths use the exact Normal font; text and cached charts use approximate browser layout. This is not Excel print fidelity.</p>
     <div className="native-sheet-page-controls">
+      <label>Rows<DsInput type="number" min={1} max={32} step={1} value={rangeRows} onChange={event => { invalidate(); setRangeRows(event.target.value) }}/></label>
+      <label>Columns<DsInput type="number" min={1} max={26} step={1} value={rangeColumns} onChange={event => { invalidate(); setRangeColumns(event.target.value) }}/></label>
       <label>Normal font: {workbook.normal_style?.font_name || 'not available'}<input type="file" accept=".ttf,font/ttf" onChange={event => { invalidate(); setFont(event.target.files?.[0] ?? null) }}/></label>
       <label><input type="checkbox" checked={useStoredRows} onChange={event => { invalidate(); setUseStoredRows(event.target.checked) }}/> Allow approximate stored-row layout</label>
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
@@ -90,17 +99,18 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       </>}
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
-    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Charts, drawings, headers, print titles and print areas are not drawn here. Formula values are saved caches, not recalculated results.</p>
+    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Headers, print titles and print areas are not drawn here. Formula values are saved caches, not recalculated results.</p>
     <p role="status">{message}</p>
     {result && <>
       <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scale' : 'Your paper, margins and scale'} · approximate selected-range preview</p>
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
+      {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
       <NativeSheetPageImages {...{workbook, sheet, objects}} {...result}/>
     </>}
   </section>
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [] }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   const cellMap = new Map(sheet.cells.map(cell => [`${cell.row}:${cell.column}`, cell]))
@@ -137,8 +147,35 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>
             </g>
           })}
+          {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
+            const r = drawing.rect!, c = drawing.clip!, p = page.source_clip
+            const left = Math.max(c.x_emu, p.x_emu), top = Math.max(c.y_emu, p.y_emu), right = Math.min(c.x_emu + c.width_emu, p.x_emu + p.width_emu), bottom = Math.min(c.y_emu + c.height_emu, p.y_emu + p.height_emu)
+            if (right <= left || bottom <= top) return null
+            const id = `${clip}-drawing-${index}`, chart = objects.charts.find(chart => chart.part === drawing.source.chart_part)
+            return <g key={index} aria-label={`Source-positioned drawing ${index + 1}`}>
+              <clipPath id={id}><rect x={left / EMU_PER_PIXEL} y={top / EMU_PER_PIXEL} width={(right - left) / EMU_PER_PIXEL} height={(bottom - top) / EMU_PER_PIXEL}/></clipPath>
+              <g clipPath={`url(#${id})`}><g transform={`translate(${r.x_emu / EMU_PER_PIXEL} ${r.y_emu / EMU_PER_PIXEL}) scale(${r.width_emu / EMU_PER_PIXEL / 600} ${r.height_emu / EMU_PER_PIXEL / 260})`}>
+                <NativePositionedChartPlot chart={chart} index={index}/>
+              </g></g>
+            </g>
+          })}
         </g>
       </svg>
     </figure>
   })}</div>
+}
+
+/** Cached-data graphic only. Its outer placement is source-backed; this plot is
+ * deliberately not an Office chart renderer or hyperlink surface. */
+export function NativePositionedChartPlot({ chart, index }: { chart?: NativeChartPreviewV1; index: number }) {
+  const layout = chart ? layoutNativeCachedChartV1(chart) : null
+  return <g>
+    <rect width={600} height={260} fill="#FFFFFF" stroke="#666666" strokeWidth={1}/>
+    <text x={12} y={18} fontFamily="sans-serif" fontSize={12} fill="#333333">{layout ? `Chart ${index + 1}: saved data, approximate plot` : 'Drawing preview unavailable'}</text>
+    {layout && chart && <g transform="translate(45 30)">
+      {chart.type === 'col' ? <line x1={0} x2={520} y1={layout.baseline * 185} y2={layout.baseline * 185} stroke="#333333"/> : <line y1={0} y2={185} x1={layout.baseline * 520} x2={layout.baseline * 520} stroke="#333333"/>}
+      {layout.marks.map((mark, i) => <rect key={i} x={mark.x * 520} y={mark.y * 185} width={mark.width * 520} height={mark.height * 185} fill={['#3366CC', '#CC6633', '#339966', '#993399'][mark.series % 4]}><title>{`${chart.series[mark.series]?.name || `Unnamed series ${mark.series + 1}`}: ${mark.value}`}</title></rect>)}
+    </g>}
+    {layout && <text x={12} y={248} fontFamily="sans-serif" fontSize={12} fill="#333333">Saved value range: {layout.minimum} to {layout.maximum}</text>}
+  </g>
 }

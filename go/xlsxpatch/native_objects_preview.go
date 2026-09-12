@@ -16,13 +16,14 @@ import (
 // NativeWorkbookObjectsV1 is a read-only supplement, never mutation authority.
 // Chart values come from saved chart caches, not evaluated worksheet formulas.
 type NativeWorkbookObjectsV1 struct {
-	Protocol      string                      `json:"protocol"`
-	Version       int                         `json:"version"`
-	PackageSHA256 string                      `json:"package_sha256"`
-	Tables        []NativeTablePreviewV1      `json:"tables"`
-	Charts        []NativeChartPreviewV1      `json:"charts"`
-	RowGeometry   []NativeStoredRowGeometryV1 `json:"row_geometry,omitempty"`
-	PageSettings  []NativeSheetPageSettingsV1 `json:"page_settings,omitempty"`
+	Protocol       string                      `json:"protocol"`
+	Version        int                         `json:"version"`
+	PackageSHA256  string                      `json:"package_sha256"`
+	Tables         []NativeTablePreviewV1      `json:"tables"`
+	Charts         []NativeChartPreviewV1      `json:"charts"`
+	RowGeometry    []NativeStoredRowGeometryV1 `json:"row_geometry,omitempty"`
+	PageSettings   []NativeSheetPageSettingsV1 `json:"page_settings,omitempty"`
+	DrawingObjects []NativeDrawingObjectV1     `json:"drawing_objects,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -284,6 +285,10 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		return nil, fmt.Errorf("table preview style IDs exceed cumulative limit 16384")
 	}
 	points := 0
+	result.DrawingObjects, err = previewNativeDrawings(pkg, workbook.Sheets, result.Charts)
+	if err != nil {
+		return nil, err
+	}
 	for _, chart := range result.Charts {
 		for _, series := range chart.Series {
 			points += len(series.Values)

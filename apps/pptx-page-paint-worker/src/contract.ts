@@ -18,6 +18,9 @@ export interface PptxPreview {
  source_frame_autofit_count?:number
  inherited_text_preview_count?:number
  inherited_text_policy?:'source-latin-inheritance-approximate-v1'
+ font_substitutions?:{source_id:string;paragraph_index:number;run_index:number;source_family:string;selected_family:string;face_id:string;font_digest:string}[]
+ font_substitution_policy?:'explicit-whole-run-font-substitution-v1'
+ font_substitution_policy_sha256?:string
 }
 export function decodePptxPreview(value:unknown):PptxPreview {
  const fail=()=>{throw new TypeError('Native slide preview failed bounded validation.')}
@@ -47,6 +50,18 @@ export function decodePptxPreview(value:unknown):PptxPreview {
   }
  }
  const v=record(value)
+ if(v.font_substitutions!==undefined){
+  if(!Array.isArray(v.font_substitutions)||v.font_substitutions.length<1||v.font_substitutions.length>20000||v.font_substitution_policy!=='explicit-whole-run-font-substitution-v1'||typeof v.font_substitution_policy_sha256!=='string'||!/^sha256:[a-f0-9]{64}$/.test(v.font_substitution_policy_sha256))fail()
+  const seen=new Set<string>()
+  for(const entry of v.font_substitutions as unknown[]){
+   const s=record(entry)
+   if(Object.keys(s).sort().join(',')!=='face_id,font_digest,paragraph_index,run_index,selected_family,source_family,source_id')fail()
+   for(const k of ['source_id','source_family','selected_family','face_id'])if(typeof s[k]!=='string'||!(s[k] as string).length||(s[k] as string).length>128)fail()
+   for(const k of ['paragraph_index','run_index']){number(s[k],0,20000);if(!Number.isInteger(s[k]))fail()}
+   if(typeof s.font_digest!=='string'||!/^sha256:[a-f0-9]{64}$/.test(s.font_digest)||!Array.isArray(v.font_digests)||!v.font_digests.includes(s.font_digest))fail()
+   const key=JSON.stringify([s.source_id,s.paragraph_index,s.run_index]);if(seen.has(key))fail();seen.add(key)
+  }
+ }else if(v.font_substitution_policy!==undefined||v.font_substitution_policy_sha256!==undefined)fail()
  if(v.source_frame_autofit_count!==undefined){number(v.source_frame_autofit_count,0,20000);if(!Number.isInteger(v.source_frame_autofit_count))fail()}
  if(v.inherited_text_preview_count!==undefined){number(v.inherited_text_preview_count,1,20000);if(!Number.isInteger(v.inherited_text_preview_count)||v.inherited_text_policy!=='source-latin-inheritance-approximate-v1')fail()}else if(v.inherited_text_policy!==undefined)fail()
  if(v.version!==1||typeof v.package_sha256!=='string'||!/^([a-f0-9]{64})$/.test(v.package_sha256)||v.policy!=='max-run-natural-v1')fail()

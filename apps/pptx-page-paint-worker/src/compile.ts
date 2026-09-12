@@ -5,6 +5,7 @@ import {assertNativePptx,type NativePptxDeck,type NativeElement,type NativeParag
 import {compileNativePptxSlide,createRecordingPaintSurface,paintSlideRenderTree,type RenderPathCommand,type RenderStroke} from '@injoffice/pptx-render'
 import {createHarfBuzzTextShaperV1,createHarfBuzzOutlineProviderV1,inspectHarfBuzzFontMetricsV1} from '@injoffice/font-metrics/harfbuzz'
 import type {NativeFontManifest,NativeFontResolver,ResolvedFontFace,FontResource} from '@injoffice/font-metrics/layout'
+import {decodeExplicitFontPolicyV1,selectExplicitFontV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
 import {decodePptxPreview,type PreviewNode,type PptxPreview,type PreviewStroke} from './contract.js'
 import {prepareNativeRasterResourceV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
 import {previewArrow,previewArrowShaftInset} from './arrows.js'
@@ -16,10 +17,11 @@ export function previewStroke(stroke:RenderStroke):PreviewStroke {
  if(ratio!==undefined&&(!Number.isFinite(ratio)||ratio<1))throw new Error('DrawingML miter limit is outside SVG replay range')
  return {stroke:stroke.color,strokeWidth:stroke.widthEmu,strokeLinecap:stroke.cap==='flat'?'butt':stroke.cap,strokeLinejoin:stroke.join,strokeMiterlimit:ratio}
 }
-function fontProviders(path:string){
+function fontProviders(path:string,allowSubstitution=false){
  if(!isAbsolute(path)||statSync(path).size>65536)throw new Error('Operator font manifest must be an absolute bounded local file')
  const config=object(JSON.parse(readFileSync(path,'utf8')))
  if(config.version!==1||!Array.isArray(config.faces)||config.faces.length>32)throw new Error('Invalid operator font manifest')
+ const policy=config.substitutions===undefined?undefined:decodeExplicitFontPolicyV1(config.substitutions)
  const resources=new Map<string,FontResource>(),outlines=new Map<string,ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
  const faces:NativeFontManifest['faces'][number][]=[]
  const manifest:NativeFontManifest={version:1,manifestId:'pptx-preview-fonts',revision:hash(Buffer.from(JSON.stringify(config))),faces,fallbackChains:[]}
@@ -38,26 +40,31 @@ function fontProviders(path:string){
   resources.set(id,{face,bytes,metrics:inspectHarfBuzzFontMetricsV1(request)})
   outlines.set(id,createHarfBuzzOutlineProviderV1(request))
  }
- const resolver:NativeFontResolver={providerId:'injoffice.pptx.operator-fonts',providerRevision:'v1',resolve({run}){
-  const found=[...resources.values()].find(resource=>run.font.families.includes(resource.face.family)&&run.font.weight===resource.face.weight&&run.font.style===resource.face.style)
-  return found?{status:'resolved',face:found.face,attemptedFaceIds:[found.face.faceId],decisions:[]}:{status:'refused',attemptedFaceIds:[],decisions:[{code:'font-not-found',message:`Exact operator font unavailable: ${run.font.families.join(', ')} / ${run.font.weight} / ${run.font.style}`,recoverable:false}]}
- },load(face){const resource=resources.get(face.faceId);if(!resource)throw new Error('Unresolved font resource');return resource}}
- return {manifest,resolver,outlines,resources}
+ const resolver:NativeFontResolver={providerId:'injoffice.pptx.operator-fonts',providerRevision:hash(Buffer.from(JSON.stringify([manifest,allowSubstitution,policy??null]))),resolve({run,manifest:requested}){
+  if(JSON.stringify(requested)!==JSON.stringify(manifest))throw new Error('Operator font manifest binding changed')
+  const selected=selectExplicitFontV1(manifest,run,allowSubstitution?policy:undefined)
+  return selected?{status:'resolved',face:selected.face,attemptedFaceIds:[selected.face.faceId],decisions:[]}:{status:'refused',attemptedFaceIds:[],decisions:[{code:'font-not-found',message:`Configured font unavailable: ${run.font.families.join(', ')} / ${run.font.weight} / ${run.font.style}`,recoverable:false}]}
+ },load(face){const resource=resources.get(face.faceId);if(!resource||resource.face.contentDigest!==face.contentDigest||resource.face.family!==face.family||resource.face.weight!==face.weight||resource.face.style!==face.style)throw new Error('Unresolved font resource');return {...resource,face:{...face},bytes:resource.bytes.slice()}}}
+ return {manifest,resolver,outlines,resources,policyDigest:policy?hash(Buffer.from(JSON.stringify(policy))):undefined}
 }
 
 export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const request=object(input)
  if(request.source_frame_autofit_preview!==undefined&&typeof request.source_frame_autofit_preview!=='boolean')throw new Error('Autofit preview requires a boolean opt-in')
  if(request.inherited_text_preview!==undefined&&typeof request.inherited_text_preview!=='boolean')throw new Error('Inherited text preview requires a boolean opt-in')
+ if(request.font_substitution_preview!==undefined&&typeof request.font_substitution_preview!=='boolean')throw new Error('Font substitution preview requires a boolean opt-in')
  if(typeof request.package_sha256!=='string'||!/^[a-f0-9]{64}$/.test(request.package_sha256)||typeof request.font_manifest_path!=='string'||!Number.isSafeInteger(request.slide_index))throw new Error('Invalid source-bound preview input')
  assertNativePptx(request.deck)
  const deck=request.deck as NativePptxDeck
  if(deck.origin!=='parsed'||request.slide_index as number<0||request.slide_index as number>=deck.slides.length)throw new Error('Preview requires a parsed source slide')
- const fonts=fontProviders(request.font_manifest_path)
+ const fonts=fontProviders(request.font_manifest_path,request.font_substitution_preview===true)
  const checkParagraphs=(paragraphs:readonly NativeParagraph[])=>{for(const paragraph of paragraphs)for(const run of paragraph.runs){if(![...fonts.resources.values()].some(r=>r.face.family===run.fontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator font unavailable: ${run.fontFamily??'unresolved family'} / ${run.bold?'bold':'regular'} / ${run.italic?'italic':'normal'}`)}}
  const checkMarkerFonts=(paragraphs:readonly NativeParagraph[])=>{for(const p of paragraphs){if(!p.bulletFontFamily)continue;const run=p.runs[0];if(!run||![...fonts.resources.values()].some(r=>r.face.family===p.bulletFontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator bullet font unavailable: ${p.bulletFontFamily}`)}}
  const checkElements=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.kind==='text'||element.kind==='shape'){checkParagraphs(element.paragraphs);checkMarkerFonts(element.paragraphs)}if(element.kind==='group')checkElements(element.children);if(element.kind==='table')for(const row of element.table.rows)for(const cell of row)if(cell.paragraphs){checkParagraphs(cell.paragraphs);checkMarkerFonts(cell.paragraphs)}}}
- checkElements(deck.slides[request.slide_index as number]!.elements)
+ if(request.font_substitution_preview!==true)checkElements(deck.slides[request.slide_index as number]!.elements)
+ // The v1 substitution evidence identifies text/shape runs, not table-cell
+ // coordinates. Keep table font resolution exact until that source join exists.
+ else {const tables=(elements:readonly NativeElement[])=>{for(const e of elements){if(e.kind==='group')tables(e.children);if(e.kind==='table')for(const row of e.table.rows)for(const cell of row)if(cell.paragraphs)checkParagraphs(cell.paragraphs)}};tables(deck.slides[request.slide_index as number]!.elements)}
  const countSourceFrames=(elements:readonly NativeElement[]):number=>elements.reduce((count,element)=>count+((element.kind==='text'||element.kind==='shape')&&element.textBody?.autoFit==='shape-source-frame'?1:0)+(element.kind==='group'?countSourceFrames(element.children):0),0)
  const sourceFrameAutoFitCount=countSourceFrames(deck.slides[request.slide_index as number]!.elements)
  const countInherited=(elements:readonly NativeElement[]):number=>elements.reduce((n,e)=>n+(e.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')?1:0)+(e.kind==='group'?countInherited(e.children):0),0)
@@ -66,6 +73,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  if(sourceFrameAutoFitCount>0&&request.source_frame_autofit_preview!==true)throw new Error('Source-frame autofit requires explicit preview opt-in')
  const tree=await compileNativePptxSlide(deck,request.slide_index as number,{inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
  const recording=createRecordingPaintSurface();paintSlideRenderTree(tree,recording)
+ const substitutions:NonNullable<PptxPreview['font_substitutions']>=[]
  const root:Extract<PreviewNode,{kind:'group'}>={kind:'group',transform:[1,0,0,1,0,0],children:[]}
  const stack=[root],diagnostics=tree.diagnostics.map(d=>`${d.code}: ${d.message}`)
  let glyphs=0
@@ -100,6 +108,11 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    }
    case 'glyphRun':{
     const run=command.run,provider=fonts.outlines.get(run.faceId??'')
+    if(run.fontSelection&&run.fontSelection.resolution!=='exact'){
+     if(!fonts.policyDigest||request.font_substitution_preview!==true||run.sourceRole==='paragraphBullet'||!run.faceId||!run.contentDigest)throw new Error('Unattested font substitution')
+     const evidence={source_id:run.sourceElementId,paragraph_index:run.paragraphIndex,run_index:run.runIndex,source_family:run.fontSelection.sourceFamily,selected_family:run.fontSelection.selectedFamily,face_id:run.faceId,font_digest:run.contentDigest}
+     if(!substitutions.some(s=>JSON.stringify(s)===JSON.stringify(evidence)))substitutions.push(evidence)
+    }
     if(!provider||fonts.resources.get(run.faceId!)?.face.contentDigest!==run.contentDigest)throw new Error('Glyph outline font identity mismatch')
     for(const glyph of run.glyphs){
      if(++glyphs>20000)throw new Error('Glyph path budget exceeded')
@@ -128,6 +141,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  result.resources=[...resources.values()].sort((a,b)=>a.part_name.toLowerCase()<b.part_name.toLowerCase()?-1:1)
  if(sourceFrameAutoFitCount>0)result.source_frame_autofit_count=sourceFrameAutoFitCount
  if(inheritedTextCount>0){result.inherited_text_preview_count=inheritedTextCount;result.inherited_text_policy='source-latin-inheritance-approximate-v1'}
+ if(substitutions.length){result.font_substitutions=substitutions;result.font_substitution_policy=EXPLICIT_FONT_POLICY_V1;result.font_substitution_policy_sha256=fonts.policyDigest}
  return decodePptxPreview(result)
 }
 function pathPart(p:RenderPathCommand):string {switch(p.kind){case 'moveTo':return `M${p.x} ${p.y}`;case 'lineTo':return `L${p.x} ${p.y}`;case 'close':return 'Z';default:throw new Error('Unmodeled path command')}}

@@ -24,6 +24,7 @@ type PPTXPreviewOptions struct {
 	WorkerPath, FontManifestPath string
 	SourceFrameAutoFitPreview    bool
 	InheritedTextPreview         bool
+	FontSubstitutionPreview      bool
 }
 
 func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXPreviewOptions) (map[string]any, error) {
@@ -101,6 +102,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 	// Explicit per-request opt-in, never inherited from operator/default options.
 	options.SourceFrameAutoFitPreview = r.URL.Query().Get("autofit") == "source-frame"
 	options.InheritedTextPreview = r.URL.Query().Get("text") == "source-inherited"
+	options.FontSubstitutionPreview = r.URL.Query().Get("fonts") == "operator-substitution"
 	select {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
@@ -122,6 +124,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
+	input["font_substitution_preview"] = options.FontSubstitutionPreview
 	result, err := compilePreviewWorker(ctx, options.WorkerPath, "injoffice.pptx.preview-worker", input, 16*1024*1024, 16*1024*1024)
 	if err != nil {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
@@ -136,7 +139,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		InheritedTextCount      int    `json:"inherited_text_preview_count"`
 		InheritedTextPolicy     string `json:"inherited_text_policy"`
 	}
-	if json.Unmarshal(result, &identity) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) || identity.InheritedTextCount != input["inherited_text_preview_count"].(int) || identity.InheritedTextCount > 0 && identity.InheritedTextPolicy != "source-latin-inheritance-approximate-v1" || identity.InheritedTextCount == 0 && identity.InheritedTextPolicy != "" {
+	if json.Unmarshal(result, &identity) != nil || validatePPTXFontSubstitutions(result, input["deck"].(pptxpatch.NativePPTXDeck).Slides[query].Elements, options.FontSubstitutionPreview, options.FontManifestPath) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) || identity.InheritedTextCount != input["inherited_text_preview_count"].(int) || identity.InheritedTextCount > 0 && identity.InheritedTextPolicy != "source-latin-inheritance-approximate-v1" || identity.InheritedTextCount == 0 && identity.InheritedTextPolicy != "" {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, errors.New("native preview worker result does not match the source slide"))
 		return
 	}
@@ -151,7 +154,7 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		return 0, err
 	}
 	for key, entries := range values {
-		if (key != "slide" && key != "autofit" && key != "text") || len(entries) != 1 {
+		if (key != "slide" && key != "autofit" && key != "text" && key != "fonts") || len(entries) != 1 {
 			return 0, errors.New("only one slide and one autofit query parameter are supported")
 		}
 		if key == "autofit" && entries[0] != "source-frame" {
@@ -159,6 +162,9 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		}
 		if key == "text" && entries[0] != "source-inherited" {
 			return 0, errors.New("text must equal source-inherited when explicitly requested")
+		}
+		if key == "fonts" && entries[0] != "operator-substitution" {
+			return 0, errors.New("fonts must equal operator-substitution when explicitly requested")
 		}
 	}
 	raw := values.Get("slide")

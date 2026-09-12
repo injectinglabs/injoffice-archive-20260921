@@ -51,6 +51,26 @@ func TestStoredRowPreviewQualification(t *testing.T) {
 	}
 }
 
+func TestStoredRowExactIgnorableDescentRoot(t *testing.T) {
+	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
+		source := `<worksheet xmlns="` + ns + `" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x14ac="` + nativeRowDescentNamespace + `" mc:Ignorable="x14ac"><sheetFormatPr defaultRowHeight="14.5" x14ac:dyDescent="0.35"/><sheetData><row r="1" x14ac:dyDescent="0.35"/></sheetData></worksheet>`
+		if got := previewNativeStoredRows([]byte(source), "s.xml"); got.RootPolicy != "x14ac-descent-only-v1" || len(got.Rows) != 32 {
+			t.Fatalf("missing exact root qualification %+v", got)
+		}
+		for _, bad := range []string{
+			strings.Replace(source, `Ignorable="x14ac"`, `Ignorable="x14ac other"`, 1),
+			strings.Replace(source, nativeRowDescentNamespace, "urn:foreign", 1),
+			strings.Replace(source, `<sheetData>`, `<sheetData><x14ac:foreign/>`, 1),
+			strings.Replace(source, `<worksheet `, `<worksheet unexpected="1" `, 1),
+			strings.Replace(source, `<row r="1"`, `<row x14ac:unexpected="1" r="1"`, 1),
+		} {
+			if got := previewNativeStoredRows([]byte(bad), "s.xml"); got.RootPolicy != "" {
+				t.Fatal("unexpected root qualification")
+			}
+		}
+	}
+}
+
 func TestStoredRowPreviewExplicitDefaultAndZeroOverride(t *testing.T) {
 	source := `<worksheet xmlns="` + spreadsheetMLTransitional + `"><sheetFormatPr defaultRowHeight="20" customHeight="1"/><sheetData><row r="1" ht="0" customHeight="1"/><row r="33" ht="40" customHeight="1"/></sheetData></worksheet>`
 	got := previewNativeStoredRows([]byte(source), "sheet.xml")
