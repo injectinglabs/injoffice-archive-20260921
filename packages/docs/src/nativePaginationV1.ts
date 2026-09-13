@@ -48,7 +48,8 @@ import { layoutNativeDocxTableRowsV1, nativeDocxTableRowGroupSizeV1, qualifyNati
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { planNativeDocxColumnParagraphFlowV1, type NativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
-import { placeNativeDocxNotesV1 } from './nativeNotePaginationV1.js'
+import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationV1 } from './nativeFootnoteReservationV1.js'
+import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
 
@@ -296,6 +297,9 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
+  footnoteReservation?: NativeDocxFootnoteReservationV1
+  reservedBottomHeight?: number
+  reservationPageOrdinal?: number
   columnFlow?: NativeDocxColumnParagraphFlowV1
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   request: NativeDocxPaginationRequestV1
@@ -1011,6 +1015,7 @@ function newPage(context: PaginationContext, section: NativeDocxSectionV1, kind:
   context.currentPage = page
   context.currentSection = section
   context.currentColumnOrdinal = 0
+  context.reservedBottomHeight = 0
   context.cursorY = 0
   context.previousAfter = 0
   return page
@@ -1035,7 +1040,7 @@ function pageHasContent(context: PaginationContext): boolean {
 }
 
 function remainingHeight(context: PaginationContext): number {
-  return (currentColumn(context)?.height_millipoints ?? 0) - context.cursorY
+  return (currentColumn(context)?.height_millipoints ?? 0) - context.cursorY - (context.reservedBottomHeight ?? 0)
 }
 
 function startSection(context: PaginationContext, section: NativeDocxSectionV1, first: boolean): void {
@@ -1641,6 +1646,23 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
     }
     startSection(context, group.section, groupIndex === 0)
     if (context.refused) return
+    if (context.footnoteReservation) {
+      const reservation = context.footnoteReservation
+      for (const native of reservation.body_paragraphs) {
+        const paragraph = shaped.get(native.id)!
+        const activates = native.id === reservation.reference_paragraph_id
+        const required = paragraph.block_advance_millipoints + (activates ? reservation.height_millipoints : 0)
+        if (required > remainingHeight(context)) startNextFlowColumn(context)
+        if (context.refused) return
+        if (activates) {
+          context.reservedBottomHeight = reservation.height_millipoints
+          context.reservationPageOrdinal = context.currentPage!.ordinal
+        }
+        placeSlice(context, paragraph, 0, paragraph.lines.length, 0)
+        if (context.refused) return
+      }
+      continue
+    }
     if (context.columnFlow) {
       for (const placement of context.columnFlow.placements) {
         while (!context.refused && (context.currentPage!.ordinal < placement.page_ordinal || context.currentColumnOrdinal < placement.column_ordinal)) startNextFlowColumn(context)
@@ -1765,6 +1787,7 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
     sliceCountForParagraph: new Map(),
     lastSliceLocation: new Map(),
   }
+  if (!approximateLegacySettings && request.document.notes.some((story) => story.kind === 'footnote')) context.footnoteReservation = measureNativeDocxFootnoteReservationV1(request, measureNativeDocxFootnoteAreaForReservationV1)
   refuseUnsupportedSource(context)
   const groups = sectionGroups(context)
   const indexed = validateAndIndexParagraphs(context, groups)
@@ -1780,6 +1803,13 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
       pages: context.pages,
     }, request.document, request.resolved_layout, request.shaped_lines)
     if (noteFailure) refuse(context, noteFailure.code, noteFailure.scope_id, noteFailure.message)
+    else if (context.footnoteReservation) {
+      const reservation = context.footnoteReservation
+      const page = context.pages.find((entry) => entry.ordinal === context.reservationPageOrdinal)
+      const notes = page?.note_stories ?? []
+      const height = notes.reduce((sum, note) => sum + note.height_millipoints, 0)
+      if (notes.length !== 2 || notes[0]?.story_id !== reservation.separator.id || notes[1]?.story_id !== reservation.note.id || notes[1]?.reference_run_id !== reservation.reference_run_id || height !== reservation.height_millipoints) refuse(context, 'note-overflow-unsupported', reservation.note.id, 'Final source-bound footnote area must exactly equal the reference-page reservation')
+    }
   }
   context.diagnostics.sort((left, right) => compareNativeCodeUnits(left.scope_id, right.scope_id) || compareNativeCodeUnits(left.code, right.code) || compareNativeCodeUnits(left.message, right.message))
   if (context.refused) return {

@@ -2517,3 +2517,51 @@ describe('unequal whole-paragraph column compiler', () => {
     await expect(prepareNativeDocxPagePaintV1(oversized)).rejects.toThrow('whole-paragraph candidates')
   })
 })
+
+describe('whole footnote reservation compiler', () => {
+  function reflowInput(prefix: number, following: number, height = 90000): NativeDocxPagePaintPrepareInputV1 {
+    const input = noteFixture()
+    const document = input.document as NativeDocxDocumentV1
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const reference = document.body.blocks[0]!
+    const paragraphs = Array.from({ length: prefix + following }, (_, index) => {
+      const block = structuredClone(reference)
+      block.id = `paragraph:following:${index}`; block.paragraph!.id = block.id
+      block.paragraph!.runs = [{ kind: 'text', id: `run:following:${index}`, anchor: block.paragraph!.runs[0]!.anchor, text: 'Ordinary whole body paragraph' }]
+      resolved.paragraphs.push({ paragraph_id: block.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'DejaVu Sans', font_size_half_points: 20 } })
+      resolved.runs.push({ run_id: block.paragraph!.runs[0]!.id, paragraph_id: block.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'DejaVu Sans', font_size_half_points: 20 } })
+      return block
+    })
+    document.body.blocks = [...paragraphs.slice(0, prefix), reference, ...paragraphs.slice(prefix)]
+    document.sections[0]!.starts_at_block_id = document.body.blocks[0]!.id
+    document.sections[0]!.page.margins.bottom_twips = 15840 - 1440 - height / 50
+    const note = document.notes[1]!.blocks[0]!.paragraph!
+    note.runs[1]!.text = 'The complete footnote remains with the reference and uses one kept paragraph with enough source text to wrap at the authored width. '.repeat(2)
+    resolved.paragraphs.find((paragraph) => paragraph.paragraph_id === note.id)!.properties.keep_lines = true
+    rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids = [...resolved.paragraphs.map((paragraph) => paragraph.paragraph_id), ...resolved.runs.map((run) => run.run_id)].sort() })
+    return input
+  }
+  it('paints references and whole notes after later body or the reference itself moves', async () => {
+    for (const [prefix, following, notePage] of [[1, 6, 0], [5, 1, 1]]) {
+      const input = reflowInput(prefix!, following!)
+      const before = structuredClone(input)
+      const prepared = await prepareNativeDocxPagePaintV1(input)
+      const layout = prepared.page_paint_request.paginated_layout
+      expect(layout.status, JSON.stringify(layout.diagnostics)).toBe('paginated')
+      expect(layout.pages.length).toBeGreaterThan(1)
+      expect(layout.pages[notePage!]!.note_stories?.some((note) => note.note_role === 'content')).toBe(true)
+      const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+      const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => {
+        const outline = outlines.outline(request.glyph_id)
+        return outline.path.length ? { ...request, ...outline, status: 'outlined' as const } : { ...request, units_per_em: outline.units_per_em, status: 'empty' as const }
+      }) })
+      expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output)).toBe('painted')
+      expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(true)
+      expect(input).toEqual(before)
+    }
+  })
+  it('keeps an oversized reference-note pair refused with no pages', async () => {
+    const prepared = await prepareNativeDocxPagePaintV1(reflowInput(0, 1, 30000))
+    expect(prepared.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [] }))
+  })
+})

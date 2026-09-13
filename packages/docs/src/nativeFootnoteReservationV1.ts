@@ -1,4 +1,4 @@
-/** Internal preparation only; body reflow is not wired until the shared paginator integration. */
+/** Source-bound whole-footnote reservation for the internal body paginator. */
 import { decodeNativeDocxPaginationRequestV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import type { NativeDocxParagraphV1, NativeDocxStoryV1 } from './nativeContract.js'
 import { qualifyNativeDocxSectionColumnsV1, type NativeDocxQualifiedColumnV1 } from './nativeSectionColumnsV1.js'
@@ -27,8 +27,8 @@ export interface NativeDocxFootnoteReservationV1 extends NativeDocxFootnoteReser
 }
 
 /** The callback is internal trusted note-core code, never request-supplied data.
- * Integration must lift the existing placedStory/placeGroup measurement once,
- * preserving every note source/label/relationship/diagnostic check. */
+ * The paginator supplies the shared note-core measurement. Complete source,
+ * label, relationship and diagnostic checks run before final output commits. */
 export type NativeDocxMeasureFootnoteAreaV1 = (profile: NativeDocxFootnoteReservationProfileV1) => NativeDocxFootnoteAreaMeasurementV1 | undefined
 
 export function qualifyNativeDocxFootnoteReservationV1(value: unknown): NativeDocxFootnoteReservationProfileV1 | undefined {

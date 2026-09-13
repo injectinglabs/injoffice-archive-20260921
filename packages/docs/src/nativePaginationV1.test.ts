@@ -1835,3 +1835,55 @@ describe('source-bound unequal whole-paragraph columns', () => {
     }
   })
 })
+
+describe('whole-footnote body reservation', () => {
+  it('reserves only the reference page and pushes later paragraphs', () => {
+    const request = fixture({ lineCounts: [1, 1, 1, 1] })
+    addFootnote(request)
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([
+      ['paragraph:1', 'paragraph:2', 'paragraph:3'], ['paragraph:4'],
+    ])
+    expect(output.pages.map((page) => page.note_stories?.length ?? 0)).toEqual([2, 0])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+    const forged = structuredClone(output)
+    forged.pages[0]!.note_stories![0]!.height_millipoints -= 1
+    expect(decodeNativeDocxPaginatedLayoutForRequest(forged, request).ok).toBe(false)
+  })
+  it('moves the whole reference and note together without reserving the previous page', () => {
+    const request = fixture({ lineCounts: [1, 1, 1, 1, 1] })
+    addFootnote(request, '1', '4')
+    const before = structuredClone(request)
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([
+      ['paragraph:1', 'paragraph:2', 'paragraph:3'], ['paragraph:4', 'paragraph:5'],
+    ])
+    expect(output.pages.map((page) => page.note_stories?.length ?? 0)).toEqual([0, 2])
+    expect(output.pages[1]!.note_stories![1]!.reference_run_id).toBe('run:paragraph:4')
+    expect(request).toEqual(before)
+  })
+  it('restores full height after leaving the reference page and honors exact pair fit', () => {
+    const request = fixture({ lineCounts: [1, 4], properties: [{}, { keep_lines: true }] })
+    addFootnote(request)
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.lines.length)).toEqual([1, 4])
+    expect(output.pages[1]!.paragraph_slices[0]!.height_millipoints).toBe(40000)
+    const exact = fixture({ lineCounts: [1, 1], bodyHeight: 20000 })
+    addFootnote(exact)
+    expect(paginated(exact).pages.map((page) => page.lines.length)).toEqual([1, 1])
+  })
+  it('retains atomic refusal for an oversized pair, invalid note authority, and page budgets', () => {
+    const oversized = fixture({ bodyHeight: 15000 })
+    addFootnote(oversized)
+    const invalid = fixture({ lineCounts: [1, 1, 1, 1] })
+    addFootnote(invalid)
+    invalid.shaped_lines.diagnostics.push({ code: 'page-control-deferred', severity: 'unsupported', scope_id: invalid.document.notes[1]!.blocks[0]!.paragraph!.id, message: 'Unqualified note source' })
+    for (const request of [oversized, invalid]) expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
+    const original = DOCX_PAGINATION_LIMITS.maxPages
+    try {
+      Object.assign(DOCX_PAGINATION_LIMITS, { maxPages: 1 })
+      const request = fixture({ lineCounts: [1, 1, 1, 1] }); addFootnote(request)
+      expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
+    } finally { Object.assign(DOCX_PAGINATION_LIMITS, { maxPages: original }) }
+  })
+})

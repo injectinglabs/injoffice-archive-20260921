@@ -454,6 +454,33 @@ and the paragraph atomicity of
 The imported Go fixture and actual HarfBuzz outline/paint replay validate this
 pipeline; they are synthetic OOXML evidence, not a Word visual reference.
 
+Whole-footnote body reflow admits one footnote containing one paragraph in a
+single-section, single-column document. Body paragraphs and the note use simple
+LTR text, natural line heights and zero spacing/indents. Every multiline body
+or note paragraph must have resolved `keep_lines=true`; keep-with-next, explicit
+page breaks, tables, drawings, fields, numbering, headers/footers and explicit
+note positions are excluded. The exact instruction-only separator also has zero
+spacing and one natural line. The reference paragraph plus measured complete
+note area must fit an empty page; otherwise the whole projection refuses.
+
+Reservation and final placement share the same note geometry implementation.
+Before placing the unique reference paragraph, the paginator tests its whole
+height plus separator/note area against the remaining page height. If necessary
+it moves the reference paragraph and note together, leaving prior paragraphs
+unchanged. Subsequent body paragraphs use the reduced space only on that page;
+advancing to the next page restores its full body height. Output section and
+column geometry remain physical. Final note placement retains all source,
+label, relationship and diagnostic validation and must reproduce the measured
+reservation exactly. Deterministic request replay executes the same flow; no
+caller-supplied reservation or source mutation is accepted.
+
+The existing omitted document-level footnote position remains page bottom, as
+described by [`FootnotePosition`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.footnoteposition?view=openxml-3.0.1).
+Explicit document/section positioning remains refused. Synthetic imported
+fixtures verify reference-stays/later-body-moves, reference-and-note-move,
+oversized-pair refusal and explicit-position refusal through actual native font
+shaping and outline paint. They do not establish Word visual equivalence.
+
 The qualified note slice is relationship-resolved and source-order driven.
 Each referenced footnote/endnote content story contains paragraphs only,
 exactly one self-label, and exactly one matching body reference. Labels use
@@ -523,8 +550,8 @@ selected header or footer is diagnosed and refuses the complete paint result;
 it is never omitted while body pages are published. Story-scoped asset
 selection and relationship closure require a later contract version.
 
-Notes requiring body reflow, within-paragraph splitting, or continuation outside
-the profile below refuse atomically. So do custom
+Notes requiring body reflow or continuation outside the bounded profiles below,
+or any within-paragraph note splitting, refuse atomically. So do custom
 numbering/restarts/positions, ambiguous/duplicate/missing references, unpaired
 labels, duplicate IDs or relationship drift, cycles, nested tables, drawings,
 fields, and unknown note markup. Exact Word `w:separator` and
