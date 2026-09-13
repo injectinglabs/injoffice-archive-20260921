@@ -189,7 +189,10 @@ func previewStoredRowRootPolicy(root *previewXML) bool {
 					continue
 				}
 			}
-			if n.name.Local == "drawing" && parent == "worksheet" && a.Name.Local == "id" && (a.Name.Space == officeRelNamespaceStrict || a.Name.Space == officeRelNamespaceTransitional) {
+			// Relationship attributes are ordinary OOXML, not ignorable extension
+			// semantics. Page setup is qualified independently; printer settings
+			// are never used as row-height or implicit page-setting authority.
+			if (n.name.Local == "drawing" || n.name.Local == "pageSetup") && parent == "worksheet" && a.Name.Local == "id" && (a.Name.Space == officeRelNamespaceStrict || a.Name.Space == officeRelNamespaceTransitional) {
 				continue
 			}
 			return false
