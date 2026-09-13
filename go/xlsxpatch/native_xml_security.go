@@ -65,7 +65,9 @@ func asciiEqualFold(left, right string) bool {
 }
 
 func preflightNativeCoreXML(data []byte) (tokens, elements int, err error) {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	// XML 1.0 §4.3.3: one initial UTF-8 BOM is an encoding signature,
+	// not character data. Only the decoder view changes; source bytes remain intact.
+	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})))
 	depth := 0
 	rootSeen, rootClosed := false, false
 	declarationSeen, prefixSeen := false, false

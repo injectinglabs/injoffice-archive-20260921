@@ -250,7 +250,8 @@ func officeDocumentRelationshipTarget(data []byte) (string, bool, error) {
 }
 
 func workbookRootDialect(data []byte) (bool, error) {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	// Decode a legal initial signature without changing the stored workbook part.
+	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})))
 	declarationSeen, prefixSeen := false, false
 	for {
 		token, err := decoder.Token()
@@ -287,7 +288,9 @@ func workbookRootDialect(data []byte) (bool, error) {
 }
 
 func parseRoutingRelationships(data []byte) ([]routingRelationship, error) {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
+	// A single initial UTF-8 signature is not XML character data (§4.3.3).
+	// This routing reader uses no source offsets and leaves package bytes intact.
+	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})))
 	depth := 0
 	rootSeen, rootClosed := false, false
 	declarationSeen, prefixSeen := false, false
