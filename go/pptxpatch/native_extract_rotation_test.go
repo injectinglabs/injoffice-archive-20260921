@@ -79,7 +79,7 @@ func TestNativeQuarterTurnBrowserFixture(t *testing.T) {
 	}
 }
 
-func TestNativeQuarterTurnShapesRefuseFractionalAndArbitraryRotation(t *testing.T) {
+func TestNativeSourceAffineAdmitsFractionalAndArbitraryRotation(t *testing.T) {
 	for _, angle := range []string{"12345", "5400000"} {
 		raw := nativeAutoShapeXML(3, "Unsupported rotation", "triangle", `<a:noFill/>`, nativeAutoShapeNoLine("flat", `<a:round/>`), ` rot="`+angle+`"`)
 		if angle == "5400000" {
@@ -95,8 +95,9 @@ func TestNativeQuarterTurnShapesRefuseFractionalAndArbitraryRotation(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		if nativeFixtureAutoShapes(deck.Slides[0])[0].Compatibility.Status != NativeCompatibilityStatusRefused {
-			t.Fatal("unrepresentable rotation accepted")
+		shape := nativeFixtureAutoShapes(deck.Slides[0])[0]
+		if shape.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || shape.Transform.RotationAngle == nil || shape.Transform.QuarterTurns != nil {
+			t.Fatal("source rational orientation was not preview-only")
 		}
 	}
 }

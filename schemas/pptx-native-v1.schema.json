@@ -174,7 +174,10 @@
         "y": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
         "cx": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "cy": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "quarterTurns": { "type": "integer", "minimum": 1, "maximum": 3 }
+        "quarterTurns": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "rotationAngle": { "type": "integer", "minimum": 0, "maximum": 21599999 },
+        "flipH": { "type": "boolean" },
+        "flipV": { "type": "boolean" }
       }
     },
     "sourceAnchor": {

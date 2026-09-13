@@ -509,6 +509,20 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 	if err != nil {
 		return nil, fmt.Errorf("pptxpatch: native mutations: source contract: %w", err)
 	}
+	affineTargets := map[string]bool{}
+	var markAffineTargets func([]NativeElement, bool)
+	markAffineTargets = func(elements []NativeElement, inherited bool) {
+		for _, element := range elements {
+			blocked := inherited || nativeComplexAffineGroup(element)
+			if blocked {
+				affineTargets[element.ID] = true
+			}
+			markAffineTargets(element.Children, blocked)
+		}
+	}
+	for _, slide := range deck.Slides {
+		markAffineTargets(slide.Elements, false)
+	}
 	seenOperations := map[string]bool{}
 	seenElements := map[string]bool{}
 	budget := nativeMutationBudget{}
@@ -536,6 +550,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if !ok || element.Source == nil {
 			return nil, fmt.Errorf("%s: parsed source element %q was not found", prefix, operation.ElementID)
 		}
+		if affineTargets[element.ID] {
+			return nil, fmt.Errorf("%s: source affine ancestor transforms are preview-only", prefix)
+		}
 		if element.Source.FingerprintSHA256 != operation.ExpectedFingerprintSHA256 {
 			return nil, fmt.Errorf("%s: stale element fingerprint for %q", prefix, operation.ElementID)
 		}
@@ -545,7 +562,7 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Geometry != nil {
 			return nil, fmt.Errorf("%s: custom geometry is preview-only", prefix)
 		}
-		if element.Transform.QuarterTurns != nil {
+		if element.Transform.QuarterTurns != nil || nativeHasSourceAffine(element.Transform) {
 			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)
 		}
 		if element.TextBody != nil && element.TextBody.WritingMode != nil {
@@ -728,7 +745,7 @@ func validateNativeMutationParagraphs(paragraphs []NativeParagraph, budget *nati
 }
 
 func validateNativeAutoShapeMutation(shape NativePPTXAutoShapeMutation) error {
-	if shape.Transform.QuarterTurns != nil {
+	if shape.Transform.QuarterTurns != nil || nativeHasSourceAffine(shape.Transform) {
 		return fmt.Errorf("quarter-turn transforms are preview-only")
 	}
 	if shape.Transform.X == nil || shape.Transform.Y == nil || shape.Transform.Cx == nil || shape.Transform.Cy == nil {
@@ -1341,7 +1358,7 @@ func nativeAutoShapeEquals(element NativeElement, expected NativePPTXAutoShapeMu
 }
 
 func nativeTransformEqual(left, right NativeTransform) bool {
-	return nativeInt64PointerEqual(left.X, right.X) && nativeInt64PointerEqual(left.Y, right.Y) && nativeInt64PointerEqual(left.Cx, right.Cx) && nativeInt64PointerEqual(left.Cy, right.Cy) && nativeInt64PointerEqual(left.QuarterTurns, right.QuarterTurns)
+	return nativeInt64PointerEqual(left.X, right.X) && nativeInt64PointerEqual(left.Y, right.Y) && nativeInt64PointerEqual(left.Cx, right.Cx) && nativeInt64PointerEqual(left.Cy, right.Cy) && nativeInt64PointerEqual(left.QuarterTurns, right.QuarterTurns) && nativeInt64PointerEqual(left.RotationAngle, right.RotationAngle) && nativeBoolPointerEqual(left.FlipH, right.FlipH) && nativeBoolPointerEqual(left.FlipV, right.FlipV)
 }
 
 func nativeStrokeEqual(left, right *NativeStroke) bool {

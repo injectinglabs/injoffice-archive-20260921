@@ -1779,7 +1779,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err != nil {
 		return NativeElement{}, err
 	}
-	if err := requireOnlyNativeAttrs(xfrm); err != nil {
+	if err := requireOnlyNativeAttrs(xfrm, xml.Name{Local: "rot"}, xml.Name{Local: "flipH"}, xml.Name{Local: "flipV"}); err != nil {
 		return NativeElement{}, fmt.Errorf("pptxpatch: native extract: unsupported transform: %w", err)
 	}
 	if err := requireOnlyNativeChildren(xfrm,
@@ -1867,6 +1867,20 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	}
 	elementFingerprint := nativeSHA256(raw)
 	transform := NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
+	orientation, err := parseNativeSourceAffine(xfrm)
+	if err != nil {
+		return NativeElement{}, err
+	}
+	if orientation.Rotation != 0 || orientation.FlipH || orientation.FlipV {
+		transform.RotationAngle = &orientation.Rotation
+		if orientation.FlipH {
+			transform.FlipH = &orientation.FlipH
+		}
+		if orientation.FlipV {
+			transform.FlipV = &orientation.FlipV
+		}
+	}
+
 	if textLayoutMessage == "" {
 		if boundsErr := validateNativeTextBodyBounds(textBody, transform); boundsErr != nil {
 			if !isNativeTextLayoutUnsupported(boundsErr) {
@@ -1883,6 +1897,10 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: part, ObjectID: objectID, FingerprintSHA256: elementFingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
+	}
+	if nativeHasSourceAffine(transform) {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.source-affine-preview", Message: "source text-box orientation uses bounded rational affine preview; transformed targets remain read-only"})
 	}
 	if inheritedPlaceholder != nil {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly

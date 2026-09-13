@@ -25,12 +25,13 @@ func refuseNativeGroup(code, message string) error {
 }
 
 type nativeGroupTransform struct {
-	x, y    int64
-	cx, cy  int64
-	childX  int64
-	childY  int64
-	childCx int64
-	childCy int64
+	orientation nativeSourceAffine
+	x, y        int64
+	cx, cy      int64
+	childX      int64
+	childY      int64
+	childCx     int64
+	childCy     int64
 }
 
 type nativeGroupExtractResult struct {
@@ -299,11 +300,25 @@ func (extractor *nativeExtractor) extractNativeGroup(
 	}
 	element := NativeElement{
 		Kind: NativeElementKindGroup, ID: elementID, Provenance: NativeProvenanceParsed,
-		Transform:      NativeTransform{X: int64Pointer(transform.x), Y: int64Pointer(transform.y), Cx: int64Pointer(transform.cx), Cy: int64Pointer(transform.cy)},
+		Transform:      nativeGroupSourceTransform(transform),
 		ChildTransform: &NativeTransform{X: int64Pointer(transform.childX), Y: int64Pointer(transform.childY), Cx: int64Pointer(transform.childCx), Cy: int64Pointer(transform.childCy)},
 		Children:       children, Passthrough: []NativePassthroughRef{},
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: worst, Diagnostics: diagnostics},
+	}
+	if nativeComplexAffineGroup(element) {
+		if nativeHasGraphicFrameDescendant(element.Children) {
+			return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-affine-graphic-frame-unavailable", "new affine group mappings containing table or chart text require separate text-orientation qualification; the complete group is preserved")
+		}
+		nativeMarkAffineDescendants(element.Children)
+	}
+	_, _, _, _, legacyErr := nativeGroupAffineComponents(element.Transform, *element.ChildTransform)
+	if nativeHasSourceAffine(element.Transform) || legacyErr != nil {
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		if len(element.Compatibility.Diagnostics) >= nativeMaxDiagnosticsPerScope {
+			return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-diagnostic-budget-unavailable", "group affine diagnostics exceed the bounded native contract")
+		}
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.source-affine-preview", Message: "DrawingML group orientation and rational scaling use bounded affine preview; transformed targets remain read-only"})
 	}
 	if name != "" {
 		element.Name = stringPointer(name)
@@ -415,25 +430,9 @@ func validateNativeGroupTransform(node *nativeXMLNode, dialect nativeExtractDial
 		xml.Name{Space: dialect.drawing, Local: "chExt"}); err != nil {
 		return nativeGroupTransform{}, fmt.Errorf("pptxpatch: native extract: malformed group transform: %w", err)
 	}
-	if value, ok := exactNativeAttr(xfrm, "", "rot"); ok {
-		rotation, parseErr := parseCanonicalNativeInt(value, -nativeMaxSafeInteger, nativeMaxSafeInteger)
-		if parseErr != nil {
-			return nativeGroupTransform{}, fmt.Errorf("pptxpatch: native extract: invalid group rotation")
-		}
-		if rotation != 0 {
-			return nativeGroupTransform{}, refuseNativeGroup("pptx.group-rotation-unavailable", "rotated groups are preserved rather than approximated")
-		}
-	}
-	for _, name := range []string{"flipH", "flipV"} {
-		if value, ok := exactNativeAttr(xfrm, "", name); ok {
-			flip, parseErr := nativeBool(value)
-			if parseErr != nil {
-				return nativeGroupTransform{}, fmt.Errorf("pptxpatch: native extract: invalid group %s", name)
-			}
-			if flip {
-				return nativeGroupTransform{}, refuseNativeGroup("pptx.group-flip-unavailable", "flipped groups are preserved rather than approximated")
-			}
-		}
+	orientation, err := parseNativeSourceAffine(xfrm)
+	if err != nil {
+		return nativeGroupTransform{}, err
 	}
 	off, err := nativeSingleton(xfrm, dialect.drawing, "off", false)
 	if err != nil {
@@ -477,13 +476,7 @@ func validateNativeGroupTransform(node *nativeXMLNode, dialect nativeExtractDial
 	if err != nil {
 		return nativeGroupTransform{}, err
 	}
-	result := nativeGroupTransform{x: x, y: y, cx: cx, cy: cy, childX: childX, childY: childY, childCx: childCx, childCy: childCy}
-	if _, _, _, _, err := nativeGroupAffineComponents(
-		NativeTransform{X: &result.x, Y: &result.y, Cx: &result.cx, Cy: &result.cy},
-		NativeTransform{X: &result.childX, Y: &result.childY, Cx: &result.childCx, Cy: &result.childCy},
-	); err != nil {
-		return nativeGroupTransform{}, refuseNativeGroup("pptx.group-fractional-transform-unavailable", "group transform cannot be represented by the exact renderer-neutral affine contract")
-	}
+	result := nativeGroupTransform{orientation: orientation, x: x, y: y, cx: cx, cy: cy, childX: childX, childY: childY, childCx: childCx, childCy: childCy}
 	return result, nil
 }
 
@@ -583,4 +576,18 @@ func nativeGroupAffineComponents(transform, childTransform NativeTransform) (sca
 		return 0, 0, 0, 0, err
 	}
 	return scaleX, scaleY, translateX, translateY, nil
+}
+
+func nativeGroupSourceTransform(group nativeGroupTransform) NativeTransform {
+	result := NativeTransform{X: &group.x, Y: &group.y, Cx: &group.cx, Cy: &group.cy}
+	if group.orientation.Rotation != 0 || group.orientation.FlipH || group.orientation.FlipV {
+		result.RotationAngle = &group.orientation.Rotation
+		if group.orientation.FlipH {
+			result.FlipH = &group.orientation.FlipH
+		}
+		if group.orientation.FlipV {
+			result.FlipV = &group.orientation.FlipV
+		}
+	}
+	return result
 }
