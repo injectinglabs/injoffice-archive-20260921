@@ -337,6 +337,8 @@ export { decodeNativeWorkbookObjectsV1, layoutNativeCachedChartV1 } from './nati
 export {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js'
 export {decodeNativeSheetPrintTitlesV1,type NativeSheetPrintTitlesV1,type NativeSheetPrintTitleRangeV1} from './nativeSheetPrintTitlesV1.js'
 export {selectNativeSheetPrintAreaV1} from './nativeSheetPrintAreaSelectionV1.js'
+export {decodeNativeSheetPrintAreaSetsV1,type NativeSheetPrintAreaSetV1} from './nativeSheetPrintAreaSetsV1.js'
+export {selectNativeSheetPrintAreaSetV1,compileNativeSheetPrintAreaSetPreviewV1,type NativeSheetPrintAreaSetPreviewV1} from './nativeSheetPrintAreaSetPreviewV1.js'
 export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'

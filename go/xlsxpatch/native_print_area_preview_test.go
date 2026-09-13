@@ -62,6 +62,7 @@ func TestNativePrintAreasNamespacesScopeAndAmbiguity(t *testing.T) {
 			{"duplicate", `<definedNames>` + def + def + second + `</definedNames>`, false, true},
 			{"case-ambiguous", `<definedNames>` + def + strings.Replace(def, "_xlnm.Print_Area", "_xlnm.print_area", 1) + second + `</definedNames>`, false, false},
 			{"titles", `<definedNames>` + def + second + `<definedName name="_xlnm.Print_Titles" localSheetId="0">'Data Set'!$1:$2</definedName></definedNames>`, true, true},
+			{"titles-invalid", `<definedNames>` + def + second + `<definedName name="_xlnm.Print_Titles" localSheetId="0">'Data Set'!$A$1:$B$2</definedName></definedNames>`, false, true},
 			{"global", `<definedNames>` + def + strings.Replace(second, ` localSheetId="1"`, ``, 1) + `</definedNames>`, false, false},
 			{"sheet-id-not-ordinal", `<definedNames>` + strings.Replace(def, `localSheetId="0"`, `localSheetId="7"`, 1) + second + `</definedNames>`, false, false},
 			{"malformed-scope", `<definedNames>` + strings.Replace(def, `localSheetId="0"`, `localSheetId="00"`, 1) + second + `</definedNames>`, false, false},
@@ -77,7 +78,11 @@ func TestNativePrintAreasNamespacesScopeAndAmbiguity(t *testing.T) {
 		} {
 			t.Run(tc.label+ns, func(t *testing.T) {
 				got := previewNativePrintAreas([]byte(wrap(tc.content)), sheets)
+				sets := previewNativePrintAreaSets([]byte(wrap(tc.content)), sheets)
 				for i, available := range []bool{tc.first, tc.second} {
+					if (sets[i].Status == "available") != available || (len(sets[i].Areas) == 1) != available || sets[i].SheetID != sheets[i].ID {
+						t.Fatalf("unexpected set %+v", sets)
+					}
 					if (got[i].Status == "available") != available || (got[i].Area != nil) != available || len(got[i].Warnings) != 1 || got[i].SheetID != sheets[i].ID {
 						t.Fatalf("unexpected %+v", got)
 					}
@@ -93,11 +98,21 @@ func TestNativePrintAreasNamespacesScopeAndAmbiguity(t *testing.T) {
 		if got[0].Status != "unavailable" || got[1].Status != "available" || got[1].SheetID != "7" {
 			t.Fatal("did not use workbook ordinal", got)
 		}
+		sets := previewNativePrintAreaSets([]byte(wrap(`<definedNames>`+def+`</definedNames>`)), reordered)
+		if sets[0].Status != "unavailable" || sets[1].Status != "available" || sets[1].SheetID != "7" {
+			t.Fatal("set did not use workbook ordinal", sets)
+		}
 	}
 	if got := previewNativePrintAreas(bytes.Repeat([]byte(" "), 2*1024*1024+1), sheets); got[0].Status != "unavailable" {
 		t.Fatal(got)
 	}
+	if got := previewNativePrintAreaSets(bytes.Repeat([]byte(" "), 2*1024*1024+1), sheets); got[0].Status != "unavailable" {
+		t.Fatal(got)
+	}
 	if got := previewNativePrintAreas(nil, make([]NativeWorkbookSheetV2, 65)); len(got) != 64 {
+		t.Fatal(len(got))
+	}
+	if got := previewNativePrintAreaSets(nil, make([]NativeWorkbookSheetV2, 65)); len(got) != 64 {
 		t.Fatal(len(got))
 	}
 }

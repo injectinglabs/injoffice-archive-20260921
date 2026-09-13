@@ -3,6 +3,7 @@ import { snapshotNativePlainData } from "./nativePlainData.js";
 import {decodeNativeSheetPageSettingsV1,type NativeSheetPageSettingsV1} from './nativeSheetPageSettingsV1.js';
 import {decodeNativeDrawingObjectsV1,type NativeDrawingObjectV1} from './nativeDrawingObjectsV1.js';
 import {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js';
+import {decodeNativeSheetPrintAreaSetsV1,type NativeSheetPrintAreaSetV1} from './nativeSheetPrintAreaSetsV1.js';
 import {decodeNativeSheetPrintTitlesV1,type NativeSheetPrintTitlesV1} from './nativeSheetPrintTitlesV1.js';
 /** Read-only source-derived metadata. Never a workbook mutation envelope. */
 export interface NativeWorkbookObjectsV1 {
@@ -14,6 +15,7 @@ export interface NativeWorkbookObjectsV1 {
   row_geometry?: NativeStoredRowGeometryV1[];
   page_settings?: NativeSheetPageSettingsV1[];
   print_areas?: NativeSheetPrintAreaV1[];
+  print_area_sets?: NativeSheetPrintAreaSetV1[];
   print_titles?: NativeSheetPrintTitlesV1[];
   drawing_objects?: NativeDrawingObjectV1[];
 }
@@ -112,6 +114,7 @@ export function decodeNativeWorkbookObjectsV1(
   const hasRows = !!input && typeof input === "object" && Object.hasOwn(input, "row_geometry");
   const hasPages = !!input && typeof input === "object" && Object.hasOwn(input, "page_settings");
   const hasPrintAreas = !!input && typeof input === "object" && Object.hasOwn(input, "print_areas");
+  const hasPrintAreaSets = !!input && typeof input === "object" && Object.hasOwn(input, "print_area_sets");
   const hasPrintTitles = !!input && typeof input === "object" && Object.hasOwn(input, "print_titles");
   const hasDrawings = !!input && typeof input === "object" && Object.hasOwn(input, "drawing_objects");
   const value = obj(input, [
@@ -123,6 +126,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasRows ? ["row_geometry"] : []),
     ...(hasPages ? ["page_settings"] : []),
     ...(hasPrintAreas ? ["print_areas"] : []),
+    ...(hasPrintAreaSets ? ["print_area_sets"] : []),
     ...(hasPrintTitles ? ["print_titles"] : []),
     ...(hasDrawings ? ["drawing_objects"] : []),
   ]);
@@ -334,6 +338,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasRows ? { row_geometry: decodeNativeStoredRowGeometryV1(value.row_geometry) } : {}),
     ...(hasPages ? { page_settings: decodeNativeSheetPageSettingsV1(value.page_settings) } : {}),
     ...(hasPrintAreas ? { print_areas: decodeNativeSheetPrintAreasV1(value.print_areas) } : {}),
+    ...(hasPrintAreaSets ? { print_area_sets: decodeNativeSheetPrintAreaSetsV1(value.print_area_sets) } : {}),
     ...(hasPrintTitles ? { print_titles: decodeNativeSheetPrintTitlesV1(value.print_titles) } : {}),
     ...(hasDrawings ? { drawing_objects: decodeNativeDrawingObjectsV1(value.drawing_objects) } : {}),
   };

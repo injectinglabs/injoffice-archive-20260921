@@ -27,6 +27,7 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 	}{
 		{"rectangle", `Sheet1!$B$2:$D$4`, true, "", false, "", false},
 		{"union", `Sheet1!$B$2:$D$4,Sheet1!$F$6`, false, "", false, "", false},
+		{"union-overlap", `Sheet1!$B$2:$D$4,Sheet1!$D$4:$F$6`, false, "", false, "", false},
 		{"fit", `Sheet1!$B$2:$D$4`, true, "1", true, "", false},
 		{"fit-unbounded", `Sheet1!$B$2:$D$4`, true, "0", true, "", false},
 		{"fit-invalid", `Sheet1!$B$2:$D$4`, true, "101", false, "", false},
@@ -74,6 +75,9 @@ func TestWASMInspectSavedPrintAreaMatchesGo(t *testing.T) {
 			}
 			if len(want.PrintTitles) != 1 || (want.PrintTitles[0].Status == "available") != tc.titlesAvailable {
 				t.Fatalf("%+v", want.PrintTitles)
+			}
+			if len(want.PrintAreaSets) != 1 || (want.PrintAreaSets[0].Status == "available") != (tc.available || tc.name == "union") {
+				t.Fatalf("unexpected area sets: %+v", want.PrintAreaSets)
 			}
 			if tc.fit != "" && (len(want.PageSettings) != 1 || (want.PageSettings[0].Status == "available") != tc.fitAvailable) {
 				t.Fatalf("unexpected Go fit settings: %+v", want.PageSettings)

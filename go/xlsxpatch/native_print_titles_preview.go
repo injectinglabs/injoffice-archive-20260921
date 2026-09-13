@@ -48,29 +48,8 @@ func previewNativePrintTitles(raw []byte, sheets []NativeWorkbookSheetV2) []Nati
 }
 
 func parseNativePrintTitles(text, sheetName string) (rows, columns *NativePrintTitleSpanV1) {
-	if len(text) == 0 || len(text) > 4096 {
-		return nil, nil
-	}
-	// Commas inside a quoted sheet name are literals, not union separators.
-	parts := []string{}
-	quoted, start := false, 0
-	for i := 0; i < len(text); i++ {
-		if text[i] == '\'' {
-			if quoted && i+1 < len(text) && text[i+1] == '\'' {
-				i++
-				continue
-			}
-			quoted = !quoted
-		} else if text[i] == ',' && !quoted {
-			parts = append(parts, text[start:i])
-			start = i + 1
-		}
-	}
-	if quoted {
-		return nil, nil
-	}
-	parts = append(parts, text[start:])
-	if len(parts) > 2 {
+	parts := splitNativePrintUnion(text, 2)
+	if parts == nil {
 		return nil, nil
 	}
 	for _, part := range parts {

@@ -148,6 +148,21 @@ describe('selected-range page presentation', () => {
     expect(html).not.toContain('Outside page one')
     expect(html.indexOf('scale(0.37)')).toBeLessThan(html.indexOf('Source-positioned drawing 1'))
   })
+  it('keeps separate area pages clipped and gives their SVG definitions unique identities', () => {
+    const first = fixture(), second = fixture()
+    second.sheet.cells = [{ ...second.sheet.cells[0]!, ref: 'B3', row: 2, column: 1, value: { kind: 'string', text: 'Second saved area' } } as NativeSheet['cells'][number]]
+    second.geometry = { ...second.geometry, rows: [{ ...second.geometry.rows[0]!, row: 2 }], columns: [{ ...second.geometry.columns[0]!, column: 1 }] }
+    second.plan.pages[0] = { ...second.plan.pages[0]!, rows: { start: 2, end: 2 }, columns: { start: 1, end: 1 } }
+    const html = renderToStaticMarkup(createElement('div', null,
+      createElement(NativeSheetPageImages, first), createElement(NativeSheetPageImages, second)))
+    expect(html.match(/aria-label="Approximate spreadsheet page 1"/g)).toHaveLength(2)
+    expect(html.match(/<title>A1:/g)).toHaveLength(1)
+    expect(html.match(/<title>B3:/g)).toHaveLength(1)
+    expect(html).not.toContain('Outside page one')
+    const ids = [...html.matchAll(/<clipPath id="([^"]+)"/g)].map(match => match[1])
+    expect(ids.length).toBeGreaterThan(1)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
   it('paints repeated heading regions separately without duplicating corner cells', () => {
     const props = fixture(), page = props.plan.pages[0]!
     props.geometry.columns.push({ ...props.geometry.columns[0]!, column: 1, x_emu: 952500 })

@@ -25,6 +25,7 @@ type NativeWorkbookObjectsV1 struct {
 	PageSettings   []NativeSheetPageSettingsV1 `json:"page_settings,omitempty"`
 	DrawingObjects []NativeDrawingObjectV1     `json:"drawing_objects,omitempty"`
 	PrintAreas     []NativeSheetPrintAreaV1    `json:"print_areas,omitempty"`
+	PrintAreaSets  []NativeSheetPrintAreaSetV1 `json:"print_area_sets,omitempty"`
 	PrintTitles    []NativeSheetPrintTitlesV1  `json:"print_titles,omitempty"`
 }
 type NativeTablePreviewV1 struct {
@@ -185,6 +186,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		return nil, err
 	}
 	result.PrintAreas = previewNativePrintAreas(pkg.files[workbookPart.part], workbook.Sheets)
+	result.PrintAreaSets = previewNativePrintAreaSets(pkg.files[workbookPart.part], workbook.Sheets)
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
 	owners := map[string]string{}
 	for _, sheet := range workbook.Sheets {

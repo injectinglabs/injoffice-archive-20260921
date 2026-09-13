@@ -11618,6 +11618,11 @@
               "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPagePreviewV1"
             },
             {
+              "name": "compileNativeSheetPrintAreaSetPreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+            },
+            {
               "name": "compileNativeStoredRowSheetGeometryV1",
               "kind": "export",
               "signature": "compileNativeStoredRowSheetGeometryV1"
@@ -11651,6 +11656,11 @@
               "name": "createNativeSheetGeometryRecordingSurfaceV2",
               "kind": "function",
               "signature": "export declare function createNativeSheetGeometryRecordingSurfaceV2(maxCommands?: number): NativeSheetGeometryRecordingSurfaceV2"
+            },
+            {
+              "name": "decodeNativeSheetPrintAreaSetsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
             },
             {
               "name": "decodeNativeSheetPrintAreasV1",
@@ -12393,6 +12403,16 @@
               "signature": "NativeSheetPreviewRegionV1"
             },
             {
+              "name": "NativeSheetPrintAreaSetPreviewV1",
+              "kind": "type",
+              "signature": "export interface NativeSheetPrintAreaSetPreviewV1"
+            },
+            {
+              "name": "NativeSheetPrintAreaSetV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintAreaSetV1 ="
+            },
+            {
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
@@ -12888,6 +12908,11 @@
               "signature": "RowSetHeightMutation"
             },
             {
+              "name": "selectNativeSheetPrintAreaSetV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintAreaSetV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): readonly NativeSheetViewportV2[]"
+            },
+            {
               "name": "selectNativeSheetPrintAreaV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
@@ -13094,6 +13119,11 @@
               "signature": "export declare function compileNativeSheetPagePreviewV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPagePreviewV1"
             },
             {
+              "name": "compileNativeSheetPrintAreaSetPreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+            },
+            {
               "name": "compileNativeStoredRowSheetGeometryV1",
               "kind": "function",
               "signature": "export declare function compileNativeStoredRowSheetGeometryV1(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2, objects: NativeWorkbookObjectsV1): NativeStoredRowSheetGeometryV1"
@@ -13102,6 +13132,11 @@
               "name": "createNativeMaximumDigitWidthAuthorityV2",
               "kind": "function",
               "signature": "export declare function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkbookRenderModelV2, fontBytes: Uint8Array): NativeMaximumDigitWidthAuthorityV2"
+            },
+            {
+              "name": "decodeNativeSheetPrintAreaSetsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
             },
             {
               "name": "decodeNativeSheetPrintAreasV1",
@@ -13227,6 +13262,16 @@
               "name": "NativeSheetPreviewRegionV1",
               "kind": "type",
               "signature": "NativeSheetPreviewRegionV1"
+            },
+            {
+              "name": "NativeSheetPrintAreaSetPreviewV1",
+              "kind": "type",
+              "signature": "export interface NativeSheetPrintAreaSetPreviewV1"
+            },
+            {
+              "name": "NativeSheetPrintAreaSetV1",
+              "kind": "type",
+              "signature": "export type NativeSheetPrintAreaSetV1 ="
             },
             {
               "name": "NativeSheetPrintAreaV1",
@@ -13357,6 +13402,11 @@
               "name": "projectNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function projectNativeWorkbookV2(input: unknown): NativeWorkbookRenderModelV2"
+            },
+            {
+              "name": "selectNativeSheetPrintAreaSetV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintAreaSetV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): readonly NativeSheetViewportV2[]"
             },
             {
               "name": "selectNativeSheetPrintAreaV1",

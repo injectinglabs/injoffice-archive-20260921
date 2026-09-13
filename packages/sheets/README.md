@@ -44,8 +44,28 @@ The required `scale` percentage remains metadata but is not applied in fit mode;
 each output page records its effective scale. Impossible targets and merged cells
 crossing a resulting page boundary still refuse without clipping. This is an
 explicit approximation, not Excel's fit algorithm or printer pagination fidelity.
-Repeated titles and printer defaults are not implemented; strict geometry and
-mutation authority are unchanged.
+Opt-in leading repeated print titles are supported by the page planner; printer
+defaults are not implemented. Strict geometry and mutation authority are unchanged.
+
+For multiple saved ranges, `decodeNativeSheetPrintAreaSetsV1` validates the
+additive `print_area_sets` evidence: up to 64 worksheets, each with one through
+16 disjoint zero-based inclusive rectangles in source order. Overlaps are refused,
+not deduplicated, reordered or replaced with a bounding rectangle.
+`selectNativeSheetPrintAreaSetV1(model, sheetId, objects)` returns frozen complete
+viewports joined to the package and source worksheet. Only absent additive metadata
+permits legacy single-area fallback; unavailable or missing entries in a present
+inventory refuse. Per-area geometry limits and a total 100,000-cell budget apply.
+
+Compile one source-qualified geometry for each selected viewport, in that order,
+then call `compileNativeSheetPrintAreaSetPreviewV1(geometries, objects, hostPolicy?,
+options?)`. The returned `injoffice.xlsx.print-area-set-pages` v1 envelope contains
+`areas: [{area_index, viewport, plan}]` and `total_pages`. Each nested plan starts
+page numbering at one; `area_index` is zero-based. Each area is fitted independently.
+The batch validates the complete source set and refuses atomically if an area fails
+or the total exceeds 100 pages. There is no partial output or skipped range. Existing
+explicit repeated-title options apply to every area and refuse if any range is
+incompatible. Source range selection, saved or host page settings, and approximate
+rendering remain separate concerns; this is not an Excel print-fidelity claim.
 
 ```bash
 npm install @injoffice/sheets
