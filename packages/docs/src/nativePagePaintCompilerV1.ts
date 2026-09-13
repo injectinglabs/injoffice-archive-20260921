@@ -657,6 +657,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   const squareWrapPresent = hasNativeSquareWrapV1(document.value)
   const solved = await solveNativeDocxLayoutFixedPointV1({ bodyFieldValues: initialBodyFieldValues, wrapPlan: {} as NativeDocxLineIntervalPlanV1 }, async state => {
   const fieldDocument = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value,state.bodyFieldValues) : document.value
+  for (let continuationPass = 0; ; continuationPass += 1) {
   const shaped = await shapeLines({
     protocol: 'injoffice.docx.shaping-request', version: 1,
     document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value,
@@ -679,10 +680,19 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   if (!decodedPagination.ok) failIssues('pagination request is invalid', decodedPagination.issues)
   const paginated = approximateEligibility === undefined ? paginateNativeDocxV1(decodedPagination.value) : { ok: true as const, value: paginateNativeDocxApproximateLegacyV1(decodedPagination.value, approximateEligibility).layout }
   if (!paginated.ok) failIssues('native pagination failed validation', paginated.issues)
+  if (continuationPass === 0 && paginated.value.status === 'refused') {
+    const activation = paginated.value.diagnostics.find((entry) => entry.code === 'note-continuation-shaping-required')
+    const sentinel = activation && fieldDocument.notes.find((story) => story.id === activation.scope_id && story.kind === 'endnote' && story.note_role === 'continuation-separator')
+    if (sentinel?.blocks.length === 1 && sentinel.blocks[0]?.paragraph) {
+      paragraphWidths.set(sentinel.blocks[0].paragraph.id, dimensions.width)
+      continue
+    }
+  }
   const paginationIssues = approximateEligibility === undefined ? validateNativeDocxPaginatedLayoutSourceV1(paginated.value, decodedPagination.value) : validateNativeDocxApproximatePaginatedLayoutSourceV1(paginated.value, decodedPagination.value, approximateEligibility)
   if (paginationIssues.length > 0) failIssues('native pagination source join failed', paginationIssues)
   const wrapPlan = squareWrapPresent ? deriveNativeSquareWrapPlanV1(fieldDocument, resolved.value, shaped.value, paginated.value) : {}
   return { next: { bodyFieldValues: bodyFields.length ? nativeDocxBodyPageFieldValuesV1(document.value,decodedPagination.value,paginated.value) : {}, wrapPlan }, result: { shaped, decodedPagination, paginated } }
+  }
   })
   const { shaped, decodedPagination, paginated } = solved.result
   const hasPageFields = hasNativeDocxPageFieldsV1(decodedPagination.value.document)
