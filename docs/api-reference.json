@@ -3194,7 +3194,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "CSS_PX_PER_INCH",
@@ -4242,6 +4242,11 @@
               "signature": "export type NativeDocxPartialCellV1 ="
             },
             {
+              "name": "NativeDocxPartialCommentV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCommentV1 ="
+            },
+            {
               "name": "NativeDocxPartialContentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialContentV1"
@@ -4850,7 +4855,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "decodeNativeDocxDocument",
@@ -5071,6 +5076,11 @@
               "name": "NativeDocxPartialCellV1",
               "kind": "type",
               "signature": "export type NativeDocxPartialCellV1 ="
+            },
+            {
+              "name": "NativeDocxPartialCommentV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCommentV1 ="
             },
             {
               "name": "NativeDocxPartialContentV1",
