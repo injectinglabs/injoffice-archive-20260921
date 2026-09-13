@@ -14,6 +14,8 @@ import {
   decodeNativeDocxResolvedLayout,
   createNativeDocxEquationPreviewsV1,
   decodeNativeDocxReviewEvidenceV1,
+  decodeNativeDocxNestedTextEvidenceV1,
+  type NativeDocxNestedTextEvidenceV1,
   decodeNativeDocxPartialTableTextContextsV1,
   type NativeDocxPartialTableTextContextV1,
   type NativeDocxReviewEvidenceV1,
@@ -58,7 +60,7 @@ export interface DocxWasmOperationOptions {
 }
 
 export interface DocxWasmClient {
-  inspectPartialContent(bytes:Uint8Array,options?:DocxWasmOperationOptions):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[];nested_table_omissions?:NativeDocxNestedTableOmissionsV1;review_changes?:NativeDocxReviewEvidenceV1;table_text_contexts?:NativeDocxPartialTableTextContextV1[]}>
+  inspectPartialContent(bytes:Uint8Array,options?:DocxWasmOperationOptions):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[];nested_table_omissions?:NativeDocxNestedTableOmissionsV1;review_changes?:NativeDocxReviewEvidenceV1;table_text_contexts?:NativeDocxPartialTableTextContextV1[];nested_text?:NativeDocxNestedTextEvidenceV1[]}>
   extract(bytes: Uint8Array, options?: DocxWasmOperationOptions): Promise<NativeDocxDocumentV1>
   apply(
     original: Uint8Array,
@@ -103,7 +105,7 @@ class DocxWasmClientImpl implements DocxWasmClient {
     return this.extractValidated(bytes, options)
   }
 
-  async inspectPartialContent(bytes:Uint8Array,options:DocxWasmOperationOptions={}):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[];nested_table_omissions?:NativeDocxNestedTableOmissionsV1;review_changes?:NativeDocxReviewEvidenceV1;table_text_contexts?:NativeDocxPartialTableTextContextV1[]}>{
+  async inspectPartialContent(bytes:Uint8Array,options:DocxWasmOperationOptions={}):Promise<{document:NativeDocxDocumentV1;resolved_layout:NativeDocxResolvedLayoutInputV1;equations?:NativeDocxEquationPreviewV1[];equation_context_notices?:NativeDocxEquationContextNoticeV1[];nested_table_omissions?:NativeDocxNestedTableOmissionsV1;review_changes?:NativeDocxReviewEvidenceV1;table_text_contexts?:NativeDocxPartialTableTextContextV1[];nested_text?:NativeDocxNestedTextEvidenceV1[]}>{
     assertPackageSize(bytes,this.maxPackageBytes)
     if(options.signal?.aborted){const error=new Error('Partial inspection aborted');error.name='AbortError';throw error}
     const snapshot=new Uint8Array(bytes)
@@ -112,14 +114,15 @@ class DocxWasmClientImpl implements DocxWasmClient {
     try{
       if(json.length>16*1024*1024||new TextEncoder().encode(json).byteLength>16*1024*1024)throw new TypeError('Partial source exceeds response budget')
       const value=JSON.parse(json) as Record<string,unknown>
-      if(!value||!['document,package_sha256,protocol,resolved_layout,version','document,equations,package_sha256,protocol,resolved_layout,version','document,equation_context_notices,equations,package_sha256,protocol,resolved_layout,version'].includes(Object.keys(value).filter(k=>k!=='nested_table_omissions'&&k!=='review_changes'&&k!=='table_text_contexts').sort().join(','))||value.protocol!=='injoffice.docx.partial-source'||value.version!==1||value.package_sha256!==hash)throw new TypeError('Partial source package identity mismatch')
+      if(!value||!['document,package_sha256,protocol,resolved_layout,version','document,equations,package_sha256,protocol,resolved_layout,version','document,equation_context_notices,equations,package_sha256,protocol,resolved_layout,version'].includes(Object.keys(value).filter(k=>k!=='nested_table_omissions'&&k!=='review_changes'&&k!=='table_text_contexts'&&k!=='nested_text').sort().join(','))||value.protocol!=='injoffice.docx.partial-source'||value.version!==1||value.package_sha256!==hash)throw new TypeError('Partial source package identity mismatch')
       const document=decodeNativeDocxDocument(value.document),layout=decodeNativeDocxResolvedLayout(value.resolved_layout)
       if(!document.ok||!layout.ok||document.value.source.package_sha256!==hash||document.value.document_id!==layout.value.document_id||document.value.revision!==layout.value.revision||document.value.source.main_part!==layout.value.source_parts.main_part)throw new TypeError('Invalid joined partial source models')
       const notices=decodeNativeDocxEquationContextNoticesV1(document.value,layout.value,value.equation_context_notices)
       const nested=decodeNativeDocxNestedTableOmissionsV1(document.value,value.nested_table_omissions)
       const tableContexts=decodeNativeDocxPartialTableTextContextsV1(document.value,layout.value,value.table_text_contexts)
+      const nestedText=decodeNativeDocxNestedTextEvidenceV1(document.value,layout.value,nested,tableContexts,value.nested_text)
       const review=decodeNativeDocxReviewEvidenceV1(document.value,value.review_changes)
-      return {...(value.table_text_contexts===undefined?{}:{table_text_contexts:tableContexts}),...(value.review_changes===undefined?{}:{review_changes:review}),document:document.value,resolved_layout:layout.value,...(value.equations===undefined?{}:{equations:createNativeDocxEquationPreviewsV1(document.value,layout.value,value.equations,notices)}),...(value.equation_context_notices===undefined?{}:{equation_context_notices:notices}),...(value.nested_table_omissions===undefined?{}:{nested_table_omissions:nested})}
+      return {...(value.nested_text===undefined?{}:{nested_text:nestedText}),...(value.table_text_contexts===undefined?{}:{table_text_contexts:tableContexts}),...(value.review_changes===undefined?{}:{review_changes:review}),document:document.value,resolved_layout:layout.value,...(value.equations===undefined?{}:{equations:createNativeDocxEquationPreviewsV1(document.value,layout.value,value.equations,notices)}),...(value.equation_context_notices===undefined?{}:{equation_context_notices:notices}),...(value.nested_table_omissions===undefined?{}:{nested_table_omissions:nested})}
     }catch(error){this.native.terminate();throw error}
   }
 
