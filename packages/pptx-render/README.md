@@ -236,3 +236,11 @@ marked `shape-source-frame` text bodies. Without it, those bodies remain refused
 even when `lineLayoutPolicy` is set. Opted-in bodies report
 `fidelity: 'approximateSourceFrame'` and a warning; they use the original frame
 without resizing and do not qualify Office-equivalent layout or editing rights.
+
+Source-explicit unmerged table cells retain top, center, and bottom vertical
+anchors. Center/bottom painting requires the explicit `max-run-natural-v1`
+line policy, just like other native text bodies; the default compiler still
+refuses these placements. Insets bound the text area before the signed anchor
+offset is applied. Table styles, merges, distributed/justified vertical anchors,
+and horizontal `anchorCtr` remain outside this extraction subset. This does not
+qualify PowerPoint line metrics or style inheritance.

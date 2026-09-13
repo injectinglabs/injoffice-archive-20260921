@@ -436,3 +436,63 @@ func removeFirstNativeTableXMLSpan(value, startMarker, endMarker string) string 
 	end := start + relativeEnd + len(endMarker)
 	return value[:start] + value[end:]
 }
+
+func TestExtractNativePPTXTableVerticalAnchors(t *testing.T) {
+	t.Parallel()
+	for _, strict := range []bool{false, true} {
+		for source, want := range map[string]NativeTextVerticalAnchor{"t": NativeTextVerticalAnchorTop, "ctr": NativeTextVerticalAnchorCenter, "b": NativeTextVerticalAnchorBottom} {
+			t.Run(fmt.Sprintf("strict-%t-%s", strict, source), func(t *testing.T) {
+				cell := strings.Replace(nativeExactTableCellXML("Anchor", "l", "FFFFFF"), `anchor="t"`, `anchor="`+source+`"`, 1)
+				frame := nativeExactTableGraphicFrameXML(3, "Anchored table", []int64{500000}, []int64{500000}, [][]string{{cell}}, "")
+				data := nativeTableFixture(t, strict, frame)
+				before := append([]byte(nil), data...)
+				deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+				if err != nil {
+					t.Fatal(err)
+				}
+				table := deck.Slides[0].Elements[1].Table
+				if table == nil || table.Rows[0][0].TextBody.VerticalAnchor != want {
+					t.Fatalf("missing source anchor %s: %#v", source, table)
+				}
+				if !bytes.Equal(data, before) {
+					t.Fatal("source changed")
+				}
+				if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+					t.Fatalf("invalid deck: %#v", issues)
+				}
+			})
+		}
+	}
+}
+
+func TestExtractNativePPTXTableVerticalAnchorRefusals(t *testing.T) {
+	t.Parallel()
+	base := nativeExactTableCellXML("Anchor", "l", "FFFFFF")
+	for name, cell := range map[string]string{
+		"missing":             strings.Replace(base, `anchor="t"`, ``, 1),
+		"justified":           strings.Replace(base, `anchor="t"`, `anchor="just"`, 1),
+		"distributed":         strings.Replace(base, `anchor="t"`, `anchor="dist"`, 1),
+		"centered-horizontal": strings.Replace(base, `anchorCtr="0"`, `anchorCtr="1"`, 1),
+		"foreign-anchor":      strings.Replace(base, `anchor="t"`, `xmlns:q="urn:foreign" q:anchor="ctr"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame := nativeExactTableGraphicFrameXML(3, "Refused anchor", []int64{500000}, []int64{500000}, [][]string{{cell}}, "")
+			deck, err := ExtractNativePPTX(nativeTableFixture(t, false, frame), nativeTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, element := range deck.Slides[0].Elements {
+				if element.Table != nil {
+					t.Fatal("unsupported anchor projected")
+				}
+			}
+			found := false
+			for _, diagnostic := range deck.Slides[0].Compatibility.Diagnostics {
+				found = found || diagnostic.Code == "pptx.table-cell-layout-unavailable"
+			}
+			if !found {
+				t.Fatalf("missing layout refusal: %#v", deck.Slides[0].Compatibility)
+			}
+		})
+	}
+}
