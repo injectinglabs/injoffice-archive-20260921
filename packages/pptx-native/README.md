@@ -136,3 +136,31 @@ clockwise from the upper-left corner with zero dash phase. These repeat lengths
 come from the standard; PowerPoint's per-edge phase and corner placement have
 not been independently qualified. This is an explicit preview policy and does
 not establish Office raster parity or restore authored typography.
+
+### Source-qualified native table typography
+
+The strict parsed-table path additionally accepts a bounded, top-level, unrotated
+single-cell no-border table whose embedded whole-table style has no fill or
+borders and whose presentation/master level-one text properties agree. This
+slice requires matching minor-Latin theme fonts and black text, explicit source
+font size and kerning threshold, empty local list/body properties, and printable
+ASCII runs carrying only one common explicit language, checking metadata and
+optional zero baseline. Equivalent runs are coalesced into one shaping span so
+source serialization boundaries do not disable cross-run kerning.
+Conflicting layers, active local paragraph formatting, merges, visible borders,
+custom flow and unknown markup remain refused. The source table remains
+`preserveOnly`; source anchors and original bytes are retained.
+
+The cell defaults are from ECMA-376 Part 1 (2016), CT_TableCellProperties:
+left/right insets 91440 EMU, top/bottom 45720 EMU, top anchoring, horizontal text,
+and horizontal clipping. Clipping uses the cell edges and preserves vertical
+overflow within the slide viewport. This contract slice restricts horizontal
+`clip` to top-level unrotated table cells; other text frames remain unsupported.
+`kerningThresholdHundredthPt` carries the source minimum size for kerning and
+controls the explicit HarfBuzz `kern` feature. Native paragraph mutations refuse
+this field until serialization supports it, instead of dropping it.
+
+Glyph layout still uses the renderer's explicitly selected line-layout policy
+and exact supplied font bytes. This source-qualified extraction does not assert
+PowerPoint line-metric or raster equivalence. Local proprietary font files and
+independent reference artifacts are not repository or CI dependencies.

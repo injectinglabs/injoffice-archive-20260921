@@ -276,6 +276,7 @@ function validateElement(
   let worst = element.compatibility.status
 
   if (element.kind === 'text' || element.kind === 'shape') {
+    if(element.textBody?.horizontalOverflow==='clip') add(issues,`${path}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping is currently supported only for table cells')
     if (element.textBody?.autoFit === 'shape-source-frame' && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.autofit-source-frame-approximate' && diagnostic.severity === 'warning'))) {
       add(issues, `${path}.textBody.autoFit`, 'native.autofitApproximation', 'source-frame autofit requires a parsed source, non-editable status and explicit approximation warning')
     }
@@ -320,6 +321,7 @@ function validateElement(
         const hasTextBody = cell.textBody !== undefined
         if (hasParagraphs !== hasTextBody) add(issues, cellPath, 'native.tableTextAuthority', 'paragraphs and textBody must be supplied together')
         if (cell.paragraphs && cell.textBody) {
+          if(cell.textBody.horizontalOverflow==='clip'&&(depth!==1||element.transform.quarterTurns!==undefined))add(issues,`${cellPath}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping requires a top-level unrotated table')
           authoritativeCells++
           validateParagraphMarkers(cell.paragraphs, `${path}.table.rows[${rowIndex}][${columnIndex}].paragraphs`, issues)
           for (const paragraph of cell.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length

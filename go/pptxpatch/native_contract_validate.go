@@ -321,6 +321,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	if element.Animation != nil {
 		v.animation(*element.Animation, p+".animation")
 	}
+	if element.TextBody != nil && element.TextBody.HorizontalOverflow == "clip" {
+		v.add(p+".textBody.horizontalOverflow", "native.horizontalClip", "horizontal clipping is currently supported only for table cells")
+	}
 	if element.Kind != NativeElementKindText && element.Kind != NativeElementKindShape && element.TextBody != nil {
 		v.add(p+".textBody", "native.elementUnion", "is not allowed for this element kind")
 	}
@@ -453,6 +456,15 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 			v.add(p+".assetId", "native.assetType", "picture assets must have an image content type")
 		}
 	case NativeElementKindTable:
+		if element.Table != nil {
+			for _, row := range element.Table.Rows {
+				for _, cell := range row {
+					if cell.TextBody != nil && cell.TextBody.HorizontalOverflow == "clip" && (depth != 1 || element.Transform.QuarterTurns != nil) {
+						v.add(p+".table", "native.horizontalClip", "horizontal clipping requires a top-level unrotated table")
+					}
+				}
+			}
+		}
 		commonForbidden(false, false, false, false, false, false, true, false, false, false)
 		if element.Table == nil {
 			v.add(p+".table", "schema.required", "is required")
@@ -533,7 +545,7 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	if body.WritingMode != nil && *body.WritingMode != "vertical-clockwise" {
 		v.add(p+".writingMode", "schema.enum", "must equal vertical-clockwise")
 	}
-	if body.HorizontalOverflow != "overflow" {
+	if body.HorizontalOverflow != "overflow" && body.HorizontalOverflow != "clip" {
 		v.add(p+".horizontalOverflow", "schema.const", "must equal overflow")
 	}
 	if body.VerticalOverflow != "overflow" {
@@ -712,6 +724,9 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 				if length > nativeMaxTextCodeUnits {
 					v.add(rp+".text", "schema.maxLength", fmt.Sprintf("must contain at most %d code units", nativeMaxTextCodeUnits))
 				}
+			}
+			if run.KerningThresholdHundredthPt != nil && (*run.KerningThresholdHundredthPt < 0 || *run.KerningThresholdHundredthPt > 400000) {
+				v.add(rp+".kerningThresholdHundredthPt", "schema.range", "invalid kerning threshold")
 			}
 			if run.FontSizeHundredthPt != nil && (*run.FontSizeHundredthPt < 1 || *run.FontSizeHundredthPt > 400000) {
 				v.add(rp+".fontSizeHundredthPt", "schema.range", "must be between 1 and 400000")
