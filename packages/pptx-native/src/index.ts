@@ -44,6 +44,8 @@ export type {
   NativeOpaqueChart,
   NativeLiteralPie,
   NativeLiteralDoughnut,
+  NativeLiteralConnected,
+  NativeLiteralConnectedSeries,
   NativeLiteralBar,
   NativeLiteralBarAxis,
   NativeLiteralBarSeries,

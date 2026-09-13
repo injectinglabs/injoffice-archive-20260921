@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"slices"
 	"sort"
-	"strings"
 	"unicode/utf16"
 )
 
@@ -25,54 +24,7 @@ type nativeChartLine struct {
 // Straight connected series require a complete source round-join/flat-cap line.
 // The line style is not reconstructed from a theme, marker, or first point.
 func nativeChartConnectedLinePaint(node *nativeXMLNode, d nativeExtractDialect) (string, int64, bool) {
-	c := nativeChartChildren(node, d.drawing)
-	if requireEmptyNativeElement(c.take("noFill")) != nil {
-		return "", 0, false
-	}
-	line := c.take("ln")
-	if line == nil || !c.done() || requireOnlyNativeAttrs(line, xml.Name{Local: "w"}, xml.Name{Local: "cap"}, xml.Name{Local: "cmpd"}, xml.Name{Local: "algn"}) != nil || !onlyNativeXMLSpace(line.Text) || len(line.Children) != 5 {
-		return "", 0, false
-	}
-	for name, want := range map[string]string{"cap": "flat", "cmpd": "sng", "algn": "ctr"} {
-		raw, ok := exactNativeAttr(line, "", name)
-		if !ok || raw != want {
-			return "", 0, false
-		}
-	}
-	raw, ok := exactNativeAttr(line, "", "w")
-	if !ok {
-		return "", 0, false
-	}
-	width, err := parseCanonicalNativeInt(raw, 1, 20116800)
-	if err != nil {
-		return "", 0, false
-	}
-	fill := line.Children[0]
-	if fill.Name != (xml.Name{Space: d.drawing, Local: "solidFill"}) || !nativeLiteralPiePaintSequence(fill, d.drawing, "srgbClr") {
-		return "", 0, false
-	}
-	color, ok := nativeChartAttribute(fill.Children[0])
-	if !ok || !inspectionRGB.MatchString(color) {
-		return "", 0, false
-	}
-	dash, join := line.Children[1], line.Children[2]
-	if dash.Name != (xml.Name{Space: d.drawing, Local: "prstDash"}) || join.Name != (xml.Name{Space: d.drawing, Local: "round"}) || requireEmptyNativeElement(join) != nil {
-		return "", 0, false
-	}
-	if _, ok := nativeChartToken(dash, "solid"); !ok {
-		return "", 0, false
-	}
-	for i, name := range []string{"headEnd", "tailEnd"} {
-		end := line.Children[i+3]
-		if end.Name != (xml.Name{Space: d.drawing, Local: name}) || requireOnlyNativeAttrs(end, xml.Name{Local: "type"}) != nil || requireOnlyNativeChildren(end) != nil {
-			return "", 0, false
-		}
-		raw, ok := exactNativeAttr(end, "", "type")
-		if !ok || raw != "none" {
-			return "", 0, false
-		}
-	}
-	return "#" + strings.ToUpper(color), width, true
+	return nativeChartLinePaint(node, d, true)
 }
 func extractNativeChartConnectedSeries(node *nativeXMLNode, d nativeExtractDialect, scatter bool) (*nativeChartLineSeries, []string, bool) {
 	c := nativeChartChildren(node, d.chart)

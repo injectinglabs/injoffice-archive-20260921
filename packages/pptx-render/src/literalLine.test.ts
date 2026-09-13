@@ -1,6 +1,7 @@
+import type {NativeLiteralConnected} from '@injoffice/pptx-native'
 import {expect,it} from 'vitest'
-import {createNativeLiteralLinePaths as create,type LiteralConnectedRecord} from './literalLine.js'
-const fixture=():LiteralConnectedRecord=>({profile:'literal-line-v1',categories:['A','B','C'],series:[{index:5,order:0,values:['0','1','0'],color:'#123456',widthEmu:12700}],xAxis:{id:1,crossAxisId:2,orientation:'minMax',position:'b',deleted:true},yAxis:{id:2,crossAxisId:1,orientation:'minMax',position:'l',deleted:true,min:'0',max:'1',crossesAt:'0'}})
+import {createNativeLiteralLinePaths as create} from './literalLine.js'
+const fixture=():NativeLiteralConnected=>({profile:'literal-line-v1',dataOrigin:'literal',categories:['A','B','C'],series:[{index:5,order:0,values:['0','1','0'],color:'#123456',widthEmu:12700}],xAxis:{id:1,crossAxisId:2,orientation:'minMax',position:'b',deleted:true},yAxis:{id:2,crossAxisId:1,orientation:'minMax',position:'l',deleted:true,min:'0',max:'1',crossesAt:'0'}})
 it('draws a continuous category line with one source round join',()=>{
  const record=fixture(),before=JSON.stringify(record),result=create(record,600,300)
  expect(result[0]).toEqual({seriesIndex:5,segmentIndices:[0,1],path:[{kind:'moveTo',x:100,y:300},{kind:'lineTo',x:300,y:0},{kind:'lineTo',x:500,y:300}],stroke:{color:'#123456',widthEmu:12700,cap:'flat',join:'round',dash:'solid'}})

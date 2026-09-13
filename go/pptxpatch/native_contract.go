@@ -224,14 +224,32 @@ type NativeLiteralBar struct {
 	CategoryAxis NativeLiteralBarAxis     `json:"categoryAxis"`
 	ValueAxis    NativeLiteralBarAxis     `json:"valueAxis"`
 }
+type NativeLiteralConnectedSeries struct {
+	Index    int64    `json:"index"`
+	Order    int64    `json:"order"`
+	Title    *string  `json:"title,omitempty"`
+	Values   []string `json:"values"`
+	XValues  []string `json:"xValues,omitempty"`
+	Color    string   `json:"color"`
+	WidthEMU int64    `json:"widthEmu"`
+}
+type NativeLiteralConnected struct {
+	Profile    string                         `json:"profile"`
+	DataOrigin string                         `json:"dataOrigin"`
+	Categories []string                       `json:"categories"`
+	Series     []NativeLiteralConnectedSeries `json:"series"`
+	XAxis      NativeLiteralBarAxis           `json:"xAxis"`
+	YAxis      NativeLiteralBarAxis           `json:"yAxis"`
+}
 type NativeOpaqueChart struct {
-	LiteralBar      *NativeLiteralBar      `json:"literalBar,omitempty"`
-	LiteralDoughnut *NativeLiteralDoughnut `json:"literalDoughnut,omitempty"`
-	LiteralPie      *NativeLiteralPie      `json:"literalPie,omitempty"`
-	ChartPart       string                 `json:"chartPart"`
-	RelationshipID  string                 `json:"relationshipId"`
-	OpaqueRef       NativePassthroughRef   `json:"opaqueRef"`
-	PreviewAssetID  *string                `json:"previewAssetId,omitempty"`
+	LiteralConnected *NativeLiteralConnected `json:"literalConnected,omitempty"`
+	LiteralBar       *NativeLiteralBar       `json:"literalBar,omitempty"`
+	LiteralDoughnut  *NativeLiteralDoughnut  `json:"literalDoughnut,omitempty"`
+	LiteralPie       *NativeLiteralPie       `json:"literalPie,omitempty"`
+	ChartPart        string                  `json:"chartPart"`
+	RelationshipID   string                  `json:"relationshipId"`
+	OpaqueRef        NativePassthroughRef    `json:"opaqueRef"`
+	PreviewAssetID   *string                 `json:"previewAssetId,omitempty"`
 }
 
 // NativeElement is the Go binding for the schema's discriminated union.
