@@ -21,7 +21,7 @@ try {
 }
 ```
 
-The returned `NativeEvaluatedGeometry` works with the public native slide compiler and vector paint worker. Coordinates already include the requested frame dimensions. Resizing requires evaluating again; source guides and adjustments are not interpreted in JavaScript. Evaluation grants no save or source mutation authority. Existing mutation guards continue to refuse evaluated shapes.
+The returned `NativeEvaluatedGeometry` works with the public native slide compiler and recording paint surface. Coordinates already include the requested frame dimensions. Resizing requires evaluating again; source guides and adjustments are not interpreted in JavaScript. Evaluation grants no save or source mutation authority. Existing mutation guards continue to refuse evaluated shapes.
 
 The 187 names, guide semantics, arithmetic qualification, relative fill policy and explicit refusals are the same as [the source catalog](PPTX-PRESET-CATALOG.md). This API adds a caller-authored entry point, not broader geometry qualification or Office visual parity. Unsupported names, undeclared adjustments, ill-conditioned results and collapsed geometry refuse without poisoning the worker; a subsequent valid evaluation remains possible.
 
