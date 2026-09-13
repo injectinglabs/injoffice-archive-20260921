@@ -10,6 +10,8 @@ export interface NativeRichTextRunV1 {
   font_color?: string
   bold?: boolean
   italic?: boolean
+  underline?: 'single' | 'none'
+  underline_origin?: 'explicit-val' | 'default-val'
   omitted: string[]
 }
 export interface NativeRichTextCellV1 {
@@ -53,9 +55,11 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
     if (c.status === 'omitted') { if (Object.hasOwn(c, 'runs')) return fail(); return base }
     if (c.status !== 'available' || !safeText(c.text) || !Array.isArray(c.runs) || !c.runs.length || c.runs.length > 64 || (runCount += c.runs.length) > 1024) return fail()
     const runs = c.runs.map(raw => {
-      const r = exact(raw, ['text', 'properties', 'omitted'], [...PROPERTIES])
+      const r = exact(raw, ['text', 'properties', 'omitted'], [...PROPERTIES, 'underline', 'underline_origin'])
       if (typeof r.text !== 'string' || !r.text || !safeText(r.text) || r.text.length > 2048 || !['direct', 'cell-inherited'].includes(String(r.properties)) || !Array.isArray(r.omitted) || r.omitted.length > 4 || new Set(r.omitted).size !== r.omitted.length || r.omitted.some(v => !OMITTED.includes(String(v)))) return fail()
-      if (r.properties === 'cell-inherited' && (PROPERTIES.some(k => Object.hasOwn(r, k)) || r.omitted.length)) return fail()
+      const hasUnderline = Object.hasOwn(r, 'underline')
+      if (hasUnderline !== Object.hasOwn(r, 'underline_origin') || hasUnderline && (typeof r.underline !== 'string' || typeof r.underline_origin !== 'string' || !['single', 'none'].includes(String(r.underline)) || !['explicit-val', 'default-val'].includes(String(r.underline_origin)) || r.underline_origin === 'default-val' && r.underline !== 'single' || r.omitted.includes('underline-none'))) return fail()
+      if (r.properties === 'cell-inherited' && (hasUnderline || PROPERTIES.some(k => Object.hasOwn(r, k)) || r.omitted.length)) return fail()
       if (Object.hasOwn(r, 'font_name') && (typeof r.font_name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$/.test(r.font_name))) return fail()
       if (Object.hasOwn(r, 'font_color') && (typeof r.font_color !== 'string' || !/^#[0-9A-F]{6}$/.test(r.font_color))) return fail()
       if (Object.hasOwn(r, 'font_size_points') && (typeof r.font_size_points !== 'number' || !Number.isFinite(r.font_size_points) || r.font_size_points < 1 || r.font_size_points > 409)) return fail()
@@ -69,6 +73,8 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
 }
 
 /** Require current package, worksheet, cell, string index, style and run joins.
+ * Underline is a raw inspector attestation; the extracted model does not
+ * independently represent or authenticate that property.
  * Unknown/unsupported raw formatting stays an explicit plaintext omission. */
 export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeRichTextPreviewV1 {
   const fail = (): never => { throw new TypeError('Rich-text preview does not join the opened source') }
@@ -93,5 +99,6 @@ export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetI
 /** Every span starts from this cell's base, never the preceding run. */
 export function nativeRichTextRunDisclosureV1(run: NativeRichTextRunV1): string {
   const missing = PROPERTIES.filter(k => !Object.hasOwn(run, k))
-  return `${run.properties === 'cell-inherited' ? 'No rPr: cell font inherited' : `Direct properties; missing ${missing.join(', ') || 'none'} use approximate cell-font fallback`}${run.omitted.length ? `; declared ${run.omitted.join(', ')}` : ''}. Host font matching and shaping are approximate.`
+  const underline = run.underline ? `Underline ${run.underline} (${run.underline_origin === 'default-val' ? 'present u, schema-default single' : 'explicit source val'}); browser decoration metrics are approximate` : run.omitted.includes('underline-none') ? 'Explicit source underline none (legacy evidence)' : 'No direct underline declaration; undecorated host fallback'
+  return `${run.properties === 'cell-inherited' ? 'No rPr: cell font inherited' : `Direct properties; missing ${missing.join(', ') || 'none'} use approximate cell-font fallback`}${run.omitted.length ? `; declared ${run.omitted.join(', ')}` : ''}; ${underline}. Host font matching and shaping are approximate.`
 }
