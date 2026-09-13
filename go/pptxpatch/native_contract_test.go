@@ -395,6 +395,7 @@ func TestNativeContractGeneratedBindingShapesMatchGo(t *testing.T) {
 		"NativeTableBorder":     reflect.TypeOf(NativeTableBorder{}),
 		"NativeTableCell":       reflect.TypeOf(NativeTableCell{}),
 		"NativeTable":           reflect.TypeOf(NativeTable{}),
+		"NativeLiteralPie":      reflect.TypeOf(NativeLiteralPie{}),
 		"NativeOpaqueChart":     reflect.TypeOf(NativeOpaqueChart{}),
 		"NativeSlide":           reflect.TypeOf(NativeSlide{}),
 	}

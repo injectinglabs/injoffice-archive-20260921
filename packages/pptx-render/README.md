@@ -252,3 +252,25 @@ refuses these placements. Insets bound the text area before the signed anchor
 offset is applied. Table styles, merges, distributed/justified vertical anchors,
 and horizontal `anchorCtr` remain outside this extraction subset. This does not
 qualify PowerPoint line metrics or style inheritance.
+
+`literalPiePreview: true` enables a bounded vector preview for extracted charts
+with `chart.literalPie.profile === 'literal-pie-v1'`. This is source **literal**
+data, not workbook/formula cache interpretation. The Go/WASM extractor accepts
+one 2D pie series with 1–64 positive integer values (maximum 1,000,000,000), an
+explicit first-slice angle, contiguous source point indices, explicit RGB fill
+and no line for every point, and explicit transparent chart/plot backgrounds.
+Unsupported markup leaves the complete chart opaque and the existing packaged
+image fallback unchanged. Charts remain read-only/preserve-only.
+
+The declared host policy uses an inscribed circle centered in the source frame,
+clockwise angles from up, polygon chords spanning at most two degrees, and one
+final integer-EMU rounding. It does not qualify PowerPoint plot fitting or arc
+fidelity. No title, legend, category/label, axis, cache, formula, theme paint,
+explosion, 3D, extension, or effect semantics are accepted. The preview emits
+`chart.literalPiePreview`; omission of the opt-in retains packaged-image behavior.
+`createNativeLiteralPiePaths(pie, cx, cy)` exposes the same bounded paths for
+standalone host views. The PPTX playground has an explicit source-literal chart
+preview checkbox and shows unsupported charts without inventing their values.
+
+Source model: [Microsoft's DrawingML first-slice angle documentation](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.charts.firstsliceangle?view=openxml-3.0.1).
+Independent PowerPoint exports and measured rendering fidelity are still pending.

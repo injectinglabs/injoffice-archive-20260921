@@ -1,3 +1,4 @@
+import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
 import {
   NATIVE_TEXT_LAYOUT_VERSION,
@@ -1895,6 +1896,16 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       return image
     }
     case 'chart': {
+      if(element.chart.literalPie && state.options.literalPiePreview===true){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalPie`,'Literal pie slices exceed RenderTree nesting budget')
+        state.diagnostics.push({severity:'warning',code:'chart.literalPiePreview',message:'Source literal pie vectors; host centered circle and two-degree polygon arcs, not qualified PowerPoint layout.',slideId:state.slide.id,elementId:element.id})
+        const children = createNativeLiteralPiePaths(element.chart.literalPie,base.bounds.cx,base.bounds.cy).map((slice,index)=>{
+          takeNode(state, `$.elements.${element.id}.literalPie.${index}`)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'ellipse' as const,path:boundedPath(slice.path,`$.elements.${element.id}.literalPie.${index}`),fill:{color:slice.color}}
+        })
+        return {kind:'group',...base,children}
+      }
+
       if (!element.chart.previewAssetId) {
         state.diagnostics.push({ severity: 'refusal', code: 'chart.missingPreview', message: 'opaque chart has no preview asset to paint; no chart renderer is invented', slideId: state.slide.id, elementId: element.id })
         return { kind: 'placeholder', ...base, reason: 'missingPreview', label: 'Chart preview unavailable' }
@@ -1936,6 +1947,7 @@ function canonicalize(value: unknown): unknown {
 export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: number | string, options: CompileSlideOptions): Promise<SlideRenderTree> {
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
+  if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
 	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)
