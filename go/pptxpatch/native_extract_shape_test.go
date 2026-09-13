@@ -112,7 +112,7 @@ func TestExtractNativePPTXAutoShapeUnsupportedRenderingIsRefusedNotApproximated(
 func TestExtractNativePPTXAutoShapeUnsupportedPresetAndAdjustmentsAreRefused(t *testing.T) {
 	t.Parallel()
 	for _, geometry := range []string{
-		`<a:prstGeom prst="star5"><a:avLst/></a:prstGeom>`,
+		`<a:prstGeom prst="unknownPreset"><a:avLst/></a:prstGeom>`,
 		`<a:prstGeom prst="rect"><a:avLst><a:gd name="adj" fmla="val 10000"/></a:avLst></a:prstGeom>`,
 	} {
 		shape := nativeAutoShapeXMLWithGeometry(3, geometry, `<a:solidFill><a:srgbClr val="DDEEFF"/></a:solidFill>`, nativeAutoShapeSolidLine("12700", "flat", `<a:round/>`, "112233"), "")

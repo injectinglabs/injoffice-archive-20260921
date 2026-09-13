@@ -30,7 +30,7 @@ func TestNativeGeometryCustomXML(t *testing.T) {
 	if p.FillMode != "none" || !p.Stroke || *p.Commands[1].X1 != 2500 || *p.Commands[1].Y1 != 5000 || *p.Commands[2].X2 != 8000 {
 		t.Fatal("path scaling/paint")
 	}
-	if geometry.Paths[1].Stroke || len(geometry.Paths[1].Commands) != 4 {
+	if geometry.Paths[1].Stroke || len(geometry.Paths[1].Commands) != 6 {
 		t.Fatal("full-circle transport")
 	}
 }
@@ -41,7 +41,7 @@ func TestNativeGeometryCustomXMLRefusals(t *testing.T) {
 		`<a:avLst><a:gd name="a1" fmla="*/ 1 2 3"/></a:avLst>` + valid,
 		`<a:gdLst><a:gd name="1" fmla="val 42"/></a:gdLst>` + valid,
 		`<a:rect l="0" t="0" r="0" b="h"/>` + valid,
-		strings.Replace(valid, `<a:path>`, `<a:path fill="darken">`, 1), strings.Replace(valid, `<a:path>`, `<a:path extrusionOk="invalid">`, 1), strings.Replace(valid, `<a:path>`, `<a:path w="0">`, 1),
+		strings.Replace(valid, `<a:path>`, `<a:path fill="unsupported">`, 1), strings.Replace(valid, `<a:path>`, `<a:path extrusionOk="invalid">`, 1), strings.Replace(valid, `<a:path>`, `<a:path w="0">`, 1),
 		strings.Replace(valid, nativeGeometryTestMove, "", 1), strings.Replace(valid, `<a:pt x="w" y="h"/>`, `<a:pt x="w" y="h"/><a:pt x="0" y="0"/>`, 1),
 		strings.Replace(valid, `<a:pt x="w" y="h"/>`, `<a:pt x="w" y="h" extra="1"/>`, 1), strings.Replace(valid, `<a:lnTo>`, `<a:lnTo>bad`, 1),
 		`<a:pathLst/>`,
