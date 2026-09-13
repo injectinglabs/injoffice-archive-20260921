@@ -542,6 +542,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.Compatibility.Status == NativeCompatibilityStatusRefused {
 			return nil, fmt.Errorf("%s: element %q is refused and cannot be mutated", prefix, operation.ElementID)
 		}
+		if element.Geometry != nil {
+			return nil, fmt.Errorf("%s: custom geometry is preview-only", prefix)
+		}
 		if element.Transform.QuarterTurns != nil {
 			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)
 		}

@@ -60,6 +60,9 @@ export type RenderClip = { readonly kind: 'rect'; readonly rect: RenderRect } | 
 export type RenderPathCommand =
   | { readonly kind: 'moveTo'; readonly x: number; readonly y: number }
   | { readonly kind: 'lineTo'; readonly x: number; readonly y: number }
+  | { readonly kind: 'quadBezierTo'; readonly x: number; readonly y: number; readonly x1:number; readonly y1:number }
+  | { readonly kind: 'cubicBezierTo'; readonly x: number; readonly y: number; readonly x1:number; readonly y1:number; readonly x2:number; readonly y2:number }
+  | { readonly kind: 'arcTo'; readonly x:number; readonly y:number; readonly rx:number; readonly ry:number; readonly largeArc:boolean; readonly clockwise:boolean }
   | { readonly kind: 'rect'; readonly rect: RenderRect }
   | { readonly kind: 'roundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
   | { readonly kind: 'ellipse'; readonly rect: RenderRect }
@@ -208,7 +211,8 @@ interface RenderNodeBase {
 
 export interface RenderShapeNode extends RenderNodeBase {
   readonly kind: 'shape'
-  readonly preset: NativeShapePreset
+  readonly preset?: NativeShapePreset
+  readonly geometryPaths?: readonly { readonly path:readonly RenderPathCommand[]; readonly fillMode:'norm'|'none'; readonly stroke:boolean }[]
   readonly path: readonly RenderPathCommand[]
   readonly fill?: RenderPaint
   readonly stroke?: RenderStroke

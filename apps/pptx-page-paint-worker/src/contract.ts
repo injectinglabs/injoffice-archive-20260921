@@ -31,9 +31,22 @@ export function decodePptxPreview(value:unknown):PptxPreview {
  let count=0,pathBytes=0
  const resources=decodeNativeDocxPagePaintResourceListV1(record(value).resources)
  const path=(d:string)=>{
-  const tokens=d.match(/[MLQCZ]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g)??[]
+  const tokens=d.match(/[MLQCAZ]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g)??[]
   if(tokens.join('')!==d.replace(/[\s,]/g,''))fail()
-  for(let i=0;i<tokens.length;){const arity=({M:2,L:2,Q:4,C:6,Z:0} as Record<string,number>)[tokens[i++]!];if(arity===undefined||i+arity>tokens.length)fail();for(let j=0;j<arity;j++)number(Number(tokens[i++]))}
+  let pen:readonly[number,number]|undefined,start:readonly[number,number]|undefined
+  for(let i=0;i<tokens.length;){
+   const kind=tokens[i++]!,arity=({M:2,L:2,Q:4,C:6,A:7,Z:0} as Record<string,number>)[kind]
+   if(arity===undefined||i+arity>tokens.length||kind!=='M'&&!pen)fail()
+   const values=tokens.slice(i,i+arity).map(Number);i+=arity;values.forEach(v=>number(v))
+   if(kind==='Z'){pen=start;continue}
+   if(kind==='A'){
+    const [rx,ry,rotation,large,sweep,x,y]=values as [number,number,number,number,number,number,number]
+    if(!values.every(Number.isSafeInteger)||!pen?.every(Number.isSafeInteger)||rx<=0||ry<=0||rotation!==0||large!==0||(sweep!==0&&sweep!==1))fail()
+    const dx=BigInt(x)-BigInt(pen![0]),dy=BigInt(y)-BigInt(pen![1]),xx=BigInt(rx)**2n,yy=BigInt(ry)**2n
+    if(dx*dx*yy+dy*dy*xx>4n*xx*yy)fail()
+   }
+   pen=[values[arity-2]!,values[arity-1]!];if(kind==='M')start=pen
+  }
  }
  const node=(v:unknown,depth:number)=>{if(++count>20000||depth>32)fail();const n=record(v)
   if(n.strokeLinecap!==undefined&&!['butt','round','square'].includes(String(n.strokeLinecap)))fail()
@@ -41,7 +54,7 @@ export function decodePptxPreview(value:unknown):PptxPreview {
   if(n.strokeMiterlimit!==undefined)number(n.strokeMiterlimit,1)
   switch(n.kind){
    case 'group':if(!Array.isArray(n.transform)||n.transform.length!==6||!Array.isArray(n.children)||n.sourceRole!==undefined&&!['paragraphBullet','contentRun','connectorArrow'].includes(String(n.sourceRole)))return fail();n.transform.forEach(v=>number(v));if(n.clip!==undefined){rect(n.clip);const c=record(n.clip);if(Object.keys(c).some(k=>!['x','y','cx','cy','radius'].includes(k)))fail();if(c.radius!==undefined)number(c.radius,0,Math.min(Number(c.cx),Number(c.cy))/2)}n.children.forEach(v=>node(v,depth+1));break
-   case 'path':if(typeof n.d!=='string'||n.d.length>200000||!/^[MLQCZ0-9eE+.,\s-]*$/.test(n.d))return fail();path(n.d);pathBytes+=n.d.length;if(pathBytes>8e6)fail();color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break
+   case 'path':if(typeof n.d!=='string'||n.d.length>200000||!/^[MLQCAZ0-9eE+.,\s-]*$/.test(n.d))return fail();path(n.d);pathBytes+=n.d.length;if(pathBytes>8e6)fail();color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break
    case 'rect':number(n.radius,0);
    case 'ellipse':rect(n.rect);color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break
    case 'placeholder':rect(n.rect);if(typeof n.label!=='string'||n.label.length>1024)fail();break

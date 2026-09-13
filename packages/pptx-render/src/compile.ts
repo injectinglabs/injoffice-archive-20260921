@@ -1,3 +1,4 @@
+import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
 import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
@@ -690,7 +691,7 @@ function elementBase(element: NativeElement, zIndex: number, budget: Budget, cli
 function nativeTextBodyBounds(element: Extract<NativeElement, { kind: 'text' | 'shape' }>, state: CompileState): RenderRect {
   const layout = element.textBody
   if (!layout) return localBounds(element.transform.cx, element.transform.cy)
-  const region = element.kind === 'shape' && element.preset
+  const region = element.kind === 'shape' && element.geometry ? element.geometry.textRect : element.kind === 'shape' && element.preset
     ? defaultPresetTextRect(element.preset, element.transform.cx, element.transform.cy)
     : localBounds(element.transform.cx, element.transform.cy)
   const bounds = {
@@ -1866,9 +1867,11 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     }
     case 'shape':
       if (element.paragraphs.length && !element.textBody) state.diagnostics.push({ severity: 'info', code: 'text.layoutMetadataUnavailable', message: 'legacy native PPTX shape text has no text-body layout; shaped compatibility preview remains clipped to element bounds', slideId: state.slide.id, elementId: element.id })
-      if (!element.preset) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
+      if (!element.preset&&!element.geometry) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
       return {
-        kind: 'shape', ...base, preset: element.preset, path: boundedPath(presetPath(element.preset, base.bounds.cx, base.bounds.cy), `$.elements.${element.id}.path`),
+        kind: 'shape', ...base, ...(element.preset?{preset:element.preset}:{}),
+        ...(element.geometry?{geometryPaths:evaluatedGeometryPaths(element.geometry,(value,path)=>checkCoordinate(value,path,state.budget),`$.elements.${element.id}.geometry`,bounds=>{checkedWorldAffine(parentWorld,base.transform,bounds,`$.elements.${element.id}.geometry`,state.budget)})}:{}),
+        path: element.preset?boundedPath(presetPath(element.preset, base.bounds.cx, base.bounds.cy), `$.elements.${element.id}.path`):[],
         fill: element.fill ? { color: element.fill } : undefined,
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
         textBody: element.paragraphs.length || element.textBody ? await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'shape', bounds: nativeTextBodyBounds(element, state), layout: element.textBody }, state) : undefined,

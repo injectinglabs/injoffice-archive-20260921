@@ -466,6 +466,162 @@
         "compatibility": { "$ref": "#/$defs/compatibility" }
       }
     },
+    "geometryCommand": {
+      "x-binding-name": "NativeGeometryCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "moveTo",
+            "lineTo",
+            "quadBezierTo",
+            "cubicBezierTo",
+            "arcTo",
+            "close"
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "rx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ry": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "largeArc": {
+          "type": "boolean"
+        },
+        "clockwise": {
+          "type": "boolean"
+        }
+      }
+    },
+    "geometryPath": {
+      "x-binding-name": "NativeGeometryPath",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fillMode",
+        "stroke",
+        "commands"
+      ],
+      "properties": {
+        "fillMode": {
+          "type": "string",
+          "enum": [
+            "norm",
+            "none"
+          ]
+        },
+        "stroke": {
+          "type": "boolean"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/geometryCommand"
+          }
+        }
+      }
+    },
+    "geometryTextRect": {
+      "x-binding-name": "NativeGeometryTextRect",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "cx",
+        "cy"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "evaluatedGeometry": {
+      "x-binding-name": "NativeEvaluatedGeometry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "textRect",
+        "paths"
+      ],
+      "properties": {
+        "profile": {
+          "const": "drawingml-paths-v1"
+        },
+        "textRect": {
+          "$ref": "#/$defs/geometryTextRect"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/geometryPath"
+          }
+        }
+      }
+    },
     "shapeElement": {
       "x-binding-name": "NativeShapeElement",
       "type": "object",
@@ -478,6 +634,7 @@
         "name": { "type": "string", "maxLength": 1024 },
         "transform": { "$ref": "#/$defs/transform" },
         "preset": { "$ref": "#/$defs/shapePreset" },
+        "geometry": { "$ref": "#/$defs/evaluatedGeometry" },
         "placeholder": { "$ref": "#/$defs/placeholderType" },
         "fill": { "$ref": "#/$defs/color" },
         "stroke": { "$ref": "#/$defs/stroke" },
