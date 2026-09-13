@@ -646,7 +646,7 @@ export default function PdfPage() {
                 }} />
                 {embeddedFormFont && <span className="ds-muted">Selected: {embeddedFormFont.name}</span>}
               </DsField>}
-              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType font supports covered left-to-right Unicode text, combining marks and ligatures. Right-to-left and other contextual scripts are not yet supported. The complete font is saved in the PDF; extra cluster glyphs may use exact font outlines to preserve text extraction. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
+              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType font supports covered Unicode text, combining marks, ligatures and mixed Arabic/Hebrew direction. Other contextual scripts are not yet supported. The complete font is saved in the PDF; extra cluster glyphs may use exact font outlines. Generic readers may reorder extracted RTL text; saved form values retain the exact input. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
               <DsField label="Saved choice appearance">
                 <DsSelect aria-label="Saved choice appearance" value={formChoiceAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
                   setFormChoiceAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')

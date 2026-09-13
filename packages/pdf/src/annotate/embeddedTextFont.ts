@@ -1,11 +1,11 @@
 import type { AppearanceProviderFor, PDFDocument, PDFFont, PDFTextField } from 'pdf-lib'
 import { readFontFace } from '../textEdit/fontCmap.js'
-import { prepareUnicodeShaper } from './unicodeShaping.js'
+import { prepareUnicodeShaper, type UnicodeShapingOptions } from './unicodeShaping.js'
 import { UnicodeFontResource, type EncodedUnicodeRun } from './unicodeFontResource.js'
 import { unicodeTextAppearance } from './unicodeTextAppearance.js'
 
 /** Caller-supplied, fixed TrueType face. This profile does not discover fonts. */
-export interface EmbeddedTextAppearanceFont {
+export interface EmbeddedTextAppearanceFont extends UnicodeShapingOptions {
   fontBytes: Uint8Array
 }
 
@@ -35,7 +35,7 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
     || (parsed.capHeight != null && !Number.isFinite(parsed.capHeight)) || (parsed.xHeight != null && !Number.isFinite(parsed.xHeight))) {
     throw new Error('invalid embedded appearance font metrics')
   }
-  const shape = await prepareUnicodeShaper(bytes, parsed.unitsPerEm, parsed.numGlyphs)
+  const shape = await prepareUnicodeShaper(bytes, parsed.unitsPerEm, parsed.numGlyphs, options)
   const resource = new UnicodeFontResource(parsed, bytes, doc)
   let qualified: EncodedUnicodeRun | undefined
   return {

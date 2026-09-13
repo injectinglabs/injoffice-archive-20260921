@@ -39,6 +39,19 @@ function font(doc: PDFDocument, name: string) {
 }
 
 describe('independent embedded text and standard choice appearances', () => {
+  it.each([false, true])('keeps RTL resources independent with choice first=%s', async choiceFirst => {
+    const rtl: FormValueSpec = { ...text, value: 'abc \u2067مَرْحَبًا 123\u2069 xyz' }
+    const source = await fixture(false, true), copy = source.slice()
+    const result = await applyFormValues(source, choiceFirst ? [choice, rtl] : [rtl, choice], options)
+    expect(result.applied).toBe(2); expect(result.skipped).toEqual([])
+    const saved = await PDFDocument.load(result.bytes)
+    expect(saved.getForm().getTextField('text').getText()).toBe(rtl.value)
+    expect(decoded(stream(saved, 'text'))).toContain(`/ActualText ${PDFHexString.fromText(rtl.value as string)}`)
+    expect(font(saved, 'text').get(PDFName.of('Subtype'))?.toString()).toBe('/Type0')
+    expect(font(saved, 'choice').get(PDFName.of('BaseFont'))?.toString()).toBe('/Courier')
+    expect(saved.getForm().acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True)
+    expect(source).toEqual(copy)
+  })
   it.each([false, true])('generates both profiles with choice first=%s and distinct font resources', async choiceFirst => {
     const source = await fixture(), copy = source.slice(), before = await PDFDocument.load(source)
     const result = await applyFormValues(source, choiceFirst ? [choice, text] : [text, choice], options)
@@ -65,7 +78,7 @@ describe('independent embedded text and standard choice appearances', () => {
 
   it.each(['text', 'choice'] as const)('does not relax the rejected %s profile when the other succeeds', async rejected => {
     const source = await fixture(rejected === 'choice'), before = await PDFDocument.load(source)
-    const result = await applyFormValues(source, [rejected === 'text' ? { ...text, value: 'مرحبا' } : text, choice], options)
+    const result = await applyFormValues(source, [rejected === 'text' ? { ...text, value: 'अ' } : text, choice], options)
     expect(result.applied).toBe(1); expect(result.skipped.map(item => item.name)).toEqual([rejected])
     const saved = await PDFDocument.load(result.bytes)
     expect(decoded(stream(saved, rejected))).toBe(decoded(stream(before, rejected)))

@@ -35,7 +35,7 @@ describe('source-aware HarfBuzz horizontal shaping', () => {
       expect(run.glyphs.at(-1)!.cluster).toBe(9)
       expect(run.glyphs.at(-1)!.end).toBe(11)
       expect(run.glyphs.every(g => run.value.slice(g.cluster, g.end).length > 0)).toBe(true)
-      expect(() => shape('x\u05B0')).toThrow('supported LTR')
+      expect(() => shape('x\u05B0')).toThrow('cross-script mark')
       expect(() => shape('a\u0483')).toThrow('cross-script mark')
     } finally { script.mockRestore(); language.mockRestore() }
   })
