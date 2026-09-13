@@ -10469,7 +10469,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb\""
             },
             {
               "name": "provenanceValues",
@@ -10774,6 +10774,11 @@
               "signature": "RenderTransform"
             },
             {
+              "name": "renderTransformMatrix",
+              "kind": "function",
+              "signature": "export declare function renderTransformMatrix(transform: RenderTransform, budget: SourceAffineBudget): readonly [number, number, number, number, number, number]"
+            },
+            {
               "name": "replayPaintCommandsToCanvas2D",
               "kind": "function",
               "signature": "export declare function replayPaintCommandsToCanvas2D<HostContext>(context: HostContext, commands: readonly PaintCommand[], adapter: Canvas2DCommandAdapter<HostContext>): void"
@@ -10782,6 +10787,16 @@
               "name": "SlideRenderTree",
               "kind": "type",
               "signature": "SlideRenderTree"
+            },
+            {
+              "name": "SourceAffineBudget",
+              "kind": "class",
+              "signature": "export declare class SourceAffineBudget"
+            },
+            {
+              "name": "SourceAffineTransport",
+              "kind": "type",
+              "signature": "SourceAffineTransport"
             },
             {
               "name": "stringifySlideRenderTree",

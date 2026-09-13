@@ -49,7 +49,7 @@
       "protocol": "pptx-native/v1",
       "version": 1,
       "schemaPath": "schemas/pptx-native-v1.schema.json",
-      "schemaSha256": "d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219"
+      "schemaSha256": "212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb"
     },
     "xlsx": {
       "protocol": "injoffice.xlsx.native",
