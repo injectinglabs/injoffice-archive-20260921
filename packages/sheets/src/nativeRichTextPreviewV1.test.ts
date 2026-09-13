@@ -29,6 +29,8 @@ it('refuses stale cell, style, index, run, table and grouped-source joins', () =
     (s: any) => s.objects.package_sha256 = `sha256:${'b'.repeat(64)}`,
     (s: any) => s.workbook.sheets[0].cells[0].value.lexical = '1',
     (s: any) => s.workbook.sheets[0].cells[0].value.runs[0].bold = false,
+    (s: any) => delete s.objects.rich_text.cells[0].runs[0].bold,
+    (s: any) => { delete s.objects.rich_text.cells[0].runs[0].bold; s.objects.rich_text.cells[0].runs[0].properties = 'cell-inherited' },
     (s: any) => s.workbook.sheets[0].cells[0].style_id = 1,
     (s: any) => s.workbook.styles[0].effective.wrap_text = true,
     (s: any) => s.objects.tables.push({ sheet_part: 'xl/worksheets/sheet1.xml' }),

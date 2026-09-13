@@ -86,7 +86,7 @@ export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetI
     const style = workbook.styles.find(s => s.id === c.style_id)?.effective
     if (workbook.unsupported?.some(u => u.part_name === sheet.part_name && u.cell_ref === c.ref && u.code !== 'RICH_CELL_STRING') || c.formula || sheet.cells.some(c => c.formula && c.formula.type !== 'normal') || objects.tables.some(t => t.sheet_part === sheet.part_name) || sheet.merged_ranges.some(m => c.row >= m.row && c.row <= m.end_row && c.column >= m.column && c.column <= m.end_column) || !style || style.projection !== 'full' || style.unsupported.length || style.wrap_text || style.shrink_to_fit || style.text_rotation) return fail()
     if (e.runs?.length !== v.runs?.length) return fail()
-    e.runs!.forEach((r, i) => { const original = v.runs![i]!; if (r.text !== original.text || PROPERTIES.some(k => Object.hasOwn(r, k) && r[k] !== original[k])) return fail() })
+    e.runs!.forEach((r, i) => { const original = v.runs![i]!; if (r.text !== original.text || PROPERTIES.some(k => Object.hasOwn(r, k) !== Object.hasOwn(original, k) || r[k] !== original[k])) return fail() })
   }
   return { cells: entries, warnings: preview.warnings }
 }
