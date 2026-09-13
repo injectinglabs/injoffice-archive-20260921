@@ -862,3 +862,38 @@ wrappers, cell properties and deeper tables remain omitted. The consumer joins
 original outer-owner omissions and resolved visibility; no nested table model,
 geometry, font placement or mutation authority is produced. Limits are 32 nested
 tables, 16 paragraphs per table, 32 runs per paragraph and 32,768 text units.
+
+### Explicit rectangle textbox preview
+
+`decodeNativeDocxTextboxGeometryV1(document, evidence)` validates the optional
+`textbox_geometry` evidence returned by the Go/WASM partial-source inspector.
+`compileNativeDocxTextboxShapeV1(document, evidence, index, fontBytes)` from
+`@injoffice/docs/native-textbox-shape-compiler` is a **Node-only** compiler. It
+uses the pinned HarfBuzz shaper and glyph outlines from the supplied regular
+TrueType face, verifies its family and actual byte digest, and returns local
+rectangle paint or an explicit refusal. There is no platform-font lookup.
+
+This first profile requires one direct inline DrawingML rectangle, identity
+transforms, matching explicit extents, zero effect extents, explicit sRGB/no
+fill and solid/no line, explicit insets/top alignment/no autofit, and one
+printable ASCII line with explicit regular font, size, color and en-US language.
+Styles must be absent or empty. EMU dimensions must be divisible by 127 so the
+millipoint paint conversion is exact. Unmarked whitespace, inheritance,
+wrapping, overflow, themes, effects, compatibility branches and linked/grouped
+shapes remain refused. All original native drawing diagnostics and mutation
+restrictions remain intact.
+
+The browser-safe `decodeNativeDocxTextboxShapePaintV1(document, evidence, index,
+output, expectedFontSHA256)` checks source geometry, path bounds and the exact
+uploaded font hash. The playground inspects source locally through Go/WASM;
+rendering requires an explicit opt-in to send the extracted document model
+(including body, headers, notes and comments), textbox evidence and font bytes
+to its same-origin development Node helper. Full DOCX bytes remain in the
+browser. Hosts can use the compiler API directly without that development
+adapter.
+
+The result reproduces this bounded authored rectangle in its own coordinate
+box. Page placement and general Word shape fidelity are not established. Text
+baseline and fit follow the pinned font metrics; no independent Word-reference
+comparison is claimed. Glyph or metric overflow is refused rather than clipped,
+wrapped, shrunk or silently replaced.

@@ -145,6 +145,21 @@ describe('DOCX WASM package client', () => {
     const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
     await expect(bad.inspectPartialContent(bytes)).rejects.toThrow('does not join');expect(badWorker.terminated).toBe(true)
   })
+  it('validates optional rectangle geometry and refuses forged dimensions',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
+    document.source.package_sha256=hash
+    const p=document.body.blocks[0]!.paragraph!,anchor={...p.anchor,path:p.anchor.path+'/w:r[1]/w:drawing[1]',start_byte:200,end_byte:220}
+    document.unsupported=[{id:'geometry:1',code:'PICTURE_GRAPHIC_REQUIRED',capability:'drawings',scope_id:p.id,anchor,preservation:'refuse-mutation',message:'Drawing'}]
+    const owner={package_sha256:hash,part_sha256:'sha256:'+'a'.repeat(64),paragraph_id:p.id,diagnostic_id:'geometry:1',anchor:{...anchor},kind:'drawingml',status:'supported',paragraphs:['Rectangle'],reason:''}
+    const geometry={width_emu:2743200,height_emu:914400,insets_emu:[91440,91440,91440,91440],fill_rgb:'FFF2CC',line_rgb:'none',line_width_emu:0,font_family:'DejaVu Sans',font_size_half_points:24,text_rgb:'000000'}
+    const resolved_layout={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
+    const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,textbox_geometry:{items:[{owner,geometry}],omitted_count:0}}
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).textbox_geometry).toEqual(envelope.textbox_geometry);client.terminate()
+    geometry.width_emu++
+    const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow('exactly representable');expect(badWorker.terminated).toBe(true)
+  })
   it('validates source-bound review metadata and rejects deletion text evidence',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
     document.source.package_sha256=hash
