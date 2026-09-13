@@ -16,6 +16,7 @@ import (
 // NativeWorkbookObjectsV1 is a read-only supplement, never mutation authority.
 // Chart values come from saved chart caches, not evaluated worksheet formulas.
 type NativeWorkbookObjectsV1 struct {
+	RichText         *NativeRichTextPreviewV1         `json:"rich_text,omitempty"`
 	ConditionalFills []NativeConditionalFillPreviewV1 `json:"conditional_fills,omitempty"`
 	Protocol         string                           `json:"protocol"`
 	Version          int                              `json:"version"`
@@ -316,6 +317,13 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	}
 	if len(encoded) > 8*1024*1024 {
 		return nil, fmt.Errorf("object preview exceeds 8 MiB JSON bound")
+	}
+	rich := previewNativeRichText(pkg, workbook)
+	if len(rich.Cells) != 0 || len(rich.Warnings) != 0 {
+		result.RichText = &rich
+		if !nativeRichTextEnvelopeFits(result) {
+			result.RichText = nil
+		}
 	}
 	return result, nil
 }
