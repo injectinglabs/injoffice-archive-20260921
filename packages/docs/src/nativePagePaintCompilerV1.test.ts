@@ -2646,3 +2646,57 @@ describe('whole footnote reservation compiler', () => {
     expect(prepared.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [] }))
   })
 })
+
+describe('source-anchored textbox page composition',()=>{
+ function textboxFixture(){
+  const input=fixture(),document=input.document as NativeDocxDocumentV1,p=document.body.blocks[0]!.paragraph!
+  p.anchor.end_byte=2000
+  p.runs[0]!.anchor=anchor(p.anchor.path+'/w:r[2]',1500,1800)
+  const root=p.anchor.path+'/w:r[1]/w:drawing[1]/wp:anchor[1]',a=anchor(root+'/a:graphic[1]/a:graphicData[1]',200,900)
+  document.unsupported=[{id:'shape:1',code:'PICTURE_GRAPHIC_REQUIRED',capability:'drawings',scope_id:p.id,anchor:a,preservation:'refuse-mutation',message:'Drawing preserved'}]
+  const evidence:import('./nativeTextboxGeometryPreviewV1.js').NativeDocxTextboxGeometryEvidenceV1={items:[{owner:{package_sha256:HASH,part_sha256:HASH,paragraph_id:p.id,diagnostic_id:'shape:1',anchor:a,kind:'drawingml',status:'supported',paragraphs:['Page rectangle'],reason:''},geometry:{width_emu:2743200,height_emu:914400,insets_emu:[91440,91440,91440,91440],fill_rgb:'FFF2CC',line_rgb:'204060',line_width_emu:12700,font_family:'DejaVu Sans',font_size_half_points:24,text_rgb:'102030'},page_anchor:{policy:'page-offset-no-wrap-v1',source_anchor:anchor(root,110,1000),horizontal_anchor:anchor(root+'/wp:positionH[1]/wp:posOffset[1]',120,135),vertical_anchor:anchor(root+'/wp:positionV[1]/wp:posOffset[1]',140,155),x_emu:914400,y_emu:1828800}}],omitted_count:0}
+  return {input,document,evidence}
+ }
+ const provider={providerId:'injoffice.sfnt-outline',providerRevision:'sfnt-v1',getGlyphOutline(request:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1){
+  const outline=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST}).outline(request.glyph_id)
+  return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}
+ }}
+ it('composes actual-font body and textbox paint without removing original source diagnostics',async()=>{
+  const {renderNativeDocxTextboxPagePreviewV1:render}=await import('./nativeTextboxPageCompilerV1.js')
+  const {decodeNativeDocxTextboxPagePreviewV1:decode}=await import('./nativeTextboxPagePreviewV1.js')
+  const {input,document,evidence}=textboxFixture(),before=structuredClone({input,evidence}),result=await render(input,evidence,FONT_BYTES,provider)
+  expect(result.body_paint.pages).toHaveLength(1);expect(result.textbox).toMatchObject({page_id:result.body_paint.pages[0]!.id,x_millipoints:72000,y_millipoints:144000,paint:{status:'supported'}})
+  expect(result.textbox.paint.paths.length).toBeGreaterThan(0);expect(result.source_diagnostics).toEqual(document.unsupported)
+  expect(decode(document,evidence,result,FONT_DIGEST)).toEqual(result)
+  expect(await render(input,evidence,FONT_BYTES,provider)).toEqual(result);expect({input,evidence}).toEqual(before)
+  for(const mutate of [(v:typeof result)=>{v.textbox.page_id='page:other'},(v:typeof result)=>{v.textbox.x_millipoints++},(v:typeof result)=>{v.source_diagnostics=[]},(v:typeof result)=>{v.source_sha256=RELATIONSHIPS_HASH},(v:typeof result)=>{v.textbox.paint.input_sha256=RELATIONSHIPS_HASH},(v:typeof result)=>{v.body_paint.provenance.revision='rev:other'},(v:typeof result)=>{v.textbox.paint.paths[0]='M 0 0 L 1 1'}]){
+   const forged=structuredClone(result);mutate(forged);expect(()=>decode(document,evidence,forged,FONT_DIGEST)).toThrow()
+  }
+  expect(()=>decode(document,evidence,result,RELATIONSHIPS_HASH)).toThrow()
+ })
+ it('follows a paragraph pushed to a later page by body flow',async()=>{
+  const {renderNativeDocxTextboxPagePreviewV1:render}=await import('./nativeTextboxPageCompilerV1.js')
+  const {input,document,evidence}=textboxFixture(),p=document.body.blocks[0]!.paragraph!,r=input.resolved_layout as NativeDocxResolvedLayoutInputV1
+  const preceding=structuredClone(p);preceding.id='paragraph:0';preceding.anchor=anchor('/w:document[1]/w:body[1]/w:p[1]',10,90);preceding.runs[0]!.id='run:0';preceding.runs[0]!.anchor=anchor(preceding.anchor.path+'/w:r[1]',20,80)
+  document.body.blocks.unshift({kind:'paragraph',id:preceding.id,paragraph:preceding});document.sections[0]!.starts_at_block_id=preceding.id
+  document.sections[0]!.page.margins.bottom_twips=14000
+  for(const a of [p.anchor,p.runs[0]!.anchor,document.unsupported[0]!.anchor!,evidence.items[0]!.owner.anchor,evidence.items[0]!.page_anchor!.source_anchor,evidence.items[0]!.page_anchor!.horizontal_anchor,evidence.items[0]!.page_anchor!.vertical_anchor])a.path=a.path.replace('/w:p[1]','/w:p[2]')
+  r.paragraphs.unshift({...structuredClone(r.paragraphs[0]!),paragraph_id:preceding.id,properties:{}});r.runs.unshift({...structuredClone(r.runs[0]!),run_id:'run:0',paragraph_id:preceding.id})
+  rewriteInventory(input,i=>{i.references[0]!.scope_ids.push('paragraph:0','run:0');i.references[0]!.scope_ids.sort()})
+  const result=await render(input,evidence,FONT_BYTES,provider)
+  expect(result.body_paint.pages).toHaveLength(2);expect(result.textbox.page_id).toBe(result.body_paint.pages[1]!.id)
+ })
+ it('refuses uncertain anchors, off-page strokes, incomplete evidence and unsupported body atomically',async()=>{
+  const {renderNativeDocxTextboxPagePreviewV1:render}=await import('./nativeTextboxPageCompilerV1.js')
+  const mutations:Array<(f:ReturnType<typeof textboxFixture>)=>void>=[
+   f=>{f.document.body.blocks[0]!.paragraph!.runs[0]!.anchor.start_byte=105},
+   f=>{f.evidence.items[0]!.page_anchor!.x_emu=0},
+   f=>{f.evidence.items[0]!.page_anchor!.y_emu=127000000},
+   f=>{delete f.evidence.items[0]!.page_anchor},
+   f=>{f.evidence.omitted_count=1},
+   f=>{f.evidence.items[0]!.geometry!.font_family='Unknown family'},
+   f=>{f.document.unsupported.push({...f.document.unsupported[0]!,id:'other:1',code:'OTHER_UNSUPPORTED',capability:'unknown'})},
+  ]
+  for(const mutate of mutations){const f=textboxFixture();mutate(f);const before=structuredClone(f);await expect(render(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow();expect(f).toEqual(before)}
+ },20000)
+})

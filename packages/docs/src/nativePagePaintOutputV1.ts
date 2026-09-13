@@ -7,3 +7,5 @@ export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROT
 export type { NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 export { decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
 export type { DecodeNativeDocxPagePaintV1Result, NativeDocxPagePaintV1, NativeDocxPaintPageV1, NativeDocxPagePaintCommandV1, NativeDocxPaintPathCommandV1, NativeDocxFillTextHighlightCommandV1, NativeDocxStrokeTextUnderlineCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1 } from './nativePagePaintV1.js'
+
+export * from './nativeTextboxPagePreviewV1.js'
