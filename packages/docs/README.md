@@ -971,3 +971,23 @@ aggregate paths; cluster selection has a separate bounded work counter.
 Original no-wrap and authored-hard-break profiles retain their behavior.
 This conservative wrapping policy is a local preview, not established Word
 line-breaking equivalence or surrounding-body/page wrapping.
+
+### Page-placed rectangle preview
+
+`renderNativeDocxTextboxPagePreviewV1` from
+`@injoffice/docs/native-textbox-page-compiler` composes one qualified floating
+rectangle with complete body page paint. The source drawing must be the first
+run's first drawing, before every modeled run in its direct body paragraph.
+Body pagination chooses that paragraph's first page; explicit page offsets
+place the rectangle above the body paint. The complete stroked rectangle must
+fit the physical page. The supplied regular font is shaped and outlined exactly
+as in the local rectangle compiler, including qualified hard breaks and wrapping.
+
+The separate `injoffice.docx.textbox-page-preview` output is approximate and
+read-only, retains all original source diagnostics, and binds the original
+source and geometry. `decodeNativeDocxTextboxPagePreviewV1` is browser-safe and
+checks those joins, font digest, anchor page and page containment. Body, shape,
+font or placement refusal returns no partial composition. Multiple rectangles,
+inline placement, anchors after paragraph text, other wrapping/positioning
+policies and unsupported body content remain refused. This does not grant
+mutation capabilities or alter the original strict page-paint contract.

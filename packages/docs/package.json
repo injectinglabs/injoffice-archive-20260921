@@ -9,6 +9,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./native-textbox-page-compiler": {
+      "types": "./dist/nativeTextboxPageCompilerV1.d.ts",
+      "import": "./dist/index.js"
+    },
     "./native-textbox-shape-compiler": {
       "types": "./dist/nativeTextboxShapePaintV1.d.ts",
       "import": "./dist/nativeTextboxShapePaintV1.js"

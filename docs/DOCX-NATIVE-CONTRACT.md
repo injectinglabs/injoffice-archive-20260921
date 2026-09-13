@@ -750,3 +750,20 @@ untyped property bag.
 The old and new renderers must not receive parallel fidelity features during
 migration. New DOCX compatibility work belongs in the native model, layout,
 or surgical-persistence lanes.
+
+### Composed textbox page preview
+
+The Node `renderNativeDocxTextboxPagePreviewV1` API accepts the ordinary complete
+page-paint preparation input plus same-source rectangle geometry and supplied
+font bytes. It projects only one qualified `PICTURE_GRAPHIC_REQUIRED` diagnostic
+out of an internal body copy. The original drawing must precede every modeled
+run in its direct body paragraph and occupy its first run's first drawing.
+The ordinary body paginator assigns the paragraph's first line to a physical
+page; source page offsets then place the rectangle on that page, including its
+stroke in the containment check. Other drawing diagnostics, incomplete geometry,
+body refusal and shape/font/placement refusal prevent the entire composition.
+
+The distinct read-only approximate output retains original diagnostics and a
+canonical source digest. Browser decoding joins body provenance, geometry,
+font digest and placement back to the current inspected source. The local
+rectangle evidence alone still grants no page layout or mutation capability.
