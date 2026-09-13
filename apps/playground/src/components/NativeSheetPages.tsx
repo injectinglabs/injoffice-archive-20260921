@@ -153,6 +153,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
+    {usePrintArea && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
     <p role="status">{message}</p>
     {results?.map((result, index) => <div key={index} data-print-area={result.areaIndex}>
       {result.areaIndex !== undefined && <h4>Saved print area {result.areaIndex + 1}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}</h4>}
