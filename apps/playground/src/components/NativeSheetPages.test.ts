@@ -233,3 +233,31 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('Saved value range:')
   })
 })
+
+describe('conditional fill page overlay', () => {
+  function conditionalFixture() {
+    const props = fixture()
+    props.objects.protocol = 'injoffice.xlsx.preview-objects'
+    props.sheet.merged_ranges = []
+    props.workbook.unsupported = []
+    props.sheet.cells[0] = { row: 0, column: 0, ref: 'A1', style_id: 0, editable: true, value: { kind: 'number', storage: 'number', lexical: '3', rich: false } }
+    props.objects.conditional_fills = [{ sheet_id: '1', sheet_part: props.sheet.part_name, status: 'available', warnings: ['Read-only conditional fill; saved cache freshness is unknown.'], rule: { ref: 'A1', operator: 'greaterThan', operand: '0', priority: 1, stop_if_true: false, dxf_id: 0, fill: '#12AB34' }, cells: [{ row: 0, column: 0, lexical: '3', cached: false, matches: true }] }]
+    return { ...props, conditionalFills: true }
+  }
+  it('requires opt-in and shows source rule provenance alongside the matching fill', () => {
+    const props = conditionalFixture()
+    expect(render(props)).toContain('fill="#12AB34" data-conditional-fill="true"')
+    expect(render(props)).toContain('Source rule: A1 greaterThan 0; priority 1; stopIfTrue false; differential style 0')
+    expect(render({ ...props, conditionalFills: false } as typeof props)).not.toContain('data-conditional-fill')
+  })
+  it('keeps base pages usable while making unsupported or stale overlays visible', () => {
+    const props = conditionalFixture()
+    props.sheet.cells[0]!.value!.lexical = '2'
+    expect(render(props)).toContain('no longer joins every saved source value')
+    expect(render(props)).not.toContain('data-conditional-fill')
+    props.objects.conditional_fills = [{ sheet_id: '1', sheet_part: props.sheet.part_name, status: 'unavailable', warnings: ['Multiple rules: no conditional fills were applied.'] }]
+    expect(render(props)).toContain('Multiple rules: no conditional fills were applied.')
+    expect(render(props)).toContain('Approximate spreadsheet page 1')
+    expect(render(props)).not.toContain('data-conditional-fill')
+  })
+})

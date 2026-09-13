@@ -500,6 +500,7 @@ func skipNativeXMLElement(decoder *xml.Decoder, root xml.StartElement, depth int
 
 func nativeReadXMLRoot(decoder *xml.Decoder) (xml.StartElement, error) {
 	for {
+		start := decoder.InputOffset()
 		token, err := decoder.Token()
 		if err != nil {
 			return xml.StartElement{}, err
@@ -508,6 +509,11 @@ func nativeReadXMLRoot(decoder *xml.Decoder) (xml.StartElement, error) {
 		case xml.StartElement:
 			return token, nil
 		case xml.CharData:
+			// Validate an initial signature without shifting source offsets used
+			// by other readers. Any later U+FEFF remains ordinary character data.
+			if start == 0 {
+				token = bytes.TrimPrefix(token, []byte{0xef, 0xbb, 0xbf})
+			}
 			if len(bytes.TrimSpace(token)) != 0 {
 				return xml.StartElement{}, fmt.Errorf("XML contains text before its root")
 			}

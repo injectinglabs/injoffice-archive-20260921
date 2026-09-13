@@ -57,3 +57,5 @@ export type { NativeTableBorderEdgesV1,NativeTableBorderSideV1 } from './nativeT
 export type { NativeTableNumberDisplayV1 } from './nativeTableNumberFormatPreview.js'
 export type { NativeWorkbookObjectsV1, NativeTablePreviewV1, NativeTableNumberFormatV1, NativeTableBorderPreviewV1, NativeChartPreviewV1, NativeChartSeriesPreviewV1, NativeCachedChartMarkV1 } from './nativeObjectsPreviewV1.js'
 export { compactNativeGeneralNumberPreviewV1, type NativeCompactGeneralPreviewV1 } from './nativeCompactGeneralPreviewV1.js'
+
+export { decodeNativeConditionalFillPreviewsV1, selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1, type NativeConditionalFillRuleV1, type NativeConditionalFillCellV1, type NativeConditionalOperatorV1 } from './nativeConditionalFillPreviewV1.js'

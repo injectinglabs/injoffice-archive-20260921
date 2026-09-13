@@ -3042,6 +3042,17 @@
       "description": "Docs track: pagination, header/footer tokens, and comment-anchor mapping — pure core plus a thin TipTap/ProseMirror shell.",
       "exports": [
         {
+          "subpath": "./native-textbox-shape-compiler",
+          "file": "nativeTextboxShapePaintV1.d.ts",
+          "symbols": [
+            {
+              "name": "compileNativeDocxTextboxShapeV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeDocxTextboxShapeV1(source: unknown, evidence: unknown, index: number, fontBytes: Uint8Array): NativeDocxTextboxShapePaintV1"
+            }
+          ]
+        },
+        {
           "subpath": "./native-raster",
           "file": "nativeImagePagePaintV1.d.ts",
           "symbols": [
@@ -3395,6 +3406,16 @@
               "name": "decodeNativeDocxTextboxEvidenceV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxTextboxEvidenceV1(source: unknown, input: unknown): NativeDocxTextboxEvidenceV1"
+            },
+            {
+              "name": "decodeNativeDocxTextboxGeometryV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxGeometryV1(source: unknown, input: unknown): NativeDocxTextboxGeometryEvidenceV1"
+            },
+            {
+              "name": "decodeNativeDocxTextboxShapePaintV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxShapePaintV1(source: unknown, evidence: unknown, index: number, input: unknown, expectedFontSHA256: string): NativeDocxTextboxShapePaintV1"
             },
             {
               "name": "DEFAULT_MARGINS_PX",
@@ -4687,9 +4708,29 @@
               "signature": "export interface NativeDocxTextboxEvidenceV1"
             },
             {
+              "name": "NativeDocxTextboxGeometryEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryEvidenceV1"
+            },
+            {
+              "name": "NativeDocxTextboxGeometryItemV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryItemV1"
+            },
+            {
+              "name": "NativeDocxTextboxGeometryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryV1"
+            },
+            {
               "name": "NativeDocxTextboxInventoryV1",
               "kind": "type",
               "signature": "export type NativeDocxTextboxInventoryV1 = ReturnType<typeof createNativeDocxTextboxInventoryV1>"
+            },
+            {
+              "name": "NativeDocxTextboxShapePaintV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxShapePaintV1"
             },
             {
               "name": "NativeDocxTextboxV1",
@@ -4730,6 +4771,21 @@
               "name": "NativeDocxValidationIssue",
               "kind": "interface",
               "signature": "export interface NativeDocxValidationIssue"
+            },
+            {
+              "name": "nativeTextboxFontDigestV1",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxFontDigestV1(bytes: Uint8Array): string"
+            },
+            {
+              "name": "nativeTextboxGeometryDigestV1",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxGeometryDigestV1(value: unknown): string"
+            },
+            {
+              "name": "nativeTextboxGeometryPlainData",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
             },
             {
               "name": "newCommentEntry",
@@ -5011,6 +5067,16 @@
               "name": "decodeNativeDocxTextboxEvidenceV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxTextboxEvidenceV1(source: unknown, input: unknown): NativeDocxTextboxEvidenceV1"
+            },
+            {
+              "name": "decodeNativeDocxTextboxGeometryV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxGeometryV1(source: unknown, input: unknown): NativeDocxTextboxGeometryEvidenceV1"
+            },
+            {
+              "name": "decodeNativeDocxTextboxShapePaintV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxShapePaintV1(source: unknown, evidence: unknown, index: number, input: unknown, expectedFontSHA256: string): NativeDocxTextboxShapePaintV1"
             },
             {
               "name": "DOCX_MAX_TWIPS_FOR_MILLIPOINTS",
@@ -5383,9 +5449,29 @@
               "signature": "export interface NativeDocxTextboxEvidenceV1"
             },
             {
+              "name": "NativeDocxTextboxGeometryEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryEvidenceV1"
+            },
+            {
+              "name": "NativeDocxTextboxGeometryItemV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryItemV1"
+            },
+            {
+              "name": "NativeDocxTextboxGeometryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxGeometryV1"
+            },
+            {
               "name": "NativeDocxTextboxInventoryV1",
               "kind": "type",
               "signature": "export type NativeDocxTextboxInventoryV1 = ReturnType<typeof createNativeDocxTextboxInventoryV1>"
+            },
+            {
+              "name": "NativeDocxTextboxShapePaintV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxShapePaintV1"
             },
             {
               "name": "NativeDocxTextboxV1",
@@ -5426,6 +5512,21 @@
               "name": "NativeDocxValidationIssue",
               "kind": "interface",
               "signature": "export interface NativeDocxValidationIssue"
+            },
+            {
+              "name": "nativeTextboxFontDigestV1",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxFontDigestV1(bytes: Uint8Array): string"
+            },
+            {
+              "name": "nativeTextboxGeometryDigestV1",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxGeometryDigestV1(value: unknown): string"
+            },
+            {
+              "name": "nativeTextboxGeometryPlainData",
+              "kind": "function",
+              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
             },
             {
               "name": "OFFICE_MUTATION_PROTOCOL",
@@ -11863,6 +11964,11 @@
               "signature": "export declare function createNativeSheetGeometryRecordingSurfaceV2(maxCommands?: number): NativeSheetGeometryRecordingSurfaceV2"
             },
             {
+              "name": "decodeNativeConditionalFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -12176,6 +12282,26 @@
               "name": "NativeCompactGeneralPreviewV1",
               "kind": "type",
               "signature": "export type NativeCompactGeneralPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillCellV1"
+            },
+            {
+              "name": "NativeConditionalFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillRuleV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillRuleV1"
+            },
+            {
+              "name": "NativeConditionalOperatorV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -13113,6 +13239,11 @@
               "signature": "RowSetHeightMutation"
             },
             {
+              "name": "selectNativeConditionalFillPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
+            },
+            {
               "name": "selectNativeSheetPrintAreaSetV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaSetV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): readonly NativeSheetViewportV2[]"
@@ -13344,6 +13475,11 @@
               "signature": "export declare function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkbookRenderModelV2, fontBytes: Uint8Array): NativeMaximumDigitWidthAuthorityV2"
             },
             {
+              "name": "decodeNativeConditionalFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -13417,6 +13553,26 @@
               "name": "NativeCompactGeneralPreviewV1",
               "kind": "type",
               "signature": "export type NativeCompactGeneralPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillCellV1"
+            },
+            {
+              "name": "NativeConditionalFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillRuleV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillRuleV1"
+            },
+            {
+              "name": "NativeConditionalOperatorV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -13612,6 +13768,11 @@
               "name": "projectNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function projectNativeWorkbookV2(input: unknown): NativeWorkbookRenderModelV2"
+            },
+            {
+              "name": "selectNativeConditionalFillPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
             },
             {
               "name": "selectNativeSheetPrintAreaSetV1",
