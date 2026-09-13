@@ -66,3 +66,8 @@ it('decodes maximum conditional-fill and rich-run evidence together in the publi
   const result = decodeNativeWorkbookObjectsV1(envelope, hash)
   expect(result.conditional_fills).toHaveLength(4); expect(result.rich_text?.cells).toHaveLength(256)
 })
+it('retains Unicode source paths and explicitly omitted noncanonical saved indices', () => {
+  const p = fixture(), c = p.cells[0]!; c.sheet_part = 'xl/worksheets/预算.xml'; c.source_part = 'xl/字符串.xml'; c.shared_index = '00'; c.status = 'omitted'; delete c.runs
+  expect(decodeNativeRichTextPreviewV1(p).cells[0]!.shared_index).toBe('00')
+  c.status = 'available'; c.runs = fixture().cells[0]!.runs; expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
+})

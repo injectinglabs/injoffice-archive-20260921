@@ -206,3 +206,12 @@ func TestNativeRichTextEnclosingByteBudget(t *testing.T) {
 		t.Fatal("older envelope changed")
 	}
 }
+
+func TestNativeRichTextNoncanonicalSharedIndexRetainsPlainSource(t *testing.T) {
+	p := richFixture(false, richPositiveRuns)
+	p["Sheets/s1.xml"] = `<worksheet xmlns="` + spreadsheetMLTransitional + `"><sheetData><row r="1"><c r="A1" t="s"><v>00</v></c></row></sheetData></worksheet>`
+	r := richPreviewFixture(t, p)
+	if len(r.Cells) != 1 || r.Cells[0].Status != "omitted" || r.Cells[0].SharedIndex != "00" || r.Cells[0].Text != "Rich Text" {
+		t.Fatalf("noncanonical source not disclosed: %#v", r)
+	}
+}

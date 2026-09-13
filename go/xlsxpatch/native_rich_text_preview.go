@@ -276,7 +276,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 			}
 			text := *c.Value.Text
 			units := nativeRichUnits(text)
-			if len(result.Cells) >= 256 || units > 2048 || totalText+units > 32768 {
+			if len(result.Cells) >= 256 || units > 2048 || totalText+units > 32768 || c.Value.Storage == "shared" && c.Value.Lexical != nil && len(*c.Value.Lexical) > 128 {
 				if len(result.Warnings) == 0 {
 					result.Warnings = append(result.Warnings, "Some rich cells exceed preview bounds; plain source text is retained without run styling.")
 				}

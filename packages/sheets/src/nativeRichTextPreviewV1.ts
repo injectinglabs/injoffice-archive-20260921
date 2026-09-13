@@ -21,7 +21,7 @@ export interface NativeRichTextPreviewV1 { cells: NativeRichTextCellV1[]; warnin
 const PROPERTIES = ['font_name', 'font_size_points', 'font_color', 'bold', 'italic'] as const
 const OMITTED = ['font-family-hint', 'baseline', 'underline-none', 'strike-false']
 const safeText = (s: string) => !/[\u0000-\u001f\u007f\u2028\u2029]/.test(s)
-const path = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_./-]{1,1024}$/.test(s) && !s.split('/').some(p => !p || p === '.' || p === '..')
+const path = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 1024 && safeText(s) && !s.startsWith('/') && !s.includes('\\') && !s.split('/').some(p => !p || p === '.' || p === '..')
 const int = (v: unknown, max: number): v is number => Number.isSafeInteger(v) && !Object.is(v, -0) && Number(v) >= 0 && Number(v) <= max
 const ref = (row: number, column: number) => { let s = ''; for (let c = column + 1; c > 0; c = Math.floor((c - 1) / 26)) s = String.fromCharCode(65 + (c - 1) % 26) + s; return s + String(row + 1) }
 /** Closed, bounded additive data. Does not change native style qualification. */
@@ -48,7 +48,7 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
     sheets.set(c.sheet_id, c.sheet_part); parts.set(c.sheet_part, c.sheet_id)
     const id = `${c.sheet_id}:${c.ref}`; if (ids.has(id)) return fail(); ids.add(id)
     if (typeof c.text !== 'string' || c.text.length > 2048 || (textCount += c.text.length) > 32768 || typeof c.shared_index !== 'string') return fail()
-    if (c.storage === 'inline' ? c.source_part !== c.sheet_part || c.shared_index !== '' : c.storage !== 'shared' || !/^(0|[1-9][0-9]{0,8})$/.test(c.shared_index)) return fail()
+    if (c.storage === 'inline' ? c.source_part !== c.sheet_part || c.shared_index !== '' : c.storage !== 'shared' || !/^[0-9]{1,128}$/.test(c.shared_index) || c.status === 'available' && !/^(0|[1-9][0-9]{0,8})$/.test(c.shared_index)) return fail()
     const base = { ...c, warnings: warnings(c.warnings) } as unknown as NativeRichTextCellV1
     if (c.status === 'omitted') { if (Object.hasOwn(c, 'runs')) return fail(); return base }
     if (c.status !== 'available' || !safeText(c.text) || !Array.isArray(c.runs) || !c.runs.length || c.runs.length > 64 || (runCount += c.runs.length) > 1024) return fail()
