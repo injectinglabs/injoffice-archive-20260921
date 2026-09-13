@@ -168,7 +168,39 @@ export interface NativeLiteralDoughnut {
   colors: string[]
 }
 
+export interface NativeLiteralBarAxis {
+ id:number
+ crossAxisId:number
+ orientation:'minMax'|'maxMin'
+ position:'b'|'l'
+ deleted:boolean
+ color?:string
+ widthEmu?:number
+ min?:string
+ max?:string
+ crossesAt?:string
+}
+export interface NativeLiteralBarSeries {
+ index:number
+ order:number
+ title?:string
+ values:string[]
+ colors:string[]
+}
+export interface NativeLiteralBar {
+ profile:'literal-bar-v1'
+ barDirection:'column'|'bar'
+ grouping:'clustered'
+ dataOrigin:'literal'
+ gapWidth:number
+ overlap:0
+ categories:string[]
+ series:NativeLiteralBarSeries[]
+ categoryAxis:NativeLiteralBarAxis
+ valueAxis:NativeLiteralBarAxis
+}
 export interface NativeOpaqueChart {
+ literalBar?:NativeLiteralBar
   literalDoughnut?: NativeLiteralDoughnut
   literalPie?: NativeLiteralPie
   chartPart: string

@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "ed137c65270dc284d46318a6d34bb9638b3d792126913e4d1cff44fbce4f8835" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -245,6 +245,71 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "transform"
     ]
   },
+  "NativeLiteralBar": {
+    "schemaName": "literalBar",
+    "properties": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ],
+    "required": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ]
+  },
+  "NativeLiteralBarAxis": {
+    "schemaName": "literalBarAxis",
+    "properties": [
+      "color",
+      "crossAxisId",
+      "crossesAt",
+      "deleted",
+      "id",
+      "max",
+      "min",
+      "orientation",
+      "position",
+      "widthEmu"
+    ],
+    "required": [
+      "crossAxisId",
+      "deleted",
+      "id",
+      "orientation",
+      "position"
+    ]
+  },
+  "NativeLiteralBarSeries": {
+    "schemaName": "literalBarSeries",
+    "properties": [
+      "colors",
+      "index",
+      "order",
+      "title",
+      "values"
+    ],
+    "required": [
+      "colors",
+      "index",
+      "order",
+      "values"
+    ]
+  },
   "NativeLiteralDoughnut": {
     "schemaName": "literalDoughnut",
     "properties": [
@@ -281,6 +346,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "schemaName": "opaqueChart",
     "properties": [
       "chartPart",
+      "literalBar",
       "literalDoughnut",
       "literalPie",
       "opaqueRef",
@@ -1534,6 +1600,188 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalBarAxis": {
+      "x-binding-name": "NativeLiteralBarAxis",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "crossAxisId",
+        "orientation",
+        "position",
+        "deleted"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "crossAxisId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "minMax",
+            "maxMin"
+          ]
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "b",
+            "l"
+          ]
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        },
+        "min": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "max": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "crossesAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "literalBarSeries": {
+      "x-binding-name": "NativeLiteralBarSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
+    "literalBar": {
+      "x-binding-name": "NativeLiteralBar",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "barDirection",
+        "grouping",
+        "dataOrigin",
+        "gapWidth",
+        "overlap",
+        "categories",
+        "series",
+        "categoryAxis",
+        "valueAxis"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-bar-v1"
+        },
+        "barDirection": {
+          "type": "string",
+          "enum": [
+            "column",
+            "bar"
+          ]
+        },
+        "grouping": {
+          "type": "string",
+          "const": "clustered"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "const": "literal"
+        },
+        "gapWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "overlap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 0
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBarSeries"
+          }
+        },
+        "categoryAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "valueAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      }
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -1561,6 +1809,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalDoughnut": {
           "$ref": "#/$defs/literalDoughnut"
+        },
+        "literalBar": {
+          "$ref": "#/$defs/literalBar"
         }
       }
     },

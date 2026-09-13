@@ -931,7 +931,10 @@ func (v *nativeValidator) chart(chart NativeOpaqueChart, p string) {
 		}
 	}
 
-	if chart.LiteralPie != nil && chart.LiteralDoughnut != nil {
+	if chart.LiteralBar != nil && !validNativeLiteralBar(chart.LiteralBar) {
+		v.add(p+".literalBar", "native.chartValues", "invalid literal bar profile")
+	}
+	if (chart.LiteralPie != nil && chart.LiteralDoughnut != nil) || (chart.LiteralBar != nil && (chart.LiteralPie != nil || chart.LiteralDoughnut != nil)) {
 		v.add(p, "native.chartProfiles", "chart cannot carry multiple literal families")
 	}
 
