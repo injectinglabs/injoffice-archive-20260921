@@ -44,10 +44,11 @@ The profile includes ordinary body text and unmerged or merged-owner table-cell 
 grouped by source row/cell ordinals without reconstructing table geometry.
 Qualified authored drawing descriptions appear as labeled alternative text
 alongside the retained drawing omission. Hidden text, fields, controls, drawing
-geometry, vertical-merge continuation cells, table layout, notes and comments receive placeholders;
+geometry, vertical-merge continuation cells, table layout and notes receive placeholders;
+comments are omitted unless separately requested;
 source diagnostics remain attached. Unknown document-wide diagnostics prevent
 text qualification. Without resolved layout, inherited visibility is unknown,
-so the result provides an inventory only and exposes no text. Formatting,
+so the result provides an inventory only and exposes no paragraph/run text. Formatting,
 numbering and document layout are not reconstructed. A 200-body-block and
 200-table-cell and 100,000-text-unit budget produces explicit truncation placeholders rather than
 silently dropping source content. The original source and mutation guards are
@@ -67,6 +68,20 @@ opaque. The inventory shares the body text budget and has a combined limit of
 64 stories and 200 header/footer blocks. Hosts must label this distinction and
 render source part names as escaped text. Native rendering and mutation support
 are unchanged.
+
+Comments require the additional explicit option
+`comment_policy: 'source-comment-inventory-v1'`. Its `comment_inventory` result
+lists at most 64 source stories and 200 direct blocks, using the same inherited
+visibility, diagnostic and shared 100,000-text-unit gates as ordinary text.
+Comment metadata counts toward that text budget. Each story must have exactly
+one validated comment owner; missing or ambiguous ownership remains omitted.
+Authored IDs, authors and dates are stored metadata, not verified identities.
+Comment tables, range placement, threads and revision display are not
+reconstructed. Deleted/unknown/wrapped revision content receives no traversal
+exception. The demo's separate **Show partial text with comments** button
+requests this policy explicitly; the ordinary partial-text button remains
+unchanged. Render all metadata as text and retain the read-only labels. This
+does not add accept/reject, comment editing or native page-paint authority.
 
 The optional fourth argument accepts `nested_table_omissions` from the same-byte
 WASM inspector. At most 64 exact direct nested-table boundaries may replace

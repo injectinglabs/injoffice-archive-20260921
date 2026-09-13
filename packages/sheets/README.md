@@ -4,9 +4,20 @@
 
 `compileNativeSheetPagePreviewV1(geometry, objects, hostPolicy, { repeat_print_titles: true })`
 joins optional `objects.print_titles` to the exact source package and worksheet part.
-Only leading row and/or column ranges wholly within the selected viewport are supported;
-both title bands and the remaining body must have visible geometry. Crossing merges,
-unavailable metadata, nonleading titles and targets outside bounded pagination are refused.
+Saved row/column headings may occur before, within, or after the selected body.
+Use `selectNativeSheetPrintTitleViewportV1(model, sheetId, bodyViewport, objects)`
+to select source-qualified geometry covering both body and headings. Compile that
+geometry and pass `{ repeat_print_titles: true, body_viewport: bodyViewport }` to
+the page planner. Cells between the body and headings supply geometry only and are
+not printed. Both heading bands and remaining body need visible geometry. Merges
+crossing painted/omitted or heading/body boundaries are refused. The expanded
+rectangle retains existing geometry limits; area sets also enforce the aggregate
+100,000-cell geometry budget including headings and gaps.
+
+When headings occur inside the body, the disjoint body runs start separate page
+sequences. This conservative policy preserves source order without printing a
+heading twice on a page; it can require more pages than Excel or make a 1-page fit
+impossible. Printer-calibrated layout is not claimed.
 The existing call without the fourth argument does not repeat headings.
 
 An opted-in page includes `regions`: body, repeated rows, repeated columns and (when

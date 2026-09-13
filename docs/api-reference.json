@@ -3194,7 +3194,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "CSS_PX_PER_INCH",
@@ -4242,6 +4242,11 @@
               "signature": "export type NativeDocxPartialCellV1 ="
             },
             {
+              "name": "NativeDocxPartialCommentV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCommentV1 ="
+            },
+            {
               "name": "NativeDocxPartialContentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialContentV1"
@@ -4850,7 +4855,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "decodeNativeDocxDocument",
@@ -5071,6 +5076,11 @@
               "name": "NativeDocxPartialCellV1",
               "kind": "type",
               "signature": "export type NativeDocxPartialCellV1 ="
+            },
+            {
+              "name": "NativeDocxPartialCommentV1",
+              "kind": "type",
+              "signature": "export type NativeDocxPartialCommentV1 ="
             },
             {
               "name": "NativeDocxPartialContentV1",
@@ -9700,6 +9710,11 @@
               "signature": "export declare const compatibilityStatusValues: readonly [\"editable\", \"preserveOnly\", \"refused\"]"
             },
             {
+              "name": "createNativePptxTableGeometryPreview",
+              "kind": "function",
+              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1'): NativePptxTableGeometryPreview"
+            },
+            {
               "name": "decodeNativePptxTableInspection",
               "kind": "function",
               "signature": "export declare function decodeNativePptxTableInspection(input: unknown, deck: NativePptxDeck, packageSHA256: string): NativePptxTableInspection"
@@ -9853,6 +9868,21 @@
               "name": "NativePptxInspectionRect",
               "kind": "type",
               "signature": "NativePptxInspectionRect"
+            },
+            {
+              "name": "NativePptxTableGeometryCell",
+              "kind": "type",
+              "signature": "NativePptxTableGeometryCell"
+            },
+            {
+              "name": "NativePptxTableGeometryPreview",
+              "kind": "type",
+              "signature": "NativePptxTableGeometryPreview"
+            },
+            {
+              "name": "NativePptxTableGeometrySlide",
+              "kind": "type",
+              "signature": "NativePptxTableGeometrySlide"
             },
             {
               "name": "NativePptxTableInspection",
@@ -11620,7 +11650,7 @@
             {
               "name": "compileNativeSheetPrintAreaSetPreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -12918,6 +12948,11 @@
               "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
             },
             {
+              "name": "selectNativeSheetPrintTitleViewportV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintTitleViewportV1(model: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
               "name": "StyleDelta",
               "kind": "type",
               "signature": "StyleDelta"
@@ -13121,7 +13156,7 @@
             {
               "name": "compileNativeSheetPrintAreaSetPreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -13412,6 +13447,11 @@
               "name": "selectNativeSheetPrintAreaV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
+              "name": "selectNativeSheetPrintTitleViewportV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintTitleViewportV1(model: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
             },
             {
               "name": "StyleDelta",

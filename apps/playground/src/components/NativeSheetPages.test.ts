@@ -213,6 +213,16 @@ describe('selected-range page presentation', () => {
     expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawings[0]!, status: 'unavailable' }])).toThrow('unavailable positions')
     expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawings[0]!, status: 'outside', rect: undefined, clip: undefined }])).not.toThrow()
   })
+  it('does not expose omitted gap cells through display details', () => {
+    const props = fixture(), page = props.plan.pages[0]!
+    props.sheet.cells[1] = { ...props.sheet.cells[1]!, value: { kind: 'string', text: 'omitted-gap-secret'.repeat(200) } } as NativeSheet['cells'][number]
+    page.regions = [{ kind: 'repeat-rows', source_clip: page.source_clip, rows: page.rows, columns: page.columns, translate_x_emu: page.translate_x_emu, translate_y_emu: page.translate_y_emu }]
+    const html = render(props)
+    expect(html).not.toContain('omitted-gap-secret')
+    expect(html).not.toContain('A2:')
+    expect(html).toContain('0 cells exceed')
+    expect(html).toContain('Rent &lt;script&gt;bad&lt;/script&gt;')
+  })
   it('labels cached plots as approximate and never activates source links', () => {
     const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }
     const html = renderToStaticMarkup(createElement('svg', null, createElement(NativePositionedChartPlot, { chart, index: 0 })))

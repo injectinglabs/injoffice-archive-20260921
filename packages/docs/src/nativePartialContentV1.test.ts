@@ -15,6 +15,100 @@ function fixture(){
  return {document,resolved}
 }
 describe('read-only native partial source content',()=>{
+ const commentOptions={...options,comment_policy:'source-comment-inventory-v1' as const}
+ function commentFixture(){
+  const joined=fixture()
+  for(const story of joined.document.comment_stories)for(const block of story.blocks){
+   const p=block.paragraph!
+   joined.resolved.paragraphs.push({paragraph_id:p.id,applied_styles:[],properties:{},paragraph_mark_properties:{}})
+   for(const r of p.runs)joined.resolved.runs.push({run_id:r.id,paragraph_id:p.id,applied_paragraph_styles:[],applied_character_styles:[],properties:{}})
+  }
+  return joined
+ }
+ it('requires a distinct comment opt-in and retains exact comment/story provenance without source mutation',()=>{
+  const {document,resolved}=commentFixture(),before=structuredClone({document,resolved})
+  const ordinary=project(document,options,resolved)
+  expect(ordinary.comment_inventory).toBeUndefined()
+  expect(JSON.stringify(ordinary)).not.toContain('This body is native DOCX content')
+  const out=project(document,commentOptions,resolved),comment=document.comments[0]!,story=document.comment_stories[0]!
+  expect(out.comment_inventory).toMatchObject({policy:'source-comment-inventory-v1',stories:[{native_comment_id:comment.native_comment_id,author:comment.author,created_at:comment.created_at,source:{scope_id:story.id,anchor:story.anchor},comment_source:{scope_id:comment.id,anchor:comment.anchor},range_assignment:'not-reconstructed'}]})
+  expect(JSON.stringify(out.comment_inventory)).toContain('This body is native DOCX content')
+  expect(JSON.stringify(out.blocks)).not.toContain('This body is native DOCX content')
+  expect({document,resolved}).toEqual(before)
+  for(const invalid of [{...commentOptions,comment_policy:'all-revisions'},{...options,comment_policy:undefined},{...options,comment_policy:true},{...commentOptions,extra:true}])expect(()=>project(document,invalid as typeof commentOptions,resolved)).toThrow('Explicit read-only')
+  expect(()=>project(document,Object.defineProperty({...options},'comment_policy',{get:()=>{throw new Error('getter called')}}),resolved)).toThrow('Explicit read-only')
+ })
+ it('keeps comment revisions, hidden content, missing visibility joins and all diagnostic scopes opaque',()=>{
+  for(const scope of ['global','comment','story','paragraph','run','deleted','wrapped','hidden','missing','resolved']){
+   const {document,resolved}=commentFixture(),story=document.comment_stories[0]!,p=story.blocks[0]!.paragraph!,r=p.runs[0]!
+   if(scope==='hidden')resolved.runs.find(run=>run.run_id===r.id)!.properties.hidden=true
+   else if(scope==='missing')resolved.runs=resolved.runs.filter(run=>run.run_id!==r.id)
+   else if(scope==='resolved')resolved.diagnostics=[{code:'WRAPPED_RUN_MARKUP',scope_id:p.id,part_name:p.anchor.part_name,path:p.anchor.path,severity:'unsupported',preservation:'preserve-verbatim',message:'Retained'}]
+   else{
+    const owner=scope==='comment'?document.comments[0]!:scope==='story'?story:scope==='run'?r:p
+    document.unsupported=[{id:'review-blocker',code:scope==='deleted'?'UNMODELED_PARAGRAPH_MARKUP':scope==='wrapped'?'WRAPPED_RUN_MARKUP':'UNMODELED',scope_id:scope==='global'?document.document_id:owner.id,anchor:owner.anchor,capability:'source',preservation:'preserve-verbatim',message:'Retained'}]
+   }
+   const out=project(document,commentOptions,resolved)
+   expect(JSON.stringify(out.comment_inventory)).not.toContain('This body is native DOCX content')
+   expect(out.omissions.length).toBeGreaterThan(0)
+   expect(out.source_diagnostics.document).toEqual(document.unsupported)
+  }
+  const {document}=commentFixture()
+  expect(JSON.stringify(project(document,commentOptions).comment_inventory)).not.toContain('This body is native DOCX content')
+ })
+ it('refuses corrupt comment joins and keeps ambiguous or unowned stories omitted',()=>{
+  const {document,resolved}=commentFixture()
+  document.comments[0]!.native_comment_id='mismatch'
+  expect(()=>project(document,commentOptions,resolved)).toThrow('Invalid native document')
+  document.comments[0]!.native_comment_id='1'
+  document.comments.push({...document.comments[0]!,id:'comment:duplicate'})
+  expect(project(document,commentOptions,resolved).comment_inventory!.stories).toEqual([])
+  document.comments.pop()
+  document.comments[0]!.anchor.part_name='word/document.xml'
+  expect(()=>project(document,commentOptions,resolved)).toThrow('Invalid native document')
+ })
+ it('shares body text budgets with comment metadata and blocks and bounds comment paragraphs',()=>{
+  const {document,resolved}=commentFixture()
+  document.body.blocks[0]!.paragraph!.runs[0]!.text='x'.repeat(100_000)
+  expect(project(document,commentOptions,resolved).comment_inventory!.stories).toEqual([])
+  document.body.blocks[0]!.paragraph!.runs[0]!.text='x'.repeat(99_990)
+  document.comments[0]!.author='x'.repeat(100)
+  expect(project(document,commentOptions,resolved).comment_inventory!.stories).toEqual([])
+  document.body.blocks[0]!.paragraph!.runs[0]!.text='body'
+  document.comments[0]!.author='Author'
+  const story=document.comment_stories[0]!,original=story.blocks[0]!.paragraph!
+  story.blocks=Array.from({length:201},(_,i)=>{
+   const p=structuredClone(original);p.id+=`:${i}`;p.anchor.path=story.anchor.path+`/w:p[${i+1}]`
+   p.runs[0]!.id+=`:${i}`;p.runs[0]!.anchor.path=p.anchor.path+'/w:r[1]'
+   return {kind:'paragraph' as const,id:p.id,paragraph:p}
+  })
+  const out=project(document,commentOptions)
+  expect(out.comment_inventory!.stories[0]!.blocks).toHaveLength(201)
+  expect(out.comment_inventory!.stories[0]!.blocks[200]).toMatchObject({code:'block-limit',count:1})
+ })
+ it('bounds comment story inventories and keeps comment tables opaque',()=>{
+  const {document}=commentFixture(),originalStory=document.comment_stories[0]!,originalComment=document.comments[0]!
+  for(let i=2;i<=65;i++){
+   const story=structuredClone(originalStory),comment=structuredClone(originalComment)
+   story.id=`story:comment:${i}`;story.native_story_id=String(i);story.anchor.path=`/w:comments[1]/w:comment[${i}]`
+   const p=story.blocks[0]!.paragraph!;p.id=`paragraph:comment:${i}`;story.blocks[0]!.id=p.id;p.anchor.path=story.anchor.path+'/w:p[1]'
+   p.runs[0]!.id=`run:comment:${i}`;p.runs[0]!.anchor.path=p.anchor.path+'/w:r[1]'
+   comment.id=`comment:${i}`;comment.native_comment_id=String(i);comment.body_story_id=story.id;comment.anchor=structuredClone(story.anchor)
+   document.comment_stories.push(story);document.comments.push(comment)
+  }
+  const out=project(document,commentOptions)
+  expect(out.comment_inventory!.stories).toHaveLength(64)
+  expect(out.omissions).toContainEqual(expect.objectContaining({code:'nonbody-story',source:expect.objectContaining({scope_id:'story:comment:65'})}))
+  const {document:tableDocument,resolved}=commentFixture(),story=tableDocument.comment_stories[0]!,table=tableDocument.body.blocks.splice(1,1)[0]!
+  story.anchor.end_byte=10000;tableDocument.comments[0]!.anchor.end_byte=10000
+  const rewrite=(anchor:typeof story.anchor)=>{anchor.part_name=story.part_name;anchor.path=anchor.path.replace('/w:document[1]/w:body[1]',story.anchor.path)}
+  rewrite(table.table!.anchor)
+  for(const row of table.table!.rows){rewrite(row.anchor);for(const cell of row.cells){rewrite(cell.anchor);for(const p of cell.paragraphs){rewrite(p.anchor);for(const r of p.runs)rewrite(r.anchor)}}}
+  story.blocks.push(table)
+  const inventory=project(tableDocument,commentOptions,resolved).comment_inventory!
+  expect(inventory.stories[0]!.blocks[1]).toMatchObject({code:'table',source:{scope_id:table.id}})
+  expect(JSON.stringify(inventory)).not.toContain('Summary')
+ })
  function storyFixture(){
   const joined=fixture()
   for(const story of [...joined.document.headers,...joined.document.footers]){

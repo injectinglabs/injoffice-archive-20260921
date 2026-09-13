@@ -94,6 +94,29 @@ describe('applyFormValues', () => {
     expect(mixed.appearances?.map(item => item.status)).toEqual(['generated', 'viewer-required']);
   });
 
+  it.each([
+    { name: 'agree', kind: 'checkbox' as const, checked: true },
+    { name: 'color', kind: 'radio' as const, value: 'blue' },
+  ])('retains pending text and choice appearances after a separate $kind edit', async spec => {
+    const pending = await applyFormValues(await formDoc(), [
+      { name: 'name', kind: 'text', value: '日本語' },
+      { name: 'country', kind: 'choice', value: 'UK' },
+    ]);
+    const sourceCopy = pending.bytes.slice();
+    const before = await PDFDocument.load(pending.bytes);
+    const result = await applyFormValues(pending.bytes, [spec]);
+    expect(result).toMatchObject({ applied: 1, skipped: [] });
+    const loaded = await PDFDocument.load(result.bytes);
+    const form = loaded.getForm();
+    expect(form.acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True);
+    expect(form.getTextField('name').getText()).toBe('日本語');
+    expect(form.getDropdown('country').getSelected()).toEqual(['UK']);
+    expect(widgetStreams(loaded, 'name')).toEqual(widgetStreams(before, 'name'));
+    if (spec.kind === 'checkbox') expect(form.getCheckBox('agree').isChecked()).toBe(true);
+    else expect(form.getRadioGroup('color').getSelected()).toBe('blue');
+    expect(pending.bytes).toEqual(sourceCopy);
+  });
+
   it.each(['XFA', 'actions', 'shared', 'orphan', 'rotation'] as const)('skips %s forms/widgets', async kind => {
     const doc = await PDFDocument.load(await formDoc());
     const form = doc.getForm();

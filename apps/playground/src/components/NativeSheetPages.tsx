@@ -3,9 +3,9 @@ import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
-  selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1,
+  selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
-  type NativeWorkbookObjectsV1, type NativeSheetGeometryV2,
+  type NativeWorkbookObjectsV1, type NativeSheetGeometryV2, type NativeSheetViewportV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
   type NativePositionedDrawingV1, type NativeChartPreviewV1,
 } from '@injoffice/sheets/browser'
@@ -18,7 +18,7 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -81,9 +81,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error(usePrintArea
         ? `The saved print area${viewports.length > 1 ? ` ${index + 1}` : ''} exceeds this demo’s 32-row or 26-column limit. No areas were previewed. Choose a range from A1 instead; saved areas are not changed.`
         : 'Choose 1–32 rows and 1–26 columns for this bounded preview.')
+      const geometryViewport = repeatHeadings ? selectNativeSheetPrintTitleViewportV1(model, sheet.id, viewport, objects) : viewport
+      if (geometryViewport.end_row - geometryViewport.row + 1 > 32 || geometryViewport.end_column - geometryViewport.column + 1 > 26) throw new Error('The selected range and saved headings together exceed this demo’s 32-row or 26-column geometry limit. No areas were previewed.')
       return useStoredRows
-        ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, viewport, authority, objects)
-        : compileNativeSheetGeometryV2(model, sheet.id, viewport, authority)
+        ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, geometryViewport, authority, objects)
+        : compileNativeSheetGeometryV2(model, sheet.id, geometryViewport, authority)
       })
       if (!useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
       const host: NativeSheetHostPagePolicyV1 | undefined = useSource ? undefined : {
@@ -95,11 +97,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       const options = repeatHeadings ? { repeat_print_titles: true as const } : undefined
       const plans = usePrintArea
         ? compileNativeSheetPrintAreaSetPreviewV1(geometries, objects, host, options).areas.map(area => area.plan)
-        : [compileNativeSheetPagePreviewV1(geometries[0]!, objects, host, options)]
+        : [compileNativeSheetPagePreviewV1(geometries[0]!, objects, host, options ? { ...options, body_viewport: viewports[0]! } : undefined)]
       const layouts = geometries.map((geometry, index) => {
         const plan = plans[index]!, drawings = layoutNativeDrawingObjectsV1(geometry, objects)
         if (repeatHeadings) assertNativeSheetHeadingDrawings(plan, drawings)
-        return { geometry, plan, drawings }
+        return { geometry, plan, drawings, selectedViewport: viewports[index]! }
       })
       const fontFamily = `injoffice-sheet-${instance}-${token}`
       loaded = await new FontFace(fontFamily, bytes.buffer, {
@@ -134,7 +136,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
       <label><input type="checkbox" checked={repeatHeadings} onChange={event => { invalidate(); setRepeatHeadings(event.target.checked) }}/> Repeat saved print headings</label>
-      <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns must start at the beginning of your selected range and leave room for body cells. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.' : 'Saved print headings are not repeated unless you select this option.'}</p>
+      <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns may lie inside or outside the selected range. The combined geometry must fit 32 rows and 26 columns. Only the selected body and heading bands are printed; intervening cells are omitted. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.' : 'Saved print headings are not repeated unless you select this option.'}</p>
       {!useSource && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
@@ -153,10 +155,10 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
     <p role="status">{message}</p>
     {results?.map((result, index) => <div key={index} data-print-area={result.areaIndex}>
-      {result.areaIndex !== undefined && <h4>Saved print area {result.areaIndex + 1}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}</h4>}
+      {result.areaIndex !== undefined && <h4>Saved print area {result.areaIndex + 1}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}</h4>}
       <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scaling' : 'Your paper, margins and scaling'} · approximate selected-range preview</p>
       {result.plan.settings.fit_to_page && <p>Fit limits: {result.plan.settings.fit_to_page.width || 'unlimited'} wide × {result.plan.settings.fit_to_page.height || 'unlimited'} tall. Effective preview scale: {result.plan.pages.length ? `${Math.round(result.plan.pages[0]!.scale * 100)}%` : 'no visible cells'}.</p>}
-      <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}. Range selection is separate from paper settings.</p>
+      <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
       {result.plan.pages.some(page => page.regions) && <p>Saved print headings and source-positioned drawing fragments repeat on each page. Page captions list body rows and columns; heading cells are shown separately.</p>}
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
@@ -178,10 +180,11 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
 export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
+  const paintRegions = plan.pages.some(page => page.regions) ? plan.pages.flatMap(page => page.regions ?? [{ ...page, kind: 'body' as const }]) : undefined
   const cellMap = new Map(sheet.cells.map(cell => [`${cell.row}:${cell.column}`, cell]))
   const styleAt = (row: number, column: number) => cellMap.get(`${row}:${column}`)?.style_id ?? sheet.rows.find(r => r.row === row)?.style_id ?? sheet.columns.find(c => column >= c.column && column <= c.end_column)?.style_id ?? 0
   const cells = geometry.rows.flatMap(row => geometry.columns.flatMap(column => {
-    if (row.hidden || column.hidden) return []
+    if (row.hidden || column.hidden || paintRegions && !paintRegions.some(region => row.row >= region.rows.start && row.row <= region.rows.end && column.column >= region.columns.start && column.column <= region.columns.end)) return []
     const merge = geometry.merged_ranges.find(m => row.row >= m.row && row.row <= m.end_row && column.column >= m.column && column.column <= m.end_column)
     if (merge && (row.row !== merge.row || column.column !== merge.column)) return []
     const cell = cellMap.get(`${row.row}:${column.column}`), styleId = styleAt(row.row, column.column)

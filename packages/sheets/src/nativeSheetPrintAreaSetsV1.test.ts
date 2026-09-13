@@ -1,7 +1,7 @@
 import {createRequire} from 'node:module'
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
-import {decodeNativeSheetPrintAreaSetsV1,decodeNativeWorkbookObjectsV1,selectNativeSheetPrintAreaSetV1,selectNativeSheetPrintAreaV1,compileNativeSheetPrintAreaSetPreviewV1,compileNativeSheetPagePreviewV1,projectNativeWorkbookV2,compileNativeSheetGeometryV2,createNativeMaximumDigitWidthAuthorityV2,type NativeWorkbookV2,type NativeWorkbookObjectsV1,type NativeSheetViewportV2} from './index.js'
+import {decodeNativeSheetPrintAreaSetsV1,decodeNativeWorkbookObjectsV1,selectNativeSheetPrintAreaSetV1,selectNativeSheetPrintAreaV1,selectNativeSheetPrintTitleViewportV1,compileNativeSheetPrintAreaSetPreviewV1,compileNativeSheetPagePreviewV1,projectNativeWorkbookV2,compileNativeSheetGeometryV2,createNativeMaximumDigitWidthAuthorityV2,type NativeWorkbookV2,type NativeWorkbookObjectsV1,type NativeSheetViewportV2} from './index.js'
 const require=createRequire(import.meta.url)
 const ranges=[{row:8,column:5,end_row:10,end_column:7},{row:1,column:1,end_row:3,end_column:3}]
 function fixture(areas:NativeSheetViewportV2[]=ranges){
@@ -85,13 +85,26 @@ describe('source-bound multi-range print areas',()=>{
  })
  it('applies fit separately and refuses a later incompatible title range without returning partial pages',()=>{
   const selected=[{row:1,column:1,end_row:6,end_column:6},{row:9,column:1,end_row:10,end_column:2}]
-  const {objects,compile,part}=fixture(selected),geometries=selected.map(compile)
+  const {model,objects,compile,part}=fixture(selected),geometries=selected.map(compile)
   Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5,top_inches:5.3,bottom_inches:5.3,fit_to_page:{width:1,height:1}})
   const result=compileNativeSheetPrintAreaSetPreviewV1(geometries,objects)
   expect(result.total_pages).toBe(2);expect(result.areas[0]!.plan.pages[0]!.scale).toBeLessThan(result.areas[1]!.plan.pages[0]!.scale)
   objects.print_titles=[{sheet_id:'7',sheet_part:part,status:'available',rows:{start:1,end:1},warnings:['Source titles']}]
   expect(()=>compileNativeSheetPagePreviewV1(geometries[0]!,objects,undefined,{repeat_print_titles:true})).not.toThrow()
-  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(geometries,objects,undefined,{repeat_print_titles:true})).toThrow('must lead')
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(geometries,objects,undefined,{repeat_print_titles:true})).toThrow('geometry identity')
+  const expanded=selected.map(v=>compile(selectNativeSheetPrintTitleViewportV1(model,'7',v,objects)))
+  const complete=compileNativeSheetPrintAreaSetPreviewV1(expanded,objects,undefined,{repeat_print_titles:true})
+  expect(complete.areas.map(a=>a.viewport)).toEqual(selected)
+  expect(complete.areas[1]!.plan.pages[0]!.regions!.find(r=>r.kind==='repeat-rows')!.rows).toEqual({start:1,end:1})
+  expect(complete.areas[1]!.plan.pages[0]!.rows).toEqual({start:9,end:10})
+ })
+ it('bounds aggregate heading-expanded geometry and rejects caller body-range overrides',()=>{
+  const areas=[{row:2000,column:24,end_row:2000,end_column:24},{row:3000,column:24,end_row:3000,end_column:24}]
+  const {model,objects,compile,part}=fixture(areas)
+  objects.print_titles=[{sheet_id:'7',sheet_part:part,status:'available',rows:{start:0,end:0},columns:{start:0,end:0},warnings:['Source']}]
+  const geometries=areas.map(v=>compile(selectNativeSheetPrintTitleViewportV1(model,'7',v,objects)))
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(geometries,objects,undefined,{repeat_print_titles:true})).toThrow('aggregate 100000-cell')
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(geometries,objects,undefined,{repeat_print_titles:true,body_viewport:areas[0]} as any)).toThrow()
  })
  it('does not execute accessors or custom iterators on the geometry array',()=>{
   const {objects,compile}=fixture(),geometries=ranges.map(compile)

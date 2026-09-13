@@ -153,7 +153,7 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
 
   if (applied === 0) return { bytes, applied, skipped, ...appearanceResult }
   if (needsViewerAppearance) form.acroForm.dict.set(PDFName.of('NeedAppearances'), doc.context.obj(true))
-  else if (font && priorNeedAppearances) {
+  else if (priorNeedAppearances) {
     // Other, untouched fields may still require viewer regeneration.
     form.acroForm.dict.set(PDFName.of('NeedAppearances'), priorNeedAppearances)
   }

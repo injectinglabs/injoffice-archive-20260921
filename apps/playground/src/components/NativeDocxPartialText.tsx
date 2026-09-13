@@ -22,6 +22,7 @@ export function NativeDocxPartialTextView({preview}:{preview:NativeDocxPartialCo
   {preview.retained_nontext_diagnostic_ids.length>0&&<p>{preview.retained_nontext_diagnostic_ids.length} source metadata warnings are retained. They do not prevent plain text recovery, but this view does not reproduce their formatting.</p>}
   {preview.blocks.map((block,index)=>block.kind==='paragraph'?<Paragraph key={index} paragraph={block}/>:block.kind==='omission'?<p key={index}>[{block.code}: {block.count}]</p>:<section key={index} aria-label="Table source text"><h5>Table cell text · no table layout</h5>{block.cells.map(cell=><section key={cell.source.scope_id}><h6>Source row {cell.row_ordinal+1}, cell {cell.cell_ordinal+1}</h6>{cell.source_merge&&<p>Authored span: {cell.source_merge.grid_span} grid {cell.source_merge.grid_span===1?'column':'columns'}. {cell.source_merge.vertical_merge==='continue'?'Vertical merge continuation — text omitted.':cell.source_merge.vertical_merge==='restart'?'Vertical merge starts here — owner text only.':'Horizontal merge — owner text only.'} Merge geometry is not reproduced.</p>}{cell.paragraphs.map((paragraph,n)=>paragraph.kind==='paragraph'?<Paragraph key={n} paragraph={paragraph}/>:<p key={n}>[{paragraph.code}]</p>)}</section>)}</section>)}
   {!!preview.header_footer_stories?.length&&<section aria-label="Header and footer source inventory"><h4>Header and footer source text</h4><p>Source inventory only. No active first, even or default variant is selected, and no page placement or repetition is reproduced. Tables remain omitted.</p>{preview.header_footer_stories.map(story=><section key={story.source.scope_id}><h5>{story.kind==='header'?'Header':'Footer'} source · {story.source.anchor.part_name}</h5>{story.blocks.map((block,index)=>block.kind==='paragraph'?<Paragraph key={index} paragraph={block}/>:<p key={index}>[{block.code}: {block.count}]</p>)}</section>)}</section>}
+  {preview.comment_inventory&&<section aria-label="Read-only comment source inventory"><h4>Comment source text</h4><p>Authored comments are listed separately in source order. Authors and dates are stored metadata. Comment ranges, threads, revision display and tables are not reconstructed. This view cannot accept or reject changes.</p>{preview.comment_inventory.stories.length===0&&<p>No qualified comment stories are available; source omissions remain listed.</p>}{preview.comment_inventory.stories.map(story=><section key={story.source.scope_id}><h5>Comment {story.native_comment_id} · {story.author}</h5>{story.created_at&&<p>Stored date: {story.created_at}</p>}{story.blocks.map((block,index)=>block.kind==='paragraph'?<Paragraph key={index} paragraph={block}/>:<p key={index}>[{block.code}: {block.count}]</p>)}</section>)}</section>}
  </article>
 }
 
@@ -31,7 +32,7 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
  const [result,setResult]=useState<NativeDocxPartialContentV1|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  const [equations,setEquations]=useState<NativeDocxEquationPreviewV1[]>([])
  useEffect(()=>{active.current?.abort();active.current=null;setResult(null);setBusy(false);setError('');return()=>{active.current?.abort();active.current=null}},[bytes,packageDigest])
- const run=async()=>{
+ const run=async(includeComments=false)=>{
   const controller=new AbortController();active.current?.abort();active.current=controller
   setBusy(true);setError('');setResult(null);setEquations([])
   let client:ReturnType<typeof createDocxWasmClient>|undefined
@@ -39,7 +40,7 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
    client=createDocxWasmClient()
    const joined=await client.inspectPartialContent(bytes,{signal:controller.signal})
    if(joined.document.source.package_sha256!==packageDigest)throw new Error('Source changed; reopen the partial text preview.')
-   const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true},joined.resolved_layout,joined.nested_table_omissions)
+   const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true,...(includeComments?{comment_policy:'source-comment-inventory-v1' as const}:{})},joined.resolved_layout,joined.nested_table_omissions)
    if(active.current===controller&&!controller.signal.aborted){setResult(preview);setEquations(joined.equations??[])}
   }catch(reason){if(active.current===controller&&!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Partial source text could not be qualified.')}
   finally{client?.terminate();if(active.current===controller){active.current=null;setBusy(false)}}
@@ -47,6 +48,7 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
  return <section aria-label="Browser-local read-only partial text">
   <p>This optional text-only view resolves source styles in your browser. No file is uploaded, including when the editor uses server mode.</p>
   <DsButton disabled={busy} onClick={()=>void run()}>Show read-only partial text</DsButton>
+  <DsButton disabled={busy} onClick={()=>void run(true)}>Show partial text with comments</DsButton>
   {busy&&<DsButton onClick={()=>{active.current?.abort();active.current=null;setBusy(false)}}>Cancel partial text</DsButton>}
   {busy&&<p role="status">Reading source text in the browser…</p>}
   {error&&<p role="status">{error}</p>}

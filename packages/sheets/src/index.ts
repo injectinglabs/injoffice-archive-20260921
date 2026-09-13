@@ -343,6 +343,7 @@ export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTa
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'
 export type { NativeStoredRowGeometryV1, NativeStoredRowV1 } from './nativeStoredRowsPreviewV1.js'
+export {selectNativeSheetPrintTitleViewportV1} from './nativeSheetPrintTitleViewportV1.js'
 export {compileNativeSheetPagePreviewV1} from './nativeSheetPagePreviewV1.js'
 export {layoutNativeDrawingObjectsV1} from './nativeDrawingLayoutV1.js'
 export type {NativePositionedDrawingV1} from './nativeDrawingLayoutV1.js'

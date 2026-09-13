@@ -471,6 +471,11 @@ function validateViewport(viewport: NativeSheetViewportV2): void {
   }
 }
 
+/** Internal shared validation for explicit preview rectangles. No source authority is granted. */
+export function snapshotNativeSheetViewportV2(input: unknown): NativeSheetViewportV2 {
+  return snapshotViewport(input)
+}
+
 function snapshotViewport(input: unknown): NativeSheetViewportV2 {
   const value = exactObject(snapshotGeometryInput(input, '$.viewport'), ['row', 'column', 'end_row', 'end_column'], '$.viewport')
   const result = {
