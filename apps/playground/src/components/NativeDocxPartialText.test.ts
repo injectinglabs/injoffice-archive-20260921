@@ -16,7 +16,7 @@ describe('browser-local partial text UI',()=>{
  })
  it('requires explicit request and explains browser-only behavior without upload or edit controls',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxPartialText,{bytes:new Uint8Array([1]),packageDigest:'sha256:'+'a'.repeat(64)}))
-  expect(html).toContain('Show read-only partial text');expect(html).toContain('No file is uploaded')
+  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('No file is uploaded')
   expect(html).not.toContain('Read-only partial source text')
  })
  it('renders same-source library table text and authored descriptions as escaped read-only content',()=>{
@@ -27,7 +27,9 @@ describe('browser-local partial text UI',()=>{
   const preview=createNativeDocxPartialContentPreviewV1(document,{policy:'source-text-with-omissions-v1',read_only:true},resolved)
   const anchor=document.headers[0]!.anchor
   preview.header_footer_stories=[{kind:'header',source:{scope_id:'source:header',anchor:{...anchor,part_name:'word/<script>header.xml'}},page_assignment:'not-selected',blocks:[{kind:'paragraph',source:{scope_id:'source:p',anchor},segments:[{kind:'text',source:{scope_id:'source:r',anchor},text:'Header <script>source</script>'}]}]}]
+  preview.comment_inventory={policy:'source-comment-inventory-v1',stories:[{kind:'comment',source:{scope_id:'comment:story',anchor},comment_source:{scope_id:'comment:1',anchor},native_comment_id:'1',author:'<script>Author</script>',created_at:'<script>date</script>',range_assignment:'not-reconstructed',blocks:[{kind:'paragraph',source:{scope_id:'comment:p',anchor},segments:[{kind:'text',source:{scope_id:'comment:r',anchor},text:'Comment <script>body</script>'}]}]}]}
   const html=renderToStaticMarkup(createElement(NativeDocxPartialTextView,{preview}))
+  expect(html).toContain('Read-only comment source inventory');expect(html).toContain('Comment &lt;script&gt;body&lt;/script&gt;');expect(html).toContain('&lt;script&gt;Author&lt;/script&gt;');expect(html).toContain('Stored date: &lt;script&gt;date&lt;/script&gt;');expect(html).toContain('cannot accept or reject changes')
   expect(html).toContain('Header and footer source inventory');expect(html).toContain('No active first, even or default variant is selected')
   expect(html).toContain('word/&lt;script&gt;header.xml');expect(html).toContain('Header &lt;script&gt;source&lt;/script&gt;')
   expect(html).toContain('Summary');expect(html).toContain('Source row 1, cell 1');expect(html).toContain('no table layout')

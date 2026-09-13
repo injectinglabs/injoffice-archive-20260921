@@ -14,6 +14,15 @@ export interface NativePptxTableInspection {
   tables: NativePptxInspectedTable[]; omissions: NativePptxTableOmission[]
 }
 
+const admittedInspections = new WeakSet<NativePptxTableInspection>()
+function freezeInspection<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeInspection(child)
+    Object.freeze(value)
+  }
+  return value
+}
+
 const warnings = [
   'Plain source text and stored cell geometry only; this is not a rendered Office table.',
   'Table styles, borders and fills are omitted, including any authored dash patterns.',
@@ -120,5 +129,59 @@ export function decodeNativePptxTableInspection(input: unknown, deck: NativePptx
     if (object_id !== 'unavailable') ids.add(key)
     return { slide_id, object_id, reason }
   })
-  return { protocol: 'pptx-table-content-inspection-v1', package_sha256: packageSHA256, source_revision: `rev-${packageSHA256}`, tables: decoded, omissions: decodedOmissions }
+  const result: NativePptxTableInspection = freezeInspection({ protocol: 'pptx-table-content-inspection-v1', package_sha256: packageSHA256, source_revision: `rev-${packageSHA256}`, tables: decoded, omissions: decodedOmissions })
+  admittedInspections.add(result)
+  return result
+}
+
+
+export interface NativePptxTableGeometryCell {
+  row: number; column: number; rect: NativePptxInspectionRect; paragraphs: readonly string[]
+}
+export interface NativePptxTableGeometrySlide {
+  slideId: string; slideIndex: number; sourceBounds: NativePptxInspectionRect
+  width: number; height: number
+  tables: { objectId: string; tableIndex: number; rect: NativePptxInspectionRect; cells: NativePptxTableGeometryCell[] }[]
+}
+export interface NativePptxTableGeometryPreview {
+  policy: 'host-sans-12pt-clipped-v1'; packageSHA256: string; sourceRevision: string
+  cssPixelsPerInch: 96; fontSize: 16; lineHeight: 20; inset: 2
+  slides: NativePptxTableGeometrySlide[]
+  omissions: readonly NativePptxTableOmission[]
+}
+
+/** Source-positioned inspection, never a native deck or Office styling authority.
+ * Accepts only the immutable output of decodeNativePptxTableInspection in this
+ * runtime. Deserialize through that source-bound decoder before planning.
+ */
+export function createNativePptxTableGeometryPreview(
+  inspection: NativePptxTableInspection,
+  policy: 'host-sans-12pt-clipped-v1',
+): NativePptxTableGeometryPreview {
+  if (!admittedInspections.has(inspection) || policy !== 'host-sans-12pt-clipped-v1') {
+    throw new TypeError('Table geometry preview requires a source-validated inspection and explicit host text policy.')
+  }
+  const slides: NativePptxTableGeometrySlide[] = []
+  const omissions = inspection.omissions.map(o => ({...o}))
+  const toPixels = (r: NativePptxInspectionRect): NativePptxInspectionRect => ({x:r.x/9525,y:r.y/9525,width:r.width/9525,height:r.height/9525})
+  for (const slideId of new Set(inspection.tables.map(t => t.slide_id))) {
+    const tables = inspection.tables.filter(t => t.slide_id === slideId)
+    const x = Math.min(...tables.map(t => t.rect.x)), y = Math.min(...tables.map(t => t.rect.y))
+    const width = Math.max(...tables.map(t => t.rect.x+t.rect.width))-x
+    const height = Math.max(...tables.map(t => t.rect.y+t.rect.height))-y
+    // Browser layout stays bounded even for maliciously distant source frames.
+    // Refuse a whole slide rather than scaling, dropping tables, or relocating them.
+    if (width/9525 > 16384 || height/9525 > 16384) {
+      omissions.push({slide_id:slideId,object_id:'slide',reason:'Source table arrangement exceeds the 16384 CSS pixel geometry preview limit.'})
+      continue
+    }
+    slides.push({slideId,slideIndex:tables[0]!.slide_index,sourceBounds:{x,y,width,height},width:width/9525,height:height/9525,
+      tables:tables.map(table => ({objectId:table.object_id,tableIndex:inspection.tables.indexOf(table),
+        rect:toPixels({...table.rect,x:table.rect.x-x,y:table.rect.y-y}),
+        cells:table.cells.map(cell=>({row:cell.row,column:cell.column,rect:toPixels(cell.rect),paragraphs:[...cell.paragraphs]})),
+      })),
+    })
+  }
+  return freezeInspection({policy,packageSHA256:inspection.package_sha256,sourceRevision:inspection.source_revision,
+    cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,slides,omissions})
 }

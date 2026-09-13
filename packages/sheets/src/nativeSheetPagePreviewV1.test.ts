@@ -2,7 +2,7 @@ import {createRequire} from 'node:module'
 import {createHash} from 'node:crypto'
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
-import {projectNativeWorkbookV2,createNativeMaximumDigitWidthAuthorityV2,compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeSheetGeometryV2,validateNativeSheetGeometryV2,compileNativeSheetPagePreviewV1,type NativeWorkbookV2,type NativeWorkbookObjectsV1} from './index.js'
+import {projectNativeWorkbookV2,createNativeMaximumDigitWidthAuthorityV2,compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeSheetGeometryV2,validateNativeSheetGeometryV2,compileNativeSheetPagePreviewV1,selectNativeSheetPrintTitleViewportV1,type NativeWorkbookV2,type NativeWorkbookObjectsV1} from './index.js'
 const require=createRequire(import.meta.url)
 function fixture(change?:(workbook:NativeWorkbookV2)=>void){
  const workbook=JSON.parse(readFileSync(new URL('../../../go/xlsxpatch/testdata/native-xlsx-v2/valid/lexical-render.json',import.meta.url),'utf8')) as NativeWorkbookV2
@@ -42,11 +42,11 @@ describe('source-bound selected worksheet page geometry',()=>{
   expect(fit.pages).toHaveLength(1);expect(fit.pages[0]!.scale).toBeLessThan(1)
   expect(fit.pages[0]!.regions).toHaveLength(4)
  })
- it('rejects missing, stale, nonleading, all-title and hidden-only repetition',()=>{
+ it('rejects missing, stale, outside-geometry, all-title and hidden-only repetition',()=>{
   const {geometry,objects,model,font}=fixture(),options={repeat_print_titles:true} as const
   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('titles unavailable')
-  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},warnings:['Source']}]
-  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('must lead')
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:4,end:4},warnings:['Source']}]
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('fully contained')
   objects.print_titles[0]!.rows={start:0,end:2}
   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,options)).toThrow('leave body')
   objects.print_titles[0]!.rows={start:0,end:0};objects.print_titles[0]!.sheet_part='wrong.xml'
@@ -56,6 +56,66 @@ describe('source-bound selected worksheet page geometry',()=>{
   const hidden=compileNativeStoredRowSheetGeometryV1(model,'7',{row:0,column:0,end_row:2,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font),objects)
   expect(()=>compileNativeSheetPagePreviewV1(hidden,objects,undefined,options)).toThrow('visible')
   for(const bad of [null,{},false,{repeat_print_titles:false},{repeat_print_titles:true,extra:1}])expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,bad as any)).toThrow()
+ })
+ it('selects source-qualified heading geometry outside the body without printing the gap',()=>{
+  const {model,font,objects}=fixture(),body={row:5,column:4,end_row:8,end_column:7}
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},columns:{start:1,end:1},warnings:['Source']}]
+  const view=selectNativeSheetPrintTitleViewportV1(model,'7',body,objects)
+  expect(view).toEqual({row:1,column:1,end_row:8,end_column:7});expect(Object.isFrozen(view)).toBe(true)
+  const geometry=compileNativeSheetGeometryV2(model,'7',view,createNativeMaximumDigitWidthAuthorityV2(model,font))
+  const plan=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true,body_viewport:body})
+  expect(plan.pages).toHaveLength(1)
+  const [b,r,c,corner]=plan.pages[0]!.regions!
+  expect(b!.rows).toEqual({start:5,end:8});expect(b!.columns).toEqual({start:4,end:7})
+  expect(r!.rows).toEqual({start:1,end:1});expect(r!.columns).toEqual(b!.columns)
+  expect(c!.columns).toEqual({start:1,end:1});expect(c!.rows).toEqual(b!.rows)
+  expect(corner!.rows).toEqual(r!.rows);expect(corner!.columns).toEqual(c!.columns)
+  for(const region of plan.pages[0]!.regions!) {
+   expect(region.rows.start).not.toBe(2);expect(region.columns.start).not.toBe(2)
+   expect(region.source_clip.x_emu*plan.pages[0]!.scale+region.translate_x_emu).toBeGreaterThanOrEqual(plan.pages[0]!.content_clip.x_emu)
+  }
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true,body_viewport:{...body,row:0}})).toThrow('contained')
+  expect(()=>selectNativeSheetPrintTitleViewportV1({...model},'7',body,objects)).toThrow('projected')
+  expect(()=>selectNativeSheetPrintTitleViewportV1(model,'7',body,{...objects,package_sha256:`sha256:${'b'.repeat(64)}`})).toThrow()
+  expect(()=>selectNativeSheetPrintTitleViewportV1(model,'8',body,objects)).toThrow('worksheet part')
+  expect(()=>selectNativeSheetPrintTitleViewportV1(model,'7',{...body,end_row:5000},objects)).toThrow()
+  let called=false;const accessor={...body};Object.defineProperty(accessor,'row',{get(){called=true;return 5}})
+  expect(()=>selectNativeSheetPrintTitleViewportV1(model,'7',accessor,objects)).toThrow();expect(called).toBe(false)
+ })
+ it('keeps nonleading title bands separate from body segments on both axes',()=>{
+  const {geometry,objects}=fixture()
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},columns:{start:1,end:1},warnings:['Source']}]
+  const plan=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+  expect(plan.pages).toHaveLength(4)
+  const body=plan.pages.map(p=>p.regions![0]!)
+  expect(body.map(r=>[r.rows.start,r.columns.start])).toEqual([[0,0],[2,0],[0,2],[2,2]])
+  expect(body.every(r=>r.rows.start===r.rows.end&&r.columns.start===r.columns.end)).toBe(true)
+  for(const p of plan.pages)expect(p.regions!.filter(r=>r.kind==='repeat-corner')).toHaveLength(1)
+  objects.page_settings![0]!.settings!.fit_to_page={width:1,height:1}
+  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('cannot be met')
+ })
+ it('supports headings after the body and rejects malformed explicit body options',()=>{
+  const {model,font,objects}=fixture(),body={row:0,column:0,end_row:1,end_column:1}
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:4,end:4},warnings:['Source']}]
+  const view=selectNativeSheetPrintTitleViewportV1(model,'7',body,objects)
+  const geometry=compileNativeSheetGeometryV2(model,'7',view,createNativeMaximumDigitWidthAuthorityV2(model,font))
+  const p=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true,body_viewport:body})
+  expect(p.pages[0]!.regions!.map(r=>r.rows)).toEqual([{start:0,end:1},{start:4,end:4}])
+  for(const v of [undefined,null,{...body,extra:1},{...body,row:-0},{...body,end_row:0.5}])expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true,body_viewport:v} as any)).toThrow()
+ })
+ it('ignores omitted-gap merges and refuses merges crossing gap-to-body or gap-to-heading boundaries',()=>{
+  for(const spec of [['E3:E4',2,3,false],['E5:E6',4,5,true],['E2:E3',1,2,true]] as const){
+   const {model,font,objects}=fixture(workbook=>{
+    Object.assign(workbook.sheets[0]!,{cells:workbook.sheets[0]!.cells.filter(c=>c.ref==='F1'),merged_ranges:[{ref:spec[0],row:spec[1],column:4,end_row:spec[2],end_column:4,editable:false}]})
+    const location=['MERGED_CELLS','merges','sheet:7','Worksheets/Sheet1.xml','',''].join('\0')
+    Object.assign(workbook,{unsupported:[...workbook.unsupported,{id:`unsupported:${createHash('sha256').update(location).digest('hex')}`,code:'MERGED_CELLS',capability:'merges',scope_id:'sheet:7',part_name:'Worksheets/Sheet1.xml',preservation:'preserve-exact',message:'Merged source geometry'}]})
+   })
+   objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:1,end:1},warnings:['Source']}]
+   const body={row:5,column:4,end_row:8,end_column:7},view=selectNativeSheetPrintTitleViewportV1(model,'7',body,objects)
+   const geometry=compileNativeSheetGeometryV2(model,'7',view,createNativeMaximumDigitWidthAuthorityV2(model,font))
+   const run=()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true,body_viewport:body})
+   if(spec[3])expect(run).toThrow('region boundary');else expect(run().pages).toHaveLength(1)
+  }
  })
  it('supports single-axis repetition and refuses oversized title reservations',()=>{
   for(const axis of ['rows','columns'] as const){
@@ -85,6 +145,11 @@ describe('source-bound selected worksheet page geometry',()=>{
     expect(compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true}).pages[0]!.scale).toBeLessThan(1)
    }
   }
+  const {model,font,objects}=merged('A1:A2',0,0,1,0)
+  objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',rows:{start:2,end:2},warnings:['Saved']}]
+  objects.row_geometry=[{sheet_part:'Worksheets/Sheet1.xml',rows:Array.from({length:32},(_,row)=>({row,height_points:14.4,hidden:row===0})),warnings:['Stored']}]
+  const hidden=compileNativeStoredRowSheetGeometryV1(model,'7',{row:0,column:0,end_row:2,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font),objects)
+  expect(()=>compileNativeSheetPagePreviewV1(hidden,objects,undefined,{repeat_print_titles:true})).not.toThrow()
  })
  it('retains the page budget and fit lower bound with repeated headings',()=>{
   const {model,font,objects}=fixture(),geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:3999,end_column:24},createNativeMaximumDigitWidthAuthorityV2(model,font))

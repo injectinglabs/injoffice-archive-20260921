@@ -632,8 +632,9 @@ func extractNativeTableCellProperties(node, textBody *nativeXMLNode, width, heig
 	overflow, overflowOK := exactNativeAttr(node, "", "horzOverflow")
 	vertical, verticalOK := exactNativeAttr(node, "", "vert")
 	centered, boolErr := nativeBool(anchorCenter)
-	if !anchorOK || anchor != "t" || !anchorCenterOK || boolErr != nil || centered || !overflowOK || overflow != "overflow" || !verticalOK || vertical != "horz" {
-		return nil, nil, refuseNativeGraphicFrame("pptx.table-cell-layout-unavailable", "only explicit top-anchored horizontal overflow cell text is represented exactly")
+	verticalAnchor := map[string]NativeTextVerticalAnchor{"t": NativeTextVerticalAnchorTop, "ctr": NativeTextVerticalAnchorCenter, "b": NativeTextVerticalAnchorBottom}[anchor]
+	if !anchorOK || verticalAnchor == "" || !anchorCenterOK || boolErr != nil || centered || !overflowOK || overflow != "overflow" || !verticalOK || vertical != "horz" {
+		return nil, nil, refuseNativeGraphicFrame("pptx.table-cell-layout-unavailable", "only explicit top, center, or bottom anchored horizontal overflow cell text is represented")
 	}
 	if requireOnlyNativeChildren(node,
 		xml.Name{Space: dialect.drawing, Local: "lnL"},
@@ -703,7 +704,7 @@ func extractNativeTableCellProperties(node, textBody *nativeXMLNode, width, heig
 	layout := &NativeTextBodyLayout{
 		LeftInsetEMU: int64Pointer(margins["marL"]), RightInsetEMU: int64Pointer(margins["marR"]),
 		TopInsetEMU: int64Pointer(margins["marT"]), BottomInsetEMU: int64Pointer(margins["marB"]),
-		Wrap: NativeTextWrapSquare, VerticalAnchor: NativeTextVerticalAnchorTop, AutoFit: "none",
+		Wrap: NativeTextWrapSquare, VerticalAnchor: verticalAnchor, AutoFit: "none",
 		HorizontalOverflow: "overflow", VerticalOverflow: "overflow",
 	}
 	return layout, fill, nil

@@ -4,7 +4,7 @@ import {isRenderNeutralLayoutDiagnostic} from './nativeRenderDiagnostics.js'
 import {decodeNativeDocxNestedTableOmissionsV1,type NativeDocxNestedTableOmissionsV1} from './nativePartialNestedTablesV1.js'
 
 export const DOCX_PARTIAL_CONTENT_POLICY='source-text-with-omissions-v1' as const
-export const DOCX_PARTIAL_CONTENT_LIMITS={bodyBlocks:200,tableCells:200,textUnits:100_000,headerFooterStories:64,headerFooterBlocks:200} as const
+export const DOCX_PARTIAL_CONTENT_LIMITS={bodyBlocks:200,tableCells:200,textUnits:100_000,headerFooterStories:64,headerFooterBlocks:200,commentStories:64,commentBlocks:200} as const
 export type NativeDocxPartialOmissionCode='unsupported-source'|'unqualified-text-visibility'|'hidden-text'|'drawing'|'field'|'reference'|'control'|'table'|'nonbody-story'|'block-limit'|'text-limit'|'merged-cell'|'cell-limit'|'nested-table'|'nested-table-limit'
 export interface NativeDocxPartialSourceV1 {scope_id:string;anchor:NativeDocxSourceAnchorV1}
 export type NativeDocxPartialSegmentV1=
@@ -14,6 +14,7 @@ export type NativeDocxPartialSegmentV1=
 export type NativeDocxPartialParagraphV1={kind:'paragraph';source:NativeDocxPartialSourceV1;segments:NativeDocxPartialSegmentV1[]}
 export type NativeDocxPartialHeaderFooterV1={kind:'header'|'footer';source:NativeDocxPartialSourceV1;page_assignment:'not-selected';blocks:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
 export type NativeDocxPartialCellV1={kind:'cell-source';source:NativeDocxPartialSourceV1;row_ordinal:number;cell_ordinal:number;source_merge?:{grid_span:number;vertical_merge:'none'|'restart'|'continue'};paragraphs:Array<NativeDocxPartialParagraphV1|Extract<NativeDocxPartialSegmentV1,{kind:'omission'}>>}
+export type NativeDocxPartialCommentV1={kind:'comment';source:NativeDocxPartialSourceV1;comment_source:NativeDocxPartialSourceV1;native_comment_id:string;author:string;created_at?:string;range_assignment:'not-reconstructed';blocks:NativeDocxPartialHeaderFooterV1['blocks']}
 export interface NativeDocxPartialContentV1 {
  protocol:'injoffice.docx.partial-content';version:1;policy:typeof DOCX_PARTIAL_CONTENT_POLICY;read_only:true;fidelity:'partial-source-content';pagination:'not-produced'
  source:{document_id:string;revision:string;package_sha256:string}
@@ -23,6 +24,7 @@ export interface NativeDocxPartialContentV1 {
  retained_nontext_diagnostic_ids:string[]
  nested_table_omissions?:NativeDocxNestedTableOmissionsV1
  header_footer_stories?:NativeDocxPartialHeaderFooterV1[]
+ comment_inventory?:{policy:'source-comment-inventory-v1';stories:NativeDocxPartialCommentV1[]}
  coverage:{body_blocks:number;visited_body_blocks:number;projected_text_runs:number;omitted_units:number;layout_present:boolean}
  warnings:string[]
 }
@@ -31,12 +33,12 @@ export interface NativeDocxPartialContentV1 {
  * mutations. Without joined layout, only the omission inventory is available:
  * inherited visibility cannot safely be inferred from direct run properties.
  * Source hashes are native extractor evidence, not re-hashed package bytes. */
-export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{policy:typeof DOCX_PARTIAL_CONTENT_POLICY;read_only:true},resolvedValue?:unknown,nestedEvidence?:unknown):NativeDocxPartialContentV1 {
+export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{policy:typeof DOCX_PARTIAL_CONTENT_POLICY;read_only:true;comment_policy?:'source-comment-inventory-v1'},resolvedValue?:unknown,nestedEvidence?:unknown):NativeDocxPartialContentV1 {
  let validOptions=false
  try{
-  if(options&&Object.getPrototypeOf(options)===Object.prototype&&Reflect.ownKeys(options).length===2){
+  if(options&&Object.getPrototypeOf(options)===Object.prototype&&Reflect.ownKeys(options).every(key=>key==='policy'||key==='read_only'||key==='comment_policy')){
    const descriptors=Object.getOwnPropertyDescriptors(options)
-   validOptions=!!descriptors.policy&&'value'in descriptors.policy&&descriptors.policy.value===DOCX_PARTIAL_CONTENT_POLICY&&!!descriptors.read_only&&'value'in descriptors.read_only&&descriptors.read_only.value===true
+   validOptions=!!descriptors.policy&&'value'in descriptors.policy&&descriptors.policy.value===DOCX_PARTIAL_CONTENT_POLICY&&!!descriptors.read_only&&'value'in descriptors.read_only&&descriptors.read_only.value===true&&(!descriptors.comment_policy||'value'in descriptors.comment_policy&&descriptors.comment_policy.value==='source-comment-inventory-v1')
   }
  }catch{/* Hostile options cannot authorize projection. */}
  if(!validOptions)throw new TypeError('Explicit read-only partial-content policy required')
@@ -165,6 +167,30 @@ export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{p
   }
   headerFooter.push({kind:story.kind as 'header'|'footer',source:s,page_assignment:'not-selected',blocks:storyBlocks})
  }
- for(const story of [...document.notes,...document.comment_stories])blocks.push(omit(source(story.id,story.anchor),'nonbody-story',1,blockers.get(story.id)??[]))
- return {protocol:'injoffice.docx.partial-content',version:1,policy:DOCX_PARTIAL_CONTENT_POLICY,read_only:true,fidelity:'partial-source-content',pagination:'not-produced',source:{document_id:document.document_id,revision:document.revision,package_sha256:document.source.package_sha256},blocks,omissions,...(headerFooter.length?{header_footer_stories:headerFooter}:{}),source_diagnostics:{document:document.unsupported,resolved:resolved?.diagnostics??[]},retained_nontext_diagnostic_ids:retainedNontext,...(nestedEvidence===undefined?{}:{nested_table_omissions:nested}),coverage:{body_blocks:document.body.blocks.length,visited_body_blocks:inherited.length?0:Math.min(document.body.blocks.length,DOCX_PARTIAL_CONTENT_LIMITS.bodyBlocks),projected_text_runs:textRuns,omitted_units:omissions.reduce((n,o)=>n+o.count,0),layout_present:resolved!==undefined},warnings:['Read-only extracted source content, not document pagination. Formatting, list markers and layout are not reconstructed. Header/footer paragraphs are a separate source inventory; active variants and page placement are not selected. Notes and comments remain omitted. Every omitted unit has a source-bound placeholder.',...(retainedNontext.length?['Source-qualified nontext metadata diagnostics are retained but do not prevent plain text recovery. This does not qualify their rendering.']:[]),...(resolved?[]:['No resolved layout was supplied: text visibility is unqualified, so this result contains an omission inventory rather than text.'])]}
+ for(const story of document.notes)blocks.push(omit(source(story.id,story.anchor),'nonbody-story',1,blockers.get(story.id)??[]))
+ const commentStories:NativeDocxPartialCommentV1[]=[]
+ let commentBlocks=0
+ const commentOwners=new Map<string,typeof document.comments>()
+ for(const comment of document.comments){const owners=commentOwners.get(comment.body_story_id)??[];owners.push(comment);commentOwners.set(comment.body_story_id,owners)}
+ for(const [index,story]of document.comment_stories.entries()){
+  const s=source(story.id,story.anchor),owners=commentOwners.get(story.id)??[],comment=owners.length===1?owners[0]:undefined
+  // The explicit policy never traverses raw revision XML or associates ranges.
+  // Ambiguous/unowned stories remain opaque even if structurally valid.
+  if(options.comment_policy!=='source-comment-inventory-v1'||index>=DOCX_PARTIAL_CONTENT_LIMITS.commentStories||!comment){blocks.push(omit(s,'nonbody-story',1,blockers.get(story.id)??[]));continue}
+  const diagnostics=[...global,...(blockers.get(story.id)??[]),...(blockers.get(comment.id)??[])]
+  if(diagnostics.length){blocks.push(omit(s,'unsupported-source',Math.max(1,story.blocks.length),diagnostics));continue}
+  // Metadata shares the same text budget; never truncate authored identities.
+  const metadataUnits=comment.native_comment_id.length+comment.author.length+(comment.created_at?.length??0)
+  if(textUnits+metadataUnits>DOCX_PARTIAL_CONTENT_LIMITS.textUnits){blocks.push(omit(s,'text-limit'));continue}
+  textUnits+=metadataUnits
+  const storyBlocks:NativeDocxPartialCommentV1['blocks']=[]
+  for(const [blockIndex,block]of story.blocks.entries()){
+   if(commentBlocks>=DOCX_PARTIAL_CONTENT_LIMITS.commentBlocks){storyBlocks.push(omit(s,'block-limit',story.blocks.length-blockIndex));break}
+   commentBlocks++
+   if(block.paragraph)storyBlocks.push(projectParagraph(block.paragraph))
+   else storyBlocks.push(omit(source(block.table!.id,block.table!.anchor),'table',1,blockers.get(block.table!.id)??[]))
+  }
+  commentStories.push({kind:'comment',source:s,comment_source:source(comment.id,comment.anchor),native_comment_id:comment.native_comment_id,author:comment.author,...(comment.created_at===undefined?{}:{created_at:comment.created_at}),range_assignment:'not-reconstructed',blocks:storyBlocks})
+ }
+ return {protocol:'injoffice.docx.partial-content',version:1,policy:DOCX_PARTIAL_CONTENT_POLICY,read_only:true,fidelity:'partial-source-content',pagination:'not-produced',source:{document_id:document.document_id,revision:document.revision,package_sha256:document.source.package_sha256},blocks,omissions,...(headerFooter.length?{header_footer_stories:headerFooter}:{}),...(options.comment_policy==='source-comment-inventory-v1'?{comment_inventory:{policy:options.comment_policy,stories:commentStories}}:{}),source_diagnostics:{document:document.unsupported,resolved:resolved?.diagnostics??[]},retained_nontext_diagnostic_ids:retainedNontext,...(nestedEvidence===undefined?{}:{nested_table_omissions:nested}),coverage:{body_blocks:document.body.blocks.length,visited_body_blocks:inherited.length?0:Math.min(document.body.blocks.length,DOCX_PARTIAL_CONTENT_LIMITS.bodyBlocks),projected_text_runs:textRuns,omitted_units:omissions.reduce((n,o)=>n+o.count,0),layout_present:resolved!==undefined},warnings:['Read-only extracted source content, not document pagination. Formatting, list markers and layout are not reconstructed. Header/footer paragraphs are a separate source inventory; active variants and page placement are not selected. Notes remain omitted. Comments require the separate source-comment-inventory-v1 policy; comment ranges, revision display and tables are not reconstructed. Every omitted unit has a source-bound placeholder.',...(retainedNontext.length?['Source-qualified nontext metadata diagnostics are retained but do not prevent plain text recovery. This does not qualify their rendering.']:[]),...(resolved?[]:['No resolved layout was supplied: text visibility is unqualified, so this result contains an omission inventory rather than text.'])]}
 }

@@ -4,7 +4,7 @@ import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
 import {compilePptxPreview,previewStroke} from './compile.js'
-import {decodePptxPreview} from './contract.js'
+import {decodePptxPreview,type PreviewNode} from './contract.js'
 import {prepareNativeRasterResourceV1} from '@injoffice/docs/native-raster'
 const root=resolve(import.meta.dirname,'../../..'),scratch=mkdtempSync(resolve(tmpdir(),'pptx-preview-worker-'))
 afterAll(()=>rmSync(scratch,{recursive:true,force:true}))
@@ -127,4 +127,30 @@ describe('actual source-font native PPTX worker',()=>{
  it('refuses exact missing font faces instead of substitution',async()=>{const request=input();request.deck.slides[0].elements[0].paragraphs[0].runs[0].fontFamily='Missing Font';await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator font unavailable: Missing Font')})
  it('rejects wrong configured font digests',async()=>{const bad=resolve(scratch,'bad.json');writeFileSync(bad,JSON.stringify({version:1,faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:`sha256:${'0'.repeat(64)}`}]}));await expect(compilePptxPreview({...input(),font_manifest_path:bad})).rejects.toThrow('digest')})
  it('rejects hostile or unbounded vector paths before mounting',async()=>{const result=await compilePptxPreview(input());for(const d of ['M1e999 0','M0','<script>','M0 0LInfinity 1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'path',d,fill:'000000'}]})).toThrow()})
+})
+
+it('paints centered and bottom table labels with real supplied font outlines and declared line policy', async () => {
+ const results = []
+ for (const verticalAnchor of ['top', 'center', 'bottom']) {
+  const request = input(), source = request.deck.slides[0].elements[0]
+  request.deck.slides[0].elements = [{id:source.id,provenance:source.provenance,source:source.source,passthrough:source.passthrough,compatibility:source.compatibility,kind:'table',
+   transform:{x:0,y:0,cx:3000000,cy:3000001}, table:{columnWidths:[3000000],rowHeights:[3000001],rows:[[{text:'Anchor',fill:'FFFFFF',
+    paragraphs:[{align:'left',level:0,bullet:false,runs:[{text:'Anchor',fontFamily:'DejaVu Sans',fontSizeHundredthPt:1200,color:'123456'}]}],
+    textBody:{...source.textBody,verticalAnchor,leftInsetEmu:10000,rightInsetEmu:20000,topInsetEmu:30000,bottomInsetEmu:40000},
+   }]]}}]
+  const before = JSON.stringify(request), result = await compilePptxPreview(request)
+  expect(JSON.stringify(request)).toBe(before)
+  expect(result.policy).toBe('max-run-natural-v1')
+  expect(result.diagnostics.join(' ')).toContain('text.deterministicLayout')
+  expect(JSON.stringify(result.nodes)).not.toContain('placeholder')
+  const runs: Extract<PreviewNode,{kind:'group'}>[] = []
+  const visit = (nodes:PreviewNode[]) => {for(const node of nodes) if(node.kind==='group'){if(node.sourceRole==='contentRun')runs.push(node);visit(node.children)}}
+  visit(result.nodes)
+  expect(runs).toHaveLength(6)
+  expect(runs[0]!.children.some(n=>n.kind==='path')).toBe(true)
+  results.push(runs[0]!.transform[5])
+ }
+ expect(results[1]).toBeGreaterThan(results[0]!)
+ expect(results[2]).toBeGreaterThan(results[1]!)
+ expect(Math.abs((results[2]!-results[0]!)-2*(results[1]!-results[0]!))).toBeLessThanOrEqual(1)
 })

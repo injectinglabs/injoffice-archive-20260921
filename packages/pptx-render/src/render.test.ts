@@ -646,6 +646,35 @@ describe('native PPTX RenderTree', () => {
     expect(shape.textBody?.bounds).toEqual({ x: 10_000, y: 30_000, cx: 470_000, cy: 430_000 })
   })
 
+  it('places source table cell text within asymmetric insets for top, center, and bottom anchors', async () => {
+    const elements = (['top', 'center', 'bottom'] as const).map(verticalAnchor => ({
+      kind: 'table' as const, id: `table-${verticalAnchor}`, provenance: 'authored' as const,
+      transform: { x: 100_000, y: 200_000, cx: 500_000, cy: 500_001 },
+      table: { columnWidths: [500_000], rowHeights: [500_001], rows: [[{
+        text: 'A', fill: 'FFFFFF',
+        paragraphs: [{ align: 'left' as const, level: 0, bullet: false, runs: [{ text: 'A', fontFamily: 'Aptos', fontSizeHundredthPt: 1000 }] }],
+        textBody: nativeTextBody({ verticalAnchor, leftInsetEmu: 10_000, rightInsetEmu: 20_000, topInsetEmu: 30_000, bottomInsetEmu: 40_000 }),
+      }]] },
+      passthrough: [], compatibility: { status: 'editable' as const, diagnostics: [] },
+    }))
+    const deck = authoredDeck(elements), before = JSON.stringify(deck)
+    const strict = await compileNativePptxSlide(deck, 0, { textLayout: textLayout() })
+    for (const element of elements.slice(1)) expect(findNode(strict, 'table', element.id).cells[0]!.textBody?.status).toBe('refused')
+    const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1' })
+    const surface = createRecordingPaintSurface()
+    paintSlideRenderTree(tree, surface)
+    const glyphs = surface.finish().filter(command => command.kind === 'glyphRun')
+    for (const [index, element] of elements.entries()) {
+      const body = findNode(tree, 'table', element.id).cells[0]!.textBody!
+      expect(body).toMatchObject({ status: 'laidOut', lineLayoutPolicy: 'max-run-natural-v1', bounds: { x: 10_000, y: 30_000, cx: 470_000, cy: 430_001 } })
+      const y = [30_000, 168_800, 307_601][index]!
+      expect(body.paragraphs[0]).toMatchObject({ y, heightEmu: 152_400 })
+      expect(glyphs[index]).toMatchObject({ kind: 'glyphRun', run: { baselineY: y + 101_600 } })
+    }
+    expect(tree.diagnostics.filter(d => d.code === 'text.deterministicLayout')).toHaveLength(3)
+    expect(JSON.stringify(deck)).toBe(before)
+  })
+
   it('opts into measured mixed-size lines and integer anchor placement without changing strict defaults', async () => {
     const elements = (['top','center','bottom'] as const).map(anchor => {
       const element = nativeTextElement(`mixed-${anchor}`, 'AB', nativeTextBody({wrap:'none',verticalAnchor:anchor}), {x:0,y:0,cx:500000,cy:500001})
