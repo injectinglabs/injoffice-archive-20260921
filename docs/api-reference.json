@@ -10091,6 +10091,21 @@
               "signature": "export interface NativeGroupElement extends NativeElementBase"
             },
             {
+              "name": "NativeLiteralBar",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBar"
+            },
+            {
+              "name": "NativeLiteralBarAxis",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBarAxis"
+            },
+            {
+              "name": "NativeLiteralBarSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBarSeries"
+            },
+            {
               "name": "NativeLiteralDoughnut",
               "kind": "type",
               "signature": "export interface NativeLiteralDoughnut"
@@ -10333,7 +10348,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"ed137c65270dc284d46318a6d34bb9638b3d792126913e4d1cff44fbce4f8835\""
             },
             {
               "name": "provenanceValues",
@@ -10408,6 +10423,11 @@
               "signature": "export declare function connectorPath(cx: number, cy: number, flipH: boolean): readonly RenderPathCommand[]"
             },
             {
+              "name": "createNativeLiteralBarPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralBarPaths(chart: LiteralBarRecord, cx: number, cy: number): readonly LiteralBarVector[]"
+            },
+            {
               "name": "createNativeLiteralDoughnutPaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralDoughnutPaths(chart: NativeLiteralDoughnut, cx: number, cy: number): readonly"
@@ -10421,6 +10441,11 @@
               "name": "createRecordingPaintSurface",
               "kind": "function",
               "signature": "export declare function createRecordingPaintSurface(maxCommands?: number): RecordingPaintSurface"
+            },
+            {
+              "name": "LiteralBarVector",
+              "kind": "type",
+              "signature": "LiteralBarVector"
             },
             {
               "name": "NativePptxTextDefaults",
