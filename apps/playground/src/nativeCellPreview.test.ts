@@ -78,6 +78,13 @@ describe('native spreadsheet display integration', () => {
     }
   })
 
+  it('keeps numeric-section refusals visible through the accounting fallback', () => {
+    for (const [lexical, format] of [['-0.001', '#,##0.00;(#,##0.00);0'], ['12', '0;(0);0.0000000'], ['12', '0;(0'], ['12', '0;0E+00'], ['12', '0;;0']]) {
+      const { workbook, cell } = sample(format!, lexical!)
+      expect(nativeCellPreview(workbook, cell)).toMatchObject({ text: lexical, warning: expect.stringContaining('Unsupported') })
+    }
+  })
+
   it('marks missing style or number format evidence instead of assuming General', () => {
     const { workbook, cell } = sample('0.00%', '0.125')
     const style = workbook.styles[0]!

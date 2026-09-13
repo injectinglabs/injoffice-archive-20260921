@@ -43,6 +43,10 @@ export function formatNativeAccountingTextPreview(lexical:string,format:string):
   if(c===' '||c==='-'||c==='+'||c==='('||c===')'){literal(c);continue}
   return undefined
  }
+ // Multi-section numeric formats belong to the strict shared formatter. Only
+ // an actual parsed accounting directive can opt into this disclosed layout
+ // approximation; never rescue its rounded-zero or unselected-section refusal.
+ if(sections.length>1&&!padding)return undefined
  let text:string
  if(zero&&/^\?*$/.test(numeric)&&prefix+suffix){text=prefix+suffix;padding||=numeric.length>0}
  else {
