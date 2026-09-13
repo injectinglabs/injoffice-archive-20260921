@@ -85,8 +85,8 @@ function noteScopes(document: NativeDocxDocumentV1): Set<string> {
   const scopes = new Set<string>()
   for (const story of document.notes) {
     // Continuation separators are dormant package sentinels until a note
-    // actually crosses a page. Bounded v1 refuses that overflow atomically,
-    // so dormant sentinel contents and diagnostics cannot affect fitting notes.
+    // actually crosses a page. The continuation path validates activated
+    // scopes separately; dormant diagnostics cannot affect fitting notes.
     if (story.note_role === 'continuation-separator') continue
     scopes.add(story.id)
     for (const block of story.blocks) {
