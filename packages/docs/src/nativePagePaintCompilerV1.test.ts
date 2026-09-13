@@ -2481,6 +2481,8 @@ describe('unequal whole-paragraph column compiler', () => {
     return input
   }
 
+  // Real HarfBuzz shaping at both widths plus repeated source/paint replay
+  // exceeds the default 5s budget on shared CI runners.
   it('shapes both widths, paints actual outlines, and binds unused candidate evidence', async () => {
     const input = unequalInput()
     const before = structuredClone(input)
@@ -2506,7 +2508,7 @@ describe('unequal whole-paragraph column compiler', () => {
     const oldHash = structuredClone(request)
     oldHash.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(oldHash.pagination_request.shaped_lines)
     expect(decodeNativeDocxPagePaintRequestV1(oldHash).ok).toBe(false)
-  })
+  }, 15_000)
 
   it('refuses multiline paragraphs without keepLines and paragraphs too tall at either width', async () => {
     const missing = unequalInput()
@@ -2515,7 +2517,7 @@ describe('unequal whole-paragraph column compiler', () => {
     const oversized = unequalInput()
     ;(oversized.document as NativeDocxDocumentV1).sections[0]!.page.margins.bottom_twips = 14200
     await expect(prepareNativeDocxPagePaintV1(oversized)).rejects.toThrow('whole-paragraph candidates')
-  })
+  }, 15_000)
 })
 
 describe('whole footnote reservation compiler', () => {
@@ -2541,6 +2543,7 @@ describe('whole footnote reservation compiler', () => {
     rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids = [...resolved.paragraphs.map((paragraph) => paragraph.paragraph_id), ...resolved.runs.map((run) => run.run_id)].sort() })
     return input
   }
+  // Two complete real-outline/replay scenarios share this integration test.
   it('paints references and whole notes after later body or the reference itself moves', async () => {
     for (const [prefix, following, notePage] of [[1, 6, 0], [5, 1, 1]]) {
       const input = reflowInput(prefix!, following!)
@@ -2559,7 +2562,7 @@ describe('whole footnote reservation compiler', () => {
       expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(true)
       expect(input).toEqual(before)
     }
-  })
+  }, 15_000)
   it('keeps an oversized reference-note pair refused with no pages', async () => {
     const prepared = await prepareNativeDocxPagePaintV1(reflowInput(0, 1, 30000))
     expect(prepared.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [] }))
