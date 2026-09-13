@@ -5,6 +5,10 @@ import type { NativeWorkbookObjectsV1 } from './nativeObjectsPreviewV1.js'
 export interface NativeRichTextRunV1 {
   text: string
   properties: 'direct' | 'cell-inherited'
+  font_scheme?: 'major' | 'minor'
+  declared_font_name?: string
+  theme_part?: string
+  theme_sha256?: string
   font_name?: string
   font_size_points?: number
   font_color?: string
@@ -21,6 +25,7 @@ export interface NativeRichTextCellV1 {
 }
 export interface NativeRichTextPreviewV1 { cells: NativeRichTextCellV1[]; warnings: string[] }
 const PROPERTIES = ['font_name', 'font_size_points', 'font_color', 'bold', 'italic'] as const
+const SCHEME = ['font_scheme', 'declared_font_name', 'theme_part', 'theme_sha256'] as const
 const OMITTED = ['font-family-hint', 'baseline', 'underline-none', 'strike-false']
 const safeText = (s: string) => !/[\u0000-\u001f\u007f\u2028\u2029]/.test(s)
 const path = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 1024 && safeText(s) && !s.startsWith('/') && !s.includes('\\') && !s.split('/').some(p => !p || p === '.' || p === '..')
@@ -39,7 +44,7 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
     if (!Array.isArray(v) || v.length < (empty ? 0 : 1) || v.length > 8 || v.some(s => typeof s !== 'string' || !s || s.length > 1024 || !safeText(s))) return fail()
     return v as string[]
   }
-  const o = exact(snapshotNativePlainData(input, { maxDepth: 8, maxNodes: 20000 }), ['cells', 'warnings'])
+  const o = exact(snapshotNativePlainData(input, { maxDepth: 8, maxNodes: 30000 }), ['cells', 'warnings'])
   if (!Array.isArray(o.cells) || o.cells.length > 256) return fail()
   let runCount = 0, textCount = 0
   const ids = new Set<string>(), sheets = new Map<string, string>(), parts = new Map<string, string>()
@@ -55,8 +60,10 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
     if (c.status === 'omitted') { if (Object.hasOwn(c, 'runs')) return fail(); return base }
     if (c.status !== 'available' || !safeText(c.text) || !Array.isArray(c.runs) || !c.runs.length || c.runs.length > 64 || (runCount += c.runs.length) > 1024) return fail()
     const runs = c.runs.map(raw => {
-      const r = exact(raw, ['text', 'properties', 'omitted'], [...PROPERTIES, 'underline', 'underline_origin'])
+      const r = exact(raw, ['text', 'properties', 'omitted'], [...PROPERTIES, ...SCHEME, 'underline', 'underline_origin'])
       if (typeof r.text !== 'string' || !r.text || !safeText(r.text) || r.text.length > 2048 || !['direct', 'cell-inherited'].includes(String(r.properties)) || !Array.isArray(r.omitted) || r.omitted.length > 4 || new Set(r.omitted).size !== r.omitted.length || r.omitted.some(v => !OMITTED.includes(String(v)))) return fail()
+      const hasScheme = SCHEME.some(k => Object.hasOwn(r, k))
+      if (hasScheme && (SCHEME.some(k => !Object.hasOwn(r, k)) || r.properties !== 'direct' || !['major', 'minor'].includes(String(r.font_scheme)) || typeof r.font_scheme !== 'string' || typeof r.font_name !== 'string' || typeof r.declared_font_name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$/.test(r.declared_font_name) || !path(r.theme_part) || typeof r.theme_sha256 !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(r.theme_sha256) || !/^[\x20-\x7e]+$/.test(r.text))) return fail()
       const hasUnderline = Object.hasOwn(r, 'underline')
       if (hasUnderline !== Object.hasOwn(r, 'underline_origin') || hasUnderline && (typeof r.underline !== 'string' || typeof r.underline_origin !== 'string' || !['single', 'none'].includes(String(r.underline)) || !['explicit-val', 'default-val'].includes(String(r.underline_origin)) || r.underline_origin === 'default-val' && r.underline !== 'single' || r.omitted.includes('underline-none'))) return fail()
       if (r.properties === 'cell-inherited' && (hasUnderline || PROPERTIES.some(k => Object.hasOwn(r, k)) || r.omitted.length)) return fail()
@@ -99,6 +106,7 @@ export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetI
 /** Every span starts from this cell's base, never the preceding run. */
 export function nativeRichTextRunDisclosureV1(run: NativeRichTextRunV1): string {
   const missing = PROPERTIES.filter(k => !Object.hasOwn(run, k))
+  const scheme = run.font_scheme ? `; Source ${run.font_scheme} scheme: declared ${run.declared_font_name}, resolved theme Latin face ${run.font_name} from ${run.theme_part} (${run.theme_sha256}); printable ASCII only` : ''
   const underline = run.underline ? `Underline ${run.underline} (${run.underline_origin === 'default-val' ? 'present u, schema-default single' : 'explicit source val'}); browser decoration metrics are approximate` : run.omitted.includes('underline-none') ? 'Explicit source underline none (legacy evidence)' : 'No direct underline declaration; undecorated host fallback'
-  return `${run.properties === 'cell-inherited' ? 'No rPr: cell font inherited' : `Direct properties; missing ${missing.join(', ') || 'none'} use approximate cell-font fallback`}${run.omitted.length ? `; declared ${run.omitted.join(', ')}` : ''}; ${underline}. Host font matching and shaping are approximate.`
+  return `${run.properties === 'cell-inherited' ? 'No rPr: cell font inherited' : `Direct properties; missing ${missing.join(', ') || 'none'} use approximate cell-font fallback`}${run.omitted.length ? `; declared ${run.omitted.join(', ')}` : ''}${scheme}; ${underline}. Host font matching and shaping are approximate.`
 }

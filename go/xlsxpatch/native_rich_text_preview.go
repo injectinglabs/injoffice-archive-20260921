@@ -32,16 +32,20 @@ type NativeRichTextCellV1 struct {
 	Runs        []NativeRichTextRunV1 `json:"runs,omitempty"`
 }
 type NativeRichTextRunV1 struct {
-	Text            string   `json:"text"`
-	Properties      string   `json:"properties"` // direct or cell-inherited (absent rPr)
-	FontName        *string  `json:"font_name,omitempty"`
-	FontSizePoints  *float64 `json:"font_size_points,omitempty"`
-	FontColor       *string  `json:"font_color,omitempty"`
-	Bold            *bool    `json:"bold,omitempty"`
-	Italic          *bool    `json:"italic,omitempty"`
-	Underline       string   `json:"underline,omitempty"`
-	UnderlineOrigin string   `json:"underline_origin,omitempty"`
-	Omitted         []string `json:"omitted"`
+	Text             string   `json:"text"`
+	Properties       string   `json:"properties"` // direct or cell-inherited (absent rPr)
+	FontName         *string  `json:"font_name,omitempty"`
+	FontSizePoints   *float64 `json:"font_size_points,omitempty"`
+	FontColor        *string  `json:"font_color,omitempty"`
+	Bold             *bool    `json:"bold,omitempty"`
+	Italic           *bool    `json:"italic,omitempty"`
+	FontScheme       string   `json:"font_scheme,omitempty"`
+	DeclaredFontName string   `json:"declared_font_name,omitempty"`
+	ThemePart        string   `json:"theme_part,omitempty"`
+	ThemeSHA256      string   `json:"theme_sha256,omitempty"`
+	Underline        string   `json:"underline,omitempty"`
+	UnderlineOrigin  string   `json:"underline_origin,omitempty"`
+	Omitted          []string `json:"omitted"`
 }
 
 var nativeRichRGB = regexp.MustCompile(`(?i)^FF[0-9A-F]{6}$`)
@@ -84,6 +88,10 @@ func nativeRichContainer(n *previewXML, ns, name string) bool {
 // A rejected declaration omits all run styling for this cell. Explicit baseline,
 // disabled effects and the numbered family hint are closed and disclosed.
 func nativeRichRuns(item *previewXML, ns string) ([]NativeRichTextRunV1, string) {
+	return nativeRichRunsWithTheme(item, ns, nativeRichTheme{})
+}
+
+func nativeRichRunsWithTheme(item *previewXML, ns string, theme nativeRichTheme) ([]NativeRichTextRunV1, string) {
 	if item == nil || !nativeRichContainer(item, ns, item.name.Local) || (item.name.Local != "si" && item.name.Local != "is") || len(item.children) < 1 || len(item.children) > 64 {
 		return nil, "Unsupported rich-string container or run count."
 	}
@@ -133,6 +141,11 @@ func nativeRichRuns(item *previewXML, ns string) ([]NativeRichTextRunV1, string)
 					} else {
 						run.Italic = &b
 					}
+				case "scheme":
+					if (val != "major" && val != "minor") || v.text != "" || theme.fonts[val] == "" {
+						return nil, "Unqualified theme font scheme; run styling omitted."
+					}
+					run.FontScheme = val
 				case "rFont":
 					if !nativeRichFont.MatchString(val) {
 						return nil, "Unsupported direct font name."
@@ -204,6 +217,20 @@ func nativeRichRuns(item *previewXML, ns string) ([]NativeRichTextRunV1, string)
 		if err != nil || text == "" || !nativeRichTextSafe(text) {
 			return nil, "Unsupported empty, multiline or control-containing run text."
 		}
+		if run.FontScheme != "" {
+			if run.FontName == nil {
+				return nil, "Theme preview requires an explicit declared run font."
+			}
+			for _, ch := range text {
+				if ch < 32 || ch > 126 {
+					return nil, "Theme font preview is limited to printable ASCII runs."
+				}
+			}
+			run.DeclaredFontName = *run.FontName
+			resolved := theme.fonts[run.FontScheme]
+			run.FontName = &resolved
+			run.ThemePart, run.ThemeSHA256 = theme.part, theme.hash
+		}
 		run.Text = text
 		total += nativeRichUnits(text)
 		if total > 2048 {
@@ -266,6 +293,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 			}
 		}
 	}
+	theme := nativeRichThemeFonts(&extractor)
 	totalRuns, totalText := 0, 0
 	for _, sheet := range workbook.Sheets {
 		ns := spreadsheetMLTransitional
@@ -378,7 +406,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 				}
 			}
 			if ok {
-				runs, reason := nativeRichRuns(item, ns)
+				runs, reason := nativeRichRunsWithTheme(item, ns, theme)
 				joined := ""
 				for _, r := range runs {
 					joined += r.Text
@@ -388,6 +416,9 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 				}
 				if reason == "" {
 					for i, r := range runs {
+						if r.FontScheme != "" && (c.Value.Runs[i].FontName == nil || r.FontName == nil || *r.FontName != *c.Value.Runs[i].FontName) {
+							reason = "Theme font does not join the extracted run font."
+						}
 						if r.Text != c.Value.Runs[i].Text {
 							reason = "Raw run boundaries do not join the opened source text."
 						}
@@ -400,7 +431,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 					totalRuns += len(runs)
 					entry.Status = "available"
 					entry.Runs = runs
-					entry.Warnings = []string{"Approximate direct-run preview: missing properties use the cell font as a host fallback for each run; font matching, shaping and omitted font-family hints are approximate. Single underline uses approximate browser decoration; absent underline uses a disclosed undecorated host fallback. Explicit baseline and disabled effects are no-op declarations. No full rich-style or Excel fidelity claim."}
+					entry.Warnings = []string{"Approximate direct-run preview: missing properties use the cell font as a host fallback for each run; font matching, shaping and omitted font-family hints are approximate. Single underline uses approximate browser decoration; absent underline uses a disclosed undecorated host fallback. Explicit baseline and disabled effects are no-op declarations. Qualified ASCII major/minor schemes use the recorded theme Latin face; browser font matching remains approximate. No full rich-style or Excel fidelity claim."}
 				} else {
 					entry.Warnings = []string{"Run styling omitted: " + reason + " Plain source text retained."}
 				}
