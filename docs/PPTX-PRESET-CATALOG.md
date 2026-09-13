@@ -1,6 +1,6 @@
 # DrawingML preset catalog
 
-This catalog uses the unchanged 187-shape Apache POI resource at commit `338882ac8898df5c13a7d15f533204c5dd8607d6`, retained with its original license and NOTICE in `go/pptxpatch/presetdata`. Runtime fingerprint verification prevents unreviewed definition changes. Evaluated geometry uses the same bounded Go engine as custom source geometry; there is no browser guide interpreter.
+This catalog uses the unchanged 187-shape Apache POI resource at commit `338882ac8898df5c13a7d15f533204c5dd8607d6`, retained with its original license and NOTICE in `go/pptxpatch/presetdata`. The WASM embeds a deterministic gzip copy; bounded inflation verifies the exact original length and SHA-256 before XML parsing, and rejects corrupt, concatenated or trailing data. The original XML remains unchanged in the repository. Runtime fingerprint verification prevents unreviewed definition changes. Evaluated geometry uses the same bounded Go engine as custom source geometry; there is no browser guide interpreter.
 
 ## Sequential guides and adjustments
 

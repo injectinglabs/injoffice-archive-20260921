@@ -2,10 +2,12 @@ package pptxpatch
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -14,8 +16,10 @@ import (
 // The unchanged Apache POI resource and its license/NOTICE are retained in
 // presetdata. No guide formulas or XML are interpreted by browser code.
 //
-//go:embed presetdata/preset-shapes.xml
-var nativePresetCatalogXML []byte
+//go:embed presetdata/preset-shapes.xml.gz
+var nativePresetCatalogGzip []byte
+
+const nativePresetCatalogXMLSize = 538970
 
 const nativePresetCatalogSHA256 = "4a762444d8d85876881c02a5b1dedf6f73006fcd8acb7b4e393435615b37c780"
 const nativePresetDrawingNS = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -26,8 +30,9 @@ var nativePresetCatalogError error
 
 func loadNativePresetCatalog() (map[string]*nativeXMLNode, error) {
 	nativePresetCatalogOnce.Do(func() {
-		if fmt.Sprintf("%x", sha256.Sum256(nativePresetCatalogXML)) != nativePresetCatalogSHA256 {
-			nativePresetCatalogError = fmt.Errorf("preset catalog fingerprint mismatch")
+		nativePresetCatalogXML, err := decodeNativePresetCatalog(nativePresetCatalogGzip)
+		if err != nil {
+			nativePresetCatalogError = err
 			return
 		}
 		root, err := parseNativeXML(bytes.TrimPrefix(nativePresetCatalogXML, []byte(`<?xml version="1.0" encoding="utf-8"?>`)), "embedded-preset-catalog.xml")
@@ -192,4 +197,27 @@ func prepareNativePresetGeometry(name string, adjustments map[string]int64) (*na
 		return nil, err
 	}
 	return node, nil
+}
+
+// Inflate a single bounded gzip member, then verify the exact retained bytes.
+// Compression changes distribution size only, never the catalog's identity.
+func decodeNativePresetCatalog(compressed []byte) ([]byte, error) {
+	if len(compressed) > 65536 {
+		return nil, fmt.Errorf("compressed preset catalog budget exceeded")
+	}
+	source := bytes.NewReader(compressed)
+	reader, err := gzip.NewReader(source)
+	if err != nil {
+		return nil, fmt.Errorf("invalid compressed preset catalog: %w", err)
+	}
+	reader.Multistream(false)
+	decoded, err := io.ReadAll(io.LimitReader(reader, nativePresetCatalogXMLSize+1))
+	closeErr := reader.Close()
+	if err != nil || closeErr != nil || len(decoded) != nativePresetCatalogXMLSize || source.Len() != 0 {
+		return nil, fmt.Errorf("invalid preset catalog inflate length or checksum")
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(decoded)) != nativePresetCatalogSHA256 {
+		return nil, fmt.Errorf("preset catalog fingerprint mismatch")
+	}
+	return decoded, nil
 }

@@ -34,6 +34,11 @@ fi
 
 size=$(wc -c < "$out/pptxnative.wasm" | tr -d ' ')
 echo "pptxnative.wasm ${size} bytes" >&2
+max_bytes=$((7 * 1024 * 1024))
+if (( size > max_bytes )); then
+  echo "pptxnative.wasm exceeds the 7 MiB size ceiling" >&2
+  exit 1
+fi
 echo "copied wasm_exec.js from $wasm_exec" >&2
 if [[ -f $package_worker ]]; then
   echo "copied npm worker from $package_worker" >&2
