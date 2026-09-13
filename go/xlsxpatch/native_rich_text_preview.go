@@ -225,6 +225,33 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 			}
 		}
 	}
+	// EffectiveStyle does not model base decoration. Refuse that raw declaration
+	// instead of describing its absence from the projection as source "none".
+	baseDecoration := map[uint32]bool{}
+	styleExpected, styleOpposing := relTypeStylesTransitional, relTypeStylesStrict
+	if location.strict {
+		styleExpected, styleOpposing = styleOpposing, styleExpected
+	}
+	stylePart, styleErr := extractor.relatedCorePart(styleExpected, styleOpposing, stylesPartContentType, "styles", false)
+	if styleErr == nil && stylePart != "" {
+		registry, err := newStyleRegistry(pkg.files[stylePart])
+		if err != nil {
+			styleErr = err
+		} else {
+			for i, xf := range registry.cellXfs {
+				base := effectiveCellStyleXF(registry.styleXfs[xf.xfID])
+				font := registry.fonts[effectiveStyleComponent(xf.fontID, base.fontID, xf.applyFont)]
+				for _, child := range font.children {
+					switch child.local {
+					case "name", "sz", "b", "i", "color", "scheme", "family", "charset":
+						// Existing modeled font and approximate selection hints.
+					default:
+						baseDecoration[uint32(i)] = true
+					}
+				}
+			}
+		}
+	}
 	totalRuns, totalText := 0, 0
 	for _, sheet := range workbook.Sheets {
 		ns := spreadsheetMLTransitional
@@ -284,6 +311,9 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 			}
 			totalText += units
 			entry := NativeRichTextCellV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Row: c.Row, Column: c.Column, Ref: c.Ref, StyleID: c.StyleID, Storage: c.Value.Storage, SourcePart: sheet.PartName, Text: text, Status: "omitted", Warnings: []string{"Run styling omitted: unqualified source, layout, or cell ownership. Plain source text retained."}}
+			if baseDecoration[c.StyleID] {
+				entry.Warnings = []string{"Run styling omitted: authored base-font decoration or unknown property is not modeled by this preview. Plain source text retained."}
+			}
 			if c.Value.Storage == "shared" {
 				if sharedPart != "" {
 					entry.SourcePart = sharedPart
@@ -293,7 +323,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 				}
 			}
 			source := rawCells[c.Ref]
-			ok := sheetOK && c.Formula == nil && source != nil && nativeRichNode(source, ns, "c", xml.Name{Local: "r"}, xml.Name{Local: "s"}, xml.Name{Local: "t"}) && strings.TrimSpace(source.text) == "" && len(source.children) == 1 && nativeRichTextSafe(text)
+			ok := sheetOK && styleErr == nil && !baseDecoration[c.StyleID] && c.Formula == nil && source != nil && nativeRichNode(source, ns, "c", xml.Name{Local: "r"}, xml.Name{Local: "s"}, xml.Name{Local: "t"}) && strings.TrimSpace(source.text) == "" && len(source.children) == 1 && nativeRichTextSafe(text)
 			for _, u := range workbook.Unsupported {
 				if u.PartName != nil && *u.PartName == sheet.PartName && u.CellRef != nil && *u.CellRef == c.Ref && u.Code != "RICH_CELL_STRING" {
 					ok = false
