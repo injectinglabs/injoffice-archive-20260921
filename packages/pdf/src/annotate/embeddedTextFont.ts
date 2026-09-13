@@ -4,8 +4,9 @@ import { prepareUnicodeShaper, type UnicodeShapingOptions } from './unicodeShapi
 import { UnicodeFontResource, type EncodedUnicodeRun } from './unicodeFontResource.js'
 import { unicodeTextAppearance } from './unicodeTextAppearance.js'
 import { standaloneUnicodeFontFace } from './unicodeFontFace.js'
+import { prepareUnicodeCffFont } from './unicodeCffFont.js'
 
-/** Caller-supplied fixed TrueType face, optionally selected from a collection. */
+/** Caller-supplied fixed TrueType or CFF1 face, optionally selected from a collection. */
 export interface EmbeddedTextAppearanceFont extends UnicodeShapingOptions {
   fontBytes: Uint8Array
   /** Zero-based collection face; standalone fonts require zero. Defaults to zero. */
@@ -24,8 +25,9 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
   }
   const bytes = standaloneUnicodeFontFace(options.fontBytes, options.faceIndex)
   const face = readFontFace(bytes)
-  if (face.offset !== 0 || !face.tables.has('glyf') || ['fvar', 'COLR', 'SVG ', 'sbix', 'CBDT', 'CBLC'].some(tag => face.tables.has(tag))) {
-    throw new Error('embedded appearances require a standalone fixed TrueType outline font')
+  const cffTable = face.tables.get('CFF ')
+  if (face.offset !== 0 || face.tables.has('glyf') === Boolean(cffTable) || ['CFF2', 'fvar', 'COLR', 'SVG ', 'sbix', 'CBDT', 'CBLC'].some(tag => face.tables.has(tag))) {
+    throw new Error('embedded appearances require fixed TrueType or CFF1 outlines')
   }
   // The package's Node entry exposes named exports, while its browser ESM
   // entry exposes a default object despite the shared named-export typings.
@@ -38,8 +40,9 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
     || (parsed.capHeight != null && !Number.isFinite(parsed.capHeight)) || (parsed.xHeight != null && !Number.isFinite(parsed.xHeight))) {
     throw new Error('invalid embedded appearance font metrics')
   }
+  const cff = cffTable ? prepareUnicodeCffFont(bytes.subarray(cffTable.offset, cffTable.offset + cffTable.length), parsed.numGlyphs, parsed.unitsPerEm) : undefined
   const shape = await prepareUnicodeShaper(bytes, parsed.unitsPerEm, parsed.numGlyphs, options)
-  const resource = new UnicodeFontResource(parsed, bytes, doc)
+  const resource = new UnicodeFontResource(parsed, bytes, doc, cff)
   let qualified: EncodedUnicodeRun | undefined
   return {
     embed: () => resource.embed(),

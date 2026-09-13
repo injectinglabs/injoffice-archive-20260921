@@ -26,7 +26,7 @@ export type TextAppearanceFont = 'Helvetica' | 'Times-Roman' | 'Courier'
 
 export interface FormValuesOptions {
   /** Explicitly replaces text appearances with a standard font (ASCII), or a
-   * supplied fixed TrueType font (supported LTR Unicode clusters and marks).
+   * supplied fixed TrueType/CFF1 font (Unicode shaping, marks and bidirectional text).
    * Only plain single-line fields with owned page widgets qualify.
    * Unexpected appearance generation failures reject the entire operation.
    */
