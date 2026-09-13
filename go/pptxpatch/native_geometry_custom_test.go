@@ -30,7 +30,7 @@ func TestNativeGeometryCustomXML(t *testing.T) {
 	if p.FillMode != "none" || !p.Stroke || *p.Commands[1].X1 != 2500 || *p.Commands[1].Y1 != 5000 || *p.Commands[2].X2 != 8000 {
 		t.Fatal("path scaling/paint")
 	}
-	if geometry.Paths[1].Stroke || len(geometry.Paths[1].Commands) != 4 {
+	if geometry.Paths[1].Stroke || len(geometry.Paths[1].Commands) != 6 {
 		t.Fatal("full-circle transport")
 	}
 }
