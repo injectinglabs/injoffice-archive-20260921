@@ -36,6 +36,12 @@ export function formatNativeSheetCellDisplayV2(
   const format = numberFormat ?? 'General'
   if (kind === 'number') {
     if (format === 'General') return { status: 'ready', text: lexical }
+    if (format.includes(';')) {
+      const text = formatSectionedNumber(lexical, format)
+      return text === undefined
+        ? { status: 'refused', code: 'CELL_STYLE_UNSUPPORTED', message: 'number-format sections are outside the qualified display subset; the original value remains preserved' }
+        : { status: 'ready', text }
+    }
     const numeric = classifyFixedNumberFormat(format)
     if (numeric) {
       const fixed = formatFixedDecimalLexical(lexical, numeric.fractionDigits, numeric.percent ? 2 : 0)
@@ -61,6 +67,37 @@ export function formatNativeSheetCellDisplayV2(
 }
 
 type FixedNumberFormat = { fractionDigits: number; grouped: boolean; percent: boolean; prefix: string; suffix: string }
+
+/** Validate every section, including unselected ones. No conditional, color,
+ * text, empty, accounting-padding or quoted-semicolon sections are inferred.
+ * Microsoft documents two sections as positive/zero;negative and three as
+ * positive;negative;zero. Nonzero values that round to zero stay unqualified. */
+function formatSectionedNumber(lexical: string, format: string): string | undefined {
+  if (format.length > 194) return undefined
+  const sections = format.split(';')
+  if (sections.length < 2 || sections.length > 3) return undefined
+  const parsed = parseDecimalLexical(lexical)
+  if (!parsed) return undefined
+  const formats = sections.map((section, index) => {
+    let prefix = '', suffix = ''
+    if (index === 1 && section.startsWith('(') && section.endsWith(')')) {
+      prefix = '('; suffix = ')'; section = section.slice(1, -1)
+    } else if (index === 1 && section.startsWith('-')) {
+      prefix = '-'; section = section.slice(1)
+    }
+    const numeric = classifyFixedNumberFormat(section)
+    return numeric ? { numeric, prefix, suffix } : undefined
+  })
+  if (formats.some((section) => section === undefined)) return undefined
+  const zero = parsed.coefficient === 0n
+  const selected = formats[zero && formats.length === 3 ? 2 : !zero && parsed.negative ? 1 : 0]!
+  // A dedicated negative section formats the magnitude; its punctuation owns
+  // the sign. The exact stored lexical remains untouched by display formatting.
+  const magnitude = lexical.replace(/^[+-]/, '')
+  const fixed = formatFixedDecimalLexical(magnitude, selected.numeric.fractionDigits, selected.numeric.percent ? 2 : 0)
+  if (fixed === undefined || (!zero && /^0(?:\.0+)?$/.test(fixed))) return undefined
+  return `${selected.prefix}${decorateFixedNumber(fixed, selected.numeric)}${selected.suffix}`
+}
 
 /** Deliberately one section: no colors, conditions, locale selection, accounting
  * padding, fill characters, scaling commas, fractions or exponent formatting.
