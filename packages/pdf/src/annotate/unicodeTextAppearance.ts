@@ -1,7 +1,7 @@
-import { appendBezierCurve, beginText, closePath, concatTransformationMatrix, defaultTextFieldAppearanceProvider, endMarkedContent, endText, fill, lineTo, moveTo, PDFHexString, PDFName, PDFOperator, PDFOperatorNames, popGraphicsState, pushGraphicsState, setTextMatrix, showText } from 'pdf-lib'
+import { appendBezierCurve, beginText, closePath, concatTransformationMatrix, defaultTextFieldAppearanceProvider, endMarkedContent, endText, fill, lineTo, moveTo, PDFHexString, PDFName, PDFOperator, PDFOperatorNames, popGraphicsState, pushGraphicsState, setTextMatrix, setFontAndSize, showText } from 'pdf-lib'
 import type { PDFFont, PDFTextField, PDFWidgetAnnotation } from 'pdf-lib'
 import { embeddedTextAppearance } from './embeddedTextAppearance.js'
-import type { EncodedUnicodeRun, OutlineCommand } from './unicodeFontResource.js'
+import { unicodeFontViewName, type EncodedUnicodeRun, type OutlineCommand } from './unicodeFontResource.js'
 
 function outlineOperators(commands: readonly OutlineCommand[]): PDFOperator[] {
   const result: PDFOperator[] = []
@@ -31,9 +31,11 @@ export function unicodeTextAppearance(field: PDFTextField, widget: PDFWidgetAnno
   }
   const authoredSize = defaultSize(widget.getDefaultAppearance()) ?? defaultSize(field.acroField.getDefaultAppearance())
   const { ink } = encodedRun
-  const fitInk = (authoredSize === undefined || authoredSize === 0) && (/\p{Mark}/u.test(run.value) || run.requiresActualText === true) && ink.maxY > ink.minY
+  // Automatic sizing must fit actual ink for every script/style, including
+  // ordinary italic bearings. Authored fixed sizes retain their clipping policy.
+  const fitInk = (authoredSize === undefined || authoredSize === 0) && ink.maxY > ink.minY
   let cursor = 0
-  const simple = run.glyphs.every((glyph, i) => {
+  const simple = !encodedRun.fontViews.some(view => view > 0) && run.glyphs.every((glyph, i) => {
     const valid = cids[i] !== 0 && glyph.x === cursor && glyph.y === 0
     cursor += glyph.advance
     return valid
@@ -71,7 +73,7 @@ export function unicodeTextAppearance(field: PDFTextField, widget: PDFWidgetAnno
     const x = e + (a * (glyph.x - (fitInk ? ink.minX : 0)) + c * (glyph.y - (fitInk ? ink.minY : 0))) * scale
     const y = f + (b * (glyph.x - (fitInk ? ink.minX : 0)) + d * (glyph.y - (fitInk ? ink.minY : 0))) * scale
     const cid = cids[index]!
-    if (cid !== 0) replacement.push(beginText(), setTextMatrix(a, b, c, d, x, y), showText(PDFHexString.of(cid.toString(16).padStart(4, '0'))), endText())
+    if (cid !== 0) replacement.push(beginText(), setFontAndSize(unicodeFontViewName(font.name, encodedRun.fontViews[index]!), size), setTextMatrix(a, b, c, d, x, y), showText(PDFHexString.of(cid.toString(16).padStart(4, '0'))), endText())
     else replacement.push(pushGraphicsState(), concatTransformationMatrix(a * scale, b * scale, c * scale, d * scale, x, y), ...outlineOperators(outlines[index]!), fill(), popGraphicsState())
   })
   replacement.push(endMarkedContent(), beginText())

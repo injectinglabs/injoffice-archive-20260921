@@ -85,6 +85,8 @@ export async function prepareUnicodeShaper(bytes: Uint8Array, unitsPerEm: number
       const primary = group.findIndex(glyph => glyph.advance > 0)
       return primary > 0 ? [group[primary]!, ...group.filter((_, i) => i !== primary)] : group
     })
-    return { value, unitsPerEm, width: x, glyphs: orderedGlyphs, requiresActualText: bidi.scalars.some(scalar => scalar.level % 2 !== 0 || /^\p{Bidi_Control}$/u.test(scalar.value) || scalar.value === '\u200C' || scalar.value === '\u200D') }
+    // A nonempty source can legitimately shape to no visible glyphs. Preserve
+    // that exact replacement text even when no CID can carry a ToUnicode span.
+    return { value, unitsPerEm, width: x, glyphs: orderedGlyphs, requiresActualText: (value.length > 0 && orderedGlyphs.length === 0) || bidi.scalars.some(scalar => scalar.level % 2 !== 0 || /^\p{Bidi_Control}$/u.test(scalar.value) || scalar.value === '\u200C' || scalar.value === '\u200D') }
   }
 }

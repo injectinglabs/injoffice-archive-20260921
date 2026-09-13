@@ -32,6 +32,34 @@ async function extracted(doc: PDFDocument) {
 }
 
 describe('saved cluster appearances', () => {
+  it.each([0, 90, 180, 270].flatMap(rotation => [TextAlignment.Left, TextAlignment.Center, TextAlignment.Right].map(alignment => ({ rotation, alignment }))))('fits plain italic negative bearings in automatic size $alignment/$rotation', async ({ rotation, alignment }) => {
+    const bytes = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Oblique.ttf'))), parsed = fontkit.create(bytes)
+    const box = parsed.glyphForCodePoint(106).bbox
+    expect(box.minX).toBeLessThan(0)
+    const result = await applyFormValues(await fixture(alignment, rotation, 0), [{ name: 'text', kind: 'text', value: 'j' }], { textAppearance: { fontBytes: bytes } })
+    expect(result.applied).toBe(1)
+    const doc = await PDFDocument.load(result.bytes), content = decoded(appearance(doc))
+    const size = Number(content.match(/\/[^\s]+ ([\d.]+) Tf/)![1]), scale = size / parsed.unitsPerEm
+    const matrix = [...content.matchAll(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/g)][1]!
+    const x = Number(matrix[1]), y = Number(matrix[2])
+    // Read the actual clipping polygon in the same local coordinate system as
+    // the text matrices; the provider rotates both together outside this scope.
+    const clip = content.match(/([\d.-]+) ([\d.-]+) m\n[\d.-]+ [\d.-]+ l\n([\d.-]+) ([\d.-]+) l\n[\d.-]+ [\d.-]+ l\nh\nW/)!
+    const [left, bottom, right, top] = clip.slice(1).map(Number)
+    expect(x + box.minX * scale).toBeGreaterThanOrEqual(left! - 1e-7)
+    expect(x + box.maxX * scale).toBeLessThanOrEqual(right! + 1e-7)
+    expect(y + box.minY * scale).toBeGreaterThanOrEqual(bottom! - 1e-7)
+    expect(y + box.maxY * scale).toBeLessThanOrEqual(top! + 1e-7)
+    expect(doc.getForm().getTextField('text').getText()).toBe('j')
+  })
+  it('retains authored fixed-size italic positioning and clipping', async () => {
+    const bytes = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Oblique.ttf')))
+    const result = await applyFormValues(await fixture(TextAlignment.Left, 0, 55), [{ name: 'text', kind: 'text', value: 'j' }], { textAppearance: { fontBytes: bytes } })
+    const content = decoded(appearance(await PDFDocument.load(result.bytes)))
+    expect(content).toContain('/DejaVuSans-Oblique 55 Tf')
+    expect([...content.matchAll(/ Tm/g)]).toHaveLength(1)
+    expect(content).toMatch(/1 0 0 1 2 [\d.-]+ Tm/)
+  })
   it.each(['e\u0301', 'a\u0301\u0323', 'x\u0301\u0323', 'ffi', '\uFB03', 'e\u0301 é ffi 😀', '  ffi  '])('preserves exact source and reader text for %j', async value => {
     const source = await fixture(), copy = source.slice(), fontCopy = fontBytes.slice()
     const result = await applyFormValues(source, [{ name: 'text', kind: 'text', value }], { textAppearance: { fontBytes } })
