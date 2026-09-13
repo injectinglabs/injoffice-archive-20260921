@@ -25,10 +25,10 @@ export function NativeRichTextDetails({ entries, styles, warnings }: {
 }) {
   return <section aria-label="Rich text run preview details">
     <h4>Source rich-text samples</h4>
-    <p>These fixed browser boxes show stored text and direct run properties. They are not worksheet positions or page geometry. Missing properties use each cell’s font as an approximate fallback; browser font matching and shaping may differ.</p>
+    <p>These fixed browser boxes show stored text, direct run properties and qualified theme fonts. They are not worksheet positions or page geometry. Missing properties use each cell’s font as an approximate fallback; browser font matching and shaping may differ.</p>
     {warnings.map((warning, i) => <p key={i}>{warning}</p>)}
     {entries.map((entry, index) => <details key={`${entry.sheet_id}:${entry.ref}`} open={index < 3}>
-      <summary>{entry.ref}: {entry.status === 'available' ? 'approximate direct runs' : 'run styling omitted'}</summary>
+      <summary>{entry.ref}: {entry.status === 'available' ? 'approximate runs' : 'run styling omitted'}</summary>
       <p>{entry.warnings.join(' ')}</p>
       <p>Source: {entry.sheet_part}; {entry.storage === 'shared' ? `${entry.source_part} shared string ${entry.shared_index}` : 'inline string'}; cell style {entry.style_id}.</p>
       {entry.status === 'available' && <svg role="img" aria-label={`Source rich-text sample ${entry.ref}`} viewBox="0 0 600 64" style={{ width: '100%', maxWidth: 600, overflow: 'hidden', border: '1px solid #bbb' }}>

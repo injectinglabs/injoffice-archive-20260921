@@ -60,7 +60,7 @@ it('enforces aggregate run and text budgets independently', () => {
 it('decodes maximum conditional-fill and rich-run evidence together in the public envelope', async () => {
   const { decodeNativeWorkbookObjectsV1 } = await import('./nativeObjectsPreviewV1.js')
   const rich = fixture(), seed = rich.cells[0]!
-  rich.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_size_points: 11, font_color: '#112233', bold: false, italic: false, underline: 'single' as const, underline_origin: 'explicit-val' as const, omitted: ['baseline', 'font-family-hint', 'strike-false'] })) }))
+  rich.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_scheme: 'minor' as const, declared_font_name: 'Arial', theme_part: 'xl/theme/theme1.xml', theme_sha256: `sha256:${'b'.repeat(64)}`, font_size_points: 11, font_color: '#112233', bold: false, italic: false, underline: 'single' as const, underline_origin: 'explicit-val' as const, omitted: ['baseline', 'font-family-hint', 'strike-false'] })) }))
   const conditional_fills = Array.from({ length: 4 }, (_, index) => ({ sheet_id: String(index + 1), sheet_part: `xl/worksheets/sheet${index + 1}.xml`, status: 'available', warnings: ['Stored integers only.'], rule: { ref: 'A1:BL64', operator: 'equal', operand: '0', priority: 1, stop_if_true: false, dxf_id: 0, fill: '#112233' }, cells: Array.from({ length: 4096 }, (_, i) => ({ row: Math.floor(i / 64), column: i % 64, lexical: '0', cached: false, matches: true })) }))
   const hash = `sha256:${'a'.repeat(64)}`, envelope = { protocol: 'injoffice.xlsx.preview-objects', version: 1, package_sha256: hash, tables: [], charts: [], conditional_fills, rich_text: rich }
   const result = decodeNativeWorkbookObjectsV1(envelope, hash)
@@ -83,4 +83,23 @@ it('validates paired raw underline attestations without inventing an extracted-m
   }
   expect(nativeRichTextRunDisclosureV1(fixture().cells[0]!.runs![0]!)).toContain('No direct underline declaration; undecorated host fallback')
   const p = fixture(); p.cells[0]!.runs![0]!.omitted = ['underline-none']; expect(decodeNativeRichTextPreviewV1(p).cells).toHaveLength(1)
+})
+
+it('joins resolved scheme fonts and retains raw declaration evidence', () => {
+  const s = source(), run = s.objects.rich_text.cells[0]!.runs![0]!
+  Object.assign(run, {font_name:'Cambria',font_scheme:'major',declared_font_name:'Arial',theme_part:'xl/theme/theme1.xml',theme_sha256:`sha256:${'b'.repeat(64)}`})
+  Object.assign(s.workbook.sheets[0]!.cells[0]!.value!.runs![0]!, {font_name: 'Cambria'})
+  const selected = selectNativeRichTextPreviewV1(s.workbook,'1',s.objects)
+  expect(nativeRichTextRunDisclosureV1(selected.cells[0]!.runs![0]!)).toContain('declared Arial, resolved theme Latin face Cambria')
+  Object.assign(s.workbook.sheets[0]!.cells[0]!.value!.runs![0]!, {font_name: 'Arial'})
+  expect(() => selectNativeRichTextPreviewV1(s.workbook,'1',s.objects)).toThrow()
+})
+it('refuses partial, malformed or non-ASCII theme attestations', () => {
+  const evidence = {font_name:'Cambria',font_scheme:'major',declared_font_name:'Arial',theme_part:'xl/theme/theme1.xml',theme_sha256:`sha256:${'b'.repeat(64)}`}
+  for (const extra of [{font_scheme:'none'},{font_scheme:['major']},{theme_part:'../theme.xml'},{theme_sha256:'bad'},{declared_font_name:''},{properties:'cell-inherited'},{text:'世界'}]) {
+    const p=fixture(); Object.assign(p.cells[0]!.runs![0]!,evidence,extra); expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
+  }
+  for(const k of Object.keys(evidence)) {
+    const p=fixture();const r=p.cells[0]!.runs![0]!;Object.assign(r,evidence);delete (r as unknown as Record<string,unknown>)[k];expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
+  }
 })
