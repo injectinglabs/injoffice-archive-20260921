@@ -104,9 +104,17 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 		return NativeElement{}, fmt.Errorf("pptxpatch: native extract: malformed graphic frame child order")
 	}
 
+	sourceTable, sourceTypography := extractor.exactSourceNoBorderTable(node, slidePart, dialect)
 	objectID, name, err := validateNativeTableNonVisual(nonVisual, dialect)
 	if err != nil {
-		return NativeElement{}, err
+		if !sourceTypography {
+			return NativeElement{}, err
+		}
+		objectID, err = inspectTableNonVisual(nonVisual, dialect)
+		if err != nil {
+			return NativeElement{}, err
+		}
+		name, _ = exactNativeAttr(nativeChild(nonVisual, dialect.presentation, "cNvPr"), "", "name")
 	}
 	transform, err := validateNativeTableTransform(transformNode, dialect)
 	if err != nil {
@@ -116,7 +124,9 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 		outputNodes: nativeMaxNodes - extractor.outputNodesEmitted, tableCells: nativeMaxTableCells - extractor.tableCellsEmitted,
 		textCodeUnits: int64(nativeMaxTotalTextCodeUnits) - extractor.textCodeUnitsEmitted,
 	})
-	if err != nil {
+	if sourceTypography {
+		exact = sourceTable
+	} else if err != nil {
 		return NativeElement{}, err
 	}
 	if err := extractor.reserveNativeTableOutput(exact); err != nil {
@@ -140,6 +150,9 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	}
 	if name != "" {
 		element.Name = stringPointer(name)
+	}
+	if sourceTypography {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
 	}
 	nativePreserveTextCheckingMetadata(&element, node, dialect)
 	return element, nil

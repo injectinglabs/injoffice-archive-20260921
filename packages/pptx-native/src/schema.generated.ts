@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "e0a7aebee5e13fd1ec333c5e4fb980cf04183b7b823aa7e152eb062751f733ca" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "eb6f8e189d984d667aae04f7fff0204825714d4220c12eff417c9be4d73de7bc" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -505,6 +505,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "fontFamily",
       "fontSizeHundredthPt",
       "italic",
+      "kerningThresholdHundredthPt",
       "language",
       "text"
     ],
@@ -1038,6 +1039,11 @@ export const PPTX_NATIVE_SCHEMA = {
           "minimum": 1,
           "maximum": 400000
         },
+        "kerningThresholdHundredthPt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 400000
+        },
         "color": {
           "$ref": "#/$defs/color"
         },
@@ -1160,7 +1166,10 @@ export const PPTX_NATIVE_SCHEMA = {
           "const": "vertical-clockwise"
         },
         "horizontalOverflow": {
-          "const": "overflow"
+          "enum": [
+            "overflow",
+            "clip"
+          ]
         },
         "verticalOverflow": {
           "const": "overflow"

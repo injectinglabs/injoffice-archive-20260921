@@ -272,6 +272,7 @@
         "bold": { "type": "boolean" },
         "italic": { "type": "boolean" },
         "fontSizeHundredthPt": { "type": "integer", "minimum": 1, "maximum": 400000 },
+        "kerningThresholdHundredthPt": { "type": "integer", "minimum": 0, "maximum": 400000 },
         "color": { "$ref": "#/$defs/color" },
         "fontFamily": { "type": "string", "minLength": 1, "maxLength": 256 },
         "language": { "type": "string", "minLength": 2, "maxLength": 63, "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$" }
@@ -312,7 +313,7 @@
         "verticalAnchor": { "$ref": "#/$defs/textVerticalAnchor" },
         "autoFit": { "enum": ["none", "shape-source-frame"] },
         "writingMode": { "const": "vertical-clockwise" },
-        "horizontalOverflow": { "const": "overflow" },
+        "horizontalOverflow": { "enum": ["overflow", "clip"] },
         "verticalOverflow": { "const": "overflow" }
       }
     },
