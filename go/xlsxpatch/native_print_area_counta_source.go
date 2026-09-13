@@ -41,9 +41,21 @@ func newNativePrintCountaSourceContext(workbook *NativeWorkbookV2, workbookXML [
 	if !seen["sheets"] {
 		return nil
 	}
-	if _, _, ok := collectNativePrintNames(workbookXML, workbook.Sheets); !ok {
+	names, _, ok := collectNativePrintNames(workbookXML, workbook.Sheets)
+	if !ok {
 		return nil
 	}
+	needed := false
+	for _, definitions := range names {
+		for _, definition := range definitions {
+			if strings.Contains(definition.text, "COUNTA(") {
+				needed = true
+			}
+		}
+	}
+	if !needed {
+		return nil
+	} // Do not certify inventories for unrelated previews.
 	ctx := &nativePrintCountaSourceContext{workbook: workbook, certified: map[*NativeWorkbookSheetV2]bool{}}
 	ids, parts := map[string]bool{}, map[string]bool{}
 	for i := range workbook.Sheets {
