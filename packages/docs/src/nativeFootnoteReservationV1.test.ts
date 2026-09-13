@@ -311,3 +311,50 @@ describe('dedicated footnote reservation preparation', () => {
     }
   })
 })
+
+
+function extendFootnoteChain(request: NativeDocxPaginationRequestV1, count: number): void {
+  const note = request.document.notes.find((story) => story.note_role === 'content')!
+  const first = note.blocks[0]!.paragraph!
+  const firstShape = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === first.id)!
+  for (let index = 1; index < count; index += 1) {
+    const paragraph = structuredClone(first)
+    paragraph.id = `${first.id}:member:${index}`
+    paragraph.runs = [{ ...structuredClone(first.runs[0]!), id: `run:${paragraph.id}`, kind: 'text', text: '1' }]
+    delete paragraph.runs[0]!.reference
+    note.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+    request.resolved_layout.paragraphs.push({ ...structuredClone(request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === first.id)!), paragraph_id: paragraph.id })
+    request.resolved_layout.runs.push({ ...structuredClone(request.resolved_layout.runs.find((entry) => entry.run_id === first.runs[0]!.id)!), run_id: paragraph.runs[0]!.id, paragraph_id: paragraph.id })
+    const shape = structuredClone(firstShape)
+    shape.paragraph_id = paragraph.id
+    for (const line of shape.lines) {
+      line.id = `line:${paragraph.id}:${line.ordinal}`
+      for (const [ordinal, fragment] of line.fragments.entries()) { fragment.id = `fragment:${paragraph.id}:${line.ordinal}:${ordinal}`; fragment.source_id = paragraph.runs[0]!.id }
+    }
+    request.shaped_lines.paragraphs.push(shape)
+  }
+  for (const [index, block] of note.blocks.entries()) {
+    request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === block.id)!.properties.keep_next = index < count - 1
+    request.shaped_lines.diagnostics.push({ code: 'page-control-deferred', severity: 'deferred', scope_id: block.id, message: 'keep_next is retained in resolved layout for the future paginator and does not alter line shaping' })
+  }
+}
+
+describe('multi-paragraph reservation source qualification', () => {
+  function input(count = 2) { const request = fixture(); addFootnote(request); extendFootnoteChain(request, count); return request }
+  it('measures only a complete authored chain with its label in the first member', () => {
+    const request = input()
+    expect(measureNativeDocxFootnoteReservationV1(request, (profile) => ({ section_id: profile.section_id, column_id: profile.column.id, reference_run_id: profile.reference_run_id, note_story_id: profile.note.id, separator_story_id: profile.separator.id, height_millipoints: 15000 }))?.note.blocks).toHaveLength(2)
+  })
+  it('refuses broken/final chains, misplaced labels and multiline members without keepLines before measurement', () => {
+    for (const mutate of [
+      (r: NativeDocxPaginationRequestV1) => { delete r.resolved_layout.paragraphs.find((p) => p.paragraph_id === r.document.notes[1]!.blocks[0]!.id)!.properties.keep_next },
+      (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs.at(-1)!.properties.keep_next = true },
+      (r: NativeDocxPaginationRequestV1) => { const note = r.document.notes[1]!; note.blocks.reverse() },
+      (r: NativeDocxPaginationRequestV1) => { const shape = r.shaped_lines.paragraphs.at(-1)!; const line = structuredClone(shape.lines[0]!); line.id += ':second'; line.ordinal = 1; line.fragments = []; line.logical_to_visual = []; shape.lines.push(line); shape.block_advance_millipoints *= 2 },
+    ]) {
+      const request = input(); mutate(request); let called = false
+      expect(measureNativeDocxFootnoteReservationV1(request, () => { called = true; return undefined })).toBeUndefined()
+      expect(called).toBe(false)
+    }
+  })
+})

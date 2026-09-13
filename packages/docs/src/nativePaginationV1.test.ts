@@ -1,3 +1,5 @@
+import { measureNativeDocxFootnoteAreaForReservationV1 } from './nativeNotePaginationV1.js'
+import { measureNativeDocxFootnoteReservationV1 } from './nativeFootnoteReservationV1.js'
 import { planNativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -1885,5 +1887,83 @@ describe('whole-footnote body reservation', () => {
       const request = fixture({ lineCounts: [1, 1, 1, 1] }); addFootnote(request)
       expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
     } finally { Object.assign(DOCX_PAGINATION_LIMITS, { maxPages: original }) }
+  })
+})
+
+
+function extendFootnoteChain(request: NativeDocxPaginationRequestV1, count: number): void {
+  const note = request.document.notes.find((story) => story.note_role === 'content')!
+  const first = note.blocks[0]!.paragraph!
+  const firstShape = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === first.id)!
+  for (let index = 1; index < count; index += 1) {
+    const paragraph = structuredClone(first)
+    paragraph.id = `${first.id}:member:${index}`
+    paragraph.runs = [{ ...structuredClone(first.runs[0]!), id: `run:${paragraph.id}`, kind: 'text', text: '1' }]
+    delete paragraph.runs[0]!.reference
+    note.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+    request.resolved_layout.paragraphs.push({ ...structuredClone(request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === first.id)!), paragraph_id: paragraph.id })
+    request.resolved_layout.runs.push({ ...structuredClone(request.resolved_layout.runs.find((entry) => entry.run_id === first.runs[0]!.id)!), run_id: paragraph.runs[0]!.id, paragraph_id: paragraph.id })
+    const shape = structuredClone(firstShape)
+    shape.paragraph_id = paragraph.id
+    for (const line of shape.lines) {
+      line.id = `line:${paragraph.id}:${line.ordinal}`
+      for (const [ordinal, fragment] of line.fragments.entries()) { fragment.id = `fragment:${paragraph.id}:${line.ordinal}:${ordinal}`; fragment.source_id = paragraph.runs[0]!.id }
+    }
+    request.shaped_lines.paragraphs.push(shape)
+  }
+  for (const [index, block] of note.blocks.entries()) {
+    request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === block.id)!.properties.keep_next = index < count - 1
+    request.shaped_lines.diagnostics.push({ code: 'page-control-deferred', severity: 'deferred', scope_id: block.id, message: 'keep_next is retained in resolved layout for the future paginator and does not alter line shaping' })
+  }
+}
+
+describe('authored whole-footnote paragraph chains', () => {
+  function input(count = 2, reference = '1', height = 40000) {
+    const request = fixture({ lineCounts: [1, 1, 1, 1, 1], bodyHeight: height })
+    addFootnote(request, '1', reference)
+    extendFootnoteChain(request, count)
+    return request
+  }
+  it('keeps two source paragraphs with their reference and restores later page height', () => {
+    for (const reference of ['1', '4']) {
+      const request = input(2, reference), before = structuredClone(request)
+      const output = paginated(request)
+      const page = output.pages.find((entry) => entry.note_stories?.length)!
+      expect(page.ordinal).toBe(reference === '1' ? 0 : 1)
+      expect(page.note_stories![1]!.lines.map((paragraph) => paragraph.paragraph_id)).toEqual(request.document.notes[1]!.blocks.map((block) => block.id))
+      expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+      expect(request).toEqual(before)
+      const forged = structuredClone(output)
+      forged.pages[page.ordinal]!.note_stories![1]!.lines.reverse()
+      expect(decodeNativeDocxPaginatedLayoutForRequest(forged, request).ok).toBe(false)
+    }
+  })
+  it('recomputes internal chain evidence against actual placement inputs', () => {
+    const request = input(), output = paginated(request)
+    const reservation = measureNativeDocxFootnoteReservationV1(request, measureNativeDocxFootnoteAreaForReservationV1)!
+    reservation.note = structuredClone(request.document.notes[0]!)
+    reservation.height_millipoints = 1
+    expect(placeNativeDocxNotesV1(structuredClone(output), request.document, request.resolved_layout, request.shaped_lines, reservation)).toBeUndefined()
+    const changed = structuredClone(request)
+    changed.resolved_layout.paragraphs.find((p) => p.paragraph_id === changed.document.notes[1]!.blocks[1]!.id)!.properties.keep_next = true
+    const staged = structuredClone(output), before = structuredClone(staged)
+    expect(placeNativeDocxNotesV1(staged, changed.document, changed.resolved_layout, changed.shaped_lines, reservation)).toBeDefined()
+    expect(staged).toEqual(before)
+  })
+  it('admits sixteen authored members at exact pair fit and refuses seventeen', () => {
+    expect(paginated(input(16, '1', 95000)).pages[0]!.note_stories![1]!.lines).toHaveLength(16)
+    expect(paginateNativeDocxV1(input(17, '1', 200000))).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [] }) }))
+  })
+  it('refuses broken chains, overflowing pairs and forged diagnostic admission atomically', () => {
+    const cases = [input(2, '1', 20000)]
+    for (const mutate of [
+      (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs.find((p) => p.paragraph_id === r.document.notes[1]!.blocks[0]!.id)!.properties.keep_next = false },
+      (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs.at(-1)!.properties.keep_next = true },
+      (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.severity = 'unsupported' },
+      (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.source_id = r.document.notes[1]!.blocks[0]!.paragraph!.runs[0]!.id },
+      (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.source_diagnostic_code = 'forged' },
+      (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.message += ' changed' },
+    ]) { const request = input(); mutate(request); cases.push(request) }
+    for (const request of cases) expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [] }) }))
   })
 })

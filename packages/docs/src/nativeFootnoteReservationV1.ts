@@ -49,16 +49,20 @@ export function qualifyNativeDocxFootnoteReservationV1(value: unknown): NativeDo
   const separators = document.notes.filter((story) => story.note_role === 'separator')
   if (notes.length !== 1 || separators.length !== 1 || document.notes.some((story) => story.kind !== 'footnote') || document.notes.filter((story) => story.note_role === 'continuation-separator').length > 1) return undefined
   const note = notes[0]!, separator = separators[0]!
-  if (note.blocks.length !== 1 || !note.blocks[0]?.paragraph || separator.blocks.length !== 1 || !separator.blocks[0]?.paragraph || separator.blocks[0].paragraph.runs.length !== 0) return undefined
+  if (note.blocks.length < 1 || note.blocks.length > 16 || note.blocks.some((block) => block.kind !== 'paragraph' || !block.paragraph) || separator.blocks.length !== 1 || !separator.blocks[0]?.paragraph || separator.blocks[0].paragraph.runs.length !== 0) return undefined
   const body: NativeDocxParagraphV1[] = []
   if (!document.body.blocks.length || document.body.blocks.length > 256) return undefined
   for (const block of document.body.blocks) { if (block.kind !== 'paragraph' || !block.paragraph) return undefined; body.push(block.paragraph) }
-  const noteParagraph = note.blocks[0].paragraph
+  const noteParagraphs = note.blocks.map((block) => block.paragraph!)
+  const noteParagraphIDs = new Set(noteParagraphs.map((paragraph) => paragraph.id))
   let referenceRun: string | undefined, referenceParagraph: string | undefined, labels = 0, textLength = 0
-  for (const paragraph of [...body, noteParagraph, separator.blocks[0].paragraph]) {
+  for (const paragraph of [...body, ...noteParagraphs, separator.blocks[0].paragraph]) {
     const properties = resolved.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)
     const shape = shaped.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)
-    if (!properties || !shape || properties.numbering || paragraph.properties.numbering || properties.properties.bidi || properties.properties.keep_next || properties.properties.page_break_before) return undefined
+    if (!properties || !shape || properties.numbering || paragraph.properties.numbering || properties.properties.bidi || properties.properties.page_break_before) return undefined
+    const noteIndex = noteParagraphs.indexOf(paragraph)
+    const chained = noteIndex >= 0 && noteIndex < noteParagraphs.length - 1
+    if (chained ? properties.properties.keep_next !== true : properties.properties.keep_next === true) return undefined
     if ((properties.properties.line_rule ?? 'auto') !== 'auto' || (properties.properties.line ?? 240) !== 240 || shape.spacing_before_millipoints || shape.spacing_after_millipoints || shape.indent_start_millipoints || shape.indent_end_millipoints || shape.first_line_delta_millipoints || shape.direction !== 'ltr') return undefined
     if (paragraph === separator.blocks[0].paragraph && shape.lines.length !== 1) return undefined
     if (shape.lines.some((line) => line.line_height_millipoints !== line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints) || shape.block_advance_millipoints !== shape.lines.reduce((sum, line) => sum + line.line_height_millipoints, 0)) return undefined
@@ -69,7 +73,7 @@ export function qualifyNativeDocxFootnoteReservationV1(value: unknown): NativeDo
         if (run.page_field || run.layout_page_field || !/^[\x20-\x7e]*$/.test(run.text ?? '')) return undefined
         textLength += (run.text ?? '').length
       } else if (run.kind === 'reference' && run.reference?.kind === 'footnote' && run.reference.target_id === note.id) {
-        if (paragraph === noteParagraph) { if (run.reference.role !== 'label') return undefined; labels += 1 }
+        if (noteParagraphIDs.has(paragraph.id)) { if (paragraph !== noteParagraphs[0] || run.reference.role !== 'label') return undefined; labels += 1 }
         else { if (run.reference.role === 'label' || referenceRun) return undefined; referenceRun = run.id; referenceParagraph = paragraph.id }
       } else return undefined
     }
