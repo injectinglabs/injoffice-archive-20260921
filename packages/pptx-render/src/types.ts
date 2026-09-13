@@ -348,8 +348,9 @@ export interface CompileSlideOptions {
   readonly textLayout: NativePptxTextLayout
   /** Read-only saved-frame preview of explicitly marked spAutoFit projections; never resizes or qualifies Office fidelity. */
   readonly sourceFrameAutoFitPreview?: boolean
-  /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
+  /** Explicit source-literal vector doughnut preview with host annular fitting and polygon arcs. */
   readonly literalDoughnutPreview?: boolean
+  /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */
 	readonly inheritedTextPreview?: boolean
