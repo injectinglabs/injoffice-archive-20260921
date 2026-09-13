@@ -1,5 +1,7 @@
 import { PDFCheckBox, PDFDict, PDFDocument, PDFDropdown, PDFHexString, PDFName, PDFOptionList, PDFRadioGroup, PDFTextField, StandardFonts } from 'pdf-lib'
 import type { FormValueSpec } from './types.js'
+import { prepareEmbeddedTextFont, type EmbeddedTextAppearanceFont } from './embeddedTextFont.js'
+export type { EmbeddedTextAppearanceFont } from './embeddedTextFont.js'
 
 export interface FormValueFailure {
   name: string
@@ -23,14 +25,15 @@ export interface FormValueAppearance {
 export type TextAppearanceFont = 'Helvetica' | 'Times-Roman' | 'Courier'
 
 export interface FormValuesOptions {
-  /** Explicitly replaces text appearances with the selected standard font.
-   * Only printable ASCII, plain single-line fields with owned page widgets qualify.
+  /** Explicitly replaces text appearances with a standard font (ASCII), or a
+   * supplied fixed TrueType font (independent horizontal Unicode glyphs).
+   * Only plain single-line fields with owned page widgets qualify.
    * Unexpected appearance generation failures reject the entire operation.
    */
-  textAppearance?: { font: TextAppearanceFont }
+  textAppearance?: { font: TextAppearanceFont } | EmbeddedTextAppearanceFont
 }
 
-function qualifyTextAppearance(doc: PDFDocument, field: PDFTextField, value: string): void {
+function qualifyTextAppearance(doc: PDFDocument, field: PDFTextField, value: string, unicode = false): void {
   // Inspect ancestors before calling helpers that recursively inherit flags.
   const ancestors = new Set<PDFDict>()
   let ancestor: PDFDict | undefined = field.acroField.dict
@@ -45,7 +48,7 @@ function qualifyTextAppearance(doc: PDFDocument, field: PDFTextField, value: str
     if (!(resolved instanceof PDFDict)) throw new Error('invalid text field ancestry')
     ancestor = resolved
   }
-  if (/[^\x20-\x7e]/.test(value)) throw new Error('text appearances support printable ASCII only')
+  if (!unicode && /[^\x20-\x7e]/.test(value)) throw new Error('text appearances support printable ASCII only')
   if (field.isMultiline() || field.isCombed() || field.isPassword() || field.isFileSelector() || field.isRichFormatted()) {
     throw new Error('text appearances require a plain single-line field')
   }
@@ -75,6 +78,12 @@ function qualifyTextAppearance(doc: PDFDocument, field: PDFTextField, value: str
     }
     const rotation = widget.getAppearanceCharacteristics()?.getRotation() ?? 0
     if (!Number.isFinite(rotation) || rotation % 90 !== 0) throw new Error('unsupported text widget rotation')
+    if (unicode) {
+      const border = widget.getBorderStyle()?.getWidth() ?? 0
+      if (!Number.isFinite(border) || border < 0 || Math.min(rect.width, rect.height) <= 2 * (border + 1)) {
+        throw new Error('embedded text widget has no valid inner rectangle')
+      }
+    }
   }
 }
 
@@ -122,7 +131,7 @@ function applyValue(field: unknown, spec: FormValueSpec): void {
 export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[], options: FormValuesOptions = {}): Promise<FormValuesResult> {
   const appearances: FormValueAppearance[] | undefined = options.textAppearance ? [] : undefined
   const appearanceResult = appearances ? { appearances } : {}
-  if (options.textAppearance && !['Helvetica', 'Times-Roman', 'Courier'].includes(options.textAppearance.font)) {
+  if (options.textAppearance && !('fontBytes' in options.textAppearance) && !['Helvetica', 'Times-Roman', 'Courier'].includes(options.textAppearance.font)) {
     throw new TypeError('unsupported text appearance font')
   }
   if (values.length === 0) return { bytes, applied: 0, skipped: [], ...appearanceResult }
@@ -138,7 +147,10 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
   let applied = 0
   let needsViewerAppearance = false
   const priorNeedAppearances = form.acroForm.dict.get(PDFName.of('NeedAppearances'))
-  const font = options.textAppearance ? doc.embedStandardFont(options.textAppearance.font as StandardFonts) : undefined
+  const embedded = options.textAppearance && 'fontBytes' in options.textAppearance
+    ? await prepareEmbeddedTextFont(doc, options.textAppearance) : undefined
+  let font = options.textAppearance && 'font' in options.textAppearance
+    ? doc.embedStandardFont(options.textAppearance.font as StandardFonts) : undefined
 
   for (const spec of values) {
     const field = form.getFieldMaybe(spec.name)
@@ -147,9 +159,10 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
       continue
     }
     try {
-      if (font && spec.kind === 'text') {
+      if (options.textAppearance && spec.kind === 'text') {
         if (!(field instanceof PDFTextField)) throw new TypeError('field is not a text field')
-        qualifyTextAppearance(doc, field, spec.value ?? '')
+        qualifyTextAppearance(doc, field, spec.value ?? '', !!embedded)
+        embedded?.qualify(spec.value ?? '')
       }
       applyValue(field, spec)
     } catch (error) {
@@ -158,7 +171,8 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
     }
     // Do not catch this: a provider can fail after replacing one widget. Reject
     // the entire operation rather than return partially modified field data.
-    if (font && field instanceof PDFTextField && spec.kind === 'text') {
+    if (options.textAppearance && field instanceof PDFTextField && spec.kind === 'text') {
+      if (!font) font = await embedded!.embed()
       field.updateAppearances(font)
       appearances!.push({ name: spec.name, status: 'generated', widgets: field.acroField.getWidgets().length })
     } else if (spec.kind === 'text' || spec.kind === 'choice') {
