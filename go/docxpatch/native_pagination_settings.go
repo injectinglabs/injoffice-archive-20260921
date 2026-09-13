@@ -42,6 +42,7 @@ type NativePaginationSettingsV1 struct {
 	MirrorMargins       bool                                   `json:"mirror_margins"`
 	GutterAtTop         bool                                   `json:"gutter_at_top"`
 	EvenAndOddHeaders   bool                                   `json:"even_and_odd_headers"`
+	NoColumnBalance     *bool                                  `json:"no_column_balance,omitempty"`
 	CompatibilityMode   *int                                   `json:"compatibility_mode,omitempty"`
 	Diagnostics         []NativePaginationSettingsDiagnosticV1 `json:"diagnostics"`
 }
@@ -447,7 +448,25 @@ func parseNativeNoteSentinelRegistrations(result *NativePaginationSettingsV1, pr
 
 func parseNativeModernCompatibility(result *NativePaginationSettingsV1, compat *nativeXMLNode, wordNS string) {
 	seenMode := false
+	seenBalance := false
 	for _, child := range compat.Children {
+		if child.Name == (xml.Name{Space: wordNS, Local: "noColumnBalance"}) {
+			if seenBalance {
+				result.addDiagnostic("DUPLICATE_SETTINGS_PROPERTY", child, "Duplicate noColumnBalance is ambiguous")
+				continue
+			}
+			seenBalance = true
+			if !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "val"}) {
+				continue
+			}
+			value, valid := nativeSettingsOnOff(child, wordNS)
+			if !valid {
+				result.addDiagnostic("INVALID_SETTINGS_ON_OFF", child, "noColumnBalance must be an exact OnOff value")
+				continue
+			}
+			result.NoColumnBalance = &value
+			continue
+		}
 		if child.Name != (xml.Name{Space: wordNS, Local: "compatSetting"}) {
 			result.addDiagnostic("COMPATIBILITY_SETTING_UNSUPPORTED", child, "Legacy compatibility markup changes Word layout and is not resolved")
 			continue
@@ -494,7 +513,7 @@ func (result *NativePaginationSettingsV1) addDiagnostic(code string, node *nativ
 func rejectNativeSettingsNamespaceSpoofing(root *nativeXMLNode, wordNS string) error {
 	known := map[string]bool{
 		"settings": true, "defaultTabStop": true, "mirrorMargins": true, "gutterAtTop": true,
-		"evenAndOddHeaders": true, "compat": true, "compatSetting": true,
+		"evenAndOddHeaders": true, "compat": true, "compatSetting": true, "noColumnBalance": true,
 		"characterSpacingControl": true,
 	}
 	return rejectNativeKnownLocalSpoofing(root, wordNS, known)
@@ -567,7 +586,7 @@ func ValidateNativePaginationSettingsV1(input *NativePaginationSettingsV1) error
 	if input.Profile != "unsupported" && len(input.Diagnostics) != 0 {
 		return fmt.Errorf("supported settings profile cannot carry diagnostics")
 	}
-	if input.Profile == "absent-default" && (input.SettingsPart != nil || relationshipClosureCount != 0 || input.CompatibilityMode != nil || input.DefaultTabStopTwips != nativeDefaultTabStopTwips || input.MirrorMargins || input.GutterAtTop || input.EvenAndOddHeaders) {
+	if input.Profile == "absent-default" && (input.SettingsPart != nil || relationshipClosureCount != 0 || input.NoColumnBalance != nil || input.CompatibilityMode != nil || input.DefaultTabStopTwips != nativeDefaultTabStopTwips || input.MirrorMargins || input.GutterAtTop || input.EvenAndOddHeaders) {
 		return fmt.Errorf("absent settings must use exact Word defaults")
 	}
 	if input.Profile == "word-modern-default" && (input.SettingsPart == nil || input.CompatibilityMode == nil || *input.CompatibilityMode != 15) {

@@ -418,6 +418,42 @@ all coordinates stay in integer Office units. Wire-visible pagination and
 page-paint diagnostics use explicit UTF-16 code-unit ordering rather than
 host-locale collation.
 
+Unequal-column paragraph flow is a separate bounded profile: exactly two
+explicit unequal widths in one section, with source-attested
+`compat/noColumnBalance=true`. The exact OnOff leaf is optional in settings;
+missing `val` means true, explicit false retains existing behavior, and true
+outside this qualified profile refuses. Duplicate, nested, spoofed, or foreign
+attributes do not create an attestation. The ordinary geometry helper still
+refuses unequal widths unless its explicit opt-in is used by the qualified flow.
+
+This profile supports nonempty ASCII LTR text paragraphs, zero spacing and
+indents, natural line height, no notes/tables/fields/drawings/numbering or
+headers/footers. Multiline paragraphs require `keep_lines=true` at both widths;
+all paragraphs must fit an empty column at both widths. `keep_next` and
+`page_break_before` remain excluded. Input is bounded to 256 paragraphs, 256
+lines per paragraph per width, and 100,000 source UTF-16 units, in addition to
+existing wire, shaping, page, and placement budgets.
+
+The optional pagination-request `column_shaped_lines` pair carries both complete
+width-specific snapshots. Request validation joins each to source and resolved
+layout, proves complete monotone text coverage, shared font/provider provenance,
+per-run font metrics, per-source-position script identity, and natural line
+geometry. Deterministic replay first tests a whole paragraph at the current
+column width; if it does not fit the remaining height, replay selects the next
+column's complete paragraph. It never splits a paragraph across widths. Last
+columns may remain unused. The selected `shaped_lines` snapshot must equal this
+plan, and page-paint hashing includes both candidates. No source diagnostic is
+removed: only the exact section-local `UNEQUAL_SECTION_COLUMNS` record is
+discharged after complete qualification. Unsupported or exhausted placements
+produce no partial pages.
+
+This implements the sequential fill policy described by
+[`noColumnBalance`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.nocolumnbalance?view=openxml-3.0.1)
+and the paragraph atomicity of
+[`keepLines`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.keeplines?view=openxml-3.0.1).
+The imported Go fixture and actual HarfBuzz outline/paint replay validate this
+pipeline; they are synthetic OOXML evidence, not a Word visual reference.
+
 The qualified note slice is relationship-resolved and source-order driven.
 Each referenced footnote/endnote content story contains paragraphs only,
 exactly one self-label, and exactly one matching body reference. Labels use
@@ -605,7 +641,7 @@ The native foundation, style-resolution, and shaping-line lanes do not
 implement:
 
 - exhaustive DOCX parsing or a model-to-OOXML regenerator;
-- unqualified tables, unequal-width columns, column separators, general
+- unqualified tables, unequal-width columns outside the bounded paragraph profile, column separators, general
   continuous multi-column balancing, dynamic header/footer fields, general
   note pagination outside the bounded native subset, distributed-character
   justification, or broader page painting;

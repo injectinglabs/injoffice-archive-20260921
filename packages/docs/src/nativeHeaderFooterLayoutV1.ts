@@ -1,3 +1,4 @@
+import { decodeNativeDocxPaginationRequestV1, validateNativeDocxPaginatedLayoutSourceV1 } from './nativePaginationV1.js'
 /**
  * Exact, renderer-neutral header/footer selection and line placement.
  *
@@ -102,6 +103,7 @@ export interface NativeDocxHeaderFooterLayoutInputV1 {
   document: NativeDocxDocumentV1
   resolved_layout: NativeDocxResolvedLayoutInputV1
   shaped_lines: NativeDocxShapedLinesV1
+  column_shaped_lines?: [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1]
   pagination_settings: NativeDocxPaginationSettingsV1
   paginated_layout: NativeDocxPaginatedLayoutV1
   page_field_variants?: Array<{ page_id: string; shaped_lines: NativeDocxShapedLinesV1 }>
@@ -313,6 +315,12 @@ export function layoutNativeDocxFontHeadersFootersV1(input:NativeDocxHeaderFoote
 function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:NativeDocxFontVariantPolicyV1):NativeDocxHeaderFooterLayoutV1{
   const diagnostics: NativeDocxHeaderFooterDiagnosticV1[] = []
   const pages: NativeDocxHeaderFooterPageLayoutV1[] = []
+  let qualifiedColumns = false
+  if (input.column_shaped_lines) {
+    const checked = decodeNativeDocxPaginationRequestV1({ protocol: 'injoffice.docx.pagination-request', version: 1, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings, column_shaped_lines: input.column_shaped_lines })
+    qualifiedColumns = checked.ok && validateNativeDocxPaginatedLayoutSourceV1(input.paginated_layout, checked.value).length === 0
+    if (!qualifiedColumns) diagnostics.push(diagnostic('section-geometry-invalid', input.document.document_id, 'Unequal column candidate provenance or pagination replay is invalid'))
+  }
   let records:NativeDocxFontSubstitutionV1[]|undefined
   try { const request={ protocol: 'injoffice.docx.pagination-request' as const, version: 1 as const, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings };if(font){validateNativeDocxFontPageFieldVariantsV1(request,input.paginated_layout,input.page_field_variants,font);records=qualifyNativeDocxFontSubstitutionsV1(input.shaped_lines,input.resolved_layout,font.manifest,font.policy,input.document,font.descriptors)}else validateNativeDocxPageFieldVariantsV1(request, input.paginated_layout, input.page_field_variants) }
   catch (error) { diagnostics.push(diagnostic('selected-story-field', input.document.document_id, error instanceof Error ? error.message : 'Invalid page-field source')) }
@@ -327,7 +335,7 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
       const section = sections.get(page.section_id)
       const variants = effective.get(page.section_id)
       if (!section || !variants) { diagnostics.push(diagnostic('selected-story-missing', page.section_id, 'Paginated page has no exact native section')); continue }
-      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections')
+      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS'))
       for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
       if (section.page.orientation === 'portrait' ? section.page.width_twips > section.page.height_twips : section.page.width_twips < section.page.height_twips) diagnostics.push(diagnostic('section-geometry-invalid', section.id, 'Section orientation contradicts its exact page width and height'))
       const kind = selectedKind(section, page, input.pagination_settings)

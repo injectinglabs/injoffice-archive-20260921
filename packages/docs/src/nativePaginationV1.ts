@@ -47,6 +47,7 @@ import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js
 import { layoutNativeDocxTableRowsV1, nativeDocxTableRowGroupSizeV1, qualifyNativeDocxTablesV1, type NativeDocxQualifiedTableV1, type NativeDocxTableRowGeometryV1 } from './nativeTablePagePaintV1.js'
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
+import { planNativeDocxColumnParagraphFlowV1, type NativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 import { placeNativeDocxNotesV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
@@ -70,6 +71,7 @@ export interface NativeDocxPaginationRequestV1 {
   document: NativeDocxDocumentV1
   resolved_layout: NativeDocxResolvedLayoutInputV1
   shaped_lines: NativeDocxShapedLinesV1
+  column_shaped_lines?: [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1]
   pagination_settings: NativeDocxPaginationSettingsV1
 }
 
@@ -294,6 +296,7 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
+  columnFlow?: NativeDocxColumnParagraphFlowV1
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
@@ -597,10 +600,12 @@ function validateRequest(value: unknown): PaginateNativeDocxV1Result | { ok: tru
   if (preflightIssues.length > 0) return { ok: false, issues: preflightIssues }
   const snapshot = safeSnapshot(value)
   if (snapshot === undefined) return { ok: false, issues: [issue('INVALID_VALUE', '', 'pagination request must be a cloneable JSON wire value')] }
-  if (!exactObject(snapshot, REQUEST_FIELDS)) {
+  const hasCandidates = snapshot !== null && typeof snapshot === 'object' && !Array.isArray(snapshot) && 'column_shaped_lines' in snapshot
+  const requestFields: readonly string[] = hasCandidates ? [...REQUEST_FIELDS, 'column_shaped_lines'] : REQUEST_FIELDS
+  if (!exactObject(snapshot, requestFields)) {
     if (snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) return { ok: false, issues: [issue('INVALID_TYPE', '', 'pagination request must be an object')] }
     const issues: NativeDocxValidationIssue[] = []
-    const allowed = new Set<string>(REQUEST_FIELDS)
+    const allowed = new Set<string>(requestFields)
     for (const key of Object.keys(snapshot).sort()) if (!allowed.has(key)) issues.push(issue('UNKNOWN_FIELD', `/${key}`, `unknown field ${JSON.stringify(key)}`))
     for (const key of REQUEST_FIELDS) if (!(key in snapshot)) issues.push(issue('REQUIRED', `/${key}`, 'field is required'))
     return { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) }
@@ -759,6 +764,24 @@ function validateRequest(value: unknown): PaginateNativeDocxV1Result | { ok: tru
     if (!inventory.ids.has(diagnostic.scope_id)) issues.push(issue('BROKEN_REFERENCE', `/shaped_lines/diagnostics/${diagnosticIndex}/scope_id`, 'shaping diagnostic scope must reference a native identity'))
     if (diagnostic.source_id && !inventory.ids.has(diagnostic.source_id)) issues.push(issue('BROKEN_REFERENCE', `/shaped_lines/diagnostics/${diagnosticIndex}/source_id`, 'shaping diagnostic source must reference a native identity'))
   }
+  let columnCandidates: [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1] | undefined
+  if (hasCandidates) {
+    if (!Array.isArray(snapshot.column_shaped_lines) || snapshot.column_shaped_lines.length !== 2) issues.push(issue('INVALID_VALUE', '/column_shaped_lines', 'requires exactly two complete width-specific shaped candidates'))
+    else {
+      const decoded: NativeDocxShapedLinesV1[] = []
+      for (const [index, candidate] of snapshot.column_shaped_lines.entries()) {
+        const { column_shaped_lines: _candidates, ...baseRequest } = snapshot
+        const checked = validateRequest({ ...baseRequest, shaped_lines: candidate })
+        if (!checked.ok) issues.push(...checked.issues.map((entry) => ({ ...entry, path: `/column_shaped_lines/${index}${entry.path}` })))
+        else if ('request' in checked) decoded.push(checked.request.shaped_lines)
+      }
+      if (decoded.length === 2) {
+        columnCandidates = [decoded[0]!, decoded[1]!]
+        const flow = planNativeDocxColumnParagraphFlowV1(document.value, resolved.value, settings.value, columnCandidates)
+        if (!flow || !samePaginationWire(flow.shaped_lines, shaped.value)) issues.push(issue('BROKEN_REFERENCE', '/column_shaped_lines', 'both complete candidates must qualify the source profile and deterministically reproduce selected shaped paragraphs'))
+      }
+    }
+  }
   if (issues.length > 0) return { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) }
   return {
     ok: true,
@@ -768,6 +791,7 @@ function validateRequest(value: unknown): PaginateNativeDocxV1Result | { ok: tru
       document: document.value,
       resolved_layout: resolved.value,
       shaped_lines: shaped.value,
+      ...(columnCandidates ? { column_shaped_lines: columnCandidates } : {}),
       pagination_settings: settings.value,
     },
   }
@@ -830,6 +854,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
       for (const diagnostic of settings.diagnostics) refuse(context, 'settings-attestation-unsupported', document.document_id, `Native pagination settings refuse layout: ${diagnostic.code}: ${diagnostic.message}`, { code: diagnostic.code, message: diagnostic.message })
     }
   }
+  if (settings.no_column_balance === true && !context.columnFlow) refuse(context, 'settings-attestation-unsupported', document.document_id, 'noColumnBalance requires qualified per-column paragraph flow')
   const expectedTabInterval = twips(settings.default_tab_stop_twips)
   if (expectedTabInterval === undefined || expectedTabInterval !== shaped.tab_interval_millipoints) {
     refuse(context, 'default-tab-stop-mismatch', document.document_id, `Shaped tab interval ${shaped.tab_interval_millipoints} does not match the attested Word default tab stop ${settings.default_tab_stop_twips} twips`)
@@ -838,6 +863,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   if (qualified.status === 'refused') for (const diagnostic of qualified.diagnostics) refuse(context, 'body-table-unsupported', diagnostic.scope_id, diagnostic.message)
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
+    if (context.columnFlow && entry.code === 'UNEQUAL_SECTION_COLUMNS') continue
     if (LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED.has(entry.code)) {
       addDiagnostic(context, {
         code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
@@ -910,7 +936,7 @@ function sectionGroups(context: PaginationContext): SectionGroup[] {
 }
 
 function sectionBodyBox(context: PaginationContext, section: NativeDocxSectionV1): NativeDocxPageBodyBoxV1 | undefined {
-  const qualified = qualifyNativeDocxSectionColumnsV1(section)
+  const qualified = qualifyNativeDocxSectionColumnsV1(section, context.columnFlow ? { allowUnequalWidths: true } : undefined)
   if (!qualified.ok) {
     refuse(context, qualified.code === 'section-geometry-invalid' ? 'section-geometry-invalid' : 'column-geometry-invalid', section.id, qualified.message)
     return undefined
@@ -929,7 +955,7 @@ function sectionBodyBox(context: PaginationContext, section: NativeDocxSectionV1
 }
 
 function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSectionV1): NativeDocxPageColumnV1[] | undefined {
-  const qualified = qualifyNativeDocxSectionColumnsV1(section)
+  const qualified = qualifyNativeDocxSectionColumnsV1(section, context.columnFlow ? { allowUnequalWidths: true } : undefined)
   if (!qualified.ok) {
     refuse(context, qualified.code === 'section-geometry-invalid' ? 'section-geometry-invalid' : 'column-geometry-invalid', section.id, qualified.message)
     return undefined
@@ -1615,6 +1641,16 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
     }
     startSection(context, group.section, groupIndex === 0)
     if (context.refused) return
+    if (context.columnFlow) {
+      for (const placement of context.columnFlow.placements) {
+        while (!context.refused && (context.currentPage!.ordinal < placement.page_ordinal || context.currentColumnOrdinal < placement.column_ordinal)) startNextFlowColumn(context)
+        if (context.refused) return
+        const paragraph = shaped.get(placement.paragraph_id)!
+        placeSlice(context, paragraph, 0, paragraph.lines.length, 0)
+        if (context.refused) return
+      }
+      continue
+    }
     const hasTable = group.blocks.some((block) => block.table !== undefined)
     if (hasTable && group.section.page.columns > 1) {
       refuse(context, 'body-table-unsupported', group.section.id, 'Table pagination is exact only in single-column sections; multi-column table geometry is outside pagination v1')
@@ -1712,6 +1748,7 @@ function expectedSectionGeometry(section: NativeDocxSectionV1): { width: number;
 function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false): NativeDocxPaginatedLayoutV1 {
   const context: PaginationContext = {
     approximateLegacySettings,
+    ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     request,
     provenance: provenance(request),
     diagnostics: [],
@@ -1792,6 +1829,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
   if (output.status === 'refused') return issues
 
   const semanticContext: PaginationContext = {
+    ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     approximateLegacySettings,
     request, provenance: provenance(request), diagnostics: [], diagnosticKeys: new Set(), refused: false,
     pages: [], sections: [], cursorY: 0, previousAfter: 0, sectionPageOrdinal: 0, currentColumnOrdinal: 0,
@@ -1806,8 +1844,9 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
     const source = request.document.sections[index]
     if (!source || section.section_id !== source.id || section.starts_at_block_id !== source.starts_at_block_id || section.break_type !== source.break_type) add('BROKEN_REFERENCE', `/sections/${index}`, 'paginated section identity, start block, and break must match source order exactly')
     const geometry = source ? expectedSectionGeometry(source) : undefined
-    const qualified = source ? qualifyNativeDocxSectionColumnsV1(source) : undefined
-    if (source && (!geometry || !qualified?.ok || qualified.value.columns.some((column) => column.width_millipoints !== request.shaped_lines.available_width_millipoints))) add('BROKEN_REFERENCE', `/sections/${index}`, 'paginated source section must have exact bounded columns at the attested shaping width')
+    const columnFlow = semanticContext.columnFlow
+    const qualified = source ? qualifyNativeDocxSectionColumnsV1(source, columnFlow ? { allowUnequalWidths: true } : undefined) : undefined
+    if (source && (!geometry || !qualified?.ok || (!columnFlow && qualified.value.columns.some((column) => column.width_millipoints !== request.shaped_lines.available_width_millipoints)))) add('BROKEN_REFERENCE', `/sections/${index}`, 'paginated source section must have exact bounded columns at the attested shaping width')
   })
   output.pages.forEach((page, index) => {
     const source = sourceSections.get(page.section_id)
