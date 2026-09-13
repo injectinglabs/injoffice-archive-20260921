@@ -13,6 +13,12 @@ it('retains exact saved decimals and literal currency with explicit accounting-l
 it('does not broaden strict formats into unknown conditional/scaled/date semantics',()=>{
  for(const format of ['[Red]0.00','0.00E+00','0,','0.00"x"0','[>=1]0.00;0.0','"unterminated','0.0*'])expect(preview('2.75',format)?.text).toBeUndefined()
 })
+it('does not rescue refused numeric sections through the accounting fallback',()=>{
+ for(const [lexical,format] of [['-0.001','#,##0.00;(#,##0.00);0'],['12','0;(0);0.0000000'],['12','0;(0'],['12','0;0E+00'],['12','0;0;"_x"'],['12','0;;0']]){
+  expect(preview(lexical!,format)?.text).toBeUndefined()
+  expect(preview(lexical!,format)?.warning).toMatch(/Unsupported/)
+ }
+})
 it('joins source revision, worksheet, range and eligible cell style',()=>{
  const value=objects('0.00')
  expect(nativeTableNumberFormatPreview(value,'stale','xl/worksheets/s.xml',3,2,0,'number','2.75')).toBeUndefined()

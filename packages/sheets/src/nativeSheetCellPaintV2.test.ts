@@ -245,12 +245,35 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     expect(formatNativeSheetCellDisplayV2('number', '1e9999', '0.00%').status).toBe('refused')
   })
 
+  it('selects explicit positive, negative and zero numeric sections without binary conversion', () => {
+    for (const [lexical, format, text] of [
+      ['1234.565', '#,##0.00;(#,##0.00)', '1,234.57'],
+      ['-1234.565', '#,##0.00;(#,##0.00)', '(1,234.57)'],
+      ['-12.5', '"$"0.00;("$"0.00)', '($12.50)'],
+      ['-12.5', '"$"0.00;-"$"0.00', '-$12.50'],
+      ['-0.125', '0%;-0.00%', '-12.50%'],
+      ['-12.5', '0.0;0.00', '12.50'],
+      ['0', '0.0;(0.00)', '0.0'],
+      ['-0e2', '0.0;(0.00);0.000', '0.000'],
+      ['9007199254740993', '#,##0;(#,##0)', '9,007,199,254,740,993'],
+    ]) expect(formatNativeSheetCellDisplayV2('number', lexical!, format)).toEqual({ status: 'ready', text })
+  })
+
+  it('validates unselected sections and refuses unqualified rounded-zero section selection', () => {
+    for (const format of ['0;[Red]0', '0;[<0]0', '0;;0', '0;(0);"zero"', '0;(0);0;@', '0;(0);0.0000000', '0;(0', '0;-', '0;0_', '0;0E+00', '0;"$;"0']) {
+      expect(formatNativeSheetCellDisplayV2('number', '12', format).status, format).toBe('refused')
+    }
+    for (const lexical of ['0.001', '-0.001', 'bad', '1e9999']) {
+      expect(formatNativeSheetCellDisplayV2('number', lexical, '0.00;(0.00);0').status).toBe('refused')
+    }
+  })
+
   it('uses formatted strings in native glyph plans and reports unsupported formats per cell', () => {
     const workbook = displayFixture()
     const percent = addStyle(workbook, '0.00%')
-    const currency = addStyle(workbook, '"$"#,##0.00')
+    const currency = addStyle(workbook, '"$"#,##0.00;("$"#,##0.00)')
     const unsupported = addStyle(workbook, '0.00E+00')
-    for (const [column, style, lexical] of [[15, percent, '0.125'], [16, currency, '1234.5'], [17, unsupported, '1.2']] as const) {
+    for (const [column, style, lexical] of [[15, percent, '0.125'], [16, currency, '-1234.5'], [17, unsupported, '1.2']] as const) {
       const cell = workbook.sheets[0]!.cells.find((candidate) => candidate.column === column)!
       cell.style_id = style
       cell.value = { kind: 'number', storage: 'number', lexical, rich: false }
@@ -260,7 +283,7 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const { model, geometry } = setup(workbook as unknown as NativeWorkbookV2, { row: 0, column: 0, end_row: 0, end_column: 17 })
     const plan = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
     expect(plan.cells.find((cell) => cell.cell_ref === 'P1')?.display_text).toBe('12.50%')
-    expect(plan.cells.find((cell) => cell.cell_ref === 'Q1')?.display_text).toBe('$1,234.50')
+    expect(plan.cells.find((cell) => cell.cell_ref === 'Q1')?.display_text).toBe('($1,234.50)')
     expect(plan.unsupported).toContainEqual(expect.objectContaining({ cell_ref: 'R1', code: 'CELL_STYLE_UNSUPPORTED' }))
     expect(plan.glyphs.some((glyph) => glyph.cell_ref === 'R1')).toBe(false)
   })

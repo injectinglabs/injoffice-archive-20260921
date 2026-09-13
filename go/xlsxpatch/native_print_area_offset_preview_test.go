@@ -15,6 +15,7 @@ func TestNativePrintOffset(t *testing.T) {
 		{`OFFSET('Data Set'!$D$3,3,-2,1,1)`, NativePrintAreaRectV1{5, 1, 5, 1}},
 		{`OFFSET('Data Set'!$D$3:$F$5,3,-2)`, NativePrintAreaRectV1{5, 1, 7, 3}},
 		{`OFFSET('Data Set'!$D$3:$F$5, 3, -2, 2)`, NativePrintAreaRectV1{5, 1, 6, 3}},
+		{`OFFSET(  'Data Set'!$D$3:$F$5  , 3, -2, 2)`, NativePrintAreaRectV1{5, 1, 6, 3}},
 		{`OFFSET('Data Set'!$B$2,-1,-1,1048576,16384)`, NativePrintAreaRectV1{0, 0, 1048575, 16383}},
 	} {
 		if got := parseNativePrintOffset(tc.formula, "Data Set"); got == nil || *got != tc.want {
@@ -42,6 +43,21 @@ func TestNativePrintOffset(t *testing.T) {
 	} {
 		if got := parseNativePrintOffset(formula, "Data Set"); got != nil {
 			t.Errorf("accepted %q: %+v", formula, got)
+		}
+	}
+}
+
+func TestNativePrintOffsetReferenceWhitespace(t *testing.T) {
+	for _, whitespace := range []string{"\u00a0", "\u2003"} {
+		for _, reference := range []string{whitespace + `'Data Set'!$A$1`, `'Data Set'!$A$1` + whitespace} {
+			formula := "OFFSET(" + reference + ",0,0)"
+			if got := parseNativePrintOffset(formula, "Data Set"); got != nil {
+				t.Fatalf("accepted non-grammar whitespace in %q: %+v", formula, got)
+			}
+		}
+		sheetName := "Data" + whitespace + "Set"
+		if got := parseNativePrintOffset("OFFSET('"+sheetName+"'!$A$1,0,0)", sheetName); got == nil || *got != (NativePrintAreaRectV1{0, 0, 0, 0}) {
+			t.Fatalf("changed quoted sheet identity %q: %+v", sheetName, got)
 		}
 	}
 }
