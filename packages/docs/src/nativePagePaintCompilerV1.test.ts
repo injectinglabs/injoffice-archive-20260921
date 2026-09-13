@@ -324,6 +324,44 @@ function endnoteFixture(): NativeDocxPagePaintPrepareInputV1 {
   return input
 }
 
+function continuedEndnotePaintFixture(): NativeDocxPagePaintPrepareInputV1 {
+  const input = endnoteFixture()
+  const document = input.document as NativeDocxDocumentV1
+  const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+  document.sections[0]!.page.margins.bottom_twips = 13_200
+  const separator = document.notes[0]!
+  const note = document.notes[1]!
+  note.anchor.end_byte = 2_000
+  const original = note.blocks[0]!.paragraph!
+  const originalResolved = resolved.paragraphs.find((entry) => entry.paragraph_id === original.id)!
+  originalResolved.properties.keep_lines = true
+  const originalRun = original.runs[1]!
+  const originalResolvedRun = resolved.runs.find((entry) => entry.run_id === originalRun.id)!
+  const scopes: string[] = []
+  for (let index = 2; index <= 7; index += 1) {
+    const paragraph = structuredClone(original)
+    paragraph.id = `paragraph:endnote:${index}`
+    paragraph.anchor = { ...paragraph.anchor, path: `/w:endnotes[1]/w:endnote[2]/w:p[${index}]`, start_byte: index * 200, end_byte: index * 200 + 100 }
+    const run = { ...structuredClone(originalRun), id: `run:endnote:${index}`, text: ` Endnote paragraph ${index}`, anchor: { ...paragraph.anchor, path: `${paragraph.anchor.path}/w:r[1]`, start_byte: paragraph.anchor.start_byte + 10, end_byte: paragraph.anchor.end_byte - 10 } }
+    paragraph.runs = [run]
+    note.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+    resolved.paragraphs.push({ ...structuredClone(originalResolved), paragraph_id: paragraph.id })
+    resolved.runs.push({ ...structuredClone(originalResolvedRun), paragraph_id: paragraph.id, run_id: run.id })
+    scopes.push(paragraph.id, run.id)
+  }
+  const continuation = structuredClone(separator)
+  continuation.id = 'story:endnote:continuation'
+  continuation.note_role = 'continuation-separator'
+  continuation.native_story_id = '0'
+  continuation.blocks[0]!.id = 'paragraph:endnote:continuation'
+  continuation.blocks[0]!.paragraph!.id = continuation.blocks[0]!.id
+  document.notes.push(continuation)
+  resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!), paragraph_id: continuation.blocks[0]!.id })
+  scopes.push(continuation.blocks[0]!.id)
+  rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids.push(...scopes); inventory.references[0]!.scope_ids.sort() })
+  return input
+}
+
 function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV1 {
   const input = noteFixture()
   const document = input.document as NativeDocxDocumentV1
@@ -2304,6 +2342,47 @@ describe('native DOCX page-paint compiler v1', () => {
       drifted.page_paint_request.integrity[field] = `sha256:${'0'.repeat(64)}`
       await expect(completeNativeDocxPagePaintV1({ prepared: drifted, outline_results: outlineResults })).rejects.toThrow(new RegExp(field))
     }
+  })
+
+  it('keeps a dormant endnote sentinel inert and refuses its unsupported semantics only on activation', async () => {
+    const input = continuedEndnotePaintFixture()
+    const document = input.document as NativeDocxDocumentV1
+    const continuation = document.notes.at(-1)!
+    document.unsupported.push({ id: 'unsupported:continuation', code: 'UNMODELED_NOTE_MARKUP', capability: 'notes', scope_id: continuation.id, preservation: 'refuse-mutation', message: 'Unsupported continuation source.' })
+    document.sections[0]!.page.margins.bottom_twips = 1_440
+    const fitting = await prepareNativeDocxPagePaintV1(input)
+    expect(fitting.page_paint_request.paginated_layout.status).toBe('paginated')
+    expect(fitting.page_paint_request.pagination_request.shaped_lines.paragraphs.some((paragraph) => paragraph.story_id === continuation.id)).toBe(false)
+    document.sections[0]!.page.margins.bottom_twips = 13_200
+    const active = await prepareNativeDocxPagePaintV1(input)
+    expect(active.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [], sections: [] }))
+  })
+
+  it('lazily shapes and paints source-bound endnote continuation with a full-width rule', async () => {
+    const input = continuedEndnotePaintFixture()
+    const before = structuredClone(input)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const layout = prepared.page_paint_request.paginated_layout
+    expect(layout.status, JSON.stringify(layout.diagnostics)).toBe('paginated')
+    if (layout.status !== 'paginated') return
+    expect(layout.pages.length).toBeGreaterThan(1)
+    expect(layout.pages[0]!.note_stories![0]!.note_role).toBe('separator')
+    expect(layout.pages.slice(1).every((page) => page.note_stories![0]!.note_role === 'continuation-separator')).toBe(true)
+    expect(layout.pages.flatMap((page) => page.note_stories!.filter((story) => story.note_role === 'content').flatMap((story) => story.lines))).toHaveLength(7)
+    expect(input).toEqual(before)
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to', x: 0, y: 0 }, { kind: 'line_to', x: 1_000, y: 0 }, { kind: 'line_to', x: 1_000, y: 1_000 }, { kind: 'close_path' }],
+    })) })
+    expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output)).toBe('painted')
+    if (completed.page_paint_output.status !== 'painted') return
+    const rules = completed.page_paint_output.pages.map((page) => page.commands.find((command) => command.kind === 'stroke_note_separator')!)
+    expect(rules[0]!.x2_millipoints - rules[0]!.x1_millipoints).toBe(144_000)
+    expect(rules.slice(1).every((rule) => rule.x2_millipoints - rule.x1_millipoints === layout.pages[0]!.body_box.width_millipoints)).toBe(true)
+    const forged = structuredClone(completed.page_paint_output)
+    const forgedRule = forged.pages[1]!.commands.find((command) => command.kind === 'stroke_note_separator')!
+    forgedRule.x2_millipoints -= 1
+    expect(decodeNativeDocxPagePaintForRequestV1(forged, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(false)
   })
 
   it('paints the same qualified exact subset for endnotes', async () => {

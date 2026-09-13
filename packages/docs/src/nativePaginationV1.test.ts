@@ -358,6 +358,40 @@ function convertFootnotesToEndnotes(request: NativeDocxPaginationRequestV1): voi
   }
 }
 
+function continuedEndnoteFixture(bodyLines = 1, bodyHeight = 40_000): NativeDocxPaginationRequestV1 {
+  const request = fixture({ bodyHeight, lineCounts: [bodyLines] })
+  addFootnote(request, '1', '1', 10_000)
+  convertFootnotesToEndnotes(request)
+  const separator = request.document.notes[0]!
+  const note = request.document.notes[1]!
+  const separatorParagraph = separator.blocks[0]!.paragraph!
+  const separatorShaped = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separatorParagraph.id)!
+  const separatorResolved = request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === separatorParagraph.id)!
+  const continuation = structuredClone(separator)
+  continuation.id = 'story:endnote:continuation'
+  continuation.native_story_id = '0'
+  continuation.note_role = 'continuation-separator'
+  const continuationParagraph = continuation.blocks[0]!.paragraph!
+  continuationParagraph.id = 'paragraph:endnote:continuation'
+  continuation.blocks[0]!.id = continuationParagraph.id
+  request.document.notes.push(continuation)
+  request.resolved_layout.paragraphs.push({ ...structuredClone(separatorResolved), paragraph_id: continuationParagraph.id })
+  request.shaped_lines.paragraphs.push({ ...structuredClone(separatorShaped), paragraph_id: continuationParagraph.id, story_id: continuation.id,
+    lines: [{ ...structuredClone(separatorShaped.lines[0]!), id: `line:${continuationParagraph.id}:0` }],
+  })
+  for (let ordinal = 2; ordinal <= 6; ordinal += 1) {
+    const paragraph = structuredClone(note.blocks[0]!.paragraph!)
+    paragraph.runs = []
+    paragraph.id = `paragraph:endnote:${ordinal}`
+    note.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+    request.resolved_layout.paragraphs.push({ ...structuredClone(separatorResolved), paragraph_id: paragraph.id })
+    request.shaped_lines.paragraphs.push({ ...structuredClone(separatorShaped), paragraph_id: paragraph.id, story_id: note.id,
+      lines: [{ ...structuredClone(separatorShaped.lines[0]!), id: `line:${paragraph.id}:0` }],
+    })
+  }
+  return request
+}
+
 describe('native DOCX shaped-lines wire decoder', () => {
   it('accepts the exact shaped projection and rejects unknown, null, negative zero, and inconsistent block advances', () => {
     const shaped = fixture().shaped_lines
@@ -1430,6 +1464,113 @@ describe('native DOCX pagination v1', () => {
     const placedLineIDs = placements.flatMap((entry) => entry.lines.map((line) => line.id))
     expect(new Set(placedLineIDs).size).toBe(placedLineIDs.length)
     expect(decodeNativeDocxPaginatedLayout(output).ok).toBe(true)
+  })
+
+  it('admits only exact satisfied paragraph-control diagnostics and independently checks note constraints', () => {
+    for (const mutation of ['exact', 'severity', 'run-source', 'message', 'origin'] as const) {
+      const request = fixture()
+      addFootnote(request)
+      const paragraphID = 'paragraph:footnote:1'
+      request.resolved_layout.paragraphs.find((paragraph) => paragraph.paragraph_id === paragraphID)!.properties.keep_lines = true
+      request.shaped_lines.diagnostics.push({
+        code: 'page-control-deferred', severity: mutation === 'severity' ? 'unsupported' : 'deferred', scope_id: paragraphID,
+        ...(mutation === 'run-source' ? { source_id: 'run:footnote-label:1' } : {}),
+        ...(mutation === 'origin' ? { source_diagnostic_code: 'FONT_MISSING' } : {}),
+        message: mutation === 'message' ? 'Unrecognized deferred layout semantics' : 'keep_lines is retained in resolved layout for the future paginator and does not alter line shaping',
+      })
+      const result = paginateNativeDocxV1(request)
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.status).toBe(mutation === 'exact' ? 'paginated' : 'refused')
+    }
+    for (const key of ['keep_next', 'page_break_before'] as const) {
+      const request = fixture()
+      addFootnote(request)
+      request.resolved_layout.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:footnote:1')!.properties[key] = true
+      expect(request.shaped_lines.diagnostics).toEqual([])
+      const result = paginateNativeDocxV1(request)
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value).toEqual(expect.objectContaining({ status: 'refused', pages: [], sections: [] }))
+    }
+  })
+
+  it('continues one endnote at complete paragraph boundaries with source-bound separators and one label', () => {
+    const request = continuedEndnoteFixture()
+    const snapshot = structuredClone(request)
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.note_stories?.map((story) => story.note_role))).toEqual([
+      ['separator', 'content'], ['continuation-separator', 'content'], ['continuation-separator', 'content'],
+    ])
+    expect(output.pages.map((page) => page.note_stories?.[1]?.lines.length)).toEqual([2, 3, 1])
+    const placed = output.pages.flatMap((page) => page.note_stories?.filter((story) => story.note_role === 'content').flatMap((story) => story.lines) ?? [])
+    expect(new Set(placed.map((line) => line.line_id)).size).toBe(6)
+    expect(placed.filter((line) => line.paragraph_id === 'paragraph:footnote:1')).toHaveLength(1)
+    expect(request).toEqual(snapshot)
+    expect(paginated(request)).toEqual(output)
+    for (const mutation of ['drop', 'duplicate', 'separator', 'reference'] as const) {
+      const forged = structuredClone(output)
+      if (mutation === 'drop') forged.pages[2]!.note_stories![1]!.lines = []
+      if (mutation === 'duplicate') forged.pages[2]!.note_stories![1]!.lines[0]!.line_id = placed[0]!.line_id
+      if (mutation === 'separator') forged.pages[1]!.note_stories![0]!.note_role = 'separator'
+      if (mutation === 'reference') forged.pages[1]!.note_stories![1]!.reference_run_id = 'run:forged'
+      expect(decodeNativeDocxPaginatedLayoutForRequest(forged, request).ok).toBe(false)
+    }
+  })
+
+  it('keeps authored multiline note paragraphs intact and refuses an unqualified atomic split', () => {
+    for (const keepLines of [true, false, undefined]) {
+      const request = continuedEndnoteFixture()
+      const paragraph = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === 'paragraph:endnote:2')!
+      paragraph.lines.push({ ...structuredClone(paragraph.lines[0]!), id: `line:${paragraph.paragraph_id}:1`, ordinal: 1 })
+      paragraph.block_advance_millipoints *= 2
+      const properties = request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === paragraph.paragraph_id)!.properties
+      if (keepLines !== undefined) properties.keep_lines = keepLines
+      const result = paginateNativeDocxV1(request)
+      expect(result.ok).toBe(true)
+      if (!result.ok) continue
+      expect(result.value.status).toBe(keepLines ? 'paginated' : 'refused')
+      if (result.value.status === 'paginated') {
+        const pages = result.value.pages.filter((page) => page.note_stories?.some((story) => story.lines.some((line) => line.paragraph_id === paragraph.paragraph_id)))
+        expect(pages).toHaveLength(1)
+        expect(pages[0]!.note_stories![1]!.lines.filter((line) => line.paragraph_id === paragraph.paragraph_id)).toHaveLength(2)
+        expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, request).ok).toBe(true)
+      }
+    }
+  })
+
+  it('retries an unfitting first note paragraph on a fresh page with an ordinary separator', () => {
+    const output = paginated(continuedEndnoteFixture(3))
+    expect(output.pages[0]!.note_stories).toEqual([])
+    expect(output.pages[1]!.note_stories![0]!.note_role).toBe('separator')
+    expect(output.pages[2]!.note_stories![0]!.note_role).toBe('continuation-separator')
+  })
+
+  it('discards all pages when endnote continuation exceeds the page budget', () => {
+    const result = paginateNativeDocxV1(continuedEndnoteFixture(4_096, 20_000))
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    if (result.ok) expect(result.value).toEqual(expect.objectContaining({
+      status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'resource-limit' })]),
+    }))
+  })
+
+  it('refuses activated missing, unsupported, or drifting continuation sentinels atomically', () => {
+    for (const mutation of ['missing', 'unshaped', 'unsupported', 'relationship', 'spacing', 'keep-next', 'oversized'] as const) {
+      const request = continuedEndnoteFixture()
+      const continuation = request.document.notes.at(-1)!
+      if (mutation === 'missing') { request.document.notes.pop(); request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter((paragraph) => paragraph.story_id !== continuation.id); request.resolved_layout.paragraphs = request.resolved_layout.paragraphs.filter((paragraph) => paragraph.paragraph_id !== continuation.blocks[0]!.id) }
+      if (mutation === 'unshaped') request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter((paragraph) => paragraph.story_id !== continuation.id)
+      if (mutation === 'unsupported') request.document.unsupported.push({ id: 'unsupported:continuation', code: 'UNMODELED_NOTE_MARKUP', capability: 'notes', scope_id: continuation.id, preservation: 'refuse-mutation', message: 'Unsupported activated instruction.' })
+      if (mutation === 'relationship') continuation.relationship_id = 'rIdDrift'
+      if (mutation === 'spacing') { const paragraph = request.shaped_lines.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:endnote:2')!; paragraph.spacing_after_millipoints = 50; paragraph.block_advance_millipoints += 50; request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === paragraph.paragraph_id)!.properties.spacing_after_twips = 1 }
+      if (mutation === 'keep-next') request.resolved_layout.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:endnote:2')!.properties.keep_next = true
+      if (mutation === 'oversized') {
+        const paragraph = request.shaped_lines.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:endnote:2')!
+        paragraph.lines[0]!.line_height_millipoints = 40_000
+        paragraph.block_advance_millipoints = 40_000
+      }
+      const result = paginateNativeDocxV1(request)
+      expect(result.ok, `${mutation}: ${JSON.stringify(result)}`).toBe(mutation !== 'relationship')
+      if (result.ok) expect(result.value).toEqual(expect.objectContaining({ status: 'refused', pages: [], sections: [] }))
+    }
   })
 
   it('moves one whole endnote group to one fresh bounded final page', () => {
