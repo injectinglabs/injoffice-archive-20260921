@@ -12,6 +12,12 @@ var nativePrintOffsetInteger = regexp.MustCompile(`^[+-]?[0-9]{1,7}$`)
 // OFFSET with literal integers and an absolute same-sheet reference is accepted.
 // https://support.microsoft.com/en-us/Excel/functions/offset-function
 func parseNativePrintOffset(text, sheetName string) *NativePrintAreaRectV1 {
+	return parseNativePrintOffsetArguments(text, sheetName, nil)
+}
+
+// The optional resolver is supplied only by the source-bound saved-cell path.
+// Formula syntax, dimensions and grid bounds remain common to both paths.
+func parseNativePrintOffsetArguments(text, sheetName string, resolve func(string) (int, bool)) *NativePrintAreaRectV1 {
 	// Keep the verbatim source expression safe and bounded in warning transport.
 	if len(text) > 2048 || strings.ContainsAny(text, "\r\n\t") || !strings.HasPrefix(text, "OFFSET(") || !strings.HasSuffix(text, ")") {
 		return nil
@@ -32,11 +38,11 @@ func parseNativePrintOffset(text, sheetName string) *NativePrintAreaRectV1 {
 	values := []int{0, 0, base.EndRow - base.Row + 1, base.EndColumn - base.Column + 1}
 	for i, arg := range args[1:] {
 		arg = strings.Trim(arg, " ")
-		if !nativePrintOffsetInteger.MatchString(arg) {
-			return nil
+		n, ok := nativePrintOffsetIntegerValue(arg)
+		if !ok && resolve != nil {
+			n, ok = resolve(arg)
 		}
-		n, err := strconv.Atoi(arg)
-		if err != nil || n < -1048576 || n > 1048576 {
+		if !ok {
 			return nil
 		}
 		values[i] = n
@@ -47,4 +53,12 @@ func parseNativePrintOffset(text, sheetName string) *NativePrintAreaRectV1 {
 		return nil
 	}
 	return &NativePrintAreaRectV1{Row: row, Column: col, EndRow: row + height - 1, EndColumn: col + width - 1}
+}
+
+func nativePrintOffsetIntegerValue(text string) (int, bool) {
+	if !nativePrintOffsetInteger.MatchString(text) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(text)
+	return n, err == nil && n >= -1048576 && n <= 1048576
 }
