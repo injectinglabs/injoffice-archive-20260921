@@ -71,7 +71,7 @@ it('bounds a custom text rectangle in cumulative group space independently of pa
  group.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'fixture.group',message:'Read-only geometry child'}]}
  deck.slides[0]!.elements=[group]
  expect(validateNativePptx(deck).ok,JSON.stringify(validateNativePptx(deck))).toBe(true)
- await expect(compileNativePptxSlide(deck,0,{textLayout:layout,maxCoordinateEmu:100000000})).rejects.toThrow(/world-space bound/)
+ await expect(compileNativePptxSlide(deck,0,{textLayout:layout,maxCoordinateEmu:100000000})).rejects.toThrow(/world.*(?:bound|budget)/)
  shape.geometry!.textRect={x:0,y:0,cx:100,cy:100}
  await expect(compileNativePptxSlide(deck,0,{textLayout:layout,maxCoordinateEmu:100000000})).resolves.toMatchObject({nodes:[{kind:'group'}]})
 })

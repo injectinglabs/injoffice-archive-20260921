@@ -5,7 +5,7 @@ export interface AffineRational { readonly numerator: bigint; readonly denominat
 type Six<T> = readonly [T,T,T,T,T,T]
 export interface QualifiedSourceAffine { values: Six<AffineRational>; errors: Six<AffineRational>; depth: number }
 export interface SourceAffineFrame { x:number; y:number; cx:number; cy:number; rotation?:number; flipH?:boolean; flipV?:boolean }
-export const SOURCE_AFFINE_LIMITS = Object.freeze({ rationalBits:512, maxDepth:64, maxOperations:100_000, maxPayloadBytes:16*1024*1024, maxErrorEmu:0.125 })
+export const SOURCE_AFFINE_LIMITS = Object.freeze({ rationalBits:512, maxDepth:64, maxOperations:1_000_000, maxPayloadBytes:16*1024*1024, maxErrorEmu:0.125 })
 /** One instance belongs to one compile request, shared by every precise node. */
 export class SourceAffineBudget {
  private operations=0

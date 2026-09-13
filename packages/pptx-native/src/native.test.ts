@@ -262,11 +262,13 @@ describe('native PPTX contract', () => {
     if (!result.ok) expect(result.issues.map((issue) => issue.code)).toContain('native.resourceDepth')
   })
 
-  it('requires child coordinate transforms to compose to an exact affine mapping', () => {
+  it('admits rational parsed child coordinate systems while preserving exact legacy authored requirements', () => {
     const deck = fixture('valid/parsed-full.json') as NativePptxDeck
     const group = deck.slides[0]!.elements.find((element) => element.kind === 'group')
     if (!group || group.kind !== 'group') throw new Error('group fixture is incomplete')
     group.childTransform = { x: 0, y: 0, cx: 3, cy: 3 }
+    expect(validateNativePptx(deck).ok).toBe(true)
+    group.provenance='authored';delete group.source
     const result = validateNativePptx(deck)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.issues.map((issue) => issue.code)).toContain('native.groupTransform')

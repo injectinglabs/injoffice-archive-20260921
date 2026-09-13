@@ -10,6 +10,6 @@ describe('native rounded picture clip SVG',()=>{
   const ids=[...markup.matchAll(/<clipPath id="([^"]+)"/g)].map(m=>m[1])
   expect(ids).toHaveLength(2);expect(new Set(ids).size).toBe(2)
   for(const id of ids)expect(markup).toContain(`url(#${id})`)
-  expect(markup).toContain('clipPathUnits="userSpaceOnUse"');expect(markup).toContain('rx="33.334" ry="33.334"');expect(markup).toContain('matrix(2 0 0 3 100 200)')
+  expect(markup).toContain('clipPathUnits="userSpaceOnUse"');expect(markup).toContain(`rx="${33.334/12700}" ry="${33.334/12700}"`);expect(markup).toContain(`matrix(2 0 0 3 ${100/12700} ${200/12700})`)
  })
 })

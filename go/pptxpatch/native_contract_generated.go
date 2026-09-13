@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219"
+const NativePPTXSchemaSHA256 = "212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -195,7 +195,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"text"},
 	},
 	"NativeTransform": {
-		Properties: []string{"cx", "cy", "quarterTurns", "x", "y"},
+		Properties: []string{"cx", "cy", "flipH", "flipV", "quarterTurns", "rotationAngle", "x", "y"},
 		Required:   []string{"cx", "cy", "x", "y"},
 	},
 	"NativeTransition": {
