@@ -91,6 +91,47 @@ func TestWASMExtractMatchesInProcessGo(t *testing.T) {
 	}
 }
 
+func TestWASMDefaultPresetsRemainReadOnly(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	shapes := ""
+	for i, preset := range []string{"roundRect", "rightArrow", "hexagon"} {
+		shapes += fmt.Sprintf(`<p:sp><p:nvSpPr><p:cNvPr id="%d" name="Default preset"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="2000000" cy="1000000"/></a:xfrm><a:prstGeom prst="%s"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="336699"/></a:solidFill><a:ln w="0" cap="flat" cmpd="sng" algn="ctr"><a:noFill/><a:prstDash val="solid"/><a:round/></a:ln></p:spPr></p:sp>`, i+4, preset)
+	}
+	original := contractPPTXWithShapes(t, shapes)
+	want, err := extractNativeJSON(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(t.TempDir(), "default-presets.pptx")
+	if err := os.WriteFile(input, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("node", script, "extract", "--wasm", wasm, "--wasm-exec", wasmExec, "--input", input)
+	got, err := command.Output()
+	if err != nil {
+		t.Fatalf("WASM extract: %v %s", err, stderrFrom(err))
+	}
+	if !bytes.Equal(bytes.TrimSpace(got), want) {
+		t.Fatal("WASM and Go differ")
+	}
+	deck, err := pptxpatch.DecodeNativePPTXJSON(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, e := range deck.Slides[0].Elements {
+		if e.Preset != nil {
+			count++
+			if e.Compatibility.Status != pptxpatch.NativeCompatibilityStatusPreserveOnly {
+				t.Fatal("preset acquired mutation authority")
+			}
+		}
+	}
+	if count != 3 {
+		t.Fatalf("expected 3 presets, got %d", count)
+	}
+}
+
 func TestWASMInspectionMatchesReadOnlyGo(t *testing.T) {
 	wasm, wasmExec, script := requireNodeHarness(t)
 	original := contractPPTX(t)
@@ -289,7 +330,9 @@ func deckHasBrowserLocalToken(deck pptxpatch.NativePPTXDeck) bool {
 	return false
 }
 
-func contractPPTX(t *testing.T) []byte {
+func contractPPTX(t *testing.T) []byte { return contractPPTXWithShapes(t, "") }
+
+func contractPPTXWithShapes(t *testing.T, shapes string) []byte {
 	t.Helper()
 	const (
 		contentTypes = "http://schemas.openxmlformats.org/package/2006/content-types"
@@ -305,7 +348,7 @@ func contractPPTX(t *testing.T) []byte {
 		{"_rels/.rels", fmt.Sprintf(`<Relationships xmlns="%s"><Relationship Id="rIdRoot" Type="%s/officeDocument" Target="relocated/deck.xml"/></Relationships>`, packageRels, officeRels)},
 		{"relocated/deck.xml", fmt.Sprintf(`<p:presentation xmlns:p="%s" xmlns:r="%s"><p:sldIdLst><p:sldId id="256" r:id="rId7"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/></p:presentation>`, presentation, officeRels)},
 		{"relocated/_rels/deck.xml.rels", fmt.Sprintf(`<Relationships xmlns="%s"><Relationship Id="rId7" Type="%s/slide" Target="slides/slide-a.xml"/></Relationships>`, packageRels, officeRels)},
-		{"relocated/slides/slide-a.xml", fmt.Sprintf(`<p:sld xmlns:p="%s" xmlns:a="%s"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>%s%s</p:spTree></p:cSld></p:sld>`, presentation, drawing, text, unsupported)},
+		{"relocated/slides/slide-a.xml", fmt.Sprintf(`<p:sld xmlns:p="%s" xmlns:a="%s"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>%s%s</p:spTree></p:cSld></p:sld>`, presentation, drawing, text, unsupported+shapes)},
 		{"relocated/slides/_rels/slide-a.xml.rels", fmt.Sprintf(`<Relationships xmlns="%s"><Relationship Id="rIdLayout" Type="%s/slideLayout" Target="../layouts/layout.xml"/></Relationships>`, packageRels, officeRels)},
 		{"relocated/layouts/layout.xml", fmt.Sprintf(`<p:sldLayout xmlns:p="%s"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sldLayout>`, presentation)},
 		{"relocated/layouts/_rels/layout.xml.rels", fmt.Sprintf(`<Relationships xmlns="%s"><Relationship Id="rIdMaster" Type="%s/slideMaster" Target="../masters/master.xml"/></Relationships>`, packageRels, officeRels)},
