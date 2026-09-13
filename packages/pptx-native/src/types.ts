@@ -80,6 +80,7 @@ export interface NativeTextRun {
   bold?: boolean
   italic?: boolean
   fontSizeHundredthPt?: number
+  kerningThresholdHundredthPt?: number
   color?: string
   fontFamily?: string
   language?: string
@@ -109,7 +110,7 @@ export interface NativeTextBodyLayout {
   wrap: NativeTextWrap
   verticalAnchor: NativeTextVerticalAnchor
   autoFit: 'none' | 'shape-source-frame'
-  horizontalOverflow: 'overflow'
+  horizontalOverflow: 'overflow' | 'clip'
   verticalOverflow: 'overflow'
   writingMode?: 'vertical-clockwise'
 }

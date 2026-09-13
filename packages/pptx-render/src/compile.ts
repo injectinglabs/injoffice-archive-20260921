@@ -1015,7 +1015,7 @@ async function shapeRun(nativeRun: NativeTextRun, context: NativePptxTextRunCont
     script: override.script ?? state.textDefaults.script,
     language: override.language ?? nativeRun.language ?? state.textDefaults.language,
     direction: override.direction ?? state.textDefaults.direction,
-    features: state.inheritedTextElements.has(context.elementId) && !symbolEncoding ? [...(override.features??[]).filter(feature=>feature.tag!=='kern').map(feature=>({...feature})),{tag:'kern',value:0}] : override.features?.map((feature) => ({ ...feature })),
+    features: nativeRun.kerningThresholdHundredthPt!==undefined ? [...(override.features??[]).filter(feature=>feature.tag!=='kern').map(feature=>({...feature})),{tag:'kern',value:(nativeRun.fontSizeHundredthPt??state.textDefaults.fontSizeHundredthPt)>=nativeRun.kerningThresholdHundredthPt?1:0}] : state.inheritedTextElements.has(context.elementId) && !symbolEncoding ? [...(override.features??[]).filter(feature=>feature.tag!=='kern').map(feature=>({...feature})),{tag:'kern',value:0}] : override.features?.map((feature) => ({ ...feature })),
     variations: override.variations?.map((variation) => ({ ...variation })),
     letterSpacingMilliPoints: override.letterSpacingMilliPoints,
     wordSpacingMilliPoints: override.wordSpacingMilliPoints,

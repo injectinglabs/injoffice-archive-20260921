@@ -85,7 +85,7 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
   if (textBody.transform) surface.push({kind:'restore'})
 }
 
-function paintNode(node: RenderNode, surface: PaintSurface): void {
+function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRect, depth=1): void {
   surface.push({ kind: 'save' })
   surface.push({ kind: 'transform', transform: node.transform })
   if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : { kind: 'clipRect', rect: node.clip.rect })
@@ -121,6 +121,13 @@ function paintNode(node: RenderNode, surface: PaintSurface): void {
         surface.push({ kind: 'save' })
         surface.push({ kind: 'transform', transform: { aPpm: 1_000_000, bPpm: 0, cPpm: 0, dPpm: 1_000_000, txEmu: cell.bounds.x, tyEmu: cell.bounds.y } })
         if (cell.textBody) {
+          // CT_TableCellProperties clips at cell edges, not its text insets.
+          // This slice permits only top-level unrotated tables. Reuse the slide
+          // vertical clip in cell coordinates, preserving vertical overflow.
+          if(cell.textBody.horizontalOverflow==='clip') {
+            if(depth!==1||node.transform.aPpm!==1000000||node.transform.dPpm!==1000000||node.transform.bPpm!==0||node.transform.cPpm!==0)throw new RenderCompileError('render.horizontalClip','$.table','horizontal clipping requires a top-level unrotated table')
+            surface.push({kind:'clipRect',rect:{x:0,y:slideClip.y-node.transform.tyEmu-cell.bounds.y,cx:cell.bounds.cx,cy:slideClip.cy}})
+          }
           paintTextBody(cell.textBody, surface)
         } else if (cell.paragraph) {
           surface.push({ kind: 'clipRect', rect: { x: 0, y: 0, cx: cell.bounds.cx, cy: cell.bounds.cy } })
@@ -130,7 +137,7 @@ function paintNode(node: RenderNode, surface: PaintSurface): void {
       }
       break
     case 'group':
-      for (const child of node.children) paintNode(child, surface)
+      for (const child of node.children) paintNode(child, surface, slideClip, depth+1)
       break
     case 'placeholder':
       surface.push({ kind: 'placeholder', sourceElementId: node.sourceElementId, rect: node.bounds, reason: node.reason, label: node.label })
@@ -151,7 +158,7 @@ export function paintSlideRenderTree(tree: SlideRenderTree, surface: PaintSurfac
   staging.push({ kind: 'beginSlide', size: tree.size, background: tree.background.color })
   staging.push({ kind: 'save' })
   staging.push({ kind: 'clipRect', rect: tree.clip.rect })
-  for (const node of tree.nodes) paintNode(node, staging)
+  for (const node of tree.nodes) paintNode(node, staging, tree.clip.rect)
   staging.push({ kind: 'restore' })
   staging.push({ kind: 'endSlide' })
   for (const command of staging.finish()) surface.push(command)

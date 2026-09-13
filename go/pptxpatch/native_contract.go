@@ -92,13 +92,14 @@ type NativeAsset struct {
 }
 
 type NativeTextRun struct {
-	Text                *string `json:"text"`
-	Bold                *bool   `json:"bold,omitempty"`
-	Italic              *bool   `json:"italic,omitempty"`
-	FontSizeHundredthPt *int64  `json:"fontSizeHundredthPt,omitempty"`
-	Color               *string `json:"color,omitempty"`
-	FontFamily          *string `json:"fontFamily,omitempty"`
-	Language            *string `json:"language,omitempty"`
+	Text                        *string `json:"text"`
+	Bold                        *bool   `json:"bold,omitempty"`
+	Italic                      *bool   `json:"italic,omitempty"`
+	FontSizeHundredthPt         *int64  `json:"fontSizeHundredthPt,omitempty"`
+	KerningThresholdHundredthPt *int64  `json:"kerningThresholdHundredthPt,omitempty"`
+	Color                       *string `json:"color,omitempty"`
+	FontFamily                  *string `json:"fontFamily,omitempty"`
+	Language                    *string `json:"language,omitempty"`
 }
 
 type NativeParagraph struct {

@@ -188,7 +188,7 @@ export interface RenderTextBodyNode {
   readonly wrap?: 'square' | 'none'
   readonly verticalAnchor?: 'top' | 'center' | 'bottom'
   readonly autoFit?: 'none' | 'shape-source-frame'
-  readonly horizontalOverflow?: 'overflow'
+  readonly horizontalOverflow?: 'overflow' | 'clip'
   readonly verticalOverflow?: 'overflow'
   readonly status: 'laidOut' | 'refused'
   readonly paragraphs: readonly RenderParagraphNode[]

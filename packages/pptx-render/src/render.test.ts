@@ -1515,6 +1515,31 @@ describe('DOM-free dependency guard', () => {
   })
 })
 
+it('applies authored kerning thresholds and clips only table horizontal cell edges',async()=>{
+ const base=fixtureShaper(),features:unknown[]=[]
+ const shaper:NativeTextShaper={...base,shape(request){features.push(request.run.features);return base.shape(request)}}
+ const cell={text:'AV',paragraphs:[{align:'left' as const,level:0,bullet:false,runs:[{text:'AV',fontFamily:'Aptos',fontSizeHundredthPt:1000,kerningThresholdHundredthPt:1200}]}],textBody:{...nativeTextBody(),wrap:'none' as const,horizontalOverflow:'clip' as const,leftInsetEmu:10000,rightInsetEmu:10000,topInsetEmu:0,bottomInsetEmu:0}}
+ const table:Extract<NativeElement,{kind:'table'}>={kind:'table',id:'clipped',provenance:'authored',transform:{x:100000,y:200000,cx:400000,cy:200000},table:{columnWidths:[200000,200000],rowHeights:[200000],rows:[[cell,{...structuredClone(cell),paragraphs:[{align:'left',level:0,bullet:false,runs:[{text:'AV',fontFamily:'Aptos',fontSizeHundredthPt:1800,kerningThresholdHundredthPt:1200}]}]}]]},passthrough:[],compatibility:{status:'editable',diagnostics:[]}}
+ const tree=await compileNativePptxSlide(authoredDeck([table]),0,{textLayout:textLayout(shaper,()=>({features:[{tag:'kern',value:0}]})),lineLayoutPolicy:'max-run-natural-v1'})
+ expect(features,JSON.stringify(tree.diagnostics)).toContainEqual([{tag:'kern',value:0}]);expect(features).toContainEqual([{tag:'kern',value:1}])
+ const recording=createRecordingPaintSurface();paintSlideRenderTree(tree,recording)
+ expect(recording.finish().filter(c=>c.kind==='clipRect')).toEqual([{kind:'clipRect',rect:{x:0,y:0,cx:2000000,cy:1500000}},{kind:'clipRect',rect:{x:0,y:-200000,cx:200000,cy:1500000}},{kind:'clipRect',rect:{x:0,y:-200000,cx:200000,cy:1500000}}])
+ expect(recording.finish().filter(c=>c.kind==='glyphRun')).toHaveLength(2)
+ const group:Extract<NativeElement,{kind:'group'}>={kind:'group',id:'clip-group',provenance:'authored',transform:{x:0,y:0,cx:1000000,cy:1000000},children:[structuredClone(table)],passthrough:[],compatibility:{status:'editable',diagnostics:[]}}
+ await expect(compileNativePptxSlide(authoredDeck([group]),0,{textLayout:textLayout()})).rejects.toThrow()
+ const rotated=structuredClone(table);rotated.transform.quarterTurns=1
+ await expect(compileNativePptxSlide(authoredDeck([rotated]),0,{textLayout:textLayout()})).rejects.toThrow()
+})
+
+it.each([0,1200,1201])('uses an exact inclusive kerning threshold %s',async threshold=>{
+ const element=nativeTextElement('kern','AV',nativeTextBody(),{x:0,y:0,cx:1000000,cy:500000})
+ element.paragraphs[0]!.runs[0]!.fontSizeHundredthPt=1200;element.paragraphs[0]!.runs[0]!.kerningThresholdHundredthPt=threshold
+ const base=fixtureShaper(),seen:unknown[]=[]
+ const shaper:NativeTextShaper={...base,shape(request){seen.push(request.run.features);return base.shape(request)}}
+ await compileNativePptxSlide(authoredDeck([element]),0,{textLayout:textLayout(shaper),lineLayoutPolicy:'max-run-natural-v1'})
+ expect(seen).toEqual([[{tag:'kern',value:1200>=threshold?1:0}]])
+})
+
 it('renders literal pie vectors only on opt-in and accounts for slice nodes',async()=>{
  const deck=structuredClone(parsedFull)
  const chart=deck.slides[0]!.elements.find(e=>e.kind==='chart')!
