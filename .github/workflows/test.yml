@@ -37,6 +37,9 @@ jobs:
           cache: false
       - run: npm ci
       - run: npm run build
+      - name: PDF embedded Unicode font in Chrome
+        timeout-minutes: 3
+        run: npm run test:pdf-embedded-font-browser
       - run: npm run typecheck
       - run: npm run check:docs-api
       - name: Installed WASM tarballs in Chrome

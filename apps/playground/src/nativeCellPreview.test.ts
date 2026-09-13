@@ -34,6 +34,8 @@ describe('native spreadsheet display integration', () => {
     ['"$"#,##0.00', '1234.56', '$1,234.56'],
     ['0.00" €"', '1234.56', '1234.56 €'],
     ['General', '9007199254740993', '9007199254740993'],
+    ['"$"#,##0.00;("$"#,##0.00)', '-1234.56', '($1,234.56)'],
+    ['0.00;(0.00);0', '0', '0'],
   ])('uses the native formatter for %s', (format, lexical, expected) => {
     const { workbook, cell } = sample(format, lexical)
     const before = JSON.stringify({ workbook, cell })
@@ -60,10 +62,26 @@ describe('native spreadsheet display integration', () => {
     expect(nativeCellPreview(workbook, { ...formula, formula: { type: 'normal', text: '1/8' } })).toMatchObject({ text: '—', warning: expect.stringContaining('No saved formula result') })
   })
 
+  it('formats cached negative sections while retaining the exact source formula and cache', () => {
+    const { workbook, cell } = sample('#,##0.00;(#,##0.00);0', '-1234.565')
+    const formula: NativeCell = { ...cell, editable: false, value: undefined, formula: { type: 'normal', text: '-SUM(A2:A3)', cached: cell.value } }
+    const before = JSON.stringify(formula)
+    expect(nativeCellPreview(workbook, formula)).toEqual({ text: '(1,234.57)', cached: true })
+    expect(displayCellValue(formula)).toBe('=-SUM(A2:A3)')
+    expect(JSON.stringify(formula)).toBe(before)
+  })
+
   it('marks raw fallbacks instead of guessing unsupported currency/accounting formats', () => {
     for (const format of ['$#,##0.00', '[Red]0.00', '0.00;[Red]-0.00']) {
       const { workbook, cell } = sample(format, '1234.56')
       expect(nativeCellPreview(workbook, cell)).toMatchObject({ text: '1234.56', warning: expect.stringContaining('Unsupported') })
+    }
+  })
+
+  it('keeps numeric-section refusals visible through the accounting fallback', () => {
+    for (const [lexical, format] of [['-0.001', '#,##0.00;(#,##0.00);0'], ['12', '0;(0);0.0000000'], ['12', '0;(0'], ['12', '0;0E+00'], ['12', '0;;0']]) {
+      const { workbook, cell } = sample(format!, lexical!)
+      expect(nativeCellPreview(workbook, cell)).toMatchObject({ text: lexical, warning: expect.stringContaining('Unsupported') })
     }
   })
 

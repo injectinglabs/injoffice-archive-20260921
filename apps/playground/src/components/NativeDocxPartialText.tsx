@@ -1,6 +1,7 @@
+import {createNativeDocxNestedTextInventoryV1,type NativeDocxNestedTextInventoryV1,createNativeDocxTextboxInventoryV1,type NativeDocxTextboxInventoryV1} from '@injoffice/docs/native-docx'
 import {createElement,useEffect,useRef,useState} from 'react'
 import {createDocxWasmClient} from '@injoffice/docx-wasm'
-import {createNativeDocxNestedTextInventoryV1,type NativeDocxNestedTextInventoryV1,createNativeDocxReviewInventoryV1,type NativeDocxReviewInventoryV1,createNativeDocxPartialContentPreviewV1,type NativeDocxPartialContentV1,type NativeDocxPartialParagraphV1,type NativeDocxMathNodeV1,type NativeDocxEquationPreviewV1} from '@injoffice/docs/native-docx'
+import {createNativeDocxReviewInventoryV1,type NativeDocxReviewInventoryV1,createNativeDocxPartialContentPreviewV1,type NativeDocxPartialContentV1,type NativeDocxPartialParagraphV1,type NativeDocxMathNodeV1,type NativeDocxEquationPreviewV1} from '@injoffice/docs/native-docx'
 import {DsButton} from '../design-system/primitives'
 
 function Paragraph({paragraph}:{paragraph:NativeDocxPartialParagraphV1}){
@@ -32,6 +33,16 @@ export function NativeDocxReviewInventoryView({review}:{review:NativeDocxReviewI
  return <section aria-label="Read-only tracked-change source inventory"><h4>Tracked-change source inventory</h4><p>Stored revision metadata, not verified author identities. Changes are listed separately; this is not a final or original Word view. Only qualified insertion text is shown. Deleted and moved text stays omitted. No accept/reject or editing controls are provided.</p>{diagnosticCodes.length>0&&<details><summary>Retained source diagnostic codes ({diagnosticCodes.length})</summary><ul>{diagnosticCodes.map(code=><li key={code}>{code}</li>)}</ul></details>}{review.items.length===0&&<p>No qualified review wrappers are available.</p>}{review.items.map(item=><section key={item.diagnostic_id}><h5>{item.kind} {item.revision_id} · {item.author}</h5>{item.created_at&&<p>Stored date: {item.created_at}</p>}{item.text_status==='qualified-insertion'?<p style={{whiteSpace:'pre-wrap'}}>{item.segments.map((s,i)=>s.kind==='text'?<span key={i}>{s.text}</span>:null)}</p>:<p>[Review text omitted: source structure or visibility is unqualified, or this change kind is metadata only.]</p>}<details><summary>Retained source diagnostics ({item.retained_diagnostic_ids.length})</summary><ul>{item.retained_diagnostic_ids.map(id=><li key={id}>{id}</li>)}</ul></details></section>)}{review.omitted_count>0&&<p>[Review inventory omissions: {review.omitted_count}]</p>}</section>
 }
 
+export function NativeDocxTextboxInventoryView({inventory}:{inventory:NativeDocxTextboxInventoryV1}){
+ return <section aria-label="Read-only textbox source inventory"><h4>Textbox source text</h4>
+  <p>Textboxes are listed separately in source order. Shape geometry, placement, wrapping and links between textboxes are not reconstructed. Source omissions remain labeled.</p>
+  {inventory.items.length===0&&<p>No qualified textbox inventory is available; source drawing warnings remain.</p>}
+  {inventory.items.map((item,index)=><section key={item.diagnostic_id}><h5>Textbox {index+1} · {item.kind==='vml'?'VML':'DrawingML'}</h5>{item.status==='supported'?item.paragraphs.map((text,n)=><p key={n} style={{whiteSpace:'pre-wrap'}}>{text}</p>):<p>[Textbox text omitted: {item.reason}]</p>}</section>)}
+  {inventory.omitted_count>0&&<p>[Textbox inventory limit: {inventory.omitted_count} omitted]</p>}
+  <details><summary>Retained source warnings ({inventory.source_diagnostics.length})</summary><ul>{inventory.source_diagnostics.map(d=><li key={d.id}>{d.code}: {d.message}</li>)}</ul></details>
+ </section>
+}
+
 export function NativeDocxNestedTextInventoryView({inventory}:{inventory:NativeDocxNestedTextInventoryV1}){
  return <section aria-label="Read-only nested table source text"><h4>Nested table source text</h4><p>Qualified one-level nested cell text, listed separately in source order. This view does not reconstruct table geometry, borders, fonts or Word layout. Original nested-table omissions and diagnostics remain; no editing is available.</p>{inventory.items.map((item,i)=><section key={item.owner.diagnostic_id}><h5>Nested table {i+1} · source cell 1</h5>{item.paragraphs.map(p=><Paragraph key={p.source.scope_id} paragraph={p}/>)}</section>)}{inventory.omitted_count>0&&<p>[Nested text omissions: {inventory.omitted_count}]</p>}{inventory.items.length===0&&<p>No qualified nested cell text is available.</p>}</section>
 }
@@ -40,20 +51,21 @@ export function NativeDocxNestedTextInventoryView({inventory}:{inventory:NativeD
 export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;packageDigest:string}){
  const active=useRef<AbortController|null>(null)
  const [result,setResult]=useState<NativeDocxPartialContentV1|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const [textboxes,setTextboxes]=useState<NativeDocxTextboxInventoryV1|null>(null)
  const [review,setReview]=useState<NativeDocxReviewInventoryV1|null>(null)
  const [nestedText,setNestedText]=useState<NativeDocxNestedTextInventoryV1|null>(null)
  const [equations,setEquations]=useState<NativeDocxEquationPreviewV1[]>([])
- useEffect(()=>{active.current?.abort();active.current=null;setResult(null);setBusy(false);setError('');return()=>{active.current?.abort();active.current=null}},[bytes,packageDigest])
- const run=async(includeComments=false,includeReview=false,includeNested=false)=>{
+ useEffect(()=>{active.current?.abort();active.current=null;setResult(null);setTextboxes(null);setNestedText(null);setReview(null);setEquations([]);setBusy(false);setError('');return()=>{active.current?.abort();active.current=null}},[bytes,packageDigest])
+ const run=async(includeComments=false,includeReview=false,includeTextboxes=false,includeNested=false)=>{
   const controller=new AbortController();active.current?.abort();active.current=controller
-  setBusy(true);setError('');setResult(null);setEquations([]);setReview(null);setNestedText(null)
+  setBusy(true);setError('');setResult(null);setEquations([]);setReview(null);setTextboxes(null);setNestedText(null)
   let client:ReturnType<typeof createDocxWasmClient>|undefined
   try{
    client=createDocxWasmClient()
    const joined=await client.inspectPartialContent(bytes,{signal:controller.signal})
    if(joined.document.source.package_sha256!==packageDigest)throw new Error('Source changed; reopen the partial text preview.')
    const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true,...(includeComments?{comment_policy:'source-comment-inventory-v1' as const}:{})},joined.resolved_layout,joined.nested_table_omissions,joined.table_text_contexts)
-   if(active.current===controller&&!controller.signal.aborted){setNestedText(includeNested?createNativeDocxNestedTextInventoryV1(joined.document,{policy:'source-nested-table-text-v1',read_only:true},joined.resolved_layout,joined.nested_table_omissions,joined.table_text_contexts,joined.nested_text):null);setResult(preview);setEquations(joined.equations??[]);setReview(includeReview?createNativeDocxReviewInventoryV1(joined.document,{policy:'source-review-inventory-v1',read_only:true},joined.resolved_layout,joined.review_changes):null)}
+   if(active.current===controller&&!controller.signal.aborted){setNestedText(includeNested?createNativeDocxNestedTextInventoryV1(joined.document,{policy:'source-nested-table-text-v1',read_only:true},joined.resolved_layout,joined.nested_table_omissions,joined.table_text_contexts,joined.nested_text):null);setResult(preview);setTextboxes(includeTextboxes?createNativeDocxTextboxInventoryV1(joined.document,{policy:'source-textbox-inventory-v1',read_only:true},joined.textbox_inventory):null);setEquations(joined.equations??[]);setReview(includeReview?createNativeDocxReviewInventoryV1(joined.document,{policy:'source-review-inventory-v1',read_only:true},joined.resolved_layout,joined.review_changes):null)}
   }catch(reason){if(active.current===controller&&!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Partial source text could not be qualified.')}
   finally{client?.terminate();if(active.current===controller){active.current=null;setBusy(false)}}
  }
@@ -62,10 +74,11 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
   <DsButton disabled={busy} onClick={()=>void run()}>Show read-only partial text</DsButton>
   <DsButton disabled={busy} onClick={()=>void run(true)}>Show partial text with comments</DsButton>
   <DsButton disabled={busy} onClick={()=>void run(false,true)}>Inspect tracked-change source</DsButton>
-  <DsButton disabled={busy} onClick={()=>void run(false,false,true)}>Inspect nested table source text</DsButton>
+  <DsButton disabled={busy} onClick={()=>void run(false,false,true)}>Inspect textbox source</DsButton>
+  <DsButton disabled={busy} onClick={()=>void run(false,false,false,true)}>Inspect nested table source text</DsButton>
   {busy&&<DsButton onClick={()=>{active.current?.abort();active.current=null;setBusy(false)}}>Cancel partial text</DsButton>}
   {busy&&<p role="status">Reading source text in the browser…</p>}
   {error&&<p role="status">{error}</p>}
-  {result?.source.package_sha256===packageDigest&&<><NativeDocxPartialTextView preview={result}/>{nestedText?.source.package_sha256===packageDigest&&<NativeDocxNestedTextInventoryView inventory={nestedText}/>}<NativeDocxEquationList equations={equations}/>{review?.source.package_sha256===packageDigest&&<NativeDocxReviewInventoryView review={review}/>}</>}
+  {result?.source.package_sha256===packageDigest&&<><NativeDocxPartialTextView preview={result}/>{nestedText?.source.package_sha256===packageDigest&&<NativeDocxNestedTextInventoryView inventory={nestedText}/>}<NativeDocxEquationList equations={equations}/>{textboxes?.source.package_sha256===packageDigest&&<NativeDocxTextboxInventoryView inventory={textboxes}/>}{review?.source.package_sha256===packageDigest&&<NativeDocxReviewInventoryView review={review}/>}</>}
  </section>
 }

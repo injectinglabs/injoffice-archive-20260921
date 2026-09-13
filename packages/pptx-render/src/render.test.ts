@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { defaultPentagonTextRect } from './geometry.js'
+import { defaultPentagonTextRect, defaultPresetTextRect } from './geometry.js'
 import type {
   NativeFontManifest,
   NativeFontResolver,
@@ -393,7 +393,7 @@ describe('native PPTX RenderTree', () => {
       transform: { aPpm: 1_000_000, dPpm: 1_000_000, txEmu: 7_000_000, tyEmu: 1_000_000 },
       bounds: { x: 0, y: 0, cx: 2_000_000, cy: 2_000_000 },
     })
-    expect(findNode(tree, 'shape', 'el-shape').path).toEqual([{ kind: 'roundRect', rect: { x: 0, y: 0, cx: 1_500_000, cy: 800_000 }, radiusEmu: 100_000 }])
+    expect(findNode(tree, 'shape', 'el-shape').path).toEqual([{ kind: 'roundRect', rect: { x: 0, y: 0, cx: 1_500_000, cy: 800_000 }, radiusEmu: 133_336 }])
     expect(findNode(tree, 'connector', 'el-line')).toMatchObject({ headArrow: false, tailArrow: true })
     expect(findNode(tree, 'connector', 'el-line')).not.toHaveProperty('clip')
     expect(findNode(tree, 'image', 'el-picture')).toMatchObject({ role: 'picture', assetId: 'z-picture', resolutionSource: 'sourceDeck' })
@@ -408,7 +408,7 @@ describe('native PPTX RenderTree', () => {
     expect(stringifySlideRenderTree(await compileNativePptxSlide(parsedFull, 0, { textLayout: textLayout() }))).toBe(canonical)
     // Fixture resolver substitutes Aptos with Fixture Sans: source/selected
     // evidence and approximate labels are now part of the replay identity.
-    expect(createHash('sha256').update(canonical).digest('hex')).toBe('752e84e2159ab169ea2039f176067fb68ff81365520ebad0f1c2a3c5bed94daa')
+    expect(createHash('sha256').update(canonical).digest('hex')).toBe('47a7d012470b11d33e462879915be81635171f1c35964191e6aa591c3d647b78')
   })
 
   it('compiles and paints exact table cells from renderer-neutral native text commands without cell or table clipping', async () => {
@@ -1097,6 +1097,41 @@ describe('native PPTX RenderTree', () => {
       expect(presetPath(preset, 1_000_003, 700_001)).toEqual(first)
       expect(first.length).toBeLessThanOrEqual(11)
       expect(JSON.stringify(first)).not.toMatch(/\.\d/)
+    }
+  })
+
+  it('evaluates default preset guides with the shorter side and final EMU rounding', () => {
+    expect(presetPath('roundRect', 1, 2)).toEqual([{kind:'roundRect',rect:{x:0,y:0,cx:1,cy:2},radiusEmu:0}])
+    expect(presetPath('roundRect', 2000000, 1000000)).toEqual([{kind:'roundRect',rect:{x:0,y:0,cx:2000000,cy:1000000},radiusEmu:166670}])
+    expect(presetPath('rightArrow', 2000000, 1000000)).toEqual([
+      {kind:'moveTo',x:0,y:250000},{kind:'lineTo',x:1500000,y:250000},
+      {kind:'lineTo',x:1500000,y:0},{kind:'lineTo',x:2000000,y:500000},
+      {kind:'lineTo',x:1500000,y:1000000},{kind:'lineTo',x:1500000,y:750000},
+      {kind:'lineTo',x:0,y:750000},{kind:'close'},
+    ])
+    expect(presetPath('hexagon', 2000000, 1000000)).toEqual([
+      {kind:'moveTo',x:0,y:500000},{kind:'lineTo',x:250000,y:0},
+      {kind:'lineTo',x:1750000,y:0},{kind:'lineTo',x:2000000,y:500000},
+      {kind:'lineTo',x:1750000,y:1000000},{kind:'lineTo',x:250000,y:1000000},{kind:'close'},
+    ])
+    expect(defaultPresetTextRect('roundRect',2000000,1000000)).toEqual({x:48816,y:48816,cx:1902368,cy:902368})
+    expect(defaultPresetTextRect('rightArrow',2000000,1000000)).toEqual({x:0,y:250000,cx:1750000,cy:500000})
+    expect(defaultPresetTextRect('hexagon',2000000,1000000)).toEqual({x:250000,y:125000,cx:1500000,cy:750000})
+    expect(presetPath('rightArrow', 1000000, 2000000)[1]).toEqual({kind:'lineTo',x:500000,y:500000})
+    expect(defaultPresetTextRect('hexagon',1000000,2000000)).toEqual({x:166667,y:333333,cx:666666,cy:1333334})
+  })
+
+  it('lays out and paints default preset text within guide rectangles', async () => {
+    for (const preset of ['roundRect','rightArrow','hexagon'] as const) {
+      const source=nativeTextElement('preset-text','AB',nativeTextBody({leftInsetEmu:1000,rightInsetEmu:2000,topInsetEmu:3000,bottomInsetEmu:4000}),{x:100,y:200,cx:2000000,cy:1000000})
+      const shape:NativeElement={...source,kind:'shape',preset,transform:{...source.transform,quarterTurns:1}}
+      const tree=await compileNativePptxSlide(authoredDeck([shape]),0,{textLayout:textLayout()})
+      const r=defaultPresetTextRect(preset,2000000,1000000)
+      expect(findNode(tree,'shape',shape.id).textBody).toMatchObject({status:'laidOut',bounds:{x:r.x+1000,y:r.y+3000,cx:r.cx-3000,cy:r.cy-7000}})
+      const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+      expect(surface.finish().some(c=>c.kind==='glyphRun')).toBe(true)
+      const collapsed={...shape,textBody:nativeTextBody({topInsetEmu:400000,bottomInsetEmu:400000})}
+      if(preset==='rightArrow') await expect(compileNativePptxSlide(authoredDeck([collapsed]),0,{textLayout:textLayout()})).rejects.toMatchObject({code:'render.coordinateBudget'})
     }
   })
 
