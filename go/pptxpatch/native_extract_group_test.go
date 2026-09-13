@@ -118,10 +118,12 @@ func TestExtractNativePPTXPreservesUnsupportedGroupAsOneOpaqueSubtree(t *testing
 		mutate    func(string) string
 		code      string
 	}{
-		{name: "rotation", xfrmAttrs: ` rot="60000"`, code: "pptx.group-rotation-unavailable"},
-		{name: "horizontal flip", xfrmAttrs: ` flipH="1"`, code: "pptx.group-flip-unavailable"},
-		{name: "fractional EMU", code: "pptx.group-fractional-transform-unavailable", mutate: func(value string) string {
-			return strings.Replace(value, `cx="6000000" cy="8000000"`, `cx="6000001" cy="8000000"`, 1)
+		{name: "unmodeled transform attribute", xfrmAttrs: ` future="1"`, code: "pptx.group-transform-unavailable"},
+		{name: "group effects", code: "pptx.group-properties-unavailable", mutate: func(value string) string {
+			return strings.Replace(value, `</p:grpSpPr>`, `<a:effectLst/></p:grpSpPr>`, 1)
+		}},
+		{name: "group fill", code: "pptx.group-properties-unavailable", mutate: func(value string) string {
+			return strings.Replace(value, `</p:grpSpPr>`, `<a:solidFill><a:srgbClr val="336699"/></a:solidFill></p:grpSpPr>`, 1)
 		}},
 	} {
 		test := test
@@ -327,7 +329,7 @@ func TestExtractNativePPTXOpaqueGroupRollsBackNestedPictureProjection(t *testing
 
 	imagePart := "relocated/media/group.png"
 	imageData := "\x89PNG\r\n\x1a\ngroup"
-	group := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Picture Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr><p:pic><p:nvPicPr><p:cNvPr id="4" name="Nested Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip xmlns:r="%s" r:embed="rIdImage"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="1" y="0"/><a:ext cx="10" cy="10"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic><p:grpSp><p:nvGrpSpPr><p:cNvPr id="5" name="Fractional Nested"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="101" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="3" cy="100"/></a:xfrm></p:grpSpPr>%s</p:grpSp></p:grpSp>`, nsOfficeRelsTransitional, nativeGroupRectXML(6, "Nested Rect", 0, 0, 1, 1))
+	group := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Picture Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr><p:pic><p:nvPicPr><p:cNvPr id="4" name="Nested Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip xmlns:r="%s" r:embed="rIdImage"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="1" y="0"/><a:ext cx="10" cy="10"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic><p:grpSp><p:nvGrpSpPr><p:cNvPr id="5" name="Unsupported Nested"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="101" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="3" cy="100"/></a:xfrm><a:effectLst/></p:grpSpPr>%s</p:grpSp></p:grpSp>`, nsOfficeRelsTransitional, nativeGroupRectXML(6, "Nested Rect", 0, 0, 1, 1))
 	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{
 		extraParts: []nativeExtractZipPart{{name: imagePart, data: imageData}},
 		mutate: func(parts map[string]string) {
@@ -340,7 +342,7 @@ func TestExtractNativePPTXOpaqueGroupRollsBackNestedPictureProjection(t *testing
 	if err != nil {
 		t.Fatalf("opaque nested-picture group: %v", err)
 	}
-	if len(deck.Assets) != 0 || len(deck.Slides[0].Elements) != 1 || nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-fractional-transform-unavailable") == false {
+	if len(deck.Assets) != 0 || len(deck.Slides[0].Elements) != 1 || nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-properties-unavailable") == false {
 		t.Fatalf("opaque group leaked nested picture projection: assets=%#v elements=%#v compatibility=%#v", deck.Assets, deck.Slides[0].Elements, deck.Slides[0].Compatibility)
 	}
 }
@@ -400,7 +402,7 @@ func TestExtractNativePPTXStagesNestedCapabilitiesUntilWholeGroupAcceptance(t *t
 		}
 		shapeEnd += shapeStart + len(`</p:sp>`)
 		textChild := strings.Replace(slide[shapeStart:shapeEnd], `id="2" name="Title"`, `id="3" name="Nested Text"`, 1)
-		lateRefusal := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="4" name="Late Fractional"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="101" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="3" cy="100"/></a:xfrm></p:grpSpPr>%s</p:grpSp>`, nativeGroupRectXML(5, "Late Leaf", 0, 0, 1, 1))
+		lateRefusal := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="4" name="Late Unsupported"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="101" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="3" cy="100"/></a:xfrm><a:effectLst/></p:grpSpPr>%s</p:grpSp>`, nativeGroupRectXML(5, "Late Leaf", 0, 0, 1, 1))
 		group := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="2" name="Atomic Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr>%s%s</p:grpSp>`, textChild, lateRefusal)
 		parts["relocated/slides/slide-a.xml"] = slide[:shapeStart] + group + slide[shapeEnd:]
 	}})
@@ -423,7 +425,7 @@ func TestExtractNativePPTXStagesNestedCapabilitiesUntilWholeGroupAcceptance(t *t
 			groupRequests = append(groupRequests, request)
 		}
 	}
-	if len(groupRequests) != 1 || groupRequests[0].ObjectID != "cNvPr-2" || groupRequests[0].Reason != "pptx.group-fractional-transform-unavailable" {
+	if len(groupRequests) != 1 || groupRequests[0].ObjectID != "cNvPr-2" || groupRequests[0].Reason != "pptx.group-properties-unavailable" {
 		t.Fatalf("external issuer observed an orphan nested capability: %#v", groupRequests)
 	}
 	if !strings.HasPrefix(string(groupRequests[0].Payload), `<p:grpSp`) || strings.Contains(string(groupRequests[0].Payload), `id="1"`) {

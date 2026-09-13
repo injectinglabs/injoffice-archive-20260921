@@ -42,3 +42,44 @@ func parseNativeSourceAffine(node *nativeXMLNode) (nativeSourceAffine, error) {
 	}
 	return result, nil
 }
+
+// Only new affine/rational source groups widen the preview boundary. Keep the
+// previously supported exact authored/parsed group mutation rules unchanged.
+func nativeComplexAffineGroup(element NativeElement) bool {
+	if element.Kind != NativeElementKindGroup {
+		return false
+	}
+	if nativeHasSourceAffine(element.Transform) {
+		return true
+	}
+	if element.ChildTransform != nil {
+		_, _, _, _, err := nativeGroupAffineComponents(element.Transform, *element.ChildTransform)
+		return err != nil
+	}
+	return false
+}
+func nativeHasGraphicFrameDescendant(elements []NativeElement) bool {
+	for _, element := range elements {
+		if element.Kind == NativeElementKindTable || element.Kind == NativeElementKindChart || nativeHasGraphicFrameDescendant(element.Children) {
+			return true
+		}
+	}
+	return false
+}
+func nativeMarkAffineDescendants(elements []NativeElement) {
+	for index := range elements {
+		element := &elements[index]
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		// One inherited marker is sufficient even across nested affine groups.
+		marked := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == "pptx.source-affine-ancestor-preview" {
+				marked = true
+			}
+		}
+		if !marked && len(element.Compatibility.Diagnostics) < nativeMaxDiagnosticsPerScope {
+			element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.source-affine-ancestor-preview", Message: "an ancestor source affine transform makes this target preview-only"})
+		}
+		nativeMarkAffineDescendants(element.Children)
+	}
+}

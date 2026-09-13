@@ -261,6 +261,12 @@ function validateElement(
     return 'refused'
   }
   registerId(element.id, `${path}.id`, ids, issues)
+  const sourceAffine = (t: NativeElement['transform']) => t.rotationAngle!==undefined || t.flipH!==undefined || t.flipV!==undefined
+  if(sourceAffine(element.transform)) {
+    if(element.transform.quarterTurns!==undefined)add(issues,`${path}.transform`,'native.rotation','source affine fields and legacy quarter turns are mutually exclusive')
+    if(element.compatibility.status==='editable')add(issues,`${path}.transform`,'native.rotationAuthority','source affine transforms remain preview-only')
+  }
+  if(element.kind==='group'&&element.childTransform&&sourceAffine(element.childTransform))add(issues,`${path}.childTransform`,'native.rotation','child coordinate systems cannot carry orientation')
   if(element.transform.quarterTurns!==undefined){
     if(element.kind!=='text'&&element.kind!=='shape')add(issues,`${path}.transform.quarterTurns`,'native.rotation','quarter turns are supported only for text and shapes')
     if(element.transform.quarterTurns%2!==0&&element.transform.cx%2!==element.transform.cy%2)add(issues,`${path}.transform.quarterTurns`,'native.rotation','quarter-turn center must remain exact integer EMU')
@@ -329,7 +335,7 @@ function validateElement(
         const hasTextBody = cell.textBody !== undefined
         if (hasParagraphs !== hasTextBody) add(issues, cellPath, 'native.tableTextAuthority', 'paragraphs and textBody must be supplied together')
         if (cell.paragraphs && cell.textBody) {
-          if(cell.textBody.horizontalOverflow==='clip'&&(depth!==1||element.transform.quarterTurns!==undefined))add(issues,`${cellPath}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping requires a top-level unrotated table')
+          if(cell.textBody.horizontalOverflow==='clip'&&(depth!==1||element.transform.quarterTurns!==undefined||sourceAffine(element.transform)))add(issues,`${cellPath}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping requires a top-level unrotated table')
           authoritativeCells++
           validateParagraphMarkers(cell.paragraphs, `${path}.table.rows[${rowIndex}][${columnIndex}].paragraphs`, issues)
           for (const paragraph of cell.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
@@ -383,7 +389,7 @@ function validateElement(
     if (element.provenance === 'parsed' && element.childTransform === undefined) {
       add(issues, `${path}.childTransform`, 'native.groupTransform', 'parsed groups require an authoritative DrawingML child coordinate transform')
     }
-    if (element.childTransform !== undefined) validateExactGroupTransform(element.transform, element.childTransform, `${path}.childTransform`, issues)
+    if (element.childTransform !== undefined && element.provenance!=='parsed' && !sourceAffine(element.transform)) validateExactGroupTransform(element.transform, element.childTransform, `${path}.childTransform`, issues)
     element.children.forEach((child, index) => {
       worst = worseStatus(worst, validateElement(deck, child, `${path}.children[${index}]`, ids, elements, assets, issues, budget, depth + 1, slideId, slidePart))
     })

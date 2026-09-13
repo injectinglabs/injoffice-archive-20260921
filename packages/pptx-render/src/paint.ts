@@ -1,3 +1,5 @@
+import {renderTransformMatrix} from './sourceRenderTransform.js'
+import {SourceAffineBudget} from './sourceAffine.js'
 import {geometryPathFill} from './geometryFillPolicy.js'
 import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
@@ -78,12 +80,14 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
     })
     return
   }
+  if(textBody.orientationTransform){surface.push({kind:'save'});surface.push({kind:'transform',transform:textBody.orientationTransform})}
   if (textBody.transform) {
     surface.push({kind:'save'})
     surface.push({kind:'transform',transform:textBody.transform})
   }
   paintParagraphs(textBody.paragraphs, surface)
   if (textBody.transform) surface.push({kind:'restore'})
+  if (textBody.orientationTransform) surface.push({kind:'restore'})
 }
 
 function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRect, depth=1): void {
@@ -134,7 +138,7 @@ function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRec
           // This slice permits only top-level unrotated tables. Reuse the slide
           // vertical clip in cell coordinates, preserving vertical overflow.
           if(cell.textBody.horizontalOverflow==='clip') {
-            if(depth!==1||node.transform.aPpm!==1000000||node.transform.dPpm!==1000000||node.transform.bPpm!==0||node.transform.cPpm!==0)throw new RenderCompileError('render.horizontalClip','$.table','horizontal clipping requires a top-level unrotated table')
+            if(depth!==1||node.transform.sourceAffine!==undefined||node.transform.aPpm!==1000000||node.transform.dPpm!==1000000||node.transform.bPpm!==0||node.transform.cPpm!==0)throw new RenderCompileError('render.horizontalClip','$.table','horizontal clipping requires a top-level unrotated table')
             surface.push({kind:'clipRect',rect:{x:0,y:slideClip.y-node.transform.tyEmu-cell.bounds.y,cx:cell.bounds.cx,cy:slideClip.cy}})
           }
           paintTextBody(cell.textBody, surface)
@@ -170,7 +174,9 @@ export function paintSlideRenderTree(tree: SlideRenderTree, surface: PaintSurfac
   for (const node of tree.nodes) paintNode(node, staging, tree.clip.rect)
   staging.push({ kind: 'restore' })
   staging.push({ kind: 'endSlide' })
-  for (const command of staging.finish()) surface.push(command)
+  const commands=staging.finish(),affineBudget=new SourceAffineBudget()
+  for(const command of commands)if(command.kind==='transform')renderTransformMatrix(command.transform,affineBudget)
+  for (const command of commands) surface.push(command)
 }
 
 /**

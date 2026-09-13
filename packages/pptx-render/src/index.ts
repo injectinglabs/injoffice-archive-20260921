@@ -52,3 +52,7 @@ export type {
   RenderTransform,
   SlideRenderTree,
 } from './types.js'
+
+export {renderTransformMatrix} from './sourceRenderTransform.js'
+export {SourceAffineBudget} from './sourceAffine.js'
+export type {SourceAffineTransport} from './sourceAffine.js'

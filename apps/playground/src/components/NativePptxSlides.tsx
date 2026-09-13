@@ -3,6 +3,7 @@ import {decodePptxPreview,type PptxPreview,type PreviewNode,type PreviewStroke} 
 import {readNativePreviewResponse,decodeNativeDocxImages,nativeDocxImagesWithinBudget} from './NativeDocxPages'
 import {DsButton,DsField,DsSelect} from '../design-system/primitives'
 import type {NativePptxDeck} from '@injoffice/pptx-native'
+import {nativePptxSvgNode,SVG_EMU_PER_POINT} from './nativePptxSvgUnits'
 import {nativePptxPreviewStatus} from '../nativePptxPreviewStatus'
 
 export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onImageError?:()=>void}){
@@ -19,10 +20,10 @@ export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onI
    case 'path':return <path key={key} d={node.d} fill={color(node.fill)} stroke={node.stroke?color(node.stroke):undefined} strokeWidth={node.strokeWidth} {...strokeProps(node)}/>
    case 'rect':return <rect key={key} x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} rx={node.radius} fill={color(node.fill)} stroke={node.stroke?color(node.stroke):undefined} strokeWidth={node.strokeWidth} {...strokeProps(node)}/>
    case 'ellipse':return <ellipse key={key} cx={node.rect.x+node.rect.cx/2} cy={node.rect.y+node.rect.cy/2} rx={node.rect.cx/2} ry={node.rect.cy/2} fill={color(node.fill)} stroke={node.stroke?color(node.stroke):undefined} strokeWidth={node.strokeWidth} {...strokeProps(node)}/>
-   case 'placeholder':return <g key={key}><rect x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} fill="#eee" stroke="#777" strokeWidth={12700}/><text x={node.rect.x+12700} y={node.rect.y+127000} fontSize={101600}>{node.label}</text></g>
+   case 'placeholder':return <g key={key}><rect x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} fill="#eee" stroke="#777" strokeWidth={1}/><text x={node.rect.x+1} y={node.rect.y+10} fontSize={8}>{node.label}</text></g>
   }
  }
- return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${preview.width} ${preview.height}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>{preview.nodes.map((node,i)=>draw(node,String(i)))}</svg>
+ return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${preview.width/SVG_EMU_PER_POINT} ${preview.height/SVG_EMU_PER_POINT}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>{preview.nodes.map((node,i)=>draw(nativePptxSvgNode(node),String(i)))}</svg>
 }
 
 export function NativePptxPreviewResult({preview,source,onImageError}:{preview:PptxPreview;source?:NativePptxDeck;onImageError?:()=>void}){

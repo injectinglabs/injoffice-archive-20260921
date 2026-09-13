@@ -47,6 +47,8 @@ export interface RenderRect { readonly x: number; readonly y: number; readonly c
 
 /** Integer affine transform. Coefficients are parts-per-million; translation is EMU. */
 export interface RenderTransform {
+  /** Explicit rational variant; the six legacy fields must be identity. */
+  readonly sourceAffine?: import('./sourceAffine.js').SourceAffineTransport
   readonly aPpm: number
   readonly bPpm: number
   readonly cPpm: number
@@ -182,6 +184,8 @@ export interface RenderParagraphNode {
 
 export interface RenderTextBodyNode {
   readonly kind: 'textBody'
+  /** DrawingML outline flips do not mirror glyph outlines. */
+  readonly orientationTransform?: RenderTransform
   readonly sourceElementId: string
   readonly bounds: RenderRect
   /** Text-only physical mapping; parent shape/group transforms remain separate. */

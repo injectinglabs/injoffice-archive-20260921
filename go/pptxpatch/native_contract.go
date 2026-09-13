@@ -27,11 +27,14 @@ type NativeSize struct {
 }
 
 type NativeTransform struct {
-	X            *int64 `json:"x"`
-	Y            *int64 `json:"y"`
-	Cx           *int64 `json:"cx"`
-	Cy           *int64 `json:"cy"`
-	QuarterTurns *int64 `json:"quarterTurns,omitempty"`
+	X             *int64 `json:"x"`
+	Y             *int64 `json:"y"`
+	Cx            *int64 `json:"cx"`
+	Cy            *int64 `json:"cy"`
+	QuarterTurns  *int64 `json:"quarterTurns,omitempty"`
+	RotationAngle *int64 `json:"rotationAngle,omitempty"`
+	FlipH         *bool  `json:"flipH,omitempty"`
+	FlipV         *bool  `json:"flipV,omitempty"`
 }
 
 // NativeSourceAnchor identifies the original OOXML object without exposing

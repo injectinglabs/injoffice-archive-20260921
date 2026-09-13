@@ -469,35 +469,28 @@ func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtract
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	var quarterTurns *int64
-	if value, ok := exactNativeAttr(node, "", "rot"); ok {
-		rotation, parseErr := parseCanonicalNativeInt(value, -2147483648, 2147483647)
-		if parseErr != nil {
-			return NativeTransform{}, fmt.Errorf("pptxpatch: native extract: invalid AutoShape rotation")
-		}
-		if rotation%5400000 != 0 {
-			gaps.add("pptx.autoshape-transform-unavailable", "non-quarter-turn shapes require an unmodeled rotation affine", true)
-		} else if q := (rotation/5400000%4 + 4) % 4; q != 0 {
-			if q%2 != 0 && cx%2 != cy%2 {
-				gaps.add("pptx.autoshape-transform-unavailable", "quarter-turn shape center requires fractional EMU", true)
-			} else {
-				quarterTurns = int64Pointer(q)
-				gaps.add("pptx.quarter-turn-preview", "source quarter-turn rotation is rendered with an exact integer affine; rotated targets remain read-only", false)
-			}
-		}
+	orientation, err := parseNativeSourceAffine(node)
+	if err != nil {
+		return NativeTransform{}, err
 	}
-	for _, name := range []string{"flipH", "flipV"} {
-		if value, ok := exactNativeAttr(node, "", name); ok {
-			flip, parseErr := nativeBool(value)
-			if parseErr != nil {
-				return NativeTransform{}, parseErr
-			}
-			if flip {
-				gaps.add("pptx.autoshape-transform-unavailable", "flipped shapes are preserved but not approximated by native PPTX v1", true)
-			}
+	result := NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
+	// Keep the original exact-cardinal representation where it is sufficient.
+	if !orientation.FlipH && !orientation.FlipV && orientation.Rotation%5400000 == 0 && (orientation.Rotation%10800000 == 0 || cx%2 == cy%2) {
+		if q := orientation.Rotation / 5400000; q != 0 {
+			result.QuarterTurns = int64Pointer(q)
+			gaps.add("pptx.quarter-turn-preview", "source quarter-turn rotation is rendered with an exact integer affine; rotated targets remain read-only", false)
 		}
+	} else {
+		result.RotationAngle = int64Pointer(orientation.Rotation)
+		if orientation.FlipH {
+			result.FlipH = &orientation.FlipH
+		}
+		if orientation.FlipV {
+			result.FlipV = &orientation.FlipV
+		}
+		gaps.add("pptx.source-affine-preview", "DrawingML orientation uses bounded rational affine preview; transformed targets remain read-only", false)
 	}
-	return NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy), QuarterTurns: quarterTurns}, nil
+	return result, nil
 }
 
 func requiredCanonicalNativeShapeInt(node *nativeXMLNode, local string, minimum, maximum int64) (int64, error) {

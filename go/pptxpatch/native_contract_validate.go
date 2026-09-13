@@ -282,6 +282,17 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	if element.Transform.QuarterTurns != nil && element.Kind != NativeElementKindText && element.Kind != NativeElementKindShape {
 		v.add(p+".transform.quarterTurns", "native.rotation", "quarter turns are supported only for text and shapes")
 	}
+	if nativeHasSourceAffine(element.Transform) {
+		if element.Transform.QuarterTurns != nil {
+			v.add(p+".transform", "native.rotation", "source affine fields and legacy quarter turns are mutually exclusive")
+		}
+		if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+			v.add(p+".transform", "native.rotationAuthority", "source affine transforms remain preview-only")
+		}
+	}
+	if element.ChildTransform != nil && nativeHasSourceAffine(*element.ChildTransform) {
+		v.add(p+".childTransform", "native.rotation", "child coordinate systems cannot carry orientation")
+	}
 	if element.ChildTransform != nil && element.ChildTransform.QuarterTurns != nil {
 		v.add(p+".childTransform.quarterTurns", "native.rotation", "child coordinate systems cannot carry quarter turns")
 	}
@@ -471,7 +482,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if element.Table != nil {
 			for _, row := range element.Table.Rows {
 				for _, cell := range row {
-					if cell.TextBody != nil && cell.TextBody.HorizontalOverflow == "clip" && (depth != 1 || element.Transform.QuarterTurns != nil) {
+					if cell.TextBody != nil && cell.TextBody.HorizontalOverflow == "clip" && (depth != 1 || element.Transform.QuarterTurns != nil || nativeHasSourceAffine(element.Transform)) {
 						v.add(p+".table", "native.horizontalClip", "horizontal clipping requires a top-level unrotated table")
 					}
 				}
@@ -505,7 +516,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 		if element.ChildTransform != nil {
 			v.transform(*element.ChildTransform, p+".childTransform")
-			if _, _, _, _, err := nativeGroupAffineComponents(element.Transform, *element.ChildTransform); err != nil {
+			if _, _, _, _, err := nativeGroupAffineComponents(element.Transform, *element.ChildTransform); err != nil && element.Provenance != NativeProvenanceParsed && !nativeHasSourceAffine(element.Transform) {
 				v.add(p+".childTransform", "native.groupTransform", "must compose to exact safe integer-PPM scale and integer-EMU translation")
 			}
 		}
@@ -1025,7 +1036,14 @@ func (v *nativeValidator) stroke(stroke NativeStroke, p string) {
 		v.add(p+".miterLimit", "native.stroke", "is allowed only for a miter join")
 	}
 }
+func nativeHasSourceAffine(transform NativeTransform) bool {
+	return transform.RotationAngle != nil || transform.FlipH != nil || transform.FlipV != nil
+}
 func (v *nativeValidator) transform(transform NativeTransform, p string) {
+	if transform.RotationAngle != nil && (*transform.RotationAngle < 0 || *transform.RotationAngle >= 21600000) {
+		v.add(p+".rotationAngle", "native.rotation", "must be a canonical angle in 60000 units per degree")
+	}
+
 	v.requiredInteger(transform.X, p+".x")
 	v.requiredInteger(transform.Y, p+".y")
 	v.requiredPositive(transform.Cx, p+".cx")

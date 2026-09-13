@@ -3,7 +3,7 @@ import {readFileSync,statSync} from 'node:fs'
 import {isAbsolute} from 'node:path'
 import {createHash} from 'node:crypto'
 import {assertNativePptx,type NativePptxDeck,type NativeElement,type NativeParagraph} from '@injoffice/pptx-native'
-import {compileNativePptxSlide,createRecordingPaintSurface,paintSlideRenderTree,type RenderPathCommand,type RenderStroke} from '@injoffice/pptx-render'
+import {renderTransformMatrix,SourceAffineBudget,compileNativePptxSlide,createRecordingPaintSurface,paintSlideRenderTree,type RenderPathCommand,type RenderStroke} from '@injoffice/pptx-render'
 import {createHarfBuzzTextShaperV1,createHarfBuzzOutlineProviderV1,inspectHarfBuzzFontMetricsV1} from '@injoffice/font-metrics/harfbuzz'
 import type {NativeFontManifest,NativeFontResolver,ResolvedFontFace,FontResource} from '@injoffice/font-metrics/layout'
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
@@ -79,6 +79,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const substitutions:NonNullable<PptxPreview['font_substitutions']>=[]
  const root:Extract<PreviewNode,{kind:'group'}>={kind:'group',transform:[1,0,0,1,0,0],children:[]}
  const stack=[root],diagnostics=tree.diagnostics.map(d=>`${d.code}: ${d.message}`)
+ const affineBudget=new SourceAffineBudget()
  let glyphs=0
  const resources=new Map<string,NativeDocxPagePaintMediaAssetV1>()
  for(const command of recording.finish()){
@@ -86,7 +87,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
   switch(command.kind){
    case 'save':{const group:typeof root={kind:'group',transform:[1,0,0,1,0,0],children:[]};current.children.push(group);stack.push(group);break}
    case 'restore':if(stack.length<2)throw new Error('Paint stack underflow');stack.pop();break
-   case 'transform':{const t=command.transform;current.transform=[t.aPpm/1e6,t.bPpm/1e6,t.cPpm/1e6,t.dPpm/1e6,t.txEmu,t.tyEmu];break}
+   case 'transform':{current.transform=[...renderTransformMatrix(command.transform,affineBudget)];break}
    case 'clipRect':current.clip=command.rect;break
    case 'clipRoundRect':current.clip={...command.rect,radius:command.radiusEmu};break
    case 'path':{

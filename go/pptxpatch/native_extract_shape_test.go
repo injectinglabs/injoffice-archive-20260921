@@ -88,14 +88,18 @@ func TestExtractNativePPTXAutoShapeUnsupportedRenderingIsRefusedNotApproximated(
 		"pptx.autoshape-fill-unavailable":        false,
 		"pptx.autoshape-dash-unavailable":        false,
 		"pptx.autoshape-effects-unavailable":     false,
-		"pptx.autoshape-transform-unavailable":   false,
+		"pptx.source-affine-preview":             false,
 		"pptx.autoshape-theme-style-unavailable": false,
 	}
 	for _, diagnostic := range element.Compatibility.Diagnostics {
 		if _, ok := wantCodes[diagnostic.Code]; ok {
 			wantCodes[diagnostic.Code] = true
 		}
-		if diagnostic.Severity != NativeDiagnosticSeverityRefusal {
+		if diagnostic.Code == "pptx.source-affine-preview" {
+			if diagnostic.Severity != NativeDiagnosticSeverityWarning {
+				t.Fatal("affine preview must be a warning")
+			}
+		} else if diagnostic.Severity != NativeDiagnosticSeverityRefusal {
 			t.Fatalf("rendering-critical gap was not a refusal: %#v", diagnostic)
 		}
 	}
