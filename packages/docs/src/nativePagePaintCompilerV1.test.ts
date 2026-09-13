@@ -2674,6 +2674,18 @@ describe('source-anchored textbox page composition',()=>{
   }
   expect(()=>decode(document,evidence,result,RELATIONSHIPS_HASH)).toThrow()
  })
+ it('binds asynchronous output to the source snapshot even when the caller edits during outlining',async()=>{
+  const {renderNativeDocxTextboxPagePreviewV1:render}=await import('./nativeTextboxPageCompilerV1.js')
+  const {decodeNativeDocxTextboxPagePreviewV1:decode}=await import('./nativeTextboxPagePreviewV1.js')
+  const {input,document,evidence}=textboxFixture(),before=structuredClone({document,evidence})
+  const result=await render(input,evidence,FONT_BYTES,{...provider,getGlyphOutline(request){
+   document.body.blocks[0]!.paragraph!.runs[0]!.text='Changed during outlining'
+   evidence.items[0]!.page_anchor!.x_emu+=127
+   return provider.getGlyphOutline(request)
+  }})
+  expect(decode(before.document,before.evidence,result,FONT_DIGEST)).toEqual(result)
+  expect(()=>decode(document,evidence,result,FONT_DIGEST)).toThrow()
+ })
  it('follows a paragraph pushed to a later page by body flow',async()=>{
   const {renderNativeDocxTextboxPagePreviewV1:render}=await import('./nativeTextboxPageCompilerV1.js')
   const {input,document,evidence}=textboxFixture(),p=document.body.blocks[0]!.paragraph!,r=input.resolved_layout as NativeDocxResolvedLayoutInputV1
