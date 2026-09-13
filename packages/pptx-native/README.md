@@ -101,3 +101,20 @@ Hosts must disclose that fonts, styles, borders, fills, alignment and spacing ar
 not authored Office paint. Keep the full reading-order text available because
 clipping can hide text. The playground exposes this through a separate explicit
 button after browser-local table inspection, without changing native rendering.
+
+An additional explicit `{policy: 'source-no-style-solid-border-v1'}` argument
+requests qualified source paint in the arrangement plan. Eligibility requires
+one unmerged cell, the actual embedded style's whole-table no-fill/no-border
+structure, no conditional style regions, and four equal explicit no-fill or
+solid centered single-line borders. Solid lines must have flat caps, round joins,
+no arrows, and widths at most 10 pt. The style identifier alone grants nothing.
+Theme colors use the source master mapping; unsupported slide/layout overrides
+prevent paint qualification. Style, theme, master and layout part hashes remain
+in the evidence. The planner's solid border is one centered rectangle with round
+joins; this bounded replay policy is not a PowerPoint corner-fidelity claim.
+
+The playground's separate source-paint button applies eligible borders and removes
+inspection guides for eligible no-border tables. Other tables retain guides and
+visible paint omissions. Transparent fills expose the host canvas. Text still uses
+the original approximate host font/layout policy, and the strict native renderer,
+source bytes and mutation permissions remain unchanged.

@@ -367,3 +367,5 @@ bold text. It reuses source-qualified default-font style IDs and requires explic
 totals evidence, an unambiguous table and the matching package revision. Explicit
 cell fonts and totals DXF/named-style overrides remain unchanged. Font family,
 color, sizing and metrics are not replaced by this helper.
+
+The native workbook demo offers a separate worksheet preview selector, including sheets with no editable cells. Changing worksheets clears the previous page-preview state and selects only an eligible cell on that worksheet for the separate mutation controls.

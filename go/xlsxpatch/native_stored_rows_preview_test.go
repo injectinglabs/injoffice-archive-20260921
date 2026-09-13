@@ -78,3 +78,21 @@ func TestStoredRowPreviewExplicitDefaultAndZeroOverride(t *testing.T) {
 		t.Fatalf("bad bounds or zero: %+v", got)
 	}
 }
+
+func TestStoredRowsPrinterRelationshipDoesNotQualifyPageSettings(t *testing.T) {
+	for _, pair := range [][2]string{{spreadsheetMLTransitional, officeRelNamespaceTransitional}, {spreadsheetMLStrict, officeRelNamespaceStrict}} {
+		source := `<worksheet xmlns="` + pair[0] + `" xmlns:r="` + pair[1] + `" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x14ac="` + nativeRowDescentNamespace + `" mc:Ignorable="x14ac"><sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.25"/><sheetData/><pageSetup paperSize="9" orientation="portrait" r:id="printer1" horizontalDpi="4294967293"/></worksheet>`
+		got := previewNativeStoredRows([]byte(source), "s.xml")
+		if got.RootPolicy != "x14ac-descent-only-v1" || len(got.Rows) != 32 {
+			t.Fatalf("ordinary relationship blocked stored row profile: %+v", got)
+		}
+		if page := previewNativePageSettings([]byte(source), "s.xml", "1"); page.Status != "unavailable" {
+			t.Fatal("printer relationship invented page settings")
+		}
+		for _, bad := range []string{strings.Replace(source, pair[1], "urn:foreign", 1), strings.Replace(source, `r:id="printer1"`, `r:other="printer1"`, 1), strings.Replace(source, `<sheetData/>`, `<sheetData r:id="bad"/>`, 1)} {
+			if previewNativeStoredRows([]byte(bad), "s.xml").RootPolicy != "" {
+				t.Fatal("unqualified relationship scope admitted")
+			}
+		}
+	}
+}
