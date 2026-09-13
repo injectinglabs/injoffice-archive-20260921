@@ -2,7 +2,7 @@ export const NATIVE_WASM_WORKER_PROTOCOL = 'injoffice.native-wasm-worker' as con
 export const NATIVE_WASM_WORKER_VERSION = 1 as const
 
 export type NativeWasmFormat = 'xlsx' | 'docx' | 'pptx'
-export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'evaluate' | 'apply'
+export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'chartWorkbooks' | 'evaluate' | 'apply'
 
 export interface NativeWasmAssets {
   wasmUrl: string
@@ -48,6 +48,8 @@ export interface NativeWasmClient {
   extract(bytes: Uint8Array, options?: NativeWasmOperationOptions): Promise<string>
   /** Optional read-only supplemental projection; unsupported engines may refuse. */
   inspect(bytes: Uint8Array, options?: NativeWasmOperationOptions): Promise<string>
+  /** PPTX-only, bounded read-only chart/workbook source inspection. */
+  chartWorkbooks(bytes: Uint8Array, options?: NativeWasmOperationOptions): Promise<string>
   /** Optional read-only JSON evaluation; engines without the operation refuse. */
   evaluate(payload: string, options?: NativeWasmOperationOptions): Promise<string>
   apply(
@@ -83,6 +85,7 @@ export type NativeWasmWorkerRequest =
   | (RequestBase & { op: 'init'; assets: NativeWasmAssets })
   | (RequestBase & { op: 'extract'; bytes: ArrayBuffer })
   | (RequestBase & { op: 'inspect'; bytes: ArrayBuffer })
+  | (RequestBase & { op: 'chartWorkbooks'; bytes: ArrayBuffer })
   | (RequestBase & { op: 'evaluate'; payload: string })
   | (RequestBase & {
     op: 'apply'
@@ -97,6 +100,7 @@ export type NativeWasmWorkerResponse =
   | (ResponseBase & { op: 'init'; ok: true })
   | (ResponseBase & { op: 'extract'; ok: true; result: { contractJson: string } })
   | (ResponseBase & { op: 'inspect'; ok: true; result: { contractJson: string } })
+  | (ResponseBase & { op: 'chartWorkbooks'; ok: true; result: { contractJson: string } })
   | (ResponseBase & { op: 'evaluate'; ok: true; result: { contractJson: string } })
   | (ResponseBase & { op: 'apply'; ok: true; result: { bytes: ArrayBuffer } })
   | (ResponseBase & { ok: false; error: { code: string; message: string; fatal: boolean } })
@@ -164,10 +168,11 @@ function validateResponse(
     return value as NativeWasmWorkerResponse
   }
   if (value.ok !== true) throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker response has an invalid status.', true)
-  if (expected.op === 'extract' || expected.op === 'inspect' || expected.op === 'evaluate') {
+  if (expected.op === 'extract' || expected.op === 'inspect' || expected.op === 'chartWorkbooks' || expected.op === 'evaluate') {
     if (!isRecord(value.result) || !hasExactKeys(value.result, ['contractJson']) || typeof value.result.contractJson !== 'string') {
       throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker returned invalid extraction JSON.', true)
     }
+    if(expected.op==='chartWorkbooks'&&(value.result.contractJson.length>33554432||new TextEncoder().encode(value.result.contractJson).byteLength>33554432))throw new NativeWasmError('MALFORMED_RESPONSE','Chart workbook inspection response budget exceeded.',true)
   } else if (expected.op === 'apply') {
     if (!isRecord(value.result) || !hasExactKeys(value.result, ['bytes']) || !(value.result.bytes instanceof ArrayBuffer)) {
       throw new NativeWasmError('MALFORMED_RESPONSE', 'Native worker returned invalid package bytes.', true)
@@ -216,6 +221,11 @@ class NativeWasmClientImpl implements NativeWasmClient {
     return this.readJSON('inspect', bytes, options)
   }
 
+  async chartWorkbooks(bytes: Uint8Array, options: NativeWasmOperationOptions = {}): Promise<string> {
+    if(this.options.format!=='pptx')throw new NativeWasmError('UNSUPPORTED_OPERATION','Chart workbook inspection requires PPTX.',false)
+    return this.readJSON('chartWorkbooks',bytes,options)
+  }
+
   async evaluate(payload: string, options: NativeWasmOperationOptions = {}): Promise<string> {
     if (this.disposed) throw new NativeWasmError('TERMINATED', 'Native WASM client was terminated.', true)
     if (options.signal?.aborted) throw abortError(options.signal)
@@ -228,7 +238,7 @@ class NativeWasmClientImpl implements NativeWasmClient {
     }, options.signal)
   }
 
-  private async readJSON(op: 'extract' | 'inspect', bytes: Uint8Array, options: NativeWasmOperationOptions): Promise<string> {
+  private async readJSON(op: 'extract' | 'inspect' | 'chartWorkbooks', bytes: Uint8Array, options: NativeWasmOperationOptions): Promise<string> {
     if (this.disposed) throw new NativeWasmError('TERMINATED', 'Native WASM client was terminated.', true)
     if (options.signal?.aborted) throw abortError(options.signal)
     const copy = copyBytes(bytes)
