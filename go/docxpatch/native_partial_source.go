@@ -43,7 +43,12 @@ func InspectNativePartialSourceV1(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	review, err := inspectNativePartialReview(data, document)
+	if err != nil {
+		return nil, err
+	}
 	result, err := json.Marshal(struct {
+		ReviewChanges          *NativePartialReviewV1          `json:"review_changes,omitempty"`
 		Protocol               string                          `json:"protocol"`
 		Version                int                             `json:"version"`
 		PackageSHA256          string                          `json:"package_sha256"`
@@ -52,7 +57,7 @@ func InspectNativePartialSourceV1(data []byte) ([]byte, error) {
 		Equations              []NativePartialEquationV1       `json:"equations,omitempty"`
 		EquationContextNotices []NativeEquationContextNoticeV1 `json:"equation_context_notices,omitempty"`
 		NestedTableOmissions   *NativePartialNestedTablesV1    `json:"nested_table_omissions,omitempty"`
-	}{"injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations, notices, nestedTables})
+	}{review, "injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations, notices, nestedTables})
 	if err != nil {
 		return nil, err
 	}

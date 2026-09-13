@@ -83,6 +83,29 @@ requests this policy explicitly; the ordinary partial-text button remains
 unchanged. Render all metadata as text and retain the read-only labels. This
 does not add accept/reject, comment editing or native page-paint authority.
 
+`createNativeDocxReviewInventoryV1(document,
+{ policy: 'source-review-inventory-v1', read_only: true }, resolvedLayout,
+reviewChanges)` provides a separate opt-in review inventory from the same-byte
+inspector's `review_changes` evidence. It lists exact direct body/table paragraph
+insertion, deletion and move wrappers with stored ID/author/date metadata.
+Metadata is not a verified identity. Unknown wrapper attributes remain omitted;
+textboxes, nested revisions and paragraph/row/cell property changes are outside
+this profile. Limits are 128 wrappers, 128 direct insertion runs per wrapper,
+and 32,768 displayed text units including metadata.
+
+Only producer-qualified direct insertion text may pass through the existing
+partial-content visibility and ancestor diagnostic guards. The exact qualified
+insertion-wrapper diagnostic is the sole exception in an internal read-only
+projection; original diagnostics remain attached to the review output. Unknown
+properties, unresolved inherited visibility, hidden text and other revisions
+still block insertion text. Deletion and move text are never exposed by this
+profile. Hosts must retain kind, omission and diagnostic labels. This is neither
+Word's final/original view nor tracked-change layout, and provides no
+accept/reject, editing or native page-paint authority. The browser demo requests
+it through **Inspect tracked-change source**. Native sidecar metadata and XML
+slice hashes are trusted producer evidence; arbitrary hand-authored models are
+not independent source-byte verification.
+
 The optional fourth argument accepts `nested_table_omissions` from the same-byte
 WASM inspector. At most 64 exact direct nested-table boundaries may replace
 their original table-wide diagnostic with source-positioned omission placeholders,

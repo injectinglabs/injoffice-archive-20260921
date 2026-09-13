@@ -104,6 +104,20 @@ const success = (request: NativeWasmWorkerRequest, result?: unknown): NativeWasm
 } as NativeWasmWorkerResponse)
 
 describe('DOCX WASM package client', () => {
+  it('validates source-bound review metadata and rejects deletion text evidence',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
+    document.source.package_sha256=hash
+    const p=document.body.blocks[0]!.paragraph!,anchor={...p.anchor,path:p.anchor.path+'/w:del[1]',start_byte:200,end_byte:220}
+    document.unsupported=[{id:'review:1',code:'UNMODELED_PARAGRAPH_CONTENT',capability:'run-structure',scope_id:p.id,anchor,preservation:'refuse-mutation',message:'Deletion'}]
+    const fact={package_sha256:hash,paragraph_id:p.id,diagnostic_id:'review:1',anchor,kind:'deletion',revision_id:'7',author:'Author',created_at:'',run_ids:[] as string[]}
+    const resolved_layout={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
+    const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,review_changes:{items:[fact],omitted_count:0}}
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).review_changes).toEqual(envelope.review_changes);client.terminate()
+    fact.run_ids=[p.runs[0]!.id]
+    const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow('Only insertion');expect(badWorker.terminated).toBe(true)
+  })
   it('validates optional nested omission evidence before returning it',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=JSON.parse(readFileSync(new URL('../../../testdata/docx-native/document-v1.json',import.meta.url),'utf8')) as NativeDocxDocumentV1
     document.source.package_sha256=hash

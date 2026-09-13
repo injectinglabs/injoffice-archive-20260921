@@ -3197,6 +3197,11 @@
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
+              "name": "createNativeDocxReviewInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
+            },
+            {
               "name": "CSS_PX_PER_INCH",
               "kind": "const",
               "signature": "export declare const CSS_PX_PER_INCH = 96"
@@ -3350,6 +3355,11 @@
               "name": "DecodeNativeDocxResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxResult ="
+            },
+            {
+              "name": "decodeNativeDocxReviewEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxReviewEvidenceV1(source: unknown, input: unknown): NativeDocxReviewEvidenceV1"
             },
             {
               "name": "decodeNativeDocxShapedLines",
@@ -4457,6 +4467,21 @@
               "signature": "export interface NativeDocxResolvedTableV1"
             },
             {
+              "name": "NativeDocxReviewChangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewChangeV1"
+            },
+            {
+              "name": "NativeDocxReviewEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewEvidenceV1"
+            },
+            {
+              "name": "NativeDocxReviewInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewInventoryV1"
+            },
+            {
               "name": "NativeDocxRunPropertiesV1",
               "kind": "interface",
               "signature": "export interface NativeDocxRunPropertiesV1"
@@ -4858,6 +4883,11 @@
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
+              "name": "createNativeDocxReviewInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
+            },
+            {
               "name": "decodeNativeDocxDocument",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult"
@@ -4896,6 +4926,11 @@
               "name": "DecodeNativeDocxResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxResult ="
+            },
+            {
+              "name": "decodeNativeDocxReviewEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxReviewEvidenceV1(source: unknown, input: unknown): NativeDocxReviewEvidenceV1"
             },
             {
               "name": "DOCX_MAX_TWIPS_FOR_MILLIPOINTS",
@@ -5166,6 +5201,21 @@
               "name": "NativeDocxResolvedLayoutInputV1",
               "kind": "type",
               "signature": "export interface NativeDocxResolvedLayoutInputV1"
+            },
+            {
+              "name": "NativeDocxReviewChangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewChangeV1"
+            },
+            {
+              "name": "NativeDocxReviewEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewEvidenceV1"
+            },
+            {
+              "name": "NativeDocxReviewInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewInventoryV1"
             },
             {
               "name": "NativeDocxRunPropertiesV1",

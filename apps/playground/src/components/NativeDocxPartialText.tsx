@@ -1,6 +1,6 @@
 import {createElement,useEffect,useRef,useState} from 'react'
 import {createDocxWasmClient} from '@injoffice/docx-wasm'
-import {createNativeDocxPartialContentPreviewV1,type NativeDocxPartialContentV1,type NativeDocxPartialParagraphV1,type NativeDocxMathNodeV1,type NativeDocxEquationPreviewV1} from '@injoffice/docs/native-docx'
+import {createNativeDocxReviewInventoryV1,type NativeDocxReviewInventoryV1,createNativeDocxPartialContentPreviewV1,type NativeDocxPartialContentV1,type NativeDocxPartialParagraphV1,type NativeDocxMathNodeV1,type NativeDocxEquationPreviewV1} from '@injoffice/docs/native-docx'
 import {DsButton} from '../design-system/primitives'
 
 function Paragraph({paragraph}:{paragraph:NativeDocxPartialParagraphV1}){
@@ -26,22 +26,28 @@ export function NativeDocxPartialTextView({preview}:{preview:NativeDocxPartialCo
  </article>
 }
 
+export function NativeDocxReviewInventoryView({review}:{review:NativeDocxReviewInventoryV1}){
+ const diagnosticCodes=[...new Set([...review.source_diagnostics.document,...review.source_diagnostics.resolved].map(d=>d.code))]
+ return <section aria-label="Read-only tracked-change source inventory"><h4>Tracked-change source inventory</h4><p>Stored revision metadata, not verified author identities. Changes are listed separately; this is not a final or original Word view. Only qualified insertion text is shown. Deleted and moved text stays omitted. No accept/reject or editing controls are provided.</p>{diagnosticCodes.length>0&&<details><summary>Retained source diagnostic codes ({diagnosticCodes.length})</summary><ul>{diagnosticCodes.map(code=><li key={code}>{code}</li>)}</ul></details>}{review.items.length===0&&<p>No qualified review wrappers are available.</p>}{review.items.map(item=><section key={item.diagnostic_id}><h5>{item.kind} {item.revision_id} · {item.author}</h5>{item.created_at&&<p>Stored date: {item.created_at}</p>}{item.text_status==='qualified-insertion'?<p style={{whiteSpace:'pre-wrap'}}>{item.segments.map((s,i)=>s.kind==='text'?<span key={i}>{s.text}</span>:null)}</p>:<p>[Review text omitted: source structure or visibility is unqualified, or this change kind is metadata only.]</p>}<details><summary>Retained source diagnostics ({item.retained_diagnostic_ids.length})</summary><ul>{item.retained_diagnostic_ids.map(id=><li key={id}>{id}</li>)}</ul></details></section>)}{review.omitted_count>0&&<p>[Review inventory omissions: {review.omitted_count}]</p>}</section>
+}
+
 /** Separate opt-in browser operation, including while editing in server mode. */
 export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;packageDigest:string}){
  const active=useRef<AbortController|null>(null)
  const [result,setResult]=useState<NativeDocxPartialContentV1|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const [review,setReview]=useState<NativeDocxReviewInventoryV1|null>(null)
  const [equations,setEquations]=useState<NativeDocxEquationPreviewV1[]>([])
  useEffect(()=>{active.current?.abort();active.current=null;setResult(null);setBusy(false);setError('');return()=>{active.current?.abort();active.current=null}},[bytes,packageDigest])
- const run=async(includeComments=false)=>{
+ const run=async(includeComments=false,includeReview=false)=>{
   const controller=new AbortController();active.current?.abort();active.current=controller
-  setBusy(true);setError('');setResult(null);setEquations([])
+  setBusy(true);setError('');setResult(null);setEquations([]);setReview(null)
   let client:ReturnType<typeof createDocxWasmClient>|undefined
   try{
    client=createDocxWasmClient()
    const joined=await client.inspectPartialContent(bytes,{signal:controller.signal})
    if(joined.document.source.package_sha256!==packageDigest)throw new Error('Source changed; reopen the partial text preview.')
    const preview=createNativeDocxPartialContentPreviewV1(joined.document,{policy:'source-text-with-omissions-v1',read_only:true,...(includeComments?{comment_policy:'source-comment-inventory-v1' as const}:{})},joined.resolved_layout,joined.nested_table_omissions)
-   if(active.current===controller&&!controller.signal.aborted){setResult(preview);setEquations(joined.equations??[])}
+   if(active.current===controller&&!controller.signal.aborted){setResult(preview);setEquations(joined.equations??[]);setReview(includeReview?createNativeDocxReviewInventoryV1(joined.document,{policy:'source-review-inventory-v1',read_only:true},joined.resolved_layout,joined.review_changes):null)}
   }catch(reason){if(active.current===controller&&!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Partial source text could not be qualified.')}
   finally{client?.terminate();if(active.current===controller){active.current=null;setBusy(false)}}
  }
@@ -49,9 +55,10 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
   <p>This optional text-only view resolves source styles in your browser. No file is uploaded, including when the editor uses server mode.</p>
   <DsButton disabled={busy} onClick={()=>void run()}>Show read-only partial text</DsButton>
   <DsButton disabled={busy} onClick={()=>void run(true)}>Show partial text with comments</DsButton>
+  <DsButton disabled={busy} onClick={()=>void run(false,true)}>Inspect tracked-change source</DsButton>
   {busy&&<DsButton onClick={()=>{active.current?.abort();active.current=null;setBusy(false)}}>Cancel partial text</DsButton>}
   {busy&&<p role="status">Reading source text in the browser…</p>}
   {error&&<p role="status">{error}</p>}
-  {result?.source.package_sha256===packageDigest&&<><NativeDocxPartialTextView preview={result}/><NativeDocxEquationList equations={equations}/></>}
+  {result?.source.package_sha256===packageDigest&&<><NativeDocxPartialTextView preview={result}/><NativeDocxEquationList equations={equations}/>{review?.source.package_sha256===packageDigest&&<NativeDocxReviewInventoryView review={review}/>}</>}
  </section>
 }

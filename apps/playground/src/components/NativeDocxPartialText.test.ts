@@ -3,8 +3,14 @@ import {describe,it,expect} from 'vitest'
 import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
-import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList} from './NativeDocxPartialText'
+import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView} from './NativeDocxPartialText'
 describe('browser-local partial text UI',()=>{
+ it('labels review kinds, metadata, omissions and retained diagnostic codes as escaped read-only text',()=>{
+  const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:ins[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
+  const html=renderToStaticMarkup(createElement(NativeDocxReviewInventoryView,{review:{policy:'source-review-inventory-v1',read_only:true,source:{document_id:'d',revision:'r',package_sha256:'sha256:'+'a'.repeat(64)},items:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p',diagnostic_id:'diag',anchor,kind:'insertion',revision_id:'1',author:'<script>Author</script>',created_at:'<date>',run_ids:['r'],segments:[{kind:'text',source:{scope_id:'r',anchor},text:'<script>Inserted</script>'}],text_status:'qualified-insertion',retained_diagnostic_ids:['diag']}],omitted_count:1,source_diagnostics:{document:[{id:'diag',code:'WRAPPED_RUN_MARKUP',scope_id:'p',anchor,capability:'run-structure',preservation:'refuse-mutation',message:'Retained'}],resolved:[]}}}))
+  expect(html).toContain('insertion 1');expect(html).toContain('&lt;script&gt;Author&lt;/script&gt;');expect(html).toContain('&lt;script&gt;Inserted&lt;/script&gt;');expect(html).toContain('WRAPPED_RUN_MARKUP');expect(html).toContain('Review inventory omissions: 1');expect(html).toContain('Deleted and moved text stays omitted')
+  expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable');expect(html).not.toContain('<input');expect(html).not.toContain('<button')
+ })
  it('paints indexed radicals with the radicand first and escaped degree text',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxEquationList,{equations:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p:1',diagnostic_id:'equation:1',anchor:{part_name:'word/document.xml',path:'/p/math',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)},status:'supported',tree:{kind:'indexed-radical',children:[{kind:'text',text:'x + 1'},{kind:'text',text:'3<script>'}]}}]}))
   expect(html).toContain('<mroot><mtext>x + 1</mtext><mtext>3&lt;script&gt;</mtext></mroot>')
@@ -16,7 +22,7 @@ describe('browser-local partial text UI',()=>{
  })
  it('requires explicit request and explains browser-only behavior without upload or edit controls',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxPartialText,{bytes:new Uint8Array([1]),packageDigest:'sha256:'+'a'.repeat(64)}))
-  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('No file is uploaded')
+  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('Inspect tracked-change source');expect(html).toContain('No file is uploaded')
   expect(html).not.toContain('Read-only partial source text')
  })
  it('renders same-source library table text and authored descriptions as escaped read-only content',()=>{
