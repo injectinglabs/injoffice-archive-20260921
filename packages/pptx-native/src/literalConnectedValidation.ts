@@ -1,8 +1,10 @@
+import {validNativeChartAxisLabels} from './chartAxisLabelsValidation'
 import type {NativeLiteralConnected} from './types'
 import {nativeChartDecimal as decimal} from './chartDecimalValidation'
 /** Semantic checks beyond generated structural/conditional schema validation. */
 export function validNativeLiteralConnected(c:NativeLiteralConnected):boolean{
  const scatter=c.profile==='literal-scatter-v1',x=c.xAxis,y=c.yAxis
+ if(!validNativeChartAxisLabels(x,y,scatter)||!validNativeChartAxisLabels(y,x,true))return false
  if(c.categories.reduce((sum,v)=>sum+v.length,0)>32768||x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||x.position!=='b'||y.position!=='l')return false
  if(scatter?c.categories.length!==0:(c.categories.length===0||x.min!==undefined||x.max!==undefined||x.crossesAt!==undefined))return false
  for(const [i,a]of [x,y].entries()){

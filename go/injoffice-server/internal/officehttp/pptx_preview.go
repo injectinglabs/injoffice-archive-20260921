@@ -1,6 +1,7 @@
 package officehttp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -25,6 +26,7 @@ type PPTXPreviewOptions struct {
 	SourceFrameAutoFitPreview    bool
 	InheritedTextPreview         bool
 	FontSubstitutionPreview      bool
+	SourceChartPreview           bool
 }
 
 func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXPreviewOptions) (map[string]any, error) {
@@ -56,7 +58,7 @@ func pptxPreviewInput(ctx context.Context, data []byte, slide int, options PPTXP
 	if err := attachPPTXPreviewImages(ctx, data, &deck, slide); err != nil {
 		return nil, err
 	}
-	return map[string]any{"deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath, "source_frame_autofit_preview": options.SourceFrameAutoFitPreview, "source_frame_autofit_count": pptxSourceFrameCount(deck.Slides[slide].Elements), "inherited_text_preview": options.InheritedTextPreview, "inherited_text_preview_count": pptxInheritedTextCount(deck.Slides[slide].Elements)}, nil
+	return map[string]any{"source_chart_preview": options.SourceChartPreview, "deck": deck, "package_sha256": fmt.Sprintf("%x", sha256.Sum256(data)), "slide_index": slide, "font_manifest_path": options.FontManifestPath, "source_frame_autofit_preview": options.SourceFrameAutoFitPreview, "source_frame_autofit_count": pptxSourceFrameCount(deck.Slides[slide].Elements), "inherited_text_preview": options.InheritedTextPreview, "inherited_text_preview_count": pptxInheritedTextCount(deck.Slides[slide].Elements)}, nil
 }
 
 func pptxInheritedTextCount(elements []pptxpatch.NativeElement) int {
@@ -103,6 +105,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 	options.SourceFrameAutoFitPreview = r.URL.Query().Get("autofit") == "source-frame"
 	options.InheritedTextPreview = r.URL.Query().Get("text") == "source-inherited"
 	options.FontSubstitutionPreview = r.URL.Query().Get("fonts") == "operator-substitution"
+	options.SourceChartPreview = r.URL.Query().Get("charts") == "source-literal"
 	select {
 	case gate <- struct{}{}:
 		defer func() { <-gate }()
@@ -139,7 +142,7 @@ func handlePPTXPreview(w http.ResponseWriter, r *http.Request, options PPTXPrevi
 		InheritedTextCount      int    `json:"inherited_text_preview_count"`
 		InheritedTextPolicy     string `json:"inherited_text_policy"`
 	}
-	if json.Unmarshal(result, &identity) != nil || validatePPTXFontSubstitutions(result, input["deck"].(pptxpatch.NativePPTXDeck).Slides[query].Elements, options.FontSubstitutionPreview, options.FontManifestPath) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) || identity.InheritedTextCount != input["inherited_text_preview_count"].(int) || identity.InheritedTextCount > 0 && identity.InheritedTextPolicy != "source-latin-inheritance-approximate-v1" || identity.InheritedTextCount == 0 && identity.InheritedTextPolicy != "" {
+	if json.Unmarshal(result, &identity) != nil || !validPPTXChartPreviewMode(result, options.SourceChartPreview) || validatePPTXFontSubstitutions(result, input["deck"].(pptxpatch.NativePPTXDeck).Slides[query].Elements, options.FontSubstitutionPreview, options.FontManifestPath) != nil || identity.Version != 1 || identity.PackageSHA256 != input["package_sha256"] || identity.SlideIndex == nil || *identity.SlideIndex != query || identity.SlideCount != len(input["deck"].(pptxpatch.NativePPTXDeck).Slides) || identity.SourceFrameAutoFitCount != input["source_frame_autofit_count"].(int) || identity.InheritedTextCount != input["inherited_text_preview_count"].(int) || identity.InheritedTextCount > 0 && identity.InheritedTextPolicy != "source-latin-inheritance-approximate-v1" || identity.InheritedTextCount == 0 && identity.InheritedTextPolicy != "" {
 		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, errors.New("native preview worker result does not match the source slide"))
 		return
 	}
@@ -154,14 +157,17 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		return 0, err
 	}
 	for key, entries := range values {
-		if (key != "slide" && key != "autofit" && key != "text" && key != "fonts") || len(entries) != 1 {
-			return 0, errors.New("only one slide and one autofit query parameter are supported")
+		if (key != "slide" && key != "autofit" && key != "text" && key != "fonts" && key != "charts") || len(entries) != 1 {
+			return 0, errors.New("only one value per supported slide preview query parameter is allowed")
 		}
 		if key == "autofit" && entries[0] != "source-frame" {
 			return 0, errors.New("autofit must equal source-frame when explicitly requested")
 		}
 		if key == "text" && entries[0] != "source-inherited" {
 			return 0, errors.New("text must equal source-inherited when explicitly requested")
+		}
+		if key == "charts" && entries[0] != "source-literal" {
+			return 0, errors.New("charts must equal source-literal when explicitly requested")
 		}
 		if key == "fonts" && entries[0] != "operator-substitution" {
 			return 0, errors.New("fonts must equal operator-substitution when explicitly requested")
@@ -176,4 +182,18 @@ func parsePPTXPreviewSlide(r *http.Request) (int, error) {
 		return 0, errors.New("slide must be a canonical zero-based integer")
 	}
 	return index, nil
+}
+
+func validPPTXChartPreviewMode(result []byte, enabled bool) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(result, &fields) != nil {
+		return false
+	}
+	flag, hasFlag := fields["source_chart_preview"]
+	policy, hasPolicy := fields["chart_axis_layout_policy"]
+	if !enabled {
+		return !hasFlag && !hasPolicy
+	}
+	var layout string
+	return hasFlag && bytes.Equal(bytes.TrimSpace(flag), []byte("true")) && hasPolicy && json.Unmarshal(policy, &layout) == nil && layout == "supplied-outline-margins-v1"
 }

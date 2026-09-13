@@ -22,6 +22,8 @@ export {
 export type {
   CompileSlideOptions,
   NativePptxTextDefaults,
+  NativePptxGlyphExtents,
+  NativePptxGlyphExtentsRequest,
   NativePptxTextLayout,
   NativePptxTextOverride,
   NativePptxTextRunContext,

@@ -6,6 +6,7 @@ import (
 )
 
 type nativeChartAxis struct {
+	Labels      *NativeChartAxisLabels
 	ID          int64
 	CrossAxisID int64
 	Orientation string
@@ -155,16 +156,50 @@ func extractNativeChartAxisWithCrossBetween(node *nativeXMLNode, d nativeExtract
 		return nil, false
 	}
 	if !axis.Deleted {
-		for _, name := range []string{"majorTickMark", "minorTickMark", "tickLblPos"} {
-			if _, ok := nativeChartToken(c.take(name), "none"); !ok {
+		var format *string
+		if c.has("numFmt") {
+			n := c.take("numFmt")
+			if !valueAxis || requireOnlyNativeAttrs(n, xml.Name{Local: "formatCode"}, xml.Name{Local: "sourceLinked"}) != nil || requireOnlyNativeChildren(n) != nil {
 				return nil, false
 			}
+			raw, found := exactNativeAttr(n, "", "formatCode")
+			linked, explicit := exactNativeAttr(n, "", "sourceLinked")
+			if !found || !nativeChartFixedFormat(raw) || !explicit || linked != "0" {
+				return nil, false
+			}
+			format = &raw
+		}
+		major, valid := nativeChartToken(c.take("majorTickMark"), "none", "out")
+		if !valid {
+			return nil, false
+		}
+		if _, valid := nativeChartToken(c.take("minorTickMark"), "none"); !valid {
+			return nil, false
+		}
+		position, valid := nativeChartToken(c.take("tickLblPos"), "none", "low", "high")
+		if !valid {
+			return nil, false
 		}
 		axis.Color, axis.Width, ok = nativeChartAxisPaint(c.take("spPr"), d)
 		if !ok {
 			return nil, false
 		}
+		if position == "none" {
+			if format != nil || major != "none" {
+				return nil, false
+			}
+		} else {
+			if valueAxis != (format != nil) {
+				return nil, false
+			}
+			style, valid := extractNativeChartAxisLabelStyle(c.take("txPr"), d)
+			if !valid {
+				return nil, false
+			}
+			axis.Labels = &NativeChartAxisLabels{Profile: "explicit-axis-labels-v1", Position: position, MajorTickMark: major, Style: *style, NumberFormat: format}
+		}
 	}
+
 	axis.CrossAxisID, ok = nativeChartInteger(c.take("crossAx"), 0, 4294967295)
 	if !ok || axis.ID == axis.CrossAxisID {
 		return nil, false
@@ -190,5 +225,29 @@ func extractNativeChartAxisWithCrossBetween(node *nativeXMLNode, d nativeExtract
 			return nil, false
 		}
 	}
+	if axis.Labels != nil {
+		if valueAxis {
+			unit, valid := nativeChartAttribute(c.take("majorUnit"))
+			if !valid {
+				return nil, false
+			}
+			if _, valid := nativeChartAxisTickCount(axis.Min, axis.Max, unit); !valid {
+				return nil, false
+			}
+			axis.Labels.MajorUnit = &unit
+		} else {
+			// Explicit single-level labels: no automatic skips or offset-base guessing.
+			for _, item := range []struct{ name, value string }{{"auto", "0"}, {"lblAlgn", "ctr"}, {"lblOffset", "0"}, {"tickLblSkip", "1"}, {"tickMarkSkip", "1"}, {"noMultiLvlLbl", "1"}} {
+				expected := item.value
+				if item.name == "lblOffset" && d.chart == nsChartStrict {
+					expected = "0%"
+				}
+				if _, valid := nativeChartToken(c.take(item.name), expected); !valid {
+					return nil, false
+				}
+			}
+		}
+	}
+
 	return axis, c.done()
 }

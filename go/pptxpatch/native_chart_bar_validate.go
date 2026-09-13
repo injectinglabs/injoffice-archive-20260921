@@ -20,6 +20,9 @@ func validNativeLiteralBar(bar *NativeLiteralBar) bool {
 		return len(c) == 7 && c[0] == '#' && inspectionRGB.MatchString(c[1:]) && strings.ToUpper(c) == c
 	}
 	ca, va := bar.CategoryAxis, bar.ValueAxis
+	if !validNativeChartAxisLabels(ca, va, false) || !validNativeChartAxisLabels(va, ca, true) {
+		return false
+	}
 	for _, axis := range []NativeLiteralBarAxis{ca, va} {
 		if axis.ID < 0 || axis.ID > 4294967295 || axis.CrossAxisID < 0 || axis.CrossAxisID > 4294967295 || (axis.Orientation != "minMax" && axis.Orientation != "maxMin") {
 			return false

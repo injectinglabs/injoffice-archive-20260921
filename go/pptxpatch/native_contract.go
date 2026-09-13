@@ -193,17 +193,37 @@ type NativeLiteralDoughnut struct {
 	Colors          []string `json:"colors"`
 }
 
+// NativeChartAxisLabels retains complete local source text and tick policy.
+// Layout margins and outward tick length are supplied preview policies.
+type NativeChartAxisLabelStyle struct {
+	FontFamily string `json:"fontFamily"`
+	FontSize   int64  `json:"fontSize"`
+	Color      string `json:"color"`
+	Bold       bool   `json:"bold"`
+	Italic     bool   `json:"italic"`
+	Language   string `json:"language"`
+}
+type NativeChartAxisLabels struct {
+	Profile       string                    `json:"profile"`
+	Position      string                    `json:"position"`
+	MajorTickMark string                    `json:"majorTickMark"`
+	Style         NativeChartAxisLabelStyle `json:"style"`
+	MajorUnit     *string                   `json:"majorUnit,omitempty"`
+	NumberFormat  *string                   `json:"numberFormat,omitempty"`
+}
+
 type NativeLiteralBarAxis struct {
-	ID          int64   `json:"id"`
-	CrossAxisID int64   `json:"crossAxisId"`
-	Orientation string  `json:"orientation"`
-	Position    string  `json:"position"`
-	Deleted     bool    `json:"deleted"`
-	Color       *string `json:"color,omitempty"`
-	WidthEMU    *int64  `json:"widthEmu,omitempty"`
-	Min         *string `json:"min,omitempty"`
-	Max         *string `json:"max,omitempty"`
-	CrossesAt   *string `json:"crossesAt,omitempty"`
+	Labels      *NativeChartAxisLabels `json:"labels,omitempty"`
+	ID          int64                  `json:"id"`
+	CrossAxisID int64                  `json:"crossAxisId"`
+	Orientation string                 `json:"orientation"`
+	Position    string                 `json:"position"`
+	Deleted     bool                   `json:"deleted"`
+	Color       *string                `json:"color,omitempty"`
+	WidthEMU    *int64                 `json:"widthEmu,omitempty"`
+	Min         *string                `json:"min,omitempty"`
+	Max         *string                `json:"max,omitempty"`
+	CrossesAt   *string                `json:"crossesAt,omitempty"`
 }
 type NativeLiteralBarSeries struct {
 	Index  int64    `json:"index"`
