@@ -182,3 +182,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+DrawingML preset geometry catalog
+--------------------------------
+`go/pptxpatch/presetdata/preset-shapes.xml` incorporates the Apache POI
+DrawingML preset definitions from commit 338882ac8898df5c13a7d15f533204c5dd8607d6,
+Copyright The Apache Software Foundation, under the Apache License 2.0.
+The original resource, license and NOTICE are retained in that directory,
+with a SHA-256-pinned source attribution in PROVENANCE.md. Local evaluation
+includes explicitly documented catalog errata and guide alpha-renaming;
+the original resource bytes are unchanged.

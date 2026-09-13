@@ -51,8 +51,8 @@ func TestNativePresetDefaultCoverageAudit(t *testing.T) {
 		}
 	}
 	t.Logf("default catalog coverage %d/%d; remaining:\n%s", passed, len(names), strings.Join(failures, "\n"))
-	if passed == 0 {
-		t.Fatal("no catalog geometry evaluates")
+	if passed != 187 {
+		t.Fatal("incomplete default catalog geometry")
 	}
 }
 func TestNativePresetAdjustmentNamesAndIsolation(t *testing.T) {
@@ -91,7 +91,7 @@ func TestNativePresetExplicitErrata(t *testing.T) {
 				}
 			}
 		}
-		if guides["xB"] != guides["xH"]-guides["dxB"] {
+		if guides.values["xB"] != guides.values["xH"]-guides.values["dxB"] {
 			t.Fatal("catalog correction changed the defined three-operand subtraction")
 		}
 		if _, err := evaluateNativePresetGeometry(name, nil, 400, 300); err != nil {
@@ -140,5 +140,42 @@ func TestNativePresetAllGeometryIndependentOfPendingToneModes(t *testing.T) {
 				t.Fatal("empty catalog geometry")
 			}
 		})
+	}
+}
+
+func TestNativePresetCalloutExactZeroBranch(t *testing.T) {
+	for _, name := range []string{"wedgeRectCallout", "wedgeRoundRectCallout"} {
+		node, err := prepareNativePresetGeometry(name, map[string]int64{"adj1": 1, "adj2": 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, _ := newNativeGeometryGuides(999983, 777779)
+		for _, list := range []string{"avLst", "gdLst"} {
+			for _, gd := range nativeChild(node, nativePresetDrawingNS, list).Children {
+				key, _ := exactNativeAttr(gd, "", "name")
+				formula, _ := exactNativeAttr(gd, "", "fmla")
+				if err := g.evaluateWithIntermediateLimit([]nativeGeometryGuide{{key, formula}}, nativeGeometryMaxIntermediate); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		// dq=(w/100000)*h/w=h/100000=dyPos, so dz is exactly zero.
+		if g.exact["dz"] == nil || g.exact["dz"].Sign() != 0 {
+			t.Fatalf("%s nonzero dz: %v", name, g.exact["dz"])
+		}
+		if g.values["xr"] != 500001.49983 || g.values["yb"] != 777779 {
+			t.Fatalf("%s wrong branch: xr=%v yb=%v", name, g.values["xr"], g.values["yb"])
+		}
+		geometry, err := evaluateNativePresetGeometry(name, map[string]int64{"adj1": 1, "adj2": 1}, 999983, 777779)
+		if err != nil {
+			t.Fatal(err)
+		}
+		right, bottom := 6, 10
+		if name == "wedgeRoundRectCallout" {
+			right, bottom = 8, 13
+		}
+		if *geometry.Paths[0].Commands[right].X != 500001 || *geometry.Paths[0].Commands[bottom].Y != 777779 {
+			t.Fatalf("%s wrong final point", name)
+		}
 	}
 }

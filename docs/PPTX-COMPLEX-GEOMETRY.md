@@ -2,15 +2,15 @@
 
 The custom geometry engine evaluates DrawingML in the Go source parser. The native boundary carries numeric paths and a text rectangle, not XML or an executable guide language. Source geometry remains preserve-only; shape mutation does not rewrite custom paths.
 
-This is the first integration milestone in the geometry completion plan. It does not establish Office visual parity or complete the preset catalog, adjustable presets, arbitrary rotations, shaded path fills, or interactive geometry handles.
+This describes the custom-path engine introduced in the first geometry milestone. The [preset catalog extension](PPTX-PRESET-CATALOG.md) adds catalog definitions, declared adjustment overrides, all six path fill modes and numerical qualification. Arbitrary rotations, broader custom-guide authoring and interactive geometry handles remain subsequent work; neither milestone establishes Office visual parity.
 
 ## Evaluation
 
 The engine supports the seventeen ECMA-376 guide operations: `*/`, `+-`, `+/`, `?:`, `abs`, `at2`, `cat2`, `cos`, `max`, `min`, `mod`, `pin`, `sat2`, `sin`, `sqrt`, `tan`, and `val`. It evaluates adjustment values followed by ordered shape guides. Built-in frame, divisor, and angle guides follow the finite list in §20.1.10.56. Names cannot shadow built-ins, earlier guides, or numeric operands. Forward references and undefined numeric domains refuse the whole geometry.
 
-Calculations retain floating-point precision until coordinates cross the native boundary, where they round once to integer EMU. Path `w` and `h` scale each axis independently. A missing axis extent uses the shape frame. Text rectangle guides use the frame coordinate system, independently of path coordinate spaces; missing `rect` uses the full frame.
+Calculations retain exact rational shadows where algebra permits and conservative interval estimates for non-rational results; see the catalog extension for numerical budgets and refusal policy. Coordinates round at the final integer-EMU boundary. Path `w` and `h` scale each axis independently. A missing axis extent uses the shape frame. Text rectangle guides use the frame coordinate system, independently of path coordinate spaces; missing `rect` uses the full frame.
 
-Paths support move, line, quadratic and cubic Bezier curves, elliptical arcs, and close. Close restores the current point to the active subpath origin. Multiple subpaths retain their original order and direction for nonzero winding, including holes. Multiple paths preserve paint order. This milestone accepts `norm`/`none` fill and Boolean stroke, refusing other fill modes. Both Boolean `extrusionOk` values are nonvisual permission metadata; applied scene/shape 3D remains refused by source qualification. The specification prose and schema disagree about its default, which does not affect this two-dimensional paint policy.
+Paths support move, line, quadratic and cubic Bezier curves, elliptical arcs, and close. Close restores the current point to the active subpath origin. Multiple subpaths retain their original order and direction for nonzero winding, including holes. Multiple paths preserve paint order. Paths accept all six DrawingML fill modes and Boolean stroke. Shaded modes use the explicitly disclosed deterministic policy described in the catalog extension. Both Boolean `extrusionOk` values are nonvisual permission metadata; applied scene/shape 3D remains refused by source qualification. The specification prose and schema disagree about its default, which does not affect this two-dimensional paint policy.
 
 ## Elliptical arcs
 
@@ -21,9 +21,9 @@ t = atan2(rx × sin(θ), ry × cos(θ))
 point = (rx × cos(t), ry × sin(t))
 ```
 
-The current point anchors the start of the ellipse. Endpoint calculation takes place before path-axis scaling. Signed sweeps preserve clockwise or counterclockwise winding. Sweeps up to one revolution split into at most two segments of at most half a revolution; this avoids the SVG coincident-endpoint full-circle omission.
+The current point anchors the start of the ellipse. Endpoint calculation takes place before path-axis scaling. Signed sweeps preserve clockwise or counterclockwise winding. Sweeps up to one revolution split into at most four segments of at most a quarter revolution; this avoids the SVG coincident-endpoint full-circle omission.
 
-After rounding, an exact integer predicate checks that the endpoint chord fits the transported radii. A shape that would require SVG to silently enlarge its radii refuses instead. Collapsed radii also refuse. These checks include tiny arcs and extreme aspect ratios.
+After rounding, an exact integer predicate checks that the endpoint chord fits the transported radii. A shape that would require SVG to silently enlarge its radii refuses instead. A zero/zero radius arc is a no-op; a single collapsed radius refuses. These checks include tiny arcs and extreme aspect ratios.
 
 ## Limits and refusal
 

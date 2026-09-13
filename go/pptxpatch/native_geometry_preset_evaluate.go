@@ -83,7 +83,7 @@ func validateNativePresetMetadata(list *nativeXMLNode, g nativeGeometryGuides) e
 		}
 		for _, attr := range item.Attrs {
 			if strings.HasPrefix(attr.Name.Local, "gdRef") {
-				if _, ok := g[attr.Value]; !ok {
+				if _, ok := g.values[attr.Value]; !ok {
 					return fmt.Errorf("unknown handle guide")
 				}
 			} else if attr.Name.Space == "" {

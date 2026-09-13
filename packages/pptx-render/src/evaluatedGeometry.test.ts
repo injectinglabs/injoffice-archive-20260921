@@ -75,3 +75,32 @@ it('bounds a custom text rectangle in cumulative group space independently of pa
  shape.geometry!.textRect={x:0,y:0,cx:100,cy:100}
  await expect(compileNativePptxSlide(deck,0,{textLayout:layout,maxCoordinateEmu:100000000})).resolves.toMatchObject({nodes:[{kind:'group'}]})
 })
+
+it('paints all six source path fill modes with explicit tone-policy diagnostics',async()=>{
+ const {deck,shape}=fixture()
+ const modes=['norm','none','darken','darkenLess','lighten','lightenLess'] as const
+ shape.fill='000000';shape.geometry!.paths=modes.map(fillMode=>({...shape.geometry!.paths[0]!,fillMode}))
+ const before=JSON.stringify(deck)
+ const tree=await compileNativePptxSlide(deck,0,{textLayout:layout})
+ expect(tree.diagnostics.some(d=>d.code==='geometry.deterministicPathTone'&&d.message.includes('linear-srgb-path-tone-20-40-v1'))).toBe(true)
+ const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+ expect(surface.finish().filter(p=>p.kind==='path').map(p=>p.fill)).toEqual(['000000',undefined,'000000','000000','AAAAAA','7C7C7C'])
+ expect(JSON.stringify(deck)).toBe(before)
+ shape.geometry!.paths[0]!.fillMode='unknown' as never
+ expect(validateNativePptx(deck).ok).toBe(false)
+ await expect(compileNativePptxSlide(deck,0,{textLayout:layout})).rejects.toThrow()
+})
+
+it('retains callout paths outside the frame while clipping only legacy text',async()=>{
+ const {deck,shape}=fixture();shape.transform={x:0,y:0,cx:1000,cy:1000}
+ shape.geometry!.paths[0]!.commands[0]={kind:'moveTo',x:-500,y:-500}
+ const tree=await compileNativePptxSlide(deck,0,{textLayout:layout})
+ const node=tree.nodes[0]!;if(node.kind!=='shape')throw Error('missing shape')
+ expect(node.clip).toBeUndefined()
+ const modified={...tree,nodes:[{...node,textBody:{kind:'textBody' as const,sourceElementId:shape.id,bounds:node.bounds,fidelity:'legacyUnavailable' as const,status:'laidOut' as const,paragraphs:[]}}]}
+ const surface=createRecordingPaintSurface();paintSlideRenderTree(modified,surface)
+ const commands=surface.finish(),paths=commands.filter(c=>c.kind==='path')
+ expect(paths[0]!.path[0]).toEqual({kind:'moveTo',x:-500,y:-500})
+ const localClip=commands.findIndex(c=>c.kind==='clipRect'&&c.rect.cx===1000)
+ expect(localClip).toBeGreaterThan(commands.lastIndexOf(paths[1]!))
+})
