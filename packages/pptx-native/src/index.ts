@@ -25,6 +25,7 @@ export {
   transitionTypeValues,
 } from './schema.generated'
 export type {
+  NativeEvaluatedGeometry, NativeGeometryTextRect, NativeGeometryPath, NativeGeometryCommand,
   NativeAnimation,
   NativeArrowEnd,
   NativeAnimationEffect,
