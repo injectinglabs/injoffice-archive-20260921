@@ -9,6 +9,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./native-textbox-shape-compiler": {
+      "types": "./dist/nativeTextboxShapePaintV1.d.ts",
+      "import": "./dist/nativeTextboxShapePaintV1.js"
+    },
     "./native-raster": {
       "types": "./dist/nativeImagePagePaintV1.d.ts",
       "import": "./dist/nativeImagePagePaintV1.js"
@@ -33,7 +37,7 @@
   },
   "files": ["dist", "schema", "README.md"],
   "injoffice": {
-    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts", "nativePagePaintOutputV1": "src/nativePagePaintOutputV1.ts", "nativeImagePagePaintV1": "src/nativeImagePagePaintV1.ts" },
+    "entries": { "index": "src/index.ts", "nativeDocx": "src/nativeDocx.ts", "nativePagePaintOutputV1": "src/nativePagePaintOutputV1.ts", "nativeImagePagePaintV1": "src/nativeImagePagePaintV1.ts", "nativeTextboxShapePaintV1": "src/nativeTextboxShapePaintV1.ts" },
     "legalFiles": ["NOTICE"]
   },
   "publishConfig": { "access": "public" },
