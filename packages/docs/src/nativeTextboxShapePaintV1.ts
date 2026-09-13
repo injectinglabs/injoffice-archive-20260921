@@ -1,7 +1,8 @@
+import {planTextboxWrap,type NativeTextboxWrapClusterV1,type NativeTextboxWrapPaintV1} from './nativeTextboxWrappingV1.js'
 import type {NativeTextboxLinePaintV1} from './nativeTextboxHardBreaksV1.js'
 /** Node-only deterministic textbox-local compiler. No platform font lookup. */
 import {createHarfBuzzTextShaperV1,createHarfBuzzOutlineProviderV1,inspectHarfBuzzFontMetricsV1,HARFBUZZ_SHAPER_CONFIG_REVISION,type HarfBuzzOutlineCommandV1} from '@injoffice/font-metrics/harfbuzz'
-import {NATIVE_TEXT_LAYOUT_VERSION,type FontResource,type TextRunInput} from '@injoffice/font-metrics/layout'
+import {NATIVE_TEXT_LAYOUT_VERSION,type FontResource,type TextRunInput,type ShapedSegment} from '@injoffice/font-metrics/layout'
 import {sha256} from '@noble/hashes/sha2.js'
 import {bytesToHex} from '@noble/hashes/utils.js'
 import {decodeNativeDocxTextboxGeometryV1,decodeNativeDocxTextboxShapePaintV1,nativeTextboxGeometryDigestV1,type NativeDocxTextboxShapePaintV1} from './nativeTextboxGeometryPreviewV1.js'
@@ -38,19 +39,31 @@ export function compileNativeDocxTextboxShapeV1(source:unknown,evidence:unknown,
   const request={bytes,contentDigest:digest},metrics=inspectHarfBuzzFontMetricsV1(request)
   if(!fontMatches(bytes,g.font_family)){result.reason='font-family-or-regular-face-mismatch';return result}
   const font:FontResource={bytes,metrics,face:{faceId:digest,family:g.font_family,weight:400,style:'normal',stretch:100,sourceKind:'host',resourceId:digest,contentDigest:digest,resolution:'exact',matchedFamily:g.font_family}}
-  const hard=item.hard_break_layout,sourceLines=hard?hard.lines.map(l=>item.owner.paragraphs[0]!.slice(l.start_utf16,l.end_utf16)):[item.owner.paragraphs[0]!]
-  const paths:string[]=[],provider=createHarfBuzzOutlineProviderV1(request),linePaint:NativeTextboxLinePaintV1={natural_height_millipoints:0,ascent_millipoints:0,line_gap_millipoints:0,lines:[]}
+  const hard=item.hard_break_layout,wrap=item.wrap_layout
   const emu=(n:number)=>n*10/127,w=emu(g.width_emu),h=emu(g.height_emu),[left,top,right,bottom]=g.insets_emu.map(emu) as [number,number,number,number]
+  const makeRun=(text:string):TextRunInput=>({version:NATIVE_TEXT_LAYOUT_VERSION,text,fontSizeMilliPoints:g.font_size_half_points*500,font:{families:[g.font_family],weight:400,style:'normal',stretch:100},direction:'ltr',script:'Latn',language:'en-US',features:[{tag:'kern',value:0}]})
+  let whole:ShapedSegment|undefined,wrapPaint:NativeTextboxWrapPaintV1|undefined,wrapPlan:ReturnType<typeof planTextboxWrap>|undefined
+  if(wrap){
+   const run=makeRun(item.owner.paragraphs[0]!),shaped=createHarfBuzzTextShaperV1({sourceRevision:'injoffice.textbox-shape-v1'}).shape({run,startUtf16:0,endUtf16:run.text.length,font})
+   if('status'in shaped){result.reason='font-shaping-refused';return result}
+   whole=shaped
+   const clusters:NativeTextboxWrapClusterV1[]=shaped.clusters.map(c=>({start_utf16:c.startUtf16,end_utf16:c.endUtf16,advance_millipoints:c.advanceInlineMilliPoints,unsafe_to_break:c.unsafeToBreak===true,glyph_start:c.glyphStart,glyph_end:c.glyphEnd}))
+   wrapPlan=planTextboxWrap(run.text,clusters,w-left-right,wrap.policy)
+   if(clusters.at(-1)!.glyph_end!==shaped.glyphs.length)throw new RangeError('wrap-glyph-coverage')
+   wrapPaint={clusters,natural_height_millipoints:shaped.metrics.lineHeightMilliPoints,ascent_millipoints:shaped.metrics.ascentMilliPoints,line_gap_millipoints:0,lines:[]}
+  }
+  const sourceLines=wrapPlan?wrapPlan.map(l=>item.owner.paragraphs[0]!.slice(l.start_utf16,l.end_utf16)):hard?hard.lines.map(l=>item.owner.paragraphs[0]!.slice(l.start_utf16,l.end_utf16)):[item.owner.paragraphs[0]!]
+  const paths:string[]=[],provider=createHarfBuzzOutlineProviderV1(request),linePaint:NativeTextboxLinePaintV1={natural_height_millipoints:0,ascent_millipoints:0,line_gap_millipoints:0,lines:[]}
   let budget=0,glyphCount=0
   for(let ordinal=0;ordinal<sourceLines.length;ordinal++){
-  const run:TextRunInput={version:NATIVE_TEXT_LAYOUT_VERSION,text:sourceLines[ordinal]!,fontSizeMilliPoints:g.font_size_half_points*500,font:{families:[g.font_family],weight:400,style:'normal',stretch:100},direction:'ltr',script:'Latn',language:'en-US',features:[{tag:'kern',value:0}]}
-  const shaped=createHarfBuzzTextShaperV1({sourceRevision:'injoffice.textbox-shape-v1'}).shape({run,startUtf16:0,endUtf16:run.text.length,font})
+  const run=makeRun(sourceLines[ordinal]!),planned=wrapPlan?.[ordinal]
+  const shaped=whole&&planned?{...whole,advanceInlineMilliPoints:planned.advance_millipoints,glyphs:whole.glyphs.slice(whole.clusters[planned.cluster_start]!.glyphStart,whole.clusters[planned.cluster_end-1]!.glyphEnd)}:createHarfBuzzTextShaperV1({sourceRevision:'injoffice.textbox-shape-v1'}).shape({run,startUtf16:0,endUtf16:run.text.length,font})
   if('status'in shaped){result.reason='font-shaping-refused';return result}
   if(shaped.advanceInlineMilliPoints>w-left-right||shaped.metrics.lineHeightMilliPoints>h-top-bottom){result.reason='text-overflow';return result}
-  const step=hard?hard.line_step_twips*50:shaped.metrics.lineHeightMilliPoints,center=hard?(step-shaped.metrics.lineHeightMilliPoints)/2:0
-  if(hard&&(shaped.metrics.lineGapMilliPoints!==0||center<0||!Number.isInteger(center)||step*sourceLines.length>h-top-bottom)){result.reason='exact-line-layout-refused';return result}
+  const explicit=hard??wrap,step=explicit?explicit.line_step_twips*50:shaped.metrics.lineHeightMilliPoints,center=explicit?(step-shaped.metrics.lineHeightMilliPoints)/2:0
+  if(explicit&&(shaped.metrics.lineGapMilliPoints!==0||center<0||!Number.isInteger(center)||step*sourceLines.length>h-top-bottom)){result.reason='exact-line-layout-refused';return result}
   if(hard&&ordinal>0&&(linePaint.natural_height_millipoints!==shaped.metrics.lineHeightMilliPoints||linePaint.ascent_millipoints!==shaped.metrics.ascentMilliPoints)){result.reason='inconsistent-line-metrics';return result}
-  const lineTop=top+ordinal*step,lineBottom=hard?lineTop+step:h-bottom,baseline=lineTop+center+shaped.metrics.ascentMilliPoints,pathStart=paths.length
+  const lineTop=top+ordinal*step,lineBottom=explicit?lineTop+step:h-bottom,baseline=lineTop+center+shaped.metrics.ascentMilliPoints,pathStart=paths.length
   let x=left
   for(const glyph of shaped.glyphs){
    if(++glyphCount>16384)throw new RangeError('glyph-budget')
@@ -66,10 +79,12 @@ export function compileNativeDocxTextboxShapeV1(source:unknown,evidence:unknown,
    const path=outline.path.map(command).join(' ');budget+=path.length;if(path.length>1000000||budget>8000000)throw new RangeError('glyph-budget')
    if(path)paths.push(path);x+=glyph.advanceXMilliPoints
   }
+  if(wrapPaint&&planned)wrapPaint.lines.push({...planned,baseline_millipoints:baseline,path_start:pathStart,path_end:paths.length})
   if(hard){const sourceLine=hard.lines[ordinal]!;linePaint.natural_height_millipoints=shaped.metrics.lineHeightMilliPoints;linePaint.ascent_millipoints=shaped.metrics.ascentMilliPoints;linePaint.lines.push({ordinal,start_utf16:sourceLine.start_utf16,end_utf16:sourceLine.end_utf16,baseline_millipoints:baseline,path_start:pathStart,path_end:paths.length})}
   }
   if(hard)result.line_layout=linePaint
+  if(wrapPaint)result.wrap_paint=wrapPaint
   Object.assign(result,{status:'supported',reason:'',paths,width_millipoints:w,height_millipoints:h,line_width_millipoints:emu(g.line_width_emu),fill_rgb:g.fill_rgb,line_rgb:g.line_rgb,text_rgb:g.text_rgb})
   return decodeNativeDocxTextboxShapePaintV1(source,joined,index,result,digest)
- }catch(error){delete result.line_layout;Object.assign(result,{status:'omitted',paths:[],width_millipoints:0,height_millipoints:0,line_width_millipoints:0,fill_rgb:'none',line_rgb:'none',text_rgb:'000000'});result.reason=error instanceof RangeError&&error.message==='glyph-overflow'?'glyph-overflow':'font-or-outline-refused';return result}
+ }catch(error){delete result.line_layout;delete result.wrap_paint;Object.assign(result,{status:'omitted',paths:[],width_millipoints:0,height_millipoints:0,line_width_millipoints:0,fill_rgb:'none',line_rgb:'none',text_rgb:'000000'});result.reason=error instanceof RangeError&&(error.message==='glyph-overflow'||error.message.startsWith('wrap-'))?error.message:'font-or-outline-refused';return result}
 }

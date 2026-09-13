@@ -885,7 +885,7 @@ paragraph/run/spacing/text/break anchors and UTF-16 ranges enter the source dige
 No automatic wrapping or extra paragraphs are synthesized.
 Styles must be absent or empty. EMU dimensions must be divisible by 127 so the
 millipoint paint conversion is exact. Unmarked whitespace, inheritance,
-wrapping, overflow, themes, effects, compatibility branches and linked/grouped
+unqualified wrapping, overflow, themes, effects, compatibility branches and linked/grouped
 shapes remain refused. All original native drawing diagnostics and mutation
 restrictions remain intact.
 
@@ -913,3 +913,37 @@ are validated in helper output, including missing nonspace lines. This is a
 canonical local metrics policy, not measured Word typography equivalence.
 [Open XML line spacing semantics](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.spacingbetweenlines.line?view=openxml-3.0.1)
 define exact spacing in twips and describe centering when the line box is taller.
+
+
+The local rectangle preview additionally admits an explicit `wrap="square"`
+profile with one preserved text node, one paragraph/run and exact line spacing.
+Text uses space-separated ASCII tokens without edge spaces. Plain alphanumeric
+text retains `ascii-space-greedy-v1`. Punctuated text uses the distinct
+`ascii-punctuation-space-greedy-v1` profile: internal apostrophes, decimal dots,
+hyphens and slashes; one attached terminal comma, full stop, question mark,
+exclamation mark, semicolon or colon; and balanced parentheses of depth at most
+one, attached to tokens. Parenthetical phrases may span spaces. Standalone
+punctuation, whitespace immediately after an opening or before a closing
+parenthesis, quoted text, repeated terminal punctuation and unknown characters
+remain refused. Go source qualification and browser validation select the same
+canonical policy; punctuation cannot be passed under the alphanumeric policy. The complete source is shaped once with the supplied font. A
+bounded greedy planner selects only safe complete-cluster boundaries after
+spaces; separator spaces retain their source ranges and measured advances on
+the preceding line. An unbreakable word or separator-space edge overflow
+refuses the whole preview. Only spaces are break candidates, regardless of punctuation inside tokens.
+Both neighboring shaped-cluster unsafe flags must permit the boundary and the
+public line-break classifier must return allowed; unsupported classifications
+never receive a fallback. There is no trimming, emergency word splitting,
+hyphenation, autofit or browser-font fallback.
+
+Source `wrap_layout` anchors bind the explicit body properties, paragraph, run,
+text and spacing. It is mutually exclusive with authored hard-break evidence.
+Output `wrap_paint` carries complete ordered source/glyph cluster coverage,
+advances and unsafe-break flags plus per-line source/cluster/path ranges. The
+browser validator replays the greedy selection from that trusted helper
+evidence and checks exact bounds, centered metrics and source/font hashes.
+Budgets remain 4,096 source UTF-16 units, 16 lines, 16,384 glyphs and bounded
+aggregate paths; cluster selection has a separate bounded work counter.
+Original no-wrap and authored-hard-break profiles retain their behavior.
+This conservative wrapping policy is a local preview, not established Word
+line-breaking equivalence or surrounding-body/page wrapping.
