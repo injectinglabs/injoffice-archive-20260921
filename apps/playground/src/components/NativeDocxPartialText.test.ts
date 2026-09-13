@@ -2,9 +2,17 @@ import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
 import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
-import {createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
-import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView} from './NativeDocxPartialText'
+import {createNativeDocxNestedTextInventoryV1,createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
+import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView,NativeDocxNestedTextInventoryView} from './NativeDocxPartialText'
 describe('browser-local partial text UI',()=>{
+ it('labels nested source text separately, retains omissions and escapes authored text',()=>{
+  const f=JSON.parse(readFileSync(new URL('../../../../testdata/docx-native/nested-text-inspection-v1.json',import.meta.url),'utf8'))
+  const inventory=createNativeDocxNestedTextInventoryV1(f.document,{policy:'source-nested-table-text-v1',read_only:true},f.resolved_layout,f.nested_table_omissions,f.table_text_contexts,f.nested_text)
+  const segment=inventory.items[0]!.paragraphs[0]!.segments[0]!;if(segment.kind==='text')segment.text='<script>nested</script>'
+  const html=renderToStaticMarkup(createElement(NativeDocxNestedTextInventoryView,{inventory}))
+  expect(html).toContain('&lt;script&gt;nested&lt;/script&gt;');expect(html).toContain('Original nested-table omissions and diagnostics remain');expect(html).toContain('does not reconstruct table geometry')
+  expect(html).not.toContain('<script>');expect(html).not.toContain('<input');expect(html).not.toContain('<button');expect(html).not.toContain('contenteditable')
+ })
  it('labels review kinds, metadata, omissions and retained diagnostic codes as escaped read-only text',()=>{
   const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:ins[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
   const html=renderToStaticMarkup(createElement(NativeDocxReviewInventoryView,{review:{policy:'source-review-inventory-v1',read_only:true,source:{document_id:'d',revision:'r',package_sha256:'sha256:'+'a'.repeat(64)},items:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p',diagnostic_id:'diag',anchor,kind:'insertion',revision_id:'1',author:'<script>Author</script>',created_at:'<date>',run_ids:['r'],segments:[{kind:'text',source:{scope_id:'r',anchor},text:'<script>Inserted</script>'}],text_status:'qualified-insertion',retained_diagnostic_ids:['diag']}],omitted_count:1,source_diagnostics:{document:[{id:'diag',code:'WRAPPED_RUN_MARKUP',scope_id:'p',anchor,capability:'run-structure',preservation:'refuse-mutation',message:'Retained'}],resolved:[]}}}))

@@ -839,3 +839,16 @@ output in a browser. This output-only entry exports `decodeNativeDocxPagePaintV1
 the protocol/version/limits and output types without loading Node font providers,
 HarfBuzz, bidi or pagination. It uses the exact same strict output decoder as the
 server compiler. Full request/source replay remains a compiler-side operation.
+
+`createNativeDocxNestedTextInventoryV1` requires the separate explicit
+`source-nested-table-text-v1` read-only policy and same-byte `nested_text`,
+`nested_table_omissions` and `table_text_contexts` evidence. It lists qualified
+one-level nested cell paragraphs separately; the default partial view retains
+its nested-table omission. The producer accepts only one row/cell, an exact
+matching geometry-only table style chain and direct property-free paragraphs
+and text runs. Existing default style resolution must establish visible text
+without new diagnostics. Missing/conditional styles, hidden text, revision
+wrappers, cell properties and deeper tables remain omitted. The consumer joins
+original outer-owner omissions and resolved visibility; no nested table model,
+geometry, font placement or mutation authority is produced. Limits are 32 nested
+tables, 16 paragraphs per table, 32 runs per paragraph and 32,768 text units.

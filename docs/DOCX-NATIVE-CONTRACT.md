@@ -385,10 +385,19 @@ authored gap is valid (omitted `w:col/@space` has the standard zero value), the
 final gap is zero, total geometry exactly covers the body, and all
 column widths are equal. Section and column IDs are carried through paginated
 pages, paragraph slices, placed lines, canonical hashes, and page-paint output.
-Terminal balancing is accepted only for uniform one-line, zero-spacing
-paragraphs without cross-paragraph break constraints; a deterministic
-quotient/remainder plan gives earlier columns at most one extra line. Other
-balancing cases refuse atomically.
+Terminal balancing accepts uniform-height, zero-spacing lines, including multiline
+paragraphs, without cross-paragraph break constraints. A deterministic
+quotient/remainder plan gives earlier columns at most one extra line. Multiline
+splits must respect `keep_lines` and default-on `widow_control`; when the ideal
+plan violates either, pagination refuses atomically instead of choosing a
+constrained rebalance. Source line ordinals and paragraph continuation flags
+remain explicit across columns and pages. Unequal widths, note continuation,
+and general constrained balancing remain outside this slice.
+
+This bounded interpretation follows the OOXML definitions of
+[`noColumnBalance`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.nocolumnbalance?view=openxml-3.0.1)
+and [`widowControl`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.widowcontrol?view=openxml-3.0.1).
+It does not establish visual equivalence with Microsoft Word.
 
 Paragraph placement applies `page_break_before`, `keep_lines`, and a provable
 atomic subset of `keep_next`. A keep-with-next chain is placed only when every
