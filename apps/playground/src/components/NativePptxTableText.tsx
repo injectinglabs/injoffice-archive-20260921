@@ -10,8 +10,8 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
  const [arrangement,setArrangement]=useState<{source:NativePptxTableInspection;preview:NativePptxTableGeometryPreview}|null>(null)
  const [geometryError,setGeometryError]=useState('')
  const current=arrangement?.source===inspection?arrangement.preview:null
- function showArrangement(){
-  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1')});setGeometryError('')}
+ function showArrangement(sourcePaint=false){
+  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1',sourcePaint?{policy:'source-no-style-solid-border-v1'}:undefined)});setGeometryError('')}
   catch{setArrangement(null);setGeometryError('Source-positioned preview unavailable. The source text and inspection limits remain available.')}
  }
  return <article aria-label="Read-only presentation table text" className="pptx-table-text-result">
@@ -19,6 +19,7 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
   <p className="ds-muted">This is source text in reading order, not PowerPoint rendering. The table layout below is for reading; authored borders, fills, fonts and spacing are not reproduced.</p>
   {!!inspection.tables.length&&<DsButton onClick={()=>current?setArrangement(null):showArrangement()}>{current?'Hide source-positioned table preview':'Show approximate source-positioned table preview'}</DsButton>}
   {geometryError&&<p role="status">{geometryError}</p>}
+  {current&&<DsButton onClick={()=>showArrangement(!current.paintPolicy)}>{current.paintPolicy?'Use inspection guides only':'Preview qualified source border paint'}</DsButton>}
   {current&&<NativePptxTableGeometry preview={current} readingId={readingId}/>}
   {inspection.tables.map((table,index)=>{
    const rows=Array.from(new Set(table.cells.map(cell=>cell.row)))

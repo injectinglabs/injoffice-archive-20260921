@@ -3,9 +3,14 @@ import { assertNativePptx } from './validate'
 
 export interface NativePptxInspectionRect { x: number; y: number; width: number; height: number }
 export interface NativePptxInspectedCell { row: number; column: number; rect: NativePptxInspectionRect; paragraphs: string[] }
+export interface NativePptxTablePaint {
+  policy: 'source-no-style-solid-border-v1'; style_id: string
+  sources: {part_name:string;sha256:string}[]
+  fill: 'none'; border: {color:string;width_emu:number}|null
+}
 export interface NativePptxInspectedTable {
   slide_id: string; slide_index: number; part_name: string; part_sha256: string; slide_source_sha256: string
-  object_id: string; source_sha256: string; rect: NativePptxInspectionRect; cells: NativePptxInspectedCell[]; warnings: string[]
+  object_id: string; source_sha256: string; paint?: NativePptxTablePaint; rect: NativePptxInspectionRect; cells: NativePptxInspectedCell[]; warnings: string[]
 }
 export interface NativePptxTableOmission { slide_id: string; object_id: string; reason: string }
 /** Read-only source text and stored geometry. Contains no native mutation or preservation capabilities. */
@@ -75,7 +80,8 @@ export function decodeNativePptxTableInspection(input: unknown, deck: NativePptx
   let cells = 0, paragraphs = 0, units = 0
   const ids = new Set<string>(), fingerprints = new Set<string>(), partHashes = new Map<string, string>()
   const decoded = tables.map(value => {
-    const t = object(value, 'slide_id slide_index part_name part_sha256 slide_source_sha256 object_id source_sha256 rect cells warnings')
+    const hasPaint = !!value && typeof value === 'object' && Object.hasOwn(value, 'paint')
+    const t = object(value, 'slide_id slide_index part_name part_sha256 slide_source_sha256 object_id source_sha256 rect cells warnings'+(hasPaint?' paint':''))
     const slide_index = integer(t.slide_index, 0, deck.slides.length - 1), slide = deck.slides[slide_index]!
     const slide_id = text(t.slide_id, 256), part_name = text(t.part_name, 1024), object_id = text(t.object_id, 32)
     const part_sha256 = hash(t.part_sha256), source_sha256 = hash(t.source_sha256), slide_source_sha256 = hash(t.slide_source_sha256)
@@ -118,7 +124,9 @@ export function decodeNativePptxTableInspection(input: unknown, deck: NativePptx
       y += height
     }
     if (y !== frame.height) return fail()
-    return { slide_id, slide_index, part_name, part_sha256, slide_source_sha256, object_id, source_sha256, rect: frame, cells: decodedCells, warnings: [...warnings] }
+    const paint=hasPaint?decodeTablePaint(t.paint):undefined
+    if(paint&&decodedCells.length!==1)return fail()
+    return { slide_id, slide_index, part_name, part_sha256, slide_source_sha256, object_id, source_sha256, rect: frame, cells: decodedCells, warnings: [...warnings],...(paint?{paint}:{}) }
   })
   const decodedOmissions = omissions.map(value => {
     const o = object(value, 'slide_id object_id reason')
@@ -141,9 +149,10 @@ export interface NativePptxTableGeometryCell {
 export interface NativePptxTableGeometrySlide {
   slideId: string; slideIndex: number; sourceBounds: NativePptxInspectionRect
   width: number; height: number
-  tables: { objectId: string; tableIndex: number; rect: NativePptxInspectionRect; cells: NativePptxTableGeometryCell[] }[]
+  tables: { objectId: string; tableIndex: number; rect: NativePptxInspectionRect; cells: NativePptxTableGeometryCell[]; paint?: NativePptxTablePaint }[]
 }
 export interface NativePptxTableGeometryPreview {
+  paintPolicy?: 'source-no-style-solid-border-v1'; paintOmissions?: {slideId:string;tableIndex:number;reason:string}[]
   policy: 'host-sans-12pt-clipped-v1'; packageSHA256: string; sourceRevision: string
   cssPixelsPerInch: 96; fontSize: 16; lineHeight: 20; inset: 2
   slides: NativePptxTableGeometrySlide[]
@@ -157,10 +166,14 @@ export interface NativePptxTableGeometryPreview {
 export function createNativePptxTableGeometryPreview(
   inspection: NativePptxTableInspection,
   policy: 'host-sans-12pt-clipped-v1',
+  paintOptions?: {policy:'source-no-style-solid-border-v1'},
 ): NativePptxTableGeometryPreview {
   if (!admittedInspections.has(inspection) || policy !== 'host-sans-12pt-clipped-v1') {
     throw new TypeError('Table geometry preview requires a source-validated inspection and explicit host text policy.')
   }
+  if(paintOptions!==undefined&&object(paintOptions,'policy').policy!=='source-no-style-solid-border-v1')return fail()
+  const paintOmissions:{slideId:string;tableIndex:number;reason:string}[]=[]
+  if(paintOptions)inspection.tables.forEach((t,tableIndex)=>{if(!t.paint)paintOmissions.push({slideId:t.slide_id,tableIndex,reason:'Table paint is outside the source-qualified one-cell no-fill and uniform solid-border profile; inspection guides remain.'})})
   const slides: NativePptxTableGeometrySlide[] = []
   const omissions = inspection.omissions.map(o => ({...o}))
   const toPixels = (r: NativePptxInspectionRect): NativePptxInspectionRect => ({x:r.x/9525,y:r.y/9525,width:r.width/9525,height:r.height/9525})
@@ -176,12 +189,26 @@ export function createNativePptxTableGeometryPreview(
       continue
     }
     slides.push({slideId,slideIndex:tables[0]!.slide_index,sourceBounds:{x,y,width,height},width:width/9525,height:height/9525,
-      tables:tables.map(table => ({objectId:table.object_id,tableIndex:inspection.tables.indexOf(table),
+      tables:tables.map(table => ({objectId:table.object_id,tableIndex:inspection.tables.indexOf(table),...(paintOptions&&table.paint?{paint:table.paint}:{}),
         rect:toPixels({...table.rect,x:table.rect.x-x,y:table.rect.y-y}),
         cells:table.cells.map(cell=>({row:cell.row,column:cell.column,rect:toPixels(cell.rect),paragraphs:[...cell.paragraphs]})),
       })),
     })
   }
   return freezeInspection({policy,packageSHA256:inspection.package_sha256,sourceRevision:inspection.source_revision,
-    cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,slides,omissions})
+    cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,slides,omissions,...(paintOptions?{paintPolicy:'source-no-style-solid-border-v1' as const,paintOmissions}:{})})
+}
+
+function decodeTablePaint(input:unknown):NativePptxTablePaint {
+ const p=object(input,'policy style_id sources fill border')
+ if(p.policy!=='source-no-style-solid-border-v1'||p.fill!=='none'||typeof p.style_id!=='string'||!/^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$/.test(p.style_id))return fail()
+ const rawSources=array(p.sources,4),seen=new Set<string>()
+ if(rawSources.length!==4)return fail()
+ const sources=rawSources.map(value=>{const v=object(value,'part_name sha256'),part_name=text(v.part_name,1024),sha256=hash(v.sha256)
+  if(!part_name||part_name.startsWith('/')||/[\\?#\u0000]/.test(part_name)||part_name.split('/').some(s=>!s||s==='.'||s==='..')||seen.has(part_name))return fail()
+  seen.add(part_name);return {part_name,sha256}
+ })
+ let border:NativePptxTablePaint['border']=null
+ if(p.border!==null){const b=object(p.border,'color width_emu');if(typeof b.color!=='string'||! /^[0-9A-F]{6}$/.test(b.color))return fail();border={color:b.color,width_emu:integer(b.width_emu,1,127000)}}
+ return {policy:'source-no-style-solid-border-v1',style_id:p.style_id,sources,fill:'none',border}
 }

@@ -9762,7 +9762,7 @@
             {
               "name": "createNativePptxTableGeometryPreview",
               "kind": "function",
-              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1'): NativePptxTableGeometryPreview"
+              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1', paintOptions?: { policy: 'source-no-style-solid-border-v1'; }): NativePptxTableGeometryPreview"
             },
             {
               "name": "decodeNativePptxTableInspection",
@@ -9943,6 +9943,11 @@
               "name": "NativePptxTableOmission",
               "kind": "type",
               "signature": "NativePptxTableOmission"
+            },
+            {
+              "name": "NativePptxTablePaint",
+              "kind": "type",
+              "signature": "NativePptxTablePaint"
             },
             {
               "name": "NativeProvenance",

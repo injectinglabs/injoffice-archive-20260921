@@ -44,6 +44,7 @@ type NativePPTXInspectedTable struct {
 	SourceSHA256      string                    `json:"source_sha256"`
 	Rect              NativePPTXInspectionRect  `json:"rect"`
 	Cells             []NativePPTXInspectedCell `json:"cells"`
+	Paint             *NativePPTXTablePaint     `json:"paint,omitempty"`
 	Warnings          []string                  `json:"warnings"`
 }
 
@@ -117,6 +118,8 @@ func InspectNativePPTXTables(data []byte) (NativePPTXTableInspection, error) {
 				result.Omissions = append(result.Omissions, NativePPTXTableOmission{SlideID: slide.ID, ObjectID: "slide", Reason: "Slide root group geometry is outside the table inspection profile."})
 				continue
 			}
+			paintContext := nativeTablePaintContext{}
+			paintContextReady := false
 			for _, node := range tree.Children {
 				if node.Name != (xml.Name{Space: d.presentation, Local: "graphicFrame"}) {
 					continue
@@ -144,6 +147,14 @@ func InspectNativePPTXTables(data []byte) (NativePPTXTableInspection, error) {
 					return err
 				}
 				table.SlideID, table.SlideIndex, table.PartName = slide.ID, slideIndex, part
+				if !paintContextReady {
+					paintDialect, dialectErr := nativeDialectForPresentation(xml.Name{Space: root.Name.Space, Local: "presentation"})
+					if dialectErr == nil {
+						paintContext = extractor.tablePaintContext(part, root, paintDialect)
+					}
+					paintContextReady = true
+				}
+				table.Paint = inspectNativeTablePaint(node, paintContext, d)
 				table.PartSHA256, table.SourceSHA256 = nativeSHA256(payload), nativeSHA256(raw)
 				table.SlideSourceSHA256 = slide.Source.FingerprintSHA256
 				result.Tables = append(result.Tables, *table)
