@@ -23,7 +23,7 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
   {current&&<NativePptxTableGeometry preview={current} readingId={readingId}/>}
   {inspection.tables.map((table,index)=>{
    const rows=Array.from(new Set(table.cells.map(cell=>cell.row)))
-   return <section id={`${readingId}-${index}`} key={`${table.slide_id}:${table.object_id}`} aria-label={`Source table ${index+1} on slide ${table.slide_index+1}`}>
+   return <section tabIndex={-1} id={`${readingId}-${index}`} key={`${table.slide_id}:${table.object_id}`} aria-label={`Source table ${index+1} on slide ${table.slide_index+1}`}>
     <h4>Slide {table.slide_index+1}, table {index+1}</h4>
     <div className="pptx-table-text-scroll"><table className="ds-table"><caption className="visually-hidden">Source cell text; display styling is not authored PowerPoint styling</caption><tbody>{rows.map(row=><tr key={row}>{table.cells.filter(cell=>cell.row===row).map(cell=><td key={cell.column} data-source-cell={`${row+1}:${cell.column+1}`}>{cell.paragraphs.map((text,at)=><p key={at} dir="auto">{text||<span className="ds-muted">[Empty paragraph]</span>}</p>)}</td>)}</tr>)}</tbody></table></div>
     <details><summary>Source geometry and inspection limits</summary>

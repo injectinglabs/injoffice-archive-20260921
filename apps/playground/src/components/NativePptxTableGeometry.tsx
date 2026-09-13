@@ -19,7 +19,7 @@ export function NativePptxTableGeometry({preview,readingId}:{preview:NativePptxT
     </div>
    </div>
    <p className="ds-muted">Source origin: x {slide.sourceBounds.x}, y {slide.sourceBounds.y} EMU. Other slide content is omitted.</p>
-   <nav aria-label={`Full table text on slide ${slide.slideIndex+1}`} className="pptx-table-geometry-links">{slide.tables.map(table=><a key={table.objectId} href={`#${readingId}-${table.tableIndex}`}>Full text: table {table.tableIndex+1}</a>)}</nav>
+   <nav aria-label={`Full table text on slide ${slide.slideIndex+1}`} className="pptx-table-geometry-links">{slide.tables.map(table=><a key={table.objectId} href={`#${readingId}-${table.tableIndex}`} onClick={event=>{event.preventDefault();const target=document.getElementById(`${readingId}-${table.tableIndex}`);target?.scrollIntoView({block:'nearest'});target?.focus({preventScroll:true})}}>Full text: table {table.tableIndex+1}</a>)}</nav>
   </section>)}
   {preview.paintPolicy&&<details open><summary>Source paint coverage</summary><p>{preview.slides.reduce((n,s)=>n+s.tables.filter(t=>t.paint).length,0)} tables have qualified source paint. Font metrics and text placement remain the declared host approximation. This is not PowerPoint rendering.</p>{!!preview.paintOmissions?.length&&<ul>{preview.paintOmissions.map(o=><li key={`${o.slideId}:${o.tableIndex}`}>Table {o.tableIndex+1}: {o.reason}</li>)}</ul>}</details>}
   {!preview.slides.length&&<p>No table arrangement fits this preview profile.</p>}
