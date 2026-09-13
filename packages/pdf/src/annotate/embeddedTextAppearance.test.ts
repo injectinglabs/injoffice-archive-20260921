@@ -133,4 +133,3 @@ describe('positioned embedded horizontal appearances', () => {
   })
 
 })
-
