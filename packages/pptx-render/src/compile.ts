@@ -1,3 +1,7 @@
+import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
+import {createNativeLiteralBarPaths} from './literalBar.js'
+import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
+import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
 import {
@@ -689,7 +693,7 @@ function elementBase(element: NativeElement, zIndex: number, budget: Budget, cli
 function nativeTextBodyBounds(element: Extract<NativeElement, { kind: 'text' | 'shape' }>, state: CompileState): RenderRect {
   const layout = element.textBody
   if (!layout) return localBounds(element.transform.cx, element.transform.cy)
-  const region = element.kind === 'shape' && element.preset
+  const region = element.kind === 'shape' && element.geometry ? element.geometry.textRect : element.kind === 'shape' && element.preset
     ? defaultPresetTextRect(element.preset, element.transform.cx, element.transform.cy)
     : localBounds(element.transform.cx, element.transform.cy)
   const bounds = {
@@ -1855,7 +1859,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
   // scale so strokes, shaped text, pictures, and descendants all inherit it.
   const base = element.kind === 'group'
     ? exactGroupBase(element, zIndex, state.budget)
-    : elementBase(element, zIndex, state.budget, !hasNativeTextBody && element.kind !== 'connector')
+    : elementBase(element, zIndex, state.budget, !hasNativeTextBody && element.kind !== 'connector' && !(element.kind==='shape'&&element.geometry))
   const world = checkedWorldAffine(parentWorld, base.transform, base.bounds, `$.elements.${element.id}`, state.budget)
   switch (element.kind) {
     case 'text': {
@@ -1864,10 +1868,13 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       return { kind: 'text', ...base, textBody: await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'text', bounds, layout: element.textBody }, state) }
     }
     case 'shape':
+      if(element.fill && element.geometry?.paths.some(path=>path.fillMode!=='norm'&&path.fillMode!=='none'))state.diagnostics.push({severity:'warning',code:'geometry.deterministicPathTone',message:`DrawingML shaded paths use ${DRAWINGML_PATH_FILL_POLICY}; these relative-tone preview strengths are not qualified PowerPoint colors.`,slideId:state.slide.id,elementId:element.id})
       if (element.paragraphs.length && !element.textBody) state.diagnostics.push({ severity: 'info', code: 'text.layoutMetadataUnavailable', message: 'legacy native PPTX shape text has no text-body layout; shaped compatibility preview remains clipped to element bounds', slideId: state.slide.id, elementId: element.id })
-      if (!element.preset) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
+      if (!element.preset&&!element.geometry) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
       return {
-        kind: 'shape', ...base, preset: element.preset, path: boundedPath(presetPath(element.preset, base.bounds.cx, base.bounds.cy), `$.elements.${element.id}.path`),
+        kind: 'shape', ...base, ...(element.preset?{preset:element.preset}:{}),
+        ...(element.geometry?{geometryPaths:evaluatedGeometryPaths(element.geometry,(value,path)=>checkCoordinate(value,path,state.budget),`$.elements.${element.id}.geometry`,bounds=>{checkedWorldAffine(parentWorld,base.transform,bounds,`$.elements.${element.id}.geometry`,state.budget)})}:{}),
+        path: element.preset?boundedPath(presetPath(element.preset, base.bounds.cx, base.bounds.cy), `$.elements.${element.id}.path`):[],
         fill: element.fill ? { color: element.fill } : undefined,
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
         textBody: element.paragraphs.length || element.textBody ? await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'shape', bounds: nativeTextBodyBounds(element, state), layout: element.textBody }, state) : undefined,
@@ -1905,7 +1912,36 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         })
         return {kind:'group',...base,children}
       }
+      const doughnut=element.chart.literalDoughnut
+      const doughnutRadius=Math.min(base.bounds.cx,base.bounds.cy)/2
+      const doughnutFits=doughnut!==undefined && doughnutRadius*Math.min(doughnut.holeSize,100-doughnut.holeSize)/100>=1
+      if(doughnut && state.options.literalDoughnutPreview===true && !doughnutFits)state.diagnostics.push({severity:'refusal',code:'chart.doughnutFrameTooSmall',message:'The integer preview frame cannot retain the source doughnut hole and ring.',slideId:state.slide.id,elementId:element.id})
+      if(element.chart.literalDoughnut && state.options.literalDoughnutPreview===true && doughnutFits){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalDoughnut`,'Literal doughnut slices exceed RenderTree nesting budget')
+        state.diagnostics.push({severity:'warning',code:'chart.literalDoughnutPreview',message:'Source literal doughnut vectors; host centered annulus and two-degree polygon arcs, not qualified PowerPoint layout.',slideId:state.slide.id,elementId:element.id})
+        const children = createNativeLiteralDoughnutPaths(element.chart.literalDoughnut,base.bounds.cx,base.bounds.cy).map((slice,index)=>{
+          takeNode(state, `$.elements.${element.id}.literalDoughnut.${index}`)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'ellipse' as const,path:boundedPath(slice.path,`$.elements.${element.id}.literalDoughnut.${index}`),fill:{color:slice.color}}
+        })
+        return {kind:'group',...base,children}
+      }
 
+      const bar=element.chart.literalBar
+      if(bar && state.options.literalBarPreview===true){
+        const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
+        const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*bar.series.length+bar.gapWidth))
+        if(!fits)state.diagnostics.push({severity:'refusal',code:'chart.barFrameTooSmall',message:'The integer preview frame cannot retain distinct source bars.',slideId:state.slide.id,elementId:element.id})
+        else {
+          if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalBar`,'Literal bar vectors exceed RenderTree nesting budget')
+          state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
+          const children=createNativeLiteralBarPaths(bar,base.bounds.cx,base.bounds.cy).map((vector,index)=>{
+            const path=`$.elements.${element.id}.literalBar.${index}`
+            takeNode(state,path)
+            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:vector.stroke}:{})}
+          })
+          return {kind:'group',...base,children}
+        }
+      }
       if (!element.chart.previewAssetId) {
         state.diagnostics.push({ severity: 'refusal', code: 'chart.missingPreview', message: 'opaque chart has no preview asset to paint; no chart renderer is invented', slideId: state.slide.id, elementId: element.id })
         return { kind: 'placeholder', ...base, reason: 'missingPreview', label: 'Chart preview unavailable' }
@@ -1948,6 +1984,8 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
+  if(options.literalBarPreview!==undefined&&typeof options.literalBarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBarPreview','literal bar opt-in must be boolean')
+  if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
 	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)

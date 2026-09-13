@@ -23,7 +23,8 @@ export const PPTX_RENDER_TREE_VERSION = 'pptx-render-tree/v2' as const
 export const PPTX_RENDER_LIMITS = Object.freeze({
   maxDepth: 64,
   maxNodes: 250_000,
-  maxPathCommands: 256,
+  // A full two-degree annulus needs 363 commands; retain one fill path.
+  maxPathCommands: 512,
   maxPaintCommands: 1_000_000,
   maxGlyphs: 2_000_000,
   maxClusters: 2_000_000,
@@ -59,6 +60,9 @@ export type RenderClip = { readonly kind: 'rect'; readonly rect: RenderRect } | 
 export type RenderPathCommand =
   | { readonly kind: 'moveTo'; readonly x: number; readonly y: number }
   | { readonly kind: 'lineTo'; readonly x: number; readonly y: number }
+  | { readonly kind: 'quadBezierTo'; readonly x: number; readonly y: number; readonly x1:number; readonly y1:number }
+  | { readonly kind: 'cubicBezierTo'; readonly x: number; readonly y: number; readonly x1:number; readonly y1:number; readonly x2:number; readonly y2:number }
+  | { readonly kind: 'arcTo'; readonly x:number; readonly y:number; readonly rx:number; readonly ry:number; readonly largeArc:boolean; readonly clockwise:boolean }
   | { readonly kind: 'rect'; readonly rect: RenderRect }
   | { readonly kind: 'roundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
   | { readonly kind: 'ellipse'; readonly rect: RenderRect }
@@ -207,7 +211,8 @@ interface RenderNodeBase {
 
 export interface RenderShapeNode extends RenderNodeBase {
   readonly kind: 'shape'
-  readonly preset: NativeShapePreset
+  readonly preset?: NativeShapePreset
+  readonly geometryPaths?: readonly { readonly path:readonly RenderPathCommand[]; readonly fillMode:'norm'|'none'|'darken'|'darkenLess'|'lighten'|'lightenLess'; readonly stroke:boolean }[]
   readonly path: readonly RenderPathCommand[]
   readonly fill?: RenderPaint
   readonly stroke?: RenderStroke
@@ -347,6 +352,10 @@ export interface CompileSlideOptions {
   readonly textLayout: NativePptxTextLayout
   /** Read-only saved-frame preview of explicitly marked spAutoFit projections; never resizes or qualifies Office fidelity. */
   readonly sourceFrameAutoFitPreview?: boolean
+  /** Explicit source-literal vector doughnut preview with host annular fitting and polygon arcs. */
+  readonly literalDoughnutPreview?: boolean
+  /** Read-only literal clustered bars using explicit source scales and host frame fitting. Default off. */
+  readonly literalBarPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */

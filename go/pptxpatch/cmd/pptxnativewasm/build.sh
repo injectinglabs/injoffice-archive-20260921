@@ -23,12 +23,22 @@ echo "building GOOS=js GOARCH=wasm -> $out/pptxnative.wasm" >&2
   GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$out/pptxnative.wasm" ./cmd/pptxnativewasm
 )
 cp "$wasm_exec" "$out/wasm_exec.js"
+# The embedded geometry resource retains upstream distribution attribution.
+mkdir -p "$out/preset-catalog"
+cp "$module/presetdata/LICENSE" "$out/preset-catalog/LICENSE"
+cp "$module/presetdata/NOTICE" "$out/preset-catalog/NOTICE"
+cp "$module/presetdata/PROVENANCE.md" "$out/preset-catalog/PROVENANCE.md"
 if [[ -f $package_worker ]]; then
   cp "$package_worker" "$out/pptxnative.worker.js"
 fi
 
 size=$(wc -c < "$out/pptxnative.wasm" | tr -d ' ')
 echo "pptxnative.wasm ${size} bytes" >&2
+max_bytes=$((7 * 1024 * 1024))
+if (( size > max_bytes )); then
+  echo "pptxnative.wasm exceeds the 7 MiB size ceiling" >&2
+  exit 1
+fi
 echo "copied wasm_exec.js from $wasm_exec" >&2
 if [[ -f $package_worker ]]; then
   echo "copied npm worker from $package_worker" >&2

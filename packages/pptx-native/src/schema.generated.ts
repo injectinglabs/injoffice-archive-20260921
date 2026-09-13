@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -160,6 +160,66 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     ],
     "required": []
   },
+  "NativeEvaluatedGeometry": {
+    "schemaName": "evaluatedGeometry",
+    "properties": [
+      "paths",
+      "profile",
+      "textRect"
+    ],
+    "required": [
+      "paths",
+      "profile",
+      "textRect"
+    ]
+  },
+  "NativeGeometryCommand": {
+    "schemaName": "geometryCommand",
+    "properties": [
+      "clockwise",
+      "kind",
+      "largeArc",
+      "rx",
+      "ry",
+      "x",
+      "x1",
+      "x2",
+      "y",
+      "y1",
+      "y2"
+    ],
+    "required": [
+      "kind"
+    ]
+  },
+  "NativeGeometryPath": {
+    "schemaName": "geometryPath",
+    "properties": [
+      "commands",
+      "fillMode",
+      "stroke"
+    ],
+    "required": [
+      "commands",
+      "fillMode",
+      "stroke"
+    ]
+  },
+  "NativeGeometryTextRect": {
+    "schemaName": "geometryTextRect",
+    "properties": [
+      "cx",
+      "cy",
+      "x",
+      "y"
+    ],
+    "required": [
+      "cx",
+      "cy",
+      "x",
+      "y"
+    ]
+  },
   "NativeGroupElement": {
     "schemaName": "groupElement",
     "properties": [
@@ -185,6 +245,88 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "transform"
     ]
   },
+  "NativeLiteralBar": {
+    "schemaName": "literalBar",
+    "properties": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ],
+    "required": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ]
+  },
+  "NativeLiteralBarAxis": {
+    "schemaName": "literalBarAxis",
+    "properties": [
+      "color",
+      "crossAxisId",
+      "crossesAt",
+      "deleted",
+      "id",
+      "max",
+      "min",
+      "orientation",
+      "position",
+      "widthEmu"
+    ],
+    "required": [
+      "crossAxisId",
+      "deleted",
+      "id",
+      "orientation",
+      "position"
+    ]
+  },
+  "NativeLiteralBarSeries": {
+    "schemaName": "literalBarSeries",
+    "properties": [
+      "colors",
+      "index",
+      "order",
+      "title",
+      "values"
+    ],
+    "required": [
+      "colors",
+      "index",
+      "order",
+      "values"
+    ]
+  },
+  "NativeLiteralDoughnut": {
+    "schemaName": "literalDoughnut",
+    "properties": [
+      "colors",
+      "firstSliceAngle",
+      "holeSize",
+      "profile",
+      "values"
+    ],
+    "required": [
+      "colors",
+      "firstSliceAngle",
+      "holeSize",
+      "profile",
+      "values"
+    ]
+  },
   "NativeLiteralPie": {
     "schemaName": "literalPie",
     "properties": [
@@ -204,6 +346,8 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "schemaName": "opaqueChart",
     "properties": [
       "chartPart",
+      "literalBar",
+      "literalDoughnut",
       "literalPie",
       "opaqueRef",
       "previewAssetId",
@@ -316,6 +460,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "animation",
       "compatibility",
       "fill",
+      "geometry",
       "id",
       "kind",
       "name",
@@ -1408,6 +1553,235 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalDoughnut": {
+      "x-binding-name": "NativeLiteralDoughnut",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "firstSliceAngle",
+        "holeSize",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-doughnut-v1"
+        },
+        "firstSliceAngle": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "holeSize": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 90
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
+    "literalBarAxis": {
+      "x-binding-name": "NativeLiteralBarAxis",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "crossAxisId",
+        "orientation",
+        "position",
+        "deleted"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "crossAxisId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "minMax",
+            "maxMin"
+          ]
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "b",
+            "l"
+          ]
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        },
+        "min": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "max": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "crossesAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "literalBarSeries": {
+      "x-binding-name": "NativeLiteralBarSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
+    "literalBar": {
+      "x-binding-name": "NativeLiteralBar",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "barDirection",
+        "grouping",
+        "dataOrigin",
+        "gapWidth",
+        "overlap",
+        "categories",
+        "series",
+        "categoryAxis",
+        "valueAxis"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-bar-v1"
+        },
+        "barDirection": {
+          "type": "string",
+          "enum": [
+            "column",
+            "bar"
+          ]
+        },
+        "grouping": {
+          "type": "string",
+          "const": "clustered"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "const": "literal"
+        },
+        "gapWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "overlap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 0
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBarSeries"
+          }
+        },
+        "categoryAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "valueAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      }
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -1432,6 +1806,12 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalPie": {
           "$ref": "#/$defs/literalPie"
+        },
+        "literalDoughnut": {
+          "$ref": "#/$defs/literalDoughnut"
+        },
+        "literalBar": {
+          "$ref": "#/$defs/literalBar"
         }
       }
     },
@@ -1496,6 +1876,166 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "geometryCommand": {
+      "x-binding-name": "NativeGeometryCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "moveTo",
+            "lineTo",
+            "quadBezierTo",
+            "cubicBezierTo",
+            "arcTo",
+            "close"
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "rx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ry": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "largeArc": {
+          "type": "boolean"
+        },
+        "clockwise": {
+          "type": "boolean"
+        }
+      }
+    },
+    "geometryPath": {
+      "x-binding-name": "NativeGeometryPath",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fillMode",
+        "stroke",
+        "commands"
+      ],
+      "properties": {
+        "fillMode": {
+          "type": "string",
+          "enum": [
+            "norm",
+            "none",
+            "darken",
+            "darkenLess",
+            "lighten",
+            "lightenLess"
+          ]
+        },
+        "stroke": {
+          "type": "boolean"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/geometryCommand"
+          }
+        }
+      }
+    },
+    "geometryTextRect": {
+      "x-binding-name": "NativeGeometryTextRect",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "cx",
+        "cy"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "evaluatedGeometry": {
+      "x-binding-name": "NativeEvaluatedGeometry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "textRect",
+        "paths"
+      ],
+      "properties": {
+        "profile": {
+          "const": "drawingml-paths-v1"
+        },
+        "textRect": {
+          "$ref": "#/$defs/geometryTextRect"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/geometryPath"
+          }
+        }
+      }
+    },
     "shapeElement": {
       "x-binding-name": "NativeShapeElement",
       "type": "object",
@@ -1528,6 +2068,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "preset": {
           "$ref": "#/$defs/shapePreset"
+        },
+        "geometry": {
+          "$ref": "#/$defs/evaluatedGeometry"
         },
         "placeholder": {
           "$ref": "#/$defs/placeholderType"

@@ -421,6 +421,199 @@
         "colors": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#[0-9A-F]{6}$" } }
       }
     },
+    "literalDoughnut": {
+      "x-binding-name": "NativeLiteralDoughnut", "type": "object", "additionalProperties": false,
+      "required": ["profile", "firstSliceAngle", "holeSize", "values", "colors"],
+      "properties": {
+        "profile": { "type": "string", "const": "literal-doughnut-v1" },
+        "firstSliceAngle": { "type": "integer", "minimum": 0, "maximum": 360 },
+        "holeSize": { "type": "integer", "minimum": 10, "maximum": 90 },
+        "values": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "integer", "minimum": 1, "maximum": 1000000000 } },
+        "colors": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#[0-9A-F]{6}$" } }
+      }
+    },
+    "literalBarAxis": {
+      "x-binding-name": "NativeLiteralBarAxis",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "crossAxisId",
+        "orientation",
+        "position",
+        "deleted"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "crossAxisId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "minMax",
+            "maxMin"
+          ]
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "b",
+            "l"
+          ]
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        },
+        "min": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "max": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "crossesAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "literalBarSeries": {
+      "x-binding-name": "NativeLiteralBarSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
+    "literalBar": {
+      "x-binding-name": "NativeLiteralBar",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "barDirection",
+        "grouping",
+        "dataOrigin",
+        "gapWidth",
+        "overlap",
+        "categories",
+        "series",
+        "categoryAxis",
+        "valueAxis"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-bar-v1"
+        },
+        "barDirection": {
+          "type": "string",
+          "enum": [
+            "column",
+            "bar"
+          ]
+        },
+        "grouping": {
+          "type": "string",
+          "const": "clustered"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "const": "literal"
+        },
+        "gapWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "overlap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 0
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBarSeries"
+          }
+        },
+        "categoryAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "valueAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      }
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -431,7 +624,9 @@
         "relationshipId": { "$ref": "#/$defs/nativeId" },
         "opaqueRef": { "$ref": "#/$defs/passthroughRef" },
         "previewAssetId": { "$ref": "#/$defs/nativeId" },
-        "literalPie": { "$ref": "#/$defs/literalPie" }
+        "literalPie": { "$ref": "#/$defs/literalPie" },
+        "literalDoughnut": { "$ref": "#/$defs/literalDoughnut" },
+        "literalBar": { "$ref": "#/$defs/literalBar" }
       }
     },
     "textElement": {
@@ -454,6 +649,166 @@
         "compatibility": { "$ref": "#/$defs/compatibility" }
       }
     },
+    "geometryCommand": {
+      "x-binding-name": "NativeGeometryCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "moveTo",
+            "lineTo",
+            "quadBezierTo",
+            "cubicBezierTo",
+            "arcTo",
+            "close"
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "rx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ry": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "largeArc": {
+          "type": "boolean"
+        },
+        "clockwise": {
+          "type": "boolean"
+        }
+      }
+    },
+    "geometryPath": {
+      "x-binding-name": "NativeGeometryPath",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fillMode",
+        "stroke",
+        "commands"
+      ],
+      "properties": {
+        "fillMode": {
+          "type": "string",
+          "enum": [
+            "norm",
+            "none",
+            "darken",
+            "darkenLess",
+            "lighten",
+            "lightenLess"
+          ]
+        },
+        "stroke": {
+          "type": "boolean"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/geometryCommand"
+          }
+        }
+      }
+    },
+    "geometryTextRect": {
+      "x-binding-name": "NativeGeometryTextRect",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "cx",
+        "cy"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "evaluatedGeometry": {
+      "x-binding-name": "NativeEvaluatedGeometry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "textRect",
+        "paths"
+      ],
+      "properties": {
+        "profile": {
+          "const": "drawingml-paths-v1"
+        },
+        "textRect": {
+          "$ref": "#/$defs/geometryTextRect"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/geometryPath"
+          }
+        }
+      }
+    },
     "shapeElement": {
       "x-binding-name": "NativeShapeElement",
       "type": "object",
@@ -466,6 +821,7 @@
         "name": { "type": "string", "maxLength": 1024 },
         "transform": { "$ref": "#/$defs/transform" },
         "preset": { "$ref": "#/$defs/shapePreset" },
+        "geometry": { "$ref": "#/$defs/evaluatedGeometry" },
         "placeholder": { "$ref": "#/$defs/placeholderType" },
         "fill": { "$ref": "#/$defs/color" },
         "stroke": { "$ref": "#/$defs/stroke" },

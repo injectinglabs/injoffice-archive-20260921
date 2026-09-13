@@ -160,7 +160,48 @@ export interface NativeLiteralPie {
   colors: string[]
 }
 
+export interface NativeLiteralDoughnut {
+  profile: 'literal-doughnut-v1'
+  firstSliceAngle: number
+  holeSize: number
+  values: number[]
+  colors: string[]
+}
+
+export interface NativeLiteralBarAxis {
+ id:number
+ crossAxisId:number
+ orientation:'minMax'|'maxMin'
+ position:'b'|'l'
+ deleted:boolean
+ color?:string
+ widthEmu?:number
+ min?:string
+ max?:string
+ crossesAt?:string
+}
+export interface NativeLiteralBarSeries {
+ index:number
+ order:number
+ title?:string
+ values:string[]
+ colors:string[]
+}
+export interface NativeLiteralBar {
+ profile:'literal-bar-v1'
+ barDirection:'column'|'bar'
+ grouping:'clustered'
+ dataOrigin:'literal'
+ gapWidth:number
+ overlap:0
+ categories:string[]
+ series:NativeLiteralBarSeries[]
+ categoryAxis:NativeLiteralBarAxis
+ valueAxis:NativeLiteralBarAxis
+}
 export interface NativeOpaqueChart {
+ literalBar?:NativeLiteralBar
+  literalDoughnut?: NativeLiteralDoughnut
   literalPie?: NativeLiteralPie
   chartPart: string
   relationshipId: string
@@ -189,8 +230,9 @@ export interface NativeTextElement extends NativeElementBase {
 
 export interface NativeShapeElement extends NativeElementBase {
   kind: 'shape'
-  /** Absent only when compatibility.status is refused and rendering must use a placeholder. */
+  /** Exactly one of preset or geometry unless explicitly refused. */
   preset?: NativeShapePreset
+  geometry?: NativeEvaluatedGeometry
   placeholder?: NativePlaceholderType
   fill?: string
   stroke?: NativeStroke
@@ -286,3 +328,17 @@ export type {
   NativeTextWrap,
   NativeTransitionType,
 } from './schema.generated'
+
+/** Numeric DrawingML geometry. Preserve-only until a serializer is qualified. */
+export interface NativeEvaluatedGeometry {
+ profile: 'drawingml-paths-v1'
+ textRect: NativeGeometryTextRect
+ paths: NativeGeometryPath[]
+}
+export interface NativeGeometryTextRect { x:number; y:number; cx:number; cy:number }
+export interface NativeGeometryPath { fillMode:'norm'|'none'|'darken'|'darkenLess'|'lighten'|'lightenLess'; stroke:boolean; commands:NativeGeometryCommand[] }
+export interface NativeGeometryCommand {
+ kind:'moveTo'|'lineTo'|'quadBezierTo'|'cubicBezierTo'|'arcTo'|'close'
+ x?:number; y?:number; x1?:number; y1?:number; x2?:number; y2?:number
+ rx?:number; ry?:number; largeArc?:boolean; clockwise?:boolean
+}

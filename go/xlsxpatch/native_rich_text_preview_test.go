@@ -56,7 +56,7 @@ func TestNativeRichTextDirectAndInherited(t *testing.T) {
 }
 func TestNativeRichTextRawRunRefusals(t *testing.T) {
 	for name, patch := range map[string]string{
-		"underline": `<u val="single"/>`, "superscript": `<vertAlign val="superscript"/>`, "scheme": `<scheme val="major"/>`, "theme": `<color theme="1"/>`, "translucent": `<color rgb="80123456"/>`, "unknown": `<unknown/>`, "foreign": `<b xmlns="urn:foreign"/>`, "duplicate": `<b/><b/>`, "effect": `<strike/>`, "emptyboolean": `<b val=""/>`, "propertytext": `<b>text</b>`,
+		"underline": `<u val="double"/>`, "superscript": `<vertAlign val="superscript"/>`, "scheme": `<scheme val="major"/>`, "theme": `<color theme="1"/>`, "translucent": `<color rgb="80123456"/>`, "unknown": `<unknown/>`, "foreign": `<b xmlns="urn:foreign"/>`, "duplicate": `<b/><b/>`, "effect": `<strike/>`, "emptyboolean": `<b val=""/>`, "propertytext": `<b>text</b>`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			raw := `<is xmlns="` + spreadsheetMLTransitional + `"><r><rPr>` + patch + `</rPr><t>text</t></r></is>`
@@ -85,7 +85,7 @@ func TestNativeRichTextWholeCellOmission(t *testing.T) {
 			p["Sheets/s1.xml"] = strings.Replace(p["Sheets/s1.xml"], `</row>`, `<c r="B1"><f t="array" ref="B1:B2">1</f><v>1</v></c></row>`, 1)
 		},
 		"underline": func(p map[string]string) {
-			p["Sheets/s1.xml"] = strings.Replace(p["Sheets/s1.xml"], `<b/>`, `<b/><u val="single"/>`, 1)
+			p["Sheets/s1.xml"] = strings.Replace(p["Sheets/s1.xml"], `<b/>`, `<b/><u val="double"/>`, 1)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -135,7 +135,7 @@ func TestNativeRichTextSharedOwnershipAndNoOps(t *testing.T) {
 		t.Fatal("missing shared cells")
 	}
 	for _, c := range r.Cells {
-		if c.Status != "available" || c.SourcePart != "Meta/Strings.xml" || c.SharedIndex != "0" || c.Text != "A & text" || c.Runs[0].Bold == nil || *c.Runs[0].Bold || c.Runs[0].Italic == nil || !*c.Runs[0].Italic || len(c.Runs[0].Omitted) != 2 {
+		if c.Status != "available" || c.SourcePart != "Meta/Strings.xml" || c.SharedIndex != "0" || c.Text != "A & text" || c.Runs[0].Bold == nil || *c.Runs[0].Bold || c.Runs[0].Italic == nil || !*c.Runs[0].Italic || len(c.Runs[0].Omitted) != 1 || c.Runs[0].Underline != "none" || c.Runs[0].UnderlineOrigin != "explicit-val" {
 			t.Fatalf("shared evidence mismatch %#v", c)
 		}
 	}

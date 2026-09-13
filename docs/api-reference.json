@@ -10066,9 +10066,49 @@
               "signature": "NativeElementKind"
             },
             {
+              "name": "NativeEvaluatedGeometry",
+              "kind": "type",
+              "signature": "export interface NativeEvaluatedGeometry"
+            },
+            {
+              "name": "NativeGeometryCommand",
+              "kind": "type",
+              "signature": "export interface NativeGeometryCommand"
+            },
+            {
+              "name": "NativeGeometryPath",
+              "kind": "type",
+              "signature": "export interface NativeGeometryPath"
+            },
+            {
+              "name": "NativeGeometryTextRect",
+              "kind": "type",
+              "signature": "export interface NativeGeometryTextRect"
+            },
+            {
               "name": "NativeGroupElement",
               "kind": "type",
               "signature": "export interface NativeGroupElement extends NativeElementBase"
+            },
+            {
+              "name": "NativeLiteralBar",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBar"
+            },
+            {
+              "name": "NativeLiteralBarAxis",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBarAxis"
+            },
+            {
+              "name": "NativeLiteralBarSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBarSeries"
+            },
+            {
+              "name": "NativeLiteralDoughnut",
+              "kind": "type",
+              "signature": "export interface NativeLiteralDoughnut"
             },
             {
               "name": "NativeLiteralPie",
@@ -10308,7 +10348,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49\""
             },
             {
               "name": "provenanceValues",
@@ -10383,6 +10423,16 @@
               "signature": "export declare function connectorPath(cx: number, cy: number, flipH: boolean): readonly RenderPathCommand[]"
             },
             {
+              "name": "createNativeLiteralBarPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralBarPaths(chart: LiteralBarRecord, cx: number, cy: number): readonly LiteralBarVector[]"
+            },
+            {
+              "name": "createNativeLiteralDoughnutPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralDoughnutPaths(chart: NativeLiteralDoughnut, cx: number, cy: number): readonly"
+            },
+            {
               "name": "createNativeLiteralPiePaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralPiePaths(pie: NativeLiteralPie, cx: number, cy: number): readonly"
@@ -10391,6 +10441,11 @@
               "name": "createRecordingPaintSurface",
               "kind": "function",
               "signature": "export declare function createRecordingPaintSurface(maxCommands?: number): RecordingPaintSurface"
+            },
+            {
+              "name": "LiteralBarVector",
+              "kind": "type",
+              "signature": "LiteralBarVector"
             },
             {
               "name": "NativePptxTextDefaults",

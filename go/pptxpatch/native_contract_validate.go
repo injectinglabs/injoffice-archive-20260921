@@ -332,6 +332,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if !paragraphs && element.Paragraphs != nil {
 			v.add(p+".paragraphs", "native.elementUnion", "is not allowed for this element kind")
 		}
+		if !preset && element.Geometry != nil {
+			v.add(p+".geometry", "native.elementUnion", "is not allowed for this element kind")
+		}
 		if !preset && element.Preset != nil {
 			v.add(p+".preset", "native.elementUnion", "is not allowed for this element kind")
 		}
@@ -381,11 +384,20 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	case NativeElementKindShape:
 		commonForbidden(true, true, true, true, false, false, false, false, false, false)
-		if element.Preset == nil {
+		if element.Geometry != nil {
+			v.geometry(*element.Geometry, p+".geometry")
+			if element.Preset != nil {
+				v.add(p+".geometry", "native.geometry", "preset and geometry are mutually exclusive")
+			}
+			if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+				v.add(p+".geometry", "native.geometryAuthority", "evaluated geometry must remain read-only")
+			}
+		}
+		if element.Preset == nil && element.Geometry == nil {
 			if element.Compatibility.Status != NativeCompatibilityStatusRefused {
 				v.add(p+".preset", "native.shapePreset", "is required unless the shape is explicitly refused")
 			}
-		} else {
+		} else if element.Preset != nil {
 			v.shapePreset(element.Preset, p+".preset")
 		}
 		v.placeholder(element.Placeholder, p+".placeholder")
@@ -901,6 +913,29 @@ func (v *nativeValidator) chart(chart NativeOpaqueChart, p string) {
 				v.add(p+".literalPie.colors", "schema.pattern", "invalid literal pie RGB")
 			}
 		}
+	}
+
+	if pie := chart.LiteralDoughnut; pie != nil {
+		if pie.Profile != "literal-doughnut-v1" || pie.HoleSize < 10 || pie.HoleSize > 90 || pie.FirstSliceAngle < 0 || pie.FirstSliceAngle > 360 || len(pie.Values) < 1 || len(pie.Values) > 64 || len(pie.Values) != len(pie.Colors) {
+			v.add(p+".literalDoughnut", "native.chartValues", "invalid literal doughnut profile")
+		}
+		for _, value := range pie.Values {
+			if value < 1 || value > 1_000_000_000 {
+				v.add(p+".literalDoughnut.values", "schema.range", "literal doughnut value outside bounds")
+			}
+		}
+		for _, color := range pie.Colors {
+			if len(color) != 7 || color[0] != '#' || !inspectionRGB.MatchString(color[1:]) || strings.ToUpper(color) != color {
+				v.add(p+".literalDoughnut.colors", "schema.pattern", "invalid literal doughnut RGB")
+			}
+		}
+	}
+
+	if chart.LiteralBar != nil && !validNativeLiteralBar(chart.LiteralBar) {
+		v.add(p+".literalBar", "native.chartValues", "invalid literal bar profile")
+	}
+	if (chart.LiteralPie != nil && chart.LiteralDoughnut != nil) || (chart.LiteralBar != nil && (chart.LiteralPie != nil || chart.LiteralDoughnut != nil)) {
+		v.add(p, "native.chartProfiles", "chart cannot carry multiple literal families")
 	}
 
 	v.part(chart.ChartPart, p+".chartPart")

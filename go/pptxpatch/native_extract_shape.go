@@ -110,7 +110,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			paintProperties = resolved
 		}
 	}
-	transform, preset, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, &gaps)
+	transform, preset, geometry, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -205,7 +205,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	}
 	element := NativeElement{
 		Kind: NativeElementKindShape, ID: elementID, Provenance: NativeProvenanceParsed,
-		Transform: transform, Preset: preset, Fill: fill, Stroke: stroke, Paragraphs: &paragraphs, TextBody: textBodyLayout,
+		Transform: transform, Preset: preset, Geometry: geometry, Fill: fill, Stroke: stroke, Paragraphs: &paragraphs, TextBody: textBodyLayout,
 		Passthrough: []NativePassthroughRef{}, Children: nil,
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: NativeCompatibilityStatusEditable, Diagnostics: []NativeDiagnostic{}},
@@ -355,7 +355,7 @@ func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtract
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *string, *NativeStroke, error) {
+func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.autoshape-properties-unavailable", "shape property attributes are not modeled in native PPTX v1", true)
 	}
@@ -371,29 +371,63 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 	}
 	for _, name := range allowed {
 		if _, err := nativeSingleton(node, name.Space, name.Local, false); err != nil {
-			return NativeTransform{}, nil, nil, nil, err
+			return NativeTransform{}, nil, nil, nil, nil, err
 		}
 	}
 	xfrm, err := nativeSingleton(node, dialect.drawing, "xfrm", true)
 	if err != nil {
-		return NativeTransform{}, nil, nil, nil, err
+		return NativeTransform{}, nil, nil, nil, nil, err
 	}
 	transform, err := validateNativeAutoShapeTransform(xfrm, dialect, gaps)
 	if err != nil {
-		return NativeTransform{}, nil, nil, nil, err
+		return NativeTransform{}, nil, nil, nil, nil, err
 	}
-	preset := validateNativeAutoShapeGeometry(node, dialect, gaps)
+	var preset *NativeShapePreset
+	var geometry *NativeEvaluatedGeometry
+	custom := nativeChild(node, dialect.drawing, "custGeom")
+	if custom != nil && nativeChild(node, dialect.drawing, "prstGeom") == nil {
+		geometry, err = evaluateNativeCustomGeometry(custom, dialect.drawing, *transform.Cx, *transform.Cy)
+		if err != nil {
+			gaps.add("pptx.autoshape-geometry-unavailable", "custom geometry is outside the evaluated profile: "+err.Error(), true)
+		} else {
+			gaps.add("pptx.custom-geometry-preview", "DrawingML custom paths and text rectangle evaluated from source; geometry remains read-only", false)
+		}
+	} else {
+		legacyGaps := nativeShapeGapSet{}
+		preset = validateNativeAutoShapeGeometry(node, dialect, &legacyGaps)
+		presetNode := nativeChild(node, dialect.drawing, "prstGeom")
+		if preset != nil || presetNode == nil || custom != nil {
+			for _, gap := range legacyGaps.values {
+				gaps.add(gap.code, gap.message, gap.refusal)
+			}
+		} else {
+			geometry, err = evaluateNativePresetSource(presetNode, dialect.drawing, *transform.Cx, *transform.Cy)
+			if err != nil {
+				gaps.add("pptx.autoshape-geometry-unavailable", "preset geometry is outside the evaluated profile: "+err.Error(), true)
+			} else {
+				gaps.add("pptx.preset-catalog-preview", "DrawingML preset catalog paths and adjustments evaluated from source; geometry remains read-only", false)
+			}
+		}
+	}
 	fill := validateNativeAutoShapeFill(node, dialect, theme, gaps)
+	if geometry != nil && fill != nil {
+		for _, path := range geometry.Paths {
+			if path.FillMode != "norm" && path.FillMode != "none" {
+				gaps.add("pptx.deterministic-path-tone-preview", "DrawingML shaded paths use linear-srgb-path-tone-20-40-v1; these relative-tone preview strengths are not qualified PowerPoint colors", false)
+				break
+			}
+		}
+	}
 	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, false, gaps)
 	if err != nil {
-		return NativeTransform{}, nil, nil, nil, err
+		return NativeTransform{}, nil, nil, nil, nil, err
 	}
 	for _, name := range []string{"effectLst", "effectDag", "scene3d", "sp3d", "extLst"} {
 		if child, _ := nativeSingleton(node, dialect.drawing, name, false); child != nil {
 			gaps.add("pptx.autoshape-effects-unavailable", "shape effects, 3D, or extension markup is preserved but not approximated", true)
 		}
 	}
-	return transform, preset, fill, stroke, nil
+	return transform, preset, geometry, fill, stroke, nil
 }
 
 func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeShapeGapSet) (NativeTransform, error) {

@@ -1,3 +1,4 @@
+import {isNativePreviewPartPathV1} from './nativePreviewPartPathV1.js'
 import {snapshotNativePlainData} from './nativePlainData.js'
 
 export interface NativeSheetPageConfigV1 {
@@ -27,7 +28,7 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
  return value.map(v=>{
   const status=(v as Record<string,unknown>)?.status
   const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[])])
-  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||typeof o.sheet_part!=='string'||o.sheet_part.length>1024||!/^[A-Za-z0-9_.\/-]+$/.test(o.sheet_part)||o.sheet_part.split('/').some(s=>!s||s==='.'||s==='..')||parts.has(o.sheet_part)||(status!=='available'&&status!=='unavailable'))return fail()
+  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='unavailable'))return fail()
   ids.add(o.sheet_id);parts.add(o.sheet_part)
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096))return fail()
   let settings:NativeSheetPageConfigV1|undefined

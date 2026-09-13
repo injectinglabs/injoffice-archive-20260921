@@ -83,6 +83,28 @@ describe('source-bound multi-range print areas',()=>{
   source.print_area_sets=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['A later OFFSET component is unavailable.']}]
   expect(()=>compileNativeSheetPrintAreaSetPreviewV1(selected.map(compile),source)).toThrow('unavailable')
  })
+ it('retains finite COUNTA counts alongside scalar inputs and refuses unavailable source certificates without fallback',()=>{
+  const areas=[{row:5,column:5,end_row:5,end_column:6},{row:5,column:0,end_row:9,end_column:3}]
+  const {objects,model,compile,part}=fixture(areas)
+  const warnings=[
+   'Read-only finite COUNTA over certified saved literals; formulas and caches are not evaluated.',
+   "Source _xlnm.Print_Area formula: 'Data Set'!$F$6:$G$6,OFFSET('Data Set'!$A$6,0,0,COUNTA('Data Set'!$A$1:$F$1),'Data Set'!$H$1)",
+   "OFFSET saved COUNTA argument: COUNTA('Data Set'!$A$1:$F$1) = 5. Counts qualified saved literals only; reinspect the source package after changing this range.",
+   "OFFSET saved numeric argument: 'Data Set'!$H$1 = 4. Reinspect the source package after changing this cell.",
+  ]
+  objects.print_area_sets![0]!.warnings=warnings
+  const source=decodeNativeWorkbookObjectsV1(objects,objects.package_sha256)
+  const selected=selectNativeSheetPrintAreaSetV1(model,'7',source)
+  const plan=compileNativeSheetPrintAreaSetPreviewV1(selected.map(compile),source)
+  expect(plan.areas.map(a=>a.viewport)).toEqual(areas)
+  for(const area of plan.areas){expect(area.plan.warnings.slice(-4)).toEqual(warnings);expect(area.plan.read_only).toBe(true)}
+  warnings[2]='Changed count'
+  expect(plan.areas[1]!.plan.warnings.join(' ')).toContain("COUNTA('Data Set'!$A$1:$F$1) = 5")
+  source.print_areas=[{sheet_id:'7',sheet_part:part,status:'available',area:areas[0]!,warnings:['Legacy rectangle']}]
+  source.print_area_sets=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['COUNTA complete-source certificate refused.']}]
+  expect(()=>selectNativeSheetPrintAreaSetV1(model,'7',source)).toThrow('unavailable')
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(selected.map(compile),source)).toThrow('unavailable')
+ })
  it('rejects overlaps, duplicate identities, empty/oversized sets and closed-shape violations',()=>{
   const entry=fixture().objects.print_area_sets![0]!
   for(const input of [[entry,entry],[{...entry,areas:[]}],[{...entry,areas:Array(17).fill(ranges[0])}],[{...entry,areas:[ranges[0],ranges[0]]}],[{...entry,areas:[ranges[0],{row:10,column:7,end_row:12,end_column:9}]}],[{...entry,status:'unavailable'}],[{...entry,extra:1}],[{...entry,areas:[{...ranges[0],extra:1}]}],[Object.assign(Object.create({extra:true}),entry)],[{...entry,warnings:['bad\nwarning']}],[{...entry,areas:[{row:-0,column:0,end_row:1,end_column:1}]}]])expect(()=>decodeNativeSheetPrintAreaSetsV1(input)).toThrow()

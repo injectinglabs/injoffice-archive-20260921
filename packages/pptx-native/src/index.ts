@@ -25,6 +25,7 @@ export {
   transitionTypeValues,
 } from './schema.generated'
 export type {
+  NativeEvaluatedGeometry, NativeGeometryTextRect, NativeGeometryPath, NativeGeometryCommand,
   NativeAnimation,
   NativeArrowEnd,
   NativeAnimationEffect,
@@ -42,6 +43,10 @@ export type {
   NativeGroupElement,
   NativeOpaqueChart,
   NativeLiteralPie,
+  NativeLiteralDoughnut,
+  NativeLiteralBar,
+  NativeLiteralBarAxis,
+  NativeLiteralBarSeries,
   NativePictureCrop,
   NativeOrigin,
   NativeProvenance,

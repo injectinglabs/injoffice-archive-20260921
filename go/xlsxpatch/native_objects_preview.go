@@ -188,7 +188,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		return nil, err
 	}
 	result.PrintAreas = previewNativePrintAreas(pkg.files[workbookPart.part], workbook.Sheets)
-	result.PrintAreaSets = previewNativePrintAreaSets(pkg.files[workbookPart.part], workbook.Sheets)
+	result.PrintAreaSets = previewNativePrintAreaSets(pkg.files[workbookPart.part], workbook.Sheets, newNativePrintCountaSourceContext(workbook, pkg.files[workbookPart.part], result.PackageSHA256))
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
 	result.ConditionalFills = previewNativeConditionalFills(pkg, workbook.Sheets)
 	owners := map[string]string{}

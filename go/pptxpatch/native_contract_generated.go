@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3"
+const NativePPTXSchemaSHA256 = "dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -66,16 +66,48 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"elementId", "partName", "slideId"},
 		Required:   []string{},
 	},
+	"NativeEvaluatedGeometry": {
+		Properties: []string{"paths", "profile", "textRect"},
+		Required:   []string{"paths", "profile", "textRect"},
+	},
+	"NativeGeometryCommand": {
+		Properties: []string{"clockwise", "kind", "largeArc", "rx", "ry", "x", "x1", "x2", "y", "y1", "y2"},
+		Required:   []string{"kind"},
+	},
+	"NativeGeometryPath": {
+		Properties: []string{"commands", "fillMode", "stroke"},
+		Required:   []string{"commands", "fillMode", "stroke"},
+	},
+	"NativeGeometryTextRect": {
+		Properties: []string{"cx", "cy", "x", "y"},
+		Required:   []string{"cx", "cy", "x", "y"},
+	},
 	"NativeGroupElement": {
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
+	},
+	"NativeLiteralBar": {
+		Properties: []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+	},
+	"NativeLiteralBarAxis": {
+		Properties: []string{"color", "crossAxisId", "crossesAt", "deleted", "id", "max", "min", "orientation", "position", "widthEmu"},
+		Required:   []string{"crossAxisId", "deleted", "id", "orientation", "position"},
+	},
+	"NativeLiteralBarSeries": {
+		Properties: []string{"colors", "index", "order", "title", "values"},
+		Required:   []string{"colors", "index", "order", "values"},
+	},
+	"NativeLiteralDoughnut": {
+		Properties: []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
+		Required:   []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
 	},
 	"NativeLiteralPie": {
 		Properties: []string{"colors", "firstSliceAngle", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalBar", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {
@@ -99,7 +131,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"assets", "compatibility", "contractVersion", "documentId", "origin", "size", "slides"},
 	},
 	"NativeShapeElement": {
-		Properties: []string{"animation", "compatibility", "fill", "id", "kind", "name", "paragraphs", "passthrough", "placeholder", "preset", "provenance", "source", "stroke", "textBody", "transform"},
+		Properties: []string{"animation", "compatibility", "fill", "geometry", "id", "kind", "name", "paragraphs", "passthrough", "placeholder", "preset", "provenance", "source", "stroke", "textBody", "transform"},
 		Required:   []string{"compatibility", "id", "kind", "paragraphs", "passthrough", "provenance", "transform"},
 	},
 	"NativeSize": {

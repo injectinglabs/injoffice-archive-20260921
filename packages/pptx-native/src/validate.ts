@@ -1,3 +1,5 @@
+import {validNativeLiteralBar} from './literalBarValidation'
+import { validateEvaluatedGeometry } from './geometryValidation'
 import { PPTX_NATIVE_RESOURCE_LIMITS, PPTX_NATIVE_SCHEMA } from './schema.generated'
 import type {
   NativeCompatibility,
@@ -286,8 +288,13 @@ function validateElement(
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
   }
 
-  if (element.kind === 'shape' && element.preset === undefined && element.compatibility.status !== 'refused') {
+  if (element.kind === 'shape' && element.preset === undefined && element.geometry === undefined && element.compatibility.status !== 'refused') {
     add(issues, `${path}.preset`, 'native.shapePreset', 'is required unless the shape is explicitly refused')
+  }
+  if(element.kind==='shape'&&element.geometry){
+    if(element.preset!==undefined)add(issues,`${path}.geometry`,'native.geometry','preset and geometry are mutually exclusive')
+    if(element.compatibility.status==='editable')add(issues,`${path}.geometry`,'native.geometryAuthority','evaluated geometry must remain read-only')
+    validateEvaluatedGeometry(element.geometry,`${path}.geometry`,issues)
   }
   if ((element.kind === 'shape' || element.kind === 'connector') && element.stroke) {
     const metadataCount = Number(element.stroke.cap !== undefined) + Number(element.stroke.join !== undefined) + Number(element.stroke.dash !== undefined)
@@ -363,6 +370,9 @@ function validateElement(
   } else if (element.kind === 'chart') {
     if (element.compatibility.status !== 'preserveOnly') add(issues, `${path}.compatibility.status`, 'native.opaqueChart', 'opaque charts must be preserveOnly')
     if (element.chart.literalPie && element.chart.literalPie.values.length !== element.chart.literalPie.colors.length) add(issues, `${path}.chart.literalPie`, 'native.chartValues', 'point colors must match literal values')
+    if (element.chart.literalDoughnut && element.chart.literalDoughnut.values.length !== element.chart.literalDoughnut.colors.length) add(issues, `${path}.chart.literalDoughnut`, 'native.chartValues', 'point colors must match literal values')
+    if (element.chart.literalBar && !validNativeLiteralBar(element.chart.literalBar)) add(issues, `${path}.chart.literalBar`, 'native.chartValues', 'invalid literal bar profile')
+    if ([element.chart.literalPie, element.chart.literalDoughnut, element.chart.literalBar].filter(Boolean).length > 1) add(issues, `${path}.chart`, 'native.chartProfiles', 'chart cannot carry multiple literal families')
     if (element.chart.previewAssetId && !assets.has(element.chart.previewAssetId)) add(issues, `${path}.chart.previewAssetId`, 'native.assetReference', 'references an unknown asset id')
     else if (element.chart.previewAssetId && !assets.get(element.chart.previewAssetId)?.contentType.startsWith('image/')) add(issues, `${path}.chart.previewAssetId`, 'native.assetType', 'chart previews must reference an image asset')
     if (element.chart.opaqueRef.ownerPart !== element.chart.chartPart) add(issues, `${path}.chart.opaqueRef.ownerPart`, 'native.chartReference', 'must equal chartPart')

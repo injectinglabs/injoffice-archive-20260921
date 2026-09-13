@@ -185,12 +185,53 @@ type NativeLiteralPie struct {
 	Colors          []string `json:"colors"`
 }
 
+type NativeLiteralDoughnut struct {
+	Profile         string   `json:"profile"`
+	FirstSliceAngle int64    `json:"firstSliceAngle"`
+	HoleSize        int64    `json:"holeSize"`
+	Values          []int64  `json:"values"`
+	Colors          []string `json:"colors"`
+}
+
+type NativeLiteralBarAxis struct {
+	ID          int64   `json:"id"`
+	CrossAxisID int64   `json:"crossAxisId"`
+	Orientation string  `json:"orientation"`
+	Position    string  `json:"position"`
+	Deleted     bool    `json:"deleted"`
+	Color       *string `json:"color,omitempty"`
+	WidthEMU    *int64  `json:"widthEmu,omitempty"`
+	Min         *string `json:"min,omitempty"`
+	Max         *string `json:"max,omitempty"`
+	CrossesAt   *string `json:"crossesAt,omitempty"`
+}
+type NativeLiteralBarSeries struct {
+	Index  int64    `json:"index"`
+	Order  int64    `json:"order"`
+	Title  *string  `json:"title,omitempty"`
+	Values []string `json:"values"`
+	Colors []string `json:"colors"`
+}
+type NativeLiteralBar struct {
+	Profile      string                   `json:"profile"`
+	BarDirection string                   `json:"barDirection"`
+	Grouping     string                   `json:"grouping"`
+	DataOrigin   string                   `json:"dataOrigin"`
+	GapWidth     int64                    `json:"gapWidth"`
+	Overlap      int64                    `json:"overlap"`
+	Categories   []string                 `json:"categories"`
+	Series       []NativeLiteralBarSeries `json:"series"`
+	CategoryAxis NativeLiteralBarAxis     `json:"categoryAxis"`
+	ValueAxis    NativeLiteralBarAxis     `json:"valueAxis"`
+}
 type NativeOpaqueChart struct {
-	LiteralPie     *NativeLiteralPie    `json:"literalPie,omitempty"`
-	ChartPart      string               `json:"chartPart"`
-	RelationshipID string               `json:"relationshipId"`
-	OpaqueRef      NativePassthroughRef `json:"opaqueRef"`
-	PreviewAssetID *string              `json:"previewAssetId,omitempty"`
+	LiteralBar      *NativeLiteralBar      `json:"literalBar,omitempty"`
+	LiteralDoughnut *NativeLiteralDoughnut `json:"literalDoughnut,omitempty"`
+	LiteralPie      *NativeLiteralPie      `json:"literalPie,omitempty"`
+	ChartPart       string                 `json:"chartPart"`
+	RelationshipID  string                 `json:"relationshipId"`
+	OpaqueRef       NativePassthroughRef   `json:"opaqueRef"`
+	PreviewAssetID  *string                `json:"previewAssetId,omitempty"`
 }
 
 // NativeElement is the Go binding for the schema's discriminated union.
@@ -206,33 +247,34 @@ type NativePictureCrop struct {
 }
 
 type NativeElement struct {
-	Kind           NativeElementKind      `json:"kind"`
-	ID             string                 `json:"id"`
-	Provenance     NativeProvenance       `json:"provenance"`
-	Name           *string                `json:"name,omitempty"`
-	Transform      NativeTransform        `json:"transform"`
-	Placeholder    *NativePlaceholderType `json:"placeholder,omitempty"`
-	Paragraphs     *[]NativeParagraph     `json:"paragraphs,omitempty"`
-	TextBody       *NativeTextBodyLayout  `json:"textBody,omitempty"`
-	Preset         *NativeShapePreset     `json:"preset,omitempty"`
-	Fill           *string                `json:"fill,omitempty"`
-	Stroke         *NativeStroke          `json:"stroke,omitempty"`
-	HeadArrow      *bool                  `json:"headArrow,omitempty"`
-	HeadEnd        *NativeArrowEnd        `json:"headEnd,omitempty"`
-	TailEnd        *NativeArrowEnd        `json:"tailEnd,omitempty"`
-	TailArrow      *bool                  `json:"tailArrow,omitempty"`
-	FlipH          *bool                  `json:"flipH,omitempty"`
-	AssetID        *string                `json:"assetId,omitempty"`
-	Crop           *NativePictureCrop     `json:"crop,omitempty"`
-	Clip           *string                `json:"clip,omitempty"`
-	Table          *NativeTable           `json:"table,omitempty"`
-	Chart          *NativeOpaqueChart     `json:"chart,omitempty"`
-	ChildTransform *NativeTransform       `json:"childTransform,omitempty"`
-	Children       []NativeElement        `json:"children,omitempty"`
-	Animation      *NativeAnimation       `json:"animation,omitempty"`
-	Source         *NativeSourceAnchor    `json:"source,omitempty"`
-	Passthrough    []NativePassthroughRef `json:"passthrough"`
-	Compatibility  NativeCompatibility    `json:"compatibility"`
+	Geometry       *NativeEvaluatedGeometry `json:"geometry,omitempty"`
+	Kind           NativeElementKind        `json:"kind"`
+	ID             string                   `json:"id"`
+	Provenance     NativeProvenance         `json:"provenance"`
+	Name           *string                  `json:"name,omitempty"`
+	Transform      NativeTransform          `json:"transform"`
+	Placeholder    *NativePlaceholderType   `json:"placeholder,omitempty"`
+	Paragraphs     *[]NativeParagraph       `json:"paragraphs,omitempty"`
+	TextBody       *NativeTextBodyLayout    `json:"textBody,omitempty"`
+	Preset         *NativeShapePreset       `json:"preset,omitempty"`
+	Fill           *string                  `json:"fill,omitempty"`
+	Stroke         *NativeStroke            `json:"stroke,omitempty"`
+	HeadArrow      *bool                    `json:"headArrow,omitempty"`
+	HeadEnd        *NativeArrowEnd          `json:"headEnd,omitempty"`
+	TailEnd        *NativeArrowEnd          `json:"tailEnd,omitempty"`
+	TailArrow      *bool                    `json:"tailArrow,omitempty"`
+	FlipH          *bool                    `json:"flipH,omitempty"`
+	AssetID        *string                  `json:"assetId,omitempty"`
+	Crop           *NativePictureCrop       `json:"crop,omitempty"`
+	Clip           *string                  `json:"clip,omitempty"`
+	Table          *NativeTable             `json:"table,omitempty"`
+	Chart          *NativeOpaqueChart       `json:"chart,omitempty"`
+	ChildTransform *NativeTransform         `json:"childTransform,omitempty"`
+	Children       []NativeElement          `json:"children,omitempty"`
+	Animation      *NativeAnimation         `json:"animation,omitempty"`
+	Source         *NativeSourceAnchor      `json:"source,omitempty"`
+	Passthrough    []NativePassthroughRef   `json:"passthrough"`
+	Compatibility  NativeCompatibility      `json:"compatibility"`
 }
 
 type NativeSlide struct {

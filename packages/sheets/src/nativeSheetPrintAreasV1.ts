@@ -1,3 +1,4 @@
+import {isNativePreviewPartPathV1} from './nativePreviewPartPathV1.js'
 import {snapshotNativePlainData} from './nativePlainData.js'
 import {EXCEL_MAX_ROWS,EXCEL_MAX_COLUMNS} from './mutationProtocol.js'
 import type {NativeSheetViewportV2} from './nativeSheetGeometryV2.js'
@@ -21,7 +22,7 @@ export function decodeNativeSheetPrintAreasV1(input:unknown):NativeSheetPrintAre
  return value.map(v=>{
   const status=(v as Record<string,unknown>)?.status
   const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['area']:[])])
-  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||typeof o.sheet_part!=='string'||o.sheet_part.length>1024||!/^[A-Za-z0-9_.\/-]+$/.test(o.sheet_part)||o.sheet_part.split('/').some(s=>!s||s==='.'||s==='..')||parts.has(o.sheet_part)||(status!=='available'&&status!=='unavailable'))return fail()
+  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='unavailable'))return fail()
   ids.add(o.sheet_id);parts.add(o.sheet_part)
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096||/[\u0000-\u001f\u007f]/.test(w)))return fail()
   const base={sheet_id:o.sheet_id,sheet_part:o.sheet_part,warnings:o.warnings as string[]}

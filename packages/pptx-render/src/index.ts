@@ -1,3 +1,6 @@
+export {createNativeLiteralBarPaths} from './literalBar.js'
+export type {LiteralBarVector} from './literalBar.js'
+export { createNativeLiteralDoughnutPaths } from './literalDoughnut.js'
 export { createNativeLiteralPiePaths } from './literalPie.js'
 export { compileNativePptxSlide, stringifySlideRenderTree } from './compile.js'
 export { connectorPath, presetPath } from './geometry.js'
