@@ -9,6 +9,11 @@ import (
 // evaluateNativeCustomGeometry is the single source XML geometry evaluator.
 // Unsupported clauses refuse the entire geometry, never a partial path list.
 func evaluateNativeCustomGeometry(node *nativeXMLNode, ns string, width, height int64) (*NativeEvaluatedGeometry, error) {
+	return evaluateNativeGeometryWithIntermediateLimit(node, ns, width, height, nativeGeometryMaxMagnitude)
+}
+
+// The wider limit is an internal catalog-only policy, never selected by XML.
+func evaluateNativeGeometryWithIntermediateLimit(node *nativeXMLNode, ns string, width, height int64, limit float64) (*NativeEvaluatedGeometry, error) {
 	if node == nil || node.Name != (xml.Name{Space: ns, Local: "custGeom"}) {
 		return nil, fmt.Errorf("missing custom geometry")
 	}
@@ -74,7 +79,7 @@ func evaluateNativeCustomGeometry(node *nativeXMLNode, ns string, width, height 
 		if count > nativeGeometryMaxGuides {
 			return nil, fmt.Errorf("geometry guide budget exceeded")
 		}
-		if err := g.evaluate(guides); err != nil {
+		if err := g.evaluateWithIntermediateLimit(guides, limit); err != nil {
 			return nil, err
 		}
 	}

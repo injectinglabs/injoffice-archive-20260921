@@ -7,7 +7,7 @@ import (
 
 func TestNativeGeometryNonSquarePolarArc(t *testing.T) {
 	// The 45-degree ray meets x²/100²+y²/50²=1 at (sqrt(2000),sqrt(2000)).
-	q := nativeGeometryEllipsePoint(100, 50, math.Pi/4)
+	q := nativeGeometryEllipsePoint(100, 50, 2700000)
 	if math.Abs(q.x-math.Sqrt(2000)) > 1e-10 || math.Abs(q.x-q.y) > 1e-10 {
 		t.Fatalf("parametric angle used instead of polar: %+v", q)
 	}
@@ -30,7 +30,7 @@ func TestNativeGeometryFullArcAndSubpathState(t *testing.T) {
 	if err := p.arc(100, 50, 0, -21600000); err != nil {
 		t.Fatal(err)
 	}
-	if len(p.commands) != 3 || *p.commands[1].X != -100 || *p.commands[2].X != 100 || *p.commands[1].Clockwise {
+	if len(p.commands) != 5 || *p.commands[2].X != -100 || *p.commands[4].X != 100 || *p.commands[1].Clockwise {
 		t.Fatalf("full arc winding: %+v", p.commands)
 	}
 	_ = p.vertices("lineTo", nativeGeometryPoint{40, 30})
@@ -100,11 +100,50 @@ func TestNativeGeometryArcRejectsImplicitRadiusCorrection(t *testing.T) {
 	p := nativeGeometryPathBuilder{sx: 1, sy: 1}
 	_ = p.vertices("moveTo", nativeGeometryPoint{0, 0})
 	if err := p.arc(1.4, 1.4, 0, 10800000); err == nil {
-		t.Fatal("rounded arc changed radius silently")
+		t.Fatal("tiny rounded arc changed radii silently")
 	}
 	p = nativeGeometryPathBuilder{sx: 0.01, sy: 1}
 	_ = p.vertices("moveTo", nativeGeometryPoint{1, 0})
 	if err := p.arc(1, 1, 0, 5400000); err == nil {
 		t.Fatal("collapsed radius accepted")
+	}
+}
+
+func TestNativeGeometryZeroRadiusCornerAndQuarterSplit(t *testing.T) {
+	p := nativeGeometryPathBuilder{sx: 1, sy: 1}
+	_ = p.vertices("moveTo", nativeGeometryPoint{100, 200})
+	if err := p.arc(0, 0, 5400000, 5400000); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.commands) != 1 || p.pen != (nativeGeometryPoint{100, 200}) {
+		t.Fatal("zero corner changed path position")
+	}
+	if err := p.arc(0, 10, 5400000, 5400000); err == nil {
+		t.Fatal("unqualified one-axis degenerate ellipse accepted")
+	}
+	if err := p.arc(100, 50, 0, 21600000); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.commands) != 5 {
+		t.Fatal("full revolution was not split into four stable arcs")
+	}
+}
+
+func TestNativeGeometryExactCardinalsAtLargeDimensions(t *testing.T) {
+	for _, angle := range []float64{0, 5400000, 10800000, 16200000, 21600000, -5400000} {
+		point := nativeGeometryEllipsePoint(9007199254740991, 4503599627370495, angle)
+		if angle == 5400000 && (point.x != 0 || point.y != 4503599627370495) {
+			t.Fatal("cardinal residual changed endpoint", point)
+		}
+		if angle == 10800000 && (point.x != -9007199254740991 || point.y != 0) {
+			t.Fatal("cardinal residual changed endpoint", point)
+		}
+	}
+	g, _ := newNativeGeometryGuides(1, 1)
+	for _, formula := range []string{"sin 9007199254740991 cd2", "cos 9007199254740991 cd4", "sat2 9007199254740991 -1 0"} {
+		value, err := g.formula(formula)
+		if err != nil || value != 0 {
+			t.Fatalf("cardinal %s: %v %v", formula, value, err)
+		}
 	}
 }

@@ -10,6 +10,11 @@ import (
 // Geometry evaluation stays in floating point until its public EMU boundary.
 // Budgets are independent of XML size limits and include adjustment guides.
 const nativeGeometryMaxGuides = 1024
+
+// Higher-order preset equations use squared distances and products that exceed
+// coordinate precision. Only the fingerprinted preset catalog selects this
+// internal ceiling; arbitrary custom programs retain the MAXSAFE result guard.
+const nativeGeometryMaxIntermediate = 1e100
 const nativeGeometryMaxMagnitude = 9007199254740991.0
 const nativeGeometryAngleUnit = math.Pi / 10800000
 
@@ -20,11 +25,11 @@ func newNativeGeometryGuides(width, height float64) (nativeGeometryGuides, error
 	if !nativeGeometryFinite(width) || !nativeGeometryFinite(height) || width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("invalid geometry extent")
 	}
-	g := nativeGeometryGuides{"w": width, "h": height, "l": 0, "t": 0, "r": width, "b": height, "hc": width / 2, "vc": height / 2, "ss": math.Min(width, height), "ls": math.Max(width, height), "cd2": 10800000, "cd4": 5400000, "cd8": 2700000, "3cd4": 16200000, "3cd8": 8100000, "5cd8": 13500000, "7cd8": 18900000}
-	for _, d := range []int{2, 3, 4, 5, 6, 8, 10} {
+	g := nativeGeometryGuides{"w": width, "h": height, "l": 0, "t": 0, "r": width, "b": height, "hc": width / 2, "vc": height / 2, "ss": math.Min(width, height), "ls": math.Max(width, height), "cd2": 10800000, "cd3": 7200000, "cd4": 5400000, "cd8": 2700000, "3cd4": 16200000, "3cd8": 8100000, "5cd8": 13500000, "7cd8": 18900000}
+	for _, d := range []int{2, 3, 4, 5, 6, 8, 10, 12, 32} {
 		g[fmt.Sprintf("wd%d", d)] = width / float64(d)
 	}
-	for _, d := range []int{2, 3, 4, 5, 6, 8} {
+	for _, d := range []int{2, 3, 4, 5, 6, 8, 10} {
 		g[fmt.Sprintf("hd%d", d)] = height / float64(d)
 	}
 	for _, d := range []int{2, 4, 6, 8, 16, 32} {
@@ -52,6 +57,10 @@ func (g nativeGeometryGuides) resolve(token string) (float64, error) {
 }
 
 func (g nativeGeometryGuides) evaluate(guides []nativeGeometryGuide) error {
+	return g.evaluateWithIntermediateLimit(guides, nativeGeometryMaxMagnitude)
+}
+
+func (g nativeGeometryGuides) evaluateWithIntermediateLimit(guides []nativeGeometryGuide, limit float64) error {
 	if len(guides) > nativeGeometryMaxGuides {
 		return fmt.Errorf("geometry guide budget exceeded")
 	}
@@ -65,7 +74,7 @@ func (g nativeGeometryGuides) evaluate(guides []nativeGeometryGuide) error {
 		if _, exists := g[guide.Name]; exists {
 			return fmt.Errorf("duplicate geometry guide %q", guide.Name)
 		}
-		value, err := g.formula(guide.Formula)
+		value, err := g.formulaWithIntermediateLimit(guide.Formula, limit)
 		if err != nil {
 			return fmt.Errorf("guide %q: %w", guide.Name, err)
 		}
@@ -75,6 +84,10 @@ func (g nativeGeometryGuides) evaluate(guides []nativeGeometryGuide) error {
 }
 
 func (g nativeGeometryGuides) formula(formula string) (float64, error) {
+	return g.formulaWithIntermediateLimit(formula, nativeGeometryMaxMagnitude)
+}
+
+func (g nativeGeometryGuides) formulaWithIntermediateLimit(formula string, limit float64) (float64, error) {
 	fields := strings.Fields(formula)
 	if len(fields) < 2 || len(fields) > 4 {
 		return 0, fmt.Errorf("invalid geometry formula")
@@ -119,14 +132,32 @@ func (g nativeGeometryGuides) formula(formula string) (float64, error) {
 		if x == 0 && y == 0 {
 			return 0, fmt.Errorf("undefined geometry angle")
 		}
-		out = math.Atan2(y, x) / nativeGeometryAngleUnit
+		if x == 0 {
+			if y > 0 {
+				out = 5400000
+			} else {
+				out = -5400000
+			}
+		} else if y == 0 {
+			if x < 0 {
+				out = 10800000
+			} else {
+				out = 0
+			}
+		} else {
+			out = math.Atan2(y, x) / nativeGeometryAngleUnit
+		}
 	case "cat2":
 		if y == 0 && z == 0 {
 			return 0, fmt.Errorf("undefined geometry angle")
 		}
-		out = x * math.Cos(math.Atan2(z, y))
+		out = x * (y / math.Hypot(y, z))
 	case "cos":
-		out = x * math.Cos(math.Mod(y, 21600000)*nativeGeometryAngleUnit)
+		if !nativeGeometryFinite(y) {
+			return 0, fmt.Errorf("geometry angle exceeds precision bounds")
+		}
+		_, cosine := nativeGeometrySinCos(y)
+		out = x * cosine
 	case "max":
 		out = math.Max(x, y)
 	case "min":
@@ -145,21 +176,49 @@ func (g nativeGeometryGuides) formula(formula string) (float64, error) {
 		if y == 0 && z == 0 {
 			return 0, fmt.Errorf("undefined geometry angle")
 		}
-		out = x * math.Sin(math.Atan2(z, y))
+		out = x * (z / math.Hypot(y, z))
 	case "sin":
-		out = x * math.Sin(math.Mod(y, 21600000)*nativeGeometryAngleUnit)
+		if !nativeGeometryFinite(y) {
+			return 0, fmt.Errorf("geometry angle exceeds precision bounds")
+		}
+		sine, _ := nativeGeometrySinCos(y)
+		out = x * sine
 	case "sqrt":
 		if x < 0 {
 			return 0, fmt.Errorf("negative geometry square root")
 		}
 		out = math.Sqrt(x)
 	case "tan":
+		if !nativeGeometryFinite(y) || math.Abs(math.Mod(y, 10800000)) == 5400000 {
+			return 0, fmt.Errorf("undefined or imprecise geometry tangent")
+		}
 		out = x * math.Tan(math.Mod(y, 21600000)*nativeGeometryAngleUnit)
 	case "val":
 		out = x
 	}
-	if !nativeGeometryFinite(out) {
+	if math.IsNaN(out) || math.IsInf(out, 0) || math.Abs(out) > limit {
 		return 0, fmt.Errorf("geometry formula exceeds numeric bounds")
 	}
 	return out, nil
+}
+
+// Exact cardinals prevent a vanishing trig residual from becoming visible EMU
+// at large dimensions; non-cardinal source angles are never epsilon-snapped.
+func nativeGeometrySinCos(angle float64) (float64, float64) {
+	angle = math.Mod(angle, 21600000)
+	if angle < 0 {
+		angle += 21600000
+	}
+	switch angle {
+	case 0:
+		return 0, 1
+	case 5400000:
+		return 1, 0
+	case 10800000:
+		return 0, -1
+	case 16200000:
+		return -1, 0
+	}
+	radians := angle * nativeGeometryAngleUnit
+	return math.Sin(radians), math.Cos(radians)
 }
