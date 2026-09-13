@@ -128,7 +128,9 @@ export default function PdfPage() {
   const [fields, setFields] = useState<PdfFormField[]>([])
   const [fieldBytes, setFieldBytes] = useState<Uint8Array | null>(null)
   const [formNotice, setFormNotice] = useState<string | null>(null)
-  const [formAppearanceFont, setFormAppearanceFont] = useState<TextAppearanceFont | 'viewer'>('viewer')
+  const [formAppearanceFont, setFormAppearanceFont] = useState<TextAppearanceFont | 'viewer' | 'embedded'>('viewer')
+  const [embeddedFormFont, setEmbeddedFormFont] = useState<{ name: string; bytes: Uint8Array } | null>(null)
+  const fontLoadGeneration = useRef(0)
   const [formChoiceAppearanceFont, setFormChoiceAppearanceFont] = useState<TextAppearanceFont | 'viewer'>('viewer')
   const [unsavedFormNames, setUnsavedFormNames] = useState<string[]>([])
   const pendingFormDrafts = useRef<{ bytes: Uint8Array; drafts: PdfFormField[]; skipped: { name: string }[] } | null>(null)
@@ -196,13 +198,16 @@ export default function PdfPage() {
 
   const applyFormDrafts = async () => {
     if (!bytes || busy || fieldBytes !== bytes) return
+    if (formAppearanceFont === 'embedded' && !embeddedFormFont) return
     setBusy('editing')
     setError(null)
     setInfo('')
     setFormNotice(null)
     try {
       const result = await applyPdfFormValues(bytes, fields, {
-        ...(formAppearanceFont === 'viewer' ? {} : { textAppearance: { font: formAppearanceFont } }),
+        ...(formAppearanceFont === 'viewer' ? {} : {
+          textAppearance: formAppearanceFont === 'embedded' ? { fontBytes: embeddedFormFont!.bytes } : { font: formAppearanceFont },
+        }),
         ...(formChoiceAppearanceFont === 'viewer' ? {} : { choiceAppearance: { font: formChoiceAppearanceFont } }),
       })
       const message = pdfFormResultMessage(result)
@@ -400,6 +405,8 @@ export default function PdfPage() {
       try { await candidate.getPage(1) } finally { await candidate.destroy() }
       setFileName(file.name || 'document.pdf')
       setFormAppearanceFont('viewer')
+      fontLoadGeneration.current += 1
+      setEmbeddedFormFont(null)
       setFormChoiceAppearanceFont('viewer')
       setEdited(false)
       setHistory({ past: [], future: [] })
@@ -614,16 +621,32 @@ export default function PdfPage() {
               <span className="ds-eyebrow">Fill form fields</span>
               <DsField label="Saved text appearance">
                 <DsSelect aria-label="Saved text appearance" value={formAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
-                  setFormAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
+                  setFormAppearanceFont(event.target.value as TextAppearanceFont | 'viewer' | 'embedded')
                   setFormNotice(null)
                 }}>
                   <option value="viewer">Let the PDF viewer generate it</option>
                   <option value="Helvetica">Generate with Helvetica</option>
                   <option value="Times-Roman">Generate with Times Roman</option>
                   <option value="Courier">Generate with Courier</option>
+                  <option value="embedded">Embed a local TrueType font</option>
                 </DsSelect>
               </DsField>
-              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields using printable ASCII. This replaces the text font; it does not preserve the original typography. Long text may clip in a fixed-size field. Unsupported text fields are skipped. Other field types may still depend on the PDF viewer.</p>
+              {formAppearanceFont === 'embedded' && <DsField label="TrueType appearance font">
+                <input type="file" accept=".ttf,font/ttf" aria-label="TrueType appearance font" disabled={locked || fieldBytes !== bytes} onChange={event => {
+                  const file = event.currentTarget.files?.[0]
+                  event.currentTarget.value = ''
+                  const generation = ++fontLoadGeneration.current
+                  setEmbeddedFormFont(null)
+                  setFormNotice(null)
+                  if (!file) return
+                  if (file.size < 12 || file.size > 16 * 1024 * 1024) { setError('Choose a TrueType font no larger than 16 MiB.'); return }
+                  void file.arrayBuffer().then(buffer => {
+                    if (generation === fontLoadGeneration.current) { setEmbeddedFormFont({ name: file.name, bytes: new Uint8Array(buffer) }); setError(null) }
+                  }).catch(reason => { if (generation === fontLoadGeneration.current) setError(errorMessage(reason)) })
+                }} />
+                {embeddedFormFont && <span className="ds-muted">Selected: {embeddedFormFont.name}</span>}
+              </DsField>}
+              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded font supports covered independent Unicode glyphs, including Latin, Greek, Cyrillic and CJK; combining marks and contextual or right-to-left scripts are skipped. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
               <DsField label="Saved choice appearance">
                 <DsSelect aria-label="Saved choice appearance" value={formChoiceAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
                   setFormChoiceAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
@@ -647,7 +670,7 @@ export default function PdfPage() {
                   )}
                 </DsField>
               ))}
-              <DsButton variant="outlined" className="workbench-button" disabled={locked || fieldBytes !== bytes || fields.length === 0} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
+              <DsButton variant="outlined" className="workbench-button" disabled={locked || fieldBytes !== bytes || fields.length === 0 || (formAppearanceFont === 'embedded' && !embeddedFormFont)} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
             </div>
           )}
 

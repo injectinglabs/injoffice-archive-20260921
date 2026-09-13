@@ -118,3 +118,20 @@ using an exported form.
 
 The implementation uses pdf-lib's documented
 [text field appearance API](https://pdf-lib.js.org/docs/api/classes/pdftextfield#updateappearances).
+
+For an explicitly supplied embedded font, pass `textAppearance: { fontBytes }`
+instead of `{ font: 'Helvetica' }`. `fontBytes` is a `Uint8Array` containing a
+standalone, fixed TrueType outline face (up to 16 MiB). The saved PDF contains a
+subset font program and Unicode mapping; reopening does not require that font
+to be installed. The playground offers a local TrueType file picker for this mode.
+
+This first embedded profile accepts up to 4,096 UTF-16 units of independent
+horizontal Unicode glyphs: covered Latin, Greek, Cyrillic, CJK, numbers,
+punctuation and symbols. Combining marks, RTL/contextual scripts, missing
+glyphs, glyph aliases that cannot retain distinct Unicode mappings, variable
+and color fonts, and glyph positioning outside simple advances are refused.
+Kerning and discretionary ligatures are disabled. The plain-field ownership
+guards, source preservation and fixed-size clipping limits above still apply.
+This is an explicit font replacement, not general Unicode shaping or original
+form typography preservation. Fonts are parsed locally and loaded lazily using
+pdf-lib's documented [custom font embedding API](https://pdf-lib.js.org/docs/api/classes/pdfdocument#embedfont).
