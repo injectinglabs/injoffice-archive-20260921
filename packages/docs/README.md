@@ -917,12 +917,23 @@ define exact spacing in twips and describe centering when the line box is taller
 
 The local rectangle preview additionally admits an explicit `wrap="square"`
 profile with one preserved text node, one paragraph/run and exact line spacing.
-Text is limited to ASCII alphanumeric words separated by single spaces, without
-edge spaces. The complete source is shaped once with the supplied font. A
+Text uses space-separated ASCII tokens without edge spaces. Plain alphanumeric
+text retains `ascii-space-greedy-v1`. Punctuated text uses the distinct
+`ascii-punctuation-space-greedy-v1` profile: internal apostrophes, decimal dots,
+hyphens and slashes; one attached terminal comma, full stop, question mark,
+exclamation mark, semicolon or colon; and balanced parentheses of depth at most
+one, attached to tokens. Parenthetical phrases may span spaces. Standalone
+punctuation, whitespace immediately after an opening or before a closing
+parenthesis, quoted text, repeated terminal punctuation and unknown characters
+remain refused. Go source qualification and browser validation select the same
+canonical policy; punctuation cannot be passed under the alphanumeric policy. The complete source is shaped once with the supplied font. A
 bounded greedy planner selects only safe complete-cluster boundaries after
 spaces; separator spaces retain their source ranges and measured advances on
 the preceding line. An unbreakable word or separator-space edge overflow
-refuses the whole preview. There is no trimming, emergency word splitting,
+refuses the whole preview. Only spaces are break candidates, regardless of punctuation inside tokens.
+Both neighboring shaped-cluster unsafe flags must permit the boundary and the
+public line-break classifier must return allowed; unsupported classifications
+never receive a fallback. There is no trimming, emergency word splitting,
 hyphenation, autofit or browser-font fallback.
 
 Source `wrap_layout` anchors bind the explicit body properties, paragraph, run,

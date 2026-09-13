@@ -9,6 +9,41 @@ const nativeTextboxWrapPolicy = "ascii-space-greedy-v1"
 
 var nativeTextboxWrapWords = regexp.MustCompile(`^[A-Za-z0-9]+( [A-Za-z0-9]+)*$`)
 
+const nativeTextboxPunctuationPolicy = "ascii-punctuation-space-greedy-v1"
+
+var nativeTextboxSentenceWords = regexp.MustCompile(`^\(?[A-Za-z0-9]+([.'/-][A-Za-z0-9]+)*\)?[,.!?;:]?( \(?[A-Za-z0-9]+([.'/-][A-Za-z0-9]+)*\)?[,.!?;:]?)*$`)
+
+func nativeTextboxTextWrapPolicy(text string) string {
+	if len(text) == 0 || len(text) > 4096 {
+		return ""
+	}
+	if nativeTextboxWrapWords.MatchString(text) {
+		return nativeTextboxWrapPolicy
+	}
+	if !nativeTextboxSentenceWords.MatchString(text) {
+		return ""
+	}
+	depth := 0
+	for _, c := range text {
+		if c == '(' {
+			depth++
+			if depth > 1 {
+				return ""
+			}
+		}
+		if c == ')' {
+			depth--
+			if depth < 0 {
+				return ""
+			}
+		}
+	}
+	if depth != 0 {
+		return ""
+	}
+	return nativeTextboxPunctuationPolicy
+}
+
 type NativeTextboxWrapLayoutV1 struct {
 	Policy               string               `json:"policy"`
 	BodyPropertiesAnchor NativeSourceAnchorV1 `json:"body_properties_anchor"`
@@ -35,7 +70,7 @@ func nativeTextboxWrapText(p *nativeXMLNode, ns string) (string, int64, bool) {
 		return "", 0, false
 	}
 	t := r.Children[1]
-	if len(t.Children) != 0 || len(t.Text) == 0 || len(t.Text) > 4096 || !nativeTextboxWrapWords.MatchString(t.Text) {
+	if len(t.Children) != 0 || len(t.Text) == 0 || len(t.Text) > 4096 || nativeTextboxTextWrapPolicy(t.Text) == "" {
 		return "", 0, false
 	}
 	space, ok := nativeAttr(t, "http://www.w3.org/XML/1998/namespace", "space")
@@ -65,5 +100,5 @@ func nativeTextboxWrapEvidence(drawing *nativeXMLNode, ns, part string, raw []by
 		return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
 	}
 	r := p.Children[1]
-	return &NativeTextboxWrapLayoutV1{nativeTextboxWrapPolicy, anchor(body), anchor(p), anchor(r), anchor(r.Children[1]), anchor(p.Children[0].Children[0]), step}
+	return &NativeTextboxWrapLayoutV1{nativeTextboxTextWrapPolicy(r.Children[1].Text), anchor(body), anchor(p), anchor(r), anchor(r.Children[1]), anchor(p.Children[0].Children[0]), step}
 }

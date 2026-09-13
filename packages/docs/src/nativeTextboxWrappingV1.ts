@@ -2,10 +2,19 @@ import {classifyNativeOfficeLineBreakRanges} from '@injoffice/font-metrics/layou
 import type {NativeDocxSourceAnchorV1} from './nativeContract.js'
 import type {NativeDocxTextboxV1} from './nativeTextboxInventoryV1.js'
 
-export interface NativeTextboxWrapLayoutV1 {policy:'ascii-space-greedy-v1';body_properties_anchor:NativeDocxSourceAnchorV1;paragraph_anchor:NativeDocxSourceAnchorV1;run_anchor:NativeDocxSourceAnchorV1;text_anchor:NativeDocxSourceAnchorV1;spacing_anchor:NativeDocxSourceAnchorV1;line_step_twips:number}
+export interface NativeTextboxWrapLayoutV1 {policy:'ascii-space-greedy-v1'|'ascii-punctuation-space-greedy-v1';body_properties_anchor:NativeDocxSourceAnchorV1;paragraph_anchor:NativeDocxSourceAnchorV1;run_anchor:NativeDocxSourceAnchorV1;text_anchor:NativeDocxSourceAnchorV1;spacing_anchor:NativeDocxSourceAnchorV1;line_step_twips:number}
 export interface NativeTextboxWrapClusterV1 {start_utf16:number;end_utf16:number;advance_millipoints:number;unsafe_to_break:boolean;glyph_start:number;glyph_end:number}
 export interface NativeTextboxWrapLineV1 {ordinal:number;start_utf16:number;end_utf16:number;cluster_start:number;cluster_end:number;advance_millipoints:number}
 export interface NativeTextboxWrapPaintV1 {clusters:NativeTextboxWrapClusterV1[];natural_height_millipoints:number;ascent_millipoints:number;line_gap_millipoints:0;lines:(NativeTextboxWrapLineV1&{baseline_millipoints:number;path_start:number;path_end:number})[]}
+/** Canonical source policy; punctuation never widens space-boundary classification. */
+export function textboxWrapPolicyForText(text:string):NativeTextboxWrapLayoutV1['policy']|undefined{
+ if(!text.length||text.length>4096)return undefined
+ if(/^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(text))return 'ascii-space-greedy-v1'
+ if(!/^\(?[A-Za-z0-9]+(?:[.'/-][A-Za-z0-9]+)*\)?[,.!?;:]?(?: \(?[A-Za-z0-9]+(?:[.'/-][A-Za-z0-9]+)*\)?[,.!?;:]?)*$/.test(text))return undefined
+ let depth=0
+ for(const c of text){if(c==='('&&++depth>1)return undefined;if(c===')'&&--depth<0)return undefined}
+ return depth===0?'ascii-punctuation-space-greedy-v1':undefined
+}
 function keys(v:unknown,wanted:string[]):asserts v is Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).sort().join(',')!==wanted.sort().join(','))throw new TypeError('Invalid textbox wrap fields')}
 function anchor(v:unknown,parent:NativeDocxSourceAnchorV1,path?:string):NativeDocxSourceAnchorV1{
  keys(v,['part_name','path','start_byte','end_byte','xml_sha256'])
@@ -15,19 +24,19 @@ function anchor(v:unknown,parent:NativeDocxSourceAnchorV1,path?:string):NativeDo
 /** Input already passed bounded own-data copying and owner joins. */
 export function decodeTextboxWrapSource(v:unknown,owner:NativeDocxTextboxV1):NativeTextboxWrapLayoutV1{
  keys(v,['policy','body_properties_anchor','paragraph_anchor','run_anchor','text_anchor','spacing_anchor','line_step_twips'])
- if(v.policy!=='ascii-space-greedy-v1'||!Number.isSafeInteger(v.line_step_twips)||Number(v.line_step_twips)<1||Number(v.line_step_twips)>25600||owner.paragraphs.length!==1||owner.paragraphs[0]!.length>4096||!/^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(owner.paragraphs[0]!))throw new TypeError('Invalid textbox wrap profile')
+ if((v.policy!=='ascii-space-greedy-v1'&&v.policy!=='ascii-punctuation-space-greedy-v1')||!Number.isSafeInteger(v.line_step_twips)||Number(v.line_step_twips)<1||Number(v.line_step_twips)>25600||owner.paragraphs.length!==1||owner.paragraphs[0]!.length>4096||textboxWrapPolicyForText(owner.paragraphs[0]!)!==v.policy)throw new TypeError('Invalid textbox wrap profile')
  const p=anchor(v.paragraph_anchor,owner.anchor),r=anchor(v.run_anchor,p,p.path+'/w:r[1]'),t=anchor(v.text_anchor,r,r.path+'/w:t[1]'),spacing=anchor(v.spacing_anchor,p,p.path+'/w:pPr[1]/w:spacing[1]'),body=anchor(v.body_properties_anchor,owner.anchor)
  const root=owner.anchor.path.match(/^(.*\/w:drawing\[[1-9][0-9]*\])/u)?.[1],suffix=root&&p.path.slice(root.length)
  if(!root||!/^\/(?:wp|ns[0-9a-f]{8}):inline\[1\]\/(?:a|ns[0-9a-f]{8}):graphic\[1\]\/(?:a|ns[0-9a-f]{8}):graphicData\[1\]\/(?:wps|ns[0-9a-f]{8}):wsp\[1\]\/(?:wps|ns[0-9a-f]{8}):txbx\[1\]\/w:txbxContent\[1\]\/w:p\[1\]$/.test(suffix!)||spacing.end_byte>=r.start_byte||body.start_byte<=p.end_byte)throw new TypeError('Invalid wrap source order')
  const shapePath=p.path.replace(/\/(?:wps|ns[0-9a-f]{8}):txbx\[1\]\/w:txbxContent\[1\]\/w:p\[1\]$/,'')
  if(!new RegExp('^'+shapePath.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'/(?:wps|ns[0-9a-f]{8}):bodyPr\\[1\\]$').test(body.path))throw new TypeError('Invalid wrap body properties')
- return {policy:'ascii-space-greedy-v1',body_properties_anchor:body,paragraph_anchor:p,run_anchor:r,text_anchor:t,spacing_anchor:spacing,line_step_twips:Number(v.line_step_twips)}
+ return {policy:v.policy as NativeTextboxWrapLayoutV1['policy'],body_properties_anchor:body,paragraph_anchor:p,run_anchor:r,text_anchor:t,spacing_anchor:spacing,line_step_twips:Number(v.line_step_twips)}
 }
 /** Greedy complete-cluster selection, with spaces retained on their source line. */
-export function planTextboxWrap(text:string,clusters:readonly NativeTextboxWrapClusterV1[],width:number):NativeTextboxWrapLineV1[]{
- if(!Number.isSafeInteger(width)||width<1||text.length>4096||!/^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(text)||!clusters.length||clusters.length>4096)throw new TypeError('Textbox wrap budget')
+export function planTextboxWrap(text:string,clusters:readonly NativeTextboxWrapClusterV1[],width:number,policy:NativeTextboxWrapLayoutV1['policy']='ascii-space-greedy-v1'):NativeTextboxWrapLineV1[]{
+ if(!Number.isSafeInteger(width)||width<1||text.length>4096||textboxWrapPolicyForText(text)!==policy||!clusters.length||clusters.length>4096)throw new TypeError('Textbox wrap budget')
  let end=0,glyphEnd=0
- for(const c of clusters){keys(c,['start_utf16','end_utf16','advance_millipoints','unsafe_to_break','glyph_start','glyph_end']);if(c.glyph_start!==glyphEnd||!Number.isSafeInteger(c.glyph_end)||c.glyph_end<=glyphEnd||c.glyph_end>16384||c.start_utf16!==end||!Number.isSafeInteger(c.end_utf16)||c.end_utf16<=end||c.end_utf16>text.length||!/^(?:[A-Za-z0-9]+| )$/.test(text.slice(end,c.end_utf16))||!Number.isSafeInteger(c.advance_millipoints)||c.advance_millipoints<0||c.advance_millipoints>10000000||typeof c.unsafe_to_break!=='boolean')throw new TypeError('Invalid wrap cluster coverage');end=c.end_utf16;glyphEnd=c.glyph_end}
+ for(const c of clusters){keys(c,['start_utf16','end_utf16','advance_millipoints','unsafe_to_break','glyph_start','glyph_end']);if(c.glyph_start!==glyphEnd||!Number.isSafeInteger(c.glyph_end)||c.glyph_end<=glyphEnd||c.glyph_end>16384||c.start_utf16!==end||!Number.isSafeInteger(c.end_utf16)||c.end_utf16<=end||c.end_utf16>text.length||!(policy==='ascii-space-greedy-v1'?/^(?:[A-Za-z0-9]+| )$/:/^(?:[A-Za-z0-9().,'/!?;:\-]+| )$/).test(text.slice(end,c.end_utf16))||!Number.isSafeInteger(c.advance_millipoints)||c.advance_millipoints<0||c.advance_millipoints>10000000||typeof c.unsafe_to_break!=='boolean')throw new TypeError('Invalid wrap cluster coverage');end=c.end_utf16;glyphEnd=c.glyph_end}
  if(end!==text.length)throw new TypeError('Incomplete wrap cluster coverage')
  const lines:NativeTextboxWrapLineV1[]=[];let start=0,work=0
  while(start<clusters.length){
@@ -48,7 +57,7 @@ export function planTextboxWrap(text:string,clusters:readonly NativeTextboxWrapC
 export function decodeTextboxWrapPaint(v:unknown,source:NativeTextboxWrapLayoutV1,text:string,width:number,top:number,bottom:number,pathCount:number):NativeTextboxWrapPaintV1{
  keys(v,['clusters','natural_height_millipoints','ascent_millipoints','line_gap_millipoints','lines'])
  if(!Array.isArray(v.clusters)||!Array.isArray(v.lines))throw new TypeError('Invalid wrap arrays')
- const planned=planTextboxWrap(text,v.clusters,width),height=Number(v.natural_height_millipoints),ascent=Number(v.ascent_millipoints),step=source.line_step_twips*50,center=(step-height)/2
+ const planned=planTextboxWrap(text,v.clusters,width,source.policy),height=Number(v.natural_height_millipoints),ascent=Number(v.ascent_millipoints),step=source.line_step_twips*50,center=(step-height)/2
  if(!Number.isSafeInteger(v.natural_height_millipoints)||height<=0||!Number.isSafeInteger(v.ascent_millipoints)||ascent<=0||ascent>height||v.line_gap_millipoints!==0||center<0||!Number.isInteger(center)||planned.length*step>bottom-top||v.lines.length!==planned.length)throw new TypeError('Invalid wrapped line metrics')
  let pathEnd=0
  for(let i=0;i<planned.length;i++){

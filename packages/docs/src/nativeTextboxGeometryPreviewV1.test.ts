@@ -116,3 +116,26 @@ describe('automatic ASCII rectangle wrapping',()=>{
   for(const mutate of mutations){const p=structuredClone(result);mutate(p);expect(()=>decodePaint(document,evidence,0,p,hash)).toThrow()}
  })
 })
+
+
+describe('punctuated real-font wrapping',()=>{
+ it('shapes sentences with contractions and decimals without changing source text',()=>{
+  for(const text of ["Hello, world. It's 3.14 miles.",'Read well-known facts/figures.','A (short phrase) ends.']){
+   const {document,evidence}=wrapping(text);evidence.items[0]!.wrap_layout!.policy='ascii-punctuation-space-greedy-v1'
+   const before=structuredClone(evidence),p=compileNativeDocxTextboxShapeV1(document,evidence,0,font);expect(p.status,p.reason).toBe('supported');expect(p.wrap_paint!.lines.map(l=>text.slice(l.start_utf16,l.end_utf16)).join('')).toBe(text);expect(evidence).toEqual(before)
+   expect(compileNativeDocxTextboxShapeV1(document,evidence,0,font)).toEqual(p)
+  }
+ })
+ it('counts terminal punctuation advance and refuses a width that fits only its prefix',()=>{
+  const {document,evidence}=wrapping('Hello.');evidence.items[0]!.wrap_layout!.policy='ascii-punctuation-space-greedy-v1'
+  const full=compileNativeDocxTextboxShapeV1(document,evidence,0,font);expect(full.status).toBe('supported');expect(full.wrap_paint!.clusters.at(-1)!.end_utf16).toBe(6)
+  const width=full.wrap_paint!.lines[0]!.advance_millipoints;evidence.items[0]!.geometry!.width_emu=182880+Math.floor((width-1)/10)*127
+  const narrow=compileNativeDocxTextboxShapeV1(document,evidence,0,font);expect(narrow.reason).toBe('wrap-word-or-space-overflow');expect(narrow.paths).toEqual([])
+ })
+ it('refuses punctuation at unsafe glyph bounds and source-policy downgrades',()=>{
+  const {document,evidence}=wrapping('T. word');evidence.items[0]!.wrap_layout!.policy='ascii-punctuation-space-greedy-v1'
+  const p=compileNativeDocxTextboxShapeV1(document,evidence,0,font);expect(p.reason).toBe('glyph-overflow');expect(p.paths).toEqual([]);expect(p.wrap_paint).toBeUndefined()
+  evidence.items[0]!.wrap_layout!.policy='ascii-space-greedy-v1';expect(()=>decode(document,evidence)).toThrow()
+  const f=wrapping('Alpha beta');f.evidence.items[0]!.wrap_layout!.policy='ascii-punctuation-space-greedy-v1';expect(()=>decode(f.document,f.evidence)).toThrow()
+ })
+})

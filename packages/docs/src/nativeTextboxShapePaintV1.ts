@@ -48,7 +48,7 @@ export function compileNativeDocxTextboxShapeV1(source:unknown,evidence:unknown,
    if('status'in shaped){result.reason='font-shaping-refused';return result}
    whole=shaped
    const clusters:NativeTextboxWrapClusterV1[]=shaped.clusters.map(c=>({start_utf16:c.startUtf16,end_utf16:c.endUtf16,advance_millipoints:c.advanceInlineMilliPoints,unsafe_to_break:c.unsafeToBreak===true,glyph_start:c.glyphStart,glyph_end:c.glyphEnd}))
-   wrapPlan=planTextboxWrap(run.text,clusters,w-left-right)
+   wrapPlan=planTextboxWrap(run.text,clusters,w-left-right,wrap.policy)
    if(clusters.at(-1)!.glyph_end!==shaped.glyphs.length)throw new RangeError('wrap-glyph-coverage')
    wrapPaint={clusters,natural_height_millipoints:shaped.metrics.lineHeightMilliPoints,ascent_millipoints:shaped.metrics.ascentMilliPoints,line_gap_millipoints:0,lines:[]}
   }

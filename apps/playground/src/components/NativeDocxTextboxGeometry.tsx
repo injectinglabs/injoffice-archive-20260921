@@ -28,7 +28,7 @@ export function NativeDocxTextboxGeometry({bytes,packageDigest}:{bytes:Uint8Arra
   }catch(e){if(!c.signal.aborted)setError(e instanceof Error?e.message:'Preview failed')}finally{if(!c.signal.aborted)setBusy(false)}
  }
  return <section aria-label="Read-only rectangle textbox geometry">
-  <h4>Rectangle textbox preview</h4><p>Inspect explicit DrawingML rectangles, then preview supplied-font text inside the authored bounds, including up to 16 explicit authored lines or automatically wrapped ASCII word lines. No page placement, autofit or editing is provided.</p>
+  <h4>Rectangle textbox preview</h4><p>Inspect explicit DrawingML rectangles, then preview supplied-font text inside the authored bounds, including up to 16 explicit authored lines or automatically wrapped ASCII text. Common sentence punctuation and contractions are supported; quoted text and complex punctuation are omitted. No page placement, autofit or editing is provided.</p>
   <button type="button" disabled={busy} onClick={()=>void inspect()}>Inspect rectangle geometry in browser</button>
   {joined&&<><p>{joined.textbox_geometry?.items.length??0} rectangle candidates. Original drawing warnings remain.</p>{!!joined.textbox_geometry?.items.length&&<>
    <label>Textbox <select disabled={busy} value={index} onChange={e=>{setIndex(Number(e.target.value));setPaint(null)}}>{joined.textbox_geometry.items.map((item,i)=><option key={item.owner.diagnostic_id} value={i}>{i+1}: {item.geometry?.font_family??item.owner.reason}</option>)}</select></label>
