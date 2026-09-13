@@ -9,14 +9,17 @@ independent Excel export; it does not declare print fidelity complete.
 
 The producer in `go/xlsxpatch/native_page_preview.go` accepts explicit Letter or A4
 paper, portrait or landscape orientation, all six page-margin attributes, and a
-percentage scale from 10 through 400. Only the four body margins are projected.
+percentage scale from 10 through 400. Each margin must be from 0 through 20 inches;
+only the four body margins are projected.
 Optional page order is `downThenOver` or `overThenDown`; omission retains
 down-then-over ordering in the planner.
 
 An explicitly active `sheetPr/pageSetUpPr@fitToPage` instead requires both
 `fitToWidth` and `fitToHeight`, each from 0 through 100, with at least one positive
 dimension. In this bounded profile, zero leaves that dimension unconstrained.
-Scale is ignored for fit; an absent scale is represented as 100 for compatibility.
+Scale is ignored for fit layout, but an authored scale must still pass canonical
+integer validation from 10 through 400. An absent scale is represented as 100 for
+compatibility.
 The activation element and its enclosing properties must meet the producer's
 exact structural checks. Inactive or additional setup properties are not silently
 discarded.
