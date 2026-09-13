@@ -118,3 +118,30 @@ func TestNativePrintCountaQuotedSheetTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestNativePrintCountaSavedNameRouting(t *testing.T) {
+	formula := `'Data Set'!$C$1,OFFSET('Data Set'!$A$1,0,0,COUNTA('Data Set'!$A$1:$B$1),1)`
+	for _, strict := range []bool{false, true} {
+		parts := nativePrintCountaFixture(strict, `<c r="A1"><v>1</v></c><c r="B1" t="b"><v>0</v></c>`, "")
+		parts["Book/Workbook.xml"] = strings.Replace(parts["Book/Workbook.xml"], `OFFSET('Data Set'!$A$1,0,0,COUNTA('Data Set'!$A$1:$F$1),4)`, formula, 1)
+		wb, ctx := nativePrintCountaExtract(t, parts)
+		got := previewNativePrintAreaSets([]byte(parts["Book/Workbook.xml"]), wb.Sheets, ctx)[0]
+		if got.Status != "available" || len(got.Areas) != 2 || got.Areas[0].Column != 2 || got.Areas[1].EndRow != 1 || got.SheetID != "7" || got.SheetPart != "Sheets/s1.xml" || len(got.Warnings) != 3 || got.Warnings[1] != "Source _xlnm.Print_Area formula: "+formula || !strings.Contains(got.Warnings[2], " = 2.") {
+			t.Fatalf("%+v", got)
+		}
+		// Omitting the private actual-source context never enables source counting.
+		if noContext := previewNativePrintAreaSets([]byte(parts["Book/Workbook.xml"]), wb.Sheets)[0]; noContext.Status != "unavailable" {
+			t.Fatal("counted without certified source context")
+		}
+		for _, bad := range []string{
+			strings.Replace(parts["Book/Workbook.xml"], `</definedNames>`, `<definedName name="_xlnm.Print_Titles" localSheetId="0">COUNTA('Data Set'!$A$1)</definedName></definedNames>`, 1),
+			strings.Replace(parts["Book/Workbook.xml"], `</definedNames>`, `<definedName name="_xlnm.Print_Area" localSheetId="0">'Data Set'!$A$1</definedName></definedNames>`, 1),
+			strings.Replace(parts["Book/Workbook.xml"], formula, formula+`,'Data Set'!$A$1`, 1),
+		} {
+			got := previewNativePrintAreaSets([]byte(bad), wb.Sheets, ctx)[0]
+			if got.Status != "unavailable" || got.Areas != nil || len(got.Warnings) != 1 {
+				t.Fatal("non-atomic title/name/overlap refusal")
+			}
+		}
+	}
+}

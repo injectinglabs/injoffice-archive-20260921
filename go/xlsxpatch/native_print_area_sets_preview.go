@@ -10,7 +10,11 @@ type NativeSheetPrintAreaSetV1 struct {
 	Areas     []NativePrintAreaRectV1 `json:"areas,omitempty"`
 }
 
-func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []NativeSheetPrintAreaSetV1 {
+func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2, countaSources ...*nativePrintCountaSourceContext) []NativeSheetPrintAreaSetV1 {
+	var countaSource *nativePrintCountaSourceContext
+	if len(countaSources) == 1 {
+		countaSource = countaSources[0]
+	}
 	count := len(sheets)
 	if count > 64 {
 		count = 64
@@ -18,7 +22,7 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 	result := make([]NativeSheetPrintAreaSetV1, count)
 	names, titles, valid := collectNativePrintNames(raw, sheets)
 	for i, sheet := range sheets[:count] {
-		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles or bounded OFFSET components, with at most four qualified saved-cell argument occurrences, and supported saved print titles, if present."}}
+		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles or bounded OFFSET components, with at most four qualified saved-cell or finite saved-literal COUNTA argument occurrences, and supported saved print titles, if present."}}
 		defs := names[sheet.Order]
 		if !valid || len(defs) != 1 || !validNativePrintName(defs[0]) {
 			continue
@@ -46,6 +50,11 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 			areas, sourceArguments = parseNativePrintFormulaUnion(defs[0].text, sheet)
 			formulaUnion = areas != nil
 		}
+		countaFormula := false
+		if areas == nil && countaSource != nil {
+			areas, sourceArguments = parseNativePrintCountaAreas(defs[0].text, &sheets[i], countaSource)
+			countaFormula = areas != nil
+		}
 		if areas == nil {
 			continue
 		}
@@ -60,6 +69,9 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 		}
 		if formulaUnion {
 			result[i].Warnings = append([]string{"Read-only print areas resolved from absolute rectangles and bounded OFFSET components in source order. Each area starts a separate approximate preview sequence; no Excel printer calibration. OFFSET inputs are integer literals or saved numeric cells; formula cells, caches and other names are not evaluated. Saved print titles require explicit preview selection.", "Source _xlnm.Print_Area formula: " + defs[0].text}, sourceArguments...)
+		}
+		if countaFormula {
+			result[i].Warnings = append([]string{"Read-only print areas resolved from absolute rectangles and bounded OFFSET inputs, including finite COUNTA ranges of qualified saved literals. Areas remain in source order. Formula cells and caches are not evaluated; page geometry is approximate, not Excel printer calibration. Saved print titles require explicit preview selection.", "Source _xlnm.Print_Area formula: " + defs[0].text}, sourceArguments...)
 		}
 	}
 	return result
