@@ -261,3 +261,20 @@ describe('conditional fill page overlay', () => {
     expect(render(props)).not.toContain('data-conditional-fill')
   })
 })
+
+it('keeps rich runs opt-in and paints only source-joined direct spans on qualified pages', () => {
+  const props = fixture(), source = props.sheet.cells[0]!
+  Object.assign(source, { ooxml_type: 'inlineStr', style_id: 0, value: { kind: 'string', storage: 'inline', rich: true, text: 'Bold plain', runs: [{ text: 'Bold ', bold: true }, { text: 'plain', font_color: '#FF0000' }] } })
+  props.sheet.merged_ranges = []
+  Object.assign(props.workbook.styles[0]!, { id: 0 })
+  Object.assign(props.workbook.styles[0]!.effective, { projection: 'full', bold: false, italic: false })
+  props.objects.protocol = 'injoffice.xlsx.preview-objects'
+  props.objects.rich_text = { warnings: [], cells: [{ sheet_id: '1', sheet_part: props.sheet.part_name, row: 0, column: 0, ref: 'A1', style_id: 0, storage: 'inline', source_part: props.sheet.part_name, shared_index: '', text: 'Bold plain', status: 'available', warnings: ['Approximate cell-font fallback.'], runs: [{ text: 'Bold ', properties: 'direct', bold: true, omitted: [] }, { text: 'plain', properties: 'direct', font_color: '#FF0000', omitted: [] }] }] }
+  expect(render(props)).not.toContain('data-rich-run=')
+  const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, richRuns: true }))
+  expect(html).toContain('data-rich-run="0"'); expect(html).toContain('font-weight="700"'); expect(html).toContain('font-weight="400"')
+  expect(html).toContain('fill="#FF0000"')
+  props.objects.rich_text.cells[0]!.runs![0]!.bold = false
+  const stale = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, richRuns: true }))
+  expect(stale).not.toContain('data-rich-run='); expect(stale).toContain('does not join'); expect(stale).toContain('Bold plain')
+})

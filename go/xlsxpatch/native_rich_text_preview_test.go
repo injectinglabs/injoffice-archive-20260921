@@ -173,3 +173,20 @@ func TestNativeRichTextExplicitEmptyTableContainer(t *testing.T) {
 		t.Fatal("explicit empty table container blocked runs")
 	}
 }
+
+func TestNativeRichTextPublicObjectsSupplement(t *testing.T) {
+	p := richFixture(false, richPositiveRuns)
+	p["Charts/chart1.xml"] = previewChartFixture()
+	b := buildZip(t, p)
+	before := bytes.Clone(b)
+	objects, e := InspectNativeWorkbookObjectsV1(b)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if objects.RichText == nil || len(objects.RichText.Cells) != 1 || objects.RichText.Cells[0].Status != "available" {
+		t.Fatal("public supplement missing")
+	}
+	if objects.PackageSHA256 != nativeWorkbookDigest(b) || !bytes.Equal(before, b) {
+		t.Fatal("public source changed")
+	}
+}

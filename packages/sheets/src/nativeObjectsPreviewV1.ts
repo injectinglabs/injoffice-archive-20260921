@@ -1,3 +1,4 @@
+import { decodeNativeRichTextPreviewV1, type NativeRichTextPreviewV1 } from "./nativeRichTextPreviewV1.js";
 import {decodeNativeConditionalFillPreviewsV1,type NativeConditionalFillPreviewV1} from './nativeConditionalFillPreviewV1.js';
 import { decodeNativeStoredRowGeometryV1, type NativeStoredRowGeometryV1 } from "./nativeStoredRowsPreviewV1.js";
 import { snapshotNativePlainData } from "./nativePlainData.js";
@@ -19,6 +20,7 @@ export interface NativeWorkbookObjectsV1 {
   print_area_sets?: NativeSheetPrintAreaSetV1[];
   print_titles?: NativeSheetPrintTitlesV1[];
   drawing_objects?: NativeDrawingObjectV1[];
+  rich_text?: NativeRichTextPreviewV1;
   conditional_fills?: NativeConditionalFillPreviewV1[];
 }
 export interface NativeTablePreviewV1 {
@@ -118,6 +120,7 @@ export function decodeNativeWorkbookObjectsV1(
   const hasPrintAreas = !!input && typeof input === "object" && Object.hasOwn(input, "print_areas");
   const hasPrintAreaSets = !!input && typeof input === "object" && Object.hasOwn(input, "print_area_sets");
   const hasPrintTitles = !!input && typeof input === "object" && Object.hasOwn(input, "print_titles");
+  const hasRichText = !!input && typeof input === "object" && Object.hasOwn(input, "rich_text");
   const hasConditionalFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_fills");
   const hasDrawings = !!input && typeof input === "object" && Object.hasOwn(input, "drawing_objects");
   const value = obj(input, [
@@ -133,6 +136,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasPrintTitles ? ["print_titles"] : []),
     ...(hasDrawings ? ["drawing_objects"] : []),
     ...(hasConditionalFills ? ["conditional_fills"] : []),
+    ...(hasRichText ? ["rich_text"] : []),
   ]);
   if (
     value.protocol !== "injoffice.xlsx.preview-objects" ||
@@ -344,6 +348,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasPrintAreas ? { print_areas: decodeNativeSheetPrintAreasV1(value.print_areas) } : {}),
     ...(hasPrintAreaSets ? { print_area_sets: decodeNativeSheetPrintAreaSetsV1(value.print_area_sets) } : {}),
     ...(hasPrintTitles ? { print_titles: decodeNativeSheetPrintTitlesV1(value.print_titles) } : {}),
+    ...(hasRichText ? { rich_text: decodeNativeRichTextPreviewV1(value.rich_text) } : {}),
     ...(hasConditionalFills ? { conditional_fills: decodeNativeConditionalFillPreviewsV1(value.conditional_fills) } : {}),
     ...(hasDrawings ? { drawing_objects: decodeNativeDrawingObjectsV1(value.drawing_objects) } : {}),
   };

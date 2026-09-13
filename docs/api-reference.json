@@ -11969,6 +11969,11 @@
               "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
             },
             {
+              "name": "decodeNativeRichTextPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -12402,6 +12407,26 @@
               "name": "NativeRenderStyleV2",
               "kind": "type",
               "signature": "NativeRenderStyleV2"
+            },
+            {
+              "name": "NativeRichTextCellV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextCellV1"
+            },
+            {
+              "name": "NativeRichTextPreviewV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextPreviewV1"
+            },
+            {
+              "name": "nativeRichTextRunDisclosureV1",
+              "kind": "function",
+              "signature": "export declare function nativeRichTextRunDisclosureV1(run: NativeRichTextRunV1): string"
+            },
+            {
+              "name": "NativeRichTextRunV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextRunV1"
             },
             {
               "name": "NativeSheetBorderSegmentV1",
@@ -13244,6 +13269,11 @@
               "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
             },
             {
+              "name": "selectNativeRichTextPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeRichTextPreviewV1"
+            },
+            {
               "name": "selectNativeSheetPrintAreaSetV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaSetV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): readonly NativeSheetViewportV2[]"
@@ -13480,6 +13510,11 @@
               "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
             },
             {
+              "name": "decodeNativeRichTextPreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -13593,6 +13628,26 @@
               "name": "NativePositionedDrawingV1",
               "kind": "type",
               "signature": "NativePositionedDrawingV1"
+            },
+            {
+              "name": "NativeRichTextCellV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextCellV1"
+            },
+            {
+              "name": "NativeRichTextPreviewV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextPreviewV1"
+            },
+            {
+              "name": "nativeRichTextRunDisclosureV1",
+              "kind": "function",
+              "signature": "export declare function nativeRichTextRunDisclosureV1(run: NativeRichTextRunV1): string"
+            },
+            {
+              "name": "NativeRichTextRunV1",
+              "kind": "type",
+              "signature": "export interface NativeRichTextRunV1"
             },
             {
               "name": "NativeSheetCellDisplayFormatResultV2",
@@ -13773,6 +13828,11 @@
               "name": "selectNativeConditionalFillPreviewV1",
               "kind": "function",
               "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
+            },
+            {
+              "name": "selectNativeRichTextPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeRichTextPreviewV1"
             },
             {
               "name": "selectNativeSheetPrintAreaSetV1",

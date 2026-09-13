@@ -5,7 +5,7 @@ function fixture(): NativeRichTextPreviewV1 { return { cells: [{ sheet_id: '1', 
 function source(p = fixture()) {
   const e = p.cells[0]!
   const workbook = { source: { package_sha256: `sha256:${'a'.repeat(64)}` }, sheets: [{ id: '1', part_name: e.sheet_part, merged_ranges: [], cells: [{ row: 0, column: 0, ref: 'A1', style_id: 0, value: { kind: 'string', rich: true, storage: 'shared', lexical: '0', text: e.text, runs: e.runs!.map(({ omitted, properties, ...r }) => r) } }] }], styles: [{ id: 0, effective: { projection: 'full', unsupported: [], bold: false, italic: false } }] } as unknown as NativeWorkbookV2
-  return { workbook, objects: { package_sha256: workbook.source.package_sha256, rich_text: p, tables: [] } }
+  return { workbook, objects: { protocol: 'injoffice.xlsx.preview-objects' as const, version: 1 as const, package_sha256: workbook.source.package_sha256, rich_text: p, tables: [], charts: [] } }
 }
 it('decodes owned source evidence and distinguishes direct from inherited fallback', () => {
   const p = fixture(), d = decodeNativeRichTextPreviewV1(p); d.cells[0]!.runs![0]!.text = 'changed'; expect(p.cells[0]!.runs![0]!.text).toBe('bold ')
@@ -56,4 +56,13 @@ it('enforces aggregate run and text budgets independently', () => {
   const textHeavy = { cells: Array.from({ length: 17 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(2048), runs: [{ text: 'x'.repeat(2048), properties: 'direct' as const, omitted: [] }] })), warnings: [] }
   expect(() => decodeNativeRichTextPreviewV1(textHeavy)).toThrow()
   textHeavy.cells.pop(); expect(decodeNativeRichTextPreviewV1(textHeavy).cells).toHaveLength(16)
+})
+it('decodes maximum conditional-fill and rich-run evidence together in the public envelope', async () => {
+  const { decodeNativeWorkbookObjectsV1 } = await import('./nativeObjectsPreviewV1.js')
+  const rich = fixture(), seed = rich.cells[0]!
+  rich.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_size_points: 11, font_color: '#112233', bold: false, italic: false, omitted: ['baseline', 'font-family-hint', 'underline-none', 'strike-false'] })) }))
+  const conditional_fills = Array.from({ length: 4 }, (_, index) => ({ sheet_id: String(index + 1), sheet_part: `xl/worksheets/sheet${index + 1}.xml`, status: 'available', warnings: ['Stored integers only.'], rule: { ref: 'A1:BL64', operator: 'equal', operand: '0', priority: 1, stop_if_true: false, dxf_id: 0, fill: '#112233' }, cells: Array.from({ length: 4096 }, (_, i) => ({ row: Math.floor(i / 64), column: i % 64, lexical: '0', cached: false, matches: true })) }))
+  const hash = `sha256:${'a'.repeat(64)}`, envelope = { protocol: 'injoffice.xlsx.preview-objects', version: 1, package_sha256: hash, tables: [], charts: [], conditional_fills, rich_text: rich }
+  const result = decodeNativeWorkbookObjectsV1(envelope, hash)
+  expect(result.conditional_fills).toHaveLength(4); expect(result.rich_text?.cells).toHaveLength(256)
 })

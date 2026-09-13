@@ -1,5 +1,6 @@
 import { snapshotNativePlainData } from './nativePlainData.js'
 import type { NativeWorkbookV2 } from './nativeContractV2.generated.js'
+import type { NativeWorkbookObjectsV1 } from './nativeObjectsPreviewV1.js'
 
 export interface NativeRichTextRunV1 {
   text: string
@@ -69,11 +70,9 @@ export function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPre
 
 /** Require current package, worksheet, cell, string index, style and run joins.
  * Unknown/unsupported raw formatting stays an explicit plaintext omission. */
-export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: {
-  package_sha256: string; rich_text?: NativeRichTextPreviewV1; tables: { sheet_part?: string }[]
-}): NativeRichTextPreviewV1 {
+export function selectNativeRichTextPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeRichTextPreviewV1 {
   const fail = (): never => { throw new TypeError('Rich-text preview does not join the opened source') }
-  if (!/^sha256:[a-f0-9]{64}$/.test(workbook.source.package_sha256) || objects.package_sha256 !== workbook.source.package_sha256) return fail()
+  if (objects.protocol !== 'injoffice.xlsx.preview-objects' || objects.version !== 1 || !/^sha256:[a-f0-9]{64}$/.test(workbook.source.package_sha256) || objects.package_sha256 !== workbook.source.package_sha256) return fail()
   const sheets = workbook.sheets.filter(s => s.id === sheetId); if (sheets.length !== 1) return fail()
   const sheet = sheets[0]!, preview = decodeNativeRichTextPreviewV1(objects.rich_text ?? { cells: [], warnings: [] })
   const entries = preview.cells.filter(c => c.sheet_id === sheetId || c.sheet_part === sheet.part_name)

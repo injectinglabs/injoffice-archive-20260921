@@ -1,3 +1,4 @@
+import { NativeRichTextSpans, NativeRichTextDetails } from './NativeRichTextSpans'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
@@ -6,6 +7,7 @@ import {
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
   selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1,
+  selectNativeRichTextPreviewV1, type NativeRichTextPreviewV1,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2, type NativeSheetViewportV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
   type NativePositionedDrawingV1, type NativeChartPreviewV1,
@@ -19,7 +21,7 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -47,6 +49,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [useStoredRows, setUseStoredRows] = useState(false)
   const [compactGeneral, setCompactGeneral] = useState(false)
   const [conditionalFills, setConditionalFills] = useState(false)
+  const [richRuns, setRichRuns] = useState(false)
+  let rich: NativeRichTextPreviewV1 | undefined, richError = ''
+  if (richRuns) { try { rich = selectNativeRichTextPreviewV1(workbook, sheet.id, objects) } catch (error) { richError = error instanceof Error ? error.message : 'Rich source unavailable.' } }
   const [usePrintArea, setUsePrintArea] = useState(false)
   const [repeatHeadings, setRepeatHeadings] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
@@ -114,7 +119,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host', ...(usePrintArea ? { areaIndex: index } : {}) })))
+      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, richRuns, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host', ...(usePrintArea ? { areaIndex: index } : {}) })))
       setMessage(`${plans.reduce((total, plan) => total + plan.pages.length, 0)} preview pages. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -159,6 +164,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     </div>
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
     {usePrintArea && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
+    <label><input type="checkbox" checked={richRuns} onChange={event => { invalidate(); setRichRuns(event.target.checked) }}/> Preview supported rich-text runs</label>
+    {richRuns && <>
+      {richError && <p role="alert">{richError} Run styling omitted; plain source text retained.</p>}
+      <NativeRichTextDetails entries={rich?.cells ?? []} styles={workbook.styles} warnings={[...(rich?.warnings ?? []), ...sheet.cells.filter(c => c.value?.rich && !rich?.cells.some(e => e.ref === c.ref)).slice(0, 256).map(c => `${c.ref}: source run evidence unavailable or outside preview bounds; plain source text retained.`)]}/>
+    </>}
     <p role="status">{message}</p>
     {results?.map((result, index) => <div key={index} data-print-area={result.areaIndex}>
       {result.areaIndex !== undefined && <h4>Saved print area {result.areaIndex + 1}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}</h4>}
@@ -183,7 +193,7 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   let conditional: NativeConditionalFillPreviewV1 | undefined
@@ -192,6 +202,10 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     try { conditional = selectNativeConditionalFillPreviewV1(workbook, sheet.id, objects) }
     catch (error) { conditionalError = error instanceof Error ? error.message : 'Conditional source evidence is unavailable.' }
   }
+  let rich: NativeRichTextPreviewV1 | undefined
+  let richError = ''
+  if (richRuns) { try { rich = selectNativeRichTextPreviewV1(workbook, sheet.id, objects) } catch (error) { richError = error instanceof Error ? error.message : 'Rich source unavailable.' } }
+  const richCells = new Map(rich?.cells.map(entry => [entry.ref, entry]) ?? [])
   const conditionalMatches = new Set(conditional?.status === 'available' ? conditional.cells.filter(cell => cell.matches).map(cell => `${cell.row}:${cell.column}`) : [])
   const paintRegions = plan.pages.some(page => page.regions) ? plan.pages.flatMap(page => page.regions ?? [{ ...page, kind: 'body' as const }]) : undefined
   const cellMap = new Map(sheet.cells.map(cell => [`${cell.row}:${cell.column}`, cell]))
@@ -221,6 +235,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
       <p role="status">{cells.filter(c => c.display.cached).length} saved formula results; freshness is unknown and formulas are not recalculated. {cells.filter(c => c.display.warnings.length).length} cells have display warnings. {cells.filter(c => c.display.truncated).length} cells exceed the 2,048-character display limit. {cells.filter(c => c.display.compacted).length} General values use your compact display choice.</p>
       {!!disclosures.length && <details><summary>Cell display details ({disclosures.length})</summary><ul>{disclosures.slice(0,100).map(cell => <li key={cell.key}>{address(cell.row,cell.column)}: {cell.display.cached && 'Saved formula result; freshness unknown. '}{cell.display.warnings.join(' ')}{cell.display.truncated && ' Text is truncated in this preview. '}{cell.display.compacted && ' Host rounding applied; not Excel General. '}Stored value: {cell.display.stored.slice(0,256)}{cell.display.stored.length > 256 && '… (detail shortened)'}</li>)}</ul>{disclosures.length > 100 && <p>Showing the first 100 of {disclosures.length} cell details.</p>}</details>}
     </section>
+    {richRuns && <p>{richError || 'Rich-run styling is approximate; unavailable cell evidence retains plain text.'}</p>}
     {plan.pages.map(page => {
     return <figure key={page.number}>
       <figcaption>Page {page.number} · {page.regions ? 'body ' : ''}rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
@@ -239,7 +254,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
               <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined}/>
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
-              <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>
+              <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{richRuns && richCells.get(address(cell.row, cell.column))?.status === 'available' ? <NativeRichTextSpans entry={richCells.get(address(cell.row, cell.column))!} base={cell.style ?? {}} normal={workbook.normal_style} loadedFont={fontFamily}/> : cell.display.text.slice(0, 2048)}</text>
             </g>
           })}
           {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
