@@ -33,3 +33,14 @@ it('applies only qualified centered solid borders and keeps unsupported paint vi
  expect(html).toContain('1 tables have qualified source paint')
  expect(html).toContain('not PowerPoint rendering')
 })
+
+it('replays a preset with flat caps and explicit phase/corner limitations',()=>{
+ const preview:NativePptxTableGeometryPreview={policy:'host-sans-12pt-clipped-v1',paintPolicy:'source-no-style-preset-border-v1',paintOmissions:[],packageSHA256:'a'.repeat(64),sourceRevision:'rev-source',cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,omissions:[],slides:[{slideId:'s1',slideIndex:0,sourceBounds:{x:0,y:0,width:952500,height:476250},width:100,height:50,tables:[{objectId:'cNvPr-1',tableIndex:0,rect:{x:0,y:0,width:100,height:50},paint:{policy:'source-no-style-preset-border-v1',style_id:'{01234567-89AB-CDEF-0123-456789ABCDEF}',sources:[],fill:'none',border:{color:'112233',width_emu:19050,preset:'dashDot'}},dashArray:[8,6,2,6],cells:[{row:0,column:0,rect:{x:0,y:0,width:100,height:50},paragraphs:['Dash Dot']}]}]}]}
+ const html=renderToStaticMarkup(createElement(NativePptxTableGeometry,{preview,readingId:'read'}))
+ expect(html).toContain('data-source-paint="preset-border"')
+ expect(html).toContain('stroke-dasharray="8 6 2 6"')
+ expect(html).toContain('stroke-linecap="butt"')
+ expect(html).toContain('stroke-dashoffset="0"')
+ expect(html).toContain('upper-left corner with zero phase')
+ expect(html).toContain('PowerPoint edge phase and corner placement are unverified')
+})

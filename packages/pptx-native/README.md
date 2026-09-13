@@ -119,6 +119,24 @@ visible paint omissions. Transparent fills expose the host canvas. Text still us
 the original approximate host font/layout policy, and the strict native renderer,
 source bytes and mutation permissions remain unchanged.
 
+
+Preset table borders require the additional `source-no-style-preset-border-v1`
+paint option. The existing `source-no-style-solid-border-v1` option continues to
+omit dashed borders. Both retain the explicit `host-sans-12pt-clipped-v1` text
+policy and the same one-cell, structural no-style, no-fill, equal-edge source
+qualification. Only explicit flat caps, centered single strokes, round joins,
+no arrowheads and widths up to 10 pt qualify; custom dashes and unequal edge
+patterns remain omitted. Native table rendering is unchanged.
+
+The preset option accepts the ten non-solid values defined by ECMA-376 Part 1
+(2016), §20.1.10.49, and converts their alternating painted/gap runs into CSS
+lengths using the source line width. See the [primary ECMA-376 standard download](https://ecma-international.org/publications-and-standards/standards/ecma-376/).
+Its returned `dashArray` is immutable. The demo replays a closed SVG rectangle
+clockwise from the upper-left corner with zero dash phase. These repeat lengths
+come from the standard; PowerPoint's per-edge phase and corner placement have
+not been independently qualified. This is an explicit preview policy and does
+not establish Office raster parity or restore authored typography.
+
 Opaque chart records may carry `literalPie`, a bounded `literal-pie-v1` source
 projection with explicit literal integer values, RGB colors and first-slice
 angle. This optional read-only preview metadata does not change chart ownership,
