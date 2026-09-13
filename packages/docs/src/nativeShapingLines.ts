@@ -515,7 +515,7 @@ function qualifyNoteNumbers(document: NativeDocxDocumentV1): QualifiedNoteNumber
   const relationshipKinds = new Map<string, 'footnote' | 'endnote'>()
   for (const note of document.notes) {
     // Continuation separator stories are inert until continuation is needed.
-    // Bounded v1 never shapes them because actual continuation is refused.
+    // They have no numeric label; source binding is checked when activated.
     if (note.note_role === 'continuation-separator') continue
     if (!note.relationship_id) issues.push({ scope: note.id, message: 'Note story is not bound to its resolved main-document relationship' })
     else {
@@ -2071,7 +2071,9 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
   const paragraphs: NativeDocxShapedParagraphV1[] = []
   storyLoop:
   for (const story of nativeStories(request.document)) {
-    if (story.note_role === 'continuation-separator') continue
+    // The compiler activates an endnote sentinel at its qualified paragraph width
+    // only after pagination proves that the owning note requires continuation.
+    if (story.note_role === 'continuation-separator' && (story.kind !== 'endnote' || !paragraphWidths?.has(story.blocks[0]?.id ?? ''))) continue
     for (const block of story.blocks) {
       if (block.kind === 'table' && block.table) {
         if (paragraphWidths) {

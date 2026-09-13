@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 // All-or-nothing source-literal profile. Frame fitting is host policy, not Office layout.
@@ -63,7 +62,7 @@ func extractNativeLiteralPie(payload []byte, part string, d nativeExtractDialect
 		return nil
 	}
 	ser := pie.Children[1]
-	if requireOnlyNativeAttrs(ser) != nil || !onlyNativeXMLSpace(ser.Text) || len(ser.Children) < 4 || len(ser.Children) > 67 {
+	if requireOnlyNativeAttrs(ser) != nil || !onlyNativeXMLSpace(ser.Text) || len(ser.Children) < 3 || len(ser.Children) > 68 {
 		return nil
 	}
 	if _, err := val(ser.Children[0], "idx", 0, 0); err != nil {
@@ -85,10 +84,14 @@ func extractNativeLiteralPie(payload []byte, part string, d nativeExtractDialect
 		return nil
 	}
 	count, err := val(lit.Children[1], "ptCount", 1, 64)
-	if err != nil || count != int64(len(lit.Children)-2) || count != int64(len(ser.Children)-3) {
+	if err != nil || count != int64(len(lit.Children)-2) {
 		return nil
 	}
-	result := &NativeLiteralPie{Profile: "literal-pie-v1", FirstSliceAngle: angle, Values: []int64{}, Colors: []string{}}
+	colors, ok := nativeLiteralPieColors(ser.Children[2:len(ser.Children)-1], len(lit.Children)-2, d)
+	if !ok {
+		return nil
+	}
+	result := &NativeLiteralPie{Profile: "literal-pie-v1", FirstSliceAngle: angle, Values: []int64{}, Colors: colors}
 	for i := 0; i < len(lit.Children)-2; i++ {
 		pt := lit.Children[i+2]
 		if pt.Name != (xml.Name{Space: d.chart, Local: "pt"}) || requireOnlyNativeAttrs(pt, xml.Name{Local: "idx"}) != nil || requireOnlyNativeChildren(pt, xml.Name{Space: d.chart, Local: "v"}) != nil || len(pt.Children) != 1 {
@@ -106,27 +109,7 @@ func extractNativeLiteralPie(payload []byte, part string, d nativeExtractDialect
 		if err != nil {
 			return nil
 		}
-		point := ser.Children[i+2]
-		if point.Name != (xml.Name{Space: d.chart, Local: "dPt"}) || !seq(point, d.chart, "idx", "spPr") {
-			return nil
-		}
-		if _, err := val(point.Children[0], "idx", int64(i), int64(i)); err != nil {
-			return nil
-		}
-		paint := point.Children[1]
-		if !seq(paint, d.drawing, "solidFill", "ln") || !seq(paint.Children[0], d.drawing, "srgbClr") || !seq(paint.Children[1], d.drawing, "noFill") || requireEmptyNativeElement(paint.Children[1].Children[0]) != nil {
-			return nil
-		}
-		rgb := paint.Children[0].Children[0]
-		if requireOnlyNativeAttrs(rgb, xml.Name{Local: "val"}) != nil || requireOnlyNativeChildren(rgb) != nil {
-			return nil
-		}
-		color, ok := exactNativeAttr(rgb, "", "val")
-		if !ok || !inspectionRGB.MatchString(color) {
-			return nil
-		}
 		result.Values = append(result.Values, number)
-		result.Colors = append(result.Colors, "#"+strings.ToUpper(color))
 	}
 	return result
 }

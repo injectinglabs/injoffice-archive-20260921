@@ -3580,7 +3580,7 @@
             {
               "name": "DOCX_PAGINATION_DIAGNOSTIC_CODES",
               "kind": "const",
-              "signature": "export declare const DOCX_PAGINATION_DIAGNOSTIC_CODES: readonly [\"source-diagnostic\", \"settings-attestation-unsupported\", \"default-tab-stop-mismatch\", \"body-table-unsupported\", \"body-structure-unsupported\", \"source-control-unsupported\", \"shaped-paragraph-missing\", \"shaped-paragraph-mismatch\", \"section-map-invalid\", \"section-break-unsupported\", \"multi-column-unsupported\", \"column-geometry-invalid\", \"column-balance-ambiguous\", \"section-geometry-invalid\", \"section-width-mismatch\", \"line-geometry-invalid\", \"keep-chain-conflict\", \"keep-chain-unsatisfiable\", \"keep-lines-unsatisfiable\", \"widow-control-unsatisfiable\", \"header-footer-selection-deferred\", \"note-structure-unsupported\", \"note-reference-ambiguous\", \"note-separator-unsupported\", \"note-overflow-unsupported\", \"resource-limit\"]"
+              "signature": "export declare const DOCX_PAGINATION_DIAGNOSTIC_CODES: readonly [\"source-diagnostic\", \"settings-attestation-unsupported\", \"default-tab-stop-mismatch\", \"body-table-unsupported\", \"body-structure-unsupported\", \"source-control-unsupported\", \"shaped-paragraph-missing\", \"shaped-paragraph-mismatch\", \"section-map-invalid\", \"section-break-unsupported\", \"multi-column-unsupported\", \"column-geometry-invalid\", \"column-balance-ambiguous\", \"section-geometry-invalid\", \"section-width-mismatch\", \"line-geometry-invalid\", \"keep-chain-conflict\", \"keep-chain-unsatisfiable\", \"keep-lines-unsatisfiable\", \"widow-control-unsatisfiable\", \"header-footer-selection-deferred\", \"note-structure-unsupported\", \"note-reference-ambiguous\", \"note-separator-unsupported\", \"note-continuation-shaping-required\", \"note-overflow-unsupported\", \"resource-limit\"]"
             },
             {
               "name": "DOCX_PAGINATION_LIMITS",
@@ -11964,6 +11964,11 @@
               "signature": "export declare function createNativeSheetGeometryRecordingSurfaceV2(maxCommands?: number): NativeSheetGeometryRecordingSurfaceV2"
             },
             {
+              "name": "decodeNativeConditionalFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -12277,6 +12282,26 @@
               "name": "NativeCompactGeneralPreviewV1",
               "kind": "type",
               "signature": "export type NativeCompactGeneralPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillCellV1"
+            },
+            {
+              "name": "NativeConditionalFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillRuleV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillRuleV1"
+            },
+            {
+              "name": "NativeConditionalOperatorV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -13214,6 +13239,11 @@
               "signature": "RowSetHeightMutation"
             },
             {
+              "name": "selectNativeConditionalFillPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
+            },
+            {
               "name": "selectNativeSheetPrintAreaSetV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaSetV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): readonly NativeSheetViewportV2[]"
@@ -13445,6 +13475,11 @@
               "signature": "export declare function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkbookRenderModelV2, fontBytes: Uint8Array): NativeMaximumDigitWidthAuthorityV2"
             },
             {
+              "name": "decodeNativeConditionalFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeSheetPrintAreaSetsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeSheetPrintAreaSetsV1(input: unknown): NativeSheetPrintAreaSetV1[]"
@@ -13518,6 +13553,26 @@
               "name": "NativeCompactGeneralPreviewV1",
               "kind": "type",
               "signature": "export type NativeCompactGeneralPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillCellV1"
+            },
+            {
+              "name": "NativeConditionalFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalFillRuleV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalFillRuleV1"
+            },
+            {
+              "name": "NativeConditionalOperatorV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -13713,6 +13768,11 @@
               "name": "projectNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function projectNativeWorkbookV2(input: unknown): NativeWorkbookRenderModelV2"
+            },
+            {
+              "name": "selectNativeConditionalFillPreviewV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
             },
             {
               "name": "selectNativeSheetPrintAreaSetV1",

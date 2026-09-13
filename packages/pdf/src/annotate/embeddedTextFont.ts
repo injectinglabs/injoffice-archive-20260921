@@ -1,5 +1,6 @@
-import type { PDFDocument, PDFFont } from 'pdf-lib'
+import type { AppearanceProviderFor, PDFDocument, PDFFont, PDFTextField } from 'pdf-lib'
 import { readFontFace } from '../textEdit/fontCmap.js'
+import { embeddedTextAppearance, type EmbeddedTextRun } from './embeddedTextAppearance.js'
 
 /** Caller-supplied, fixed TrueType face. This profile does not discover fonts. */
 export interface EmbeddedTextAppearanceFont {
@@ -7,11 +8,13 @@ export interface EmbeddedTextAppearanceFont {
 }
 
 const features = { kern: false, liga: false, clig: false, calt: false }
+const positionedFeatures = { ...features, kern: true }
 const maxBytes = 16 * 1024 * 1024
 
 export async function prepareEmbeddedTextFont(doc: PDFDocument, options: EmbeddedTextAppearanceFont): Promise<{
   embed(): Promise<PDFFont>
   qualify(value: string): void
+  appearanceProvider: AppearanceProviderFor<PDFTextField>
 }> {
   if (!(options.fontBytes instanceof Uint8Array) || options.fontBytes.length < 12 || options.fontBytes.length > maxBytes) {
     throw new RangeError('embedded appearance font must contain 12..16777216 bytes')
@@ -36,8 +39,13 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
   // PDF subset encoding uses one CID per glyph. Aliased scalars cannot share
   // that CID without losing the original text in its ToUnicode mapping.
   const scalarByGlyph = new Map<number, number>()
+  let qualified: EmbeddedTextRun | undefined
   return {
     embed: () => doc.embedFont(bytes, { subset: true, features }),
+    appearanceProvider(field, widget, font) {
+      if (!qualified) throw new Error('embedded appearance has no qualified text run')
+      return embeddedTextAppearance(field, widget, font, qualified)
+    },
     qualify(value) {
       if (value.length > 4096) throw new Error('embedded appearance text exceeds 4096 UTF-16 units')
       // Only independent horizontal glyphs are qualified. Marks, bidi controls,
@@ -49,7 +57,7 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
       }
       const scalars = [...value].map(character => character.codePointAt(0)!)
       if (scalars.some(scalar => !parsed.hasGlyphForCodePoint(scalar))) throw new Error('embedded appearance font is missing a requested glyph')
-      const run = parsed.layout(value, features)
+      const run = parsed.layout(value, positionedFeatures)
       const pending = new Map(scalarByGlyph)
       for (let index = 0; index < run.glyphs.length; index++) {
         const glyph = run.glyphs[index]!
@@ -64,9 +72,17 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
         const position = run.positions[index]!
         return glyph.id === 0 || glyph.id !== parsed.glyphForCodePoint(scalars[index]!).id
           || !Number.isFinite(glyph.advanceWidth) || glyph.advanceWidth < 0
-          || position.xAdvance !== glyph.advanceWidth || position.yAdvance !== 0 || position.xOffset !== 0 || position.yOffset !== 0
+          || !Number.isFinite(position.xAdvance) || position.xAdvance < 0
+          || position.yAdvance !== 0 || position.xOffset !== 0 || position.yOffset !== 0
       })) throw new Error('embedded appearance text requires unsupported glyph shaping or positioning')
+      // Subsetting encodes with kerning disabled. Its glyph selection must be
+      // identical to the positioned run; only advances may differ.
+      const encodedRun = parsed.layout(value, features)
+      if (encodedRun.glyphs.length !== run.glyphs.length || encodedRun.glyphs.some((glyph, index) => glyph.id !== run.glyphs[index]!.id)) {
+        throw new Error('embedded appearance positioning changes encoded glyphs')
+      }
       for (const [glyph, scalar] of pending) scalarByGlyph.set(glyph, scalar)
+      qualified = { value, unitsPerEm: parsed.unitsPerEm, advances: run.positions.map(position => position.xAdvance), nominalAdvances: run.glyphs.map(glyph => glyph.advanceWidth) }
     },
   }
 }
