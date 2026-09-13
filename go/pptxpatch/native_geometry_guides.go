@@ -3,6 +3,7 @@ package pptxpatch
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -19,21 +20,38 @@ const nativeGeometryMaxMagnitude = 9007199254740991.0
 const nativeGeometryAngleUnit = math.Pi / 10800000
 
 type nativeGeometryGuide struct{ Name, Formula string }
-type nativeGeometryGuides map[string]float64
+type nativeGeometryGuides struct {
+	values    map[string]float64
+	exact     map[string]*big.Rat
+	intervals map[string]nativeGeometryInterval
+	symbols   map[string]string
+}
 
 func newNativeGeometryGuides(width, height float64) (nativeGeometryGuides, error) {
 	if !nativeGeometryFinite(width) || !nativeGeometryFinite(height) || width <= 0 || height <= 0 {
-		return nil, fmt.Errorf("invalid geometry extent")
+		return nativeGeometryGuides{}, fmt.Errorf("invalid geometry extent")
 	}
-	g := nativeGeometryGuides{"w": width, "h": height, "l": 0, "t": 0, "r": width, "b": height, "hc": width / 2, "vc": height / 2, "ss": math.Min(width, height), "ls": math.Max(width, height), "cd2": 10800000, "cd3": 7200000, "cd4": 5400000, "cd8": 2700000, "3cd4": 16200000, "3cd8": 8100000, "5cd8": 13500000, "7cd8": 18900000}
+	g := nativeGeometryGuides{values: map[string]float64{"w": width, "h": height, "l": 0, "t": 0, "r": width, "b": height, "hc": width / 2, "vc": height / 2, "ss": math.Min(width, height), "ls": math.Max(width, height), "cd2": 10800000, "cd3": 7200000, "cd4": 5400000, "cd8": 2700000, "3cd4": 16200000, "3cd8": 8100000, "5cd8": 13500000, "7cd8": 18900000}, exact: map[string]*big.Rat{}, intervals: map[string]nativeGeometryInterval{}, symbols: map[string]string{}}
 	for _, d := range []int{2, 3, 4, 5, 6, 8, 10, 12, 32} {
-		g[fmt.Sprintf("wd%d", d)] = width / float64(d)
+		g.values[fmt.Sprintf("wd%d", d)] = width / float64(d)
 	}
 	for _, d := range []int{2, 3, 4, 5, 6, 8, 10} {
-		g[fmt.Sprintf("hd%d", d)] = height / float64(d)
+		g.values[fmt.Sprintf("hd%d", d)] = height / float64(d)
 	}
 	for _, d := range []int{2, 4, 6, 8, 16, 32} {
-		g[fmt.Sprintf("ssd%d", d)] = g["ss"] / float64(d)
+		g.values[fmt.Sprintf("ssd%d", d)] = g.values["ss"] / float64(d)
+	}
+	for name, value := range g.values {
+		g.exact[name] = new(big.Rat).SetFloat64(value)
+	}
+	for _, axis := range []struct{ prefix, base string }{{"wd", "w"}, {"hd", "h"}, {"ssd", "ss"}} {
+		for name := range g.values {
+			if strings.HasPrefix(name, axis.prefix) {
+				if divisor, err := strconv.ParseInt(strings.TrimPrefix(name, axis.prefix), 10, 64); err == nil && divisor > 0 {
+					g.exact[name] = new(big.Rat).Quo(g.exact[axis.base], big.NewRat(divisor, 1))
+				}
+			}
+		}
 	}
 	return g, nil
 }
@@ -42,7 +60,7 @@ func nativeGeometryFinite(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0) && math.Abs(v) <= nativeGeometryMaxMagnitude
 }
 func (g nativeGeometryGuides) resolve(token string) (float64, error) {
-	if v, ok := g[token]; ok {
+	if v, ok := g.values[token]; ok {
 		return v, nil
 	}
 	// DrawingML numeric operands are integer lexical tokens, not IEEE literals.
@@ -71,14 +89,25 @@ func (g nativeGeometryGuides) evaluateWithIntermediateLimit(guides []nativeGeome
 		if _, numericErr := strconv.ParseFloat(guide.Name, 64); numericErr == nil {
 			return fmt.Errorf("ambiguous numeric geometry guide name %q", guide.Name)
 		}
-		if _, exists := g[guide.Name]; exists {
+		if _, exists := g.values[guide.Name]; exists {
 			return fmt.Errorf("duplicate geometry guide %q", guide.Name)
 		}
 		value, err := g.formulaWithIntermediateLimit(guide.Formula, limit)
 		if err != nil {
 			return fmt.Errorf("guide %q: %w", guide.Name, err)
 		}
-		g[guide.Name] = value
+		exact, exactErr := g.exactFormula(strings.Fields(guide.Formula))
+		if exactErr != nil {
+			return fmt.Errorf("guide %q: %w", guide.Name, exactErr)
+		}
+		g.values[guide.Name] = value
+		g.exact[guide.Name] = exact
+		interval, intervalErr := g.intervalFormula(strings.Fields(guide.Formula), exact)
+		if intervalErr != nil {
+			return fmt.Errorf("guide %q: %w", guide.Name, intervalErr)
+		}
+		g.intervals[guide.Name] = interval
+		g.symbols[guide.Name] = g.formulaSymbol(strings.Fields(guide.Formula), exact)
 	}
 	return nil
 }
@@ -105,7 +134,29 @@ func (g nativeGeometryGuides) formulaWithIntermediateLimit(formula string, limit
 		}
 		a[i] = v
 	}
+	exact, err := g.exactFormula(fields)
+	if err != nil {
+		return 0, err
+	}
+	if exact != nil {
+		if new(big.Rat).Abs(exact).Cmp(new(big.Rat).SetFloat64(limit)) > 0 {
+			return 0, fmt.Errorf("geometry formula exceeds numeric bounds")
+		}
+		out, _ := exact.Float64()
+		if math.IsNaN(out) || math.IsInf(out, 0) || math.Abs(out) > limit || (out == 0 && exact.Sign() != 0) {
+			return 0, fmt.Errorf("geometry formula exceeds numeric bounds")
+		}
+		return out, nil
+	}
+	if _, err := g.intervalFormula(fields, nil); err != nil {
+		return 0, err
+	}
 	x, y, z := a[0], a[1], a[2]
+	if fields[0] == "?:" {
+		if predicate := g.exactOperand(fields[1]); predicate != nil {
+			x = float64(predicate.Sign())
+		}
+	}
 	var out float64
 	switch fields[0] {
 	case "*/":

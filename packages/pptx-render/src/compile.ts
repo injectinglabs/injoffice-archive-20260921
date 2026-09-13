@@ -1,3 +1,4 @@
+import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
 import {createNativeLiteralBarPaths} from './literalBar.js'
 import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
 import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
@@ -1858,7 +1859,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
   // scale so strokes, shaped text, pictures, and descendants all inherit it.
   const base = element.kind === 'group'
     ? exactGroupBase(element, zIndex, state.budget)
-    : elementBase(element, zIndex, state.budget, !hasNativeTextBody && element.kind !== 'connector')
+    : elementBase(element, zIndex, state.budget, !hasNativeTextBody && element.kind !== 'connector' && !(element.kind==='shape'&&element.geometry))
   const world = checkedWorldAffine(parentWorld, base.transform, base.bounds, `$.elements.${element.id}`, state.budget)
   switch (element.kind) {
     case 'text': {
@@ -1867,6 +1868,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       return { kind: 'text', ...base, textBody: await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'text', bounds, layout: element.textBody }, state) }
     }
     case 'shape':
+      if(element.fill && element.geometry?.paths.some(path=>path.fillMode!=='norm'&&path.fillMode!=='none'))state.diagnostics.push({severity:'warning',code:'geometry.deterministicPathTone',message:`DrawingML shaded paths use ${DRAWINGML_PATH_FILL_POLICY}; these relative-tone preview strengths are not qualified PowerPoint colors.`,slideId:state.slide.id,elementId:element.id})
       if (element.paragraphs.length && !element.textBody) state.diagnostics.push({ severity: 'info', code: 'text.layoutMetadataUnavailable', message: 'legacy native PPTX shape text has no text-body layout; shaped compatibility preview remains clipped to element bounds', slideId: state.slide.id, elementId: element.id })
       if (!element.preset&&!element.geometry) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
       return {

@@ -40,7 +40,7 @@ func TestNativeGeometryGuideOrderAndRefusal(t *testing.T) {
 		})
 	}
 	g, _ := newNativeGeometryGuides(600, 400)
-	if err := g.evaluate([]nativeGeometryGuide{{"a", "*/ w 1 3"}, {"b1", "+- a 5 0"}}); err != nil || g["b1"] != 205 {
+	if err := g.evaluate([]nativeGeometryGuide{{"a", "*/ w 1 3"}, {"b1", "+- a 5 0"}}); err != nil || g.values["b1"] != 205 {
 		t.Fatalf("ordered evaluation: %v %v", g, err)
 	}
 	if err := g.evaluate([]nativeGeometryGuide{{"a", "val 1"}}); err == nil {
@@ -80,10 +80,10 @@ func TestNativeGeometryIntermediateAndOutputBudgets(t *testing.T) {
 	if err := g.evaluateWithIntermediateLimit([]nativeGeometryGuide{{"squared", "*/ w w 1"}, {"fourth", "*/ squared squared 1"}, {"restored", "*/ fourth 1 squared"}}, nativeGeometryMaxIntermediate); err != nil {
 		t.Fatal(err)
 	}
-	if g["fourth"] <= nativeGeometryMaxMagnitude || g["restored"] != 16000000000000 {
+	if g.values["fourth"] <= nativeGeometryMaxMagnitude || g.values["restored"] != 16000000000000 {
 		t.Fatal("bounded higher-order guides failed")
 	}
-	if _, err := nativeGeometryRound(g["fourth"]); err == nil {
+	if _, err := nativeGeometryRound(g.values["fourth"]); err == nil {
 		t.Fatal("intermediate leaked beyond output budget")
 	}
 	for i := 0; i < 12; i++ {
@@ -107,7 +107,7 @@ func TestNativeGeometryCustomRejectsUnsafeCancellationIntermediate(t *testing.T)
 	if err := g.evaluate([]nativeGeometryGuide{{"square", "*/ w w 1"}, {"increment", "+- square 1 0"}, {"delta", "+- increment 0 square"}, {"final", "*/ delta w 1"}}); err == nil {
 		t.Fatal("unsafe arbitrary custom intermediate accepted")
 	}
-	if _, exists := g["square"]; exists {
+	if _, exists := g.values["square"]; exists {
 		t.Fatal("unsafe result published")
 	}
 }

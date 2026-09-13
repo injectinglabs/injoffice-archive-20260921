@@ -393,9 +393,31 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 			gaps.add("pptx.custom-geometry-preview", "DrawingML custom paths and text rectangle evaluated from source; geometry remains read-only", false)
 		}
 	} else {
-		preset = validateNativeAutoShapeGeometry(node, dialect, gaps)
+		legacyGaps := nativeShapeGapSet{}
+		preset = validateNativeAutoShapeGeometry(node, dialect, &legacyGaps)
+		presetNode := nativeChild(node, dialect.drawing, "prstGeom")
+		if preset != nil || presetNode == nil || custom != nil {
+			for _, gap := range legacyGaps.values {
+				gaps.add(gap.code, gap.message, gap.refusal)
+			}
+		} else {
+			geometry, err = evaluateNativePresetSource(presetNode, dialect.drawing, *transform.Cx, *transform.Cy)
+			if err != nil {
+				gaps.add("pptx.autoshape-geometry-unavailable", "preset geometry is outside the evaluated profile: "+err.Error(), true)
+			} else {
+				gaps.add("pptx.preset-catalog-preview", "DrawingML preset catalog paths and adjustments evaluated from source; geometry remains read-only", false)
+			}
+		}
 	}
 	fill := validateNativeAutoShapeFill(node, dialect, theme, gaps)
+	if geometry != nil && fill != nil {
+		for _, path := range geometry.Paths {
+			if path.FillMode != "norm" && path.FillMode != "none" {
+				gaps.add("pptx.deterministic-path-tone-preview", "DrawingML shaded paths use linear-srgb-path-tone-20-40-v1; these relative-tone preview strengths are not qualified PowerPoint colors", false)
+				break
+			}
+		}
+	}
 	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, false, gaps)
 	if err != nil {
 		return NativeTransform{}, nil, nil, nil, nil, err

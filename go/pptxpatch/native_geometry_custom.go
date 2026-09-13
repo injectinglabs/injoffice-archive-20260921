@@ -3,6 +3,7 @@ package pptxpatch
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -106,6 +107,9 @@ func evaluateNativeGeometryWithIntermediateLimit(node *nativeXMLNode, ns string,
 			if err != nil {
 				return nil, err
 			}
+			if _, err := g.qualifyOutputAttribute(rect, key, 1); err != nil {
+				return nil, err
+			}
 			edge, err := nativeGeometryRound(v)
 			if err != nil {
 				return nil, err
@@ -166,7 +170,7 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 	}
 	result := &NativeGeometryPath{FillMode: "norm", Stroke: true}
 	if fill, ok := exactNativeAttr(node, "", "fill"); ok {
-		if fill != "norm" && fill != "none" {
+		if !nativeGeometryFillMode(fill) {
 			return nil, fmt.Errorf("unsupported geometry path fill")
 		}
 		result.FillMode = fill
@@ -197,6 +201,14 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 			*axis.scale = axis.extent / v
 		}
 	}
+	pathUncertainty := 0.0
+	addUncertainty := func(value float64) error {
+		pathUncertainty += value
+		if math.IsNaN(pathUncertainty) || math.IsInf(pathUncertainty, 0) || pathUncertainty > nativeGeometryMaxOutputUncertainty {
+			return fmt.Errorf("geometry accumulated path uncertainty exceeds one eighth EMU")
+		}
+		return nil
+	}
 	for _, command := range node.Children {
 		kind := command.Name.Local
 		switch kind {
@@ -221,6 +233,37 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 					return nil, err
 				}
 				values = append(values, v)
+			}
+			// A polar ellipse can magnify angular uncertainty by rMax²/rMin.
+			// Bound radius sensitivity conservatively by the cubed aspect ratio.
+			maxR, minR := math.Max(values[0], values[1]), math.Min(values[0], values[1])
+			if minR > 0 {
+				aspect := maxR / minR
+				scale := math.Max(math.Abs(p.sx), math.Abs(p.sy))
+				uncertainty := 0.0
+				for _, key := range []string{"wR", "hR"} {
+					u, e := g.qualifyOutputAttribute(command, key, 2*scale*aspect*aspect*aspect)
+					if e != nil {
+						return nil, e
+					}
+					uncertainty += u
+				}
+				for _, key := range []string{"stAng", "swAng"} {
+					u, e := g.qualifyOutputAttribute(command, key, 2*scale*maxR*aspect*nativeGeometryAngleUnit)
+					if e != nil {
+						return nil, e
+					}
+					uncertainty += u
+				}
+				// Every arc endpoint uses the prior pen and two polar offsets.
+				// Conservatively sum the whole path, including all previous arcs.
+				// The construction allowance includes up to four split segments,
+				// libm conversion, ellipse conditioning and floating additions.
+				magnitude := math.Max(maxR, math.Max(math.Abs(p.pen.x), math.Abs(p.pen.y)))
+				uncertainty += 1024 * 2.220446049250313e-16 * scale * magnitude * aspect * aspect * aspect
+				if err := addUncertainty(uncertainty); err != nil {
+					return nil, err
+				}
 			}
 			if err := p.arc(values[0], values[1], values[2], values[3]); err != nil {
 				return nil, err
@@ -251,6 +294,22 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 				y, err := nativeGeometryAttribute(g, point, "y")
 				if err != nil {
 					return nil, err
+				}
+				for _, axis := range []struct {
+					key          string
+					scale, value float64
+				}{{"x", p.sx, x}, {"y", p.sy, y}} {
+					u, err := g.qualifyOutputAttribute(point, axis.key, axis.scale)
+					if err != nil {
+						return nil, err
+					}
+					// Non-unit path-space division/multiplication is not exact.
+					if axis.scale != 1 {
+						u += 16 * 2.220446049250313e-16 * math.Abs(axis.value*axis.scale)
+					}
+					if err := addUncertainty(u); err != nil {
+						return nil, err
+					}
 				}
 				points = append(points, nativeGeometryPoint{x, y})
 			}

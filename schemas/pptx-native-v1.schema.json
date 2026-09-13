@@ -730,7 +730,11 @@
           "type": "string",
           "enum": [
             "norm",
-            "none"
+            "none",
+            "darken",
+            "darkenLess",
+            "lighten",
+            "lightenLess"
           ]
         },
         "stroke": {
