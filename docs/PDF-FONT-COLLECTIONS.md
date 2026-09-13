@@ -1,0 +1,11 @@
+# Embedded font collections
+
+`textAppearance: { fontBytes, faceIndex: 1 }` selects the second face of a caller-supplied TTC/OTC collection. The default index is zero; standalone fonts accept only zero. The selected face must satisfy the existing fixed TrueType outline profile. A collection can contain unsupported faces without making a supported selected face unavailable. The source collection and PDF bytes remain unchanged.
+
+The collection input is limited to 16 MiB and 64 faces. TTC versions 1 and 2 are accepted. All face directories must have bounded, aligned metadata; selected tables must have unique tags and valid nonoverlapping byte ranges outside directory/signature metadata. Repacking preserves glyph indices and table content, except for the recalculated `head.checkSumAdjustment`, drops invalidated DSIG data, sorts table records, aligns padding, and recomputes search fields and checksums. Only the selected complete face is embedded in the saved PDF. Incoming checksum declarations are not used as authenticity checks.
+
+The playground accepts local `.ttf`, `.ttc`, and `.otc` files, displays a zero-based collection face selector, prevents invalid indices, and resets the selection on a changed font or PDF. Unicode shaping, exact source `/V`, ownership, mixed standard-choice appearances, and atomic refusals follow the existing profile. CFF outlines, variable fonts and color fonts remain explicitly unsupported at this milestone; an `.otc` extension alone does not guarantee a supported face.
+
+The offline fixture generator combines the existing pinned OFL Noto Devanagari and Bengali faces without changing their glyph programs. Its adjacent JSON records source hashes, licenses and the resulting TTC hash. Unit tests check both selections, output checksums, malformed structures and saved Bengali form values. The permanent browser test uploads the collection, saves its second face, inspects the embedded standalone font, and verifies invalid-index and changed-file reset behavior.
+
+The format and reconstruction follow the primary [OpenType font file specification](https://learn.microsoft.com/en-us/typography/opentype/spec/otff) and [head table specification](https://learn.microsoft.com/en-us/typography/opentype/spec/head).
