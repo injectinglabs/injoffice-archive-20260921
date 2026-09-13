@@ -837,10 +837,10 @@ function tableCommandsByPage(
   return commands
 }
 
-function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDocxPlacedLineV1, storyID: string): NativeDocxStrokeNoteSeparatorCommandV1 | undefined {
+function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDocxPlacedLineV1, storyID: string, continuation = false): NativeDocxStrokeNoteSeparatorCommandV1 | undefined {
   const column = page.columns[placed.column_ordinal]
   if (!column || column.id !== placed.column_id || column.section_id !== placed.section_id || column.ordinal !== placed.column_ordinal) return undefined
-  const x2 = Math.min(column.x_millipoints + column.width_millipoints, column.x_millipoints + 144_000)
+  const x2 = Math.min(column.x_millipoints + column.width_millipoints, column.x_millipoints + (continuation ? column.width_millipoints : 144_000))
   const y = placed.y_millipoints + Math.min(6_000, Math.floor(placed.height_millipoints / 2))
   if (!Number.isSafeInteger(x2) || !Number.isSafeInteger(y) || x2 <= column.x_millipoints) return undefined
   return {
@@ -1026,9 +1026,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       const firstCommand = contentCommands.length
       const highlights: NativeDocxFillTextHighlightCommandV1[] = []
       const underlines: NativeDocxStrokeTextUnderlineCommandV1[] = []
-      if (noteStory?.note_role === 'separator' && noteStory.lines[0]?.id === placed.id) {
+      if ((noteStory?.note_role === 'separator' || noteStory?.note_role === 'continuation-separator') && noteStory.lines[0]?.id === placed.id) {
         if (noteStory.lines.length !== 1 || line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'Instruction-only note separator must paint exactly one derived rule and no text or glyph commands') }
-        const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id)
+        const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id, noteStory.note_role === 'continuation-separator')
         if (!separator) return { ok: true, value: refusal(provenance, 'identity-mismatch', noteStory.story_id, 'Ordinary note separator cannot exact-join its placed line and column geometry') }
         contentCommands.push(separator)
       }
@@ -1312,9 +1312,9 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
         placements.forEach((placed) => {
           const line = shapedParagraphs.get(placed.paragraph_id)?.lines[placed.source_line_ordinal]
           const indexedStory = noteStoryByLineID.get(placed.id)
-          const separatorStory = indexedStory?.note_role === 'separator' ? indexedStory : undefined
+          const separatorStory = indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator' ? indexedStory : undefined
           if (separatorStory) {
-            const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, separatorStory.story_id)
+            const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, separatorStory.story_id, separatorStory.note_role === 'continuation-separator')
             if (separator) expectedSeparators.push({ pageIndex, command: separator })
           }
           let fragmentX = placed.x_millipoints
@@ -1354,7 +1354,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       if (!sameWire(actualUnderlines, expectedUnderlines)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'underlines must exactly cover source style and resolved font metrics')
       if (actualGlyphs.length !== expectedGlyphs.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every shaped glyph once')
       if (actualImages.length !== expectedImages.length) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly cover every qualified inline image once')
-      if (!sameWire(actualSeparators, expectedSeparators)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly derive one deterministic rule from each placed ordinary note separator')
+      if (!sameWire(actualSeparators, expectedSeparators)) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'paint commands must exactly derive one deterministic rule from each placed source-bound note separator')
       output.value.pages.forEach((page, pageIndex) => {
         const shapedParagraphs = new Map((request.value.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? request.value.pagination_request.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
         const source = request.value.paginated_layout.status === 'paginated' ? request.value.paginated_layout.pages[pageIndex] : undefined
@@ -1366,7 +1366,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           const placed = sourceLines[lineIndex]
           const shaped = placed ? shapedParagraphs.get(placed.paragraph_id)?.lines[placed.source_line_ordinal] : undefined
           const indexedStory = placed ? noteStoryByPlacedLineID.get(placed.id) : undefined
-          const separatorStory = indexedStory?.note_role === 'separator' ? indexedStory : undefined
+          const separatorStory = indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator' ? indexedStory : undefined
           const expectedCommandIDs = [
             ...(placed ? highlightIDsByPlacement.get(`${pageIndex}\0${placed.id}`) ?? [] : []),
             ...(separatorStory && placed ? [paintNoteSeparatorCommandID(placed.id)] : []),

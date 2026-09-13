@@ -391,8 +391,8 @@ quotient/remainder plan gives earlier columns at most one extra line. Multiline
 splits must respect `keep_lines` and default-on `widow_control`; when the ideal
 plan violates either, pagination refuses atomically instead of choosing a
 constrained rebalance. Source line ordinals and paragraph continuation flags
-remain explicit across columns and pages. Unequal widths, note continuation,
-and general constrained balancing remain outside this slice.
+remain explicit across columns and pages. Unequal widths and general
+constrained balancing remain outside this column slice.
 
 This bounded interpretation follows the OOXML definitions of
 [`noColumnBalance`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.nocolumnbalance?view=openxml-3.0.1)
@@ -424,7 +424,8 @@ exactly one self-label, and exactly one matching body reference. Labels use
 independent decimal sequences per kind, beginning at one. A used kind has one
 exact separator story. The paginator atomically reserves the unused bottom of
 each referencing page for that page's footnotes. It atomically places all
-endnotes at the end of the document, adding at most one final content page.
+endnotes at the end of the document. Whole fitting groups may move to one fresh
+final page; the bounded continuation profile below can append additional pages.
 Placed note stories preserve kind, native ID, relationship ID, role, reference
 run, assigned label, geometry, section ID, column ID/ordinal, and shaped-line
 provenance. WordprocessingML note-reference superscript remains in OOXML, but
@@ -486,16 +487,42 @@ selected header or footer is diagnosed and refuses the complete paint result;
 it is never omitted while body pages are published. Story-scoped asset
 selection and relationship closure require a later contract version.
 
-Notes requiring body reflow, a split note/group, multiple added endnote pages,
-or actual continuation refuse atomically. So do custom
+Notes requiring body reflow, within-paragraph splitting, or continuation outside
+the profile below refuse atomically. So do custom
 numbering/restarts/positions, ambiguous/duplicate/missing references, unpaired
 labels, duplicate IDs or relationship drift, cycles, nested tables, drawings,
 fields, and unknown note markup. Exact Word `w:separator` and
 `w:continuationSeparator` instruction leaves are admitted only in their
 matching `-1` and `0` sentinel stories. Page paint derives one bounded black
-separator rule from the placed ordinary sentinel; the continuation sentinel is
-inert when no continuation is needed, and actual continuation refuses
-atomically.
+separator rule from the placed ordinary sentinel. A continuation rule spans the
+full single-column text width. A dormant continuation sentinel is not shaped;
+the compiler performs one bounded shaping retry only after pagination emits
+`note-continuation-shaping-required` for its exact source story.
+
+Endnote continuation admits exactly one content endnote in one single-column
+section with no footnotes. Every note paragraph must have zero before/after
+spacing, no `keep_next`, no `page_break_before`, and no fields. Multiline
+paragraphs require resolved `keep_lines=true`; single-line paragraphs are
+already indivisible. The paginator greedily places complete paragraphs, adding
+a page when the next paragraph plus the separator cannot fit. It refuses a
+paragraph that cannot fit on an empty page. The first slice uses the ordinary
+separator even when moved to a fresh page; only later slices of the same note
+use the source-bound continuation sentinel. Custom continuation notices remain
+unsupported source semantics.
+
+Slices retain the existing page/story placement IDs and full source line
+identities. Content lines and the original label occur exactly once across
+all pages; no label, paragraph, or separator is synthesized. Request-bound
+validation replays the complete placement to reject omitted, reordered,
+duplicated, or transplanted slices. Geometry, font provenance, page budgets,
+and activated sentinel diagnostics remain mandatory. Placement is staged and
+any failure discards the entire result.
+
+This profile follows the OOXML definitions of
+[`keepLines`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.keeplines?view=openxml-3.0.1),
+[`continuationSeparator`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.continuationseparatormark?view=openxml-3.0.1),
+and document-end [`endnote pos`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.endnoteposition?view=openxml-3.0.1).
+It does not establish visual equivalence with Microsoft Word.
 
 Pagination limits are 2,048 pages, 100,000 placed lines, 100,000 paragraph
 slices, 1,000 diagnostics, two million traversed output values, and one

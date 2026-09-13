@@ -102,6 +102,7 @@ export const DOCX_PAGINATION_DIAGNOSTIC_CODES = Object.freeze([
   'note-structure-unsupported',
   'note-reference-ambiguous',
   'note-separator-unsupported',
+  'note-continuation-shaping-required',
   'note-overflow-unsupported',
   'resource-limit',
 ] as const)
@@ -193,7 +194,7 @@ export interface NativeDocxPlacedNoteStoryV1 {
   id: string
   story_id: string
   story_kind: 'footnote' | 'endnote'
-  note_role: 'content' | 'separator'
+  note_role: 'content' | 'separator' | 'continuation-separator'
   native_story_id: string
   relationship_id: string
   ordinal: number
