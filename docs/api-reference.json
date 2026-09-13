@@ -9970,6 +9970,11 @@
               "signature": "export interface NativeGroupElement extends NativeElementBase"
             },
             {
+              "name": "NativeLiteralPie",
+              "kind": "type",
+              "signature": "export interface NativeLiteralPie"
+            },
+            {
               "name": "NativeOpaqueChart",
               "kind": "type",
               "signature": "export interface NativeOpaqueChart"
@@ -10202,7 +10207,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"eb6f8e189d984d667aae04f7fff0204825714d4220c12eff417c9be4d73de7bc\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3\""
             },
             {
               "name": "provenanceValues",
@@ -10275,6 +10280,11 @@
               "name": "connectorPath",
               "kind": "function",
               "signature": "export declare function connectorPath(cx: number, cy: number, flipH: boolean): readonly RenderPathCommand[]"
+            },
+            {
+              "name": "createNativeLiteralPiePaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralPiePaths(pie: NativeLiteralPie, cx: number, cy: number): readonly"
             },
             {
               "name": "createRecordingPaintSurface",
