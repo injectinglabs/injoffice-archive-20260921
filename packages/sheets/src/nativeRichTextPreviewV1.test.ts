@@ -43,7 +43,7 @@ it('keeps omitted styling as readable plaintext evidence with no partial runs', 
   c.runs = []; expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
 })
 it('accepts combined maximum rich shape within its structural snapshot allowance', () => {
-  const p = fixture(), seed = p.cells[0]!; p.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_color: '#112233', font_size_points: 11, bold: false, italic: false, omitted: ['baseline', 'font-family-hint', 'underline-none', 'strike-false'] })) }))
+  const p = fixture(), seed = p.cells[0]!; p.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_color: '#112233', font_size_points: 11, bold: false, italic: false, underline: 'single' as const, underline_origin: 'explicit-val' as const, omitted: ['baseline', 'font-family-hint', 'strike-false'] })) }))
   expect(decodeNativeRichTextPreviewV1(p).cells).toHaveLength(256)
   p.cells[0]!.runs!.push({ text: 'y', properties: 'direct', omitted: [] }); p.cells[0]!.text += 'y'
   expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
@@ -60,7 +60,7 @@ it('enforces aggregate run and text budgets independently', () => {
 it('decodes maximum conditional-fill and rich-run evidence together in the public envelope', async () => {
   const { decodeNativeWorkbookObjectsV1 } = await import('./nativeObjectsPreviewV1.js')
   const rich = fixture(), seed = rich.cells[0]!
-  rich.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_size_points: 11, font_color: '#112233', bold: false, italic: false, omitted: ['baseline', 'font-family-hint', 'underline-none', 'strike-false'] })) }))
+  rich.cells = Array.from({ length: 256 }, (_, row) => ({ ...structuredClone(seed), row, ref: `A${row + 1}`, text: 'x'.repeat(128), runs: Array.from({ length: 4 }, () => ({ text: 'x'.repeat(32), properties: 'direct' as const, font_name: 'Calibri', font_size_points: 11, font_color: '#112233', bold: false, italic: false, underline: 'single' as const, underline_origin: 'explicit-val' as const, omitted: ['baseline', 'font-family-hint', 'strike-false'] })) }))
   const conditional_fills = Array.from({ length: 4 }, (_, index) => ({ sheet_id: String(index + 1), sheet_part: `xl/worksheets/sheet${index + 1}.xml`, status: 'available', warnings: ['Stored integers only.'], rule: { ref: 'A1:BL64', operator: 'equal', operand: '0', priority: 1, stop_if_true: false, dxf_id: 0, fill: '#112233' }, cells: Array.from({ length: 4096 }, (_, i) => ({ row: Math.floor(i / 64), column: i % 64, lexical: '0', cached: false, matches: true })) }))
   const hash = `sha256:${'a'.repeat(64)}`, envelope = { protocol: 'injoffice.xlsx.preview-objects', version: 1, package_sha256: hash, tables: [], charts: [], conditional_fills, rich_text: rich }
   const result = decodeNativeWorkbookObjectsV1(envelope, hash)
@@ -70,4 +70,17 @@ it('retains Unicode source paths and explicitly omitted noncanonical saved indic
   const p = fixture(), c = p.cells[0]!; c.sheet_part = 'xl/worksheets/预算.xml'; c.source_part = 'xl/字符串.xml'; c.shared_index = '00'; c.status = 'omitted'; delete c.runs
   expect(decodeNativeRichTextPreviewV1(p).cells[0]!.shared_index).toBe('00')
   c.status = 'available'; c.runs = fixture().cells[0]!.runs; expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
+})
+
+it('validates paired raw underline attestations without inventing an extracted-model property', () => {
+  for (const [underline, underline_origin] of [['single', 'explicit-val'], ['single', 'default-val'], ['none', 'explicit-val']] as const) {
+    const s = source(); Object.assign(s.objects.rich_text.cells[0]!.runs![0]!, { underline, underline_origin })
+    expect(selectNativeRichTextPreviewV1(s.workbook, '1', s.objects).cells[0]!.runs![0]!.underline).toBe(underline)
+    expect(nativeRichTextRunDisclosureV1(s.objects.rich_text.cells[0]!.runs![0]!)).toContain(underline_origin === 'default-val' ? 'schema-default single' : 'explicit source val')
+  }
+  for (const extra of [{underline:['single'],underline_origin:'explicit-val'}, {underline:'single'}, {underline_origin:'explicit-val'}, {underline:'none',underline_origin:'default-val'}, {underline:'double',underline_origin:'explicit-val'}, {underline:'singleAccounting',underline_origin:'explicit-val'}, {underline:'single',underline_origin:'unknown'}, {underline:null,underline_origin:'explicit-val'}, {underline:'single',underline_origin:'explicit-val',omitted:['underline-none']}, {underline:'single',underline_origin:'explicit-val',properties:'cell-inherited'}]) {
+    const p = fixture(); Object.assign(p.cells[0]!.runs![0]!, extra); expect(() => decodeNativeRichTextPreviewV1(p)).toThrow()
+  }
+  expect(nativeRichTextRunDisclosureV1(fixture().cells[0]!.runs![0]!)).toContain('No direct underline declaration; undecorated host fallback')
+  const p = fixture(); p.cells[0]!.runs![0]!.omitted = ['underline-none']; expect(decodeNativeRichTextPreviewV1(p).cells).toHaveLength(1)
 })
