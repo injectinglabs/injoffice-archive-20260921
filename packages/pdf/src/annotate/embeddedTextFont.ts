@@ -1,14 +1,14 @@
 import type { AppearanceProviderFor, PDFDocument, PDFFont, PDFTextField } from 'pdf-lib'
 import { readFontFace } from '../textEdit/fontCmap.js'
-import { embeddedTextAppearance, type EmbeddedTextRun } from './embeddedTextAppearance.js'
+import { prepareUnicodeShaper } from './unicodeShaping.js'
+import { UnicodeFontResource, type EncodedUnicodeRun } from './unicodeFontResource.js'
+import { unicodeTextAppearance } from './unicodeTextAppearance.js'
 
 /** Caller-supplied, fixed TrueType face. This profile does not discover fonts. */
 export interface EmbeddedTextAppearanceFont {
   fontBytes: Uint8Array
 }
 
-const features = { kern: false, liga: false, clig: false, calt: false }
-const positionedFeatures = { ...features, kern: true }
 const maxBytes = 16 * 1024 * 1024
 
 export async function prepareEmbeddedTextFont(doc: PDFDocument, options: EmbeddedTextAppearanceFont): Promise<{
@@ -35,54 +35,18 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
     || (parsed.capHeight != null && !Number.isFinite(parsed.capHeight)) || (parsed.xHeight != null && !Number.isFinite(parsed.xHeight))) {
     throw new Error('invalid embedded appearance font metrics')
   }
-  doc.registerFontkit(fontkit)
-  // PDF subset encoding uses one CID per glyph. Aliased scalars cannot share
-  // that CID without losing the original text in its ToUnicode mapping.
-  const scalarByGlyph = new Map<number, number>()
-  let qualified: EmbeddedTextRun | undefined
+  const shape = await prepareUnicodeShaper(bytes, parsed.unitsPerEm, parsed.numGlyphs)
+  const resource = new UnicodeFontResource(parsed, bytes, doc)
+  let qualified: EncodedUnicodeRun | undefined
   return {
-    embed: () => doc.embedFont(bytes, { subset: true, features }),
+    embed: () => resource.embed(),
     appearanceProvider(field, widget, font) {
       if (!qualified) throw new Error('embedded appearance has no qualified text run')
-      return embeddedTextAppearance(field, widget, font, qualified)
+      resource.commit()
+      return unicodeTextAppearance(field, widget, font, qualified, qualified.run.glyphs.map(g => parsed.getGlyph(g.id).advanceWidth))
     },
     qualify(value) {
-      if (value.length > 4096) throw new Error('embedded appearance text exceeds 4096 UTF-16 units')
-      // Only independent horizontal glyphs are qualified. Marks, bidi controls,
-      // contextual shaping and surrogate errors must not silently lose positioning.
-      if (![...value].every(character => /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]$/u.test(character)
-        || (/^\p{Script=Common}$/u.test(character) && /^[0-9\p{Punctuation}\p{Symbol} ]$/u.test(character)))
-        || /[\p{Mark}\p{Control}\p{Format}\p{Surrogate}]/u.test(value)) {
-        throw new Error('embedded appearances support independent horizontal Unicode glyphs only')
-      }
-      const scalars = [...value].map(character => character.codePointAt(0)!)
-      if (scalars.some(scalar => !parsed.hasGlyphForCodePoint(scalar))) throw new Error('embedded appearance font is missing a requested glyph')
-      const run = parsed.layout(value, positionedFeatures)
-      const pending = new Map(scalarByGlyph)
-      for (let index = 0; index < run.glyphs.length; index++) {
-        const glyph = run.glyphs[index]!
-        const scalar = scalars[index]!
-        if ((pending.has(glyph.id) && pending.get(glyph.id) !== scalar)
-          || glyph.codePoints.length !== 1 || glyph.codePoints[0] !== scalar) {
-          throw new Error('embedded appearance glyph aliases cannot preserve Unicode text')
-        }
-        pending.set(glyph.id, scalar)
-      }
-      if (run.glyphs.length !== scalars.length || run.positions.length !== scalars.length || run.glyphs.some((glyph, index) => {
-        const position = run.positions[index]!
-        return glyph.id === 0 || glyph.id !== parsed.glyphForCodePoint(scalars[index]!).id
-          || !Number.isFinite(glyph.advanceWidth) || glyph.advanceWidth < 0
-          || !Number.isFinite(position.xAdvance) || position.xAdvance < 0
-          || position.yAdvance !== 0 || position.xOffset !== 0 || position.yOffset !== 0
-      })) throw new Error('embedded appearance text requires unsupported glyph shaping or positioning')
-      // Subsetting encodes with kerning disabled. Its glyph selection must be
-      // identical to the positioned run; only advances may differ.
-      const encodedRun = parsed.layout(value, features)
-      if (encodedRun.glyphs.length !== run.glyphs.length || encodedRun.glyphs.some((glyph, index) => glyph.id !== run.glyphs[index]!.id)) {
-        throw new Error('embedded appearance positioning changes encoded glyphs')
-      }
-      for (const [glyph, scalar] of pending) scalarByGlyph.set(glyph, scalar)
-      qualified = { value, unitsPerEm: parsed.unitsPerEm, advances: run.positions.map(position => position.xAdvance), nominalAdvances: run.glyphs.map(glyph => glyph.advanceWidth) }
+      qualified = resource.qualify(shape(value))
     },
   }
 }

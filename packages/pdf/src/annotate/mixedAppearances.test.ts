@@ -65,7 +65,7 @@ describe('independent embedded text and standard choice appearances', () => {
 
   it.each(['text', 'choice'] as const)('does not relax the rejected %s profile when the other succeeds', async rejected => {
     const source = await fixture(rejected === 'choice'), before = await PDFDocument.load(source)
-    const result = await applyFormValues(source, [rejected === 'text' ? { ...text, value: 'e\u0301' } : text, choice], options)
+    const result = await applyFormValues(source, [rejected === 'text' ? { ...text, value: 'مرحبا' } : text, choice], options)
     expect(result.applied).toBe(1); expect(result.skipped.map(item => item.name)).toEqual([rejected])
     const saved = await PDFDocument.load(result.bytes)
     expect(decoded(stream(saved, rejected))).toBe(decoded(stream(before, rejected)))
