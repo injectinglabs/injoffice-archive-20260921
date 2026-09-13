@@ -248,7 +248,7 @@ function validatePage(
   pageIDs: Set<string>,
   lineIDs: Set<string>,
   noteSourceLineIDs: Set<string>,
-  noteHistory: Map<string, { page: number; relationship: unknown; reference: unknown; number: unknown; nativeID: unknown }>,
+  noteHistory: Map<string, { page: number; kind: unknown; relationship: unknown; reference: unknown; number: unknown; nativeID: unknown }>,
   sliceIDs: Set<string>,
   referencedLineIDs: Set<string>,
   paragraphSlices: Map<string, SliceValidation[]>,
@@ -433,19 +433,19 @@ function validatePage(
     if (noteIndex === 0) leadingNoteRole = role
     if (typeof note.native_story_id !== 'string' || (role === 'separator' ? note.native_story_id !== '-1' : role === 'continuation-separator' ? note.native_story_id !== '0' : !/^[1-9][0-9]{0,18}$/.test(note.native_story_id))) add(issues, 'INVALID_VALUE', `${notePath}/native_story_id`, 'native note id must match its exact placed role')
     if ((noteIndex === 0 && role !== 'separator' && role !== 'continuation-separator') || (noteIndex > 0 && role !== 'content')) add(issues, 'INVALID_VALUE', `${notePath}/note_role`, 'each page note group must contain one leading ordinary or continuation separator followed by content stories')
-    if (role === 'continuation-separator' && storyKind !== 'endnote') add(issues, 'INVALID_VALUE', `${notePath}/note_role`, 'only endnote continuation is supported')
+    if (role === 'continuation-separator' && storyKind === 'footnote' && pageLineOrder.length) add(issues, 'INVALID_VALUE', `${notePath}/note_role`, 'continued footnotes require note-only pages')
     stringValue(note.relationship_id, `${notePath}/relationship_id`, issues)
     const noteOrdinal = integer(note.ordinal, `${notePath}/ordinal`, 0, DOCX_NATIVE_LIMITS.maxCollectionItems, issues)
     if (noteOrdinal !== undefined && noteOrdinal !== noteIndex) add(issues, 'INVALID_VALUE', `${notePath}/ordinal`, 'note placement ordinal must equal page note order')
     if (role === 'content' && storyID) {
       const previous = noteHistory.get(storyID)
       if (leadingNoteRole === 'continuation-separator') {
-        if (notes.length !== 2 || storyKind !== 'endnote' || !previous || previous.page !== expectedOrdinal - 1 ||
+        if (notes.length !== 2 || !previous || previous.kind !== storyKind || previous.page !== expectedOrdinal - 1 ||
           previous.relationship !== note.relationship_id || previous.reference !== note.reference_run_id || previous.number !== note.number || previous.nativeID !== note.native_story_id) {
-          add(issues, 'BROKEN_REFERENCE', notePath, 'continued endnote must immediately follow its prior source-bound story slice with one unchanged reference and label')
+          add(issues, 'BROKEN_REFERENCE', notePath, 'continued note must immediately follow its prior source-bound story slice with one unchanged reference and label')
         }
-      } else if (previous) add(issues, 'DUPLICATE_ID', notePath, 'repeated content story requires an endnote continuation separator')
-      noteHistory.set(storyID, { page: expectedOrdinal, relationship: note.relationship_id, reference: note.reference_run_id, number: note.number, nativeID: note.native_story_id })
+      } else if (previous) add(issues, 'DUPLICATE_ID', notePath, 'repeated content story requires a continuation separator')
+      noteHistory.set(storyID, { page: expectedOrdinal, kind: storyKind, relationship: note.relationship_id, reference: note.reference_run_id, number: note.number, nativeID: note.native_story_id })
     }
     if (role === 'content') {
       stringValue(note.reference_run_id, `${notePath}/reference_run_id`, issues)
@@ -584,7 +584,7 @@ function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolea
   const pageIDs = new Set<string>()
   const placedLineIDs = new Set<string>()
   const noteSourceLineIDs = new Set<string>()
-  const noteHistory = new Map<string, { page: number; relationship: unknown; reference: unknown; number: unknown; nativeID: unknown }>()
+  const noteHistory = new Map<string, { page: number; kind: unknown; relationship: unknown; reference: unknown; number: unknown; nativeID: unknown }>()
   const sliceIDs = new Set<string>()
   const referencedLineIDs = new Set<string>()
   const paragraphSlices = new Map<string, SliceValidation[]>()

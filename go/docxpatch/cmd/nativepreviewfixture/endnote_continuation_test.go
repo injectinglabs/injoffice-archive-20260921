@@ -17,6 +17,12 @@ import (
 // Synthetic OOXML source fixture, not a Word visual reference. Keeps real
 // package/font/relationship provenance through extraction and optional paint QA.
 func TestNativeEndnoteContinuationSource(t *testing.T) {
+	testNativeNoteContinuationSource(t, "endnote")
+}
+func TestNativeFootnoteContinuationSource(t *testing.T) {
+	testNativeNoteContinuationSource(t, "footnote")
+}
+func testNativeNoteContinuationSource(t *testing.T, kind string) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
 		t.Skip("optional installed DejaVu font unavailable")
@@ -63,6 +69,13 @@ func TestNativeEndnoteContinuationSource(t *testing.T) {
 		content.WriteString(`<w:r><w:t>` + text + `</w:t></w:r></w:p>`)
 	}
 	parts["word/endnotes.xml"] = []byte(`<w:endnotes xmlns:w="` + wns + `"><w:endnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:endnote><w:endnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:endnote><w:endnote w:id="1">` + content.String() + `</w:endnote></w:endnotes>`)
+	if kind == "footnote" {
+		converted := map[string][]byte{}
+		for name, data := range parts {
+			converted[strings.ReplaceAll(name, "endnote", "footnote")] = []byte(strings.ReplaceAll(string(data), "endnote", "footnote"))
+		}
+		parts = converted
+	}
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	// ApplyPatch provides deterministic entry ordering and preserves all source parts.
@@ -135,7 +148,7 @@ func TestNativeEndnoteContinuationSource(t *testing.T) {
 	if labels != 1 || kept != 7 || sentinels != 2 || !bytes.Equal(before, source) {
 		t.Fatalf("source changed: labels=%d kept=%d sentinels=%d", labels, kept, sentinels)
 	}
-	if out := os.Getenv("INJOFFICE_ENDNOTE_EVIDENCE_DIR"); out != "" {
+	if out := os.Getenv("INJOFFICE_" + strings.ToUpper(kind) + "_EVIDENCE_DIR"); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +172,7 @@ func TestNativeEndnoteContinuationSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(out, "endnote-continuation.docx"), source, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(out, kind+"-continuation.docx"), source, 0600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(out, "source.json"), envelope, 0600); err != nil {

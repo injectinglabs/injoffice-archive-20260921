@@ -357,7 +357,15 @@ on the final content page, or on one new final page when the existing page has
 insufficient room. Every placed note and note line carries its exact section
 and column identity. The normal `-1` sentinel produces one deterministic
 bounded separator rule; an unused `0` continuation sentinel stays inert.
-Actual continuation still refuses the whole projection.
+Bounded continuation admits a single endnote, or a single footnote referenced
+on the final body page of a paragraph-only, single-column, single-section body.
+The note splits only between complete zero-spacing paragraphs, without
+keep-with-next, explicit page breaks or fields; multiline paragraphs require
+`keep_lines=true`. A footnote's first paragraph plus ordinary separator must
+fit on its reference page. Later slices occupy note-only pages at page bottom,
+using the authored continuation separator and retaining the sole original label.
+The compiler shapes the continuation separator only when pagination activates it.
+Source replay rejects dropped, duplicated, moved or misidentified slices.
 
 Because keep-with-next constrains a paragraph boundary rather than making every
 line indivisible, v1 accepts a keep chain only when every multiline member is
@@ -368,8 +376,9 @@ width used by shaping. Continuous transitions require an identical
 single-column physical grid; next-column requires an identical exact grid.
 Equal-width columns must divide exactly, while explicit columns must completely
 describe equal widths and authored gaps; omitted explicit spacing is standard
-zero. Notes that require body reflow or splitting refuse the complete
-projection; an unused continuation separator remains inert. Custom
+zero. Note reflow or splitting outside the qualified whole-note reservation and
+paragraph-boundary continuation profiles refuses the complete projection;
+an unused continuation separator remains inert. Custom
 numbering/restarts/positions, ambiguous or duplicate
 references, missing labels or separators, cycles, nested tables, drawings,
 fields, unsupported note markup, note-bearing pages with multiple columns or

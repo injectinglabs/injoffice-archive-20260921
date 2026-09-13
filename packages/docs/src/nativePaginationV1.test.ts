@@ -1523,10 +1523,10 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
-  it('keeps authored multiline note paragraphs intact and refuses an unqualified atomic split', () => {
+  it.each(['endnote', 'footnote'])('keeps authored multiline %s paragraphs intact and refuses an unqualified atomic split', (kind) => {
     for (const keepLines of [true, false, undefined]) {
-      const request = continuedEndnoteFixture()
-      const paragraph = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === 'paragraph:endnote:2')!
+      const request = kind === 'endnote' ? continuedEndnoteFixture() : continuedFootnoteFixture()
+      const paragraph = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === `paragraph:${kind}:2`)!
       paragraph.lines.push({ ...structuredClone(paragraph.lines[0]!), id: `line:${paragraph.paragraph_id}:1`, ordinal: 1 })
       paragraph.block_advance_millipoints *= 2
       const properties = request.resolved_layout.paragraphs.find((entry) => entry.paragraph_id === paragraph.paragraph_id)!.properties
@@ -2032,4 +2032,53 @@ describe('two whole-footnote page reservations', () => {
     wrong.shaped_lines.paragraphs.find((p) => p.story_id === wrong.document.notes[2]!.id)!.lines[0]!.fragments[0]!.text = '1'
     for (const request of [oversized, wrong]) expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
   })
+})
+
+function continuedFootnoteFixture(bodyLines=1,bodyHeight=40_000):NativeDocxPaginationRequestV1 {
+ return JSON.parse(JSON.stringify(continuedEndnoteFixture(bodyLines,bodyHeight)).replaceAll('endnote','footnote'))
+}
+describe('final-body-page footnote continuation',()=>{
+ it('places whole paragraph slices at page bottom with one source label and ordered continuation rules',()=>{
+  const request=continuedFootnoteFixture(),before=structuredClone(request),output=paginated(request)
+  expect(output.pages.map(p=>p.note_stories?.map(n=>n.note_role))).toEqual([['separator','content'],['continuation-separator','content'],['continuation-separator','content']])
+  expect(output.pages.map(p=>p.note_stories?.[1]?.lines.length)).toEqual([2,3,1])
+  const lines=output.pages.flatMap(p=>p.note_stories![1]!.lines)
+  expect(new Set(lines.map(l=>l.line_id)).size).toBe(6)
+  expect(lines.filter(l=>l.paragraph_id==='paragraph:footnote:1')).toHaveLength(1)
+  for(const page of output.pages){const note=page.note_stories!.at(-1)!;expect(note.top_millipoints+note.height_millipoints).toBe(page.body_box.y_millipoints+page.body_box.height_millipoints)}
+  expect(request).toEqual(before);expect(paginated(request)).toEqual(output)
+  for(const mutation of ['drop','duplicate','separator','page','reference'] as const){
+   const forged=structuredClone(output)
+   if(mutation==='drop')forged.pages[2]!.note_stories![1]!.lines=[]
+   if(mutation==='duplicate')forged.pages[2]!.note_stories![1]!.lines[0]!.line_id=lines[0]!.line_id
+   if(mutation==='separator')forged.pages[1]!.note_stories![0]!.note_role='separator'
+   if(mutation==='page')forged.pages[2]!.note_stories![1]!.top_millipoints--
+   if(mutation==='reference')forged.pages[1]!.note_stories![1]!.reference_run_id='run:forged'
+   expect(decodeNativeDocxPaginatedLayoutForRequest(forged,request).ok).toBe(false)
+  }
+ })
+ it('refuses without partial pages when the reference cannot retain the first note paragraph or has later body pages',()=>{
+  for(const bodyLines of [3,5]){
+   const result=paginateNativeDocxV1(continuedFootnoteFixture(bodyLines))
+   expect(result.ok).toBe(true)
+   if(result.ok)expect(result.value).toEqual(expect.objectContaining({status:'refused',pages:[],sections:[]}))
+  }
+ })
+ it('requires an exact active continuation separator and honors kept note paragraph boundaries',()=>{
+  for(const mutation of ['missing','unshaped','unsupported','relationship','spacing','keep-next','oversized','multiline-unkept'] as const){
+   const request=continuedFootnoteFixture(),continuation=request.document.notes.at(-1)!
+   const paragraph=request.shaped_lines.paragraphs.find(p=>p.paragraph_id==='paragraph:footnote:2')!
+   const properties=request.resolved_layout.paragraphs.find(p=>p.paragraph_id===paragraph.paragraph_id)!.properties
+   if(mutation==='missing'){request.document.notes.pop();request.shaped_lines.paragraphs=request.shaped_lines.paragraphs.filter(p=>p.story_id!==continuation.id);request.resolved_layout.paragraphs=request.resolved_layout.paragraphs.filter(p=>p.paragraph_id!==continuation.blocks[0]!.id)}
+   if(mutation==='unshaped')request.shaped_lines.paragraphs=request.shaped_lines.paragraphs.filter(p=>p.story_id!==continuation.id)
+   if(mutation==='unsupported')request.document.unsupported.push({id:'unsupported:continuation',code:'UNMODELED_NOTE_MARKUP',capability:'notes',scope_id:continuation.id,preservation:'refuse-mutation',message:'Unsupported active source'})
+   if(mutation==='relationship')continuation.relationship_id='rIdDrift'
+   if(mutation==='spacing'){paragraph.spacing_after_millipoints=50;paragraph.block_advance_millipoints+=50;properties.spacing_after_twips=1}
+   if(mutation==='keep-next')properties.keep_next=true
+   if(mutation==='oversized'){paragraph.lines[0]!.line_height_millipoints=40_000;paragraph.block_advance_millipoints=40_000}
+   if(mutation==='multiline-unkept'){paragraph.lines.push({...structuredClone(paragraph.lines[0]!),id:`line:${paragraph.paragraph_id}:1`,ordinal:1});paragraph.block_advance_millipoints*=2;properties.keep_lines=false}
+   const result=paginateNativeDocxV1(request);expect(result.ok,`${mutation}: ${JSON.stringify(result)}`).toBe(mutation!=='relationship')
+   if(result.ok)expect(result.value).toEqual(expect.objectContaining({status:'refused',pages:[],sections:[]}))
+  }
+ })
 })

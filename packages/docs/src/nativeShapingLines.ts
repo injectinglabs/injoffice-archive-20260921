@@ -2073,7 +2073,7 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
   for (const story of nativeStories(request.document)) {
     // The compiler activates an endnote sentinel at its qualified paragraph width
     // only after pagination proves that the owning note requires continuation.
-    if (story.note_role === 'continuation-separator' && (story.kind !== 'endnote' || !paragraphWidths?.has(story.blocks[0]?.id ?? ''))) continue
+    if (story.note_role === 'continuation-separator' && ((story.kind !== 'endnote' && story.kind !== 'footnote') || !paragraphWidths?.has(story.blocks[0]?.id ?? ''))) continue
     for (const block of story.blocks) {
       if (block.kind === 'table' && block.table) {
         if (paragraphWidths) {
