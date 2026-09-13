@@ -111,10 +111,11 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
   }
   if (values.length === 0) return { bytes, applied: 0, skipped: [], ...appearanceResult }
   const doc = await PDFDocument.load(bytes)
-  // PDFDocument.getForm() removes XFA as a side effect. Refuse the opt-in batch
-  // before calling it, including mixed text/checkbox batches.
-  if (options.textAppearance && doc.catalog.getAcroForm()?.dict.has(PDFName.of('XFA'))) {
-    return { bytes, applied: 0, skipped: values.map(spec => ({ name: spec.name, reason: 'XFA text appearances are unsupported' })), ...appearanceResult }
+  // PDFDocument.getForm() removes XFA as a side effect. Refuse every form batch
+  // before calling it, including default radio/choice edits to hybrid forms.
+  if (doc.catalog.getAcroForm()?.dict.has(PDFName.of('XFA'))) {
+    const reason = options.textAppearance ? 'XFA text appearances are unsupported' : 'XFA form updates are unsupported'
+    return { bytes, applied: 0, skipped: values.map(spec => ({ name: spec.name, reason })), ...appearanceResult }
   }
   const form = doc.getForm()
   const skipped: FormValueFailure[] = []

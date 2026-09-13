@@ -19,6 +19,25 @@ async function formDoc(): Promise<Uint8Array> {
 }
 
 describe('applyFormValues', () => {
+  it('refuses a default mixed XFA form update before changing any source bytes', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    doc.getForm().acroForm.dict.set(PDFName.of('XFA'), doc.context.obj('preserve source XFA'));
+    const source = await doc.save({ updateFieldAppearances: false });
+    const copy = source.slice();
+    const result = await applyFormValues(source, [
+      { name: 'color', kind: 'radio', value: 'blue' },
+      { name: 'country', kind: 'choice', value: 'UK' },
+      { name: 'name', kind: 'text', value: 'AFTER' },
+      { name: 'agree', kind: 'checkbox', checked: true },
+    ]);
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toHaveLength(4);
+    expect(result.skipped.every(item => item.reason === 'XFA form updates are unsupported')).toBe(true);
+    expect(result.bytes).toBe(source);
+    expect(result.bytes).toEqual(copy);
+    expect((await PDFDocument.load(result.bytes)).catalog.getAcroForm()!.dict.has(PDFName.of('XFA'))).toBe(true);
+  });
+
   const portable = { textAppearance: { font: 'Helvetica' as const } };
   const widgetStreams = (doc: PDFDocument, name: string) => doc.getForm().getTextField(name).acroField.getWidgets()
     .map(widget => {
