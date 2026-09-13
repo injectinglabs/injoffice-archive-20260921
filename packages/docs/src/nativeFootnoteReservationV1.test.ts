@@ -275,20 +275,20 @@ describe('dedicated footnote reservation preparation', () => {
     return request
   }
   function measured(profile: NativeDocxFootnoteReservationProfileV1): NativeDocxFootnoteAreaMeasurementV1 {
-    return { section_id: profile.section_id, column_id: profile.column.id, reference_run_id: profile.reference_run_id, note_story_id: profile.note.id, separator_story_id: profile.separator.id, height_millipoints: 10000 }
+    return { section_id: profile.section_id, column_id: profile.column.id, reference_run_ids: profile.references.map((entry) => entry.reference_run_id), note_story_ids: profile.references.map((entry) => entry.note.id), separator_story_id: profile.separator.id, height_millipoints: 10000 }
   }
   it('qualifies one source reference and invokes only the authoritative measurement hook', () => {
     const request = input(), before = structuredClone(request)
     let calls = 0
     const result = measureNativeDocxFootnoteReservationV1(request, (profile) => { calls += 1; return measured(profile) })
-    expect(result?.height_millipoints).toBe(10000)
-    expect(result?.reference_height_millipoints).toBe(10000)
+    expect(result?.groups[0]?.height_millipoints).toBe(10000)
+    expect(result?.references[0]?.reference_paragraph_id).toBe(request.document.body.blocks[0]!.id)
     expect(calls).toBe(1)
     expect(request).toEqual(before)
   })
   it('refuses measurement identity, bounded arithmetic and empty-page pair overflow', () => {
     for (const change of [
-      { section_id: 'wrong' }, { column_id: 'wrong' }, { reference_run_id: 'wrong' }, { note_story_id: 'wrong' }, { separator_story_id: 'wrong' },
+      { section_id: 'wrong' }, { column_id: 'wrong' }, { reference_run_ids: ['wrong'] }, { note_story_ids: ['wrong'] }, { separator_story_id: 'wrong' },
       { height_millipoints: NaN }, { height_millipoints: Infinity }, { height_millipoints: -1 }, { height_millipoints: 0 }, { height_millipoints: 0.5 }, { height_millipoints: 35000 },
     ]) expect(measureNativeDocxFootnoteReservationV1(input(), (profile) => ({ ...measured(profile), ...change }))).toBeUndefined()
     expect(measureNativeDocxFootnoteReservationV1(input(), () => undefined)).toBeUndefined()
@@ -343,7 +343,7 @@ describe('multi-paragraph reservation source qualification', () => {
   function input(count = 2) { const request = fixture(); addFootnote(request); extendFootnoteChain(request, count); return request }
   it('measures only a complete authored chain with its label in the first member', () => {
     const request = input()
-    expect(measureNativeDocxFootnoteReservationV1(request, (profile) => ({ section_id: profile.section_id, column_id: profile.column.id, reference_run_id: profile.reference_run_id, note_story_id: profile.note.id, separator_story_id: profile.separator.id, height_millipoints: 15000 }))?.note.blocks).toHaveLength(2)
+    expect(measureNativeDocxFootnoteReservationV1(request, (profile) => ({ section_id: profile.section_id, column_id: profile.column.id, reference_run_ids: profile.references.map((entry) => entry.reference_run_id), note_story_ids: profile.references.map((entry) => entry.note.id), separator_story_id: profile.separator.id, height_millipoints: 15000 }))?.references[0]?.note.blocks).toHaveLength(2)
   })
   it('refuses broken/final chains, misplaced labels and multiline members without keepLines before measurement', () => {
     for (const mutate of [
@@ -356,5 +356,35 @@ describe('multi-paragraph reservation source qualification', () => {
       expect(measureNativeDocxFootnoteReservationV1(request, () => { called = true; return undefined })).toBeUndefined()
       expect(called).toBe(false)
     }
+  })
+})
+
+describe('two-note reservation qualification', () => {
+  function input() { const request = fixture({ lineCounts: [1, 1] }); addFootnote(request); addFootnote(request, '2', '2'); return request }
+  it('measures each empty-page pair and the ordered group with one shared separator', () => {
+    const seen: string[][] = []
+    const result = measureNativeDocxFootnoteReservationV1(input(), (profile, references) => {
+      seen.push(references.map((entry) => entry.reference_run_id))
+      return { section_id: profile.section_id, column_id: profile.column.id, reference_run_ids: references.map((entry) => entry.reference_run_id), note_story_ids: references.map((entry) => entry.note.id), separator_story_id: profile.separator.id, height_millipoints: 5000 + references.length * 5000 }
+    })
+    expect(seen).toEqual([['run:paragraph:1'], ['run:paragraph:2'], ['run:paragraph:1', 'run:paragraph:2']])
+    expect(result?.groups.map((group) => group.height_millipoints)).toEqual([10000, 10000, 15000])
+    expect(result?.references.map((entry) => entry.number)).toEqual([1, 2])
+  })
+  it('refuses a measured group that omits or reverses source reference identities', () => {
+    expect(measureNativeDocxFootnoteReservationV1(input(), (profile, references) => ({ section_id: profile.section_id, column_id: profile.column.id, reference_run_ids: references.map((entry) => entry.reference_run_id).reverse(), note_story_ids: references.map((entry) => entry.note.id), separator_story_id: profile.separator.id, height_millipoints: 15000 }))).toBeUndefined()
+  })
+  it('refuses two source references in the same paragraph before measurement', () => {
+    const request = input(), first = request.document.body.blocks[0]!.paragraph!, second = request.document.body.blocks[1]!.paragraph!
+    const moved = second.runs.pop()!; moved.anchor = structuredClone(first.runs[0]!.anchor); first.runs.push(moved)
+    request.resolved_layout.runs.find((run) => run.run_id === moved.id)!.paragraph_id = first.id
+    const firstLine = request.shaped_lines.paragraphs[0]!.lines[0]!, secondLine = request.shaped_lines.paragraphs[1]!.lines[0]!
+    const fragment = secondLine.fragments.pop()!; fragment.logical_order = 1; fragment.id = `fragment:${first.id}:0:1`; firstLine.fragments.push(fragment); firstLine.logical_to_visual.push(1)
+    firstLine.advance_inline_millipoints += fragment.advance_inline_millipoints
+    secondLine.logical_to_visual = []; secondLine.advance_inline_millipoints = 0
+    expect(decodeNativeDocxPaginationRequestV1(request).ok, JSON.stringify(decodeNativeDocxPaginationRequestV1(request))).toBe(true)
+    let called = false
+    expect(measureNativeDocxFootnoteReservationV1(request, () => { called = true; return undefined })).toBeUndefined()
+    expect(called).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationProfileV1, type NativeDocxFootnoteAreaMeasurementV1 } from './nativeFootnoteReservationV1.js'
+import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationProfileV1, type NativeDocxFootnoteAreaMeasurementV1, type NativeDocxFootnoteReferenceV1 } from './nativeFootnoteReservationV1.js'
 /**
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
@@ -279,12 +279,12 @@ function measureNoteGroup(
 /** Internal reservation probe uses the same note geometry and resource checks
  * as final placement; all source/label/relationship checks still run before
  * final output is committed by placeNativeDocxNotesV1. No probe is published. */
-export function measureNativeDocxFootnoteAreaForReservationV1(profile: NativeDocxFootnoteReservationProfileV1): NativeDocxFootnoteAreaMeasurementV1 | undefined {
+export function measureNativeDocxFootnoteAreaForReservationV1(profile: NativeDocxFootnoteReservationProfileV1, references: NativeDocxFootnoteReferenceV1[]): NativeDocxFootnoteAreaMeasurementV1 | undefined {
   const column = { ...profile.column, section_id: profile.section_id }
-  const reference: NoteReference = { kind: 'footnote', story: profile.note, runID: profile.reference_run_id, number: 1, pageOrdinal: 0, sectionID: profile.section_id, columnID: column.id, columnOrdinal: column.ordinal }
-  const height = measureNoteGroup({ ordinal: 0 }, column, [{ story: profile.separator }, { story: profile.note, reference }], new Map(profile.request.shaped_lines.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph])), { lines: 0 })
+  const entries = references.map((entry) => ({ story: entry.note, reference: { kind: 'footnote' as const, story: entry.note, runID: entry.reference_run_id, number: entry.number, pageOrdinal: 0, sectionID: profile.section_id, columnID: column.id, columnOrdinal: column.ordinal } }))
+  const height = measureNoteGroup({ ordinal: 0 }, column, [{ story: profile.separator }, ...entries], new Map(profile.request.shaped_lines.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph])), { lines: 0 })
   if (typeof height !== 'number') return undefined
-  return { section_id: profile.section_id, column_id: column.id, reference_run_id: profile.reference_run_id, note_story_id: profile.note.id, separator_story_id: profile.separator.id, height_millipoints: height }
+  return { section_id: profile.section_id, column_id: column.id, reference_run_ids: references.map((entry) => entry.reference_run_id), note_story_ids: references.map((entry) => entry.note.id), separator_story_id: profile.separator.id, height_millipoints: height }
 }
 
 function placeGroup(
@@ -423,7 +423,7 @@ export function placeNativeDocxNotesV1(
   // never trust a caller-supplied paragraph list or a decoded object's identity.
   const verifiedReservation = reservation && measureNativeDocxFootnoteReservationV1(
     { ...reservation.request, document, resolved_layout: resolved, shaped_lines: shaped }, measureNativeDocxFootnoteAreaForReservationV1)
-  const keptParagraphs = new Set(verifiedReservation?.note.blocks.slice(0, -1).map((block) => block.paragraph!.id) ?? [])
+  const keptParagraphs = new Set(verifiedReservation?.references.flatMap((entry) => entry.note.blocks.slice(0, -1).map((block) => block.paragraph!.id)) ?? [])
   const staged = structuredClone(layout)
   for (const page of staged.pages) page.note_stories = []
   if (document.notes.length === 0) {

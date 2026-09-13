@@ -454,7 +454,7 @@ and the paragraph atomicity of
 The imported Go fixture and actual HarfBuzz outline/paint replay validate this
 pipeline; they are synthetic OOXML evidence, not a Word visual reference.
 
-Whole-footnote body reflow admits one footnote containing 1–16 paragraphs in a
+Whole-footnote body reflow admits one or two footnotes, each containing 1–16 paragraphs, in a
 single-section, single-column document. Multiple note paragraphs require a complete
 resolved `keep_next=true` chain on every nonfinal paragraph, with final keep-next
 absent or false and the sole owning label in the first paragraph. Every multiline
@@ -466,19 +466,27 @@ LTR text, natural line heights and zero spacing/indents. Every multiline body
 or note paragraph must have resolved `keep_lines=true`; body keep-with-next, explicit
 page breaks, tables, drawings, fields, numbering, headers/footers and explicit
 note positions are excluded. The exact instruction-only separator also has zero
-spacing and one natural line. The reference paragraph plus measured complete
-note area must fit an empty page; otherwise the whole projection refuses.
+spacing and one natural line. Each footnote requires a unique reference in a
+distinct body paragraph. Its reference paragraph plus individual separator/note
+area must fit an empty page; otherwise the whole projection refuses. Decimal
+numbering follows body reference order, including when note2 moves to a new page.
 
 Reservation and final placement share the same note geometry implementation.
-Before placing the unique reference paragraph, the paginator tests its whole
-height plus separator/note area against the remaining page height. If necessary
-it moves the reference paragraph and note together, leaving prior paragraphs
-unchanged. Subsequent body paragraphs use the reduced space only on that page;
-advancing to the next page restores its full body height. Output section and
-column geometry remain physical. Final note placement retains all source,
-label, relationship and diagnostic validation and must reproduce the measured
-reservation exactly. Deterministic request replay executes the same flow; no
-caller-supplied reservation or source mutation is accepted.
+Before placing a reference paragraph, the paginator measures the tentative page
+note group in source order with one shared ordinary separator. It compares used
+body height plus the whole reference paragraph and the total group area with
+physical page height; the existing reservation is replaced, not counted twice.
+If the total does not fit, only the new reference and its note advance, leaving
+previous body paragraphs and notes unchanged. A combined two-note group may
+exceed one page when each individual reference/note pair fits separately.
+Subsequent body paragraphs use the reduced space only on that page; advancing
+restores full body height. Final placement must match each page's ordered source
+note/reference IDs, global decimal numbers, single separator and measured area,
+with no unreserved groups. Source, label, relationship and exact diagnostic
+validation remain mandatory. Deterministic request replay executes the same
+flow; no caller-supplied reservation or source mutation is accepted.
+Same-paragraph multiple references, more than two-note reservation, general
+footnote continuation and oversized individual pairs remain outside this slice.
 
 The existing omitted document-level footnote position remains page bottom, as
 described by [`FootnotePosition`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.footnoteposition?view=openxml-3.0.1).
