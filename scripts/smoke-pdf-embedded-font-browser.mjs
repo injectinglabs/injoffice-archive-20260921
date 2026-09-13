@@ -130,16 +130,45 @@ try {
   const cid = font.lookup(PDFName.of('DescendantFonts')).lookup(0)
   const fontFile = cid.lookup(PDFName.of('FontDescriptor')).lookup(PDFName.of('FontFile2'))
   const embeddedBytes = decodePDFRawStream(fontFile).decode()
-  assert.ok(embeddedBytes.length > 100 && embeddedBytes.length < readFileSync(fontPath).length, 'saved font is a real subset')
+  assert.deepEqual(Buffer.from(embeddedBytes), readFileSync(fontPath), 'saved font retains the complete fixed TrueType face')
   const cmap = Buffer.from(decodePDFRawStream(font.lookup(PDFName.of('ToUnicode'))).decode()).toString('latin1')
   assert.match(cmap, /<D83DDE00>/, 'supplementary scalar survives ToUnicode')
-  await setValue(textInput, 'e\u0301')
+  const shapedValue = 'e\u0301 ffi a\u0301\u0323'
+  await setValue(textInput, shapedValue)
+  await apply()
+  await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser HarfBuzz creates positioned cluster appearance')
+  await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(shapedValue)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'shaped saved document finishes reloading')
+  const shapedOutput = mkdtempSync(resolve(output, 'shaped-'))
+  await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: shapedOutput })
+  await evaluate(`Array.from(document.querySelectorAll('[data-demo-surface="pdf"] button')).find(button => button.textContent.trim() === 'Download edited PDF').click()`)
+  let shapedDownload
+  for (let attempt = 0; attempt < 300; attempt++) {
+    shapedDownload = readdirSync(shapedOutput).find(name => name.endsWith('.pdf'))
+    if (shapedDownload) break
+    await pause(100)
+  }
+  assert.ok(shapedDownload, 'UI downloads shaped source text')
+  const shapedDoc = await PDFDocument.load(readFileSync(resolve(shapedOutput, shapedDownload)))
+  const shapedField = shapedDoc.getForm().getTextField('Unicode sample')
+  assert.equal(shapedField.getText(), shapedValue, 'public browser form retains exact logical source')
+  const shapedAp = shapedDoc.context.lookup(shapedField.acroField.getWidgets()[0].getNormalAppearance())
+  const shapedArtwork = Buffer.from(decodePDFRawStream(shapedAp).decode()).toString('latin1')
+  assert.match(shapedArtwork, /ActualText/, 'unpartitionable continuation has exact replacement text')
+  shapedDoc.getForm().flatten({ updateFieldAppearances: false })
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const extraction = pdfjs.getDocument({ data: await shapedDoc.save() })
+  try {
+    const page = await (await extraction.promise).getPage(1)
+    const content = await page.getTextContent({ disableNormalization: true })
+    assert.ok(content.items.map(item => 'str' in item ? item.str : '').join('').includes(shapedValue), 'saved appearance extracts exact decomposed clusters and ligatures')
+  } finally { await extraction.destroy() }
+  await setValue(textInput, 'مرحبا')
   await apply()
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'unsupported shaping is refused')
   assert.deepEqual(readFileSync(sourcePath), Buffer.from(source), 'source bytes stay unchanged')
   assert.deepEqual(errors, [])
   assert.deepEqual(postRequests, [])
-  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 subset, ToUnicode, shaping refusal)')
+  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, bidi refusal)')
 } finally {
   socket?.close()
   for (const task of pending.values()) clearTimeout(task.timer)

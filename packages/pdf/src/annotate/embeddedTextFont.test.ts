@@ -50,7 +50,7 @@ function embeddedFont(stream: PDFRawStream): PDFDict {
   const file = lookupStream(cid.lookup(PDFName.of('FontDescriptor'), PDFDict), 'FontFile2')
   const bytes = decodePDFRawStream(file).decode()
   expect(bytes.length).toBeGreaterThan(100)
-  expect(bytes.length).toBeLessThan(fontBytes.length)
+  expect(bytes.length).toBeGreaterThanOrEqual(fontBytes.length)
   expect(readFontFace(bytes).tables.has('glyf')).toBe(true)
   return font
 }
@@ -83,7 +83,7 @@ function aliasedFont(): Uint8Array {
 }
 
 describe('embedded Unicode form appearances', () => {
-  it('saves subset outlines and exact BMP/supplementary ToUnicode mappings in every owned rotated widget', async () => {
+  it('saves full fixed outlines and exact BMP/supplementary ToUnicode mappings in every owned rotated widget', async () => {
     const source = await fixture(true)
     const sourceCopy = source.slice()
     const fontCopy = fontBytes.slice()
@@ -108,22 +108,27 @@ describe('embedded Unicode form appearances', () => {
     expect(fontBytes).toEqual(fontCopy)
   })
 
-  it('refuses glyph aliases across separate fields instead of corrupting ToUnicode', async () => {
+  it('preserves glyph aliases across separate fields with independent source CIDs', async () => {
     const source = await fixture()
     const result = await applyFormValues(source, [
       { name: 'first', kind: 'text', value: 'é' },
       { name: 'second', kind: 'text', value: 'Ω' },
     ], { textAppearance: { fontBytes: aliasedFont() } })
-    expect(result.applied).toBe(1)
-    expect(result.skipped).toHaveLength(1)
-    expect(result.skipped[0]?.name).toBe('second')
+    expect(result.applied).toBe(2)
+    expect(result.skipped).toEqual([])
     const loaded = await PDFDocument.load(result.bytes)
-    expect(loaded.getForm().getTextField('second').getText()).toBe('BEFORE')
-    expect(streams(loaded, 'second').map(decoded)).toEqual(streams(await PDFDocument.load(source), 'second').map(decoded))
-    expect(decoded(lookupStream(embeddedFont(streams(loaded, 'first')[0]!), 'ToUnicode'))).toMatch(/<0001> <00E9>/i)
+    expect(loaded.getForm().getTextField('second').getText()).toBe('Ω')
+    const font = embeddedFont(streams(loaded, 'first')[0]!)
+    const cmap = decoded(lookupStream(font, 'ToUnicode'))
+    expect(cmap).toContain('<0001> <00E9>')
+    expect(cmap).toContain('<0002> <03A9>')
+    const cid = font.lookup(PDFName.of('DescendantFonts'), PDFArray).lookup(0, PDFDict)
+    const map = decodePDFRawStream(lookupStream(cid, 'CIDToGIDMap')).decode()
+    expect([...map.slice(2, 4)]).toEqual([...map.slice(4, 6)])
+
   })
 
-  it.each(['e\u0301', 'مرحبا', 'א', 'A١', '\u200f', '\ud800', '漢', 'a'.repeat(4097)])('preserves source and appearance when Unicode qualification refuses %s', async value => {
+  it.each(['مرحبا', 'א', 'A١', '\u200f', '\ud800', '漢', 'a'.repeat(4097)])('preserves source and appearance when Unicode qualification refuses %s', async value => {
     const source = await fixture()
     const copy = source.slice()
     const result = await applyFormValues(source, [{ name: 'first', kind: 'text', value }], options)

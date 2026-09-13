@@ -114,22 +114,21 @@ describe('positioned embedded horizontal appearances', () => {
     encode.mockRestore()
   })
   it.each([
-    ['xAdvance', NaN], ['xAdvance', -1], ['xOffset', 10], ['yOffset', 10], ['yAdvance', 10],
+    ['xAdvance', NaN], ['xAdvance', -1e9], ['xOffset', Infinity], ['yOffset', 1e9], ['yAdvance', 10],
   ] as const)('refuses unsupported %s=%s before mutating source', async (property, value) => {
-    const parsed = fontkit.create(bytes)
-    const layout = parsed.layout.bind(parsed)
-    const positioned = vi.spyOn(parsed, 'layout').mockImplementation((...args) => {
-      const run = layout(...args)
-      run.positions[0]![property] = value
-      return run
+    const hb = await import('harfbuzzjs')
+    const original = hb.Buffer.prototype.getGlyphPositions
+    const positioned = vi.spyOn(hb.Buffer.prototype, 'getGlyphPositions').mockImplementation(function (this: InstanceType<typeof hb.Buffer>) {
+      const positions = original.call(this)
+      positions[0]![property] = value
+      return positions
     })
-    const create = vi.spyOn(fontkit, 'create').mockReturnValue(parsed)
     try {
       const source = await fixture(), copy = source.slice()
       const result = await applyFormValues(source, [{ name: 'text', kind: 'text', value: 'AV' }], options)
       expect(result.applied).toBe(0); expect(result.bytes).toBe(source); expect(source).toEqual(copy)
-      expect(result.skipped[0]?.reason).toContain('unsupported glyph shaping or positioning')
-    } finally { create.mockRestore(); positioned.mockRestore() }
+      expect(result.skipped[0]?.reason).toContain('invalid horizontal shaping positions')
+    } finally { positioned.mockRestore() }
   })
 
 })
