@@ -1,5 +1,8 @@
 # @injoffice/sheets
 
+See [XLSX print calibration evidence](../../docs/XLSX-PRINT-CALIBRATION.md) for
+the page-settings contract and independent reference requirements.
+
 ### Opt-in saved print headings
 
 `compileNativeSheetPagePreviewV1(geometry, objects, hostPolicy, { repeat_print_titles: true })`
