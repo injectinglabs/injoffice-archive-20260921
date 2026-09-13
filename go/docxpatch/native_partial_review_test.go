@@ -70,3 +70,18 @@ func TestPartialReviewRejectsUnknownWrapperMetadataAndBoundsInventory(t *testing
 		t.Fatalf("budget failed: %d/%d", len(review.Items), review.OmittedCount)
 	}
 }
+
+func TestPartialReviewRunPropertyMarkupIsExact(t *testing.T) {
+	for _, properties := range []string{`<w:rPr mystery="x"/>`, `<w:rPr>STRAY</w:rPr>`, `<w:rPr><w:rStyle w:val="Normal" mystery="x"/></w:rPr>`, `<w:rPr><w:sz w:val="22" mystery="x"/></w:rPr>`, `<w:rPr><w:u w:val="single">STRAY</w:u></w:rPr>`, `<w:rPr><w:highlight w:val="yellow"><w:vanish/></w:highlight></w:rPr>`, `<w:rPr><w:b/><w:b/></w:rPr>`} {
+		_, review, _ := inspectReviewTest(t, `<w:p><w:ins w:id="1" w:author="A"><w:r>`+properties+`<w:t>SECRET_PROPERTY_MARKUP</w:t></w:r></w:ins></w:p>`)
+		if len(review.Items) != 1 || len(review.Items[0].RunIDs) != 0 {
+			t.Fatalf("property markup qualified: %s %+v", properties, review)
+		}
+	}
+	for _, properties := range []string{`<w:rPr/>`, `<w:rPr><w:b/><w:sz w:val="22"/></w:rPr>`, `<w:rPr><w:vanish/></w:rPr>`} {
+		_, review, _ := inspectReviewTest(t, `<w:p><w:ins w:id="1" w:author="A"><w:r>`+properties+`<w:t>TEXT</w:t></w:r></w:ins></w:p>`)
+		if len(review.Items) != 1 || len(review.Items[0].RunIDs) != 1 {
+			t.Fatalf("exact property source not modeled: %s", properties)
+		}
+	}
+}

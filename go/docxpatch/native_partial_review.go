@@ -20,6 +20,42 @@ type NativePartialReviewV1 struct {
 	OmittedCount int                           `json:"omitted_count"`
 }
 
+// Insertion admission cannot inherit permissive parsing of property markup.
+// Known leaf values still pass through native style/visibility qualification.
+func nativePartialReviewRunProperties(n *nativeXMLNode, ns string) bool {
+	if !nativeExactContainer(n) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, child := range n.Children {
+		if child.Name.Space != ns || seen[child.Name.Local] {
+			return false
+		}
+		seen[child.Name.Local] = true
+		attrs := []string{}
+		switch child.Name.Local {
+		case "rStyle", "sz", "szCs", "b", "i", "bCs", "iCs", "rtl", "vanish", "u", "highlight", "vertAlign", "kern":
+			attrs = []string{"val"}
+		case "rFonts":
+			attrs = []string{"ascii", "hAnsi", "asciiTheme", "hAnsiTheme", "eastAsia", "eastAsiaTheme", "cs", "cstheme", "hint"}
+		case "color":
+			attrs = []string{"val", "themeColor", "themeTint", "themeShade"}
+		case "lang":
+			attrs = []string{"val", "eastAsia", "bidi"}
+		default:
+			return false
+		}
+		allowed := []xml.Name{}
+		for _, name := range attrs {
+			allowed = append(allowed, xml.Name{Space: ns, Local: name})
+		}
+		if !nativeExactLeaf(child, allowed...) {
+			return false
+		}
+	}
+	return true
+}
+
 func inspectNativePartialReview(data []byte, doc *NativeDocumentV1) (*NativePartialReviewV1, error) {
 	pkg, err := openNativeDOCXPackage(data)
 	if err != nil {
@@ -104,6 +140,10 @@ func inspectNativePartialReview(data []byte, doc *NativeDocumentV1) (*NativePart
 				}
 				for i, c := range r.Children {
 					if c.Name == (xml.Name{Space: ns, Local: "rPr"}) && i == 0 {
+						if !nativePartialReviewRunProperties(c, ns) {
+							exact = false
+							break
+						}
 						continue
 					}
 					if c.Name != (xml.Name{Space: ns, Local: "t"}) || len(c.Children) > 0 {
