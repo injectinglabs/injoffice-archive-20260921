@@ -139,3 +139,51 @@ describe('punctuated real-font wrapping',()=>{
   const f=wrapping('Alpha beta');f.evidence.items[0]!.wrap_layout!.policy='ascii-punctuation-space-greedy-v1';expect(()=>decode(f.document,f.evidence)).toThrow()
  })
 })
+
+function pageAnchored(f=fixture()){
+ const item=f.evidence.items[0]!,old=item.owner.anchor.path,next=old.replace('/wp:inline[1]','/wp:anchor[1]')
+ // Keep all existing nested line witnesses attached to the floating container.
+ const evidence=JSON.parse(JSON.stringify(f.evidence).replaceAll('/wp:inline[1]','/wp:anchor[1]')) as NativeDocxTextboxGeometryEvidenceV1
+ f.evidence=evidence;f.document.unsupported[0].anchor.path=next
+ const owner=evidence.items[0]!.owner,a=owner.anchor,root=next.slice(0,next.indexOf('/a:graphic[1]'))
+ const anchor=(path:string,start:number,end:number)=>({...a,path,start_byte:start,end_byte:end})
+ evidence.items[0]!.page_anchor={policy:'page-offset-no-wrap-v1',source_anchor:anchor(root,100,450),horizontal_anchor:anchor(root+'/wp:positionH[1]/wp:posOffset[1]',120,140),vertical_anchor:anchor(root+'/wp:positionV[1]/wp:posOffset[1]',160,180),x_emu:914400,y_emu:1828800}
+ return f
+}
+describe('page-relative rectangle source coordinates',()=>{
+ it('retains offsets through decoding and binds them into local paint replay for all line profiles',()=>{
+  for(const f of [fixture(),multiline(),wrapping()]){
+   const {document,evidence}=pageAnchored(f),before=structuredClone({document,evidence}),result=compileNativeDocxTextboxShapeV1(document,evidence,0,font)
+   expect(result.status,result.reason).toBe('supported');expect(decode(document,evidence)).toEqual(evidence)
+   expect({document,evidence}).toEqual(before)
+   evidence.items[0]!.page_anchor!.x_emu+=127
+   expect(()=>decodePaint(document,evidence,0,result,nativeTextboxFontDigestV1(font))).toThrow('source mismatch')
+   expect(result).not.toHaveProperty('page_number')
+  }
+ })
+ it('rejects missing, unrelated, reordered, nonexact and hostile position evidence',()=>{
+  const mutations:Array<(e:NativeDocxTextboxGeometryEvidenceV1)=>void>=[
+   e=>{delete e.items[0]!.page_anchor},
+   e=>{e.items[0]!.page_anchor!.x_emu=-127},
+   e=>{e.items[0]!.page_anchor!.y_emu++},
+   e=>{e.items[0]!.page_anchor!.x_emu=127000127},
+   e=>{e.items[0]!.page_anchor!.source_anchor.path=e.items[0]!.page_anchor!.source_anchor.path.replace('anchor[1]','inline[1]')},
+   e=>{e.items[0]!.page_anchor!.horizontal_anchor.part_name='/word/other.xml'},
+   e=>{e.items[0]!.page_anchor!.horizontal_anchor.xml_sha256='bad'},
+   e=>{e.items[0]!.page_anchor!.horizontal_anchor.path+='/wp:posOffset[1]'},
+   e=>{e.items[0]!.page_anchor!.vertical_anchor.start_byte=130},
+   e=>{e.items[0]!.page_anchor!.vertical_anchor.end_byte=220},
+   e=>{e.items[0]!.page_anchor!.source_anchor.start_byte=201},
+   e=>{e.items[0]!.owner.status='omitted';e.items[0]!.owner.reason='omitted';e.items[0]!.owner.paragraphs=[];e.items[0]!.geometry=null},
+  ]
+  for(const mutate of mutations){const {document,evidence}=pageAnchored();mutate(evidence);expect(()=>decode(document,evidence)).toThrow()}
+  const {document,evidence}=pageAnchored();let invoked=false
+  Object.defineProperty(evidence.items[0]!.page_anchor,'x_emu',{get(){invoked=true;return 0}})
+  expect(()=>decode(document,evidence)).toThrow();expect(invoked).toBe(false)
+ })
+ it('keeps inline source evidence unchanged and rejects attaching a floating witness to it',()=>{
+  const {document,evidence}=fixture();expect(decode(document,evidence)).toEqual(evidence)
+  evidence.items[0]!.page_anchor=pageAnchored().evidence.items[0]!.page_anchor
+  expect(()=>decode(document,evidence)).toThrow()
+ })
+})

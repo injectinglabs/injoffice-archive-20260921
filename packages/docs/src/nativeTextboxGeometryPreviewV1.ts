@@ -1,3 +1,5 @@
+import {decodeTextboxPageAnchor,type NativeTextboxPageAnchorV1} from './nativeTextboxPageAnchorV1.js'
+export type {NativeTextboxPageAnchorV1} from './nativeTextboxPageAnchorV1.js'
 import {decodeTextboxWrapSource,decodeTextboxWrapPaint,type NativeTextboxWrapLayoutV1,type NativeTextboxWrapPaintV1} from './nativeTextboxWrappingV1.js'
 import {decodeTextboxHardBreaks,decodeTextboxLinePaint,type NativeTextboxHardBreakLayoutV1,type NativeTextboxLinePaintV1} from './nativeTextboxHardBreaksV1.js'
 import {decodeNativeDocxTextboxEvidenceV1,type NativeDocxTextboxV1} from './nativeTextboxInventoryV1.js'
@@ -7,7 +9,7 @@ import {bytesToHex} from '@noble/hashes/utils.js'
 export interface NativeDocxTextboxGeometryV1 {
  width_emu:number;height_emu:number;insets_emu:[number,number,number,number];fill_rgb:string;line_rgb:string;line_width_emu:number;font_family:string;font_size_half_points:number;text_rgb:string;text_wrap?:'square'
 }
-export interface NativeDocxTextboxGeometryItemV1 {owner:NativeDocxTextboxV1;geometry:NativeDocxTextboxGeometryV1|null;hard_break_layout?:NativeTextboxHardBreakLayoutV1;wrap_layout?:NativeTextboxWrapLayoutV1}
+export interface NativeDocxTextboxGeometryItemV1 {owner:NativeDocxTextboxV1;geometry:NativeDocxTextboxGeometryV1|null;hard_break_layout?:NativeTextboxHardBreakLayoutV1;wrap_layout?:NativeTextboxWrapLayoutV1;page_anchor?:NativeTextboxPageAnchorV1}
 export interface NativeDocxTextboxGeometryEvidenceV1 {items:NativeDocxTextboxGeometryItemV1[];omitted_count:number}
 
 /** Copy only bounded plain own data, without invoking accessors or toJSON. */
@@ -39,12 +41,14 @@ export function decodeNativeDocxTextboxGeometryV1(source:unknown,input:unknown):
  if(input===undefined){decodeNativeDocxTextboxEvidenceV1(source,undefined);return {items:[],omitted_count:0}}
  const data=nativeTextboxGeometryPlainData(input);keys(data,['items','omitted_count'])
  if(!Array.isArray(data.items)||data.items.length>64)throw new TypeError('Textbox geometry budget')
- const raw=data.items.map(i=>{keys(i,['owner','geometry',...(i&&typeof i==='object'&&Object.hasOwn(i,'hard_break_layout')?['hard_break_layout']:[]),...(i&&typeof i==='object'&&Object.hasOwn(i,'wrap_layout')?['wrap_layout']:[])]);return i})
+ const raw=data.items.map(i=>{keys(i,['owner','geometry',...(i&&typeof i==='object'&&Object.hasOwn(i,'hard_break_layout')?['hard_break_layout']:[]),...(i&&typeof i==='object'&&Object.hasOwn(i,'wrap_layout')?['wrap_layout']:[]),...(i&&typeof i==='object'&&Object.hasOwn(i,'page_anchor')?['page_anchor']:[])]);return i})
  const joined=decodeNativeDocxTextboxEvidenceV1(source,{items:raw.map(i=>i.owner),omitted_count:data.omitted_count})
  return {items:raw.map((item,i)=>{
   const owner=joined.items[i]!,g=item.geometry
   if(owner.kind!=='drawingml')throw new TypeError('Geometry requires DrawingML')
-  if(owner.status==='omitted'){if(g!==null||Object.hasOwn(item,'hard_break_layout')||Object.hasOwn(item,'wrap_layout'))throw new TypeError('Omitted textbox has geometry');return {owner,geometry:null}}
+  if(owner.status==='omitted'){if(g!==null||Object.hasOwn(item,'hard_break_layout')||Object.hasOwn(item,'wrap_layout')||Object.hasOwn(item,'page_anchor'))throw new TypeError('Omitted textbox has geometry');return {owner,geometry:null}}
+  const page=Object.hasOwn(item,'page_anchor')?decodeTextboxPageAnchor(item.page_anchor,owner):undefined
+  if(!page&&/\/(?:wp|ns[0-9a-f]{8}):anchor\[/.test(owner.anchor.path))throw new TypeError('Missing textbox page anchor')
   keys(g,['width_emu','height_emu','insets_emu','fill_rgb','line_rgb','line_width_emu','font_family','font_size_half_points','text_rgb',...(g&&typeof g==='object'&&Object.hasOwn(g,'text_wrap')?['text_wrap']:[])])
   const integer=(v:unknown,min:number,max:number):v is number=>Number.isSafeInteger(v)&&Number(v)>=min&&Number(v)<=max
   if(!integer(g.width_emu,1,127000000)||!integer(g.height_emu,1,127000000)||!Array.isArray(g.insets_emu)||g.insets_emu.length!==4||!g.insets_emu.every(v=>integer(v,0,127000000)))throw new TypeError('Invalid shape bounds')
@@ -56,7 +60,7 @@ export function decodeNativeDocxTextboxGeometryV1(source:unknown,input:unknown):
   if(wrap?g.text_wrap!=='square':Object.hasOwn(g,'text_wrap'))throw new TypeError('Textbox wrap geometry policy mismatch')
   const hard=Object.hasOwn(item,'hard_break_layout')?decodeTextboxHardBreaks(item.hard_break_layout,owner):undefined
   if(typeof g.font_family!=='string'||!g.font_family.length||g.font_family.length>128||g.font_family.trim()!==g.font_family||!integer(g.font_size_half_points,1,400)||typeof g.text_rgb!=='string'||!/^[0-9A-F]{6}$/.test(g.text_rgb)||owner.paragraphs.length!==1||(!hard&&!/^[\x20-\x7e]{1,4096}$/.test(owner.paragraphs[0]!)))throw new TypeError('Invalid qualified textbox run')
-  return {owner,geometry:g as unknown as NativeDocxTextboxGeometryV1,...(hard?{hard_break_layout:hard}:{}),...(wrap?{wrap_layout:wrap}:{})}
+  return {owner,geometry:g as unknown as NativeDocxTextboxGeometryV1,...(hard?{hard_break_layout:hard}:{}),...(wrap?{wrap_layout:wrap}:{}),...(page?{page_anchor:page}:{})}
  }),omitted_count:joined.omitted_count}
 }
 
