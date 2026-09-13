@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, PDFHexString, PDFName, PDFArray, PDFRawStream, PDFBool, decodePDFRawStream } from 'pdf-lib';
+import { StandardFonts, PDFDocument, PDFHexString, PDFName, PDFArray, PDFRawStream, PDFBool, decodePDFRawStream } from 'pdf-lib';
 import { applyFormValues } from './forms.js';
 
 async function fixture(kind: 'dropdown' | 'list' = 'dropdown') {
@@ -20,7 +20,7 @@ describe('explicit choice appearances', () => {
   it.each(['Helvetica', 'Times-Roman', 'Courier'] as const)('keeps centered dropdown descenders inside the clip with %s', async fontName => {
     const { doc, field } = await fixture();
     field.acroField.setOptions([{ value: PDFHexString.fromText('gqy') }]);
-    const font = doc.embedStandardFont(fontName);
+    const font = doc.embedStandardFont(fontName as StandardFonts);
     const ascent = font.heightAtSize(12, { descender: false });
     const descent = font.heightAtSize(12) - ascent;
     const required = Math.max(font.heightAtSize(12) * 1.2, ascent + 2 * descent);
@@ -63,7 +63,7 @@ describe('explicit choice appearances', () => {
   it.each(['Helvetica', 'Times-Roman', 'Courier'] as const)('reserves final list descenders with %s', async fontName => {
     const { doc, field } = await fixture('list');
     field.acroField.setOptions(['g', 'q', 'y'].map(value => ({ value: PDFHexString.fromText(value) })));
-    const font = doc.embedStandardFont(fontName);
+    const font = doc.embedStandardFont(fontName as StandardFonts);
     const lineHeight = font.heightAtSize(12) * 1.2;
     const descent = font.heightAtSize(12) - font.heightAtSize(12, { descender: false });
     const widget = field.acroField.getWidgets()[0]!;
