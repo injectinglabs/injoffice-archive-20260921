@@ -136,6 +136,15 @@ onmessage = async (event) => {
       respond(request, { ok: true, result: { contractJson } })
       return
     }
+    if (request.op === 'evaluate') {
+      const keys = Object.keys(request).sort().join(' ')
+      if (keys !== 'format id op payload protocol version' || typeof request.payload !== 'string' || request.payload.length > 65536 || new TextEncoder().encode(request.payload).byteLength > 65536) throw new NativeBindingError('Preset evaluation requires at most 64 KiB of UTF-8 JSON.', false)
+      if (typeof self.pptxnative.evaluatePreset !== 'function') throw new NativeBindingError('pptxnative preset evaluation binding unavailable', false)
+      const contractJson = unwrap(self.pptxnative.evaluatePreset(request.payload), 'json')
+      if (contractJson.length > 2097152) throw new NativeBindingError('Preset evaluation response budget exceeded', true)
+      respond(request, { ok: true, result: { contractJson } })
+      return
+    }
     if (request.op === 'apply') {
       const payload = typeof request.payload === 'string' ? request.payload : new Uint8Array(request.payload)
       const produced = unwrap(self.pptxnative.apply(new Uint8Array(request.original), payload, request.expectedRevision), 'bytes')
