@@ -1,3 +1,4 @@
+import { validateEvaluatedGeometry } from './geometryValidation'
 import { PPTX_NATIVE_RESOURCE_LIMITS, PPTX_NATIVE_SCHEMA } from './schema.generated'
 import type {
   NativeCompatibility,
@@ -286,8 +287,13 @@ function validateElement(
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
   }
 
-  if (element.kind === 'shape' && element.preset === undefined && element.compatibility.status !== 'refused') {
+  if (element.kind === 'shape' && element.preset === undefined && element.geometry === undefined && element.compatibility.status !== 'refused') {
     add(issues, `${path}.preset`, 'native.shapePreset', 'is required unless the shape is explicitly refused')
+  }
+  if(element.kind==='shape'&&element.geometry){
+    if(element.preset!==undefined)add(issues,`${path}.geometry`,'native.geometry','preset and geometry are mutually exclusive')
+    if(element.compatibility.status==='editable')add(issues,`${path}.geometry`,'native.geometryAuthority','evaluated geometry must remain read-only')
+    validateEvaluatedGeometry(element.geometry,`${path}.geometry`,issues)
   }
   if ((element.kind === 'shape' || element.kind === 'connector') && element.stroke) {
     const metadataCount = Number(element.stroke.cap !== undefined) + Number(element.stroke.join !== undefined) + Number(element.stroke.dash !== undefined)

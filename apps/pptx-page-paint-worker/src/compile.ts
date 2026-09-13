@@ -144,4 +144,4 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  if(substitutions.length){result.font_substitutions=substitutions;result.font_substitution_policy=EXPLICIT_FONT_POLICY_V1;result.font_substitution_policy_sha256=fonts.policyDigest}
  return decodePptxPreview(result)
 }
-function pathPart(p:RenderPathCommand):string {switch(p.kind){case 'moveTo':return `M${p.x} ${p.y}`;case 'lineTo':return `L${p.x} ${p.y}`;case 'close':return 'Z';default:throw new Error('Unmodeled path command')}}
+function pathPart(p:RenderPathCommand):string {switch(p.kind){case 'moveTo':return `M${p.x} ${p.y}`;case 'lineTo':return `L${p.x} ${p.y}`;case 'quadBezierTo':return `Q${p.x1} ${p.y1} ${p.x} ${p.y}`;case 'cubicBezierTo':return `C${p.x1} ${p.y1} ${p.x2} ${p.y2} ${p.x} ${p.y}`;case 'arcTo':return `A${p.rx} ${p.ry} 0 ${p.largeArc?1:0} ${p.clockwise?1:0} ${p.x} ${p.y}`;case 'close':return 'Z';default:throw new Error('Unmodeled path command')}}

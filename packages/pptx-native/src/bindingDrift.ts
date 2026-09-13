@@ -1,4 +1,5 @@
 import type {
+  NativeEvaluatedGeometry, NativeGeometryTextRect, NativeGeometryPath, NativeGeometryCommand,
   NativeAnimation,
   NativeAsset,
   NativeChartElement,
@@ -69,6 +70,10 @@ type NativePptxBindingChecks = [
   Assert<Fields<'NativeLiteralPie', NativeLiteralPie>>, Assert<Required<'NativeLiteralPie', NativeLiteralPie>>,
   Assert<Fields<'NativeOpaqueChart', NativeOpaqueChart>>, Assert<Required<'NativeOpaqueChart', NativeOpaqueChart>>,
   Assert<Fields<'NativeTextElement', NativeTextElement>>, Assert<Required<'NativeTextElement', NativeTextElement>>,
+  Assert<Fields<'NativeEvaluatedGeometry', NativeEvaluatedGeometry>>, Assert<Required<'NativeEvaluatedGeometry', NativeEvaluatedGeometry>>,
+  Assert<Fields<'NativeGeometryTextRect', NativeGeometryTextRect>>, Assert<Required<'NativeGeometryTextRect', NativeGeometryTextRect>>,
+  Assert<Fields<'NativeGeometryPath', NativeGeometryPath>>, Assert<Required<'NativeGeometryPath', NativeGeometryPath>>,
+  Assert<Fields<'NativeGeometryCommand', NativeGeometryCommand>>, Assert<Required<'NativeGeometryCommand', NativeGeometryCommand>>,
   Assert<Fields<'NativeShapeElement', NativeShapeElement>>, Assert<Required<'NativeShapeElement', NativeShapeElement>>,
   Assert<Fields<'NativeConnectorElement', NativeConnectorElement>>, Assert<Required<'NativeConnectorElement', NativeConnectorElement>>,
   Assert<Fields<'NativePictureElement', NativePictureElement>>, Assert<Required<'NativePictureElement', NativePictureElement>>,

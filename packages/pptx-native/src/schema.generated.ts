@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "0805f1321fdaef1391b7ffc4d6ef62cf2a483fcdf30f1dde29f4d09fc7798b19" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -159,6 +159,66 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "slideId"
     ],
     "required": []
+  },
+  "NativeEvaluatedGeometry": {
+    "schemaName": "evaluatedGeometry",
+    "properties": [
+      "paths",
+      "profile",
+      "textRect"
+    ],
+    "required": [
+      "paths",
+      "profile",
+      "textRect"
+    ]
+  },
+  "NativeGeometryCommand": {
+    "schemaName": "geometryCommand",
+    "properties": [
+      "clockwise",
+      "kind",
+      "largeArc",
+      "rx",
+      "ry",
+      "x",
+      "x1",
+      "x2",
+      "y",
+      "y1",
+      "y2"
+    ],
+    "required": [
+      "kind"
+    ]
+  },
+  "NativeGeometryPath": {
+    "schemaName": "geometryPath",
+    "properties": [
+      "commands",
+      "fillMode",
+      "stroke"
+    ],
+    "required": [
+      "commands",
+      "fillMode",
+      "stroke"
+    ]
+  },
+  "NativeGeometryTextRect": {
+    "schemaName": "geometryTextRect",
+    "properties": [
+      "cx",
+      "cy",
+      "x",
+      "y"
+    ],
+    "required": [
+      "cx",
+      "cy",
+      "x",
+      "y"
+    ]
   },
   "NativeGroupElement": {
     "schemaName": "groupElement",
@@ -334,6 +394,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "animation",
       "compatibility",
       "fill",
+      "geometry",
       "id",
       "kind",
       "name",
@@ -1564,6 +1625,162 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "geometryCommand": {
+      "x-binding-name": "NativeGeometryCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "moveTo",
+            "lineTo",
+            "quadBezierTo",
+            "cubicBezierTo",
+            "arcTo",
+            "close"
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y1": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "x2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y2": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "rx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "ry": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "largeArc": {
+          "type": "boolean"
+        },
+        "clockwise": {
+          "type": "boolean"
+        }
+      }
+    },
+    "geometryPath": {
+      "x-binding-name": "NativeGeometryPath",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fillMode",
+        "stroke",
+        "commands"
+      ],
+      "properties": {
+        "fillMode": {
+          "type": "string",
+          "enum": [
+            "norm",
+            "none"
+          ]
+        },
+        "stroke": {
+          "type": "boolean"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/geometryCommand"
+          }
+        }
+      }
+    },
+    "geometryTextRect": {
+      "x-binding-name": "NativeGeometryTextRect",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "cx",
+        "cy"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "evaluatedGeometry": {
+      "x-binding-name": "NativeEvaluatedGeometry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "textRect",
+        "paths"
+      ],
+      "properties": {
+        "profile": {
+          "const": "drawingml-paths-v1"
+        },
+        "textRect": {
+          "$ref": "#/$defs/geometryTextRect"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/geometryPath"
+          }
+        }
+      }
+    },
     "shapeElement": {
       "x-binding-name": "NativeShapeElement",
       "type": "object",
@@ -1596,6 +1813,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "preset": {
           "$ref": "#/$defs/shapePreset"
+        },
+        "geometry": {
+          "$ref": "#/$defs/evaluatedGeometry"
         },
         "placeholder": {
           "$ref": "#/$defs/placeholderType"

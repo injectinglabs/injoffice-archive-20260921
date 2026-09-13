@@ -198,8 +198,9 @@ export interface NativeTextElement extends NativeElementBase {
 
 export interface NativeShapeElement extends NativeElementBase {
   kind: 'shape'
-  /** Absent only when compatibility.status is refused and rendering must use a placeholder. */
+  /** Exactly one of preset or geometry unless explicitly refused. */
   preset?: NativeShapePreset
+  geometry?: NativeEvaluatedGeometry
   placeholder?: NativePlaceholderType
   fill?: string
   stroke?: NativeStroke
@@ -295,3 +296,17 @@ export type {
   NativeTextWrap,
   NativeTransitionType,
 } from './schema.generated'
+
+/** Numeric DrawingML geometry. Preserve-only until a serializer is qualified. */
+export interface NativeEvaluatedGeometry {
+ profile: 'drawingml-paths-v1'
+ textRect: NativeGeometryTextRect
+ paths: NativeGeometryPath[]
+}
+export interface NativeGeometryTextRect { x:number; y:number; cx:number; cy:number }
+export interface NativeGeometryPath { fillMode:'norm'|'none'; stroke:boolean; commands:NativeGeometryCommand[] }
+export interface NativeGeometryCommand {
+ kind:'moveTo'|'lineTo'|'quadBezierTo'|'cubicBezierTo'|'arcTo'|'close'
+ x?:number; y?:number; x1?:number; y1?:number; x2?:number; y2?:number
+ rx?:number; ry?:number; largeArc?:boolean; clockwise?:boolean
+}
