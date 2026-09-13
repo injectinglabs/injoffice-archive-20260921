@@ -1,3 +1,4 @@
+import {geometryPathFill} from './geometryFillPolicy.js'
 import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
 import type { NativePictureCrop,NativeArrowEnd } from '@injoffice/pptx-native'
@@ -91,9 +92,16 @@ function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRec
   if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : { kind: 'clipRect', rect: node.clip.rect })
   switch (node.kind) {
     case 'shape':
-      if(node.geometryPaths) for(const part of node.geometryPaths) surface.push({kind:'path',sourceElementId:node.sourceElementId,path:part.path,fill:part.fillMode==='norm'?node.fill?.color:undefined,stroke:part.stroke?node.stroke:undefined})
+      if(node.geometryPaths) for(const part of node.geometryPaths) surface.push({kind:'path',sourceElementId:node.sourceElementId,path:part.path,fill:geometryPathFill(node.fill?.color,part.fillMode),stroke:part.stroke?node.stroke:undefined})
       else surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, fill: node.fill?.color, stroke: node.stroke })
-      if (node.textBody) paintTextBody(node.textBody, surface)
+      if (node.textBody) {
+        // Evaluated callouts can extend beyond their source frame. Preserve the
+        // historical paragraph-only clipping policy for text, not path paint.
+        const legacyTextClip=node.geometryPaths!==undefined&&node.textBody.fidelity==='legacyUnavailable'
+        if(legacyTextClip){surface.push({kind:'save'});surface.push({kind:'clipRect',rect:node.bounds})}
+        paintTextBody(node.textBody, surface)
+        if(legacyTextClip)surface.push({kind:'restore'})
+      }
       break
     case 'text':
       paintTextBody(node.textBody, surface)

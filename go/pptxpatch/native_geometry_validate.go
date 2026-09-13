@@ -20,7 +20,7 @@ func (v *nativeValidator) geometry(g NativeEvaluatedGeometry, p string) {
 	total := 0
 	for i, path := range g.Paths {
 		pp := fmt.Sprintf("%s.paths[%d]", p, i)
-		if path.FillMode != "norm" && path.FillMode != "none" {
+		if !nativeGeometryFillMode(path.FillMode) {
 			v.add(pp+".fillMode", "native.geometry", "unsupported geometry fill")
 		}
 		total += len(path.Commands)
@@ -82,4 +82,12 @@ func (v *nativeValidator) geometry(g NativeEvaluatedGeometry, p string) {
 			}
 		}
 	}
+}
+
+func nativeGeometryFillMode(mode string) bool {
+	switch mode {
+	case "norm", "none", "darken", "darkenLess", "lighten", "lightenLess":
+		return true
+	}
+	return false
 }

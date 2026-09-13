@@ -212,7 +212,7 @@ interface RenderNodeBase {
 export interface RenderShapeNode extends RenderNodeBase {
   readonly kind: 'shape'
   readonly preset?: NativeShapePreset
-  readonly geometryPaths?: readonly { readonly path:readonly RenderPathCommand[]; readonly fillMode:'norm'|'none'; readonly stroke:boolean }[]
+  readonly geometryPaths?: readonly { readonly path:readonly RenderPathCommand[]; readonly fillMode:'norm'|'none'|'darken'|'darkenLess'|'lighten'|'lightenLess'; readonly stroke:boolean }[]
   readonly path: readonly RenderPathCommand[]
   readonly fill?: RenderPaint
   readonly stroke?: RenderStroke

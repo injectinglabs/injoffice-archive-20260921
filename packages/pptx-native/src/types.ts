@@ -336,7 +336,7 @@ export interface NativeEvaluatedGeometry {
  paths: NativeGeometryPath[]
 }
 export interface NativeGeometryTextRect { x:number; y:number; cx:number; cy:number }
-export interface NativeGeometryPath { fillMode:'norm'|'none'; stroke:boolean; commands:NativeGeometryCommand[] }
+export interface NativeGeometryPath { fillMode:'norm'|'none'|'darken'|'darkenLess'|'lighten'|'lightenLess'; stroke:boolean; commands:NativeGeometryCommand[] }
 export interface NativeGeometryCommand {
  kind:'moveTo'|'lineTo'|'quadBezierTo'|'cubicBezierTo'|'arcTo'|'close'
  x?:number; y?:number; x1?:number; y1?:number; x2?:number; y2?:number

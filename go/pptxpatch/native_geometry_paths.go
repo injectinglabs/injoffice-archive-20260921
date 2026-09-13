@@ -91,12 +91,22 @@ func (p *nativeGeometryPathBuilder) close() error {
 // ellipse on y=x. SVG's ellipse parameter is different. Convert before deriving
 // endpoints; path-space scaling happens only afterwards (ECMA 20.1.9.4).
 func nativeGeometryEllipsePoint(rx, ry, angle float64) nativeGeometryPoint {
-	t := math.Atan2(rx*math.Sin(angle), ry*math.Cos(angle))
+	sine, cosine := nativeGeometrySinCos(angle)
+	if sine == 0 {
+		return nativeGeometryPoint{rx * cosine, 0}
+	}
+	if cosine == 0 {
+		return nativeGeometryPoint{0, ry * sine}
+	}
+	t := math.Atan2(rx*sine, ry*cosine)
 	return nativeGeometryPoint{rx * math.Cos(t), ry * math.Sin(t)}
 }
 func (p *nativeGeometryPathBuilder) arc(rx, ry, start, sweep float64) error {
 	if !p.hasPen {
 		return fmt.Errorf("geometry arc before moveTo")
+	}
+	if rx == 0 && ry == 0 && nativeGeometryFinite(start) && nativeGeometryFinite(sweep) && math.Abs(sweep) <= 21600000 {
+		return nil
 	}
 	if !nativeGeometryFinite(rx) || !nativeGeometryFinite(ry) || rx <= 0 || ry <= 0 || !nativeGeometryFinite(start) || !nativeGeometryFinite(sweep) || math.Abs(sweep) > 21600000 {
 		return fmt.Errorf("invalid geometry arc")
@@ -104,13 +114,13 @@ func (p *nativeGeometryPathBuilder) arc(rx, ry, start, sweep float64) error {
 	if sweep == 0 {
 		return nil
 	}
-	start = math.Mod(start, 21600000) * nativeGeometryAngleUnit
-	sw := sweep * nativeGeometryAngleUnit
+	start = math.Mod(start, 21600000)
+	sw := sweep
 	offset := nativeGeometryEllipsePoint(rx, ry, start)
 	center := nativeGeometryPoint{p.pen.x - offset.x, p.pen.y - offset.y}
-	// At most half a revolution per segment avoids SVG's coincident-endpoint
+	// At most a quarter revolution per segment avoids SVG's coincident-endpoint
 	// full-circle omission and makes signed winding explicit.
-	segments := int(math.Ceil(math.Abs(sweep) / 10800000))
+	segments := int(math.Ceil(math.Abs(sweep) / 5400000))
 	for i := 1; i <= segments; i++ {
 		next := start + sw*float64(i)/float64(segments)
 		offset = nativeGeometryEllipsePoint(rx, ry, next)

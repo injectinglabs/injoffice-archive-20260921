@@ -32,7 +32,7 @@ func TestNativeDefaultPresetPreview(t *testing.T) {
 				if !bytes.Equal(original, before) {
 					t.Fatal("source bytes changed")
 				}
-				for _, av := range []string{`<a:avLst><a:gd name="adj" fmla="val 16667"/></a:avLst>`, `<a:avLst extra="1"/>`, `<a:avLst>text</a:avLst>`, `<a:avLst><a:gd name="adj" fmla="*/ w 1 2"/></a:avLst>`, `<a:avLst><x:gd xmlns:x="urn:foreign"/></a:avLst>`} {
+				for _, av := range []string{`<a:avLst><a:gd name="unknown" fmla="val 16667"/></a:avLst>`, `<a:avLst extra="1"/>`, `<a:avLst>text</a:avLst>`, `<a:avLst><a:gd name="adj" fmla="*/ w 1 2"/></a:avLst>`, `<a:avLst><x:gd xmlns:x="urn:foreign"/></a:avLst>`} {
 					candidate := strings.Replace(shape, `<a:avLst/>`, av, 1)
 					negative, err := ExtractNativePPTX(nativeShapeStyleFixture(t, strict, candidate, `<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>`), nativeTestExtractOptions())
 					if err != nil {
