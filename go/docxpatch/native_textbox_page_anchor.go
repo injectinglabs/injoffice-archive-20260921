@@ -17,10 +17,12 @@ type NativeTextboxPageAnchorV1 struct {
 }
 
 func nativeTextboxPageOffsets(n *nativeXMLNode, wp, a string) (int64, int64, bool) {
-	if n.Name != (xml.Name{Space: wp, Local: "anchor"}) || !nativeGeometryAttrs(n, "", map[string]string{
-		"distT": "0", "distB": "0", "distL": "0", "distR": "0", "simplePos": "0", "relativeHeight": "0",
-		"behindDoc": "0", "locked": "0", "layoutInCell": "1", "allowOverlap": "1",
-	}) || len(n.Children) != 8 {
+	values := map[string]string{}
+	for _, name := range []string{"distT", "distB", "distL", "distR", "simplePos", "relativeHeight", "behindDoc", "locked"} {
+		values[name] = "0"
+	}
+	values["layoutInCell"], values["allowOverlap"] = "1", "1"
+	if n.Name != (xml.Name{Space: wp, Local: "anchor"}) || !nativeGeometryAttrs(n, "", values) || len(n.Children) != 8 {
 		return 0, 0, false
 	}
 	for i, name := range []string{"simplePos", "positionH", "positionV", "extent", "effectExtent", "wrapNone", "docPr"} {
@@ -52,9 +54,6 @@ func nativeTextboxPageAnchorEvidence(drawing *nativeXMLNode, ns, part string, ra
 	if !ok {
 		return nil
 	}
-	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 {
-		start, end := n.Start, n.End
-		return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
-	}
+	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 { return nativeTextboxSourceAnchor(n, part, raw) }
 	return &NativeTextboxPageAnchorV1{"page-offset-no-wrap-v1", anchor(n), anchor(n.Children[1].Children[0]), anchor(n.Children[2].Children[0]), x, y}
 }

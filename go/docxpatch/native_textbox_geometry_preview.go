@@ -131,20 +131,21 @@ func nativeGeometryChildren(n *nativeXMLNode, ns string, names ...string) bool {
 	return true
 }
 func nativeGeometryAttrs(n *nativeXMLNode, ns string, values map[string]string) bool {
-	attrs := []xml.Name{}
-	for key := range values {
-		attrs = append(attrs, xml.Name{Space: ns, Local: key})
-	}
-	if !nativeExactContainer(n, attrs...) {
+	if !nativeXMLWhitespaceOnly(n.Text) {
 		return false
 	}
-	for key, want := range values {
-		value, ok := nativeAttr(n, ns, key)
-		if !ok || value != want {
+	count := 0
+	for _, attr := range n.Attrs {
+		if nativeSettingsNamespaceDeclaration(attr) {
+			continue
+		}
+		want, ok := values[attr.Name.Local]
+		if !ok || attr.Name.Space != ns || attr.Value != want {
 			return false
 		}
+		count++
 	}
-	return true
+	return count == len(values)
 }
 func nativeGeometryPaint(n *nativeXMLNode, a string) (string, bool) {
 	if n.Name == (xml.Name{Space: a, Local: "noFill"}) && nativeExactLeaf(n) {
@@ -354,4 +355,10 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 		textWrap = "square"
 	}
 	return &NativeTextboxGeometryV1{width, height, insets, fillRGB, lineRGB, lineWidth, font, size, rgb, textWrap}, text
+}
+
+// All supplemental textbox witnesses hash the exact source node bytes.
+func nativeTextboxSourceAnchor(n *nativeXMLNode, part string, raw []byte) NativeSourceAnchorV1 {
+	start, end := n.Start, n.End
+	return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
 }

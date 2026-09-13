@@ -95,10 +95,7 @@ func nativeTextboxWrapEvidence(drawing *nativeXMLNode, ns, part string, raw []by
 	if !ok {
 		return nil
 	}
-	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 {
-		start, end := n.Start, n.End
-		return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
-	}
+	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 { return nativeTextboxSourceAnchor(n, part, raw) }
 	r := p.Children[1]
 	return &NativeTextboxWrapLayoutV1{nativeTextboxTextWrapPolicy(r.Children[1].Text), anchor(body), anchor(p), anchor(r), anchor(r.Children[1]), anchor(p.Children[0].Children[0]), step}
 }
