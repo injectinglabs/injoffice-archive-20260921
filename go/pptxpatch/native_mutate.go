@@ -686,6 +686,9 @@ func validateNativeMutationParagraphs(paragraphs []NativeParagraph, budget *nati
 		budget.runs += len(paragraph.Runs)
 		budget.nodes += len(paragraph.Runs)
 		for runIndex, run := range paragraph.Runs {
+			if run.KerningThresholdHundredthPt != nil {
+				return fmt.Errorf("authored kerning threshold mutation is unsupported")
+			}
 			if run.Text == nil || run.Bold == nil || run.Italic == nil || run.FontSizeHundredthPt == nil || run.Color == nil || run.FontFamily == nil {
 				return fmt.Errorf("paragraph %d run %d is not self-contained", paragraphIndex, runIndex)
 			}
@@ -1320,7 +1323,7 @@ func nativeParagraphEqual(left, right NativeParagraph) bool {
 	}
 	for index := range left.Runs {
 		l, r := left.Runs[index], right.Runs[index]
-		if !nativeStringPointerEqual(l.Text, r.Text) || !nativeBoolPointerEqual(l.Bold, r.Bold) || !nativeBoolPointerEqual(l.Italic, r.Italic) || !nativeInt64PointerEqual(l.FontSizeHundredthPt, r.FontSizeHundredthPt) || !nativeStringPointerEqual(l.Color, r.Color) || !nativeStringPointerEqual(l.FontFamily, r.FontFamily) || !nativeStringPointerEqual(l.Language, r.Language) {
+		if !nativeStringPointerEqual(l.Text, r.Text) || !nativeBoolPointerEqual(l.Bold, r.Bold) || !nativeBoolPointerEqual(l.Italic, r.Italic) || !nativeInt64PointerEqual(l.FontSizeHundredthPt, r.FontSizeHundredthPt) || !nativeStringPointerEqual(l.Color, r.Color) || !nativeStringPointerEqual(l.FontFamily, r.FontFamily) || !nativeStringPointerEqual(l.Language, r.Language) || !nativeInt64PointerEqual(l.KerningThresholdHundredthPt, r.KerningThresholdHundredthPt) {
 			return false
 		}
 	}
