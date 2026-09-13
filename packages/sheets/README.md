@@ -306,8 +306,14 @@ The qualified subset is fail-closed and viewport-bounded:
   (`"$"#,##0.00`, `0.00" €"`), applied without `Date`, `Intl`, host locale, or host timezone;
   decimal scaling/rounding uses bounded integer arithmetic, including percentages.
   Separators are deterministic comma grouping and decimal point, not a claim of
-  host-locale display parity. Accounting padding, colors/conditions, multi-section
-  formats, fractions, scientific notation, scaling commas and implicit currencies
+  host-locale display parity. Two or three numeric sections select positive/zero
+  and negative, or positive, negative and zero respectively; the negative section
+  can use parentheses or an explicit minus (`0.00;(0.00);0`). Every section must
+  use the fixed numeric subset, even when not selected. Nonzero values rounding
+  to zero remain refused pending independent reference evidence. Section selection
+  follows [Microsoft's format guidelines](https://support.microsoft.com/en-us/excel/review-guidelines-for-customizing-a-number-format).
+  Accounting padding, colors/conditions, empty/text sections, fractions,
+  scientific notation, scaling commas and implicit currencies
   remain refused rather than displaying raw numbers as if formatting succeeded;
   `General` numbers keep their stored lexical; named months/days (`mmmm`,
   `dddd`) paint only from an explicit OOXML `[$-…]` calendar/locale that has a
