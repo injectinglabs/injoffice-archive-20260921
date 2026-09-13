@@ -7924,7 +7924,7 @@
             {
               "name": "NativeWasmOperation",
               "kind": "type",
-              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'apply'"
+              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'evaluate' | 'apply'"
             },
             {
               "name": "NativeWasmOperationOptions",
@@ -10748,6 +10748,11 @@
               "name": "PptxNativeTextReplaceMutationV1",
               "kind": "interface",
               "signature": "export interface PptxNativeTextReplaceMutationV1"
+            },
+            {
+              "name": "PptxPresetGeometryRequest",
+              "kind": "type",
+              "signature": "export interface PptxPresetGeometryRequest"
             },
             {
               "name": "PptxWasmAssetUrls",
