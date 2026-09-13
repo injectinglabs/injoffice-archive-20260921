@@ -18,7 +18,7 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 	result := make([]NativeSheetPrintAreaSetV1, count)
 	names, titles, valid := collectNativePrintNames(raw, sheets)
 	for i, sheet := range sheets[:count] {
-		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles, or one constant-integer OFFSET over an absolute same-sheet rectangle, and supported saved print titles, if present."}}
+		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles, or one bounded OFFSET with integer literals or qualified saved same-sheet numeric cells, and supported saved print titles, if present."}}
 		defs := names[sheet.Order]
 		if !valid || len(defs) != 1 || !validNativePrintName(defs[0]) {
 			continue
@@ -34,6 +34,10 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 		}
 		areas := parseNativePrintAreaSet(defs[0].text, sheet.Name)
 		offset := parseNativePrintOffset(defs[0].text, sheet.Name)
+		var sourceArguments []string
+		if offset == nil {
+			offset, sourceArguments = parseNativePrintSourceCellOffset(defs[0].text, sheet)
+		}
 		if offset != nil {
 			areas = []NativePrintAreaRectV1{*offset}
 		}
@@ -44,6 +48,10 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 		result[i].Warnings = []string{"Read-only saved print-area rectangles in source order. Each area starts a separate approximate preview sequence; no formula evaluation, printer fidelity or mutation authority. Saved print titles require explicit preview selection."}
 		if offset != nil {
 			result[i].Warnings = []string{"Read-only print area resolved from constant OFFSET arguments; no cell values, caches or other names were evaluated. Page geometry is approximate, not Excel printer calibration. Saved print titles require explicit preview selection.", "Source _xlnm.Print_Area formula: " + defs[0].text}
+			if len(sourceArguments) > 0 {
+				result[i].Warnings[0] = "Read-only print area resolved from OFFSET integer literals and saved numeric source cells. Formula cells, caches and other names are not evaluated. Page geometry is approximate, not Excel printer calibration. Saved print titles require explicit preview selection."
+				result[i].Warnings = append(result[i].Warnings, sourceArguments...)
+			}
 		}
 	}
 	return result
