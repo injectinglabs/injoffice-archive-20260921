@@ -991,3 +991,11 @@ font or placement refusal returns no partial composition. Multiple rectangles,
 inline placement, anchors after paragraph text, other wrapping/positioning
 policies and unsupported body content remain refused. This does not grant
 mutation capabilities or alter the original strict page-paint contract.
+
+The playground's **Upload to helper and preview page-placed textboxes** action
+uses `/v1/docx/page-preview-textboxes`. It validates the current package and
+embedded-font inventory before mounting the rectangle above the body paint.
+Navigation mounts one page at a time; replacing the source clears old pages
+and requires a new explicit upload. `scripts/smoke-docx-textbox-notes-browser.mjs`
+checks this flow and four-page footnote continuation with real DOCX fixtures,
+actual font outlines, SVG raster pixels and source-byte preservation in Chrome.

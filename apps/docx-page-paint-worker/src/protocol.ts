@@ -1,5 +1,8 @@
+import {renderNativeDocxTextboxPagePreviewV1} from '@injoffice/docs/native-textbox-page-compiler'
+import {decodeNativeDocxTextboxGeometryV1} from '@injoffice/docs/native-docx'
 import {
   DOCX_INLINE_IMAGE_LIMITS,
+  decodeNativeDOCXFontInventoryV1,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
@@ -36,7 +39,7 @@ export interface NativeDocxPagePaintWorkerRequestV1 {
   protocol: typeof DOCX_PAGE_PAINT_WORKER_PROTOCOL
   version: typeof DOCX_PAGE_PAINT_WORKER_VERSION
   id: string
-  op: 'prepare' | 'complete' | 'render' | 'render-approximate' | 'render-auto-borders' | 'ping'
+  op: 'prepare' | 'complete' | 'render' | 'render-approximate' | 'render-auto-borders' | 'render-font-substitution' | 'render-textbox-pages' | 'ping'
   input?: unknown
 }
 
@@ -130,15 +133,16 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
   try {
     if (!record(value) || !exactKeys(value, ['protocol', 'version', 'id', 'op', 'input']) || value.protocol !== DOCX_PAGE_PAINT_WORKER_PROTOCOL || value.version !== DOCX_PAGE_PAINT_WORKER_VERSION || candidateID === 'invalid') throw new TypeError('worker request envelope is invalid')
     if (value.op === 'ping') return { ...base, ok: true, result: { status: 'ready' } }
-    if (value.op === 'render-approximate' || value.op === 'render-auto-borders' || value.op==='render-font-substitution') {
+    if (value.op === 'render-approximate' || value.op === 'render-auto-borders' || value.op==='render-font-substitution' || value.op==='render-textbox-pages') {
+      const textbox = value.op==='render-textbox-pages'
       const automatic = value.op === 'render-auto-borders'
       const fontOnly=value.op==='render-font-substitution'
       if (!record(value.input)) throw new TypeError('approximate render requires an input object')
-      const fields = fontOnly?('composition' in value.input?['prepare','composition']:['prepare']):automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
+      const fields = textbox?['prepare','evidence']:fontOnly?('composition' in value.input?['prepare','composition']:['prepare']):automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
       if ('font_size_policy' in value.input) fields.push('font_size_policy')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
-      if(fontOnly&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
+      if((fontOnly||textbox)&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
       if (fontSizePolicy !== undefined && !validNativeDocxHostDefaultSizePolicyV1(fontSizePolicy)) throw new TypeError('Host default size policy is invalid')
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
@@ -160,6 +164,17 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
           const outline = provider.outline(request.glyph_id)
           return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em }
         },
+      }
+      if(textbox){
+        const evidence=decodeNativeDocxTextboxGeometryV1(input.document,value.input.evidence)
+        const family=evidence.items.length===1?evidence.items[0]?.geometry?.font_family:undefined
+        const inventory=decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
+        const faces=inventory.families.flatMap(f=>f.faces).filter(f=>f.family===family&&f.weight===400&&f.style==='normal'&&(f.stretch??100)===100&&f.source.face_slot==='embedRegular')
+        if(faces.length!==1)throw new TypeError('Textbox page preview requires one exact embedded regular font')
+        const face=faces[0]!,asset=input.font_assets.find(a=>a.face_id===face.face_id&&a.content_digest===face.source.content_sha256&&a.resource_id===face.source.resource_id)
+        if(!asset)throw new TypeError('Textbox font bytes do not match the source inventory')
+        const preview=await renderNativeDocxTextboxPagePreviewV1(input,evidence,asset.bytes,outlineProvider,{fonts})
+        return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
       const runtime = { createShaper: workerShaper, fonts, fontSizePolicy }
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
