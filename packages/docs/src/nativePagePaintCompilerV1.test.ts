@@ -2521,7 +2521,7 @@ describe('unequal whole-paragraph column compiler', () => {
 })
 
 describe('whole footnote reservation compiler', () => {
-  function reflowInput(prefix: number, following: number, height = 90000): NativeDocxPagePaintPrepareInputV1 {
+  function reflowInput(prefix: number, following: number, height = 90000, members = 1): NativeDocxPagePaintPrepareInputV1 {
     const input = noteFixture()
     const document = input.document as NativeDocxDocumentV1
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
@@ -2540,9 +2540,38 @@ describe('whole footnote reservation compiler', () => {
     const note = document.notes[1]!.blocks[0]!.paragraph!
     note.runs[1]!.text = 'The complete footnote remains with the reference and uses one kept paragraph with enough source text to wrap at the authored width. '.repeat(2)
     resolved.paragraphs.find((paragraph) => paragraph.paragraph_id === note.id)!.properties.keep_lines = true
+    for (let index = 1; index < members; index += 1) {
+      const paragraph = structuredClone(note)
+      paragraph.id = `${note.id}:member:${index}`
+      paragraph.runs = [{ ...structuredClone(note.runs[1]!), id: `run:${paragraph.id}`, text: 'Another authored kept paragraph.' }]
+      document.notes[1]!.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+      resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs.find((entry) => entry.paragraph_id === note.id)!), paragraph_id: paragraph.id })
+      resolved.runs.push({ ...structuredClone(resolved.runs.find((entry) => entry.run_id === note.runs[1]!.id)!), run_id: paragraph.runs[0]!.id, paragraph_id: paragraph.id })
+    }
+    if (members > 1) for (const [index, block] of document.notes[1]!.blocks.entries()) resolved.paragraphs.find((entry) => entry.paragraph_id === block.id)!.properties.keep_next = index < members - 1
     rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids = [...resolved.paragraphs.map((paragraph) => paragraph.paragraph_id), ...resolved.runs.map((run) => run.run_id)].sort() })
     return input
   }
+  it('paints every authored footnote-chain paragraph with one label after body reflow', async () => {
+    const input = reflowInput(5, 2, 90000, 2), before = structuredClone(input)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const layout = prepared.page_paint_request.paginated_layout
+    expect(layout.status, JSON.stringify(layout.diagnostics)).toBe('paginated')
+    const note = layout.pages[1]!.note_stories![1]!
+    expect([...new Set(note.lines.map((line) => line.paragraph_id))]).toEqual((input.document as NativeDocxDocumentV1).notes[1]!.blocks.map((block) => block.id))
+    expect(layout.pages[0]!.note_stories ?? []).toHaveLength(0)
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((request) => {
+      const outline = outlines.outline(request.glyph_id)
+      return outline.path.length ? { ...request, ...outline, status: 'outlined' as const } : { ...request, units_per_em: outline.units_per_em, status: 'empty' as const }
+    }) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, completed.page_paint_request, completed.page_paint_request.outline_provider).ok).toBe(true)
+    const forged = structuredClone(completed.page_paint_request)
+    forged.paginated_layout.pages[1]!.note_stories![1]!.lines.pop()
+    expect(decodeNativeDocxPagePaintRequestV1(forged).ok).toBe(false)
+    expect(input).toEqual(before)
+  }, 15_000)
   // Two complete real-outline/replay scenarios share this integration test.
   it('paints references and whole notes after later body or the reference itself moves', async () => {
     for (const [prefix, following, notePage] of [[1, 6, 0], [5, 1, 1]]) {

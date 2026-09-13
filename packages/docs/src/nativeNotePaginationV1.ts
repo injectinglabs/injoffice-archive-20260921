@@ -1,4 +1,4 @@
-import type { NativeDocxFootnoteReservationProfileV1, NativeDocxFootnoteAreaMeasurementV1 } from './nativeFootnoteReservationV1.js'
+import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationProfileV1, type NativeDocxFootnoteAreaMeasurementV1 } from './nativeFootnoteReservationV1.js'
 /**
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
@@ -417,7 +417,13 @@ export function placeNativeDocxNotesV1(
   document: NativeDocxDocumentV1,
   resolved: NativeDocxResolvedLayoutInputV1,
   shaped: NativeDocxShapedLinesV1,
+  reservation?: NativeDocxFootnoteReservationProfileV1,
 ): NativeDocxNotePaginationRefusalV1 | undefined {
+  // Reproduce qualification and measured pair fit from the actual placement inputs;
+  // never trust a caller-supplied paragraph list or a decoded object's identity.
+  const verifiedReservation = reservation && measureNativeDocxFootnoteReservationV1(
+    { ...reservation.request, document, resolved_layout: resolved, shaped_lines: shaped }, measureNativeDocxFootnoteAreaForReservationV1)
+  const keptParagraphs = new Set(verifiedReservation?.note.blocks.slice(0, -1).map((block) => block.paragraph!.id) ?? [])
   const staged = structuredClone(layout)
   for (const page of staged.pages) page.note_stories = []
   if (document.notes.length === 0) {
@@ -455,7 +461,7 @@ export function placeNativeDocxNotesV1(
     if (!paragraphs) return { scope_id: story.id, code: 'note-structure-unsupported', message: 'Nested note tables are unsupported' }
     for (const paragraph of paragraphs) {
       const properties = resolvedParagraphs.get(paragraph.id)?.properties
-      if (properties?.keep_next === true || properties?.page_break_before === true) return { scope_id: paragraph.id, code: 'note-structure-unsupported', message: 'Note cross-paragraph keep and page-break constraints are outside bounded placement' }
+      if ((properties?.keep_next === true && !keptParagraphs.has(paragraph.id)) || properties?.page_break_before === true) return { scope_id: paragraph.id, code: 'note-structure-unsupported', message: 'Note cross-paragraph keep and page-break constraints are outside bounded placement' }
     }
     for (const paragraph of paragraphs) for (const run of paragraph.runs) {
       if (run.drawing) return { scope_id: run.id, code: 'note-structure-unsupported', message: 'Note drawings are outside bounded native note pagination' }
@@ -488,7 +494,7 @@ export function placeNativeDocxNotesV1(
     // Whole paragraphs satisfy keep_lines/widow control. Run page controls and
     // cross-paragraph constraints still need layout semantics outside this slice.
     return !(entry.code === 'page-control-deferred' && entry.severity === 'deferred' && entry.source_id === undefined && entry.source_diagnostic_code === undefined && entry.source_diagnostic_message === undefined &&
-      properties && properties.keep_next !== true && properties.page_break_before !== true &&
+      properties && (properties.keep_next !== true || keptParagraphs.has(entry.scope_id)) && properties.page_break_before !== true &&
       (['keep_next', 'keep_lines', 'page_break_before', 'widow_control'] as const).some((key) => properties[key] !== undefined &&
         entry.message === `${key} is retained in resolved layout for the future paginator and does not alter line shaping`))
   })

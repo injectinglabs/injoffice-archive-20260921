@@ -454,10 +454,16 @@ and the paragraph atomicity of
 The imported Go fixture and actual HarfBuzz outline/paint replay validate this
 pipeline; they are synthetic OOXML evidence, not a Word visual reference.
 
-Whole-footnote body reflow admits one footnote containing one paragraph in a
-single-section, single-column document. Body paragraphs and the note use simple
+Whole-footnote body reflow admits one footnote containing 1–16 paragraphs in a
+single-section, single-column document. Multiple note paragraphs require a complete
+resolved `keep_next=true` chain on every nonfinal paragraph, with final keep-next
+absent or false and the sole owning label in the first paragraph. Every multiline
+member requires `keep_lines=true`; oversized reference/group pairs remain refused.
+This follows authored [KeepNext](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.keepnext)
+and [KeepLines](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.keeplines)
+semantics without implementing their oversized-group fallback. Body paragraphs and the note use simple
 LTR text, natural line heights and zero spacing/indents. Every multiline body
-or note paragraph must have resolved `keep_lines=true`; keep-with-next, explicit
+or note paragraph must have resolved `keep_lines=true`; body keep-with-next, explicit
 page breaks, tables, drawings, fields, numbering, headers/footers and explicit
 note positions are excluded. The exact instruction-only separator also has zero
 spacing and one natural line. The reference paragraph plus measured complete

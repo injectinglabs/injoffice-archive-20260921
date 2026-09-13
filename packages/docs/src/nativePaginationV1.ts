@@ -1801,7 +1801,7 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
       diagnostics: context.diagnostics,
       sections: context.sections,
       pages: context.pages,
-    }, request.document, request.resolved_layout, request.shaped_lines)
+    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation)
     if (noteFailure) refuse(context, noteFailure.code, noteFailure.scope_id, noteFailure.message)
     else if (context.footnoteReservation) {
       const reservation = context.footnoteReservation
