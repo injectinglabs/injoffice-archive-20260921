@@ -15,7 +15,7 @@ export function NativeRichTextSpans({ entry, base, normal, loadedFont }: {
     const name = run.font_name ?? base.font_name ?? 'sans-serif'
     const bold = run.bold ?? base.bold ?? false, italic = run.italic ?? base.italic ?? false
     const family = loadedFont && name === normal?.font_name && bold === Boolean(normal.font_bold) && italic === Boolean(normal.font_italic) ? loadedFont : name
-    return <tspan key={i} data-rich-run={i} data-rich-properties={run.properties} aria-label={nativeRichTextRunDisclosureV1(run)} fontFamily={family} fontSize={(run.font_size_points ?? base.font_size_points ?? 11) * 96 / 72} fontWeight={bold ? 700 : 400} fontStyle={italic ? 'italic' : 'normal'} fill={run.font_color ?? base.font_color ?? '#000000'} style={{ whiteSpace: 'pre' }}>{run.text}</tspan>
+    return <tspan key={i} data-rich-run={i} data-rich-properties={run.properties} aria-label={nativeRichTextRunDisclosureV1(run)} fontFamily={family} fontSize={(run.font_size_points ?? base.font_size_points ?? 11) * 96 / 72} fontWeight={bold ? 700 : 400} fontStyle={italic ? 'italic' : 'normal'} fill={run.font_color ?? base.font_color ?? '#000000'} style={{ whiteSpace: 'pre', textDecoration: run.underline === 'single' ? 'underline solid' : 'none' }}>{run.text}</tspan>
   })}</>
 }
 

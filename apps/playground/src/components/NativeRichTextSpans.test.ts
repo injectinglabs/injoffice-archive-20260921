@@ -25,3 +25,15 @@ it('exposes a clearly labeled source sample and all per-run omissions without pa
   const html = renderToStaticMarkup(createElement(NativeRichTextDetails, { entries: [entry], styles: [{ id: 0, effective: { font_name: 'Calibri' } }], warnings: [] }))
   expect(html).toContain('not worksheet positions or page geometry'); expect(html).toContain('shared string 0'); expect(html).toContain('Source rich-text sample A1'); expect(html).toContain('font-family-hint'); expect(html).toContain('Stored text: sample')
 })
+
+it('decorates individual runs and resets absent and explicit-none runs', () => {
+ const entry = { text: 'on absent off', status: 'available', runs: [
+  {text:'on ',properties:'direct',underline:'single',underline_origin:'default-val',omitted:[]},
+  {text:'absent ',properties:'direct',omitted:[]},
+  {text:'off',properties:'direct',underline:'none',underline_origin:'explicit-val',omitted:[]},
+ ] } as NativeRichTextCellV1
+ const html = renderToStaticMarkup(createElement(NativeRichTextSpans, {entry,base:{}}))
+ expect(html.match(/text-decoration:underline solid/g)).toHaveLength(1)
+ expect(html.match(/text-decoration:none/g)).toHaveLength(2)
+ expect(html).toContain('schema-default single'); expect(html).toContain('undecorated host fallback')
+})

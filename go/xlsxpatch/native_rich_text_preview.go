@@ -32,14 +32,16 @@ type NativeRichTextCellV1 struct {
 	Runs        []NativeRichTextRunV1 `json:"runs,omitempty"`
 }
 type NativeRichTextRunV1 struct {
-	Text           string   `json:"text"`
-	Properties     string   `json:"properties"` // direct or cell-inherited (absent rPr)
-	FontName       *string  `json:"font_name,omitempty"`
-	FontSizePoints *float64 `json:"font_size_points,omitempty"`
-	FontColor      *string  `json:"font_color,omitempty"`
-	Bold           *bool    `json:"bold,omitempty"`
-	Italic         *bool    `json:"italic,omitempty"`
-	Omitted        []string `json:"omitted"`
+	Text            string   `json:"text"`
+	Properties      string   `json:"properties"` // direct or cell-inherited (absent rPr)
+	FontName        *string  `json:"font_name,omitempty"`
+	FontSizePoints  *float64 `json:"font_size_points,omitempty"`
+	FontColor       *string  `json:"font_color,omitempty"`
+	Bold            *bool    `json:"bold,omitempty"`
+	Italic          *bool    `json:"italic,omitempty"`
+	Underline       string   `json:"underline,omitempty"`
+	UnderlineOrigin string   `json:"underline_origin,omitempty"`
+	Omitted         []string `json:"omitted"`
 }
 
 var nativeRichRGB = regexp.MustCompile(`(?i)^FF[0-9A-F]{6}$`)
@@ -160,10 +162,22 @@ func nativeRichRuns(item *previewXML, ns string) ([]NativeRichTextRunV1, string)
 					}
 					run.Omitted = append(run.Omitted, "baseline")
 				case "u":
-					if val != "none" {
-						return nil, "Underline run styling omitted."
+					origin := "default-val"
+					for _, a := range v.attrs {
+						if a.Name.Space == "" && a.Name.Local == "val" {
+							if origin == "explicit-val" {
+								return nil, "Duplicate underline value."
+							}
+							origin = "explicit-val"
+						}
 					}
-					run.Omitted = append(run.Omitted, "underline-none")
+					if origin == "default-val" {
+						val = "single"
+					}
+					if val != "single" && val != "none" || v.text != "" {
+						return nil, "Unsupported underline declaration; run styling omitted."
+					}
+					run.Underline, run.UnderlineOrigin = val, origin
 				case "strike":
 					if val != "0" && val != "false" {
 						return nil, "Unsupported run effect."
@@ -386,7 +400,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 					totalRuns += len(runs)
 					entry.Status = "available"
 					entry.Runs = runs
-					entry.Warnings = []string{"Approximate direct-run preview: missing properties use the cell font as a host fallback for each run; font matching, shaping and omitted font-family hints are approximate. Explicit baseline and disabled effects are no-op declarations. No full rich-style or Excel fidelity claim."}
+					entry.Warnings = []string{"Approximate direct-run preview: missing properties use the cell font as a host fallback for each run; font matching, shaping and omitted font-family hints are approximate. Single underline uses approximate browser decoration; absent underline uses a disclosed undecorated host fallback. Explicit baseline and disabled effects are no-op declarations. No full rich-style or Excel fidelity claim."}
 				} else {
 					entry.Warnings = []string{"Run styling omitted: " + reason + " Plain source text retained."}
 				}
