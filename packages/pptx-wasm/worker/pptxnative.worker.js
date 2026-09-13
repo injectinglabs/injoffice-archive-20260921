@@ -136,6 +136,14 @@ onmessage = async (event) => {
       respond(request, { ok: true, result: { contractJson } })
       return
     }
+    if (request.op === 'chartWorkbooks') {
+      if (Object.keys(request).sort().join(' ') !== 'bytes format id op protocol version' || !(request.bytes instanceof ArrayBuffer) || request.bytes.byteLength < 1 || request.bytes.byteLength > 536870912) throw new NativeBindingError('Chart workbook inspection requires bounded source package bytes.', false)
+      if (typeof self.pptxnative.inspectChartWorkbooks !== 'function') throw new NativeBindingError('PPTX chart workbook inspection binding unavailable', false)
+      const contractJson = unwrap(self.pptxnative.inspectChartWorkbooks(new Uint8Array(request.bytes)), 'json')
+      if (contractJson.length > 33554432 || new TextEncoder().encode(contractJson).byteLength > 33554432) throw new NativeBindingError('Chart workbook inspection response budget exceeded', true)
+      respond(request, { ok: true, result: { contractJson } })
+      return
+    }
     if (request.op === 'evaluate') {
       const keys = Object.keys(request).sort().join(' ')
       if (keys !== 'format id op payload protocol version' || typeof request.payload !== 'string' || request.payload.length > 65536 || new TextEncoder().encode(request.payload).byteLength > 65536) throw new NativeBindingError('Preset evaluation requires at most 64 KiB of UTF-8 JSON.', false)
