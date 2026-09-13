@@ -17,3 +17,13 @@ it('refuses invalid geometry and values at the public boundary',()=>{
  expect(()=>createNativeLiteralPiePaths(pie,100,0)).toThrow()
  expect(createNativeLiteralPiePaths({...pie,values:[1],colors:['#FF0000']},100,100)[0]!.path).toHaveLength(183)
 })
+it('keeps indexed effective paints attached to source value proportions',()=>{
+ const source={...pie,values:[1,2,3],colors:['#0000FF','#FF0000','#0000FF']}
+ const result=createNativeLiteralPiePaths(source,200,200)
+ expect(result.map(slice=>slice.color)).toEqual(source.colors)
+ expect(result[0]!.path.at(-2)).toEqual({kind:'lineTo',x:187,y:50})
+ expect(result[1]!.path.at(-2)).toEqual({kind:'lineTo',x:100,y:200})
+ expect(result[2]!.path.at(-2)).toEqual({kind:'lineTo',x:100,y:0})
+ const recolored=createNativeLiteralPiePaths({...source,colors:['#00FF00','#00FF00','#FF0000']},200,200)
+ expect(recolored.map(slice=>slice.path)).toEqual(result.map(slice=>slice.path))
+})
