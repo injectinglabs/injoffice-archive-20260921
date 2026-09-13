@@ -384,7 +384,8 @@ export function nativeDocxPagePaintFontManifestSha256V1(manifest: NativeFontMani
 }
 
 /** Canonical content attestation for the complete shaped-lines projection carried by page-paint v1. */
-export function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[]): string {
+export function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[], columnShapedLines?: [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1]): string {
+  if (columnShapedLines) return canonicalWireSha256({ shaped_lines: shapedLines, column_shaped_lines: columnShapedLines, ...(pageFieldVariants ? { page_field_variants: pageFieldVariants } : {}) })
   return canonicalWireSha256(pageFieldVariants ? { shaped_lines: shapedLines, page_field_variants: pageFieldVariants } : shapedLines)
 }
 
@@ -416,6 +417,7 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDo
     document: request.pagination_request.document,
     resolved_layout: request.pagination_request.resolved_layout,
     shaped_lines: request.pagination_request.shaped_lines,
+    ...(request.pagination_request.column_shaped_lines ? { column_shaped_lines: request.pagination_request.column_shaped_lines } : {}),
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
@@ -513,7 +515,7 @@ function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown,f
     stringValue(integrity.media_assets_sha256, '/integrity/media_assets_sha256', issues, SHA256, 71)
     stringValue(integrity.paginated_layout_sha256, '/integrity/paginated_layout_sha256', issues, SHA256, 71)
     if (manifest.ok && integrity.font_manifest_sha256 !== nativeDocxPagePaintFontManifestSha256V1(manifest.value)) add(issues, 'BROKEN_REFERENCE', '/integrity/font_manifest_sha256', 'must attest the complete validated font manifest carried by this request')
-    if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines, root.page_field_variants as NativeDocxPageFieldVariantV1[] | undefined)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines and page-field variants carried by this request')
+    if (pagination.ok && integrity.shaped_lines_sha256 !== nativeDocxPagePaintShapedLinesSha256V1(pagination.value.shaped_lines, root.page_field_variants as NativeDocxPageFieldVariantV1[] | undefined, pagination.value.column_shaped_lines)) add(issues, 'BROKEN_REFERENCE', '/integrity/shaped_lines_sha256', 'must attest the complete strict shaped-lines and page-field variants carried by this request')
     if (pagination.ok) {
       const qualified = qualifyApproximateLegacyTables(pagination.value.document, pagination.value.resolved_layout, pagination.value.shaped_lines,eligibility===undefined?undefined:decodeNativeDocxApproximationEligibilityV1(eligibility,pagination.value.pagination_settings))
       const expected = qualified.status === 'qualified' ? qualified.sha256 : nativeDocxTableProjectionSha256V1([])
@@ -537,7 +539,8 @@ function decodePagePaintRequestForPolicy(value: unknown, eligibility?: unknown,f
     try { pageFieldVariants = font&&manifest.ok?validateNativeDocxFontPageFieldVariantsV1(pagination.value,paginated.value,root.page_field_variants,{...font,manifest:manifest.value}):validateNativeDocxPageFieldVariantsV1(pagination.value, paginated.value, root.page_field_variants) }
     catch (error) { add(issues, 'BROKEN_REFERENCE', '/page_field_variants', error instanceof Error ? error.message : 'Invalid page-field variants') }
   }
-  if (pagination.ok && manifest.ok) for (const shaped of [pagination.value.shaped_lines, ...(pageFieldVariants ?? []).map((variant) => variant.shaped_lines)]) for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) for (const fragment of line.fragments) {
+  if (pagination.ok && manifest.ok) for (const shaped of [pagination.value.shaped_lines, ...(pagination.value.column_shaped_lines ?? []), ...(pageFieldVariants ?? []).map((variant) => variant.shaped_lines)]) for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) for (const fragment of line.fragments) {
+    if (pagination.value.column_shaped_lines && (!fragment.face_id || !manifest.value.faces.some((face) => face.faceId === fragment.face_id && face.source.contentDigest))) add(issues, 'BROKEN_REFERENCE', '/pagination_request/column_shaped_lines', 'Every column candidate fragment must bind an attested content-addressed font face')
     if (fragment.script_transform && fragment.script_transform.font_sha256 !== manifest.value.faces.find((face) => face.faceId === fragment.face_id)?.source.contentDigest) add(issues, 'BROKEN_REFERENCE', '/pagination_request/shaped_lines', 'Script metrics must bind the exact content-addressed shaped font face')
   }
   issues.sort(compareNativeValidationIssues)

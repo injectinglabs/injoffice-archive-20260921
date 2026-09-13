@@ -215,6 +215,12 @@ func TestExtractNativePaginationSettingsV1AbsentDefaults(t *testing.T) {
 	if settings.Profile != "absent-default" || settings.SettingsPart != nil || settings.DefaultTabStopTwips != nativeDefaultTabStopTwips || settings.MirrorMargins || settings.GutterAtTop || settings.EvenAndOddHeaders || len(settings.Diagnostics) != 0 {
 		t.Fatalf("unexpected absent settings defaults: %#v", settings)
 	}
+	for _, value := range []bool{true, false} {
+		settings.NoColumnBalance = &value
+		if ValidateNativePaginationSettingsV1(settings) == nil {
+			t.Fatal("absent defaults accepted authored noColumnBalance")
+		}
+	}
 }
 
 func TestExtractNativePaginationSettingsV1AcceptsOnlyDisabledFieldUpdates(t *testing.T) {
@@ -419,7 +425,7 @@ func TestExtractNativePaginationSettingsV1AcceptsOnlyExactNoteSentinelRegistrati
 	}
 }
 
-func TestExtractNativePaginationSettingsV1RefusesColumnBalanceSettingsInBothDialects(t *testing.T) {
+func TestExtractNativePaginationSettingsV1RefusesCachedColumnBalanceInBothDialects(t *testing.T) {
 	for _, strict := range []bool{false, true} {
 		name, wordNS := "Transitional", wordMLTransitional
 		if strict {
@@ -440,7 +446,7 @@ func TestExtractNativePaginationSettingsV1RefusesColumnBalanceSettingsInBothDial
 			if settings.Profile != "unsupported" {
 				t.Fatalf("column-balance settings profile = %q, want unsupported", settings.Profile)
 			}
-			for _, code := range []string{"PAGINATION_SETTING_UNSUPPORTED", "COMPATIBILITY_SETTING_UNSUPPORTED"} {
+			for _, code := range []string{"PAGINATION_SETTING_UNSUPPORTED"} {
 				found := false
 				for _, diagnostic := range settings.Diagnostics {
 					if diagnostic.Code == code {
@@ -568,5 +574,43 @@ func TestExtractNativePaginationSettingsV1StructurallyRefusesAcceptedElementSmug
 				}
 			})
 		}
+	}
+}
+
+func TestNativePaginationSettingsNoColumnBalance(t *testing.T) {
+	for _, test := range []struct {
+		name, markup   string
+		want           *bool
+		refused, spoof bool
+	}{
+		{name: "absent"},
+		{name: "implicit true", markup: `<w:noColumnBalance/>`, want: nativeBool(true)},
+		{name: "explicit true", markup: `<w:noColumnBalance w:val="true"/>`, want: nativeBool(true)},
+		{name: "false", markup: `<w:noColumnBalance w:val="0"/>`, want: nativeBool(false)},
+		{name: "invalid", markup: `<w:noColumnBalance w:val="yes"/>`, refused: true},
+		{name: "duplicate", markup: `<w:noColumnBalance/><w:noColumnBalance/>`, refused: true},
+		{name: "nested", markup: `<w:noColumnBalance><w:noColumnBalance/></w:noColumnBalance>`, refused: true},
+		{name: "foreign attr", markup: `<w:noColumnBalance x:val="true"/>`, refused: true},
+		{name: "spoof", markup: `<x:noColumnBalance/>`, spoof: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			markup := `<w:settings xmlns:w="` + wordMLTransitional + `" xmlns:x="urn:foreign"><w:compat>` + test.markup + `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+			value, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(markup))))
+			if test.spoof {
+				if err == nil {
+					t.Fatal("accepted namespace spoof")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (value.Profile == "unsupported") != test.refused {
+				t.Fatalf("unexpected profile: %#v", value)
+			}
+			if !test.refused && !reflect.DeepEqual(value.NoColumnBalance, test.want) {
+				t.Fatalf("unexpected noColumnBalance: %v", value.NoColumnBalance)
+			}
+		})
 	}
 }

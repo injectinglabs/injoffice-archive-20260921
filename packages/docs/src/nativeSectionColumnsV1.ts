@@ -43,7 +43,7 @@ function checkedSum(...values: number[]): number | undefined {
   return sum
 }
 
-export function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1): QualifyNativeDocxSectionColumnsV1Result {
+export function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1, options?: { allowUnequalWidths: true }): QualifyNativeDocxSectionColumnsV1Result {
   const pageWidth = twips(section.page.width_twips)
   const pageHeight = twips(section.page.height_twips)
   const left = twips(section.page.margins.left_twips)
@@ -100,7 +100,7 @@ export function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1):
     }
     if (total !== bodyWidth) return { ok: false, code: 'column-geometry-invalid', message: 'Explicit column widths and gaps must exactly cover the section body width' }
   }
-  if (widths.some((width) => width !== widths[0])) {
+  if (!options?.allowUnequalWidths && widths.some((width) => width !== widths[0])) {
     return { ok: false, code: 'unequal-column-widths', message: 'Unequal column widths require per-column reshaping and are outside the exact v1 slice' }
   }
   const columns: NativeDocxQualifiedColumnV1[] = []

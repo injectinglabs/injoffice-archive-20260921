@@ -1,3 +1,4 @@
+import type { NativeDocxFootnoteReservationProfileV1, NativeDocxFootnoteAreaMeasurementV1 } from './nativeFootnoteReservationV1.js'
 /**
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
@@ -110,7 +111,7 @@ function addChecked(...values: number[]): number | undefined {
 function placedStory(
   story: NativeDocxStoryV1,
   shapedByParagraph: Map<string, NativeDocxShapedParagraphV1>,
-  page: NativeDocxPaginatedPageV1,
+  page: Pick<NativeDocxPaginatedPageV1, 'ordinal'>,
   column: NativeDocxPageColumnV1,
   top: number,
   ordinal: number,
@@ -254,6 +255,38 @@ function exactInstructionSentinelProjection(story: NativeDocxStoryV1): boolean {
   return story.blocks.length === 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
 }
 
+function measureNoteGroup(
+  page: Pick<NativeDocxPaginatedPageV1, 'ordinal'>,
+  column: NativeDocxPageColumnV1,
+  stories: Array<{ story: NativeDocxStoryV1; reference?: NoteReference }>,
+  shapedByParagraph: Map<string, NativeDocxShapedParagraphV1>,
+  budget: PlacementBudget,
+): number | NativeDocxNotePaginationRefusalV1 {
+  let height = 0
+  let measuredLineCount = 0
+  for (const [ordinal, entry] of stories.entries()) {
+    const result = placedStory(entry.story, shapedByParagraph, page, column, 0, ordinal, entry.reference?.runID, entry.reference?.number)
+    if ('code' in result) return result
+    height += result.height_millipoints
+    if (!Number.isSafeInteger(height)) return { scope_id: entry.story.id, code: 'resource-limit', message: 'Combined note height exceeds safe integer bounds' }
+    measuredLineCount += result.lines.length
+    const nextLineCount = budget.lines + measuredLineCount
+    if (!Number.isSafeInteger(nextLineCount) || nextLineCount > DOCX_NOTE_PAGINATION_LIMITS.maxNoteLines) return { scope_id: entry.story.id, code: 'resource-limit', message: `Note lines exceed ${DOCX_NOTE_PAGINATION_LIMITS.maxNoteLines}` }
+  }
+  return height
+}
+
+/** Internal reservation probe uses the same note geometry and resource checks
+ * as final placement; all source/label/relationship checks still run before
+ * final output is committed by placeNativeDocxNotesV1. No probe is published. */
+export function measureNativeDocxFootnoteAreaForReservationV1(profile: NativeDocxFootnoteReservationProfileV1): NativeDocxFootnoteAreaMeasurementV1 | undefined {
+  const column = { ...profile.column, section_id: profile.section_id }
+  const reference: NoteReference = { kind: 'footnote', story: profile.note, runID: profile.reference_run_id, number: 1, pageOrdinal: 0, sectionID: profile.section_id, columnID: column.id, columnOrdinal: column.ordinal }
+  const height = measureNoteGroup({ ordinal: 0 }, column, [{ story: profile.separator }, { story: profile.note, reference }], new Map(profile.request.shaped_lines.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph])), { lines: 0 })
+  if (typeof height !== 'number') return undefined
+  return { section_id: profile.section_id, column_id: column.id, reference_run_id: profile.reference_run_id, note_story_id: profile.note.id, separator_story_id: profile.separator.id, height_millipoints: height }
+}
+
 function placeGroup(
   page: NativeDocxPaginatedPageV1,
   column: NativeDocxPageColumnV1,
@@ -263,19 +296,8 @@ function placeGroup(
   occupiedBottom: number,
   alignment: 'bottom' | 'flow',
 ): NativeDocxNotePaginationRefusalV1 | undefined {
-  const measured: NativeDocxPlacedNoteStoryV1[] = []
-  let height = 0
-  let measuredLineCount = 0
-  for (const [ordinal, entry] of stories.entries()) {
-    const result = placedStory(entry.story, shapedByParagraph, page, column, 0, ordinal, entry.reference?.runID, entry.reference?.number)
-    if ('code' in result) return result
-    height += result.height_millipoints
-    if (!Number.isSafeInteger(height)) return { scope_id: entry.story.id, code: 'resource-limit', message: 'Combined note height exceeds safe integer bounds' }
-    measured.push(result)
-    measuredLineCount += result.lines.length
-    const nextLineCount = budget.lines + measuredLineCount
-    if (!Number.isSafeInteger(nextLineCount) || nextLineCount > DOCX_NOTE_PAGINATION_LIMITS.maxNoteLines) return { scope_id: entry.story.id, code: 'resource-limit', message: `Note lines exceed ${DOCX_NOTE_PAGINATION_LIMITS.maxNoteLines}` }
-  }
+  const height = measureNoteGroup(page, column, stories, shapedByParagraph, budget)
+  if (typeof height !== 'number') return height
   const bodyBottom = column.y_millipoints + column.height_millipoints
   const top = alignment === 'bottom' ? bodyBottom - height : occupiedBottom
   const groupBottom = addChecked(top, height)
