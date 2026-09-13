@@ -99,7 +99,16 @@ export function defaultPresetTextRect(preset: NativeShapePreset, cx: number, cy:
     return { x, y, cx: Math.round(outer.halfX + dx1) - x, cy: Math.round(y3) - y }
   }
   let left = 0, top = 0, right = cx, bottom = cy
-  if (preset === 'roundRect') {
+  if (preset === 'ellipse') {
+    const dx = cx / 2 / Math.sqrt(2), dy = cy / 2 / Math.sqrt(2)
+    left = cx / 2 - dx; right = cx / 2 + dx
+    top = cy / 2 - dy; bottom = cy / 2 + dy
+  } else if (preset === 'triangle') {
+    // Default adj=50000: x1=w/4, x3=x1+w/2; text starts at vc.
+    left = cx / 4; right = cx * 3 / 4; top = cy / 2
+  } else if (preset === 'diamond') {
+    left = cx / 4; top = cy / 4; right = cx * 3 / 4; bottom = cy * 3 / 4
+  } else if (preset === 'roundRect') {
     left = top = Math.min(cx, cy) * 16667 / 100000 * 29289 / 100000
     right -= left; bottom -= top
   } else if (preset === 'rightArrow') {

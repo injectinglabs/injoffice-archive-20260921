@@ -242,7 +242,7 @@ it('keeps shape geometry independent and composes vertical text with scaled-grou
   if(command.kind==='glyphRun')textMatrix=[...matrix]
  }
  expect(shapeMatrix).toEqual([-2,0,0,-3,800200,600600])
- expect(textMatrix?.map(value=>value===0?0:value)).toEqual([0,-3,2,0,200,600600])
+ expect(textMatrix?.map(value=>value===0?0:value)).toEqual([0,-3,2,0,200200,300600])
 })
 
 it('refuses unsupported vertical scripts, offsets, bullets and RTL shaper direction',async()=>{
