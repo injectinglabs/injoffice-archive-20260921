@@ -10106,6 +10106,16 @@
               "signature": "export interface NativeLiteralBarSeries"
             },
             {
+              "name": "NativeLiteralConnected",
+              "kind": "type",
+              "signature": "export interface NativeLiteralConnected"
+            },
+            {
+              "name": "NativeLiteralConnectedSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralConnectedSeries"
+            },
+            {
               "name": "NativeLiteralDoughnut",
               "kind": "type",
               "signature": "export interface NativeLiteralDoughnut"
@@ -10348,7 +10358,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204\""
             },
             {
               "name": "provenanceValues",
@@ -10433,9 +10443,19 @@
               "signature": "export declare function createNativeLiteralDoughnutPaths(chart: NativeLiteralDoughnut, cx: number, cy: number): readonly"
             },
             {
+              "name": "createNativeLiteralLinePaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralLinePaths(chart: NativeLiteralConnected, cx: number, cy: number): readonly LiteralConnectedVector[]"
+            },
+            {
               "name": "createNativeLiteralPiePaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralPiePaths(pie: NativeLiteralPie, cx: number, cy: number): readonly"
+            },
+            {
+              "name": "createNativeLiteralScatterPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralScatterPaths(chart: NativeLiteralConnected, cx: number, cy: number): readonly LiteralConnectedVector[]"
             },
             {
               "name": "createRecordingPaintSurface",
@@ -10446,6 +10466,11 @@
               "name": "LiteralBarVector",
               "kind": "type",
               "signature": "LiteralBarVector"
+            },
+            {
+              "name": "LiteralConnectedVector",
+              "kind": "type",
+              "signature": "LiteralConnectedVector"
             },
             {
               "name": "NativePptxTextDefaults",

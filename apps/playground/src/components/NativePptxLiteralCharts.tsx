@@ -1,17 +1,30 @@
-import {useState} from 'react'
+import {useId,useState} from 'react'
 import type {NativeElement,NativePptxDeck} from '@injoffice/pptx-native'
-import {createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths} from '@injoffice/pptx-render'
+import {createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
 
 export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
  const [enabled,setEnabled]=useState(false)
+ const clipPrefix=useId()
  const charts:Extract<NativeElement,{kind:'chart'}>[]=[]
  const visit=(elements:readonly NativeElement[])=>{for(const e of elements){if(e.kind==='chart')charts.push(e);if(e.kind==='group')visit(e.children)}}
  for(const slide of deck.slides)visit(slide.elements)
  if(!charts.length)return null
  return <section aria-label="Source literal chart preview">
   <label><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)}/> Preview supported source literal charts</label>
-  <p>Read-only vectors from explicit source values and colors. Each chart is shown separately with host frame fitting. Circular charts use polygon arcs; clustered bars use explicit linear scales. This preview does not reproduce PowerPoint plot layout. Formula caches, source labels and legends are unsupported.</p>
-  {enabled&&charts.map(chart=>{
+  <p>Read-only vectors from explicit source values and colors. Each chart is shown separately with host frame fitting. Circular charts use polygon arcs; Cartesian charts use explicit linear scales and clipped data geometry. This preview does not reproduce PowerPoint plot layout. Formula caches, source labels and legends are unsupported.</p>
+  {enabled&&charts.map((chart,chartIndex)=>{
+   const connected=chart.chart.literalConnected
+   if(connected){
+    const scatter=connected.profile==='literal-scatter-v1'
+    const vectors=(scatter?createNativeLiteralScatterPaths:createNativeLiteralLinePaths)(connected,chart.transform.cx,chart.transform.cy)
+    return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal {scatter?'XY scatter':'category line'} · preserved, read-only</figcaption>
+     <svg role="img" aria-label={`${chart.name??'Connected chart'}: ${connected.series.length} series. Source values are listed below.`} viewBox={`0 0 ${chart.transform.cx} ${chart.transform.cy}`} style={{width:400,maxWidth:'100%',height:260,overflow:'hidden'}}>
+      <defs><clipPath id={`${clipPrefix}-${chartIndex}`}><rect x={0} y={0} width={chart.transform.cx} height={chart.transform.cy}/></clipPath></defs>
+      <g clipPath={`url(#${clipPrefix}-${chartIndex})`}>{vectors.filter(vector=>vector.path.length>0).map((vector,i)=><path key={i} fill="none" stroke={vector.stroke.color} strokeWidth={vector.stroke.widthEmu} strokeLinecap="butt" strokeLinejoin="round" d={vector.path.map(p=>p.kind==='moveTo'?`M ${p.x} ${p.y}`:p.kind==='lineTo'?`L ${p.x} ${p.y}`:'').join(' ')}/>)}</g>
+     </svg><p>Straight segments follow source point order. Explicit Y scale: {connected.yAxis.min} to {connected.yAxis.max}.{scatter?` X scale: ${connected.xAxis.min} to ${connected.xAxis.max}.`:''} Segments and stroke envelopes are clipped to the plot frame. Singleton or fully clipped series have no visible line.</p>
+     <table><caption>Source data (host table, separate from slide labels)</caption><thead><tr><th>Series</th><th>Point</th><th>{scatter?'X':'Category'}</th><th>Y</th></tr></thead><tbody>{connected.series.flatMap(series=>series.values.map((value,i)=><tr key={`${series.index}:${i}`}><th>{series.title??`Series ${series.index}`}</th><td>{i}</td><td>{scatter?series.xValues![i]:connected.categories[i]}</td><td>{value}</td></tr>))}</tbody></table>
+    </figure>
+   }
    const bar=chart.chart.literalBar
    if(bar){
     const extent=bar.barDirection==='column'?chart.transform.cx:chart.transform.cy

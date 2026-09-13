@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -310,6 +310,44 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "values"
     ]
   },
+  "NativeLiteralConnected": {
+    "schemaName": "literalConnected",
+    "properties": [
+      "categories",
+      "dataOrigin",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ],
+    "required": [
+      "categories",
+      "dataOrigin",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ]
+  },
+  "NativeLiteralConnectedSeries": {
+    "schemaName": "literalConnectedSeries",
+    "properties": [
+      "color",
+      "index",
+      "order",
+      "title",
+      "values",
+      "widthEmu",
+      "xValues"
+    ],
+    "required": [
+      "color",
+      "index",
+      "order",
+      "values",
+      "widthEmu"
+    ]
+  },
   "NativeLiteralDoughnut": {
     "schemaName": "literalDoughnut",
     "properties": [
@@ -347,6 +385,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "properties": [
       "chartPart",
       "literalBar",
+      "literalConnected",
       "literalDoughnut",
       "literalPie",
       "opaqueRef",
@@ -1600,6 +1639,181 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalConnectedSeries": {
+      "x-binding-name": "NativeLiteralConnectedSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "color",
+        "widthEmu"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "xValues": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        }
+      }
+    },
+    "literalConnected": {
+      "x-binding-name": "NativeLiteralConnected",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "categories",
+        "series",
+        "xAxis",
+        "yAxis"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "literal-line-v1",
+            "literal-scatter-v1"
+          ],
+          "type": "string"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalConnectedSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "literal-line-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "categories": {
+                "minItems": 1
+              },
+              "series": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "xValues"
+                    ]
+                  }
+                }
+              },
+              "xAxis": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "min"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "max"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "crossesAt"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "categories": {
+                "maxItems": 0
+              },
+              "series": {
+                "items": {
+                  "required": [
+                    "xValues"
+                  ]
+                }
+              },
+              "xAxis": {
+                "required": [
+                  "min",
+                  "max",
+                  "crossesAt"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "literalBarAxis": {
       "x-binding-name": "NativeLiteralBarAxis",
       "type": "object",
@@ -1812,6 +2026,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalBar": {
           "$ref": "#/$defs/literalBar"
+        },
+        "literalConnected": {
+          "$ref": "#/$defs/literalConnected"
         }
       }
     },
