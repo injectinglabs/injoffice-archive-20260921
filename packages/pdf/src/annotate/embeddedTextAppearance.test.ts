@@ -54,7 +54,9 @@ describe('positioned embedded horizontal appearances', () => {
     const { content } = appearance(await PDFDocument.load(result.bytes))
     // width48/advance1.30419921875 permits36pt; nominal unkerned width permits35.
     expect(content).toContain('/DejaVuSans 36 Tf')
-    expect(content).toContain('63.96484375')
+    const matrices = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm/g)].slice(1)
+    // Native positioned glyphs retain the -131 unit AV kerning correction.
+    expect(Number(matrices[1]![1]) - Number(matrices[0]![1])).toBeCloseTo((1401 - 131) * 36 / 2048, 8)
     expect(content).toMatch(/ 1 -1 .* 0 0 cm/)
   })
 
@@ -64,11 +66,14 @@ describe('positioned embedded horizontal appearances', () => {
     const saved = await PDFDocument.load(result.bytes), { content, ap } = appearance(saved)
     expect(saved.getForm().getTextField('text').getText() ?? '').toBe(value)
     if (value) {
-      expect(content).toContain('63.96484375'); expect(content).toContain('169.921875')
+      const size = Number(content.match(/\/DejaVuSans ([\d.]+) Tf/)![1])
+      const matrices = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm/g)].slice(1)
+      const a = value.indexOf('A'), t = value.indexOf('T')
+      expect(Number(matrices[a + 1]![1]) - Number(matrices[a]![1])).toBeCloseTo((1401 - 131) * size / 2048, 8)
+      expect(Number(matrices[t + 1]![1]) - Number(matrices[t]![1])).toBeCloseTo((1251 - 348) * size / 2048, 8)
       const cmap = Buffer.from(decodePDFRawStream(fontDictionary(ap).lookup(PDFName.of('ToUnicode')) as PDFRawStream).decode()).toString('latin1')
       const mapping = new Map([...cmap.matchAll(/<([\dA-F]{4})> <([\dA-F]+)>/g)].map(match => [match[1], match[2]]))
-      const encoded = content.match(/\[(.*?)\] TJ/)![1]!
-      const scalars = [...encoded.matchAll(/<([\dA-F]{4})>/g)].map(match => String.fromCodePoint(parseInt(mapping.get(match[1])!, 16))).join('')
+      const scalars = [...content.matchAll(/<([\dA-F]{4})> Tj/g)].map(match => String.fromCodePoint(parseInt(mapping.get(match[1])!, 16))).join('')
       expect(scalars).toBe(value)
     } else expect(content).toContain('<> Tj')
   })

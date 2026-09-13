@@ -1,7 +1,7 @@
 import { validateCffPrograms } from './unicodeCffProgram.js'
 import { expertCffCharsets } from './unicodeCffCharsets.js'
 
-export interface UnicodeCffFont { bytes: Uint8Array; glyphCids: readonly number[]; name: string; registry: string; ordering: string; supplement: number }
+export interface UnicodeCffFont { bytes: Uint8Array; glyphCids: readonly number[]; sourceGlyphFDs?: readonly number[]; name: string; registry: string; ordering: string; supplement: number }
 interface Index { values: Uint8Array[]; start: number; end: number }
 interface Operand { values: number[]; bytes: Uint8Array }
 type Dict = Map<number, Operand>
@@ -245,7 +245,7 @@ export function prepareUnicodeCffFont(source: Uint8Array, glyphCount: number, un
     end = Math.max(end, current.end); previous = current
   }
   validateCffPrograms(glyphs.values, globals.values, locals, selected)
-  if (isCid) return { bytes: source.slice(), glyphCids, name: String.fromCharCode(...name), registry, ordering, supplement }
+  if (isCid) return { bytes: source.slice(), glyphCids, sourceGlyphFDs: Object.freeze(selected.slice()), name: String.fromCharCode(...name), registry, ordering, supplement }
 
   // Preserve original Type 2 bytes and Private-relative local Subrs offsets in
   // an opaque relocated payload. Only new absolute Top/FD pointers change.
