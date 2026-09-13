@@ -25,7 +25,7 @@ func parseNativePrintOffset(text, sheetName string) *NativePrintAreaRectV1 {
 	if len(args) < 3 || len(args) > 5 {
 		return nil
 	}
-	base := parseNativePrintAreaRect(strings.TrimSpace(args[0]), sheetName)
+	base := parseNativePrintAreaRect(strings.Trim(args[0], " "), sheetName)
 	if base == nil {
 		return nil
 	}
