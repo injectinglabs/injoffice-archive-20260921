@@ -1,3 +1,4 @@
+import {isNativePreviewPartPathV1} from './nativePreviewPartPathV1.js'
 import {snapshotNativePlainData} from './nativePlainData.js'
 export interface NativeDrawingMarkerV1 {column:number;row:number;column_offset_emu:number;row_offset_emu:number}
 export type NativeDrawingAnchorV1={kind:'twoCellAnchor';from:NativeDrawingMarkerV1;to:NativeDrawingMarkerV1}|{kind:'oneCellAnchor';from:NativeDrawingMarkerV1;width_emu:number;height_emu:number}
@@ -7,7 +8,7 @@ export function decodeNativeDrawingObjectsV1(input:unknown):NativeDrawingObjectV
  const fail=():never=>{throw new TypeError('Invalid native source drawing objects')}
  const exact=(v:unknown,keys:string[])=>{if(!v||typeof v!=='object'||Array.isArray(v))return fail();const o=v as Record<string,unknown>;if(Object.keys(o).length!==keys.length||keys.some(k=>!Object.hasOwn(o,k)))return fail();return o}
  const int=(v:unknown,max:number,min=0):number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=min&&v<=max?v:fail()
- const part=(v:unknown,empty=false):string=>typeof v==='string'&&v.length<=1024&&((empty&&v==='')||(/^[A-Za-z0-9_.\/-]+$/.test(v)&&v.split('/').every(p=>p&&p!=='.'&&p!=='..')))?v:fail()
+ const part=(v:unknown,empty=false):string=>isNativePreviewPartPathV1(v,empty)?v:fail()
  const marker=(v:unknown):NativeDrawingMarkerV1=>{const m=exact(v,['column','row','column_offset_emu','row_offset_emu']);return {column:int(m.column,16383),row:int(m.row,1048575),column_offset_emu:int(m.column_offset_emu,2147483647),row_offset_emu:int(m.row_offset_emu,2147483647)}}
  if(!Array.isArray(value)||value.length>256)return fail()
  const seen=new Set<string>()

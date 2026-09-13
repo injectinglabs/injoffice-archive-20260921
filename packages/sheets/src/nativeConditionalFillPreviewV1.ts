@@ -1,3 +1,4 @@
+import {isNativePreviewPartPathV1} from './nativePreviewPartPathV1.js'
 import { snapshotNativePlainData } from './nativePlainData.js'
 import type { NativeWorkbookV2 } from './nativeContractV2.generated.js'
 import type { NativeWorkbookObjectsV1 } from './nativeObjectsPreviewV1.js'
@@ -63,7 +64,7 @@ export function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeCon
   return value.map(raw => {
     const status = (raw as Record<string, unknown> | undefined)?.status
     const o = exact(raw, ['sheet_id', 'sheet_part', 'status', 'warnings', ...(status === 'available' ? ['rule', 'cells'] : [])])
-    if (typeof o.sheet_id !== 'string' || !/^[1-9][0-9]{0,9}$/.test(o.sheet_id) || Number(o.sheet_id) > 0xffffffff || ids.has(o.sheet_id) || typeof o.sheet_part !== 'string' || !/^[A-Za-z0-9_./-]{1,1024}$/.test(o.sheet_part) || o.sheet_part.split('/').some(p => !p || p === '.' || p === '..') || parts.has(o.sheet_part)) return fail()
+    if (typeof o.sheet_id !== 'string' || !/^[1-9][0-9]{0,9}$/.test(o.sheet_id) || Number(o.sheet_id) > 0xffffffff || ids.has(o.sheet_id) || !isNativePreviewPartPathV1(o.sheet_part) || parts.has(o.sheet_part)) return fail()
     ids.add(o.sheet_id); parts.add(o.sheet_part)
     if (!Array.isArray(o.warnings) || o.warnings.length < 1 || o.warnings.length > 8 || o.warnings.some(w => typeof w !== 'string' || !w || w.length > 4096 || /[\u0000-\u001f\u007f]/.test(w))) return fail()
     const base = { sheet_id: o.sheet_id, sheet_part: o.sheet_part, warnings: o.warnings as string[] }
