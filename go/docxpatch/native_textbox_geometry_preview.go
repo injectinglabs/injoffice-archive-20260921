@@ -18,8 +18,9 @@ type NativeTextboxGeometryV1 struct {
 	TextRGB            string   `json:"text_rgb"`
 }
 type NativeTextboxGeometryItemV1 struct {
-	Owner    NativePartialTextboxV1   `json:"owner"`
-	Geometry *NativeTextboxGeometryV1 `json:"geometry"`
+	Owner           NativePartialTextboxV1          `json:"owner"`
+	Geometry        *NativeTextboxGeometryV1        `json:"geometry"`
+	HardBreakLayout *NativeTextboxHardBreakLayoutV1 `json:"hard_break_layout,omitempty"`
 }
 type NativeTextboxGeometryEvidenceV1 struct {
 	Items        []NativeTextboxGeometryItemV1 `json:"items"`
@@ -85,6 +86,7 @@ func inspectNativeTextboxGeometry(data []byte, doc *NativeDocumentV1) (*NativeTe
 				geometry, text := nativeParseTextboxGeometry(drawing, ns)
 				if geometry != nil && units+len(text) <= 100000 {
 					item.Geometry = geometry
+					item.HardBreakLayout = nativeTextboxHardBreakEvidence(drawing, ns, main, raw)
 					item.Owner.Status = "supported"
 					item.Owner.Reason = ""
 					item.Owner.Paragraphs = []string{text}
@@ -280,13 +282,13 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 	if !nativeExactContainer(pp) || !nativeGeometryChildren(pp, ns, "spacing", "ind", "jc") {
 		return nil, ""
 	}
-	for i, values := range []map[string]string{{"before": "0", "after": "0", "line": "240", "lineRule": "auto"}, {"left": "0", "right": "0", "firstLine": "0"}, {"val": "left"}} {
-		if !nativeGeometryAttrs(pp.Children[i], ns, values) || len(pp.Children[i].Children) != 0 {
+	for i, values := range []map[string]string{{"left": "0", "right": "0", "firstLine": "0"}, {"val": "left"}} {
+		if !nativeGeometryAttrs(pp.Children[i+1], ns, values) || len(pp.Children[i+1].Children) != 0 {
 			return nil, ""
 		}
 	}
 	r := p.Children[1]
-	if !nativeExactContainer(r) || !nativeGeometryChildren(r, ns, "rPr", "t") {
+	if !nativeExactContainer(r) || len(r.Children) < 2 || r.Children[0].Name != (xml.Name{Space: ns, Local: "rPr"}) {
 		return nil, ""
 	}
 	rp := r.Children[0]
@@ -318,30 +320,9 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 	if !sOK || size > 400 || !nativeExactLeaf(sizeNode, xml.Name{Space: ns, Local: "val"}) || !nativeGeometryAttrs(rp.Children[5], ns, map[string]string{"val": "en-US"}) || len(rp.Children[5].Children) != 0 {
 		return nil, ""
 	}
-	t := r.Children[1]
-	if len(t.Children) != 0 {
+	text, _, ok := nativeTextboxHardBreakText(p, ns)
+	if !ok {
 		return nil, ""
-	}
-	for _, attr := range t.Attrs {
-		if nativeSettingsNamespaceDeclaration(attr) {
-			continue
-		}
-		if attr.Name != (xml.Name{Space: "http://www.w3.org/XML/1998/namespace", Local: "space"}) || attr.Value != "preserve" {
-			return nil, ""
-		}
-	}
-	space, spaceOK := nativeAttr(t, "http://www.w3.org/XML/1998/namespace", "space")
-	if !spaceOK || space != "preserve" {
-		return nil, ""
-	}
-	text := t.Text
-	if len(text) == 0 || len(text) > 4096 {
-		return nil, ""
-	}
-	for _, c := range text {
-		if c < 32 || c > 126 {
-			return nil, ""
-		}
 	}
 	for _, v := range []int64{width, height, insets[0], insets[1], insets[2], insets[3], lineWidth} {
 		if v%127 != 0 {

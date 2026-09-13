@@ -418,6 +418,69 @@ all coordinates stay in integer Office units. Wire-visible pagination and
 page-paint diagnostics use explicit UTF-16 code-unit ordering rather than
 host-locale collation.
 
+Unequal-column paragraph flow is a separate bounded profile: exactly two
+explicit unequal widths in one section, with source-attested
+`compat/noColumnBalance=true`. The exact OnOff leaf is optional in settings;
+missing `val` means true, explicit false retains existing behavior, and true
+outside this qualified profile refuses. Duplicate, nested, spoofed, or foreign
+attributes do not create an attestation. The ordinary geometry helper still
+refuses unequal widths unless its explicit opt-in is used by the qualified flow.
+
+This profile supports nonempty ASCII LTR text paragraphs, zero spacing and
+indents, natural line height, no notes/tables/fields/drawings/numbering or
+headers/footers. Multiline paragraphs require `keep_lines=true` at both widths;
+all paragraphs must fit an empty column at both widths. `keep_next` and
+`page_break_before` remain excluded. Input is bounded to 256 paragraphs, 256
+lines per paragraph per width, and 100,000 source UTF-16 units, in addition to
+existing wire, shaping, page, and placement budgets.
+
+The optional pagination-request `column_shaped_lines` pair carries both complete
+width-specific snapshots. Request validation joins each to source and resolved
+layout, proves complete monotone text coverage, shared font/provider provenance,
+per-run font metrics, per-source-position script identity, and natural line
+geometry. Deterministic replay first tests a whole paragraph at the current
+column width; if it does not fit the remaining height, replay selects the next
+column's complete paragraph. It never splits a paragraph across widths. Last
+columns may remain unused. The selected `shaped_lines` snapshot must equal this
+plan, and page-paint hashing includes both candidates. No source diagnostic is
+removed: only the exact section-local `UNEQUAL_SECTION_COLUMNS` record is
+discharged after complete qualification. Unsupported or exhausted placements
+produce no partial pages.
+
+This implements the sequential fill policy described by
+[`noColumnBalance`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.nocolumnbalance?view=openxml-3.0.1)
+and the paragraph atomicity of
+[`keepLines`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.keeplines?view=openxml-3.0.1).
+The imported Go fixture and actual HarfBuzz outline/paint replay validate this
+pipeline; they are synthetic OOXML evidence, not a Word visual reference.
+
+Whole-footnote body reflow admits one footnote containing one paragraph in a
+single-section, single-column document. Body paragraphs and the note use simple
+LTR text, natural line heights and zero spacing/indents. Every multiline body
+or note paragraph must have resolved `keep_lines=true`; keep-with-next, explicit
+page breaks, tables, drawings, fields, numbering, headers/footers and explicit
+note positions are excluded. The exact instruction-only separator also has zero
+spacing and one natural line. The reference paragraph plus measured complete
+note area must fit an empty page; otherwise the whole projection refuses.
+
+Reservation and final placement share the same note geometry implementation.
+Before placing the unique reference paragraph, the paginator tests its whole
+height plus separator/note area against the remaining page height. If necessary
+it moves the reference paragraph and note together, leaving prior paragraphs
+unchanged. Subsequent body paragraphs use the reduced space only on that page;
+advancing to the next page restores its full body height. Output section and
+column geometry remain physical. Final note placement retains all source,
+label, relationship and diagnostic validation and must reproduce the measured
+reservation exactly. Deterministic request replay executes the same flow; no
+caller-supplied reservation or source mutation is accepted.
+
+The existing omitted document-level footnote position remains page bottom, as
+described by [`FootnotePosition`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.footnoteposition?view=openxml-3.0.1).
+Explicit document/section positioning remains refused. Synthetic imported
+fixtures verify reference-stays/later-body-moves, reference-and-note-move,
+oversized-pair refusal and explicit-position refusal through actual native font
+shaping and outline paint. They do not establish Word visual equivalence.
+
 The qualified note slice is relationship-resolved and source-order driven.
 Each referenced footnote/endnote content story contains paragraphs only,
 exactly one self-label, and exactly one matching body reference. Labels use
@@ -487,8 +550,8 @@ selected header or footer is diagnosed and refuses the complete paint result;
 it is never omitted while body pages are published. Story-scoped asset
 selection and relationship closure require a later contract version.
 
-Notes requiring body reflow, within-paragraph splitting, or continuation outside
-the profile below refuse atomically. So do custom
+Notes requiring body reflow or continuation outside the bounded profiles below,
+or any within-paragraph note splitting, refuse atomically. So do custom
 numbering/restarts/positions, ambiguous/duplicate/missing references, unpaired
 labels, duplicate IDs or relationship drift, cycles, nested tables, drawings,
 fields, and unknown note markup. Exact Word `w:separator` and
@@ -605,7 +668,7 @@ The native foundation, style-resolution, and shaping-line lanes do not
 implement:
 
 - exhaustive DOCX parsing or a model-to-OOXML regenerator;
-- unqualified tables, unequal-width columns, column separators, general
+- unqualified tables, unequal-width columns outside the bounded paragraph profile, column separators, general
   continuous multi-column balancing, dynamic header/footer fields, general
   note pagination outside the bounded native subset, distributed-character
   justification, or broader page painting;

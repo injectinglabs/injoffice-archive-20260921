@@ -45,6 +45,7 @@ export interface NativeDocxPaginationSettingsV1 {
   mirror_margins: boolean
   gutter_at_top: boolean
   even_and_odd_headers: boolean
+  no_column_balance?: boolean
   compatibility_mode?: 15
   diagnostics: NativeDocxPaginationSettingsDiagnosticV1[]
 }
@@ -55,7 +56,7 @@ export type DecodeNativeDocxPaginationSettingsResult =
 
 export const DOCX_PAGINATION_SETTINGS_V1_BINDING_FIELDS = {
   DiagnosticV1: ['code', 'severity', 'part_name', 'path', 'preservation', 'message'],
-  SettingsV1: ['protocol', 'version', 'document_id', 'revision', 'package_sha256', 'main_part', 'relationships_part', 'relationships_sha256', 'relationship_id', 'settings_part', 'settings_sha256', 'profile', 'default_tab_stop_twips', 'mirror_margins', 'gutter_at_top', 'even_and_odd_headers', 'compatibility_mode', 'diagnostics'],
+  SettingsV1: ['protocol', 'version', 'document_id', 'revision', 'package_sha256', 'main_part', 'relationships_part', 'relationships_sha256', 'relationship_id', 'settings_part', 'settings_sha256', 'profile', 'default_tab_stop_twips', 'mirror_margins', 'gutter_at_top', 'even_and_odd_headers', 'compatibility_mode', 'no_column_balance', 'diagnostics'],
 } as const
 const ROOT_FIELDS = DOCX_PAGINATION_SETTINGS_V1_BINDING_FIELDS.SettingsV1
 const DIAGNOSTIC_FIELDS = DOCX_PAGINATION_SETTINGS_V1_BINDING_FIELDS.DiagnosticV1
@@ -77,7 +78,7 @@ function record(value: unknown, path: string, fields: readonly string[], issues:
   const result = value as Record<string, unknown>
   const allowed = new Set(fields)
   for (const key of Object.keys(result).sort()) if (!allowed.has(key)) add(issues, 'UNKNOWN_FIELD', `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`, `unknown field ${JSON.stringify(key)}`)
-  for (const key of fields) if (!['relationships_part', 'relationships_sha256', 'relationship_id', 'settings_part', 'settings_sha256', 'compatibility_mode'].includes(key) && !(key in result)) add(issues, 'REQUIRED', `${path}/${key}`, 'field is required')
+  for (const key of fields) if (!['relationships_part', 'relationships_sha256', 'relationship_id', 'settings_part', 'settings_sha256', 'compatibility_mode', 'no_column_balance'].includes(key) && !(key in result)) add(issues, 'REQUIRED', `${path}/${key}`, 'field is required')
   return result
 }
 
@@ -140,6 +141,7 @@ function decodeNativeDocxPaginationSettingsUnsafe(value: unknown): DecodeNativeD
   const mirror = bool(root.mirror_margins, '/mirror_margins', issues)
   const gutterAtTop = bool(root.gutter_at_top, '/gutter_at_top', issues)
   const evenOdd = bool(root.even_and_odd_headers, '/even_and_odd_headers', issues)
+  const noColumnBalance = root.no_column_balance === undefined ? undefined : bool(root.no_column_balance, '/no_column_balance', issues)
   const compatibilityMode = root.compatibility_mode === undefined ? undefined : root.compatibility_mode === 15 ? 15 as const : undefined
   if (root.compatibility_mode !== undefined && compatibilityMode === undefined) add(issues, 'INVALID_VALUE', '/compatibility_mode', 'only modern compatibility mode 15 is attested')
   const diagnostics: NativeDocxPaginationSettingsDiagnosticV1[] = []
@@ -162,7 +164,7 @@ function decodeNativeDocxPaginationSettingsUnsafe(value: unknown): DecodeNativeD
   }
   if (profile === 'unsupported' && diagnostics.length === 0) add(issues, 'REQUIRED', '/diagnostics', 'unsupported profile requires at least one diagnostic')
   if (profile && profile !== 'unsupported' && diagnostics.length !== 0) add(issues, 'INVALID_UNION', '/diagnostics', 'supported profiles cannot carry diagnostics')
-  if (profile === 'absent-default' && (settingsPart !== undefined || relationshipClosure !== 0 || compatibilityMode !== undefined || tabStop !== DOCX_DEFAULT_TAB_STOP_TWIPS || mirror !== false || gutterAtTop !== false || evenOdd !== false)) add(issues, 'INVALID_UNION', '/profile', 'absent-default must carry the exact Word defaults and no settings relationship closure')
+  if (profile === 'absent-default' && (settingsPart !== undefined || relationshipClosure !== 0 || root.no_column_balance !== undefined || compatibilityMode !== undefined || tabStop !== DOCX_DEFAULT_TAB_STOP_TWIPS || mirror !== false || gutterAtTop !== false || evenOdd !== false)) add(issues, 'INVALID_UNION', '/profile', 'absent-default must carry the exact Word defaults and no settings relationship closure')
   if (profile === 'word-modern-default' && (!settingsPart || compatibilityMode !== 15)) add(issues, 'REQUIRED', '/settings_part', 'word-modern-default must bind an extracted settings part and explicit compatibility mode 15')
   if (profile === 'unsupported' && !settingsPart) add(issues, 'REQUIRED', '/settings_part', 'unsupported settings must bind the preserved source part that caused refusal')
   if (settingsPart && relationshipClosure !== 3) add(issues, 'REQUIRED', '/relationships_part', 'an extracted settings part must bind its exact owning relationship closure')
@@ -174,7 +176,7 @@ function decodeNativeDocxPaginationSettingsUnsafe(value: unknown): DecodeNativeD
     ...(relationshipsPart ? { relationships_part: relationshipsPart, relationships_sha256: relationshipsSHA!, relationship_id: relationshipID! } : {}),
     ...(settingsPart ? { settings_part: settingsPart, settings_sha256: settingsSHA! } : {}),
     profile, default_tab_stop_twips: tabStop, mirror_margins: mirror, gutter_at_top: gutterAtTop,
-    even_and_odd_headers: evenOdd, ...(compatibilityMode ? { compatibility_mode: compatibilityMode } : {}), diagnostics,
+    even_and_odd_headers: evenOdd, ...(noColumnBalance !== undefined ? { no_column_balance: noColumnBalance } : {}), ...(compatibilityMode ? { compatibility_mode: compatibilityMode } : {}), diagnostics,
   } }
 }
 

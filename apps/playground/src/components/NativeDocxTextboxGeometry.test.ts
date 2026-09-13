@@ -13,4 +13,9 @@ describe('rectangle geometry UI',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxTextboxShapeView,{paint}))
   expect(html).toContain('viewBox="-500 -500 217000 73000"');expect(html).toContain('fill="#FFF2CC"');expect(html).toContain('d="M8000 8000 L9000 9000 Z"');expect(html).not.toContain('<text');expect(html).toContain('Page placement is not produced')
  })
+ it('discloses authored multiline centering without page placement claims',()=>{
+  const paint={status:'supported',width_millipoints:216000,height_millipoints:72000,line_width_millipoints:0,fill_rgb:'none',line_rgb:'none',text_rgb:'102030',paths:[],line_layout:{lines:[{},{}]}} as NativeDocxTextboxShapePaintV1
+  const html=renderToStaticMarkup(createElement(NativeDocxTextboxShapeView,{paint}));expect(html).toContain('2 authored lines. Each authored line is centered within its specified line height.');expect(html).toContain('Page placement is not produced');expect(html).not.toContain('<text')
+ })
+
 })

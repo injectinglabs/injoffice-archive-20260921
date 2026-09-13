@@ -875,8 +875,14 @@ rectangle paint or an explicit refusal. There is no platform-font lookup.
 
 This first profile requires one direct inline DrawingML rectangle, identity
 transforms, matching explicit extents, zero effect extents, explicit sRGB/no
-fill and solid/no line, explicit insets/top alignment/no autofit, and one
-printable ASCII line with explicit regular font, size, color and en-US language.
+fill and solid/no line, explicit insets/top alignment/no autofit, and printable ASCII text with explicit regular font, size, color and en-US language.
+The original single-line profile remains supported. A second profile admits
+2–16 authored lines in one source paragraph/run, with preserved nonempty text
+nodes alternating with explicit `w:br w:type="textWrapping" w:clear="none"`
+leaves and explicit positive `w:lineRule="exact"` spacing (at most 25,600 twips).
+The 4,096 UTF-16 unit limit covers all lines and separators together. Ordered
+paragraph/run/spacing/text/break anchors and UTF-16 ranges enter the source digest.
+No automatic wrapping or extra paragraphs are synthesized.
 Styles must be absent or empty. EMU dimensions must be divisible by 127 so the
 millipoint paint conversion is exact. Unmarked whitespace, inheritance,
 wrapping, overflow, themes, effects, compatibility branches and linked/grouped
@@ -897,3 +903,13 @@ box. Page placement and general Word shape fidelity are not established. Text
 baseline and fit follow the pinned font metrics; no independent Word-reference
 comparison is claimed. Glyph or metric overflow is refused rather than clipped,
 wrapped, shrunk or silently replaced.
+
+For authored multiline text, the supplied font must have zero canonical line
+gap. Each natural font line box is centered within its exact authored line step;
+the center offset must be a nonnegative integer millipoint. Too-small spacing,
+half-integer offsets, whole-stack overflow, and per-line glyph overflow are
+refused. Per-line source ranges, baseline positions and contiguous path ranges
+are validated in helper output, including missing nonspace lines. This is a
+canonical local metrics policy, not measured Word typography equivalence.
+[Open XML line spacing semantics](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.spacingbetweenlines.line?view=openxml-3.0.1)
+define exact spacing in twips and describe centering when the line box is taller.

@@ -1,3 +1,4 @@
+import { qualifyNativeDocxColumnParagraphProfileV1, planNativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 /**
  * Canonical server-side join for the qualified native DOCX page-paint slice.
  *
@@ -406,7 +407,7 @@ function twips(value: number): number {
 
 function shapingDimensions(document: NativeDocxDocumentV1, settings: NativeDocxPaginationSettingsV1): { width: number; tab: number } {
   if (document.sections.length === 0) throw new TypeError('native document has no section geometry')
-  const geometries = document.sections.map(qualifyNativeDocxSectionColumnsV1)
+  const geometries = document.sections.map((section) => qualifyNativeDocxSectionColumnsV1(section))
   if (geometries.some((entry) => !entry.ok)) throw new TypeError('native section column geometry is not exactly representable')
   const widths = geometries.flatMap((entry) => entry.ok ? entry.value.columns.map((column) => column.width_millipoints) : [])
   const width = widths[0] ?? 0
@@ -524,6 +525,7 @@ export function collectNativeDocxPagePaintOutlineRequestsV1(requestValue: unknow
     document: request.pagination_request.document,
     resolved_layout: request.pagination_request.resolved_layout,
     shaped_lines: request.pagination_request.shaped_lines,
+    ...(request.pagination_request.column_shaped_lines ? { column_shaped_lines: request.pagination_request.column_shaped_lines } : {}),
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
@@ -622,7 +624,8 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   if(descriptors)qualifyNativeDocxFontDescriptorPreviewV1(descriptors.eligibility,document.value,resolved.value,descriptors.inventoryJSON)
   await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references, fontPolicy===undefined||!descriptors&&resolved.value.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED'))
   const shapeLines:typeof shapeNativeDocxLinesWithParagraphWidthsV1=(value,providers,widths,intervals)=>fontPolicy?shapeNativeDocxFontPreviewLinesV1(value,providers,widths,fontPolicy,descriptors):shapeNativeDocxLinesWithParagraphWidthsV1(value,providers,widths,intervals)
-  const dimensions = shapingDimensions(document.value, settings.value)
+  const columnProfile = fontPolicy || approximateEligibility !== undefined ? undefined : qualifyNativeDocxColumnParagraphProfileV1(document.value, resolved.value, settings.value)
+  const dimensions = columnProfile ? { width: columnProfile.geometry.columns[0]!.width_millipoints, tab: settings.value.default_tab_stop_twips * 50 } : shapingDimensions(document.value, settings.value)
   const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
   const initialBodyFieldValues = Object.fromEntries(bodyFields.map(run => [run.id, '1']))
   let layoutFragmentWork = 0
@@ -664,6 +667,17 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab,
   }, { resolver, shaper }, paragraphWidths, state.wrapPlan)
   if (!shaped.ok) failIssues('native shaping failed validation', shaped.issues)
+  let columnCandidates: NativeDocxPaginationRequestV1['column_shaped_lines']
+  if (columnProfile) {
+    const second = await shapeLines({ protocol: 'injoffice.docx.shaping-request', version: 1, document: fieldDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: columnProfile.geometry.columns[1]!.width_millipoints, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, paragraphWidths)
+    if (!second.ok) failIssues('second-column shaping failed validation', second.issues)
+    columnCandidates = [shaped.value, second.value]
+    const flow = planNativeDocxColumnParagraphFlowV1(fieldDocument, resolved.value, settings.value, columnCandidates)
+    if (!flow) throw new TypeError('Unequal columns require complete fitting source-bound whole-paragraph candidates at both widths')
+    layoutFragmentWork += columnCandidates.reduce((n, candidate) => n + candidate.paragraphs.reduce((m, paragraph) => m + paragraph.lines.reduce((k, line) => k + line.fragments.length, 0), 0), 0)
+    if (layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Unequal-column shaping exceeds cumulative fragment budget')
+    shaped.value = flow.shaped_lines
+  }
   if(!fontPolicy&&shaped.value.font_substitutions?.length)throw new TypeError('Strict preparation does not accept substituted fonts')
   if(fontPolicy)qualifyNativeDocxFontSubstitutionsV1(shaped.value,resolved.value,manifest.value,fontPolicy,document.value,descriptors)
   layoutFragmentWork += shaped.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
@@ -674,6 +688,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     document: fieldDocument,
     resolved_layout: resolved.value,
     shaped_lines: shaped.value,
+    ...(columnCandidates ? { column_shaped_lines: columnCandidates } : {}),
     pagination_settings: settings.value,
   }
   const decodedPagination = decodeNativeDocxPaginationRequestV1(paginationRequest)
@@ -726,7 +741,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     integrity: {
       ...(bodyFields.length ? { body_field_source_sha256: canonicalWireSha256(document.value) } : {}),
       font_manifest_sha256: nativeDocxPagePaintFontManifestSha256V1(manifest.value),
-      shaped_lines_sha256: nativeDocxPagePaintShapedLinesSha256V1(shaped.value, pageFieldVariants),
+      shaped_lines_sha256: nativeDocxPagePaintShapedLinesSha256V1(shaped.value, pageFieldVariants, decodedPagination.value.column_shaped_lines),
       table_projection_sha256: finalQualifiedTables.status === 'qualified' ? finalQualifiedTables.sha256 : nativeDocxTableProjectionSha256V1([]),
       media_assets_sha256: nativeDocxPagePaintMediaAssetsSha256V1(mediaAssets),
       paginated_layout_sha256: nativeDocxPagePaintPaginatedLayoutSha256V1(paginated.value),
