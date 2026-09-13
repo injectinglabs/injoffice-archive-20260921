@@ -131,6 +131,7 @@ export default function PdfPage() {
   const [formAppearanceFont, setFormAppearanceFont] = useState<TextAppearanceFont | 'viewer' | 'embedded'>('viewer')
   const [embeddedFormFont, setEmbeddedFormFont] = useState<{ name: string; bytes: Uint8Array } | null>(null)
   const fontLoadGeneration = useRef(0)
+  const [formChoiceAppearanceFont, setFormChoiceAppearanceFont] = useState<TextAppearanceFont | 'viewer'>('viewer')
   const [unsavedFormNames, setUnsavedFormNames] = useState<string[]>([])
   const pendingFormDrafts = useRef<{ bytes: Uint8Array; drafts: PdfFormField[]; skipped: { name: string }[] } | null>(null)
   const [noteText, setNoteText] = useState('Shared note')
@@ -203,8 +204,11 @@ export default function PdfPage() {
     setInfo('')
     setFormNotice(null)
     try {
-      const result = await applyPdfFormValues(bytes, fields, formAppearanceFont === 'viewer' ? undefined : {
-        textAppearance: formAppearanceFont === 'embedded' ? { fontBytes: embeddedFormFont!.bytes } : { font: formAppearanceFont },
+      const result = await applyPdfFormValues(bytes, fields, {
+        ...(formAppearanceFont === 'viewer' ? {} : {
+          textAppearance: formAppearanceFont === 'embedded' ? { fontBytes: embeddedFormFont!.bytes } : { font: formAppearanceFont },
+        }),
+        ...(formChoiceAppearanceFont === 'viewer' ? {} : { choiceAppearance: { font: formChoiceAppearanceFont } }),
       })
       const message = pdfFormResultMessage(result)
       setFormNotice(message)
@@ -403,6 +407,7 @@ export default function PdfPage() {
       setFormAppearanceFont('viewer')
       fontLoadGeneration.current += 1
       setEmbeddedFormFont(null)
+      setFormChoiceAppearanceFont('viewer')
       setEdited(false)
       setHistory({ past: [], future: [] })
       setPage(1)
@@ -642,6 +647,18 @@ export default function PdfPage() {
                 {embeddedFormFont && <span className="ds-muted">Selected: {embeddedFormFont.name}</span>}
               </DsField>}
               <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded font supports covered independent Unicode glyphs, including Latin, Greek, Cyrillic and CJK; combining marks and contextual or right-to-left scripts are skipped. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
+              <DsField label="Saved choice appearance">
+                <DsSelect aria-label="Saved choice appearance" value={formChoiceAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
+                  setFormChoiceAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
+                  setFormNotice(null)
+                }}>
+                  <option value="viewer">Let the PDF viewer generate it</option>
+                  <option value="Helvetica">Generate with Helvetica</option>
+                  <option value="Times-Roman">Generate with Times Roman</option>
+                  <option value="Courier">Generate with Courier</option>
+                </DsSelect>
+              </DsField>
+              <p className="ds-muted">Choice appearances use 12-point text and replace the original artwork. All option labels must fit and use printable ASCII. Only single-selection lists and noneditable dropdowns with unambiguous options qualify. Unsupported fields are skipped; stored export values and options are preserved.</p>
               {formNotice && <p role="status" className="ds-muted" aria-live="polite">{formNotice}</p>}
               {unsavedFormNames.length > 0 && <p role="status" className="ds-muted">Unsaved drafts: {unsavedFormNames.join(', ')}. These values are not in the downloaded PDF. Change the input or appearance mode and apply again.</p>}
               {fields.length === 0 ? <p className="ds-muted">No form fields in this file.</p> : fields.map((field, index) => (

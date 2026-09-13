@@ -104,6 +104,19 @@ const success = (request: NativeWasmWorkerRequest, result?: unknown): NativeWasm
 } as NativeWasmWorkerResponse)
 
 describe('DOCX WASM package client', () => {
+  it('joins nested text producer evidence and refuses hidden auxiliary resolution',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex')
+    const envelope=JSON.parse(readFileSync(new URL('../../../testdata/docx-native/nested-text-inspection-v1.json',import.meta.url),'utf8'))
+    envelope.package_sha256=hash;envelope.document.source.package_sha256=hash
+    for(const c of envelope.table_text_contexts)c.package_sha256=hash
+    for(const n of envelope.nested_table_omissions.items)n.package_sha256=hash
+    for(const n of envelope.nested_text)n.owner.package_sha256=hash
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).nested_text?.[0]?.paragraphs[0]?.runs[0]?.text).toBe('Inner visible');client.terminate()
+    envelope.nested_text[0].resolved_layout.runs[0].properties.hidden=true
+    const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow();expect(badWorker.terminated).toBe(true)
+  })
   it('validates optional table text contexts against source look and style part hashes',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=JSON.parse(readFileSync(new URL('../../../testdata/docx-native/document-v1.json',import.meta.url),'utf8')) as NativeDocxDocumentV1,table=document.body.blocks[1]!.table!
     document.source.package_sha256=hash

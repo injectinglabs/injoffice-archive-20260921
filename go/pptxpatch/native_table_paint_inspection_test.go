@@ -130,3 +130,63 @@ func TestInspectedTablePaintRequiresExactStyleAndBorders(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectedTablePresetPaint(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		for _, preset := range []string{"dash", "dashDot", "dot", "lgDash", "lgDashDot", "lgDashDotDot", "sysDash", "sysDashDot", "sysDashDotDot", "sysDot"} {
+			t.Run(fmt.Sprintf("strict-%t-%s", strict, preset), func(t *testing.T) {
+				input := paintTestFixture(t, strict, true, func(p map[string]string) {
+					p["relocated/slides/slide-a.xml"] = strings.ReplaceAll(p["relocated/slides/slide-a.xml"], `<a:prstDash val="solid"/>`, `<a:prstDash val="`+preset+`"/>`)
+				})
+				result, err := InspectNativePPTXTables(input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(result.Tables) != 1 || result.Tables[0].Paint == nil {
+					t.Fatal("preset not qualified")
+				}
+				paint := result.Tables[0].Paint
+				if paint.Policy != "source-no-style-preset-border-v1" || paint.Border == nil || paint.Border.Preset != preset || paint.Border.WidthEMU != 12700 {
+					t.Fatalf("preset altered: %+v", paint)
+				}
+				deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, e := range deck.Slides[0].Elements {
+					if e.Table != nil {
+						t.Fatal("preset promoted native rendering")
+					}
+				}
+			})
+		}
+	}
+}
+func TestInspectedTablePresetPaintRejectsUnqualifiedEdges(t *testing.T) {
+	for name, pair := range map[string][2]string{
+		"unknown-preset":  {`<a:prstDash val="solid"/>`, `<a:prstDash val="unknown"/>`},
+		"custom-dash":     {`<a:prstDash val="solid"/>`, `<a:custDash><a:ds d="400000" sp="300000"/></a:custDash>`},
+		"rounded-cap":     {`cap="flat"`, `cap="rnd"`},
+		"square-cap":      {`cap="flat"`, `cap="sq"`},
+		"bevel-join":      {`<a:round/>`, `<a:bevel/>`},
+		"double-line":     {`cmpd="sng"`, `cmpd="dbl"`},
+		"arrowhead":       {`type="none"`, `type="triangle"`},
+		"dash-attributes": {`<a:prstDash val="solid"/>`, `<a:prstDash val="dash" unknown="1"/>`},
+		"dash-text":       {`<a:prstDash val="solid"/>`, `<a:prstDash val="dash">unqualified</a:prstDash>`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := paintTestFixture(t, false, true, func(p map[string]string) {
+				p["relocated/slides/slide-a.xml"] = strings.ReplaceAll(p["relocated/slides/slide-a.xml"], pair[0], pair[1])
+			})
+			result, err := InspectNativePPTXTables(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, table := range result.Tables {
+				if table.Paint != nil {
+					t.Fatal("unqualified preset paint admitted")
+				}
+			}
+		})
+	}
+}
