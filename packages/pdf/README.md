@@ -89,7 +89,8 @@ This policy uses 12-point text and pdf-lib's choice appearance providers. It
 supports noneditable dropdowns and single-selection lists with 1–64 unique,
 nonempty printable ASCII display labels, at most 256 characters each. Export
 values remain unchanged even when they differ from the painted labels. All
-labels and list rows must fit every owned widget at 12 points. Authored list
+labels and list rows, including final descenders, must fit every owned widget
+at 12 points. Widget rotations must be exactly 0, 90, 180 or 270 degrees. Authored list
 scrolling, actions, shared/orphaned widgets, multiselection and ambiguous labels
 or exports are skipped before mutation. This replaces original artwork; source
 typography, borders and styling are not preserved or certified. Default choice

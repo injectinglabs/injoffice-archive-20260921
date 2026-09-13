@@ -17,6 +17,50 @@ const streams = (doc: PDFDocument) => doc.getForm().getField('choice').acroField
 });
 
 describe('explicit choice appearances', () => {
+  it.each([-270, -90, 360, 450])('refuses noncanonical widget rotation %s before changing values', async rotation => {
+    const { doc, field } = await fixture();
+    field.acroField.setOptions([{ value: PDFHexString.fromText('ABCDEFGHIJK') }]);
+    const widget = field.acroField.getWidgets()[0]!;
+    widget.setRectangle({ x: 10, y: 10, width: 20, height: 100 });
+    widget.dict.set(PDFName.of('MK'), doc.context.obj({ R: rotation }));
+    const source = await doc.save({ updateFieldAppearances: false });
+    const result = await applyFormValues(source, [{ name: 'choice', kind: 'choice', value: 'ABCDEFGHIJK' }], option);
+    expect(result.applied).toBe(0); expect(result.bytes).toBe(source);
+    expect(result.skipped[0]?.reason).toContain('canonical widget rotation');
+  });
+
+  it.each([0, 90, 180, 270])('qualifies exact quarter-turn %s using the provider dimensions', async rotation => {
+    const { doc, field } = await fixture();
+    field.acroField.setOptions([{ value: PDFHexString.fromText('ABCDEFGHIJK') }]);
+    const widget = field.acroField.getWidgets()[0]!;
+    widget.setRectangle({ x: 10, y: 10, width: rotation % 180 ? 20 : 100, height: rotation % 180 ? 100 : 20 });
+    widget.dict.set(PDFName.of('MK'), doc.context.obj({ R: rotation }));
+    const result = await applyFormValues(await doc.save({ updateFieldAppearances: false }), [{ name: 'choice', kind: 'choice', value: 'ABCDEFGHIJK' }], option);
+    expect(result.applied).toBe(1);
+    expect(streams(await PDFDocument.load(result.bytes))[0]).toContain('<4142434445464748494A4B> Tj');
+  });
+
+  it.each(['Helvetica', 'Times-Roman', 'Courier'] as const)('reserves final list descenders with %s', async fontName => {
+    const { doc, field } = await fixture('list');
+    field.acroField.setOptions(['g', 'q', 'y'].map(value => ({ value: PDFHexString.fromText(value) })));
+    const font = doc.embedStandardFont(fontName);
+    const lineHeight = font.heightAtSize(12) * 1.2;
+    const descent = font.heightAtSize(12) - font.heightAtSize(12, { descender: false });
+    const widget = field.acroField.getWidgets()[0]!;
+    widget.getBorderStyle()!.setWidth(0);
+    widget.setRectangle({ x: 10, y: 10, width: 100, height: 3 * lineHeight + 2.1 });
+    const source = await doc.save({ updateFieldAppearances: false });
+    const rejected = await applyFormValues(source, [{ name: 'choice', kind: 'choice', value: 'y' }], { choiceAppearance: { font: fontName } });
+    expect(rejected.bytes).toBe(source); expect(rejected.applied).toBe(0);
+    widget.setRectangle({ x: 10, y: 10, width: 100, height: 3 * lineHeight + descent + 2.1 });
+    const accepted = await applyFormValues(await doc.save({ updateFieldAppearances: false }), [{ name: 'choice', kind: 'choice', value: 'y' }], { choiceAppearance: { font: fontName } });
+    expect(accepted.applied).toBe(1);
+    const stream = streams(await PDFDocument.load(accepted.bytes))[0]!;
+    const baselines = [...stream.matchAll(/1 0 0 1 [\d.]+ ([\d.]+) Tm/g)].map(match => Number(match[1]));
+    expect(baselines).toHaveLength(3);
+    expect(Math.min(...baselines) - descent).toBeGreaterThanOrEqual(1);
+  });
+
   for (const kind of ['dropdown', 'list'] as const) for (const font of ['Helvetica', 'Times-Roman', 'Courier'] as const) {
     it(`paints ${kind} display labels with ${font} while preserving authored exports on every widget`, async () => {
       const { doc, field } = await fixture(kind);

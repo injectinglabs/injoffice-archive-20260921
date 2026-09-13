@@ -96,13 +96,19 @@ function qualifyChoiceAppearance(doc: PDFDocument, field: PDFDropdown | PDFOptio
     exports.add(value); labels.add(label)
   }
   for (const widget of field.acroField.getWidgets()) {
-    const rect = widget.getRectangle(), rotation = Math.abs(widget.getAppearanceCharacteristics()?.getRotation() ?? 0) % 180
+    const authoredRotation = widget.getAppearanceCharacteristics()?.getRotation() ?? 0
+    if (![0, 90, 180, 270].includes(authoredRotation)) throw new Error('choice appearances require canonical widget rotation')
+    const rect = widget.getRectangle(), rotation = authoredRotation % 180
     const width = rotation === 90 ? rect.height : rect.width, height = rotation === 90 ? rect.width : rect.height
     const border = widget.getBorderStyle()?.getWidth() ?? 0
     if (!Number.isFinite(border) || border < 0) throw new Error('invalid choice widget border')
     const innerWidth = width - 2 * (border + 1), innerHeight = height - 2 * (border + 1)
     const lineHeight = font.heightAtSize(12) * 1.2
-    if ([...labels].some(label => font.widthOfTextAtSize(label, 12) > innerWidth) || (field instanceof PDFOptionList ? choices.length : 1) * lineHeight > innerHeight) throw new Error('choice options do not fit the explicit 12pt appearance policy')
+    // The list provider positions the final baseline one line-height below the
+    // preceding one. Reserve descent below that baseline as well as each line.
+    const descent = font.heightAtSize(12) - font.heightAtSize(12, { descender: false })
+    const requiredHeight = field instanceof PDFOptionList ? choices.length * lineHeight + descent : lineHeight
+    if ([...labels].some(label => font.widthOfTextAtSize(label, 12) > innerWidth) || requiredHeight > innerHeight) throw new Error('choice options do not fit the explicit 12pt appearance policy')
   }
   if (field instanceof PDFOptionList && field.acroField.dict.has(PDFName.of('TI'))) throw new Error('choice appearances with authored list scrolling are unsupported')
 }
