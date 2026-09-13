@@ -32,4 +32,4 @@ The generic workbook-feature inventory code is disambiguated using a closed work
 
 ## Qualification
 
-Dedicated producer tests cover strict/transitional extraction, the Microsoft five-value example, empty/absent/literal variants, source-completeness counterexamples, exact budgets and atomic refusal. Public inspect, consumer and actual WASM/browser proof must be completed after the reserved integration files are released; helper tests alone are not a delivery claim. Local source fixtures and browser artifacts stay outside git and CI.
+Dedicated producer tests cover strict/transitional extraction, the Microsoft five-value example, empty/absent/literal variants, source-completeness counterexamples, exact budgets and atomic refusal. Public Inspect and consumer tests verify exact source ownership, complete-set refusal and retained count provenance. Actual Go-produced inspection envelopes and browser qualification use local synthetic fixtures. Local source fixtures and browser artifacts stay outside git and CI.

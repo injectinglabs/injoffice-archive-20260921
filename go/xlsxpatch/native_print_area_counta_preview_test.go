@@ -125,7 +125,17 @@ func TestNativePrintCountaSavedNameRouting(t *testing.T) {
 		parts := nativePrintCountaFixture(strict, `<c r="A1"><v>1</v></c><c r="B1" t="b"><v>0</v></c>`, "")
 		parts["Book/Workbook.xml"] = strings.Replace(parts["Book/Workbook.xml"], `OFFSET('Data Set'!$A$1,0,0,COUNTA('Data Set'!$A$1:$F$1),4)`, formula, 1)
 		wb, ctx := nativePrintCountaExtract(t, parts)
-		got := previewNativePrintAreaSets([]byte(parts["Book/Workbook.xml"]), wb.Sheets, ctx)[0]
+		public, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := public.PrintAreaSets[0]
+		if public.PackageSHA256 != wb.Source.PackageSHA256 || public.PrintAreas[0].Status != "unavailable" {
+			t.Fatal("public source join or legacy selector changed")
+		}
+		if !reflect.DeepEqual(got, previewNativePrintAreaSets([]byte(parts["Book/Workbook.xml"]), wb.Sheets, ctx)[0]) {
+			t.Fatal("public/private projection differs")
+		}
 		if got.Status != "available" || len(got.Areas) != 2 || got.Areas[0].Column != 2 || got.Areas[1].EndRow != 1 || got.SheetID != "7" || got.SheetPart != "Sheets/s1.xml" || len(got.Warnings) != 3 || got.Warnings[1] != "Source _xlnm.Print_Area formula: "+formula || !strings.Contains(got.Warnings[2], " = 2.") {
 			t.Fatalf("%+v", got)
 		}
@@ -142,6 +152,20 @@ func TestNativePrintCountaSavedNameRouting(t *testing.T) {
 			if got.Status != "unavailable" || got.Areas != nil || len(got.Warnings) != 1 {
 				t.Fatal("non-atomic title/name/overlap refusal")
 			}
+		}
+	}
+}
+
+func TestNativePrintCountaFormulaLengthAndSyntaxBounds(t *testing.T) {
+	wb, ctx := nativePrintCountaExtract(t, nativePrintCountaFixture(false, `<c r="A1"><v>1</v></c>`, ""))
+	formula := `OFFSET('Data Set'!$A$1,0,0,COUNTA('Data Set'!$A$1),1)`
+	exact := strings.Replace(formula, "OFFSET(", "OFFSET("+strings.Repeat(" ", 2048-len(formula)), 1)
+	if a, w := parseNativePrintCountaAreas(exact, &wb.Sheets[0], ctx); len(a) != 1 || len(w) != 1 {
+		t.Fatal("exact 2048 bytes")
+	}
+	for _, bad := range []string{" " + exact, "=" + formula, strings.Replace(formula, "COUNTA(", "counta(", 1), strings.Replace(formula, "COUNTA(", "COUNTA(\u00a0", 1), strings.Replace(formula, "COUNTA(", "COUNTA(\t", 1), strings.Replace(formula, "$A$1),1)", "$A$1),0)", 1), strings.Replace(formula, "OFFSET('Data Set'!$A$1", "OFFSET('Data Set'!$XFD$1048576", 1) + ",'Data Set'!$XFD$1048576"} {
+		if a, w := parseNativePrintCountaAreas(bad, &wb.Sheets[0], ctx); a != nil || w != nil {
+			t.Fatalf("syntax/bound refusal: %q", bad)
 		}
 	}
 }
