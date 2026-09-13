@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a"
+const NativePPTXSchemaSHA256 = "ed137c65270dc284d46318a6d34bb9638b3d792126913e4d1cff44fbce4f8835"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -86,6 +86,18 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
+	"NativeLiteralBar": {
+		Properties: []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+	},
+	"NativeLiteralBarAxis": {
+		Properties: []string{"color", "crossAxisId", "crossesAt", "deleted", "id", "max", "min", "orientation", "position", "widthEmu"},
+		Required:   []string{"crossAxisId", "deleted", "id", "orientation", "position"},
+	},
+	"NativeLiteralBarSeries": {
+		Properties: []string{"colors", "index", "order", "title", "values"},
+		Required:   []string{"colors", "index", "order", "values"},
+	},
 	"NativeLiteralDoughnut": {
 		Properties: []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
@@ -95,7 +107,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalBar", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

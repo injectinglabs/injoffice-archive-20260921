@@ -354,6 +354,8 @@ export interface CompileSlideOptions {
   readonly sourceFrameAutoFitPreview?: boolean
   /** Explicit source-literal vector doughnut preview with host annular fitting and polygon arcs. */
   readonly literalDoughnutPreview?: boolean
+  /** Read-only literal clustered bars using explicit source scales and host frame fitting. Default off. */
+  readonly literalBarPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */
