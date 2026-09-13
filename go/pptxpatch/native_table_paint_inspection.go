@@ -14,6 +14,7 @@ type NativePPTXTablePaintSource struct {
 type NativePPTXTablePaintBorder struct {
 	Color    string `json:"color"`
 	WidthEMU int64  `json:"width_emu"`
+	Preset   string `json:"preset,omitempty"`
 }
 type NativePPTXTablePaint struct {
 	Policy  string                       `json:"policy"`
@@ -217,13 +218,13 @@ func inspectNativeTablePaint(frame *nativeXMLNode, c nativeTablePaintContext, d 
 		if name != "lnL" && name != "lnR" && name != "lnT" && name != "lnB" {
 			return nil
 		}
-		border, ok := nativeTableSolidPaintEdge(edge, c.theme, d)
+		border, ok := nativeTablePresetPaintEdge(edge, c.theme, d)
 		if !ok {
 			return nil
 		}
 		if name == "lnL" {
 			first = border
-		} else if (first == nil) != (border == nil) || first != nil && (first.Color != border.Color || first.WidthEMU != border.WidthEMU) {
+		} else if (first == nil) != (border == nil) || first != nil && (first.Color != border.Color || first.WidthEMU != border.WidthEMU || first.Preset != border.Preset) {
 			return nil
 		}
 	}
@@ -233,6 +234,9 @@ func inspectNativeTablePaint(frame *nativeXMLNode, c nativeTablePaintContext, d 
 		}
 	}
 	result.Border = first
+	if first != nil && first.Preset != "" {
+		result.Policy = "source-no-style-preset-border-v1"
+	}
 	return result
 }
 func nativeTableInvisibleDiagonal(edge *nativeXMLNode, d nativeExtractDialect) bool {
@@ -245,7 +249,7 @@ func nativeTableInvisibleDiagonal(edge *nativeXMLNode, d nativeExtractDialect) b
 	v, has := exactNativeAttr(dash, "", "val")
 	return ok && w == "12700" && present && cmpd == "sng" && has && v == "solid" && requireOnlyNativeAttrs(dash, xml.Name{Local: "val"}) == nil && len(dash.Children) == 0
 }
-func nativeTableSolidPaintEdge(edge *nativeXMLNode, theme nativeResolvedTheme, d nativeExtractDialect) (*NativePPTXTablePaintBorder, bool) {
+func nativeTablePresetPaintEdge(edge *nativeXMLNode, theme nativeResolvedTheme, d nativeExtractDialect) (*NativePPTXTablePaintBorder, bool) {
 	if requireOnlyNativeAttrs(edge) == nil && nativePaintOnlyChild(edge, d, "noFill") && requireEmptyNativeElement(edge.Children[0]) == nil {
 		return nil, true
 	}
@@ -276,7 +280,7 @@ func nativeTableSolidPaintEdge(edge *nativeXMLNode, theme nativeResolvedTheme, d
 	}
 	dash := edge.Children[1]
 	v, ok := exactNativeAttr(dash, "", "val")
-	if !ok || v != "solid" || requireOnlyNativeAttrs(dash, xml.Name{Local: "val"}) != nil || len(dash.Children) != 0 || requireEmptyNativeElement(edge.Children[2]) != nil {
+	if !ok || !nativeTablePaintPreset(v) || requireOnlyNativeAttrs(dash, xml.Name{Local: "val"}) != nil || len(dash.Children) != 0 || requireEmptyNativeElement(edge.Children[2]) != nil {
 		return nil, false
 	}
 	for _, end := range edge.Children[3:] {
@@ -290,7 +294,10 @@ func nativeTableSolidPaintEdge(edge *nativeXMLNode, theme nativeResolvedTheme, d
 			}
 		}
 	}
-	return &NativePPTXTablePaintBorder{Color: color, WidthEMU: width}, true
+	if v == "solid" {
+		v = ""
+	}
+	return &NativePPTXTablePaintBorder{Color: color, WidthEMU: width, Preset: v}, true
 }
 
 func nativeTablePaintWhitespace(node *nativeXMLNode) bool {
@@ -303,4 +310,15 @@ func nativeTablePaintWhitespace(node *nativeXMLNode) bool {
 		}
 	}
 	return true
+}
+
+// Preset lengths are defined by ECMA-376 Part 1, 20.1.10.49.
+// Phase/corner replay is an explicit preview policy, not Office raster evidence.
+func nativeTablePaintPreset(value string) bool {
+	switch value {
+	case "solid", "dash", "dashDot", "dot", "lgDash", "lgDashDot", "lgDashDotDot", "sysDash", "sysDashDot", "sysDashDotDot", "sysDot":
+		return true
+	default:
+		return false
+	}
 }

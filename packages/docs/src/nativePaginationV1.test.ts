@@ -842,6 +842,58 @@ describe('native DOCX pagination v1', () => {
     expect(JSON.stringify(paginated(request))).toBe(JSON.stringify(output))
   })
 
+  it('balances multiline paragraphs and preserves exact source slices across columns and pages', () => {
+    const request = fixture({ lineCounts: [10], bodyHeight: 40_000, properties: [{ widow_control: false }] })
+    setEqualColumns(request, 2)
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.lines.map((line) => line.source_line_ordinal))).toEqual([
+      [0, 1, 2, 3, 4, 5, 6, 7], [8, 9],
+    ])
+    expect(output.pages.flatMap((page) => page.paragraph_slices.map((slice) => [
+      slice.first_line_ordinal, slice.last_line_ordinal, slice.continued_from_previous_page,
+      slice.continues_on_next_page, slice.continued_from_previous_column, slice.continues_in_next_column,
+    ]))).toEqual([
+      [0, 3, false, false, false, true], [4, 7, false, true, true, false],
+      [8, 8, true, false, false, true], [9, 9, false, false, true, false],
+    ])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+    expect(paginated(request)).toEqual(output)
+  })
+
+  it('balances mixed paragraphs when the ideal plan respects keep and default widow constraints', () => {
+    const request = fixture({ lineCounts: [2, 4, 2], bodyHeight: 40_000, properties: [{ keep_lines: true }, {}, { keep_lines: true }] })
+    setEqualColumns(request, 2)
+    const output = paginated(request)
+    expect(output.pages[0]!.paragraph_slices.map((slice) => [slice.paragraph_id, slice.column_ordinal, slice.first_line_ordinal, slice.last_line_ordinal])).toEqual([
+      ['paragraph:1', 0, 0, 1], ['paragraph:2', 0, 0, 1], ['paragraph:2', 1, 2, 3], ['paragraph:3', 1, 0, 1],
+    ])
+  })
+
+  it('balances default-widow multiline continuations and a next-column terminal section', () => {
+    const request = fixture({ lineCounts: [12], bodyHeight: 40_000 })
+    setEqualColumns(request, 2)
+    expect(paginated(request).pages.map((page) => page.paragraph_slices.map((slice) => slice.line_ids.length))).toEqual([[4, 4], [2, 2]])
+
+    const nextColumn = fixture({ lineCounts: [1, 4], sections: [
+      { start: 0, breakType: 'next-page' }, { start: 1, breakType: 'next-column' },
+    ] })
+    setEqualColumns(nextColumn, 2)
+    expect(paginated(nextColumn).pages[0]!.lines.map((line) => line.column_ordinal)).toEqual([0, 1, 1, 1, 1])
+  })
+
+  it('refuses constrained ideal splits and accepts explicitly disabled widow control', () => {
+    for (const properties of [{}, { widow_control: true }, { widow_control: false, keep_lines: true }]) {
+      const request = fixture({ lineCounts: [3], properties: [properties] })
+      setEqualColumns(request, 2)
+      expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
+        status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]),
+      }) }))
+    }
+    const request = fixture({ lineCounts: [3], properties: [{ widow_control: false }] })
+    setEqualColumns(request, 2)
+    expect(paginated(request).pages[0]!.lines.map((line) => line.column_ordinal)).toEqual([0, 0, 1])
+  })
+
   it('retains note-free multicolumn support and refuses only note-bearing ambiguous grids atomically', () => {
     const multicolumn = fixture({ lineCounts: [1, 1, 1, 1], bodyHeight: 40_000 })
     setEqualColumns(multicolumn, 2)
@@ -943,7 +995,7 @@ describe('native DOCX pagination v1', () => {
     ]
     expect(paginated(explicit).pages[0]!.columns.map((column) => column.width_millipoints)).toEqual([width, width])
 
-    const ambiguousBalance = fixture({ lineCounts: [2, 1] })
+    const ambiguousBalance = fixture({ lineCounts: [3] })
     setEqualColumns(ambiguousBalance, 2)
     expect(paginateNativeDocxV1(ambiguousBalance)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]) }) }))
 
