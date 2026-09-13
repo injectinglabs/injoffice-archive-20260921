@@ -312,6 +312,9 @@ The qualified subset is fail-closed and viewport-bounded:
   use the fixed numeric subset, even when not selected. Nonzero values rounding
   to zero remain refused pending independent reference evidence. Section selection
   follows [Microsoft's format guidelines](https://support.microsoft.com/en-us/excel/review-guidelines-for-customizing-a-number-format).
+  The browser/table accounting fallback requires actual parsed padding directives
+  for multiple sections and keeps its separate approximation warning; it cannot
+  silently rescue refused plain numeric sections.
   Accounting padding, colors/conditions, empty/text sections, fractions,
   scientific notation, scaling commas and implicit currencies
   remain refused rather than displaying raw numbers as if formatting succeeded;
