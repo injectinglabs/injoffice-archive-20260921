@@ -2183,6 +2183,38 @@ describe('native DOCX page-paint compiler v1', () => {
       ])
     }
   })
+  it('shapes, balances, and paints a wrapped paragraph across equal-width columns', async () => {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const section = document.sections[0]!
+    section.page.columns = 2
+    section.page.column_spacing_twips = 720
+    section.page.column_definitions = [
+      { id: 'column:section:1:0', ordinal: 0 }, { id: 'column:section:1:1', ordinal: 1 },
+    ]
+    document.body.blocks[0]!.paragraph!.runs[0]!.text = 'A '.repeat(200)
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    resolved.paragraphs[0]!.properties.widow_control = false
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const layout = prepared.page_paint_request.paginated_layout
+    expect(layout.status).toBe('paginated')
+    if (layout.status !== 'paginated') return
+    expect(layout.pages).toHaveLength(1)
+    const lines = layout.pages[0]!.lines
+    expect(lines.length).toBeGreaterThan(2)
+    const counts = [0, 1].map((ordinal) => lines.filter((line) => line.column_ordinal === ordinal).length)
+    expect(counts).toEqual([Math.ceil(lines.length / 2), Math.floor(lines.length / 2)])
+    expect(layout.pages[0]!.paragraph_slices).toHaveLength(2)
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to', x: 0, y: 0 }, { kind: 'line_to', x: 1_000, y: 0 }, { kind: 'line_to', x: 1_000, y: 1_000 }, { kind: 'close_path' }],
+    })) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    if (completed.page_paint_output.status === 'painted') {
+      expect(completed.page_paint_output.pages[0]!.lines.map((line) => line.column_id)).toEqual(lines.map((line) => line.column_id))
+    }
+  })
+
   it('composes exact note shaping, bottom placement, paint, and paginated-layout attestation', async () => {
     const prepared = await prepareNativeDocxPagePaintV1(noteFixture())
     expect(prepared.page_paint_request.paginated_layout.status).toBe('paginated')

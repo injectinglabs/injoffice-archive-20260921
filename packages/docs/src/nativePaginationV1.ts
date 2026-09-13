@@ -1542,9 +1542,10 @@ function validateAndIndexParagraphs(context: PaginationContext, groups: readonly
 
 /**
  * Word normally balances a section's terminal multi-column fragment. V1 only
- * accepts the uniquely provable subset: one uniform-height, zero-spacing line
- * per paragraph. The quotient/remainder distribution puts at most one extra
- * line in each earlier column, yielding a unique minimum-height spread.
+ * accepts uniform-height, zero-spacing lines when the ideal quotient/remainder
+ * distribution also satisfies paragraph keep/widow constraints. Earlier columns
+ * receive at most one extra line. A constrained split that would need a different
+ * balance plan is refused rather than moving lines heuristically.
  */
 function paginateExactlyBalancedGroup(
   context: PaginationContext,
@@ -1555,32 +1556,48 @@ function paginateExactlyBalancedGroup(
   const entries = group.blocks.flatMap((block) => block.paragraph ? [{ native: block.paragraph, resolved: resolved.get(block.paragraph.id)!, shaped: shaped.get(block.paragraph.id)! }] : [])
   const lineHeight = entries[0]?.shaped.lines[0]?.line_height_millipoints
   const exact = lineHeight !== undefined && lineHeight > 0 && entries.every((entry) =>
-    entry.shaped.lines.length === 1 && entry.shaped.lines[0]!.line_height_millipoints === lineHeight &&
+    entry.shaped.lines.length > 0 && entry.shaped.lines.every((line) => line.line_height_millipoints === lineHeight) &&
     entry.shaped.spacing_before_millipoints === 0 && entry.shaped.spacing_after_millipoints === 0 &&
     entry.resolved.properties.keep_next !== true && entry.resolved.properties.page_break_before !== true)
   const column = currentColumn(context)
   const capacity = lineHeight === undefined || !column ? 0 : Math.floor(column.height_millipoints / lineHeight)
   if (!exact || capacity < 1) {
-    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing is exact only for uniform one-line, zero-spacing paragraphs without cross-paragraph break constraints')
+    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing requires uniform-height, zero-spacing lines without cross-paragraph break constraints')
     return
   }
   const columns = group.section.page.columns
   const firstColumns = columns - context.currentColumnOrdinal
   let index = 0
+  let sourceLine = 0
+  let remainingLines = entries.reduce((total, entry) => total + entry.shaped.lines.length, 0)
   let firstPage = true
-  while (index < entries.length && !context.refused) {
+  while (remainingLines > 0 && !context.refused) {
     const participating = firstPage ? firstColumns : columns
-    const pageLines = Math.min(entries.length - index, participating * capacity)
+    const pageLines = Math.min(remainingLines, participating * capacity)
     const baseQuota = Math.floor(pageLines / participating)
     const extraColumns = pageLines % participating
-    for (let columnIndex = 0; columnIndex < participating && index < entries.length; columnIndex += 1) {
-      const quota = baseQuota + (columnIndex < extraColumns ? 1 : 0)
-      for (let offset = 0; offset < quota; offset += 1) {
-        const entry = entries[index++]!
-        placeSlice(context, entry.shaped, 0, 1, 0)
+    for (let columnIndex = 0; columnIndex < participating && remainingLines > 0; columnIndex += 1) {
+      let quota = baseQuota + (columnIndex < extraColumns ? 1 : 0)
+      while (quota > 0 && !context.refused) {
+        const entry = entries[index]!
+        const count = Math.min(quota, entry.shaped.lines.length - sourceLine)
+        const split = sourceLine > 0 || count < entry.shaped.lines.length
+        if (split && (entry.resolved.properties.keep_lines === true ||
+          ((entry.resolved.properties.widow_control ?? true) && count < 2))) {
+          refuse(context, 'column-balance-ambiguous', entry.native.id, 'Ideal equal-column balance would violate paragraph keep_lines or widow_control; constrained rebalancing is outside the bounded slice')
+          return
+        }
+        placeSlice(context, entry.shaped, sourceLine, count, 0)
         context.previousAfter = 0
+        sourceLine += count
+        remainingLines -= count
+        quota -= count
+        if (sourceLine === entry.shaped.lines.length) {
+          index += 1
+          sourceLine = 0
+        }
       }
-      if (index < entries.length) startNextFlowColumn(context)
+      if (remainingLines > 0 && !context.refused) startNextFlowColumn(context)
     }
     firstPage = false
   }
