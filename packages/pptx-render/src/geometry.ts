@@ -93,6 +93,11 @@ function guidePolygon(points: readonly (readonly [number, number])[]): readonly 
 /** Default DrawingML text rectangles, before a:bodyPr insets. */
 export function defaultPresetTextRect(preset: NativeShapePreset, cx: number, cy: number): RenderRect {
   if (preset === 'pentagon') return defaultPentagonTextRect(cx, cy)
+  if (preset === 'star5') {
+    const { outer, dx1, y1, y3 } = star5Guides(cx, cy)
+    const x = Math.round(outer.halfX - dx1), y = Math.round(y1)
+    return { x, y, cx: Math.round(outer.halfX + dx1) - x, cy: Math.round(y3) - y }
+  }
   let left = 0, top = 0, right = cx, bottom = cy
   if (preset === 'roundRect') {
     left = top = Math.min(cx, cy) * 16667 / 100000 * 29289 / 100000
@@ -109,10 +114,30 @@ export function defaultPresetTextRect(preset: NativeShapePreset, cx: number, cy:
   const x = Math.round(left), y = Math.round(top)
   return { x, y, cx: Math.round(right) - x, cy: Math.round(bottom) - y }
 }
-const STAR5 = [
-  [500_000, 0], [617_557, 338_197], [975_528, 345_492], [690_211, 561_803], [793_893, 904_508],
-  [500_000, 700_000], [206_107, 904_508], [309_789, 561_803], [24_472, 345_492], [382_443, 338_197],
-] as const
+/** DrawingML default star5 shares the pentagon outer guides, but uses
+ * adj=19098 for its five inner vertices (not an inscribed generic star). */
+function star5Guides(cx: number, cy: number) {
+  const outer = pentagonGuides(cx, cy)
+  const scaledY = cy / 2 * 110557 / 100000
+  const innerX = cx / 2 * 105146 / 100000 * 19098 / 50000
+  const innerY = scaledY * 19098 / 50000
+  const root5 = Math.sqrt(5)
+  const dx1 = innerX * Math.sqrt(10 + 2 * root5) / 4 // cos(342°)
+  const dx2 = innerX * Math.sqrt(10 - 2 * root5) / 4 // cos(54°)
+  const y1 = scaledY - innerY * (root5 + 1) / 4 // sin(54°)
+  const y2 = scaledY + innerY * (root5 - 1) / 4 // -sin(342°)
+  return { outer, dx1, dx2, y1, y2, y3: scaledY + innerY }
+}
+
+function star5(cx: number, cy: number): readonly RenderPathCommand[] {
+  const { outer: o, dx1, dx2, y1, y2, y3 } = star5Guides(cx, cy)
+  return guidePolygon([
+    [o.halfX - o.dx1, o.y1], [o.halfX - dx2, y1], [o.halfX, 0],
+    [o.halfX + dx2, y1], [o.halfX + o.dx1, o.y1], [o.halfX + dx1, y2],
+    [o.halfX + o.dx2, o.y2], [o.halfX, y3], [o.halfX - o.dx2, o.y2],
+    [o.halfX - dx1, y2],
+  ])
+}
 
 /** Preset paths contain only integer EMU; guide results round once at the path boundary. */
 export function presetPath(preset: NativeShapePreset, cx: number, cy: number): readonly RenderPathCommand[] {
@@ -132,7 +157,7 @@ export function presetPath(preset: NativeShapePreset, cx: number, cy: number): r
       const { dx, top, bottom } = hexagonGuides(cx, cy)
       return guidePolygon([[0, cy / 2], [dx, top], [cx - dx, top], [cx, cy / 2], [cx - dx, bottom], [dx, bottom]])
     }
-    case 'star5': return polygon(cx, cy, STAR5)
+    case 'star5': return star5(cx, cy)
   }
 }
 
