@@ -78,7 +78,37 @@ function pentagon(cx: number, cy: number): readonly RenderPathCommand[] {
     { kind: 'close' },
   ]
 }
-const HEXAGON = [[250_000, 0], [750_000, 0], [1_000_000, 500_000], [750_000, 1_000_000], [250_000, 1_000_000], [0, 500_000]] as const
+// DrawingML default guides. ss is the shorter side, not always the width.
+function hexagonGuides(cx: number, cy: number) {
+  const ss = Math.min(cx, cy)
+  const dx = ss / 4
+  const dy = cy / 2 * 115470 / 100000 * Math.sqrt(3) / 2
+  return { dx, top: cy / 2 - dy, bottom: cy / 2 + dy }
+}
+
+function guidePolygon(points: readonly (readonly [number, number])[]): readonly RenderPathCommand[] {
+  return [...points.map(([x, y], i) => ({ kind: i === 0 ? 'moveTo' as const : 'lineTo' as const, x: Math.round(x), y: Math.round(y) })), { kind: 'close' }]
+}
+
+/** Default DrawingML text rectangles, before a:bodyPr insets. */
+export function defaultPresetTextRect(preset: NativeShapePreset, cx: number, cy: number): RenderRect {
+  if (preset === 'pentagon') return defaultPentagonTextRect(cx, cy)
+  let left = 0, top = 0, right = cx, bottom = cy
+  if (preset === 'roundRect') {
+    left = top = Math.min(cx, cy) * 16667 / 100000 * 29289 / 100000
+    right -= left; bottom -= top
+  } else if (preset === 'rightArrow') {
+    top = cy / 4; bottom = cy * 3 / 4
+    right = cx - Math.min(cx, cy) / 4
+  } else if (preset === 'hexagon') {
+    // Default adj <= maxAdj/2, so q8 = 2 + 2*ss/w.
+    const q8 = 2 + 2 * Math.min(cx, cy) / cx
+    left = cx * q8 / 24; top = cy * q8 / 24
+    right -= left; bottom -= top
+  }
+  const x = Math.round(left), y = Math.round(top)
+  return { x, y, cx: Math.round(right) - x, cy: Math.round(bottom) - y }
+}
 const STAR5 = [
   [500_000, 0], [617_557, 338_197], [975_528, 345_492], [690_211, 561_803], [793_893, 904_508],
   [500_000, 700_000], [206_107, 904_508], [309_789, 561_803], [24_472, 345_492], [382_443, 338_197],
@@ -89,13 +119,19 @@ export function presetPath(preset: NativeShapePreset, cx: number, cy: number): r
   const rect = localBounds(cx, cy)
   switch (preset) {
     case 'rect': return [{ kind: 'rect', rect }]
-    case 'roundRect': return [{ kind: 'roundRect', rect, radiusEmu: Math.max(1, Math.round(Math.min(cx, cy) / 8)) }]
+    case 'roundRect': return [{ kind: 'roundRect', rect, radiusEmu: Math.round(Math.min(cx, cy) * 16667 / 100000) }]
     case 'ellipse': return [{ kind: 'ellipse', rect }]
     case 'triangle': return polygon(cx, cy, [[500_000, 0], [1_000_000, 1_000_000], [0, 1_000_000]])
     case 'diamond': return polygon(cx, cy, [[500_000, 0], [1_000_000, 500_000], [500_000, 1_000_000], [0, 500_000]])
-    case 'rightArrow': return polygon(cx, cy, [[0, 250_000], [625_000, 250_000], [625_000, 0], [1_000_000, 500_000], [625_000, 1_000_000], [625_000, 750_000], [0, 750_000]])
+    case 'rightArrow': {
+      const shoulder = cx - Math.min(cx, cy) / 2
+      return guidePolygon([[0, cy / 4], [shoulder, cy / 4], [shoulder, 0], [cx, cy / 2], [shoulder, cy], [shoulder, cy * 3 / 4], [0, cy * 3 / 4]])
+    }
     case 'pentagon': return pentagon(cx, cy)
-    case 'hexagon': return polygon(cx, cy, HEXAGON)
+    case 'hexagon': {
+      const { dx, top, bottom } = hexagonGuides(cx, cy)
+      return guidePolygon([[0, cy / 2], [dx, top], [cx - dx, top], [cx, cy / 2], [cx - dx, bottom], [dx, bottom]])
+    }
     case 'star5': return polygon(cx, cy, STAR5)
   }
 }

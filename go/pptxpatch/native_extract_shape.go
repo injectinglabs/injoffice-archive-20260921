@@ -509,6 +509,9 @@ func validateNativeAutoShapeGeometry(node *nativeXMLNode, dialect nativeExtractD
 		preset = NativeShapePresetTriangle
 	case "diamond":
 		preset = NativeShapePresetDiamond
+	case "roundRect", "rightArrow", "hexagon":
+		preset = NativeShapePreset(value)
+		gaps.add("pptx.autoshape-preset-preview", "default "+value+" outline and text rectangle use DrawingML preset equations; preset target remains read-only", false)
 	case "pentagon":
 		preset = NativeShapePresetPentagon
 		gaps.add("pptx.autoshape-preset-preview", "default pentagon outline is rendered from DrawingML preset equations; preset target remains read-only", false)
