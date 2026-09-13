@@ -371,7 +371,7 @@ func previewNativeRichText(pkg *nativeWorkbookPackage, workbook *NativeWorkbookV
 // optional supplement. A full older envelope must remain usable without it.
 func nativeRichTextEnvelopeFits(value any) bool {
 	encoded, err := json.Marshal(value)
-	if err != nil {
+	if err != nil || len(encoded) > 8*1024*1024 {
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(encoded))

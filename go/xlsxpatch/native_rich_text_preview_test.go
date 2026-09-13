@@ -190,3 +190,19 @@ func TestNativeRichTextPublicObjectsSupplement(t *testing.T) {
 		t.Fatal("public source changed")
 	}
 }
+
+func TestNativeRichTextEnclosingByteBudget(t *testing.T) {
+	// {"existing":""} contributes15 bytes to the serialized envelope.
+	base := map[string]any{"existing": strings.Repeat("x", 8*1024*1024-15)}
+	if !nativeRichTextEnvelopeFits(base) {
+		t.Fatal("existing at-limit envelope refused")
+	}
+	base["rich_text"] = NativeRichTextPreviewV1{Cells: []NativeRichTextCellV1{}, Warnings: []string{}}
+	if nativeRichTextEnvelopeFits(base) {
+		t.Fatal("new supplement exceeded output byte ceiling")
+	}
+	delete(base, "rich_text")
+	if !nativeRichTextEnvelopeFits(base) {
+		t.Fatal("older envelope changed")
+	}
+}
