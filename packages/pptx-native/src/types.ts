@@ -160,7 +160,16 @@ export interface NativeLiteralPie {
   colors: string[]
 }
 
+export interface NativeLiteralDoughnut {
+  profile: 'literal-doughnut-v1'
+  firstSliceAngle: number
+  holeSize: number
+  values: number[]
+  colors: string[]
+}
+
 export interface NativeOpaqueChart {
+  literalDoughnut?: NativeLiteralDoughnut
   literalPie?: NativeLiteralPie
   chartPart: string
   relationshipId: string

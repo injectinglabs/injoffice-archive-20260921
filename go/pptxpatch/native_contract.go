@@ -185,12 +185,21 @@ type NativeLiteralPie struct {
 	Colors          []string `json:"colors"`
 }
 
+type NativeLiteralDoughnut struct {
+	Profile         string   `json:"profile"`
+	FirstSliceAngle int64    `json:"firstSliceAngle"`
+	HoleSize        int64    `json:"holeSize"`
+	Values          []int64  `json:"values"`
+	Colors          []string `json:"colors"`
+}
+
 type NativeOpaqueChart struct {
-	LiteralPie     *NativeLiteralPie    `json:"literalPie,omitempty"`
-	ChartPart      string               `json:"chartPart"`
-	RelationshipID string               `json:"relationshipId"`
-	OpaqueRef      NativePassthroughRef `json:"opaqueRef"`
-	PreviewAssetID *string              `json:"previewAssetId,omitempty"`
+	LiteralDoughnut *NativeLiteralDoughnut `json:"literalDoughnut,omitempty"`
+	LiteralPie      *NativeLiteralPie      `json:"literalPie,omitempty"`
+	ChartPart       string                 `json:"chartPart"`
+	RelationshipID  string                 `json:"relationshipId"`
+	OpaqueRef       NativePassthroughRef   `json:"opaqueRef"`
+	PreviewAssetID  *string                `json:"previewAssetId,omitempty"`
 }
 
 // NativeElement is the Go binding for the schema's discriminated union.
