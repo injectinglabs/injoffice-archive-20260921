@@ -217,7 +217,7 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
     // the entire operation rather than return partially modified field data.
     if (options.textAppearance && field instanceof PDFTextField && spec.kind === 'text') {
       if (!textFont) textFont = await embedded!.embed()
-      field.updateAppearances(textFont)
+      field.updateAppearances(textFont, embedded?.appearanceProvider)
       appearances!.push({ name: spec.name, status: 'generated', widgets: field.acroField.getWidgets().length })
     } else if (choiceFont && spec.kind === 'choice' && (field instanceof PDFDropdown || field instanceof PDFOptionList)) {
       // The explicit choice policy is fixed at 12pt; preflight proves all labels fit.
