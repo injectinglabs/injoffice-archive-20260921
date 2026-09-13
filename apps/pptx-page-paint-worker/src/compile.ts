@@ -1,3 +1,4 @@
+import {chartGlyphExtents} from './chartGlyphExtents.js'
 import {readFileSync,statSync} from 'node:fs'
 import {isAbsolute} from 'node:path'
 import {createHash} from 'node:crypto'
@@ -10,12 +11,13 @@ import {decodePptxPreview,type PreviewNode,type PptxPreview,type PreviewStroke} 
 import {prepareNativeRasterResourceV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
 import {previewArrow,previewArrowShaftInset} from './arrows.js'
 
+const previewColor=(color:string)=>/^#[0-9A-F]{6}$/.test(color)?color.slice(1):color
 const hash=(bytes:Uint8Array)=>`sha256:${createHash('sha256').update(bytes).digest('hex')}` as const
 const object=(v:unknown):Record<string,unknown>=>{if(!v||typeof v!=='object'||Array.isArray(v))throw new TypeError('Expected bounded object');return v as Record<string,unknown>}
 export function previewStroke(stroke:RenderStroke):PreviewStroke {
  const ratio=stroke.miterLimit===undefined?undefined:stroke.miterLimit/100000
  if(ratio!==undefined&&(!Number.isFinite(ratio)||ratio<1))throw new Error('DrawingML miter limit is outside SVG replay range')
- return {stroke:stroke.color,strokeWidth:stroke.widthEmu,strokeLinecap:stroke.cap==='flat'?'butt':stroke.cap,strokeLinejoin:stroke.join,strokeMiterlimit:ratio}
+ return {stroke:previewColor(stroke.color),strokeWidth:stroke.widthEmu,strokeLinecap:stroke.cap==='flat'?'butt':stroke.cap,strokeLinejoin:stroke.join,strokeMiterlimit:ratio}
 }
 function fontProviders(path:string,allowSubstitution=false){
  if(!isAbsolute(path)||statSync(path).size>65536)throw new Error('Operator font manifest must be an absolute bounded local file')
@@ -50,6 +52,7 @@ function fontProviders(path:string,allowSubstitution=false){
 
 export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const request=object(input)
+ if(request.source_chart_preview!==undefined&&typeof request.source_chart_preview!=='boolean')throw new Error('Source chart preview requires a boolean opt-in')
  if(request.source_frame_autofit_preview!==undefined&&typeof request.source_frame_autofit_preview!=='boolean')throw new Error('Autofit preview requires a boolean opt-in')
  if(request.inherited_text_preview!==undefined&&typeof request.inherited_text_preview!=='boolean')throw new Error('Inherited text preview requires a boolean opt-in')
  if(request.font_substitution_preview!==undefined&&typeof request.font_substitution_preview!=='boolean')throw new Error('Font substitution preview requires a boolean opt-in')
@@ -71,7 +74,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const inheritedTextCount=countInherited(deck.slides[request.slide_index as number]!.elements)
  if(inheritedTextCount>0&&request.inherited_text_preview!==true)throw new Error('Inherited text requires explicit preview opt-in')
  if(sourceFrameAutoFitCount>0&&request.source_frame_autofit_preview!==true)throw new Error('Source-frame autofit requires explicit preview opt-in')
- const tree=await compileNativePptxSlide(deck,request.slide_index as number,{inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
+ const tree=await compileNativePptxSlide(deck,request.slide_index as number,{literalBarPreview:request.source_chart_preview===true,literalConnectedPreview:request.source_chart_preview===true,chartAxisLabelsPreview:request.source_chart_preview===true,inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{glyphExtents:chartGlyphExtents(fonts.resources,fonts.outlines),manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
  const recording=createRecordingPaintSurface();paintSlideRenderTree(tree,recording)
  const substitutions:NonNullable<PptxPreview['font_substitutions']>=[]
  const root:Extract<PreviewNode,{kind:'group'}>={kind:'group',transform:[1,0,0,1,0,0],children:[]}
@@ -89,7 +92,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    case 'path':{
     if(command.headArrow&&!command.headEnd||command.tailArrow&&!command.tailEnd){diagnostics.push('Boolean-only arrowheads lack source type/dimensions and remain unqualified');current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Arrowhead unavailable'});break}
     const stroke=command.stroke
-    const paint={fill:command.fill??'none',...(stroke?previewStroke(stroke):{})}
+    const paint={fill:previewColor(command.fill??'none'),...(stroke?previewStroke(stroke):{})}
     const first=command.path[0]
     if(first?.kind==='rect'||first?.kind==='roundRect')current.children.push({kind:'rect',rect:first.rect,radius:first.kind==='roundRect'?first.radiusEmu:0,...paint})
     else if(first?.kind==='ellipse')current.children.push({kind:'ellipse',rect:first.rect,...paint})
@@ -139,6 +142,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  }
  const result:PptxPreview={version:1,package_sha256:request.package_sha256,slide_index:request.slide_index as number,slide_count:deck.slides.length,width:tree.size.cx,height:tree.size.cy,background:tree.background.color,policy:'max-run-natural-v1',nodes:root.children,diagnostics,font_digests:[...fonts.resources.values()].map(r=>r.face.contentDigest),resources:[]}
  result.resources=[...resources.values()].sort((a,b)=>a.part_name.toLowerCase()<b.part_name.toLowerCase()?-1:1)
+ if(request.source_chart_preview===true){result.source_chart_preview=true;result.chart_axis_layout_policy='supplied-outline-margins-v1'}
  if(sourceFrameAutoFitCount>0)result.source_frame_autofit_count=sourceFrameAutoFitCount
  if(inheritedTextCount>0){result.inherited_text_preview_count=inheritedTextCount;result.inherited_text_policy='source-latin-inheritance-approximate-v1'}
  if(substitutions.length){result.font_substitutions=substitutions;result.font_substitution_policy=EXPLICIT_FONT_POLICY_V1;result.font_substitution_policy_sha256=fonts.policyDigest}

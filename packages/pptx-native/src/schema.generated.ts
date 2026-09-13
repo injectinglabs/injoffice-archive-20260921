@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -71,6 +71,42 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "passthrough",
       "provenance",
       "sha256"
+    ]
+  },
+  "NativeChartAxisLabels": {
+    "schemaName": "chartAxisLabels",
+    "properties": [
+      "majorTickMark",
+      "majorUnit",
+      "numberFormat",
+      "position",
+      "profile",
+      "style"
+    ],
+    "required": [
+      "majorTickMark",
+      "position",
+      "profile",
+      "style"
+    ]
+  },
+  "NativeChartAxisLabelStyle": {
+    "schemaName": "chartAxisLabelStyle",
+    "properties": [
+      "bold",
+      "color",
+      "fontFamily",
+      "fontSize",
+      "italic",
+      "language"
+    ],
+    "required": [
+      "bold",
+      "color",
+      "fontFamily",
+      "fontSize",
+      "italic",
+      "language"
     ]
   },
   "NativeChartElement": {
@@ -280,6 +316,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "crossesAt",
       "deleted",
       "id",
+      "labels",
       "max",
       "min",
       "orientation",
@@ -1814,6 +1851,94 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       ]
     },
+    "chartAxisLabelStyle": {
+      "x-binding-name": "NativeChartAxisLabelStyle",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fontFamily",
+        "fontSize",
+        "color",
+        "bold",
+        "italic",
+        "language"
+      ],
+      "properties": {
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "fontSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 400000
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-F]{6}$"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 63
+        }
+      }
+    },
+    "chartAxisLabels": {
+      "x-binding-name": "NativeChartAxisLabels",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "position",
+        "majorTickMark",
+        "style"
+      ],
+      "properties": {
+        "profile": {
+          "const": "explicit-axis-labels-v1"
+        },
+        "position": {
+          "enum": [
+            "low",
+            "high"
+          ]
+        },
+        "majorTickMark": {
+          "enum": [
+            "none",
+            "out"
+          ]
+        },
+        "style": {
+          "$ref": "#/$defs/chartAxisLabelStyle"
+        },
+        "majorUnit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "numberFormat": {
+          "type": "string",
+          "enum": [
+            "0",
+            "0.0",
+            "0.00",
+            "0.000",
+            "0.0000",
+            "0.00000",
+            "0.000000"
+          ]
+        }
+      }
+    },
     "literalBarAxis": {
       "x-binding-name": "NativeLiteralBarAxis",
       "type": "object",
@@ -1876,8 +2001,69 @@ export const PPTX_NATIVE_SCHEMA = {
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "labels": {
+          "$ref": "#/$defs/chartAxisLabels"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "deleted": {
+                "const": true
+              }
+            },
+            "required": [
+              "deleted"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "labels"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "min"
+            ]
+          },
+          "then": {
+            "properties": {
+              "labels": {
+                "required": [
+                  "majorUnit",
+                  "numberFormat"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "labels": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "majorUnit"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "numberFormat"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "literalBarSeries": {
       "x-binding-name": "NativeLiteralBarSeries",

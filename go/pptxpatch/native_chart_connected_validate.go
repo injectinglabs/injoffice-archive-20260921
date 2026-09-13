@@ -28,6 +28,9 @@ func validNativeLiteralConnected(c *NativeLiteralConnected) bool {
 		return len(s) == 7 && s[0] == '#' && inspectionRGB.MatchString(s[1:]) && strings.ToUpper(s) == s
 	}
 	x, y := c.XAxis, c.YAxis
+	if !validNativeChartAxisLabels(x, y, scatter) || !validNativeChartAxisLabels(y, x, true) {
+		return false
+	}
 	if x.ID == y.ID || x.CrossAxisID != y.ID || y.CrossAxisID != x.ID || x.Position != "b" || y.Position != "l" {
 		return false
 	}

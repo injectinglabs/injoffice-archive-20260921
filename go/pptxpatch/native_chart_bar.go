@@ -136,6 +136,9 @@ func extractNativeChartBar(payload []byte, part string, d nativeExtractDialect) 
 	if !nativeChartTransparent(plot.take("spPr"), d) || !plot.done() || !chart.done() || !nativeChartTransparent(root.take("spPr"), d) || !root.done() {
 		return nil
 	}
+	if !validNativeChartAxisLabels(nativeLiteralChartAxis(*category, false), nativeLiteralChartAxis(*value, true), false) || !validNativeChartAxisLabels(nativeLiteralChartAxis(*value, true), nativeLiteralChartAxis(*category, false), true) {
+		return nil
+	}
 	result.CategoryAxis = *category
 	result.ValueAxis = *value
 	return result
@@ -159,7 +162,7 @@ func extractNativeLiteralBar(payload []byte, part string, d nativeExtractDialect
 }
 
 func nativeLiteralChartAxis(a nativeChartAxis, value bool) NativeLiteralBarAxis {
-	result := NativeLiteralBarAxis{ID: a.ID, CrossAxisID: a.CrossAxisID, Orientation: a.Orientation, Position: a.Position, Deleted: a.Deleted}
+	result := NativeLiteralBarAxis{Labels: a.Labels, ID: a.ID, CrossAxisID: a.CrossAxisID, Orientation: a.Orientation, Position: a.Position, Deleted: a.Deleted}
 	if !a.Deleted {
 		result.Color = &a.Color
 		result.WidthEMU = &a.Width

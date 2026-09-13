@@ -35,5 +35,8 @@ func extractNativeChartConnectedAxes(plot *nativeChartCursor, d nativeExtractDia
 	if len(seen) != 2 || x.ID == y.ID || x.CrossAxisID != y.ID || y.CrossAxisID != x.ID || !((x.ID == firstID && y.ID == secondID) || (x.ID == secondID && y.ID == firstID)) {
 		return result, false
 	}
+	if !validNativeChartAxisLabels(nativeLiteralChartAxis(x, scatter), nativeLiteralChartAxis(y, true), scatter) || !validNativeChartAxisLabels(nativeLiteralChartAxis(y, true), nativeLiteralChartAxis(x, scatter), true) {
+		return result, false
+	}
 	return result, true
 }

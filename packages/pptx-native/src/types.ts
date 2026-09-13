@@ -168,7 +168,25 @@ export interface NativeLiteralDoughnut {
   colors: string[]
 }
 
+export interface NativeChartAxisLabelStyle {
+ fontFamily:string
+ fontSize:number
+ color:string
+ bold:boolean
+ italic:boolean
+ language:string
+}
+export interface NativeChartAxisLabels {
+ profile:'explicit-axis-labels-v1'
+ position:'low'|'high'
+ majorTickMark:'none'|'out'
+ style:NativeChartAxisLabelStyle
+ majorUnit?:string
+ numberFormat?:string
+}
+
 export interface NativeLiteralBarAxis {
+ labels?:NativeChartAxisLabels
  id:number
  crossAxisId:number
  orientation:'minMax'|'maxMin'
