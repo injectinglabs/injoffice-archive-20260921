@@ -78,3 +78,41 @@ describe('authored hard-break rectangles',()=>{
   for(const mutate of corruptions){const p=structuredClone(paint);mutate(p);expect(()=>decodePaint(document,evidence,0,p,hash)).toThrow()}
  })
 })
+
+function wrapping(text='First authored line Second authored line Final authored line',width=1270000){
+ const f=fixture(),item=f.evidence.items[0]!,a=item.owner.anchor,g=item.geometry!
+ const anchor=(path:string,start:number,end:number)=>({...a,path,start_byte:start,end_byte:end})
+ const shape=a.path+'/wps:wsp[1]',p=anchor(shape+'/wps:txbx[1]/w:txbxContent[1]/w:p[1]',210,340),r=anchor(p.path+'/w:r[1]',240,330)
+ item.owner.paragraphs=[text];g.font_size_half_points=20;g.width_emu=width;g.height_emu=1828800;g.text_wrap='square'
+ item.wrap_layout={policy:'ascii-space-greedy-v1',body_properties_anchor:anchor(shape+'/wps:bodyPr[1]',350,380),paragraph_anchor:p,run_anchor:r,text_anchor:anchor(r.path+'/w:t[1]',250,320),spacing_anchor:anchor(p.path+'/w:pPr[1]/w:spacing[1]',215,230),line_step_twips:360}
+ return f
+}
+describe('automatic ASCII rectangle wrapping',()=>{
+ it('uses complete real-font cluster coverage and changes lines with width',()=>{
+  const counts=[]
+  for(const width of [1270000,1905000]){
+   const {document,evidence}=wrapping(undefined,width),before=structuredClone(evidence),p=compileNativeDocxTextboxShapeV1(document,evidence,0,font)
+   expect(p.status,p.reason).toBe('supported');expect(p.wrap_paint).toBeDefined();expect(p.line_layout).toBeUndefined();counts.push(p.wrap_paint!.lines.length)
+   expect(p.wrap_paint!.lines.map(l=>evidence.items[0]!.owner.paragraphs[0]!.slice(l.start_utf16,l.end_utf16)).join('')).toBe(evidence.items[0]!.owner.paragraphs[0]);expect(p.wrap_paint!.lines.at(-1)!.path_end).toBe(p.paths.length)
+   expect(compileNativeDocxTextboxShapeV1(document,evidence,0,font)).toEqual(p);expect(evidence).toEqual(before)
+  }
+  expect(counts[0]).toBeGreaterThan(counts[1]!)
+ })
+ it('retains real font ligature clusters inside wrapped words',()=>{
+  const {document,evidence}=wrapping('office office office office'),p=compileNativeDocxTextboxShapeV1(document,evidence,0,font)
+  expect(p.status,p.reason).toBe('supported');expect(p.wrap_paint!.clusters.some(c=>c.end_utf16-c.start_utf16>1)).toBe(true)
+  for(const line of p.wrap_paint!.lines)expect(evidence.items[0]!.owner.paragraphs[0]!.slice(line.start_utf16,line.end_utf16)).toMatch(/^office(?: office)* ?$/)
+ })
+ it('refuses unbreakable words, odd centering, stack overflow and invalid source policies',()=>{
+  for(const f of [wrapping('M'.repeat(100)),wrapping()]){if(f.evidence.items[0]!.owner.paragraphs[0]!.startsWith('First'))f.evidence.items[0]!.geometry!.font_size_half_points=24;const p=compileNativeDocxTextboxShapeV1(f.document,f.evidence,0,font);expect(p.status).toBe('omitted');expect(p.paths).toEqual([]);expect(p.wrap_paint).toBeUndefined()}
+  const f=wrapping();f.evidence.items[0]!.geometry!.height_emu=400050;expect(compileNativeDocxTextboxShapeV1(f.document,f.evidence,0,font).status).toBe('omitted')
+  for(const text of [' edge','edge ','two  spaces','punctuation.','soft\nhard','éclair']){const f=wrapping(text);expect(()=>decode(f.document,f.evidence)).toThrow()}
+  for(const field of ['geometry','evidence']){const f=wrapping();if(field==='geometry')delete f.evidence.items[0]!.geometry!.text_wrap;else delete f.evidence.items[0]!.wrap_layout;expect(()=>decode(f.document,f.evidence)).toThrow()}
+  const h=multiline();h.evidence.items[0]!.wrap_layout=wrapping().evidence.items[0]!.wrap_layout;expect(()=>decode(h.document,h.evidence)).toThrow()
+ })
+ it('rejects missing source units, fabricated clusters and non-greedy or missing line paint',()=>{
+  const {document,evidence}=wrapping(),result=compileNativeDocxTextboxShapeV1(document,evidence,0,font),hash=nativeTextboxFontDigestV1(font);expect(result.status,result.reason).toBe('supported')
+  const mutations=[(p:typeof result)=>{p.wrap_paint!.clusters[0]!.start_utf16++},(p:typeof result)=>{p.wrap_paint!.clusters.pop()},(p:typeof result)=>{p.wrap_paint!.clusters[0]!.glyph_start++},(p:typeof result)=>{p.wrap_paint!.clusters[0]!.advance_millipoints=-1},(p:typeof result)=>{p.wrap_paint!.lines[0]!.end_utf16--},(p:typeof result)=>{p.wrap_paint!.lines.reverse()},(p:typeof result)=>{p.wrap_paint!.lines[1]!.baseline_millipoints++},(p:typeof result)=>{p.wrap_paint!.lines[0]!.path_end=0},(p:typeof result)=>{const n=p.wrap_paint!.clusters[p.wrap_paint!.lines[0]!.cluster_end-1]!.glyph_end+1;p.paths=Array(n).fill('M 8000 8000 L 8001 8001');p.wrap_paint!.lines[0]!.path_end=n},(p:typeof result)=>{delete p.wrap_paint}]
+  for(const mutate of mutations){const p=structuredClone(result);mutate(p);expect(()=>decodePaint(document,evidence,0,p,hash)).toThrow()}
+ })
+})

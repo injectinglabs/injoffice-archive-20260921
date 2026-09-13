@@ -16,11 +16,13 @@ type NativeTextboxGeometryV1 struct {
 	FontFamily         string   `json:"font_family"`
 	FontSizeHalfPoints int64    `json:"font_size_half_points"`
 	TextRGB            string   `json:"text_rgb"`
+	TextWrap           string   `json:"text_wrap,omitempty"`
 }
 type NativeTextboxGeometryItemV1 struct {
 	Owner           NativePartialTextboxV1          `json:"owner"`
 	Geometry        *NativeTextboxGeometryV1        `json:"geometry"`
 	HardBreakLayout *NativeTextboxHardBreakLayoutV1 `json:"hard_break_layout,omitempty"`
+	WrapLayout      *NativeTextboxWrapLayoutV1      `json:"wrap_layout,omitempty"`
 }
 type NativeTextboxGeometryEvidenceV1 struct {
 	Items        []NativeTextboxGeometryItemV1 `json:"items"`
@@ -87,6 +89,7 @@ func inspectNativeTextboxGeometry(data []byte, doc *NativeDocumentV1) (*NativeTe
 				if geometry != nil && units+len(text) <= 100000 {
 					item.Geometry = geometry
 					item.HardBreakLayout = nativeTextboxHardBreakEvidence(drawing, ns, main, raw)
+					item.WrapLayout = nativeTextboxWrapEvidence(drawing, ns, main, raw)
 					item.Owner.Status = "supported"
 					item.Owner.Reason = ""
 					item.Owner.Paragraphs = []string{text}
@@ -239,6 +242,10 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 	}
 	body := shape.Children[3]
 	keys := map[string]string{"vert": "horz", "anchor": "t", "anchorCtr": "0", "wrap": "none", "numCol": "1", "rot": "0", "spcFirstLastPara": "0", "vertOverflow": "overflow", "horzOverflow": "overflow"}
+	wrap, _ := nativeAttr(body, "", "wrap")
+	if wrap == "square" {
+		keys["wrap"] = "square"
+	}
 	attrs := []xml.Name{}
 	for key := range keys {
 		attrs = append(attrs, xml.Name{Local: key})
@@ -321,6 +328,9 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 		return nil, ""
 	}
 	text, _, ok := nativeTextboxHardBreakText(p, ns)
+	if wrap == "square" {
+		text, _, ok = nativeTextboxWrapText(p, ns)
+	}
 	if !ok {
 		return nil, ""
 	}
@@ -329,5 +339,9 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 			return nil, ""
 		}
 	}
-	return &NativeTextboxGeometryV1{width, height, insets, fillRGB, lineRGB, lineWidth, font, size, rgb}, text
+	textWrap := ""
+	if wrap == "square" {
+		textWrap = "square"
+	}
+	return &NativeTextboxGeometryV1{width, height, insets, fillRGB, lineRGB, lineWidth, font, size, rgb, textWrap}, text
 }

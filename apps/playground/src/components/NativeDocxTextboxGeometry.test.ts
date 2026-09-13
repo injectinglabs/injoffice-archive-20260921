@@ -18,4 +18,9 @@ describe('rectangle geometry UI',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxTextboxShapeView,{paint}));expect(html).toContain('2 authored lines. Each authored line is centered within its specified line height.');expect(html).toContain('Page placement is not produced');expect(html).not.toContain('<text')
  })
 
+ it('describes automatic wrapping separately from authored hard breaks',()=>{
+  const paint={status:'supported',width_millipoints:100000,height_millipoints:144000,line_width_millipoints:0,fill_rgb:'none',line_rgb:'none',text_rgb:'102030',paths:[],wrap_paint:{lines:[{},{}]}} as NativeDocxTextboxShapePaintV1
+  const html=renderToStaticMarkup(createElement(NativeDocxTextboxShapeView,{paint}));expect(html).toContain('2 lines wrap at spaces within the specified width');expect(html).toContain('Spaces remain in the measured line width');expect(html).not.toContain('2 authored lines');expect(html).toContain('Page placement is not produced')
+ })
+
 })
