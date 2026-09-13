@@ -8,7 +8,7 @@ import type { FormValueSpec } from './types.js'
 const require = createRequire(import.meta.url)
 const fontBytes = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
 const options = { textAppearance: { fontBytes }, choiceAppearance: { font: 'Courier' as const } }
-const text: FormValueSpec = { name: 'text', kind: 'text', value: 'café Ω Ж 😀' }
+const text: FormValueSpec = { name: 'text', kind: 'text', value: 'AV café Ω Ж 😀' }
 const choice: FormValueSpec = { name: 'choice', kind: 'choice', value: 'b' }
 async function fixture(unicodeChoice = false, priorRequest = false) {
   const doc = await PDFDocument.create(), page = doc.addPage([400, 400]), form = doc.getForm()
@@ -50,6 +50,8 @@ describe('independent embedded text and standard choice appearances', () => {
     expect(form.getDropdown('choice').acroField.dict.get(PDFName.of('Opt'))?.toString()).toBe(before.getForm().getDropdown('choice').acroField.dict.get(PDFName.of('Opt'))?.toString())
     const textFont = font(saved, 'text'), choiceFont = font(saved, 'choice')
     expect(textFont.get(PDFName.of('Subtype'))?.toString()).toBe('/Type0')
+    expect(decoded(stream(saved, 'text'))).toContain('63.96484375')
+    expect(decoded(stream(saved, 'text'))).toContain('] TJ')
     const cid = textFont.lookup(PDFName.of('DescendantFonts'), PDFArray).lookup(0, PDFDict)
     expect(cid.lookup(PDFName.of('FontDescriptor'), PDFDict).lookup(PDFName.of('FontFile2'))).toBeInstanceOf(PDFRawStream)
     expect(decoded(textFont.lookup(PDFName.of('ToUnicode')) as PDFRawStream)).toContain('<D83DDE00>')
