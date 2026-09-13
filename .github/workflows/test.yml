@@ -45,8 +45,8 @@ jobs:
       - name: Installed WASM tarballs in Chrome
         timeout-minutes: 10
         run: npm run test:wasm-tarball-browser
-      # Keep fast qualification-harness tests here. Full browser/rendering and
-      # performance runs are opt-in in rendering-qualification.yml.
+      # Keep focused page-preview checks here; the full rendering corpus and
+      # performance runs remain opt-in in rendering-qualification.yml.
       - name: DOCX textbox and footnote pages in Chrome
         timeout-minutes: 4
         env:

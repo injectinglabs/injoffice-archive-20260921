@@ -178,7 +178,9 @@ async function click(label) {
   } finally { await cdp.send('Runtime.releaseObject', { objectId: handle.result.objectId }) }
 }
 async function screenshot(name) {
-  await evaluate(`${native}?.scrollIntoView({ block: 'start' }); window.scrollBy(0, -80)`)
+  await evaluate(`${native}?.querySelector('svg')?.scrollIntoView({ block: 'center' })`)
+  const raster=await evaluate(`(async()=>{const svg=${native}.querySelector('svg').cloneNode(true);svg.removeAttribute('style');svg.setAttribute('width','816');svg.setAttribute('height','1056');const image=new Image();image.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await image.decode();const canvas=document.createElement('canvas');canvas.width=816;canvas.height=1056;canvas.getContext('2d').drawImage(image,0,0,816,1056);return canvas.toDataURL('image/png').split(',')[1]})()`)
+  writeFileSync(resolve(artifacts,name.replace('.png','-page.png')),Buffer.from(raster,'base64'))
   const result = await cdp.send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(resolve(artifacts, name), Buffer.from(result.data, 'base64'))
 }
