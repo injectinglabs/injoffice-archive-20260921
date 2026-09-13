@@ -74,6 +74,24 @@ viewports joined to the package and source worksheet. Only absent additive metad
 permits legacy single-area fallback; unavailable or missing entries in a present
 inventory refuse. Per-area geometry limits and a total 100,000-cell budget apply.
 
+The same additive inventory also resolves one `OFFSET(reference, rows, cols,
+[height], [width])` expression with literal signed decimal integers and an absolute
+same-sheet reference. For example, `OFFSET('Data Set'!$D$3:$F$5,3,-2)` resolves to
+B6:D8. Omitted trailing dimensions inherit the reference size; supplied dimensions
+must be positive and the entire result must fit the worksheet. Arguments may have
+ASCII spaces. The source formula is retained verbatim in `warnings`, alongside the
+resolution and approximation disclosure; consumers should display these warnings.
+The playground shows them when “Use saved print area” is selected.
+
+This is a closed 2,048-byte, uppercase `OFFSET` subset, not recalculation. Cell/name
+arguments, nested functions, arithmetic, external/relative references, fractional
+numbers, omitted interior arguments, leading `=`, and formula unions refuse as a
+whole. No cell caches or source bytes are changed. Existing local-name ownership,
+print-title checks, source joins and cell/page budgets still apply. The legacy
+single-rectangle inventory/selector remains literal-only. These semantics follow
+[Microsoft's OFFSET documentation](https://support.microsoft.com/en-us/Excel/functions/offset-function);
+they do not establish Excel print calibration or dynamic formula support.
+
 Compile one source-qualified geometry for each selected viewport, in that order,
 then call `compileNativeSheetPrintAreaSetPreviewV1(geometries, objects, hostPolicy?,
 options?)`. The returned `injoffice.xlsx.print-area-set-pages` v1 envelope contains
