@@ -83,6 +83,19 @@ ambiguous duplicate export values are skipped. Choice appearances still require
 viewer regeneration. XFA forms refuse every form-update batch, including default
 radio/choice edits, before pdf-lib can remove their source XFA data.
 
+To save replacement choice artwork, separately request
+`choiceAppearance: { font: 'Helvetica' }` (also `Times-Roman` or `Courier`).
+This policy uses 12-point text and pdf-lib's choice appearance providers. It
+supports noneditable dropdowns and single-selection lists with 1–64 unique,
+nonempty printable ASCII display labels, at most 256 characters each. Export
+values remain unchanged even when they differ from the painted labels. All
+labels and list rows must fit every owned widget at 12 points. Authored list
+scrolling, actions, shared/orphaned widgets, multiselection and ambiguous labels
+or exports are skipped before mutation. This replaces original artwork; source
+typography, borders and styling are not preserved or certified. Default choice
+updates still request viewer regeneration. Text and choice appearance options
+are independent; both can be selected in the demo's form panel.
+
 The selected font must be `Helvetica`, `Times-Roman`, or `Courier`. This opts
 into pdf-lib's default text appearance provider and replaces the original font
 and appearance artwork. It supports printable ASCII (U+0020–U+007E), empty text,
@@ -93,9 +106,9 @@ missing page widgets, and ambiguous/shared widget ownership are skipped before
 the value changes. No unsupported character is replaced, transliterated, or dropped.
 
 `applied` and `skipped` describe value updates. In opt-in mode, `appearances`
-reports each applied text/choice request as `generated` (with the number of text
-widgets updated) or `viewer-required` (choice fields). Checkbox/radio behavior
-is unchanged. Every owned text widget is regenerated; unrelated fields retain
+reports each applied text/choice request as `generated` (with the number of
+widgets updated) or `viewer-required`. Checkbox/radio behavior
+is unchanged. Every owned qualified widget is regenerated; unrelated fields retain
 their appearances. Existing `NeedAppearances=true` is preserved because other
 fields may still need regeneration. An unexpected generation failure rejects
 the entire operation, returning no partially updated PDF. Source bytes are
