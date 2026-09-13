@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/notofonts/noto-fonts",
+  "commit": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+  "license": "SIL Open Font License 1.1",
+  "files": {
+    "NotoSansBengali-Regular.ttf": "6300c5370cd688b0641343de4c786de6d412bb6c578d129dae75e93a0322dcab",
+    "NotoSansDevanagari-Regular.ttf": "385e78e6359a9d88a0f243d53b1209d7548361ba2194e2b9ec779bcaa7e8949d",
+    "NotoSansKhmer-Regular.ttf": "5c1ec068352f1e1fe8e7a3218230360d054e104d377ef40c0423b17c34c3c259",
+    "NotoSansMyanmar-Regular.ttf": "9dd2bc76a822a974efce803a4b07302d14d01d5c1fa9e33a258d15a9cb513a7d",
+    "NotoSansSyriac-Regular.ttf": "7e05622602dd5333006807f61b30452a94cca0a0791047a120edff00cf189082",
+    "NotoSansThai-Regular.ttf": "404ddfb5ed0aaa6b6ec8a85700d682978992062d67da93903967b56cbd9a4acc",
+    "OFL.txt": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+    "NotoSansArabic-Regular.ttf": "ceea25b464a656dc3b26849bab9356740401af62aedf1bfa8b7f0d9b75925b1b"
+  }
+}
