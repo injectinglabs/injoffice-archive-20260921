@@ -23,6 +23,21 @@ describe('source-bound multi-range print areas',()=>{
   expect(Object.hasOwn(decodeNativeWorkbookObjectsV1(objects,objects.package_sha256),'print_area_sets')).toBe(false)
   expect(()=>decodeNativeWorkbookObjectsV1({...objects,print_area_sets:undefined},objects.package_sha256)).toThrow()
  })
+ it('carries constant OFFSET provenance through owned decoding, selection and page plans',()=>{
+  const resolved={row:5,column:1,end_row:7,end_column:3}
+  const {objects,model,compile}=fixture([resolved])
+  const warnings=['Read-only print area resolved from constant OFFSET arguments; no cell values were evaluated.',"Source _xlnm.Print_Area formula: OFFSET('Data Set'!$D$3:$F$5,3,-2)"]
+  objects.print_area_sets![0]!.warnings=warnings
+  const decoded=decodeNativeWorkbookObjectsV1(objects,objects.package_sha256)
+  expect(selectNativeSheetPrintAreaSetV1(model,'7',decoded)).toEqual([resolved])
+  const plan=compileNativeSheetPrintAreaSetPreviewV1([compile(resolved)],decoded)
+  expect(plan.areas[0]!.plan.warnings.slice(-2)).toEqual(warnings)
+  expect(plan.areas[0]!.viewport).toEqual(resolved)
+  expect(plan.areas[0]!.plan.pages[0]!.rows).toEqual({start:5,end:7})
+  warnings[0]='changed'
+  expect(plan.areas[0]!.plan.warnings).not.toContain('changed')
+  expect(()=>selectNativeSheetPrintAreaSetV1(model,'7',{...decoded,package_sha256:`sha256:${'f'.repeat(64)}`})).toThrow()
+ })
  it('rejects overlaps, duplicate identities, empty/oversized sets and closed-shape violations',()=>{
   const entry=fixture().objects.print_area_sets![0]!
   for(const input of [[entry,entry],[{...entry,areas:[]}],[{...entry,areas:Array(17).fill(ranges[0])}],[{...entry,areas:[ranges[0],ranges[0]]}],[{...entry,areas:[ranges[0],{row:10,column:7,end_row:12,end_column:9}]}],[{...entry,status:'unavailable'}],[{...entry,extra:1}],[{...entry,areas:[{...ranges[0],extra:1}]}],[Object.assign(Object.create({extra:true}),entry)],[{...entry,warnings:['bad\nwarning']}],[{...entry,areas:[{row:-0,column:0,end_row:1,end_column:1}]}]])expect(()=>decodeNativeSheetPrintAreaSetsV1(input)).toThrow()
@@ -69,7 +84,7 @@ describe('source-bound multi-range print areas',()=>{
   const result=compileNativeSheetPrintAreaSetPreviewV1(geometries,objects)
   expect(result.protocol).toBe('injoffice.xlsx.print-area-set-pages');expect(result.total_pages).toBe(2)
   expect(result.areas.map(a=>a.viewport)).toEqual(ranges);expect(result.areas.map(a=>a.area_index)).toEqual([0,1])
-  expect(result.areas.map(a=>a.plan)).toEqual(geometries.map(g=>compileNativeSheetPagePreviewV1(g,objects)))
+  expect(result.areas.map(a=>a.plan)).toEqual(geometries.map(g=>{const plan=compileNativeSheetPagePreviewV1(g,objects);plan.warnings.push(...objects.print_area_sets![0]!.warnings);return plan}))
   expect(result.areas.map(a=>a.plan.pages[0]!.rows.start)).toEqual([8,1]);expect(JSON.stringify(objects)).toBe(before)
   for(const bad of [[],[geometries[0]!],[geometries[0]!,geometries[0]!],[...geometries].reverse(),[{...geometries[0]!},geometries[1]!],[compile({row:0,column:0,end_row:10,end_column:7}),geometries[1]!]])expect(()=>compileNativeSheetPrintAreaSetPreviewV1(bad,objects)).toThrow()
   objects.print_area_sets![0]!.sheet_part='wrong.xml';expect(()=>compileNativeSheetPrintAreaSetPreviewV1(geometries,objects)).toThrow('join')

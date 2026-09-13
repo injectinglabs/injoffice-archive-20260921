@@ -18,7 +18,7 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 	result := make([]NativeSheetPrintAreaSetV1, count)
 	names, titles, valid := collectNativePrintNames(raw, sheets)
 	for i, sheet := range sheets[:count] {
-		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles and supported saved print titles, if present."}}
+		result[i] = NativeSheetPrintAreaSetV1{SheetID: sheet.ID, SheetPart: sheet.PartName, Status: "unavailable", Warnings: []string{"Saved print areas unavailable: requires one worksheet-local name containing 1 to 16 non-overlapping absolute same-sheet rectangles, or one constant-integer OFFSET over an absolute same-sheet rectangle, and supported saved print titles, if present."}}
 		defs := names[sheet.Order]
 		if !valid || len(defs) != 1 || !validNativePrintName(defs[0]) {
 			continue
@@ -33,11 +33,18 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2) []Na
 			}
 		}
 		areas := parseNativePrintAreaSet(defs[0].text, sheet.Name)
+		offset := parseNativePrintOffset(defs[0].text, sheet.Name)
+		if offset != nil {
+			areas = []NativePrintAreaRectV1{*offset}
+		}
 		if areas == nil {
 			continue
 		}
 		result[i].Status, result[i].Areas = "available", areas
 		result[i].Warnings = []string{"Read-only saved print-area rectangles in source order. Each area starts a separate approximate preview sequence; no formula evaluation, printer fidelity or mutation authority. Saved print titles require explicit preview selection."}
+		if offset != nil {
+			result[i].Warnings = []string{"Read-only print area resolved from constant OFFSET arguments; no cell values, caches or other names were evaluated. Page geometry is approximate, not Excel printer calibration. Saved print titles require explicit preview selection.", "Source _xlnm.Print_Area formula: " + defs[0].text}
+		}
 	}
 	return result
 }
