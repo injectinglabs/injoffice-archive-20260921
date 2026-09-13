@@ -849,3 +849,16 @@ The bounded producer admits direct body-paragraph VML shape/rect textboxes and D
 This is plain source text, without shape geometry, page placement, wrapping, text flow between linked boxes, SmartArt or Word rendering equivalence. Native paint and editing authority are unchanged. Missing evidence is an empty inventory, never an inferred story; arbitrary caller-authored evidence is not XML proof. The decoder checks original drawing diagnostic anchors, package hashes, source ordering and bounded plain data.
 
 Source semantics: [WordprocessingML TextBoxContent](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.textboxcontent?view=openxml-3.0.1), [DrawingML TextBoxInfo2](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.office2010.word.drawingshape.textboxinfo2?view=openxml-3.0.1), and [VML TextBox](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.vml.textbox?view=openxml-3.0.1).
+
+`createNativeDocxNestedTextInventoryV1` requires the separate explicit
+`source-nested-table-text-v1` read-only policy and same-byte `nested_text`,
+`nested_table_omissions` and `table_text_contexts` evidence. It lists qualified
+one-level nested cell paragraphs separately; the default partial view retains
+its nested-table omission. The producer accepts only one row/cell, an exact
+matching geometry-only table style chain and direct property-free paragraphs
+and text runs. Existing default style resolution must establish visible text
+without new diagnostics. Missing/conditional styles, hidden text, revision
+wrappers, cell properties and deeper tables remain omitted. The consumer joins
+original outer-owner omissions and resolved visibility; no nested table model,
+geometry, font placement or mutation authority is produced. Limits are 32 nested
+tables, 16 paragraphs per table, 32 runs per paragraph and 32,768 text units.

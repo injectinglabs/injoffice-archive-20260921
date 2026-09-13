@@ -2,8 +2,8 @@ import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
 import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
-import {createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
-import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView,NativeDocxTextboxInventoryView} from './NativeDocxPartialText'
+import {createNativeDocxNestedTextInventoryV1,createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
+import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView,NativeDocxTextboxInventoryView,NativeDocxNestedTextInventoryView} from './NativeDocxPartialText'
 describe('browser-local partial text UI',()=>{
  it('escapes textbox text and keeps geometry and omission disclosures visible',()=>{
   const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:pict[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
@@ -11,6 +11,14 @@ describe('browser-local partial text UI',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxTextboxInventoryView,{inventory:{policy:'source-textbox-inventory-v1',read_only:true,source:{document_id:'d',revision:'r',package_sha256:item.package_sha256},items:[item,{...item,diagnostic_id:'d2',status:'omitted',paragraphs:[],reason:'hidden-text'}],omitted_count:1,source_diagnostics:[]}}))
   expect(html).toContain('&lt;script&gt;Textbox&lt;/script&gt;');expect(html).toContain('Textbox text omitted: hidden-text');expect(html).toContain('Shape geometry, placement, wrapping');expect(html).toContain('Textbox inventory limit: 1 omitted')
   expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable');expect(html).not.toContain('<input');expect(html).not.toContain('<button')
+ })
+ it('labels nested source text separately, retains omissions and escapes authored text',()=>{
+  const f=JSON.parse(readFileSync(new URL('../../../../testdata/docx-native/nested-text-inspection-v1.json',import.meta.url),'utf8'))
+  const inventory=createNativeDocxNestedTextInventoryV1(f.document,{policy:'source-nested-table-text-v1',read_only:true},f.resolved_layout,f.nested_table_omissions,f.table_text_contexts,f.nested_text)
+  const segment=inventory.items[0]!.paragraphs[0]!.segments[0]!;if(segment.kind==='text')segment.text='<script>nested</script>'
+  const html=renderToStaticMarkup(createElement(NativeDocxNestedTextInventoryView,{inventory}))
+  expect(html).toContain('&lt;script&gt;nested&lt;/script&gt;');expect(html).toContain('Original nested-table omissions and diagnostics remain');expect(html).toContain('does not reconstruct table geometry')
+  expect(html).not.toContain('<script>');expect(html).not.toContain('<input');expect(html).not.toContain('<button');expect(html).not.toContain('contenteditable')
  })
  it('labels review kinds, metadata, omissions and retained diagnostic codes as escaped read-only text',()=>{
   const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:ins[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
@@ -29,7 +37,7 @@ describe('browser-local partial text UI',()=>{
  })
  it('requires explicit request and explains browser-only behavior without upload or edit controls',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxPartialText,{bytes:new Uint8Array([1]),packageDigest:'sha256:'+'a'.repeat(64)}))
-  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('Inspect tracked-change source');expect(html).toContain('Inspect textbox source');expect(html).toContain('No file is uploaded')
+  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('Inspect tracked-change source');expect(html).toContain('Inspect textbox source');expect(html).toContain('Inspect nested table source text');expect(html).toContain('No file is uploaded')
   expect(html).not.toContain('Read-only partial source text')
  })
  it('renders same-source library table text and authored descriptions as escaped read-only content',()=>{

@@ -133,3 +133,28 @@ it('refuses malformed paint evidence rather than dropping source provenance or g
   (p:ReturnType<typeof paintEvidence>)=>{Object.defineProperty(p.border,'width_emu',{get(){throw Error('getter')}})},
  ]){const {deck,input}=fixture(),p=paintEvidence();mutate(p);input.tables[0]!.paint=p;expect(()=>decodeNativePptxTableInspection(input,deck,sha)).toThrow()}
 })
+
+it('keeps preset paint behind its own policy and converts normative binary patterns into CSS lengths',()=>{
+ const patterns={dash:'1111000',dashDot:'11110001000',dot:'1000',lgDash:'11111111000',lgDashDot:'111111110001000',lgDashDotDot:'1111111100010001000',sysDash:'1110',sysDashDot:'111010',sysDashDotDot:'11101010',sysDot:'10'}
+ for(const [preset,binary] of Object.entries(patterns)){
+  const {deck,input}=fixture()
+  input.tables[0]!.paint={...paintEvidence(),policy:'source-no-style-preset-border-v1',border:{...paintEvidence().border,preset:preset as keyof typeof patterns}}
+  const decoded=decodeNativePptxTableInspection(input,deck,sha)
+  const solid=createNativePptxTableGeometryPreview(decoded,'host-sans-12pt-clipped-v1',{policy:'source-no-style-solid-border-v1'})
+  expect(solid.paintOmissions).toHaveLength(1);expect(solid.slides[0]!.tables[0]).not.toHaveProperty('paint')
+  const preview=createNativePptxTableGeometryPreview(decoded,'host-sans-12pt-clipped-v1',{policy:'source-no-style-preset-border-v1'})
+  expect(preview.paintOmissions).toEqual([])
+  const table=preview.slides[0]!.tables[0]!
+  expect(table.paint?.border?.preset).toBe(preset)
+  expect(table.dashArray).toEqual(binary.match(/1+|0+/g)!.map(run=>run.length*12700/9525))
+  expect(Object.isFrozen(table.dashArray)).toBe(true)
+ }
+})
+it('rejects preset/policy mismatch, unknown preset and caller-supplied dash arrays',()=>{
+ for(const border of [{color:'112233',width_emu:12700},{color:'112233',width_emu:12700,preset:'solid'},{color:'112233',width_emu:12700,preset:'custom'},null,{color:'112233',width_emu:12700,preset:'dash',dashArray:[1,1]}]){
+  const {deck,input}=fixture();input.tables[0]!.paint={...paintEvidence(),policy:'source-no-style-preset-border-v1',border} as never
+  expect(()=>decodeNativePptxTableInspection(input,deck,sha)).toThrow()
+ }
+ const {deck,input}=fixture();input.tables[0]!.paint={...paintEvidence(),border:{...paintEvidence().border,preset:'dash'}} as never
+ expect(()=>decodeNativePptxTableInspection(input,deck,sha)).toThrow()
+})
