@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204"
+const NativePPTXSchemaSHA256 = "d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -45,6 +45,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 	"NativeAsset": {
 		Properties: []string{"byteLength", "contentType", "dataBase64", "id", "passthrough", "provenance", "sha256", "source"},
 		Required:   []string{"byteLength", "contentType", "id", "passthrough", "provenance", "sha256"},
+	},
+	"NativeChartAxisLabels": {
+		Properties: []string{"majorTickMark", "majorUnit", "numberFormat", "position", "profile", "style"},
+		Required:   []string{"majorTickMark", "position", "profile", "style"},
+	},
+	"NativeChartAxisLabelStyle": {
+		Properties: []string{"bold", "color", "fontFamily", "fontSize", "italic", "language"},
+		Required:   []string{"bold", "color", "fontFamily", "fontSize", "italic", "language"},
 	},
 	"NativeChartElement": {
 		Properties: []string{"animation", "chart", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
@@ -91,7 +99,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
 	},
 	"NativeLiteralBarAxis": {
-		Properties: []string{"color", "crossAxisId", "crossesAt", "deleted", "id", "max", "min", "orientation", "position", "widthEmu"},
+		Properties: []string{"color", "crossAxisId", "crossesAt", "deleted", "id", "labels", "max", "min", "orientation", "position", "widthEmu"},
 		Required:   []string{"crossAxisId", "deleted", "id", "orientation", "position"},
 	},
 	"NativeLiteralBarSeries": {

@@ -1,8 +1,10 @@
+import {validNativeChartAxisLabels} from './chartAxisLabelsValidation'
 import type {NativeLiteralBar} from './types'
 
 import {nativeChartDecimal as decimal} from './chartDecimalValidation'
 export function validNativeLiteralBar(bar:NativeLiteralBar):boolean{
  const ca=bar.categoryAxis,va=bar.valueAxis
+ if(!validNativeChartAxisLabels(ca,va,false)||!validNativeChartAxisLabels(va,ca,true))return false
  if(bar.categories.reduce((sum,c)=>sum+c.length,0)>32768||ca.id===va.id||ca.crossAxisId!==va.id||va.crossAxisId!==ca.id||ca.min!==undefined||ca.max!==undefined||ca.crossesAt!==undefined||va.min===undefined||va.max===undefined||va.crossesAt===undefined)return false
  for(const axis of [ca,va])if(axis.deleted?(axis.color!==undefined||axis.widthEmu!==undefined):(axis.color===undefined||axis.widthEmu===undefined))return false
  if(bar.barDirection==='column'?(ca.position!=='b'||va.position!=='l'):(ca.position!=='l'||va.position!=='b'))return false

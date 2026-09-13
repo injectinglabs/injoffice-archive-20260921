@@ -1,3 +1,5 @@
+import {layoutChartAxes,chartAxisTickVectors,CHART_AXIS_LAYOUT_POLICY,type ChartAxisLabelInput} from './chartAxisLayout.js'
+import {measureChartAxisText} from './chartAxisText.js'
 import {createNativeLiteralLinePaths} from './literalLine.js'
 import {createNativeLiteralScatterPaths} from './literalScatter.js'
 import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
@@ -1929,7 +1931,56 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       }
 
       const connected=element.chart.literalConnected
-      if(connected && state.options.literalConnectedPreview===true){
+      const labeledBar=element.chart.literalBar
+      const hasAxisLabels=Boolean(connected?.xAxis.labels||connected?.yAxis.labels||labeledBar?.categoryAxis.labels||labeledBar?.valueAxis.labels)
+      if(hasAxisLabels && state.options.chartAxisLabelsPreview===true && (connected&&state.options.literalConnectedPreview===true||labeledBar&&state.options.literalBarPreview===true)){
+        try {
+          if(depth+2>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}`,'Axis plot and labels exceed nesting budget')
+          const inputs:ChartAxisLabelInput[]=connected?[
+            {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...(connected.profile==='literal-line-v1'?{categories:connected.categories}:{})},
+            {axis:connected.yAxis,perpendicular:connected.xAxis,horizontal:false},
+          ]:[
+            {axis:labeledBar!.categoryAxis,perpendicular:labeledBar!.valueAxis,horizontal:labeledBar!.barDirection==='column',categories:labeledBar!.categories},
+            {axis:labeledBar!.valueAxis,perpendicular:labeledBar!.categoryAxis,horizontal:labeledBar!.barDirection!=='column'},
+          ]
+          const layout=await layoutChartAxes(inputs,base.bounds.cx,base.bounds.cy,async(text,axis,index)=>{
+            const style=axis.labels!.style
+            if(!text || /[\p{C}]/u.test(text) || /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(text))throw new RangeError('axis labels require supported Latin/common text without controls')
+            const axisState:CompileState={...state,resolveRun:undefined,textDefaults:{...state.textDefaults,script:'Latn',direction:'ltr'}}
+            const body=await compileTextBody([{align:'center',level:0,bullet:false,runs:[{text,fontFamily:style.fontFamily,fontSizeHundredthPt:style.fontSize,color:style.color,bold:style.bold,italic:style.italic,language:style.language,kerningThresholdHundredthPt:0}]}],{
+              elementId:`${element.id}:axis:${axis.id}:${index}`,elementKind:'text',bounds:base.bounds,
+              layout:{leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'none',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow'},
+            },axisState)
+            const run=body.paragraphs[0]?.runs[0]
+            if(run?.fontSelection?.selectedFamily!==style.fontFamily||run.fontSizeMilliPoints!==style.fontSize*10||run.color!==style.color)throw new RangeError('axis source font style was not retained')
+            return {body,bounds:await measureChartAxisText(body,state.options.textLayout.glyphExtents)}
+          })
+          const plot=layout.plot
+          const vectors=connected?(connected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(connected,plot.cx,plot.cy):createNativeLiteralBarPaths(labeledBar!,plot.cx,plot.cy)
+          const data=vectors.filter(v=>v.path.length>0).map((vector,index)=>{
+            const path=`$.elements.${element.id}.axisPlot.${index}`;takeNode(state,path)
+            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},preset:'rect' as const,path:boundedPath(vector.path,path),...('color' in vector&&vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
+          })
+          takeNode(state,`$.elements.${element.id}.axisPlot`)
+          const children:RenderNode[]=[{kind:'group',...base,zIndex:0,transform:translationTransform(plot.x,plot.y),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},clip:{kind:'rect',rect:{x:0,y:0,cx:plot.cx,cy:plot.cy}},children:data}]
+          for(const [index,vector] of chartAxisTickVectors(inputs,plot).entries()){
+            const path=`$.elements.${element.id}.axisTicks.${index}`;takeNode(state,path)
+            children.push({kind:'shape',...base,zIndex:children.length,transform:translationTransform(0,0),preset:'rect',path:boundedPath(vector.path,path),stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)})
+          }
+          for(const [index,label]of layout.labels.entries()){
+            takeNode(state,`$.elements.${element.id}.axisLabels.${index}`)
+            checkedWorldAffine(world,translationTransform(0,0),label.bounds,`$.elements.${element.id}.axisLabels.${index}`,state.budget)
+            children.push({kind:'text',...base,clip:undefined,zIndex:children.length,transform:translationTransform(label.x,label.y),bounds:{x:label.bounds.x-label.x,y:label.bounds.y-label.y,cx:label.bounds.cx,cy:label.bounds.cy},textBody:label.body})
+          }
+          state.diagnostics.push({severity:'warning',code:'chart.axisLabelsPreview',message:`Source labels use exact supplied fonts and ${CHART_AXIS_LAYOUT_POLICY}: conservative outline hulls, one-point label gap, three-point outside ticks and fixed-decimal half-away rounding. Plot margins are measured host layout, not PowerPoint layout reproduction.`,slideId:state.slide.id,elementId:element.id})
+          return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
+        }catch(error){
+          if(!(error instanceof RangeError))throw error
+          state.diagnostics.push({severity:'refusal',code:'chart.axisLabelsUnavailable',message:error.message,slideId:state.slide.id,elementId:element.id})
+        }
+      }
+
+      if(connected && !hasAxisLabels && state.options.literalConnectedPreview===true){
         if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalConnected`,'Connected chart vectors exceed RenderTree nesting budget')
         state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
         const vectors=(connected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(connected,base.bounds.cx,base.bounds.cy)
@@ -1942,7 +1993,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
       }
       const bar=element.chart.literalBar
-      if(bar && state.options.literalBarPreview===true){
+      if(bar && !hasAxisLabels && state.options.literalBarPreview===true){
         const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
         const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*bar.series.length+bar.gapWidth))
         if(!fits)state.diagnostics.push({severity:'refusal',code:'chart.barFrameTooSmall',message:'The integer preview frame cannot retain distinct source bars.',slideId:state.slide.id,elementId:element.id})
@@ -1999,6 +2050,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
+  if(options.chartAxisLabelsPreview!==undefined&&typeof options.chartAxisLabelsPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.chartAxisLabelsPreview','axis labels opt-in must be boolean')
   if(options.literalConnectedPreview!==undefined&&typeof options.literalConnectedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalConnectedPreview','literal connected opt-in must be boolean')
   if(options.literalBarPreview!==undefined&&typeof options.literalBarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBarPreview','literal bar opt-in must be boolean')
   if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
