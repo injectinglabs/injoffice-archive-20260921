@@ -432,6 +432,181 @@
         "colors": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#[0-9A-F]{6}$" } }
       }
     },
+    "literalConnectedSeries": {
+      "x-binding-name": "NativeLiteralConnectedSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "color",
+        "widthEmu"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "xValues": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        }
+      }
+    },
+    "literalConnected": {
+      "x-binding-name": "NativeLiteralConnected",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "categories",
+        "series",
+        "xAxis",
+        "yAxis"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "literal-line-v1",
+            "literal-scatter-v1"
+          ],
+          "type": "string"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalConnectedSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "literal-line-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "categories": {
+                "minItems": 1
+              },
+              "series": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "xValues"
+                    ]
+                  }
+                }
+              },
+              "xAxis": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "min"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "max"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "crossesAt"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "categories": {
+                "maxItems": 0
+              },
+              "series": {
+                "items": {
+                  "required": [
+                    "xValues"
+                  ]
+                }
+              },
+              "xAxis": {
+                "required": [
+                  "min",
+                  "max",
+                  "crossesAt"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "literalBarAxis": {
       "x-binding-name": "NativeLiteralBarAxis",
       "type": "object",
@@ -626,7 +801,8 @@
         "previewAssetId": { "$ref": "#/$defs/nativeId" },
         "literalPie": { "$ref": "#/$defs/literalPie" },
         "literalDoughnut": { "$ref": "#/$defs/literalDoughnut" },
-        "literalBar": { "$ref": "#/$defs/literalBar" }
+        "literalBar": { "$ref": "#/$defs/literalBar" },
+        "literalConnected": { "$ref": "#/$defs/literalConnected" }
       }
     },
     "textElement": {

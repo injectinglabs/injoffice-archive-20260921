@@ -31,6 +31,11 @@ func nativeChartToken(node *nativeXMLNode, allowed ...string) (string, bool) {
 	return "", false
 }
 func nativeChartAxisPaint(node *nativeXMLNode, d nativeExtractDialect) (string, int64, bool) {
+	return nativeChartLinePaint(node, d, false)
+}
+
+// Shared complete local line paint; series additionally require a round join.
+func nativeChartLinePaint(node *nativeXMLNode, d nativeExtractDialect, roundJoin bool) (string, int64, bool) {
 	c := nativeChartChildren(node, d.drawing)
 	if requireEmptyNativeElement(c.take("noFill")) != nil {
 		return "", 0, false
@@ -53,7 +58,11 @@ func nativeChartAxisPaint(node *nativeXMLNode, d nativeExtractDialect) (string, 
 	if err != nil {
 		return "", 0, false
 	}
-	if len(line.Children) != 4 {
+	count := 4
+	if roundJoin {
+		count++
+	}
+	if len(line.Children) != count {
 		return "", 0, false
 	}
 	fill := line.Children[0]
@@ -72,8 +81,16 @@ func nativeChartAxisPaint(node *nativeXMLNode, d nativeExtractDialect) (string, 
 	if _, ok := nativeChartToken(dash, "solid"); !ok {
 		return "", 0, false
 	}
+	offset := 2
+	if roundJoin {
+		join := line.Children[2]
+		if join.Name != (xml.Name{Space: d.drawing, Local: "round"}) || requireEmptyNativeElement(join) != nil {
+			return "", 0, false
+		}
+		offset++
+	}
 	for i, name := range []string{"headEnd", "tailEnd"} {
-		end := line.Children[i+2]
+		end := line.Children[i+offset]
 		if end.Name != (xml.Name{Space: d.drawing, Local: name}) || requireOnlyNativeAttrs(end, xml.Name{Local: "type"}) != nil || requireOnlyNativeChildren(end) != nil {
 			return "", 0, false
 		}
@@ -85,6 +102,12 @@ func nativeChartAxisPaint(node *nativeXMLNode, d nativeExtractDialect) (string, 
 	return "#" + strings.ToUpper(color), width, true
 }
 func extractNativeChartAxis(node *nativeXMLNode, d nativeExtractDialect, valueAxis bool) (*nativeChartAxis, bool) {
+	return extractNativeChartAxisWithCrossBetween(node, d, valueAxis, true)
+}
+
+// Scatter axes have no category midpoint/boundary setting. This private policy
+// leaves the existing bar profile grammar unchanged.
+func extractNativeChartAxisWithCrossBetween(node *nativeXMLNode, d nativeExtractDialect, valueAxis, requireBetween bool) (*nativeChartAxis, bool) {
 	c := nativeChartChildren(node, d.chart)
 	axis := &nativeChartAxis{}
 	var ok bool
@@ -157,8 +180,10 @@ func extractNativeChartAxis(node *nativeXMLNode, d nativeExtractDialect, valueAx
 		if err != nil || !cross.isZero() {
 			return nil, false
 		}
-		if _, ok := nativeChartToken(c.take("crossBetween"), "between"); !ok {
-			return nil, false
+		if requireBetween {
+			if _, ok := nativeChartToken(c.take("crossBetween"), "between"); !ok {
+				return nil, false
+			}
 		}
 	} else {
 		if _, ok := nativeChartToken(c.take("crosses"), "min"); !ok {
