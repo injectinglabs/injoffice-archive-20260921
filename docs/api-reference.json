@@ -10066,6 +10066,26 @@
               "signature": "NativeElementKind"
             },
             {
+              "name": "NativeEvaluatedGeometry",
+              "kind": "type",
+              "signature": "export interface NativeEvaluatedGeometry"
+            },
+            {
+              "name": "NativeGeometryCommand",
+              "kind": "type",
+              "signature": "export interface NativeGeometryCommand"
+            },
+            {
+              "name": "NativeGeometryPath",
+              "kind": "type",
+              "signature": "export interface NativeGeometryPath"
+            },
+            {
+              "name": "NativeGeometryTextRect",
+              "kind": "type",
+              "signature": "export interface NativeGeometryTextRect"
+            },
+            {
               "name": "NativeGroupElement",
               "kind": "type",
               "signature": "export interface NativeGroupElement extends NativeElementBase"
@@ -10313,7 +10333,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"0805f1321fdaef1391b7ffc4d6ef62cf2a483fcdf30f1dde29f4d09fc7798b19\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a\""
             },
             {
               "name": "provenanceValues",
