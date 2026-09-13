@@ -89,10 +89,7 @@ func nativeTextboxHardBreakEvidence(drawing *nativeXMLNode, ns, part string, raw
 	if !ok || step == 0 {
 		return nil
 	}
-	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 {
-		start, end := n.Start, n.End
-		return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
-	}
+	anchor := func(n *nativeXMLNode) NativeSourceAnchorV1 { return nativeTextboxSourceAnchor(n, part, raw) }
 	r := p.Children[1]
 	out := &NativeTextboxHardBreakLayoutV1{ParagraphAnchor: anchor(p), RunAnchor: anchor(r), SpacingAnchor: anchor(p.Children[0].Children[0]), LineStepTwips: step, Lines: []NativeTextboxHardBreakLineV1{}}
 	offset := 0

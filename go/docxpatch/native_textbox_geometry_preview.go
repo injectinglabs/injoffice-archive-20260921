@@ -23,6 +23,7 @@ type NativeTextboxGeometryItemV1 struct {
 	Geometry        *NativeTextboxGeometryV1        `json:"geometry"`
 	HardBreakLayout *NativeTextboxHardBreakLayoutV1 `json:"hard_break_layout,omitempty"`
 	WrapLayout      *NativeTextboxWrapLayoutV1      `json:"wrap_layout,omitempty"`
+	PageAnchor      *NativeTextboxPageAnchorV1      `json:"page_anchor,omitempty"`
 }
 type NativeTextboxGeometryEvidenceV1 struct {
 	Items        []NativeTextboxGeometryItemV1 `json:"items"`
@@ -90,6 +91,7 @@ func inspectNativeTextboxGeometry(data []byte, doc *NativeDocumentV1) (*NativeTe
 					item.Geometry = geometry
 					item.HardBreakLayout = nativeTextboxHardBreakEvidence(drawing, ns, main, raw)
 					item.WrapLayout = nativeTextboxWrapEvidence(drawing, ns, main, raw)
+					item.PageAnchor = nativeTextboxPageAnchorEvidence(drawing, ns, main, raw)
 					item.Owner.Status = "supported"
 					item.Owner.Reason = ""
 					item.Owner.Paragraphs = []string{text}
@@ -129,20 +131,21 @@ func nativeGeometryChildren(n *nativeXMLNode, ns string, names ...string) bool {
 	return true
 }
 func nativeGeometryAttrs(n *nativeXMLNode, ns string, values map[string]string) bool {
-	attrs := []xml.Name{}
-	for key := range values {
-		attrs = append(attrs, xml.Name{Space: ns, Local: key})
-	}
-	if !nativeExactContainer(n, attrs...) {
+	if !nativeXMLWhitespaceOnly(n.Text) {
 		return false
 	}
-	for key, want := range values {
-		value, ok := nativeAttr(n, ns, key)
-		if !ok || value != want {
+	count := 0
+	for _, attr := range n.Attrs {
+		if nativeSettingsNamespaceDeclaration(attr) {
+			continue
+		}
+		want, ok := values[attr.Name.Local]
+		if !ok || attr.Name.Space != ns || attr.Value != want {
 			return false
 		}
+		count++
 	}
-	return true
+	return count == len(values)
 }
 func nativeGeometryPaint(n *nativeXMLNode, a string) (string, bool) {
 	if n.Name == (xml.Name{Space: a, Local: "noFill"}) && nativeExactLeaf(n) {
@@ -164,14 +167,22 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 	if ns == wordMLStrict {
 		wp, a = wordDrawingStrict, drawingMLStrict
 	}
-	if !nativeExactContainer(drawing) || !nativeGeometryChildren(drawing, wp, "inline") {
+	if !nativeExactContainer(drawing) || len(drawing.Children) != 1 {
 		return nil, ""
 	}
 	inline := drawing.Children[0]
-	if !nativeGeometryAttrs(inline, "", map[string]string{"distT": "0", "distB": "0", "distL": "0", "distR": "0"}) || len(inline.Children) != 4 {
-		return nil, ""
+	var extent, effect, docPr, graphic *nativeXMLNode
+	if inline.Name == (xml.Name{Space: wp, Local: "inline"}) {
+		if !nativeGeometryAttrs(inline, "", map[string]string{"distT": "0", "distB": "0", "distL": "0", "distR": "0"}) || len(inline.Children) != 4 {
+			return nil, ""
+		}
+		extent, effect, docPr, graphic = inline.Children[0], inline.Children[1], inline.Children[2], inline.Children[3]
+	} else {
+		if _, _, ok := nativeTextboxPageOffsets(inline, wp, a); !ok {
+			return nil, ""
+		}
+		extent, effect, docPr, graphic = inline.Children[3], inline.Children[4], inline.Children[6], inline.Children[7]
 	}
-	extent, effect, docPr, graphic := inline.Children[0], inline.Children[1], inline.Children[2], inline.Children[3]
 	if extent.Name != (xml.Name{Space: wp, Local: "extent"}) || !nativeExactLeaf(extent, xml.Name{Local: "cx"}, xml.Name{Local: "cy"}) || effect.Name != (xml.Name{Space: wp, Local: "effectExtent"}) || !nativeGeometryAttrs(effect, "", map[string]string{"l": "0", "t": "0", "r": "0", "b": "0"}) || len(effect.Children) != 0 || docPr.Name != (xml.Name{Space: wp, Local: "docPr"}) || !nativeExactLeaf(docPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}) {
 		return nil, ""
 	}
@@ -344,4 +355,10 @@ func nativeParseTextboxGeometry(drawing *nativeXMLNode, ns string) (*NativeTextb
 		textWrap = "square"
 	}
 	return &NativeTextboxGeometryV1{width, height, insets, fillRGB, lineRGB, lineWidth, font, size, rgb, textWrap}, text
+}
+
+// All supplemental textbox witnesses hash the exact source node bytes.
+func nativeTextboxSourceAnchor(n *nativeXMLNode, part string, raw []byte) NativeSourceAnchorV1 {
+	start, end := n.Start, n.End
+	return NativeSourceAnchorV1{part, n.Path, &start, &end, nativeSHA(raw[start:end])}
 }

@@ -4788,6 +4788,11 @@
               "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
             },
             {
+              "name": "NativeTextboxPageAnchorV1",
+              "kind": "type",
+              "signature": "export interface NativeTextboxPageAnchorV1"
+            },
+            {
               "name": "newCommentEntry",
               "kind": "function",
               "signature": "export declare function newCommentEntry(author: string, text: string, parentId?: string): CommentEntry"
@@ -5527,6 +5532,11 @@
               "name": "nativeTextboxGeometryPlainData",
               "kind": "function",
               "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
+            },
+            {
+              "name": "NativeTextboxPageAnchorV1",
+              "kind": "type",
+              "signature": "export interface NativeTextboxPageAnchorV1"
             },
             {
               "name": "OFFICE_MUTATION_PROTOCOL",

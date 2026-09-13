@@ -454,6 +454,18 @@ and the paragraph atomicity of
 The imported Go fixture and actual HarfBuzz outline/paint replay validate this
 pipeline; they are synthetic OOXML evidence, not a Word visual reference.
 
+The separate read-only rectangle preview now retains a bounded floating
+textbox's page-relative source offsets in `textbox_geometry.items[].page_anchor`.
+It requires exact `wp:anchor` offsets from the page, `wrapNone`, zero distances,
+zero effects and relative height, foreground/unlocked placement, layout-in-cell
+and overlap enabled. Nonnegative offsets are bounded to 127,000,000 EMU and
+must convert exactly to millipoints. Container and ordered offset-leaf anchors
+bind this metadata into the existing local shape-paint digest. Inline previews
+remain unchanged. This is source placement evidence only: physical-page
+assignment, page containment and composition with body text remain unfinished,
+and native drawing diagnostics remain intact. The complete source profile is
+documented in [the Docs package](../packages/docs/README.md#explicit-rectangle-textbox-preview).
+
 Whole-footnote body reflow admits one or two footnotes, each containing 1–16 paragraphs, in a
 single-section, single-column document. Multiple note paragraphs require a complete
 resolved `keep_next=true` chain on every nonfinal paragraph, with final keep-next

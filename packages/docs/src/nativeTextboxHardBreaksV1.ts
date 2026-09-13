@@ -17,7 +17,7 @@ export function decodeTextboxHardBreaks(value:unknown,owner:NativeDocxTextboxV1)
  const p=anchor(value.paragraph_anchor,owner.anchor),r=anchor(value.run_anchor,p,p.path+'/w:r[1]'),spacing=anchor(value.spacing_anchor,p,p.path+'/w:pPr[1]/w:spacing[1]')
  const root=owner.anchor.path.match(/^(.*\/w:drawing\[[1-9][0-9]*\])/u)?.[1]
  const suffix=root&&p.path.slice(root.length)
- if(!root||!/^\/(?:wp|ns[0-9a-f]{8}):inline\[1\]\/(?:a|ns[0-9a-f]{8}):graphic\[1\]\/(?:a|ns[0-9a-f]{8}):graphicData\[1\]\/(?:wps|ns[0-9a-f]{8}):wsp\[1\]\/(?:wps|ns[0-9a-f]{8}):txbx\[1\]\/w:txbxContent\[1\]\/w:p\[1\]$/.test(suffix!)||spacing.end_byte>=r.start_byte)throw new TypeError('Invalid hard-break paragraph sequence')
+ if(!root||!/^\/(?:wp|ns[0-9a-f]{8}):(?:inline|anchor)\[1\]\/(?:a|ns[0-9a-f]{8}):graphic\[1\]\/(?:a|ns[0-9a-f]{8}):graphicData\[1\]\/(?:wps|ns[0-9a-f]{8}):wsp\[1\]\/(?:wps|ns[0-9a-f]{8}):txbx\[1\]\/w:txbxContent\[1\]\/w:p\[1\]$/.test(suffix!)||spacing.end_byte>=r.start_byte)throw new TypeError('Invalid hard-break paragraph sequence')
  const text=owner.paragraphs[0]!,lines:NativeTextboxHardBreakLineV1[]=[]
  let offset=0,end=r.start_byte
  for(let i=0;i<value.lines.length;i++){
