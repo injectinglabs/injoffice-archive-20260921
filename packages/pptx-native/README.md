@@ -164,3 +164,10 @@ Glyph layout still uses the renderer's explicitly selected line-layout policy
 and exact supplied font bytes. This source-qualified extraction does not assert
 PowerPoint line-metric or raster equivalence. Local proprietary font files and
 independent reference artifacts are not repository or CI dependencies.
+
+Opaque chart records may carry `literalPie`, a bounded `literal-pie-v1` source
+projection with explicit literal integer values, RGB colors and first-slice
+angle. This optional read-only preview metadata does not change chart ownership,
+source hashes, preservation or mutation authority. No cached formula values are
+projected. Consumers must opt into a declared geometry policy; see
+`@injoffice/pptx-render`'s `literalPiePreview` option.
