@@ -1,4 +1,4 @@
-import { decodePDFRawStream, PDFArray, PDFBool, PDFDict, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+import { decodePDFRawStream, PDFArray, PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { applyFormValues } from './forms.js';
 import type { FormValueSpec } from './types.js';
@@ -19,6 +19,25 @@ async function formDoc(): Promise<Uint8Array> {
 }
 
 describe('applyFormValues', () => {
+  it('refuses a default mixed XFA form update before changing any source bytes', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    doc.getForm().acroForm.dict.set(PDFName.of('XFA'), doc.context.obj('preserve source XFA'));
+    const source = await doc.save({ updateFieldAppearances: false });
+    const copy = source.slice();
+    const result = await applyFormValues(source, [
+      { name: 'color', kind: 'radio', value: 'blue' },
+      { name: 'country', kind: 'choice', value: 'UK' },
+      { name: 'name', kind: 'text', value: 'AFTER' },
+      { name: 'agree', kind: 'checkbox', checked: true },
+    ]);
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toHaveLength(4);
+    expect(result.skipped.every(item => item.reason === 'XFA form updates are unsupported')).toBe(true);
+    expect(result.bytes).toBe(source);
+    expect(result.bytes).toEqual(copy);
+    expect((await PDFDocument.load(result.bytes)).catalog.getAcroForm()!.dict.has(PDFName.of('XFA'))).toBe(true);
+  });
+
   const portable = { textAppearance: { font: 'Helvetica' as const } };
   const widgetStreams = (doc: PDFDocument, name: string) => doc.getForm().getTextField(name).acroField.getWidgets()
     .map(widget => {
@@ -214,6 +233,43 @@ describe('applyFormValues', () => {
     const result = await applyFormValues(bytes, [{ name: 'country', kind: 'choice', value: 'UK' }]);
     expect(result.applied).toBe(1);
     expect((await PDFDocument.load(result.bytes)).getForm().getDropdown('country').getSelected()).toEqual(['UK']);
+  });
+
+  it.each(['dropdown', 'list'] as const)('selects authored %s export values without changing field flags or options', async kind => {
+    const doc = await PDFDocument.create();
+    const form = doc.getForm();
+    const field = kind === 'dropdown' ? form.createDropdown('choice') : form.createOptionList('choice');
+    field.acroField.setOptions([{ value: PDFHexString.fromText('e'), display: PDFHexString.fromText('E') }]);
+    field.addToPage(doc.addPage(), { x: 10, y: 10, width: 100, height: 30 });
+    const source = await doc.save();
+    const original = await PDFDocument.load(source);
+    const originalField = original.getForm().getField('choice');
+    const result = await applyFormValues(source, [{ name: 'choice', kind: 'choice', value: 'e' }]);
+    expect(result).toMatchObject({ applied: 1, skipped: [] });
+    const loaded = await PDFDocument.load(result.bytes);
+    const actual = loaded.getForm().getField('choice');
+    expect(actual.acroField.dict.get(PDFName.of('V'))?.toString()).toBe(PDFHexString.fromText('e').toString());
+    expect(actual.acroField.getFlags()).toBe(originalField.acroField.getFlags());
+    expect(actual.acroField.dict.get(PDFName.of('Opt'))?.toString()).toBe(originalField.acroField.dict.get(PDFName.of('Opt'))?.toString());
+    expect(actual.acroField.dict.lookup(PDFName.of('I'), PDFArray).asArray().map(v => v.toString())).toEqual(['0']);
+    expect(loaded.getForm().acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True);
+    const invalid = await applyFormValues(source, [{ name: 'choice', kind: 'choice', value: 'E' }]);
+    expect(invalid.applied).toBe(0); expect(invalid.bytes).toBe(source);
+  });
+
+  it('allows free text only in an already editable dropdown and rejects ambiguous exports', async () => {
+    const doc = await PDFDocument.load(await formDoc());
+    const field = doc.getForm().getDropdown('country');
+    const source = await doc.save();
+    const rejected = await applyFormValues(source, [{ name: 'country', kind: 'choice', value: 'OTHER' }]);
+    expect(rejected.applied).toBe(0); expect(rejected.bytes).toBe(source);
+    field.enableEditing();
+    const editable = await applyFormValues(await doc.save(), [{ name: 'country', kind: 'choice', value: 'OTHER' }]);
+    expect((await PDFDocument.load(editable.bytes)).getForm().getDropdown('country').getSelected()).toEqual(['OTHER']);
+    field.acroField.setOptions([{ value: PDFHexString.fromText('same') }, { value: PDFHexString.fromText('same') }]);
+    const ambiguous = await doc.save({ updateFieldAppearances: false });
+    const result = await applyFormValues(ambiguous, [{ name: 'country', kind: 'choice', value: 'same' }]);
+    expect(result.applied).toBe(0); expect(result.bytes).toBe(ambiguous);
   });
 
   it('sets multiple fields in one batch', async () => {

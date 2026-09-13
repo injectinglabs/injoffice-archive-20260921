@@ -1,4 +1,4 @@
-import { PDFCheckBox, PDFDict, PDFDocument, PDFDropdown, PDFName, PDFOptionList, PDFRadioGroup, PDFTextField, StandardFonts } from 'pdf-lib'
+import { PDFCheckBox, PDFDict, PDFDocument, PDFDropdown, PDFHexString, PDFName, PDFOptionList, PDFRadioGroup, PDFTextField, StandardFonts } from 'pdf-lib'
 import type { FormValueSpec } from './types.js'
 
 export interface FormValueFailure {
@@ -99,8 +99,24 @@ function applyValue(field: unknown, spec: FormValueSpec): void {
   if (!(field instanceof PDFDropdown || field instanceof PDFOptionList)) {
     throw new TypeError('field is not a choice field')
   }
-  if (spec.value) field.select(spec.value)
-  else field.clear()
+  if (!spec.value) {
+    field.clear()
+    return
+  }
+  // pdf-lib's choice helpers match display labels, not authored export values;
+  // dropdown.select can also silently enable free-text editing. Preserve both
+  // the source options and flags while writing the canonical export selection.
+  const choices = field.acroField.getOptions()
+  const matches = choices.map((option, index) => ({ option, index }))
+    .filter(({ option }) => option.value.decodeText() === spec.value)
+  if (matches.length > 1) throw new Error('ambiguous choice export value')
+  if (matches.length === 0 && (!(field instanceof PDFDropdown) || !field.isEditable())) {
+    throw new Error('choice value is not an authored export option')
+  }
+  const selected = matches[0]
+  field.acroField.dict.set(PDFName.of('V'), selected?.option.value ?? PDFHexString.fromText(spec.value))
+  if (selected) field.acroField.dict.set(PDFName.of('I'), field.acroField.dict.context.obj([selected.index]))
+  else field.acroField.dict.delete(PDFName.of('I'))
 }
 
 export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[], options: FormValuesOptions = {}): Promise<FormValuesResult> {
@@ -111,10 +127,11 @@ export async function applyFormValues(bytes: Uint8Array, values: FormValueSpec[]
   }
   if (values.length === 0) return { bytes, applied: 0, skipped: [], ...appearanceResult }
   const doc = await PDFDocument.load(bytes)
-  // PDFDocument.getForm() removes XFA as a side effect. Refuse the opt-in batch
-  // before calling it, including mixed text/checkbox batches.
-  if (options.textAppearance && doc.catalog.getAcroForm()?.dict.has(PDFName.of('XFA'))) {
-    return { bytes, applied: 0, skipped: values.map(spec => ({ name: spec.name, reason: 'XFA text appearances are unsupported' })), ...appearanceResult }
+  // PDFDocument.getForm() removes XFA as a side effect. Refuse every form batch
+  // before calling it, including default radio/choice edits to hybrid forms.
+  if (doc.catalog.getAcroForm()?.dict.has(PDFName.of('XFA'))) {
+    const reason = options.textAppearance ? 'XFA text appearances are unsupported' : 'XFA form updates are unsupported'
+    return { bytes, applied: 0, skipped: values.map(spec => ({ name: spec.name, reason })), ...appearanceResult }
   }
   const form = doc.getForm()
   const skipped: FormValueFailure[] = []

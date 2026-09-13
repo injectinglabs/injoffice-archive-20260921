@@ -106,3 +106,30 @@ describe('source-positioned table geometry preview', () => {
     expect(preview.omissions[0]!.reason).toContain('16384 CSS pixel')
   })
 })
+
+function paintEvidence(){return {policy:'source-no-style-solid-border-v1' as const,style_id:'{01234567-89AB-CDEF-0123-456789ABCDEF}',sources:['styles.xml','theme.xml','master.xml','layout.xml'].map(part_name=>({part_name,sha256:'c'.repeat(64)})),fill:'none' as const,border:{color:'112233',width_emu:12700}}}
+it('requires separate source-paint opt-in while preserving qualified border metadata and omissions',()=>{
+ const {deck,input}=fixture();input.tables[0]!.paint=paintEvidence()
+ const decoded=decodeNativePptxTableInspection(input,deck,sha)
+ expect(createNativePptxTableGeometryPreview(decoded,'host-sans-12pt-clipped-v1').slides[0]!.tables[0]).not.toHaveProperty('paint')
+ const painted=createNativePptxTableGeometryPreview(decoded,'host-sans-12pt-clipped-v1',{policy:'source-no-style-solid-border-v1'})
+ expect(painted.slides[0]!.tables[0]!.paint?.border).toEqual({color:'112233',width_emu:12700})
+ expect(painted.paintOmissions).toEqual([])
+ expect(Object.isFrozen(painted.slides[0]!.tables[0]!.paint?.sources)).toBe(true)
+ expect(()=>createNativePptxTableGeometryPreview(decoded,'host-sans-12pt-clipped-v1',{policy:'other'} as never)).toThrow()
+ const plain=fixture(),omitted=createNativePptxTableGeometryPreview(decodeNativePptxTableInspection(plain.input,plain.deck,sha),'host-sans-12pt-clipped-v1',{policy:'source-no-style-solid-border-v1'})
+ expect(omitted.paintOmissions).toHaveLength(1)
+ expect(omitted.slides[0]!.tables[0]).not.toHaveProperty('paint')
+})
+it('refuses malformed paint evidence rather than dropping source provenance or guessing line styles',()=>{
+ for(const mutate of [
+  (p:ReturnType<typeof paintEvidence>)=>{p.border.width_emu=127001},
+  (p:ReturnType<typeof paintEvidence>)=>{p.border.width_emu=0},
+  (p:ReturnType<typeof paintEvidence>)=>{p.border.color='url(evil)'},
+  (p:ReturnType<typeof paintEvidence>)=>{p.sources[0]!.sha256='broken'},
+  (p:ReturnType<typeof paintEvidence>)=>{p.sources[0]!.part_name='../outside.xml'},
+  (p:ReturnType<typeof paintEvidence>)=>{p.sources[0]!.part_name=p.sources[1]!.part_name},
+  (p:ReturnType<typeof paintEvidence>)=>{p.sources.pop()},
+  (p:ReturnType<typeof paintEvidence>)=>{Object.defineProperty(p.border,'width_emu',{get(){throw Error('getter')}})},
+ ]){const {deck,input}=fixture(),p=paintEvidence();mutate(p);input.tables[0]!.paint=p;expect(()=>decodeNativePptxTableInspection(input,deck,sha)).toThrow()}
+})

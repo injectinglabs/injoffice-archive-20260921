@@ -119,6 +119,7 @@ export default function NativeRoundTripPage() {
   const [artifactId, setArtifactId] = useState('')
   const [sourceName, setSourceName] = useState('workbook.xlsx')
   const [selection, setSelection] = useState('')
+  const [previewSheetID, setPreviewSheetID] = useState('')
   const [draft, setDraft] = useState('')
   const [status, setStatus] = useState('Choose the bundled workbook or upload your own .xlsx file.')
   const [error, setError] = useState('')
@@ -128,8 +129,8 @@ export default function NativeRoundTripPage() {
   const [proof, setProof] = useState<RoundTripProof | null>(null)
 
   const targets = useMemo(() => workbook ? editableTargets(workbook) : [], [workbook])
-  const target = targets.find((candidate) => targetKey(candidate) === selection) ?? targets[0]
-  const activeSheet = workbook?.sheets.find((sheet) => sheet.id === target?.sheetId) ?? workbook?.sheets[0]
+  const target = targets.find((candidate) => targetKey(candidate) === selection)
+  const activeSheet = workbook?.sheets.find((sheet) => sheet.id === previewSheetID) ?? workbook?.sheets[0]
   const targetValue = displayCellValue(target)
 
   const runtimeFor = (selectedMode: XlsxRoundTripMode): XlsxRoundTripRuntime => {
@@ -166,12 +167,14 @@ export default function NativeRoundTripPage() {
     const preferredKey = preferred ? targetKey(preferred) : ''
     const nextTarget = nextTargets.find((candidate) => targetKey(candidate) === preferredKey) ?? nextTargets[0]
     setWorkbook(next)
+    setPreviewSheetID(nextTarget?.sheetId ?? next.sheets[0]?.id ?? '')
     setSelection(nextTarget ? targetKey(nextTarget) : '')
     setDraft(displayCellValue(nextTarget))
   }
 
   const clearSession = () => {
     setWorkbook(null)
+    setPreviewSheetID('')
     setAuthoritativeBytes(null)
     setArtifactId('')
     setSelection('')
@@ -241,6 +244,7 @@ export default function NativeRoundTripPage() {
   }
 
   const chooseTarget = (next: EditableTarget) => {
+    setPreviewSheetID(next.sheetId)
     setSelection(targetKey(next))
     setDraft(displayCellValue(next))
     setProof(null)
@@ -403,6 +407,20 @@ export default function NativeRoundTripPage() {
                 </div>
                 <span className="native-muted ds-muted">{sourceName} · {workbook.source.authority}</span>
               </div>
+              {workbook.sheets.length > 1 && <DsField label="Preview worksheet">
+                <DsSelect value={activeSheet.id} disabled={busy} onChange={event => {
+                  const sheet = workbook.sheets.find(sheet => sheet.id === event.target.value)
+                  if (!sheet) return
+                  const next = targets.find(candidate => candidate.sheetId === sheet.id)
+                  setPreviewSheetID(sheet.id)
+                  setSelection(next ? targetKey(next) : '')
+                  setDraft(displayCellValue(next))
+                  setProof(null)
+                  setError('')
+                }}>
+                  {workbook.sheets.map(sheet => <option key={sheet.id} value={sheet.id}>{sheet.name}</option>)}
+                </DsSelect>
+              </DsField>}
               <div className="native-grid-wrap">
                 <table className="native-grid">
                   <thead><tr><th aria-label="Row" />{Array.from({ length: bounds.columns }, (_, column) => <th key={column}>{columnName(column)}</th>)}</tr></thead>

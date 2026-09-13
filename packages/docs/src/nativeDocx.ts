@@ -7,3 +7,7 @@ export * from './nativePartialNestedTablesV1.js'
 export * from './nativePartialEquationsV1.js'
 export {decodeNativeDocxResolvedLayout,type NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 export * from './nativeTransactionAdapterV1.js'
+
+export * from './nativeReviewInventoryV1.js'
+
+export * from './nativePartialTableTextContextV1.js'

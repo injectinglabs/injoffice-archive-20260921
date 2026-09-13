@@ -3194,7 +3194,12 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
+            },
+            {
+              "name": "createNativeDocxReviewInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
             },
             {
               "name": "CSS_PX_PER_INCH",
@@ -3322,6 +3327,11 @@
               "signature": "export type DecodeNativeDocxPaginationSettingsResult ="
             },
             {
+              "name": "decodeNativeDocxPartialTableTextContextsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPartialTableTextContextsV1(source: unknown, resolvedValue: unknown, input: unknown): NativeDocxPartialTableTextContextV1[]"
+            },
+            {
               "name": "decodeNativeDocxProseMirrorTransactionJsonV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxProseMirrorTransactionJsonV1(json: string): NativeDocxProseMirrorTransactionV1 | NativeDocxTransactionAdapterIssueV1[]"
@@ -3350,6 +3360,11 @@
               "name": "DecodeNativeDocxResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxResult ="
+            },
+            {
+              "name": "decodeNativeDocxReviewEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxReviewEvidenceV1(source: unknown, input: unknown): NativeDocxReviewEvidenceV1"
             },
             {
               "name": "decodeNativeDocxShapedLines",
@@ -4277,6 +4292,11 @@
               "signature": "export interface NativeDocxPartialSourceV1"
             },
             {
+              "name": "NativeDocxPartialTableTextContextV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxPartialTableTextContextV1"
+            },
+            {
               "name": "NativeDocxPassthroughPartV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPassthroughPartV1"
@@ -4455,6 +4475,21 @@
               "name": "NativeDocxResolvedTableV1",
               "kind": "interface",
               "signature": "export interface NativeDocxResolvedTableV1"
+            },
+            {
+              "name": "NativeDocxReviewChangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewChangeV1"
+            },
+            {
+              "name": "NativeDocxReviewEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewEvidenceV1"
+            },
+            {
+              "name": "NativeDocxReviewInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewInventoryV1"
             },
             {
               "name": "NativeDocxRunPropertiesV1",
@@ -4855,7 +4890,12 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
+            },
+            {
+              "name": "createNativeDocxReviewInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
             },
             {
               "name": "decodeNativeDocxDocument",
@@ -4878,6 +4918,11 @@
               "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
             },
             {
+              "name": "decodeNativeDocxPartialTableTextContextsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPartialTableTextContextsV1(source: unknown, resolvedValue: unknown, input: unknown): NativeDocxPartialTableTextContextV1[]"
+            },
+            {
               "name": "decodeNativeDocxProseMirrorTransactionJsonV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxProseMirrorTransactionJsonV1(json: string): NativeDocxProseMirrorTransactionV1 | NativeDocxTransactionAdapterIssueV1[]"
@@ -4896,6 +4941,11 @@
               "name": "DecodeNativeDocxResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxResult ="
+            },
+            {
+              "name": "decodeNativeDocxReviewEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxReviewEvidenceV1(source: unknown, input: unknown): NativeDocxReviewEvidenceV1"
             },
             {
               "name": "DOCX_MAX_TWIPS_FOR_MILLIPOINTS",
@@ -5113,6 +5163,11 @@
               "signature": "export interface NativeDocxPartialSourceV1"
             },
             {
+              "name": "NativeDocxPartialTableTextContextV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxPartialTableTextContextV1"
+            },
+            {
               "name": "NativeDocxPassthroughPartV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPassthroughPartV1"
@@ -5166,6 +5221,21 @@
               "name": "NativeDocxResolvedLayoutInputV1",
               "kind": "type",
               "signature": "export interface NativeDocxResolvedLayoutInputV1"
+            },
+            {
+              "name": "NativeDocxReviewChangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewChangeV1"
+            },
+            {
+              "name": "NativeDocxReviewEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewEvidenceV1"
+            },
+            {
+              "name": "NativeDocxReviewInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxReviewInventoryV1"
             },
             {
               "name": "NativeDocxRunPropertiesV1",
@@ -9712,7 +9782,7 @@
             {
               "name": "createNativePptxTableGeometryPreview",
               "kind": "function",
-              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1'): NativePptxTableGeometryPreview"
+              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1', paintOptions?: { policy: 'source-no-style-solid-border-v1'; }): NativePptxTableGeometryPreview"
             },
             {
               "name": "decodeNativePptxTableInspection",
@@ -9893,6 +9963,11 @@
               "name": "NativePptxTableOmission",
               "kind": "type",
               "signature": "NativePptxTableOmission"
+            },
+            {
+              "name": "NativePptxTablePaint",
+              "kind": "type",
+              "signature": "NativePptxTablePaint"
             },
             {
               "name": "NativeProvenance",

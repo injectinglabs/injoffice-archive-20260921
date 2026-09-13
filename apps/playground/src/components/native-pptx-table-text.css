@@ -15,3 +15,5 @@
 .pptx-table-geometry-cell { position: absolute; box-sizing: border-box; overflow: hidden; outline: 1px dashed var(--ds-text-muted, #666); outline-offset: -1px; font-family: sans-serif; font-weight: normal; font-style: normal; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ds-text, #111); }
 .pptx-table-geometry-cell p { margin: 0; padding: 0; font: inherit; line-height: inherit; }
 .pptx-table-geometry-links { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-bottom: 1rem; }
+.pptx-table-source-border { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.pptx-table-qualified-paint { outline: none; }

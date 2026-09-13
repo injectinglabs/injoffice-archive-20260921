@@ -83,6 +83,47 @@ requests this policy explicitly; the ordinary partial-text button remains
 unchanged. Render all metadata as text and retain the read-only labels. This
 does not add accept/reject, comment editing or native page-paint authority.
 
+`createNativeDocxReviewInventoryV1(document,
+{ policy: 'source-review-inventory-v1', read_only: true }, resolvedLayout,
+reviewChanges)` provides a separate opt-in review inventory from the same-byte
+inspector's `review_changes` evidence. It lists exact direct body/table paragraph
+insertion, deletion and move wrappers with stored ID/author/date metadata.
+Metadata is not a verified identity. Unknown wrapper attributes remain omitted;
+textboxes, nested revisions and paragraph/row/cell property changes are outside
+this profile. Limits are 128 wrappers, 128 direct insertion runs per wrapper,
+and 32,768 displayed text units including metadata.
+
+Only producer-qualified direct insertion text may pass through the existing
+partial-content visibility and ancestor diagnostic guards. The exact qualified
+insertion-wrapper diagnostic is the sole exception in an internal read-only
+projection; original diagnostics remain attached to the review output. Unknown
+properties, unresolved inherited visibility, hidden text and other revisions
+still block insertion text. Deletion and move text are never exposed by this
+profile. Hosts must retain kind, omission and diagnostic labels. This is neither
+Word's final/original view nor tracked-change layout, and provides no
+accept/reject, editing or native page-paint authority. The browser demo requests
+it through **Inspect tracked-change source**. Native sidecar metadata and XML
+slice hashes are trusted producer evidence; arbitrary hand-authored models are
+not independent source-byte verification.
+
+The optional fifth argument accepts `table_text_contexts` from the same-byte
+inspector. This narrowly qualifies active `tblLook` metadata when its authored
+table style has a complete, bounded, nonconditional inheritance chain containing
+only exact authoring metadata, paragraph spacing and table indent/margins/borders.
+Run/conditional properties, unknown markup, revisions, malformed look flags and
+missing/cyclic styles do not qualify. Source table-look and selected resolved
+geometry diagnostics remain attached and labeled; they do not prevent ordinary
+text recovery under this explicit plain-text policy. Every other source,
+ancestor, paragraph/run and inherited visibility gate remains active.
+
+At most 64 table contexts with 16 style ancestors and 16 exact geometry diagnostic
+references are accepted. Styles part hashes join retained package parts; source
+and style anchors remain native producer evidence rather than independent
+consumer XML parsing. The demo forwards the same-byte evidence and labels the
+omitted look, borders, spacing and margins. This can recover outer-cell text
+beside a separately qualified nested-table omission; it does not reconstruct
+the inner table, override a missing style, or extend paint/mutation authority.
+
 The optional fourth argument accepts `nested_table_omissions` from the same-byte
 WASM inspector. At most 64 exact direct nested-table boundaries may replace
 their original table-wide diagnostic with source-positioned omission placeholders,

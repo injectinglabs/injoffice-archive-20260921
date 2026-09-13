@@ -10,8 +10,8 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
  const [arrangement,setArrangement]=useState<{source:NativePptxTableInspection;preview:NativePptxTableGeometryPreview}|null>(null)
  const [geometryError,setGeometryError]=useState('')
  const current=arrangement?.source===inspection?arrangement.preview:null
- function showArrangement(){
-  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1')});setGeometryError('')}
+ function showArrangement(sourcePaint=false){
+  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1',sourcePaint?{policy:'source-no-style-solid-border-v1'}:undefined)});setGeometryError('')}
   catch{setArrangement(null);setGeometryError('Source-positioned preview unavailable. The source text and inspection limits remain available.')}
  }
  return <article aria-label="Read-only presentation table text" className="pptx-table-text-result">
@@ -19,10 +19,11 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
   <p className="ds-muted">This is source text in reading order, not PowerPoint rendering. The table layout below is for reading; authored borders, fills, fonts and spacing are not reproduced.</p>
   {!!inspection.tables.length&&<DsButton onClick={()=>current?setArrangement(null):showArrangement()}>{current?'Hide source-positioned table preview':'Show approximate source-positioned table preview'}</DsButton>}
   {geometryError&&<p role="status">{geometryError}</p>}
+  {current&&<DsButton onClick={()=>showArrangement(!current.paintPolicy)}>{current.paintPolicy?'Use inspection guides only':'Preview qualified source border paint'}</DsButton>}
   {current&&<NativePptxTableGeometry preview={current} readingId={readingId}/>}
   {inspection.tables.map((table,index)=>{
    const rows=Array.from(new Set(table.cells.map(cell=>cell.row)))
-   return <section id={`${readingId}-${index}`} key={`${table.slide_id}:${table.object_id}`} aria-label={`Source table ${index+1} on slide ${table.slide_index+1}`}>
+   return <section tabIndex={-1} id={`${readingId}-${index}`} key={`${table.slide_id}:${table.object_id}`} aria-label={`Source table ${index+1} on slide ${table.slide_index+1}`}>
     <h4>Slide {table.slide_index+1}, table {index+1}</h4>
     <div className="pptx-table-text-scroll"><table className="ds-table"><caption className="visually-hidden">Source cell text; display styling is not authored PowerPoint styling</caption><tbody>{rows.map(row=><tr key={row}>{table.cells.filter(cell=>cell.row===row).map(cell=><td key={cell.column} data-source-cell={`${row+1}:${cell.column+1}`}>{cell.paragraphs.map((text,at)=><p key={at} dir="auto">{text||<span className="ds-muted">[Empty paragraph]</span>}</p>)}</td>)}</tr>)}</tbody></table></div>
     <details><summary>Source geometry and inspection limits</summary>

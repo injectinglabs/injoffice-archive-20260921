@@ -76,6 +76,13 @@ const result = await applyFormValues(source, [
 ], { textAppearance: { font: 'Helvetica' } })
 ```
 
+Choice values select the authored export value, which can differ from the
+display label. The source options and field flags are preserved. Unknown values
+are skipped unless the source dropdown already permits free-text editing;
+ambiguous duplicate export values are skipped. Choice appearances still require
+viewer regeneration. XFA forms refuse every form-update batch, including default
+radio/choice edits, before pdf-lib can remove their source XFA data.
+
 The selected font must be `Helvetica`, `Times-Roman`, or `Courier`. This opts
 into pdf-lib's default text appearance provider and replaces the original font
 and appearance artwork. It supports printable ASCII (U+0020–U+007E), empty text,
@@ -83,8 +90,7 @@ and plain single-line text fields only. It is not an original-font fidelity or
 universal rendering guarantee; fixed font sizes and long values may clip.
 Rich text, multiline, comb, password, file selection, field/widget actions,
 missing page widgets, and ambiguous/shared widget ownership are skipped before
-the value changes. XFA refuses the entire opt-in batch before pdf-lib can remove
-its data. No unsupported character is replaced, transliterated, or dropped.
+the value changes. No unsupported character is replaced, transliterated, or dropped.
 
 `applied` and `skipped` describe value updates. In opt-in mode, `appearances`
 reports each applied text/choice request as `generated` (with the number of text
