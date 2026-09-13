@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const workerSource = readFileSync(new URL('../worker/pptxnative.worker.js', import.meta.url), 'utf8')
 
 type Binding = {
+  inspectChartWorkbooks?(bytes: Uint8Array): unknown
   evaluatePreset?(payload: string): unknown
   extract(bytes: Uint8Array): unknown
   inspect?(bytes: Uint8Array): unknown
@@ -46,11 +47,29 @@ function createWorkerHarness(binding: Binding, runResult?: () => Promise<unknown
     init: () => send({ ...base, id: 'init-1', op: 'init', assets: { wasmUrl: '/engine.wasm', goRuntimeUrl: '/wasm_exec.js' } }),
     extract: (id: string) => send({ ...base, id, op: 'extract', bytes: new Uint8Array([1]).buffer }),
     inspect: (id: string) => send({ ...base, id, op: 'inspect', bytes: new Uint8Array([1]).buffer }),
+    chartWorkbooks: (id:string,extra:Record<string,unknown>={})=>send({...base,id,op:'chartWorkbooks',bytes:new Uint8Array([1]).buffer,...extra}),
     evaluate: (id: string, payload: string) => send({ ...base, id, op: 'evaluate', payload }),
   }
 }
 
 describe('PPTX WASM worker binding envelopes', () => {
+  it('routes workbook inspection with strict keys and recovers after native source refusal',async()=>{
+    let calls=0
+    const worker=createWorkerHarness({extract:()=>({ok:true,value:'{}'}),apply:()=>({ok:true,value:new Uint8Array([1])}),inspectChartWorkbooks:()=>++calls===1?{ok:false,error:'source budget',fatal:false}:{ok:true,value:'{"charts":[]}'}})
+    await worker.init()
+    await expect(worker.chartWorkbooks('unknown',{extra:true})).resolves.toMatchObject({ok:false,error:{fatal:false}})
+    await expect(worker.chartWorkbooks('typed',{bytes:new Uint8Array([1])})).resolves.toMatchObject({ok:false,error:{fatal:false}})
+    expect(calls).toBe(0)
+    await expect(worker.chartWorkbooks('refuse')).resolves.toMatchObject({ok:false,error:{fatal:false}})
+    await expect(worker.chartWorkbooks('recover')).resolves.toMatchObject({ok:true,result:{contractJson:'{"charts":[]}'}})
+    expect(worker.isClosed()).toBe(false)
+  })
+  it('keeps earlier engines usable when workbook inspection is absent',async()=>{
+    const worker=createWorkerHarness({extract:()=>({ok:true,value:'{}'}),apply:()=>({ok:true,value:new Uint8Array([1])})})
+    await worker.init()
+    await expect(worker.chartWorkbooks('missing')).resolves.toMatchObject({ok:false,error:{fatal:false}})
+    await expect(worker.extract('after')).resolves.toMatchObject({ok:true})
+  })
   it('routes preset JSON without source bytes and recovers from qualification refusal', async () => {
     const payloads: string[]=[]
     const worker=createWorkerHarness({extract:()=>({ok:true,value:'{}'}),apply:()=>({ok:true,value:new Uint8Array([1])}),evaluatePreset:payload=>{payloads.push(payload);return payload==='bad'?{ok:false,error:'unknown preset',fatal:false}:{ok:true,value:'{"geometry":{}}'}}})
