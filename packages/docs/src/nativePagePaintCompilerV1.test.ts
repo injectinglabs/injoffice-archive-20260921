@@ -2449,3 +2449,71 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(completed.page_paint_output).toEqual(expect.objectContaining({ status: 'refused', pages: [] }))
   })
 })
+
+describe('unequal whole-paragraph column compiler', () => {
+  function unequalInput(): NativeDocxPagePaintPrepareInputV1 {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const original = structuredClone(document.body.blocks[0]!)
+    document.body.blocks = Array.from({ length: 9 }, (_, index) => {
+      const block = structuredClone(original)
+      block.id = `paragraph:${index + 1}`
+      block.paragraph!.id = block.id
+      block.paragraph!.runs[0]!.id = `run:${index + 1}`
+      block.paragraph!.runs[0]!.text = 'Column paragraph has enough source text to wrap at different authored widths.'
+      return block
+    })
+    resolved.paragraphs = document.body.blocks.map((block) => ({ ...structuredClone(resolved.paragraphs[0]!), paragraph_id: block.id, properties: { keep_lines: true } }))
+    resolved.runs = document.body.blocks.map((block) => ({ ...structuredClone(resolved.runs[0]!), run_id: block.paragraph!.runs[0]!.id, paragraph_id: block.id }))
+    const section = document.sections[0]!
+    section.page.margins.bottom_twips = 12000
+    section.page.columns = 2
+    section.page.column_layout = 'explicit'
+    section.page.column_spacing_twips = 0
+    section.page.column_definitions = [
+      { id: 'column:section:1:0', ordinal: 0, width_twips: 3000, space_after_twips: 720 },
+      { id: 'column:section:1:1', ordinal: 1, width_twips: 5640, space_after_twips: 0 },
+    ]
+    document.unsupported = [{ id: 'unsupported:unequal', code: 'UNEQUAL_SECTION_COLUMNS', capability: 'sections', scope_id: section.id, anchor: section.anchor, preservation: 'refuse-mutation', message: 'Unequal column widths require per-column shaping outside the exact v1 slice' }]
+    ;(input.pagination_settings as NativeDocxPaginationSettingsV1).no_column_balance = true
+    rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids = [...resolved.paragraphs.map((p) => p.paragraph_id), ...resolved.runs.map((r) => r.run_id)].sort() })
+    return input
+  }
+
+  it('shapes both widths, paints actual outlines, and binds unused candidate evidence', async () => {
+    const input = unequalInput()
+    const before = structuredClone(input)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const request = prepared.page_paint_request
+    expect(request.paginated_layout.status).toBe('paginated')
+    expect(request.pagination_request.column_shaped_lines?.map((candidate) => candidate.available_width_millipoints)).toEqual([150000, 282000])
+    const candidates = request.pagination_request.column_shaped_lines!
+    expect(candidates[0].paragraphs[0]!.lines.length).toBeGreaterThan(candidates[1].paragraphs[0]!.lines.length)
+    expect(prepared.outline_requests.length).toBeGreaterThan(0)
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((requested) => {
+      const outline = outlines.outline(requested.glyph_id)
+      return outline.path.length ? { ...requested, ...outline, status: 'outlined' as const } : { ...requested, units_per_em: outline.units_per_em, status: 'empty' as const }
+    }) })
+    expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output)).toBe('painted')
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, request, request.outline_provider).ok).toBe(true)
+    expect(input).toEqual(before)
+    const tampered = structuredClone(request)
+    tampered.pagination_request.column_shaped_lines![1].paragraphs[0]!.lines[0]!.fragments[0]!.face_id = 'font-face:forged'
+    tampered.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(tampered.pagination_request.shaped_lines, undefined, tampered.pagination_request.column_shaped_lines)
+    expect(decodeNativeDocxPagePaintRequestV1(tampered).ok).toBe(false)
+    const oldHash = structuredClone(request)
+    oldHash.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(oldHash.pagination_request.shaped_lines)
+    expect(decodeNativeDocxPagePaintRequestV1(oldHash).ok).toBe(false)
+  })
+
+  it('refuses multiline paragraphs without keepLines and paragraphs too tall at either width', async () => {
+    const missing = unequalInput()
+    delete (missing.resolved_layout as NativeDocxResolvedLayoutInputV1).paragraphs[0]!.properties.keep_lines
+    await expect(prepareNativeDocxPagePaintV1(missing)).rejects.toThrow('whole-paragraph candidates')
+    const oversized = unequalInput()
+    ;(oversized.document as NativeDocxDocumentV1).sections[0]!.page.margins.bottom_twips = 14200
+    await expect(prepareNativeDocxPagePaintV1(oversized)).rejects.toThrow('whole-paragraph candidates')
+  })
+})

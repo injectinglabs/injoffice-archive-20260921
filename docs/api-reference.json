@@ -4190,7 +4190,7 @@
             {
               "name": "nativeDocxPagePaintShapedLinesSha256V1",
               "kind": "function",
-              "signature": "export declare function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[]): string"
+              "signature": "export declare function nativeDocxPagePaintShapedLinesSha256V1(shapedLines: NativeDocxShapedLinesV1, pageFieldVariants?: NativeDocxPageFieldVariantV1[], columnShapedLines?: [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1]): string"
             },
             {
               "name": "NativeDocxPagePaintSuccessV1",
@@ -4895,7 +4895,7 @@
             {
               "name": "qualifyNativeDocxSectionColumnsV1",
               "kind": "function",
-              "signature": "export declare function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1): QualifyNativeDocxSectionColumnsV1Result"
+              "signature": "export declare function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1, options?: { allowUnequalWidths: true; }): QualifyNativeDocxSectionColumnsV1Result"
             },
             {
               "name": "QualifyNativeDocxSectionColumnsV1Result",

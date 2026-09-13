@@ -1,3 +1,4 @@
+import { planNativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { BIDI_UNICODE_VERSION, NATIVE_BIDI_PROVIDER_ID, NATIVE_BIDI_PROVIDER_REVISION } from '@injoffice/font-metrics/bidi'
@@ -450,7 +451,7 @@ describe('native DOCX pagination v1', () => {
 
   it('accepts the shared modern Word settings attestation and binds tab shaping', () => {
     const shared = JSON.parse(readFileSync(new URL('../../../testdata/docx-native/pagination-settings-v1.json', import.meta.url), 'utf8'))
-    expect(Object.keys(shared).sort()).toEqual([...DOCX_PAGINATION_SETTINGS_V1_BINDING_FIELDS.SettingsV1].sort())
+    expect(Object.keys(shared).sort()).toEqual([...DOCX_PAGINATION_SETTINGS_V1_BINDING_FIELDS.SettingsV1].filter((field) => field !== 'no_column_balance').sort())
     expect(decodeNativeDocxPaginationSettings(shared).ok).toBe(true)
     const request = fixture()
     request.document.passthrough_parts.find((part) => part.part_name === SETTINGS_PART)!.sha256 = shared.settings_sha256
@@ -493,6 +494,10 @@ describe('native DOCX pagination v1', () => {
     delete absent.pagination_settings.relationships_sha256
     delete absent.pagination_settings.relationship_id
     delete absent.pagination_settings.compatibility_mode
+    expect(decodeNativeDocxPaginationSettings({ ...absent.pagination_settings, no_column_balance: true }).ok).toBe(false)
+    expect(decodeNativeDocxPaginationSettings({ ...absent.pagination_settings, no_column_balance: false }).ok).toBe(false)
+    expect(decodeNativeDocxPaginationSettings({ ...settings, no_column_balance: false }).ok).toBe(true)
+    expect(decodeNativeDocxPaginationSettings({ ...settings, no_column_balance: 'true' }).ok).toBe(false)
     const absentResult = paginateNativeDocxV1(absent)
     expect(absentResult).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'settings-attestation-unsupported' })]) }) }))
   })
@@ -1731,5 +1736,102 @@ describe('native DOCX pagination v1', () => {
     expect(source).not.toMatch(/\bglobalThis\s*\.\s*(?:document|window)\b|(?:^|[^\w.])window\s*[.[]/m)
     expect(source).not.toMatch(/\b(?:HTMLElement|DOMParser|OffscreenCanvas|CanvasRenderingContext2D|getBoundingClientRect|measureText|mammoth)\b\s*[.(]/)
     expect(source).not.toMatch(/from ['"]\.\/paginate(?:\.js)?['"]/)
+  })
+})
+
+function unequalColumnFixture(): NativeDocxPaginationRequestV1 {
+  const request = fixture({ lineCounts: [3, 2, 3, 2, 1], properties: Array.from({ length: 5 }, () => ({ keep_lines: true })) })
+  const section = request.document.sections[0]!
+  section.page.columns = 2
+  section.page.column_layout = 'explicit'
+  section.page.column_spacing_twips = 0
+  section.page.column_definitions = [
+    { id: 'column:section:1:0', ordinal: 0, width_twips: 300, space_after_twips: 100 },
+    { id: 'column:section:1:1', ordinal: 1, width_twips: 400, space_after_twips: 0 },
+  ]
+  request.document.unsupported = [{ id: 'unsupported:unequal', code: 'UNEQUAL_SECTION_COLUMNS', capability: 'sections', scope_id: section.id, anchor: structuredClone(section.anchor), preservation: 'refuse-mutation', message: 'Unequal column widths require per-column shaping outside the exact v1 slice' }]
+  request.pagination_settings.no_column_balance = true
+  const candidates = [15000, 20000].map((width) => {
+    const shaped = structuredClone(request.shaped_lines)
+    shaped.available_width_millipoints = width
+    shaped.paragraphs.forEach((paragraph) => paragraph.lines.forEach((line) => { line.available_width_millipoints = width }))
+    return shaped
+  }) as [NativeDocxShapedLinesV1, NativeDocxShapedLinesV1]
+  // A wider candidate has fewer complete lines; paragraph identities remain stable.
+  candidates[1].paragraphs[1]!.lines.pop()
+  candidates[1].paragraphs[1]!.block_advance_millipoints = 10000
+  for (const [index, block] of request.document.body.blocks.entries()) block.paragraph!.runs[0]!.text = 'AAA'
+  for (const candidate of candidates) for (const [index, paragraph] of candidate.paragraphs.entries()) {
+    let start = 0
+    for (const [ordinal, line] of paragraph.lines.entries()) {
+      const end = ordinal + 1 === paragraph.lines.length ? 3 : start + 1
+      line.logical_to_visual = [0]
+      line.fragments = [{ id: `fragment:${paragraph.paragraph_id}:${ordinal}:0`, source_kind: 'run', source_id: request.document.body.blocks[index]!.paragraph!.runs[0]!.id, start_utf16: start, end_utf16: end, text: 'AAA'.slice(start, end), direction: 'ltr', bidi_level: 0, logical_order: 0, script: 'Latn', language: 'und', face_id: 'face:test', whitespace: false, advance_inline_millipoints: 5000, justification_expansion_millipoints: 0, ascent_millipoints: 8000, descent_millipoints: -2000, line_gap_millipoints: 0, glyphs: [{ glyph_id: 1, advance_x_millipoints: 5000, advance_y_millipoints: 0, offset_x_millipoints: 0, offset_y_millipoints: 0 }] }]
+      start = end
+    }
+  }
+  request.column_shaped_lines = candidates
+  const plan = planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, candidates)
+  if (!plan) throw new Error('unequal fixture did not qualify')
+  request.shaped_lines = plan.shaped_lines
+  return request
+}
+
+describe('source-bound unequal whole-paragraph columns', () => {
+  it('tries current width before advancing and retains unused final columns', () => {
+    const request = unequalColumnFixture()
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.paragraph_slices.map((slice) => [slice.paragraph_id, slice.column_ordinal, slice.line_ids.length]))).toEqual([
+      [['paragraph:1', 0, 3], ['paragraph:2', 1, 1], ['paragraph:3', 1, 3]],
+      [['paragraph:4', 0, 2], ['paragraph:5', 0, 1]],
+    ])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+  })
+  it('refuses noColumnBalance outside qualified unequal flow', () => {
+    const request = fixture()
+    request.pagination_settings.no_column_balance = true
+    expect(paginateNativeDocxV1(request)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [] }) }))
+  })
+  it('rejects plausible unused-candidate omission, reordering, font and geometry forgery', () => {
+    for (const mutate of [
+      (r: NativeDocxPaginationRequestV1) => { const p = r.column_shaped_lines![1].paragraphs[0]!; p.lines.pop(); p.block_advance_millipoints -= 10000 },
+      (r: NativeDocxPaginationRequestV1) => { const p = r.column_shaped_lines![1].paragraphs[0]!; const first = p.lines[0]!.fragments[0]!; const second = p.lines[1]!.fragments[0]!; [first.start_utf16, second.start_utf16] = [second.start_utf16, first.start_utf16]; [first.end_utf16, second.end_utf16] = [second.end_utf16, first.end_utf16] },
+      (r: NativeDocxPaginationRequestV1) => { r.column_shaped_lines![1].paragraphs[0]!.lines[0]!.fragments[0]!.face_id = 'face:other' },
+      (r: NativeDocxPaginationRequestV1) => { const p = r.column_shaped_lines![1].paragraphs[0]!; p.lines[0]!.line_height_millipoints -= 1; p.block_advance_millipoints -= 1 },
+      (r: NativeDocxPaginationRequestV1) => { const p = r.column_shaped_lines![1].paragraphs[0]!; p.lines[0]!.fragments[0]!.ascent_millipoints -= 1; p.lines[0]!.ascent_millipoints -= 1; p.lines[0]!.line_height_millipoints -= 1; p.block_advance_millipoints -= 1 },
+      (r: NativeDocxPaginationRequestV1) => { r.document.unsupported[0]!.anchor!.start_byte += 1 },
+      (r: NativeDocxPaginationRequestV1) => { r.document.unsupported[0]!.message += ' changed' },
+    ]) {
+      const request = unequalColumnFixture()
+      // paragraph 1 is painted from candidate 0; mutate only its unused candidate.
+      mutate(request)
+      expect(planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines!)).toBeUndefined()
+      expect(decodeNativeDocxPaginationRequestV1(request).ok).toBe(false)
+    }
+  })
+  it('refuses placement budget exhaustion atomically', () => {
+    const original = DOCX_PAGINATION_LIMITS.maxPages
+    try {
+      Object.assign(DOCX_PAGINATION_LIMITS, { maxPages: 1 })
+      expect(paginateNativeDocxV1(unequalColumnFixture())).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
+    } finally { Object.assign(DOCX_PAGINATION_LIMITS, { maxPages: original }) }
+  })
+  it('rejects missing candidates and source, controls, width, provenance, or selected-shape tampering', () => {
+    const missing = unequalColumnFixture()
+    delete missing.column_shaped_lines
+    expect(paginateNativeDocxV1(missing)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [] }) }))
+    for (const mutate of [
+      (r: NativeDocxPaginationRequestV1) => { r.pagination_settings.no_column_balance = false },
+      (r: NativeDocxPaginationRequestV1) => { r.document.unsupported[0]!.scope_id = r.document.body.id },
+      (r: NativeDocxPaginationRequestV1) => { delete r.resolved_layout.paragraphs[0]!.properties.keep_lines },
+      (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs[0]!.properties.keep_next = true },
+      (r: NativeDocxPaginationRequestV1) => { r.column_shaped_lines![1].available_width_millipoints -= 1 },
+      (r: NativeDocxPaginationRequestV1) => { r.column_shaped_lines![1].providers.shaper_revision = 'tampered' },
+      (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.paragraphs[1] = structuredClone(r.column_shaped_lines![0].paragraphs[1]!) },
+    ]) {
+      const request = unequalColumnFixture()
+      mutate(request)
+      expect(decodeNativeDocxPaginationRequestV1(request).ok).toBe(false)
+    }
   })
 })
