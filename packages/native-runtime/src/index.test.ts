@@ -68,6 +68,38 @@ const createWorker = (handler?: (worker: FakeWorker, request: NativeWasmWorkerRe
     else worker.respond(success(request, { bytes: new Uint8Array([7, 8, 9]).buffer }))
   }))
 
+it('queues read-only evaluation with normal lifecycle and request identity checks', async () => {
+ const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{"paths":[]}'})))
+ const client=createNativeWasmClient({format:'pptx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ expect(await client.evaluate('{"name":"star5"}')).toBe('{"paths":[]}')
+ expect(worker.messages.map(v=>v.message.op)).toEqual(['init','evaluate'])
+ expect(worker.messages[1]!.transfer).toEqual([])
+ client.terminate()
+ await expect(client.evaluate('{}')).rejects.toThrow()
+})
+
+it('aborts evaluation before worker creation and bounds UTF-8 requests', async () => {
+ let calls=0;const client=createNativeWasmClient({format:'pptx',workerFactory:()=>{calls++;return createWorker()},assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ const controller=new AbortController();controller.abort()
+ await expect(client.evaluate('{}',{signal:controller.signal})).rejects.toMatchObject({name:'AbortError'})
+ await expect(client.evaluate('界'.repeat(400000))).rejects.toThrow(/1 MiB/)
+ expect(calls).toBe(0);client.terminate()
+})
+
+it('terminates an in-flight evaluation on abort and on timeout', async () => {
+ for (const abort of [true,false]) {
+  const worker=createWorker((w,r)=>{if(r.op==='init')w.respond(success(r))})
+  const client=createNativeWasmClient({format:'pptx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'},operationTimeoutMs:20})
+  const controller=new AbortController()
+  const pending=client.evaluate('{}',{signal:controller.signal})
+  const refusal=expect(pending).rejects.toThrow()
+  if(abort){await new Promise(resolve=>setTimeout(resolve,1));controller.abort()}
+  await refusal
+  expect(worker.terminated).toBe(true)
+  await expect(client.extract(new Uint8Array([1]))).rejects.toThrow()
+ }
+})
+
 it('runs source bytes through a distinct bounded read-only inspection operation', async () => {
  const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{"objects":[]}'})))
  const client=createNativeWasmClient({format:'xlsx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})

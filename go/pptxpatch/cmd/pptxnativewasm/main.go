@@ -14,6 +14,7 @@ func main() {
 	api.Set("extract", guarded(jsExtract))
 	api.Set("inspect", guarded(jsInspect))
 	api.Set("apply", guarded(jsApply))
+	api.Set("evaluatePreset", guarded(jsEvaluatePreset))
 	js.Global().Set("pptxnative", api)
 	if ready := js.Global().Get("pptxnativeOnReady"); ready.Type() == js.TypeFunction {
 		ready.Invoke()
@@ -87,6 +88,18 @@ func jsInspect(_ js.Value, args []js.Value) any {
 		return fail(err.Error())
 	}
 	encoded, err := inspectNativeJSON(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
+}
+
+// evaluatePreset(payload) is a read-only calculation, never a source mutation.
+func jsEvaluatePreset(_ js.Value, args []js.Value) any {
+	if len(args) != 1 || args[0].Type() != js.TypeString {
+		return fail("evaluatePreset(payload) requires one JSON string")
+	}
+	encoded, err := evaluatePresetJSON([]byte(args[0].String()))
 	if err != nil {
 		return fail(err.Error())
 	}
