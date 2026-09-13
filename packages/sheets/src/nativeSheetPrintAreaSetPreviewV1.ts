@@ -66,6 +66,8 @@ export function compileNativeSheetPrintAreaSetPreviewV1(geometries:readonly Nati
  let total_pages=0
  const areas=geometries.map((geometry,area_index)=>{
   const plan=compileNativeSheetPagePreviewV1(geometry,source,hostPolicy,options?{repeat_print_titles:true,body_viewport:viewports[area_index]!}:undefined)
+  const evidence=source.print_area_sets?.find(s=>s.sheet_id===first.sheet_id)??source.print_areas?.find(s=>s.sheet_id===first.sheet_id)
+  plan.warnings.push(...evidence!.warnings)
   total_pages+=plan.pages.length
   if(total_pages>100)throw new RangeError('Print area set preview exceeds aggregate 100-page budget')
   return {area_index,viewport:viewports[area_index]!,plan}
