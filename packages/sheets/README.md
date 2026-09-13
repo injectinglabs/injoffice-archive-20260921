@@ -13,8 +13,12 @@ An opted-in page includes `regions`: body, repeated rows, repeated columns and (
 both axes repeat) one corner. Consumers must paint each region exactly once, clipped
 to its `source_clip`, using its translation and the page's shared scale. Page-level
 source bounds and translations describe only the body. Repainting the whole range
-for each region without clipping duplicates content. Drawing repetition is not supplied;
-hosts must separately qualify drawings that intersect heading bands. Fit-to-page
+for each region without clipping duplicates content. Drawing paint remains the host’s
+responsibility. The demo intersects qualified `layoutNativeDrawingObjectsV1` rectangles
+with each region before applying its transform, including repeated headings and the
+corner. Crossing drawings appear as clipped fragments; cached chart plots and unknown
+drawing placeholders remain approximate. Unavailable positions refuse the complete
+repeated-heading preview. Fit-to-page
 reserves heading space on every page but remains an approximation, not Excel fidelity.
 
 Dependency-free contracts for fail-closed native spreadsheet saves. Version 1

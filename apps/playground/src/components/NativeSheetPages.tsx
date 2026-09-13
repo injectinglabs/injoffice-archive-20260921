@@ -134,7 +134,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
       <label><input type="checkbox" checked={repeatHeadings} onChange={event => { invalidate(); setRepeatHeadings(event.target.checked) }}/> Repeat saved print headings</label>
-      <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns must start at the beginning of your selected range and leave room for body cells. Drawings that overlap headings are not supported in this mode.' : 'Saved print headings are not repeated unless you select this option.'}</p>
+      <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns must start at the beginning of your selected range and leave room for body cells. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.' : 'Saved print headings are not repeated unless you select this option.'}</p>
       {!useSource && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
@@ -158,7 +158,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       {result.plan.settings.fit_to_page && <p>Fit limits: {result.plan.settings.fit_to_page.width || 'unlimited'} wide × {result.plan.settings.fit_to_page.height || 'unlimited'} tall. Effective preview scale: {result.plan.pages.length ? `${Math.round(result.plan.pages[0]!.scale * 100)}%` : 'no visible cells'}.</p>}
       <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress(result.geometry.viewport.row, result.geometry.viewport.column)}:{cellAddress(result.geometry.viewport.end_row, result.geometry.viewport.end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
-      {result.plan.pages.some(page => page.regions) && <p>Saved print headings repeat on each page. Page captions list body rows and columns; heading cells are shown separately.</p>}
+      {result.plan.pages.some(page => page.regions) && <p>Saved print headings and source-positioned drawing fragments repeat on each page. Page captions list body rows and columns; heading cells are shown separately.</p>}
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
       {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
       <NativeSheetPageImages {...{workbook, sheet, objects}} {...result}/>
@@ -166,14 +166,13 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   </section>
 }
 
-/** This demo paints drawings only in body regions, never silently dropping a
- * drawing that overlaps a repeated heading or whose position is unavailable. */
+/** Each qualified drawing is clipped independently into the page's disjoint
+ * regions. Unknown positions still refuse the complete repeated-heading preview. */
 export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1, drawings: NativePositionedDrawingV1[]) {
-  const headings = plan.pages.flatMap(page => page.regions?.filter(region => region.kind !== 'body') ?? [])
-  if (drawings.some(drawing => drawing.status !== 'positioned' || !drawing.rect || !drawing.clip || headings.some(({ source_clip: h }) => {
-    const d = drawing.clip!
-    return d.x_emu < h.x_emu + h.width_emu && d.x_emu + d.width_emu > h.x_emu && d.y_emu < h.y_emu + h.height_emu && d.y_emu + d.height_emu > h.y_emu
-  }))) throw new Error('Drawings overlap saved print headings or have unavailable positions. Turn off repeated headings to preview this range without repeating them.')
+  if (!plan.pages.some(page => page.regions)) return
+  if (drawings.some(drawing => drawing.status === 'unavailable' || drawing.status === 'positioned' && (!drawing.rect || !drawing.clip))) {
+    throw new Error('Drawings have unavailable positions. Turn off repeated headings to preview this range without repeating them.')
+  }
 }
 
 export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
@@ -222,7 +221,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>
             </g>
           })}
-          {region.kind === 'body' && drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
+          {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
             const r = drawing.rect!, c = drawing.clip!, p = region.source_clip
             const left = Math.max(c.x_emu, p.x_emu), top = Math.max(c.y_emu, p.y_emu), right = Math.min(c.x_emu + c.width_emu, p.x_emu + p.width_emu), bottom = Math.min(c.y_emu + c.height_emu, p.y_emu + p.height_emu)
             if (right <= left || bottom <= top) return null

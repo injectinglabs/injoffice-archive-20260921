@@ -182,8 +182,36 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('>Body value</text>')
     const drawing: NativePositionedDrawingV1 = { source: { sheet_id: '1', sheet_part: props.sheet.part_name, drawing_part: 'xl/drawings/drawing1.xml', ordinal: 1, kind: 'unsupported', warnings: [] }, status: 'positioned', rect: region('body', 1, 1).source_clip, clip: region('body', 1, 1).source_clip }
     expect(() => assertNativeSheetHeadingDrawings(props.plan, [drawing])).not.toThrow()
-    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawing, clip: region('repeat-corner', 0, 0).source_clip }])).toThrow('Drawings overlap')
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawing, rect: region('repeat-corner', 0, 0).source_clip, clip: region('repeat-corner', 0, 0).source_clip }])).not.toThrow()
     expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawing, clip: undefined }])).toThrow('unavailable positions')
+  })
+  it('clips crossing drawings into all four heading regions with unique per-page identities', () => {
+    const props = fixture(), page = props.plan.pages[0]!
+    const region = (kind: 'body' | 'repeat-rows' | 'repeat-columns' | 'repeat-corner', row: number, column: number) => ({
+      kind, rows: { start: row, end: row }, columns: { start: column, end: column },
+      source_clip: { x_emu: column * 952500, y_emu: row * 190500, width_emu: 952500, height_emu: 190500 },
+      translate_x_emu: 457200, translate_y_emu: 457200,
+    })
+    page.regions = [region('body', 1, 1), region('repeat-rows', 0, 1), region('repeat-columns', 1, 0), region('repeat-corner', 0, 0)]
+    page.scale = 0.5
+    props.plan.pages.push({ ...page, number: 2 })
+    const rect = { x_emu: 476250, y_emu: 95250, width_emu: 952500, height_emu: 190500 }
+    const drawings: NativePositionedDrawingV1[] = [{ source: { sheet_id: '1', sheet_part: props.sheet.part_name, drawing_part: 'xl/drawings/drawing1.xml', ordinal: 1, kind: 'unsupported', warnings: [] }, status: 'positioned', rect, clip: rect }]
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, drawings)).not.toThrow()
+    const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))
+    expect(html.match(/aria-label="Source-positioned drawing 1"/g)).toHaveLength(8)
+    expect(html.match(/Drawing preview unavailable/g)).toHaveLength(8)
+    for (const [x, y] of [[50, 10], [100, 10], [50, 20], [100, 20]]) {
+      expect(html.match(new RegExp(`<rect x="${x}" y="${y}" width="50" height="10"`, 'g'))).toHaveLength(2)
+    }
+    const ids = [...html.matchAll(/<clipPath id="([^"]+)"/g)].map(match => match[1])
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(html.match(/translate\(48 48\) scale\(0.5\)/g)).toHaveLength(8)
+    drawings[0] = { ...drawings[0]!, rect: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 }, clip: { x_emu: 0, y_emu: 0, width_emu: 952500, height_emu: 190500 } }
+    const cornerOnly = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, drawings }))
+    expect(cornerOnly.match(/aria-label="Source-positioned drawing 1"/g)).toHaveLength(2)
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawings[0]!, status: 'unavailable' }])).toThrow('unavailable positions')
+    expect(() => assertNativeSheetHeadingDrawings(props.plan, [{ ...drawings[0]!, status: 'outside', rect: undefined, clip: undefined }])).not.toThrow()
   })
   it('labels cached plots as approximate and never activates source links', () => {
     const chart: NativeChartPreviewV1 = { part: 'xl/charts/chart1.xml', type: 'col', series: [{ name: '<a href="https://example.test">Revenue</a>', labels: ['Q1'], values: [10] }], warnings: [] }
