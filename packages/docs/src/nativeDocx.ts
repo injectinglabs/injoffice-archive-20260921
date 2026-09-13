@@ -12,4 +12,6 @@ export * from './nativeReviewInventoryV1.js'
 
 export * from './nativePartialTableTextContextV1.js'
 
+export * from './nativeTextboxInventoryV1.js'
+
 export * from './nativeNestedTextV1.js'

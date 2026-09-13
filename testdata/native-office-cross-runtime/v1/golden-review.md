@@ -48,3 +48,14 @@ built revisions. This read-only diagnostic emits the full original-fixture DOCX
 objects instead of their digest summary. Normal qualification still compares
 the complete semantic report across all manifest profiles and against its pin.
 This is a deterministic regression baseline, not an external Office reference.
+
+## Default preset geometry correction (2026-09-12)
+
+Semantic hash: `40874e465586274eb06a7c83b1f8aaa4bb6357bbf16516fd93186288f9a82e08`.
+The only report difference from the previous golden is PPTX imported render-tree
+hash `c24cb8f335100f1a638e7ba04a2d5ed1cd93352d697079a464d150726e6f83d7`
+→ `085571fad022f4f6097845dac803d32fb638abf237fff5a75ef8bc0d5d614e24`,
+caused by the corrected DrawingML default roundRect corner radius. Source
+canonical JSON, authored wire output, refusals, DOCX, and XLSX remain identical.
+Verified by rebuilding the renderer once with baseline geometry/compile sources
+and once with the candidate, then comparing full semantic worker reports.

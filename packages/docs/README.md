@@ -840,6 +840,16 @@ the protocol/version/limits and output types without loading Node font providers
 HarfBuzz, bidi or pagination. It uses the exact same strict output decoder as the
 server compiler. Full request/source replay remains a compiler-side operation.
 
+### Read-only textbox source inventory
+
+`createNativeDocxTextboxInventoryV1(document, {policy: 'source-textbox-inventory-v1', read_only: true}, evidence)` exposes a separate source-order text inventory. Obtain `textbox_inventory` evidence from `createDocxWasmClient().inspectPartialContent(bytes)` so the document and evidence come from the same immutable package. The playground's **Inspect textbox source** action runs this operation locally in a Web Worker.
+
+The bounded producer admits direct body-paragraph VML shape/rect textboxes and DrawingML `wps:wsp/wps:txbx` stories with qualified ordinary paragraph/run text. It requires a closed styles-source subset (ordinary run properties, exact style name/basedOn metadata and empty paragraph-property containers), resolves source style visibility, and rejects unknown shape properties, hidden text, revision wrappers/ranges, fields, nested tables, linked textboxes, groups and ambiguous compatibility branches. Unsupported candidates retain explicit omissions and all original drawing diagnostics. Limits are 64 inventory items, 64 paragraphs per item, 4,096 UTF-16 units per paragraph and 100,000 units overall.
+
+This is plain source text, without shape geometry, page placement, wrapping, text flow between linked boxes, SmartArt or Word rendering equivalence. Native paint and editing authority are unchanged. Missing evidence is an empty inventory, never an inferred story; arbitrary caller-authored evidence is not XML proof. The decoder checks original drawing diagnostic anchors, package hashes, source ordering and bounded plain data.
+
+Source semantics: [WordprocessingML TextBoxContent](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.textboxcontent?view=openxml-3.0.1), [DrawingML TextBoxInfo2](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.office2010.word.drawingshape.textboxinfo2?view=openxml-3.0.1), and [VML TextBox](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.vml.textbox?view=openxml-3.0.1).
+
 `createNativeDocxNestedTextInventoryV1` requires the separate explicit
 `source-nested-table-text-v1` read-only policy and same-byte `nested_text`,
 `nested_table_omissions` and `table_text_contexts` evidence. It lists qualified

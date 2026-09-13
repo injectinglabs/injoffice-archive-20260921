@@ -30,15 +30,23 @@ no proprietary font bytes are bundled. The render run retains the encoding
 evidence, and diagnostics disclose that no GSUB/GPOS shaping is applied to the
 isolated symbol.
 
-Parsed default pentagons use the DrawingML preset guide equations, rounded once
-to integer EMU, rather than an inscribed regular polygon. Supported solid theme
+Parsed default rounded rectangles, right arrows, hexagons, and pentagons use the DrawingML preset guide equations, rounded once
+to integer EMU, including shorter-side-dependent arrow/hexagon guides and the default 16667/100000 corner radius. Supported solid theme
 fill/outline references are resolved by the native extractor. These source-bound
 projections are read-only. Unsupported shape text is explicitly omitted while
 independently supported geometry remains visible; diagnostics must be shown by
-the host. Default pentagon text uses the official preset text rectangle followed
+the host. These default presets use their DrawingML text rectangles followed
 by authored body insets; custom adjustments remain unsupported. Vertical text
 flow and autofit are not qualified by this geometry support. This is a partial preview, not a claim of
 complete slide or Microsoft Office fidelity.
+
+Geometry correction: callers of `presetPath` (including authored shapes) now get
+DrawingML defaults for these three presets. Rounded corners formerly used 1/8
+of the shorter side, arrows used a fixed 5/8-width shoulder, and hexagons used
+1/4-width corners. The corrected guides depend on the shorter side and change
+render-tree hashes. Sub-EMU corner radii round to zero, a valid square corner.
+Explicit `textBody` layout uses the corrected preset text rectangle; legacy
+paragraph placement without `textBody` retains its existing frame bounds.
 
 ```ts
 import {
