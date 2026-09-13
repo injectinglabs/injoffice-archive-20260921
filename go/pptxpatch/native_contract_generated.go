@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3"
+const NativePPTXSchemaSHA256 = "0805f1321fdaef1391b7ffc4d6ef62cf2a483fcdf30f1dde29f4d09fc7798b19"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -70,12 +70,16 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
+	"NativeLiteralDoughnut": {
+		Properties: []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
+		Required:   []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
+	},
 	"NativeLiteralPie": {
 		Properties: []string{"colors", "firstSliceAngle", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

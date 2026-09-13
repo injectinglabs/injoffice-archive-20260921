@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "9e9ff47f8f508e26ea05297a046f80344f173a8b9258799e274fbd9400f9c1a3" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "0805f1321fdaef1391b7ffc4d6ef62cf2a483fcdf30f1dde29f4d09fc7798b19" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -185,6 +185,23 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "transform"
     ]
   },
+  "NativeLiteralDoughnut": {
+    "schemaName": "literalDoughnut",
+    "properties": [
+      "colors",
+      "firstSliceAngle",
+      "holeSize",
+      "profile",
+      "values"
+    ],
+    "required": [
+      "colors",
+      "firstSliceAngle",
+      "holeSize",
+      "profile",
+      "values"
+    ]
+  },
   "NativeLiteralPie": {
     "schemaName": "literalPie",
     "properties": [
@@ -204,6 +221,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "schemaName": "opaqueChart",
     "properties": [
       "chartPart",
+      "literalDoughnut",
       "literalPie",
       "opaqueRef",
       "previewAssetId",
@@ -1408,6 +1426,53 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalDoughnut": {
+      "x-binding-name": "NativeLiteralDoughnut",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "firstSliceAngle",
+        "holeSize",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-doughnut-v1"
+        },
+        "firstSliceAngle": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "holeSize": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 90
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -1432,6 +1497,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalPie": {
           "$ref": "#/$defs/literalPie"
+        },
+        "literalDoughnut": {
+          "$ref": "#/$defs/literalDoughnut"
         }
       }
     },

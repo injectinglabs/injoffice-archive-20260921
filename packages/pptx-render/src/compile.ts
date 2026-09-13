@@ -1,3 +1,4 @@
+import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
 import {
@@ -1905,6 +1906,19 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         })
         return {kind:'group',...base,children}
       }
+      const doughnut=element.chart.literalDoughnut
+      const doughnutRadius=Math.min(base.bounds.cx,base.bounds.cy)/2
+      const doughnutFits=doughnut!==undefined && doughnutRadius*Math.min(doughnut.holeSize,100-doughnut.holeSize)/100>=1
+      if(doughnut && state.options.literalDoughnutPreview===true && !doughnutFits)state.diagnostics.push({severity:'refusal',code:'chart.doughnutFrameTooSmall',message:'The integer preview frame cannot retain the source doughnut hole and ring.',slideId:state.slide.id,elementId:element.id})
+      if(element.chart.literalDoughnut && state.options.literalDoughnutPreview===true && doughnutFits){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalDoughnut`,'Literal doughnut slices exceed RenderTree nesting budget')
+        state.diagnostics.push({severity:'warning',code:'chart.literalDoughnutPreview',message:'Source literal doughnut vectors; host centered annulus and two-degree polygon arcs, not qualified PowerPoint layout.',slideId:state.slide.id,elementId:element.id})
+        const children = createNativeLiteralDoughnutPaths(element.chart.literalDoughnut,base.bounds.cx,base.bounds.cy).map((slice,index)=>{
+          takeNode(state, `$.elements.${element.id}.literalDoughnut.${index}`)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'ellipse' as const,path:boundedPath(slice.path,`$.elements.${element.id}.literalDoughnut.${index}`),fill:{color:slice.color}}
+        })
+        return {kind:'group',...base,children}
+      }
 
       if (!element.chart.previewAssetId) {
         state.diagnostics.push({ severity: 'refusal', code: 'chart.missingPreview', message: 'opaque chart has no preview asset to paint; no chart renderer is invented', slideId: state.slide.id, elementId: element.id })
@@ -1948,6 +1962,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
+  if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
 	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')
   assertNativePptx(deckInput)
