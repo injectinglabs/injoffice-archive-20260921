@@ -3192,6 +3192,11 @@
               "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown, contextNotices?: unknown): NativeDocxEquationPreviewV1[]"
             },
             {
+              "name": "createNativeDocxNestedTextInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxNestedTextInventoryV1(source: unknown, options: { policy: 'source-nested-table-text-v1'; read_only: true; }, resolved: unknown, nested: unknown, contexts: unknown, evidence: unknown): NativeDocxNestedTextInventoryV1"
+            },
+            {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
@@ -3255,6 +3260,11 @@
               "name": "decodeNativeDocxNestedTableOmissionsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
+            },
+            {
+              "name": "decodeNativeDocxNestedTextEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxNestedTextEvidenceV1(source: unknown, resolved: unknown, nestedInput: unknown, contextInput: unknown, input: unknown): NativeDocxNestedTextEvidenceV1[]"
             },
             {
               "name": "decodeNativeDocxPagePaintForRequestV1",
@@ -4020,6 +4030,16 @@
               "name": "NativeDocxNestedTableOmissionV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNestedTableOmissionV1"
+            },
+            {
+              "name": "NativeDocxNestedTextEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTextEvidenceV1"
+            },
+            {
+              "name": "NativeDocxNestedTextInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTextInventoryV1"
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
@@ -4888,6 +4908,11 @@
               "signature": "export declare function createNativeDocxEquationPreviewsV1(source: unknown, layout: unknown, equations: unknown, contextNotices?: unknown): NativeDocxEquationPreviewV1[]"
             },
             {
+              "name": "createNativeDocxNestedTextInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxNestedTextInventoryV1(source: unknown, options: { policy: 'source-nested-table-text-v1'; read_only: true; }, resolved: unknown, nested: unknown, contexts: unknown, evidence: unknown): NativeDocxNestedTextInventoryV1"
+            },
+            {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
               "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
@@ -4916,6 +4941,11 @@
               "name": "decodeNativeDocxNestedTableOmissionsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
+            },
+            {
+              "name": "decodeNativeDocxNestedTextEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxNestedTextEvidenceV1(source: unknown, resolved: unknown, nestedInput: unknown, contextInput: unknown, input: unknown): NativeDocxNestedTextEvidenceV1[]"
             },
             {
               "name": "decodeNativeDocxPartialTableTextContextsV1",
@@ -5091,6 +5121,16 @@
               "name": "NativeDocxNestedTableOmissionV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNestedTableOmissionV1"
+            },
+            {
+              "name": "NativeDocxNestedTextEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTextEvidenceV1"
+            },
+            {
+              "name": "NativeDocxNestedTextInventoryV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNestedTextInventoryV1"
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
