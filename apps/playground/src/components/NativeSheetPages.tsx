@@ -5,6 +5,7 @@ import {
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
+  selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2, type NativeSheetViewportV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
   type NativePositionedDrawingV1, type NativeChartPreviewV1,
@@ -18,7 +19,7 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -45,6 +46,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const [useSource, setUseSource] = useState(true)
   const [useStoredRows, setUseStoredRows] = useState(false)
   const [compactGeneral, setCompactGeneral] = useState(false)
+  const [conditionalFills, setConditionalFills] = useState(false)
   const [usePrintArea, setUsePrintArea] = useState(false)
   const [repeatHeadings, setRepeatHeadings] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
@@ -55,6 +57,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const generation = useRef(0)
   const installed = useRef<FontFace | null>(null)
   const instance = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const conditionalSource = objects.conditional_fills?.find(entry => entry.sheet_id === sheet.id && entry.sheet_part === sheet.part_name)
   const savedArea = objects.print_areas?.find(area => area.sheet_id === sheet.id && area.sheet_part === sheet.part_name)
   const savedSet = objects.print_area_sets?.find(area => area.sheet_id === sheet.id && area.sheet_part === sheet.part_name)
   const savedRanges = savedSet?.status === 'available' ? savedSet.areas : !objects.print_area_sets && savedArea?.status === 'available' ? [savedArea.area] : []
@@ -111,7 +114,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host', ...(usePrintArea ? { areaIndex: index } : {}) })))
+      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host', ...(usePrintArea ? { areaIndex: index } : {}) })))
       setMessage(`${plans.reduce((total, plan) => total + plan.pages.length, 0)} preview pages. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -132,6 +135,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       </>}
       <label>Normal font: {workbook.normal_style?.font_name || 'not available'}<input type="file" accept=".ttf,font/ttf" onChange={event => { invalidate(); setFont(event.target.files?.[0] ?? null) }}/></label>
       <label><input type="checkbox" checked={useStoredRows} onChange={event => { invalidate(); setUseStoredRows(event.target.checked) }}/> Allow approximate stored-row layout</label>
+      <label><input type="checkbox" checked={conditionalFills} onChange={event => { invalidate(); setConditionalFills(event.target.checked) }}/> Preview supported conditional fills</label>
+      <p aria-label="Conditional fill availability" className="ds-muted">{conditionalSource ? conditionalSource.warnings.join(" ") : "No conditional fill rules were qualified in this source."} Conditional fills are not included unless you select this option.</p>
       <label><input type="checkbox" checked={compactGeneral} onChange={event => { invalidate(); setCompactGeneral(event.target.checked) }}/> Compact General numbers (host preview)</label>
       {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
@@ -178,9 +183,16 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
+  let conditional: NativeConditionalFillPreviewV1 | undefined
+  let conditionalError = ''
+  if (conditionalFills) {
+    try { conditional = selectNativeConditionalFillPreviewV1(workbook, sheet.id, objects) }
+    catch (error) { conditionalError = error instanceof Error ? error.message : 'Conditional source evidence is unavailable.' }
+  }
+  const conditionalMatches = new Set(conditional?.status === 'available' ? conditional.cells.filter(cell => cell.matches).map(cell => `${cell.row}:${cell.column}`) : [])
   const paintRegions = plan.pages.some(page => page.regions) ? plan.pages.flatMap(page => page.regions ?? [{ ...page, kind: 'body' as const }]) : undefined
   const cellMap = new Map(sheet.cells.map(cell => [`${cell.row}:${cell.column}`, cell]))
   const styleAt = (row: number, column: number) => cellMap.get(`${row}:${column}`)?.style_id ?? sheet.rows.find(r => r.row === row)?.style_id ?? sheet.columns.find(c => column >= c.column && column <= c.end_column)?.style_id ?? 0
@@ -191,15 +203,20 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     const cell = cellMap.get(`${row.row}:${column.column}`), styleId = styleAt(row.row, column.column)
     const style = workbook.styles[styleId]?.effective
     const display = nativeSheetPageCellPreview(workbook, cell, objects, sheet.part_name, compactGeneral)
-    const fill = nativeTableFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId) ?? style?.fill_color ?? '#FFFFFF'
+    const conditionalMatch = conditionalMatches.has(`${row.row}:${column.column}`)
+    const fill = conditionalMatch && conditional?.status === 'available' ? conditional.rule.fill : nativeTableFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId) ?? style?.fill_color ?? '#FFFFFF'
     const header = nativeTableHeaderTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId)
     const totals = nativeTableTotalsTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, styleId)
     const rect = merge?.rect ?? { x_emu: column.x_emu, y_emu: row.y_emu, width_emu: column.width_emu, height_emu: row.height_emu }
-    return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals }]
+    return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals, conditionalMatch }]
   }))
   const disclosures = cells.filter(cell => cell.display.cached || cell.display.warnings.length || cell.display.truncated || cell.display.compacted)
   const address = cellAddress
   return <div className="native-sheet-page-list">
+    {conditionalFills && <section aria-label="Conditional fill preview details">
+      <p role="status">{conditionalError || conditional?.warnings.join(' ') || 'No source-qualified conditional fills are available. No conditional fills were applied.'}</p>
+      {conditional?.status === 'available' && <p>Source rule: {conditional.rule.ref} {conditional.rule.operator} {conditional.rule.operand}; priority {conditional.rule.priority}; stopIfTrue {String(conditional.rule.stop_if_true)}; differential style {conditional.rule.dxf_id}; fill {conditional.rule.fill}. {conditional.cells.filter(cell => cell.matches).length} matching source cells, including {conditional.cells.filter(cell => cell.matches && cell.cached).length} saved formula results. This overlay does not change source styles.</p>}
+    </section>}
     <section aria-label="Cell display details">
       <p role="status">{cells.filter(c => c.display.cached).length} saved formula results; freshness is unknown and formulas are not recalculated. {cells.filter(c => c.display.warnings.length).length} cells have display warnings. {cells.filter(c => c.display.truncated).length} cells exceed the 2,048-character display limit. {cells.filter(c => c.display.compacted).length} General values use your compact display choice.</p>
       {!!disclosures.length && <details><summary>Cell display details ({disclosures.length})</summary><ul>{disclosures.slice(0,100).map(cell => <li key={cell.key}>{address(cell.row,cell.column)}: {cell.display.cached && 'Saved formula result; freshness unknown. '}{cell.display.warnings.join(' ')}{cell.display.truncated && ' Text is truncated in this preview. '}{cell.display.compacted && ' Host rounding applied; not Excel General. '}Stored value: {cell.display.stored.slice(0,256)}{cell.display.stored.length > 256 && '… (detail shortened)'}</li>)}</ul>{disclosures.length > 100 && <p>Showing the first 100 of {disclosures.length} cell details.</p>}</details>}
@@ -220,7 +237,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             const right = cell.display.horizontal === 'right', center = cell.display.horizontal === 'center'
             const exactNormal = cell.style?.font_name === workbook.normal_style?.font_name && Boolean(cell.style?.bold) === Boolean(workbook.normal_style?.font_bold) && Boolean(cell.style?.italic) === Boolean(workbook.normal_style?.font_italic)
             return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
-              <rect x={x} y={y} width={w} height={h} fill={cell.fill}/>
+              <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined}/>
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{cell.display.text.slice(0, 2048)}</text>
             </g>
