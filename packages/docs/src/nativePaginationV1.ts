@@ -299,7 +299,7 @@ const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+
 interface PaginationContext {
   footnoteReservation?: NativeDocxFootnoteReservationV1
   reservedBottomHeight?: number
-  reservationPageOrdinal?: number
+  reservationPages?: Map<number, { reference_run_ids: string[]; height_millipoints: number }>
   columnFlow?: NativeDocxColumnParagraphFlowV1
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   request: NativeDocxPaginationRequestV1
@@ -1648,15 +1648,27 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
     if (context.refused) return
     if (context.footnoteReservation) {
       const reservation = context.footnoteReservation
+      context.reservationPages = new Map()
       for (const native of reservation.body_paragraphs) {
         const paragraph = shaped.get(native.id)!
-        const activates = native.id === reservation.reference_paragraph_id
-        const required = paragraph.block_advance_millipoints + (activates ? reservation.height_millipoints : 0)
-        if (required > remainingHeight(context)) startNextFlowColumn(context)
-        if (context.refused) return
+        const activates = reservation.references.find((entry) => entry.reference_paragraph_id === native.id)
+        let group: NativeDocxFootnoteReservationV1['groups'][number] | undefined
         if (activates) {
-          context.reservedBottomHeight = reservation.height_millipoints
-          context.reservationPageOrdinal = context.currentPage!.ordinal
+          const active = context.reservationPages.get(context.currentPage!.ordinal)?.reference_run_ids ?? []
+          const ids = [...active, activates.reference_run_id]
+          group = reservation.groups.find((entry) => entry.reference_run_ids.length === ids.length && entry.reference_run_ids.every((id, index) => id === ids[index]))!
+          // remainingHeight already subtracts the old reservation; replace it
+          // with the tentative total instead of counting the old notes twice.
+          const physicalRemaining = remainingHeight(context) + (context.reservedBottomHeight ?? 0)
+          if (paragraph.block_advance_millipoints + group.height_millipoints > physicalRemaining) {
+            startNextFlowColumn(context)
+            group = reservation.groups.find((entry) => entry.reference_run_ids.length === 1 && entry.reference_run_ids[0] === activates.reference_run_id)!
+          }
+        } else if (paragraph.block_advance_millipoints > remainingHeight(context)) startNextFlowColumn(context)
+        if (context.refused) return
+        if (group) {
+          context.reservedBottomHeight = group.height_millipoints
+          context.reservationPages.set(context.currentPage!.ordinal, { reference_run_ids: [...group.reference_run_ids], height_millipoints: group.height_millipoints })
         }
         placeSlice(context, paragraph, 0, paragraph.lines.length, 0)
         if (context.refused) return
@@ -1801,14 +1813,27 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
       diagnostics: context.diagnostics,
       sections: context.sections,
       pages: context.pages,
-    }, request.document, request.resolved_layout, request.shaped_lines)
+    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation)
     if (noteFailure) refuse(context, noteFailure.code, noteFailure.scope_id, noteFailure.message)
     else if (context.footnoteReservation) {
       const reservation = context.footnoteReservation
-      const page = context.pages.find((entry) => entry.ordinal === context.reservationPageOrdinal)
-      const notes = page?.note_stories ?? []
-      const height = notes.reduce((sum, note) => sum + note.height_millipoints, 0)
-      if (notes.length !== 2 || notes[0]?.story_id !== reservation.separator.id || notes[1]?.story_id !== reservation.note.id || notes[1]?.reference_run_id !== reservation.reference_run_id || height !== reservation.height_millipoints) refuse(context, 'note-overflow-unsupported', reservation.note.id, 'Final source-bound footnote area must exactly equal the reference-page reservation')
+      const placedReferences: string[] = []
+      for (const page of context.pages) {
+        const expected = context.reservationPages?.get(page.ordinal)
+        const notes = page.note_stories ?? []
+        if (!expected) {
+          if (notes.length) refuse(context, 'note-overflow-unsupported', page.id, 'Footnote placement must not create an unreserved page group')
+          continue
+        }
+        const references = expected.reference_run_ids.map((id) => reservation.references.find((entry) => entry.reference_run_id === id)!)
+        const height = notes.reduce((sum, note) => sum + note.height_millipoints, 0)
+        if (notes.length !== references.length + 1 || notes[0]?.story_id !== reservation.separator.id || height !== expected.height_millipoints || references.some((reference, index) => {
+          const note = notes[index + 1]
+          return note?.story_id !== reference.note.id || note.reference_run_id !== reference.reference_run_id || note.number !== reference.number
+        })) refuse(context, 'note-overflow-unsupported', page.id, 'Final source-bound footnote area must exactly equal the ordered reference-page reservation')
+        placedReferences.push(...expected.reference_run_ids)
+      }
+      if (placedReferences.length !== reservation.references.length || placedReferences.some((id, index) => id !== reservation.references[index]!.reference_run_id)) refuse(context, 'note-reference-ambiguous', request.document.document_id, 'Every qualified footnote reference must activate once in source order')
     }
   }
   context.diagnostics.sort((left, right) => compareNativeCodeUnits(left.scope_id, right.scope_id) || compareNativeCodeUnits(left.code, right.code) || compareNativeCodeUnits(left.message, right.message))
