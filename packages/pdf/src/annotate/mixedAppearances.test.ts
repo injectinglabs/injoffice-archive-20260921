@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { resolve } from 'node:path'
 import { decodePDFRawStream, PDFArray, PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
 import { applyFormValues, type FormValuesOptions } from './forms.js'
@@ -39,6 +40,21 @@ function font(doc: PDFDocument, name: string) {
 }
 
 describe('independent embedded text and standard choice appearances', () => {
+  it.each([false, true])('keeps CFF, standard choice and missing-glyph refusal independent, choice first=%s', async choiceFirst => {
+    const bytes = new Uint8Array(readFileSync(resolve(import.meta.dirname, '../../testdata/fonts/NotoSansDevanagari-Regular.otf'))), fontCopy = bytes.slice()
+    const cffText: FormValueSpec = { ...text, value: 'क्षि नमस्ते' }, refused: FormValueSpec = { name: 'untouched', kind: 'text', value: '\u{10FFFF}' }
+    const source = await fixture(false, true), copy = source.slice(), before = await PDFDocument.load(source)
+    const result = await applyFormValues(source, choiceFirst ? [choice, refused, cffText] : [cffText, refused, choice], { textAppearance: { fontBytes: bytes }, choiceAppearance: options.choiceAppearance })
+    expect(result.applied).toBe(2); expect(result.skipped.map(item => item.name)).toEqual(['untouched'])
+    const saved = await PDFDocument.load(result.bytes), cid = font(saved, 'text').lookup(PDFName.of('DescendantFonts'), PDFArray).lookup(0, PDFDict)
+    expect(saved.getForm().getTextField('text').getText()).toBe(cffText.value)
+    expect(String(cid.get(PDFName.of('Subtype')))).toBe('/CIDFontType0')
+    expect(String(font(saved, 'choice').get(PDFName.of('BaseFont')))).toBe('/Courier')
+    expect(decoded(stream(saved, 'untouched'))).toBe(decoded(stream(before, 'untouched')))
+    expect(saved.getForm().getTextField('untouched').getText()).toBe('BEFORE')
+    expect(saved.getForm().acroForm.dict.get(PDFName.of('NeedAppearances'))).toBe(PDFBool.True)
+    expect(source).toEqual(copy); expect(bytes).toEqual(fontCopy)
+  })
   it.each([false, true])('keeps RTL resources independent with choice first=%s', async choiceFirst => {
     const rtl: FormValueSpec = { ...text, value: 'abc \u2067مَرْحَبًا 123\u2069 xyz' }
     const source = await fixture(false, true), copy = source.slice()

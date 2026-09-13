@@ -121,9 +121,9 @@ The implementation uses pdf-lib's documented
 
 For an explicitly supplied embedded font, pass `textAppearance: { fontBytes }`
 instead of `{ font: 'Helvetica' }`. `fontBytes` is a `Uint8Array` containing a
-fixed TrueType outline face, standalone or selected from a TTC/OTC collection (up to 16 MiB). Pass zero-based `faceIndex` to select a collection face; it defaults to zero. The saved PDF contains a
-complete font program and source-semantic Unicode mappings; reopening does not
-require that font to be installed. The playground offers a local font picker and collection face index. Only the selected complete face is saved.
+fixed TrueType or CFF1 outline face, standalone or selected from a TTC/OTC collection (up to 16 MiB). Pass zero-based `faceIndex` to select a collection face; it defaults to zero. The saved PDF contains a
+complete outline program and source-semantic Unicode mappings; reopening does not
+require that font to be installed. The playground offers a local font picker and collection face index. Only the selected outline program is saved.
 
 This single-line cluster profile accepts up to 4,096 UTF-16 units of Unicode text covered by the supplied font and HarfBuzz. Unicode 17 script extensions and grapheme segmentation preserve contextual script clusters. Unicode 17 bidi resolution handles mixed direction text, digits, brackets and isolates. Optional `direction` (`auto`, `ltr`, `rtl`) and `language` (default `und`) configure shaping. HarfBuzz
 positions combining marks and ordinary ligatures, retaining exact source `/V`.
@@ -132,7 +132,7 @@ continuation glyphs use exact font outlines so reader extraction does not invent
 characters; those outlines do not receive TrueType hinting. Generic readers may reorder RTL extraction (including lam-alef) despite exact `/V`, ToUnicode and ActualText. Auto-sized RTL and marks
 fit positioned ink bounds; explicitly fixed sizes can still clip.
 
-CFF font packaging and explicit font fallback remain subsequent milestones. Missing glyphs, invalid paths/metrics,
+CFF1 name-keyed and CID-keyed fonts are supported with explicit CID resources; see [CFF validation and resources](../../docs/PDF-CFF-FONTS.md). Explicit font fallback remains separate work. Missing glyphs, invalid paths/metrics,
 unsupported font formats and resource limits produce explicit refusal. A single
 unpartitionable cluster may use at most 256 UTF-16 units (the PDF ToUnicode
 512-byte destination limit). Existing ownership, source-preservation and mixed
