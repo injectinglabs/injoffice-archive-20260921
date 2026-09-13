@@ -37,3 +37,13 @@ it('decorates individual runs and resets absent and explicit-none runs', () => {
  expect(html.match(/text-decoration:none/g)).toHaveLength(2)
  expect(html).toContain('schema-default single'); expect(html).toContain('undecorated host fallback')
 })
+
+it('paints resolved theme faces, discloses the declared name and resets following direct runs', () => {
+ const entry = {text:'Major plain',status:'available',runs:[
+  {text:'Major ',properties:'direct',font_name:'Cambria',font_scheme:'major',declared_font_name:'Arial',theme_part:'xl/theme/theme1.xml',theme_sha256:`sha256:${'b'.repeat(64)}`,omitted:[]},
+  {text:'plain',properties:'direct',font_name:'Calibri',omitted:[]},
+ ]} as NativeRichTextCellV1
+ const html=renderToStaticMarkup(createElement(NativeRichTextSpans,{entry,base:{font_name:'Courier'}}))
+ expect(html).toContain('font-family="Cambria"');expect(html).toContain('font-family="Calibri"')
+ expect(html).not.toContain('font-family="Arial"');expect(html).toContain('declared Arial, resolved theme Latin face Cambria')
+})
