@@ -128,7 +128,7 @@ describe('embedded Unicode form appearances', () => {
 
   })
 
-  it.each(['مرحبا', 'א', 'A١', '\u200f', '\ud800', '漢', 'a'.repeat(4097)])('preserves source and appearance when Unicode qualification refuses %s', async value => {
+  it.each(['अ', '\ud800', '漢', 'a'.repeat(4097)])('preserves source and appearance when Unicode qualification refuses %s', async value => {
     const source = await fixture()
     const copy = source.slice()
     const result = await applyFormValues(source, [{ name: 'first', kind: 'text', value }], options)

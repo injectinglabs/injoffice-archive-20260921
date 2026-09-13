@@ -30,15 +30,20 @@ export function unicodeTextAppearance(field: PDFTextField, widget: PDFWidgetAnno
     return matches.length ? Number(matches.at(-1)![2]) : undefined
   }
   const authoredSize = defaultSize(widget.getDefaultAppearance()) ?? defaultSize(field.acroField.getDefaultAppearance())
-  const fitInk = (authoredSize === undefined || authoredSize === 0) && /\p{Mark}/u.test(run.value)
   const { ink } = encodedRun
+  const fitInk = (authoredSize === undefined || authoredSize === 0) && (/\p{Mark}/u.test(run.value) || run.requiresActualText === true) && ink.maxY > ink.minY
   let cursor = 0
   const simple = run.glyphs.every((glyph, i) => {
     const valid = cids[i] !== 0 && glyph.x === cursor && glyph.y === 0
     cursor += glyph.advance
     return valid
   })
-  if (simple && !fitInk) return embeddedTextAppearance(field, widget, font, { value: run.value, unitsPerEm: run.unitsPerEm, advances: run.glyphs.map(g => g.advance), nominalAdvances })
+  if (simple && !fitInk) {
+    const operators = embeddedTextAppearance(field, widget, font, { value: run.value, unitsPerEm: run.unitsPerEm, advances: run.glyphs.map(g => g.advance), nominalAdvances })
+    if (!run.requiresActualText) return operators
+    const replacement = PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [PDFName.of('Span'), field.acroField.dict.context.obj({ ActualText: PDFHexString.fromText(run.value) }).toString()])
+    return operators.flatMap(operator => /(?:^|\s)(?:Tj|TJ)$/.test(operator.toString()) ? [replacement, operator, endMarkedContent()] : [operator])
+  }
   const token = '\uFFFC'
   const requireToken = (value: string) => { if (value !== token) throw new Error('unexpected embedded appearance layout request') }
   const layoutFont = Object.assign(Object.create(font) as PDFFont, {
