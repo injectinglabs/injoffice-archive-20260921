@@ -118,6 +118,20 @@ describe('DOCX WASM package client', () => {
     const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
     await expect(bad.inspectPartialContent(bytes)).rejects.toThrow();expect(badWorker.terminated).toBe(true)
   })
+  it('validates textbox source evidence and terminates on forged anchors',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
+    document.source.package_sha256=hash
+    const p=document.body.blocks[0]!.paragraph!,anchor={...p.anchor,path:p.anchor.path+'/w:r[1]/w:pict[1]',start_byte:200,end_byte:220}
+    document.unsupported=[{id:'textbox:1',code:'UNMODELED_DRAWING',capability:'drawings',scope_id:p.id,anchor,preservation:'refuse-mutation',message:'Drawing'}]
+    const fact={package_sha256:hash,part_sha256:'sha256:'+'a'.repeat(64),paragraph_id:p.id,diagnostic_id:'textbox:1',anchor:{...anchor},kind:'vml',status:'supported',paragraphs:['Literal <script>text</script>'],reason:''}
+    const resolved_layout={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
+    const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,textbox_inventory:{items:[fact],omitted_count:0}}
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).textbox_inventory).toEqual(envelope.textbox_inventory);client.terminate()
+    fact.anchor.xml_sha256='sha256:'+'f'.repeat(64)
+    const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow('does not join');expect(badWorker.terminated).toBe(true)
+  })
   it('validates source-bound review metadata and rejects deletion text evidence',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
     document.source.package_sha256=hash

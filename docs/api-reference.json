@@ -3202,6 +3202,11 @@
               "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
             },
             {
+              "name": "createNativeDocxTextboxInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxTextboxInventoryV1(source: unknown, options: { policy: 'source-textbox-inventory-v1'; read_only: true; }, evidence: unknown):"
+            },
+            {
               "name": "CSS_PX_PER_INCH",
               "kind": "const",
               "signature": "export declare const CSS_PX_PER_INCH = 96"
@@ -3375,6 +3380,11 @@
               "name": "DecodeNativeDocxShapedLinesResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxShapedLinesResult ="
+            },
+            {
+              "name": "decodeNativeDocxTextboxEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxEvidenceV1(source: unknown, input: unknown): NativeDocxTextboxEvidenceV1"
             },
             {
               "name": "DEFAULT_MARGINS_PX",
@@ -4652,6 +4662,21 @@
               "signature": "export interface NativeDocxTableV1"
             },
             {
+              "name": "NativeDocxTextboxEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxEvidenceV1"
+            },
+            {
+              "name": "NativeDocxTextboxInventoryV1",
+              "kind": "type",
+              "signature": "export type NativeDocxTextboxInventoryV1 = ReturnType<typeof createNativeDocxTextboxInventoryV1>"
+            },
+            {
+              "name": "NativeDocxTextboxV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxV1"
+            },
+            {
               "name": "NativeDocxTextMutationPayloadV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTextMutationPayloadV1"
@@ -4898,6 +4923,11 @@
               "signature": "export declare function createNativeDocxReviewInventoryV1(source: unknown, options: { policy: 'source-review-inventory-v1'; read_only: true; }, resolved: unknown, evidence: unknown): NativeDocxReviewInventoryV1"
             },
             {
+              "name": "createNativeDocxTextboxInventoryV1",
+              "kind": "function",
+              "signature": "export declare function createNativeDocxTextboxInventoryV1(source: unknown, options: { policy: 'source-textbox-inventory-v1'; read_only: true; }, evidence: unknown):"
+            },
+            {
               "name": "decodeNativeDocxDocument",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult"
@@ -4946,6 +4976,11 @@
               "name": "decodeNativeDocxReviewEvidenceV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxReviewEvidenceV1(source: unknown, input: unknown): NativeDocxReviewEvidenceV1"
+            },
+            {
+              "name": "decodeNativeDocxTextboxEvidenceV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxEvidenceV1(source: unknown, input: unknown): NativeDocxTextboxEvidenceV1"
             },
             {
               "name": "DOCX_MAX_TWIPS_FOR_MILLIPOINTS",
@@ -5301,6 +5336,21 @@
               "name": "NativeDocxTableV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTableV1"
+            },
+            {
+              "name": "NativeDocxTextboxEvidenceV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxEvidenceV1"
+            },
+            {
+              "name": "NativeDocxTextboxInventoryV1",
+              "kind": "type",
+              "signature": "export type NativeDocxTextboxInventoryV1 = ReturnType<typeof createNativeDocxTextboxInventoryV1>"
+            },
+            {
+              "name": "NativeDocxTextboxV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxV1"
             },
             {
               "name": "NativeDocxTextMutationPayloadV1",

@@ -3,8 +3,15 @@ import {describe,it,expect} from 'vitest'
 import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {createNativeDocxPartialContentPreviewV1,type NativeDocxDocumentV1,type NativeDocxResolvedLayoutInputV1} from '@injoffice/docs/native-docx'
-import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView} from './NativeDocxPartialText'
+import {NativeDocxPartialText,NativeDocxPartialTextView,NativeDocxEquationList,NativeDocxReviewInventoryView,NativeDocxTextboxInventoryView} from './NativeDocxPartialText'
 describe('browser-local partial text UI',()=>{
+ it('escapes textbox text and keeps geometry and omission disclosures visible',()=>{
+  const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:pict[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
+  const item={package_sha256:'sha256:'+'a'.repeat(64),part_sha256:'sha256:'+'c'.repeat(64),paragraph_id:'p',diagnostic_id:'d',anchor,kind:'vml' as const,status:'supported' as const,paragraphs:['<script>Textbox</script>'],reason:''}
+  const html=renderToStaticMarkup(createElement(NativeDocxTextboxInventoryView,{inventory:{policy:'source-textbox-inventory-v1',read_only:true,source:{document_id:'d',revision:'r',package_sha256:item.package_sha256},items:[item,{...item,diagnostic_id:'d2',status:'omitted',paragraphs:[],reason:'hidden-text'}],omitted_count:1,source_diagnostics:[]}}))
+  expect(html).toContain('&lt;script&gt;Textbox&lt;/script&gt;');expect(html).toContain('Textbox text omitted: hidden-text');expect(html).toContain('Shape geometry, placement, wrapping');expect(html).toContain('Textbox inventory limit: 1 omitted')
+  expect(html).not.toContain('<script>');expect(html).not.toContain('contenteditable');expect(html).not.toContain('<input');expect(html).not.toContain('<button')
+ })
  it('labels review kinds, metadata, omissions and retained diagnostic codes as escaped read-only text',()=>{
   const anchor={part_name:'word/document.xml',path:'/w:document[1]/w:body[1]/w:p[1]/w:ins[1]',start_byte:1,end_byte:2,xml_sha256:'sha256:'+'b'.repeat(64)}
   const html=renderToStaticMarkup(createElement(NativeDocxReviewInventoryView,{review:{policy:'source-review-inventory-v1',read_only:true,source:{document_id:'d',revision:'r',package_sha256:'sha256:'+'a'.repeat(64)},items:[{package_sha256:'sha256:'+'a'.repeat(64),paragraph_id:'p',diagnostic_id:'diag',anchor,kind:'insertion',revision_id:'1',author:'<script>Author</script>',created_at:'<date>',run_ids:['r'],segments:[{kind:'text',source:{scope_id:'r',anchor},text:'<script>Inserted</script>'}],text_status:'qualified-insertion',retained_diagnostic_ids:['diag']}],omitted_count:1,source_diagnostics:{document:[{id:'diag',code:'WRAPPED_RUN_MARKUP',scope_id:'p',anchor,capability:'run-structure',preservation:'refuse-mutation',message:'Retained'}],resolved:[]}}}))
@@ -22,7 +29,7 @@ describe('browser-local partial text UI',()=>{
  })
  it('requires explicit request and explains browser-only behavior without upload or edit controls',()=>{
   const html=renderToStaticMarkup(createElement(NativeDocxPartialText,{bytes:new Uint8Array([1]),packageDigest:'sha256:'+'a'.repeat(64)}))
-  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('Inspect tracked-change source');expect(html).toContain('No file is uploaded')
+  expect(html).toContain('Show read-only partial text');expect(html).toContain('Show partial text with comments');expect(html).toContain('Inspect tracked-change source');expect(html).toContain('Inspect textbox source');expect(html).toContain('No file is uploaded')
   expect(html).not.toContain('Read-only partial source text')
  })
  it('renders same-source library table text and authored descriptions as escaped read-only content',()=>{
