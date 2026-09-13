@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const workerSource = readFileSync(new URL('../worker/pptxnative.worker.js', import.meta.url), 'utf8')
 
 type Binding = {
+  evaluatePreset?(payload: string): unknown
   extract(bytes: Uint8Array): unknown
   inspect?(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
@@ -16,7 +17,7 @@ function createWorkerHarness(binding: Binding, runResult?: () => Promise<unknown
   const messages: WorkerMessage[] = []
   let closed = false
   const globals: Record<string, unknown> = {
-    ArrayBuffer, Error, Promise, Uint8Array, clearTimeout, queueMicrotask, setTimeout,
+    ArrayBuffer, Error, Promise, Uint8Array, TextEncoder, clearTimeout, queueMicrotask, setTimeout,
     postMessage: (message: WorkerMessage) => messages.push(message),
     importScripts: () => undefined,
     fetch: async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) }),
@@ -45,10 +46,27 @@ function createWorkerHarness(binding: Binding, runResult?: () => Promise<unknown
     init: () => send({ ...base, id: 'init-1', op: 'init', assets: { wasmUrl: '/engine.wasm', goRuntimeUrl: '/wasm_exec.js' } }),
     extract: (id: string) => send({ ...base, id, op: 'extract', bytes: new Uint8Array([1]).buffer }),
     inspect: (id: string) => send({ ...base, id, op: 'inspect', bytes: new Uint8Array([1]).buffer }),
+    evaluate: (id: string, payload: string) => send({ ...base, id, op: 'evaluate', payload }),
   }
 }
 
 describe('PPTX WASM worker binding envelopes', () => {
+  it('routes preset JSON without source bytes and recovers from qualification refusal', async () => {
+    const payloads: string[]=[]
+    const worker=createWorkerHarness({extract:()=>({ok:true,value:'{}'}),apply:()=>({ok:true,value:new Uint8Array([1])}),evaluatePreset:payload=>{payloads.push(payload);return payload==='bad'?{ok:false,error:'unknown preset',fatal:false}:{ok:true,value:'{"geometry":{}}'}}})
+    await worker.init()
+    await expect(worker.evaluate('bad','bad')).resolves.toMatchObject({ok:false,error:{code:'NATIVE_REFUSED',fatal:false}})
+    await expect(worker.evaluate('good','{}')).resolves.toMatchObject({ok:true,result:{contractJson:'{"geometry":{}}'}})
+    expect(payloads).toEqual(['bad','{}']);expect(worker.isClosed()).toBe(false)
+    await expect(worker.evaluate('large','界'.repeat(30000))).resolves.toMatchObject({ok:false})
+    expect(payloads).toHaveLength(2)
+  })
+  it('keeps older engines usable while refusing unavailable evaluation', async () => {
+    const worker=createWorkerHarness({extract:()=>({ok:true,value:'{}'}),apply:()=>({ok:true,value:new Uint8Array([1])})})
+    await worker.init()
+    await expect(worker.evaluate('missing','{}')).resolves.toMatchObject({ok:false,error:{fatal:false}})
+    await expect(worker.extract('after')).resolves.toMatchObject({ok:true,result:{contractJson:'{}'}})
+  })
   it('routes inspection and preserves recoverable refusals', async () => {
     let calls = 0
     const worker = createWorkerHarness({ extract: () => ({ ok: true, value: '{}' }), apply: () => ({ ok: true, value: new Uint8Array([1]) }),
