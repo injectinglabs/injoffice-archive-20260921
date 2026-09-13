@@ -49,7 +49,7 @@ describe('playground workbench page contract', () => {
     expect(page).toContain('These values are not in the downloaded PDF.')
     expect(page).toContain('if (!bytes || busy || fieldBytes !== bytes) return')
     expect(page).toContain('setFieldBytes(bytes)')
-    expect(page).toContain('disabled={locked || fieldBytes !== bytes || fields.length === 0}')
+    expect(page).toContain("disabled={locked || fieldBytes !== bytes || fields.length === 0 || (formAppearanceFont === 'embedded' && !embeddedFormFont)}")
     expect(page).toContain('{formNotice && <p role="status"')
     expect(page).not.toContain("'Applied form values.'")
     expect(page).toContain('applyPdfStamp')
