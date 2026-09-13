@@ -1,3 +1,4 @@
+import {createNativeLiteralBarPaths} from './literalBar.js'
 import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
 import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
@@ -1923,6 +1924,22 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         return {kind:'group',...base,children}
       }
 
+      const bar=element.chart.literalBar
+      if(bar && state.options.literalBarPreview===true){
+        const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
+        const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*bar.series.length+bar.gapWidth))
+        if(!fits)state.diagnostics.push({severity:'refusal',code:'chart.barFrameTooSmall',message:'The integer preview frame cannot retain distinct source bars.',slideId:state.slide.id,elementId:element.id})
+        else {
+          if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalBar`,'Literal bar vectors exceed RenderTree nesting budget')
+          state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
+          const children=createNativeLiteralBarPaths(bar,base.bounds.cx,base.bounds.cy).map((vector,index)=>{
+            const path=`$.elements.${element.id}.literalBar.${index}`
+            takeNode(state,path)
+            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:vector.stroke}:{})}
+          })
+          return {kind:'group',...base,children}
+        }
+      }
       if (!element.chart.previewAssetId) {
         state.diagnostics.push({ severity: 'refusal', code: 'chart.missingPreview', message: 'opaque chart has no preview asset to paint; no chart renderer is invented', slideId: state.slide.id, elementId: element.id })
         return { kind: 'placeholder', ...base, reason: 'missingPreview', label: 'Chart preview unavailable' }
@@ -1965,6 +1982,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
+  if(options.literalBarPreview!==undefined&&typeof options.literalBarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBarPreview','literal bar opt-in must be boolean')
   if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
 	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')
   if (lineLayoutPolicy !== undefined && lineLayoutPolicy !== 'max-run-natural-v1') throw new RenderCompileError('render.invalidContract', '$.options.lineLayoutPolicy', 'unknown native line layout policy')

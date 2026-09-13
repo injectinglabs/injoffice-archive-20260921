@@ -193,7 +193,39 @@ type NativeLiteralDoughnut struct {
 	Colors          []string `json:"colors"`
 }
 
+type NativeLiteralBarAxis struct {
+	ID          int64   `json:"id"`
+	CrossAxisID int64   `json:"crossAxisId"`
+	Orientation string  `json:"orientation"`
+	Position    string  `json:"position"`
+	Deleted     bool    `json:"deleted"`
+	Color       *string `json:"color,omitempty"`
+	WidthEMU    *int64  `json:"widthEmu,omitempty"`
+	Min         *string `json:"min,omitempty"`
+	Max         *string `json:"max,omitempty"`
+	CrossesAt   *string `json:"crossesAt,omitempty"`
+}
+type NativeLiteralBarSeries struct {
+	Index  int64    `json:"index"`
+	Order  int64    `json:"order"`
+	Title  *string  `json:"title,omitempty"`
+	Values []string `json:"values"`
+	Colors []string `json:"colors"`
+}
+type NativeLiteralBar struct {
+	Profile      string                   `json:"profile"`
+	BarDirection string                   `json:"barDirection"`
+	Grouping     string                   `json:"grouping"`
+	DataOrigin   string                   `json:"dataOrigin"`
+	GapWidth     int64                    `json:"gapWidth"`
+	Overlap      int64                    `json:"overlap"`
+	Categories   []string                 `json:"categories"`
+	Series       []NativeLiteralBarSeries `json:"series"`
+	CategoryAxis NativeLiteralBarAxis     `json:"categoryAxis"`
+	ValueAxis    NativeLiteralBarAxis     `json:"valueAxis"`
+}
 type NativeOpaqueChart struct {
+	LiteralBar      *NativeLiteralBar      `json:"literalBar,omitempty"`
 	LiteralDoughnut *NativeLiteralDoughnut `json:"literalDoughnut,omitempty"`
 	LiteralPie      *NativeLiteralPie      `json:"literalPie,omitempty"`
 	ChartPart       string                 `json:"chartPart"`
