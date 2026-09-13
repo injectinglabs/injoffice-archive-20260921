@@ -11630,7 +11630,7 @@
             {
               "name": "compileNativeSheetPrintAreaSetPreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -12928,6 +12928,11 @@
               "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
             },
             {
+              "name": "selectNativeSheetPrintTitleViewportV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintTitleViewportV1(model: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
               "name": "StyleDelta",
               "kind": "type",
               "signature": "StyleDelta"
@@ -13131,7 +13136,7 @@
             {
               "name": "compileNativeSheetPrintAreaSetPreviewV1",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: NativeSheetPagePreviewOptionsV1): NativeSheetPrintAreaSetPreviewV1"
+              "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
               "name": "compileNativeStoredRowSheetGeometryV1",
@@ -13422,6 +13427,11 @@
               "name": "selectNativeSheetPrintAreaV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintAreaV1(model: NativeWorkbookRenderModelV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
+              "name": "selectNativeSheetPrintTitleViewportV1",
+              "kind": "function",
+              "signature": "export declare function selectNativeSheetPrintTitleViewportV1(model: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
             },
             {
               "name": "StyleDelta",
