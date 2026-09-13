@@ -1479,3 +1479,21 @@ describe('DOM-free dependency guard', () => {
     expect(Object.keys(packageJson.dependencies ?? {}).sort()).toEqual(['@injoffice/font-metrics', '@injoffice/pptx-native', '@noble/hashes'].sort())
   })
 })
+
+it('renders literal pie vectors only on opt-in and accounts for slice nodes',async()=>{
+ const deck=structuredClone(parsedFull)
+ const chart=deck.slides[0]!.elements.find(e=>e.kind==='chart')!
+ if(chart.kind!=='chart')throw new Error('missing chart')
+ deck.slides[0]!.elements=[chart]
+ chart.chart.literalPie={profile:'literal-pie-v1',firstSliceAngle:90,values:[1,3],colors:['#FF0000','#00FF00']}
+ const before=JSON.stringify(deck)
+ const defaultTree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()})
+ expect(defaultTree.nodes[0]!.kind).not.toBe('group')
+ const tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout(),literalPiePreview:true})
+ expect(tree.nodes[0]).toMatchObject({kind:'group',children:[{kind:'shape',fill:{color:'#FF0000'}},{kind:'shape',fill:{color:'#00FF00'}}]})
+ expect(tree.diagnostics.some(d=>d.code==='chart.literalPiePreview')).toBe(true)
+ const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+ expect(surface.finish().filter(c=>c.kind==='path')).toHaveLength(2)
+ expect(JSON.stringify(deck)).toBe(before)
+ await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(),literalPiePreview:true,maxNodes:2})).rejects.toThrow()
+})

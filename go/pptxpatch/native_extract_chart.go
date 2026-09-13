@@ -6,8 +6,9 @@ import (
 	"fmt"
 )
 
-// extractNativeChartGraphicFrame projects an opaque chart frame. Semantic chart
-// series are never interpreted. When the chart part has exactly one PNG/JPEG
+// extractNativeChartGraphicFrame retains opaque chart ownership. A strict
+// literal pie profile may be attached for opt-in read-only vector previews.
+// When the chart part has exactly one PNG/JPEG
 // image relationship, that picture is attached as previewAssetId and painted
 // at the frame's exact EMU. Missing or ambiguous previews stay preserve-only
 // without inventing a chart renderer.
@@ -92,7 +93,8 @@ func (extractor *nativeExtractor) extractNativeChartGraphicFrame(node *nativeXML
 	}
 	relID := relationshipID
 	chart := NativeOpaqueChart{
-		ChartPart: chartRel.Part, RelationshipID: relationshipID, OpaqueRef: opaqueRef, PreviewAssetID: previewAssetID,
+		LiteralPie: extractNativeLiteralPie(chartPayload, chartRel.Part, dialect),
+		ChartPart:  chartRel.Part, RelationshipID: relationshipID, OpaqueRef: opaqueRef, PreviewAssetID: previewAssetID,
 	}
 	element := NativeElement{
 		Kind: NativeElementKindChart, ID: elementID, Provenance: NativeProvenanceParsed,

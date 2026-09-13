@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "e0a7aebee5e13fd1ec333c5e4fb980cf04183b7b823aa7e152eb062751f733ca"
+const NativePPTXSchemaSHA256 = "91ecc0beb3b997c8b18ac80538f9a3387781d1eaa65ad0fda31aa1d4a9fd2a70"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -70,8 +70,12 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
+	"NativeLiteralPie": {
+		Properties: []string{"colors", "firstSliceAngle", "profile", "values"},
+		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
+	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

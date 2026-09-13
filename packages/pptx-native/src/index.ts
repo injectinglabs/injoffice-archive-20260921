@@ -41,6 +41,7 @@ export type {
   NativeElementKind,
   NativeGroupElement,
   NativeOpaqueChart,
+  NativeLiteralPie,
   NativePictureCrop,
   NativeOrigin,
   NativeProvenance,

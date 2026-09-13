@@ -118,3 +118,10 @@ inspection guides for eligible no-border tables. Other tables retain guides and
 visible paint omissions. Transparent fills expose the host canvas. Text still uses
 the original approximate host font/layout policy, and the strict native renderer,
 source bytes and mutation permissions remain unchanged.
+
+Opaque chart records may carry `literalPie`, a bounded `literal-pie-v1` source
+projection with explicit literal integer values, RGB colors and first-slice
+angle. This optional read-only preview metadata does not change chart ownership,
+source hashes, preservation or mutation authority. No cached formula values are
+projected. Consumers must opt into a declared geometry policy; see
+`@injoffice/pptx-render`'s `literalPiePreview` option.

@@ -152,7 +152,15 @@ export interface NativeTable {
   rows: NativeTableCell[][]
 }
 
+export interface NativeLiteralPie {
+  profile: 'literal-pie-v1'
+  firstSliceAngle: number
+  values: number[]
+  colors: string[]
+}
+
 export interface NativeOpaqueChart {
+  literalPie?: NativeLiteralPie
   chartPart: string
   relationshipId: string
   opaqueRef: NativePassthroughRef

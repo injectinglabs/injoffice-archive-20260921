@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "e0a7aebee5e13fd1ec333c5e4fb980cf04183b7b823aa7e152eb062751f733ca" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "91ecc0beb3b997c8b18ac80538f9a3387781d1eaa65ad0fda31aa1d4a9fd2a70" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -185,10 +185,26 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "transform"
     ]
   },
+  "NativeLiteralPie": {
+    "schemaName": "literalPie",
+    "properties": [
+      "colors",
+      "firstSliceAngle",
+      "profile",
+      "values"
+    ],
+    "required": [
+      "colors",
+      "firstSliceAngle",
+      "profile",
+      "values"
+    ]
+  },
   "NativeOpaqueChart": {
     "schemaName": "opaqueChart",
     "properties": [
       "chartPart",
+      "literalPie",
       "opaqueRef",
       "previewAssetId",
       "relationshipId"
@@ -1342,6 +1358,47 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalPie": {
+      "x-binding-name": "NativeLiteralPie",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "firstSliceAngle",
+        "values",
+        "colors"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-pie-v1"
+        },
+        "firstSliceAngle": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        }
+      }
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -1363,6 +1420,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "previewAssetId": {
           "$ref": "#/$defs/nativeId"
+        },
+        "literalPie": {
+          "$ref": "#/$defs/literalPie"
         }
       }
     },

@@ -102,6 +102,7 @@ func TestExtractNativePPTXGroupedChartPreviewRetainsFrameEMU(t *testing.T) {
 }
 
 type nativeChartFixtureOptions struct {
+	chartXML      string
 	strict        bool
 	previewData   string
 	omitPreview   bool
@@ -128,6 +129,9 @@ func nativeChartFixture(t *testing.T, options nativeChartFixtureOptions) []byte 
 	secondPart := "relocated/media/chart-extra.png"
 	extra := []nativeExtractZipPart{
 		{name: chartPart, data: `<c:chartSpace xmlns:c="` + chartNS + `"><c:chart><c:plotArea/></c:chart></c:chartSpace>`},
+	}
+	if options.chartXML != "" {
+		extra[0].data = options.chartXML
 	}
 	chartRels := `<Relationships xmlns="` + nsPackageRels + `">`
 	if !options.omitPreview {
