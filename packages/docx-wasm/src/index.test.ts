@@ -104,6 +104,20 @@ const success = (request: NativeWasmWorkerRequest, result?: unknown): NativeWasm
 } as NativeWasmWorkerResponse)
 
 describe('DOCX WASM package client', () => {
+  it('validates optional table text contexts against source look and style part hashes',async()=>{
+    const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=JSON.parse(readFileSync(new URL('../../../testdata/docx-native/document-v1.json',import.meta.url),'utf8')) as NativeDocxDocumentV1,table=document.body.blocks[1]!.table!
+    document.source.package_sha256=hash
+    const anchor={...table.anchor,path:table.anchor.path+'/w:tblPr[1]/w:tblLook[1]',start_byte:table.anchor.start_byte+1,end_byte:table.anchor.start_byte+2}
+    document.unsupported=[{id:'look:1',code:'UNMODELED_TABLE_PROPERTY',scope_id:table.id,anchor,capability:'table-properties',preservation:'refuse-mutation',message:'Look'}]
+    const resolved_layout={protocol:'injoffice.docx.resolved-layout',version:1,document_id:document.document_id,revision:document.revision,source_parts:{main_part:document.source.main_part,styles_part:'word/styles.xml'},paragraphs:[],runs:[],tables:[],fonts:[],diagnostics:[]}
+    const context={package_sha256:hash,table_id:table.id,look_diagnostic_id:'look:1',look_anchor:anchor,styles_part:'word/styles.xml',styles_sha256:document.passthrough_parts.find(p=>p.part_name==='word/styles.xml')!.sha256,style_chain:[{style_id:table.table_style_id,anchor:{...anchor,part_name:'word/styles.xml',path:'/w:styles[1]/w:style[1]',start_byte:1,end_byte:400}}],resolved_diagnostics:[]}
+    const envelope={protocol:'injoffice.docx.partial-source',version:1,package_sha256:hash,document,resolved_layout,table_text_contexts:[context]}
+    const worker=new FakeWorker(JSON.stringify(envelope)),client=createDocxWasmClient({workerFactory:()=>worker})
+    expect((await client.inspectPartialContent(bytes)).table_text_contexts).toEqual([context]);client.terminate()
+    context.styles_sha256='sha256:'+'0'.repeat(64)
+    const badWorker=new FakeWorker(JSON.stringify(envelope)),bad=createDocxWasmClient({workerFactory:()=>badWorker})
+    await expect(bad.inspectPartialContent(bytes)).rejects.toThrow();expect(badWorker.terminated).toBe(true)
+  })
   it('validates source-bound review metadata and rejects deletion text evidence',async()=>{
     const bytes=new Uint8Array([1,2,3]),hash='sha256:'+createHash('sha256').update(bytes).digest('hex'),document=structuredClone(fixtureDocument)
     document.source.package_sha256=hash

@@ -9,3 +9,5 @@ export {decodeNativeDocxResolvedLayout,type NativeDocxResolvedLayoutInputV1} fro
 export * from './nativeTransactionAdapterV1.js'
 
 export * from './nativeReviewInventoryV1.js'
+
+export * from './nativePartialTableTextContextV1.js'

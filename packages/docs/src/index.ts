@@ -126,3 +126,5 @@ export * from './nativeTransactionAdapterV1'
 export * from './nativePartialEquationsV1'
 
 export * from './nativeReviewInventoryV1.js'
+
+export * from './nativePartialTableTextContextV1.js'

@@ -106,6 +106,24 @@ it through **Inspect tracked-change source**. Native sidecar metadata and XML
 slice hashes are trusted producer evidence; arbitrary hand-authored models are
 not independent source-byte verification.
 
+The optional fifth argument accepts `table_text_contexts` from the same-byte
+inspector. This narrowly qualifies active `tblLook` metadata when its authored
+table style has a complete, bounded, nonconditional inheritance chain containing
+only exact authoring metadata, paragraph spacing and table indent/margins/borders.
+Run/conditional properties, unknown markup, revisions, malformed look flags and
+missing/cyclic styles do not qualify. Source table-look and selected resolved
+geometry diagnostics remain attached and labeled; they do not prevent ordinary
+text recovery under this explicit plain-text policy. Every other source,
+ancestor, paragraph/run and inherited visibility gate remains active.
+
+At most 64 table contexts with 16 style ancestors and 16 exact geometry diagnostic
+references are accepted. Styles part hashes join retained package parts; source
+and style anchors remain native producer evidence rather than independent
+consumer XML parsing. The demo forwards the same-byte evidence and labels the
+omitted look, borders, spacing and margins. This can recover outer-cell text
+beside a separately qualified nested-table omission; it does not reconstruct
+the inner table, override a missing style, or extend paint/mutation authority.
+
 The optional fourth argument accepts `nested_table_omissions` from the same-byte
 WASM inspector. At most 64 exact direct nested-table boundaries may replace
 their original table-wide diagnostic with source-positioned omission placeholders,

@@ -3194,7 +3194,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "createNativeDocxReviewInventoryV1",
@@ -3325,6 +3325,11 @@
               "name": "DecodeNativeDocxPaginationSettingsResult",
               "kind": "type",
               "signature": "export type DecodeNativeDocxPaginationSettingsResult ="
+            },
+            {
+              "name": "decodeNativeDocxPartialTableTextContextsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPartialTableTextContextsV1(source: unknown, resolvedValue: unknown, input: unknown): NativeDocxPartialTableTextContextV1[]"
             },
             {
               "name": "decodeNativeDocxProseMirrorTransactionJsonV1",
@@ -4287,6 +4292,11 @@
               "signature": "export interface NativeDocxPartialSourceV1"
             },
             {
+              "name": "NativeDocxPartialTableTextContextV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxPartialTableTextContextV1"
+            },
+            {
               "name": "NativeDocxPassthroughPartV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPassthroughPartV1"
@@ -4880,7 +4890,7 @@
             {
               "name": "createNativeDocxPartialContentPreviewV1",
               "kind": "function",
-              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown): NativeDocxPartialContentV1"
+              "signature": "export declare function createNativeDocxPartialContentPreviewV1(value: unknown, options: { policy: typeof DOCX_PARTIAL_CONTENT_POLICY; read_only: true; comment_policy?: 'source-comment-inventory-v1'; }, resolvedValue?: unknown, nestedEvidence?: unknown, tableTextEvidence?: unknown): NativeDocxPartialContentV1"
             },
             {
               "name": "createNativeDocxReviewInventoryV1",
@@ -4906,6 +4916,11 @@
               "name": "decodeNativeDocxNestedTableOmissionsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxNestedTableOmissionsV1(source: unknown, input: unknown): NativeDocxNestedTableOmissionsV1"
+            },
+            {
+              "name": "decodeNativeDocxPartialTableTextContextsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxPartialTableTextContextsV1(source: unknown, resolvedValue: unknown, input: unknown): NativeDocxPartialTableTextContextV1[]"
             },
             {
               "name": "decodeNativeDocxProseMirrorTransactionJsonV1",
@@ -5146,6 +5161,11 @@
               "name": "NativeDocxPartialSourceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPartialSourceV1"
+            },
+            {
+              "name": "NativeDocxPartialTableTextContextV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxPartialTableTextContextV1"
             },
             {
               "name": "NativeDocxPassthroughPartV1",

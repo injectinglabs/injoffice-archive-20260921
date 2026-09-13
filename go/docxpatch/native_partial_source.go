@@ -47,17 +47,22 @@ func InspectNativePartialSourceV1(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	tableContexts, err := inspectNativePartialTableTextContexts(data, document, layout)
+	if err != nil {
+		return nil, err
+	}
 	result, err := json.Marshal(struct {
-		ReviewChanges          *NativePartialReviewV1          `json:"review_changes,omitempty"`
-		Protocol               string                          `json:"protocol"`
-		Version                int                             `json:"version"`
-		PackageSHA256          string                          `json:"package_sha256"`
-		Document               json.RawMessage                 `json:"document"`
-		ResolvedLayout         json.RawMessage                 `json:"resolved_layout"`
-		Equations              []NativePartialEquationV1       `json:"equations,omitempty"`
-		EquationContextNotices []NativeEquationContextNoticeV1 `json:"equation_context_notices,omitempty"`
-		NestedTableOmissions   *NativePartialNestedTablesV1    `json:"nested_table_omissions,omitempty"`
-	}{review, "injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations, notices, nestedTables})
+		TableTextContexts      []NativePartialTableTextContextV1 `json:"table_text_contexts,omitempty"`
+		ReviewChanges          *NativePartialReviewV1            `json:"review_changes,omitempty"`
+		Protocol               string                            `json:"protocol"`
+		Version                int                               `json:"version"`
+		PackageSHA256          string                            `json:"package_sha256"`
+		Document               json.RawMessage                   `json:"document"`
+		ResolvedLayout         json.RawMessage                   `json:"resolved_layout"`
+		Equations              []NativePartialEquationV1         `json:"equations,omitempty"`
+		EquationContextNotices []NativeEquationContextNoticeV1   `json:"equation_context_notices,omitempty"`
+		NestedTableOmissions   *NativePartialNestedTablesV1      `json:"nested_table_omissions,omitempty"`
+	}{tableContexts, review, "injoffice.docx.partial-source", 1, document.Source.PackageSHA256, docJSON, layoutJSON, equations, notices, nestedTables})
 	if err != nil {
 		return nil, err
 	}
