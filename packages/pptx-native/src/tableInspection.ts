@@ -4,9 +4,9 @@ import { assertNativePptx } from './validate'
 export interface NativePptxInspectionRect { x: number; y: number; width: number; height: number }
 export interface NativePptxInspectedCell { row: number; column: number; rect: NativePptxInspectionRect; paragraphs: string[] }
 export interface NativePptxTablePaint {
-  policy: 'source-no-style-solid-border-v1'; style_id: string
+  policy: 'source-no-style-solid-border-v1' | 'source-no-style-preset-border-v1'; style_id: string
   sources: {part_name:string;sha256:string}[]
-  fill: 'none'; border: {color:string;width_emu:number}|null
+  fill: 'none'; border: {color:string;width_emu:number;preset?:keyof typeof presetDashUnits}|null
 }
 export interface NativePptxInspectedTable {
   slide_id: string; slide_index: number; part_name: string; part_sha256: string; slide_source_sha256: string
@@ -149,10 +149,10 @@ export interface NativePptxTableGeometryCell {
 export interface NativePptxTableGeometrySlide {
   slideId: string; slideIndex: number; sourceBounds: NativePptxInspectionRect
   width: number; height: number
-  tables: { objectId: string; tableIndex: number; rect: NativePptxInspectionRect; cells: NativePptxTableGeometryCell[]; paint?: NativePptxTablePaint }[]
+  tables: { objectId: string; tableIndex: number; rect: NativePptxInspectionRect; cells: NativePptxTableGeometryCell[]; paint?: NativePptxTablePaint; dashArray?: number[] }[]
 }
 export interface NativePptxTableGeometryPreview {
-  paintPolicy?: 'source-no-style-solid-border-v1'; paintOmissions?: {slideId:string;tableIndex:number;reason:string}[]
+  paintPolicy?: NativePptxTablePaint['policy']; paintOmissions?: {slideId:string;tableIndex:number;reason:string}[]
   policy: 'host-sans-12pt-clipped-v1'; packageSHA256: string; sourceRevision: string
   cssPixelsPerInch: 96; fontSize: 16; lineHeight: 20; inset: 2
   slides: NativePptxTableGeometrySlide[]
@@ -166,14 +166,15 @@ export interface NativePptxTableGeometryPreview {
 export function createNativePptxTableGeometryPreview(
   inspection: NativePptxTableInspection,
   policy: 'host-sans-12pt-clipped-v1',
-  paintOptions?: {policy:'source-no-style-solid-border-v1'},
+  paintOptions?: {policy:NativePptxTablePaint['policy']},
 ): NativePptxTableGeometryPreview {
   if (!admittedInspections.has(inspection) || policy !== 'host-sans-12pt-clipped-v1') {
     throw new TypeError('Table geometry preview requires a source-validated inspection and explicit host text policy.')
   }
-  if(paintOptions!==undefined&&object(paintOptions,'policy').policy!=='source-no-style-solid-border-v1')return fail()
+  if(paintOptions!==undefined&&!isPaintPolicy(object(paintOptions,'policy').policy))return fail()
+  const eligible=(table:NativePptxInspectedTable)=>!!table.paint&&(paintOptions?.policy==='source-no-style-preset-border-v1'||table.paint.policy==='source-no-style-solid-border-v1')
   const paintOmissions:{slideId:string;tableIndex:number;reason:string}[]=[]
-  if(paintOptions)inspection.tables.forEach((t,tableIndex)=>{if(!t.paint)paintOmissions.push({slideId:t.slide_id,tableIndex,reason:'Table paint is outside the source-qualified one-cell no-fill and uniform solid-border profile; inspection guides remain.'})})
+  if(paintOptions)inspection.tables.forEach((t,tableIndex)=>{if(!eligible(t))paintOmissions.push({slideId:t.slide_id,tableIndex,reason:'Table paint is outside the source-qualified one-cell no-fill and uniform border profile for the selected paint policy; inspection guides remain.'})})
   const slides: NativePptxTableGeometrySlide[] = []
   const omissions = inspection.omissions.map(o => ({...o}))
   const toPixels = (r: NativePptxInspectionRect): NativePptxInspectionRect => ({x:r.x/9525,y:r.y/9525,width:r.width/9525,height:r.height/9525})
@@ -189,19 +190,19 @@ export function createNativePptxTableGeometryPreview(
       continue
     }
     slides.push({slideId,slideIndex:tables[0]!.slide_index,sourceBounds:{x,y,width,height},width:width/9525,height:height/9525,
-      tables:tables.map(table => ({objectId:table.object_id,tableIndex:inspection.tables.indexOf(table),...(paintOptions&&table.paint?{paint:table.paint}:{}),
+      tables:tables.map(table => ({objectId:table.object_id,tableIndex:inspection.tables.indexOf(table),...(paintOptions&&eligible(table)?{paint:table.paint,...(table.paint?.border?.preset?{dashArray:presetDashUnits[table.paint.border.preset].map(n=>n*table.paint!.border!.width_emu/9525)}:{})}:{}),
         rect:toPixels({...table.rect,x:table.rect.x-x,y:table.rect.y-y}),
         cells:table.cells.map(cell=>({row:cell.row,column:cell.column,rect:toPixels(cell.rect),paragraphs:[...cell.paragraphs]})),
       })),
     })
   }
   return freezeInspection({policy,packageSHA256:inspection.package_sha256,sourceRevision:inspection.source_revision,
-    cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,slides,omissions,...(paintOptions?{paintPolicy:'source-no-style-solid-border-v1' as const,paintOmissions}:{})})
+    cssPixelsPerInch:96,fontSize:16,lineHeight:20,inset:2,slides,omissions,...(paintOptions?{paintPolicy:paintOptions.policy,paintOmissions}:{})})
 }
 
 function decodeTablePaint(input:unknown):NativePptxTablePaint {
  const p=object(input,'policy style_id sources fill border')
- if(p.policy!=='source-no-style-solid-border-v1'||p.fill!=='none'||typeof p.style_id!=='string'||!/^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$/.test(p.style_id))return fail()
+ if(!isPaintPolicy(p.policy)||p.fill!=='none'||typeof p.style_id!=='string'||!/^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$/.test(p.style_id))return fail()
  const rawSources=array(p.sources,4),seen=new Set<string>()
  if(rawSources.length!==4)return fail()
  const sources=rawSources.map(value=>{const v=object(value,'part_name sha256'),part_name=text(v.part_name,1024),sha256=hash(v.sha256)
@@ -209,6 +210,17 @@ function decodeTablePaint(input:unknown):NativePptxTablePaint {
   seen.add(part_name);return {part_name,sha256}
  })
  let border:NativePptxTablePaint['border']=null
- if(p.border!==null){const b=object(p.border,'color width_emu');if(typeof b.color!=='string'||! /^[0-9A-F]{6}$/.test(b.color))return fail();border={color:b.color,width_emu:integer(b.width_emu,1,127000)}}
- return {policy:'source-no-style-solid-border-v1',style_id:p.style_id,sources,fill:'none',border}
+ if(p.border!==null){const b=object(p.border,p.policy==='source-no-style-preset-border-v1'?'color width_emu preset':'color width_emu');if(typeof b.color!=='string'||! /^[0-9A-F]{6}$/.test(b.color))return fail();if(p.policy==='source-no-style-preset-border-v1'&&(typeof b.preset!=='string'||!Object.hasOwn(presetDashUnits,b.preset)))return fail();border={color:b.color,width_emu:integer(b.width_emu,1,127000),...(p.policy==='source-no-style-preset-border-v1'?{preset:b.preset as keyof typeof presetDashUnits}:{})}}
+ if(p.policy==='source-no-style-preset-border-v1'&&!border)return fail()
+ return {policy:p.policy,style_id:p.style_id,sources,fill:'none',border}
+}
+
+// ECMA-376 Part 1 (2016), 20.1.10.49: alternating painted/gap line-width units.
+// The preview explicitly chooses a zero-phase clockwise closed rectangle.
+const presetDashUnits = {
+ dash:[4,3],dashDot:[4,3,1,3],dot:[1,3],lgDash:[8,3],lgDashDot:[8,3,1,3],
+ lgDashDotDot:[8,3,1,3,1,3],sysDash:[3,1],sysDashDot:[3,1,1,1],sysDashDotDot:[3,1,1,1,1,1],sysDot:[1,1],
+} as const
+function isPaintPolicy(value:unknown):value is NativePptxTablePaint['policy'] {
+ return value==='source-no-style-solid-border-v1'||value==='source-no-style-preset-border-v1'
 }

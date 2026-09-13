@@ -10,8 +10,8 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
  const [arrangement,setArrangement]=useState<{source:NativePptxTableInspection;preview:NativePptxTableGeometryPreview}|null>(null)
  const [geometryError,setGeometryError]=useState('')
  const current=arrangement?.source===inspection?arrangement.preview:null
- function showArrangement(sourcePaint=false){
-  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1',sourcePaint?{policy:'source-no-style-solid-border-v1'}:undefined)});setGeometryError('')}
+ function showArrangement(sourcePaint=false,includeDashes=false){
+  try{setArrangement({source:inspection,preview:createNativePptxTableGeometryPreview(inspection,'host-sans-12pt-clipped-v1',sourcePaint?{policy:includeDashes?'source-no-style-preset-border-v1':'source-no-style-solid-border-v1'}:undefined)});setGeometryError('')}
   catch{setArrangement(null);setGeometryError('Source-positioned preview unavailable. The source text and inspection limits remain available.')}
  }
  return <article aria-label="Read-only presentation table text" className="pptx-table-text-result">
@@ -20,6 +20,7 @@ export function NativePptxTableTextResult({inspection}:{inspection:NativePptxTab
   {!!inspection.tables.length&&<DsButton onClick={()=>current?setArrangement(null):showArrangement()}>{current?'Hide source-positioned table preview':'Show approximate source-positioned table preview'}</DsButton>}
   {geometryError&&<p role="status">{geometryError}</p>}
   {current&&<DsButton onClick={()=>showArrangement(!current.paintPolicy)}>{current.paintPolicy?'Use inspection guides only':'Preview qualified source border paint'}</DsButton>}
+  {current?.paintPolicy&&<DsButton onClick={()=>showArrangement(true,current.paintPolicy!=='source-no-style-preset-border-v1')}>{current.paintPolicy==='source-no-style-preset-border-v1'?'Use solid borders only':'Include source preset dashes'}</DsButton>}
   {current&&<NativePptxTableGeometry preview={current} readingId={readingId}/>}
   {inspection.tables.map((table,index)=>{
    const rows=Array.from(new Set(table.cells.map(cell=>cell.row)))
