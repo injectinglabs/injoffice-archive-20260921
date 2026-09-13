@@ -85,6 +85,12 @@ func nativeChartAxisPaint(node *nativeXMLNode, d nativeExtractDialect) (string, 
 	return "#" + strings.ToUpper(color), width, true
 }
 func extractNativeChartAxis(node *nativeXMLNode, d nativeExtractDialect, valueAxis bool) (*nativeChartAxis, bool) {
+	return extractNativeChartAxisWithCrossBetween(node, d, valueAxis, true)
+}
+
+// Scatter axes have no category midpoint/boundary setting. This private policy
+// leaves the existing bar profile grammar unchanged.
+func extractNativeChartAxisWithCrossBetween(node *nativeXMLNode, d nativeExtractDialect, valueAxis, requireBetween bool) (*nativeChartAxis, bool) {
 	c := nativeChartChildren(node, d.chart)
 	axis := &nativeChartAxis{}
 	var ok bool
@@ -157,8 +163,10 @@ func extractNativeChartAxis(node *nativeXMLNode, d nativeExtractDialect, valueAx
 		if err != nil || !cross.isZero() {
 			return nil, false
 		}
-		if _, ok := nativeChartToken(c.take("crossBetween"), "between"); !ok {
-			return nil, false
+		if requireBetween {
+			if _, ok := nativeChartToken(c.take("crossBetween"), "between"); !ok {
+				return nil, false
+			}
 		}
 	} else {
 		if _, ok := nativeChartToken(c.take("crosses"), "min"); !ok {

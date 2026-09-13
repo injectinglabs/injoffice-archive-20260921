@@ -1,0 +1,19 @@
+# Source literal line and XY scatter previews
+
+This milestone is being integrated. The dedicated parsers and vector helpers qualify straight connected line charts and connected XY scatter charts. Native source attachment, public contract and opt-in compiler/demo integration are serialized after the preset-catalog lane; this document is not a declaration that the current public API already exposes them.
+
+The bounded source profile requires explicit standard 2D line grouping or scatter style `line`, explicit no markers and no smoothing, complete local solid RGB flat-cap/round-join series lines, and reciprocal explicit axes. Source literal number spelling and point indices are retained. Category line points bind indexed string categories; XY scatter binds explicit indexed numeric x and y arrays. Scatter follows source index order, including duplicate and decreasing x values. It never sorts points or turns them into categories.
+
+Each chart supports 1–16 series and 1–256 points per series. Literal decimals use the existing 128-byte, 32-mantissa-digit and exponent [-100,100] budget. Category strings total at most 32,768 UTF-16 units and each optional literal series title at most 1,024 units. Unsupported encoded category/title escapes, references, caches, sparse/missing/error data, automatic scales, logarithmic/date/secondary axes, smoothing, markers, per-point styles, error bars and trend lines refuse the whole profile.
+
+Line category axes explicitly use between-category crossing and increasing/reversed source orientation. Numeric axes explicitly set finite min/max including zero and zero crossings. Axes are explicitly deleted or carry complete local no-label/no-tick solid line styles. Labels shown in a separate host source-data table do not pretend to be source slide labels.
+
+Segments are intersected with the explicit plot rectangle using exact rational arithmetic. Endpoint clamping is insufficient: for a segment from (-1,0) to (1,1) against the unit plot, the entry is (0,0.5), rather than (0,0). Only after clipping are endpoints mapped to the host frame and rounded once to integer EMU. Source reversals apply before rounding. Point order and original numeric lexemes are unchanged.
+
+A continuous visible source polyline remains one stroked subpath with source round joins. When a line leaves and re-enters the plot, its visible pieces are separate subpaths; no synthetic bridge or boundary join is added. Every source series retains its identity and the indices of visible source segments. A singleton series has no segment and no invented marker. Source zero-length or tangent segments may paint no area with a flat cap.
+
+At most 255 segments per series require at most 510 path commands, below the existing 512 limit. Exact rational numerators/denominators are independently limited to 4,096 bits; bounded source decimals and one clipping calculation per segment stay comfortably within that limit. No renderer budget increase is needed. Host plot fitting and centerline clipping remain openly described preview policies; half-stroke thickness can extend beyond the fitted plot edge.
+
+Next required work includes supplied-font tick/category/title typography, explicit number-format support, automatic scales, stacked/percent-stacked series, authoritative workbook data and further chart families. These remain active completion-matrix rows.
+
+Primary basis: ECMA-376 Part 1 CT_LineChart/CT_LineSer/CT_ScatterChart/CT_ScatterSer and §21.2.2.194. Microsoft's [line chart API](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.charts.linechart?view=openxml-3.0.1) and [scatter style definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.charts.scatterstyle?view=openxml-3.0.1) mirror these source distinctions. Smoothing means Catmull-Rom interpolation and is not silently represented by straight segments.
