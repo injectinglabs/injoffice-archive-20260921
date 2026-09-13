@@ -17,6 +17,26 @@ const streams = (doc: PDFDocument) => doc.getForm().getField('choice').acroField
 });
 
 describe('explicit choice appearances', () => {
+  it.each(['Helvetica', 'Times-Roman', 'Courier'] as const)('keeps centered dropdown descenders inside the clip with %s', async fontName => {
+    const { doc, field } = await fixture();
+    field.acroField.setOptions([{ value: PDFHexString.fromText('gqy') }]);
+    const font = doc.embedStandardFont(fontName);
+    const ascent = font.heightAtSize(12, { descender: false });
+    const descent = font.heightAtSize(12) - ascent;
+    const required = Math.max(font.heightAtSize(12) * 1.2, ascent + 2 * descent);
+    const widget = field.acroField.getWidgets()[0]!;
+    widget.getBorderStyle()!.setWidth(0);
+    widget.setRectangle({ x: 10, y: 10, width: 100, height: required + 2 - 0.01 });
+    const source = await doc.save({ updateFieldAppearances: false });
+    const rejected = await applyFormValues(source, [{ name: 'choice', kind: 'choice', value: 'gqy' }], { choiceAppearance: { font: fontName } });
+    expect(rejected.applied).toBe(0); expect(rejected.bytes).toBe(source);
+    widget.setRectangle({ x: 10, y: 10, width: 100, height: required + 2 + 0.01 });
+    const accepted = await applyFormValues(await doc.save({ updateFieldAppearances: false }), [{ name: 'choice', kind: 'choice', value: 'gqy' }], { choiceAppearance: { font: fontName } });
+    expect(accepted.applied).toBe(1);
+    const baseline = Number(streams(await PDFDocument.load(accepted.bytes))[0]!.match(/1 0 0 1 [\d.]+ ([\d.]+) Tm/)![1]);
+    expect(baseline - descent).toBeGreaterThanOrEqual(1);
+  });
+
   it.each([-270, -90, 360, 450])('refuses noncanonical widget rotation %s before changing values', async rotation => {
     const { doc, field } = await fixture();
     field.acroField.setOptions([{ value: PDFHexString.fromText('ABCDEFGHIJK') }]);

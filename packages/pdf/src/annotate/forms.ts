@@ -107,7 +107,7 @@ function qualifyChoiceAppearance(doc: PDFDocument, field: PDFDropdown | PDFOptio
     // The list provider positions the final baseline one line-height below the
     // preceding one. Reserve descent below that baseline as well as each line.
     const descent = font.heightAtSize(12) - font.heightAtSize(12, { descender: false })
-    const requiredHeight = field instanceof PDFOptionList ? choices.length * lineHeight + descent : lineHeight
+    const requiredHeight = field instanceof PDFOptionList ? choices.length * lineHeight + descent : Math.max(lineHeight, font.heightAtSize(12, { descender: false }) + 2 * descent)
     if ([...labels].some(label => font.widthOfTextAtSize(label, 12) > innerWidth) || requiredHeight > innerHeight) throw new Error('choice options do not fit the explicit 12pt appearance policy')
   }
   if (field instanceof PDFOptionList && field.acroField.dict.has(PDFName.of('TI'))) throw new Error('choice appearances with authored list scrolling are unsupported')
