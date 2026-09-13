@@ -122,16 +122,22 @@ The implementation uses pdf-lib's documented
 For an explicitly supplied embedded font, pass `textAppearance: { fontBytes }`
 instead of `{ font: 'Helvetica' }`. `fontBytes` is a `Uint8Array` containing a
 standalone, fixed TrueType outline face (up to 16 MiB). The saved PDF contains a
-subset font program and Unicode mapping; reopening does not require that font
-to be installed. The playground offers a local TrueType file picker for this mode.
+complete font program and source-semantic Unicode mappings; reopening does not
+require that font to be installed. The playground offers a local TrueType picker.
 
-This first embedded profile accepts up to 4,096 UTF-16 units of independent
-horizontal Unicode glyphs: covered Latin, Greek, Cyrillic, CJK, numbers,
-punctuation and symbols. Combining marks, RTL/contextual scripts, missing
-glyphs, glyph aliases that cannot retain distinct Unicode mappings, variable
-and color fonts, and glyph positioning outside simple advances are refused.
-Kerning and discretionary ligatures are disabled. The plain-field ownership
-guards, source preservation and fixed-size clipping limits above still apply.
-This is an explicit font replacement, not general Unicode shaping or original
-form typography preservation. Fonts are parsed locally and loaded lazily using
-pdf-lib's documented [custom font embedding API](https://pdf-lib.js.org/docs/api/classes/pdfdocument#embedfont).
+This LTR cluster profile accepts up to 4,096 UTF-16 units of covered Latin,
+Greek, Cyrillic and East Asian text, numbers, punctuation and symbols. HarfBuzz
+positions combining marks and ordinary ligatures, retaining exact source `/V`.
+Distinct source strings sharing a glyph receive distinct CIDs. Unpartitionable
+continuation glyphs use exact font outlines so reader extraction does not invent
+characters; those outlines do not receive TrueType hinting. Auto-sized marks
+fit positioned ink bounds; explicitly fixed sizes can still clip.
+
+Bidi/Arabic/Hebrew, other contextual scripts and cross-script-specific combining
+marks remain subsequent milestones. Missing glyphs, invalid paths/metrics,
+unsupported font formats and resource limits produce explicit refusal. A single
+unpartitionable cluster may use at most 256 UTF-16 units (the PDF ToUnicode
+512-byte destination limit). Existing ownership, source-preservation and mixed
+standard-choice guards remain in force. This explicitly replaces the original
+font. See [Unicode shaping and extraction policy](../../docs/PDF-UNICODE-SHAPING.md)
+for the current scope, reader behavior and remaining work.
