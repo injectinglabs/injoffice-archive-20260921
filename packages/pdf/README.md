@@ -125,16 +125,14 @@ standalone, fixed TrueType outline face (up to 16 MiB). The saved PDF contains a
 complete font program and source-semantic Unicode mappings; reopening does not
 require that font to be installed. The playground offers a local TrueType picker.
 
-This single-line cluster profile accepts up to 4,096 UTF-16 units of covered Latin,
-Greek, Cyrillic, Arabic, Hebrew and East Asian text, numbers, punctuation and symbols. Unicode 17 bidi resolution handles mixed direction text, digits, brackets and isolates. Optional `direction` (`auto`, `ltr`, `rtl`) and `language` (default `und`) configure shaping. HarfBuzz
+This single-line cluster profile accepts up to 4,096 UTF-16 units of Unicode text covered by the supplied font and HarfBuzz. Unicode 17 script extensions and grapheme segmentation preserve contextual script clusters. Unicode 17 bidi resolution handles mixed direction text, digits, brackets and isolates. Optional `direction` (`auto`, `ltr`, `rtl`) and `language` (default `und`) configure shaping. HarfBuzz
 positions combining marks and ordinary ligatures, retaining exact source `/V`.
 Distinct source strings sharing a glyph receive distinct CIDs. Unpartitionable
 continuation glyphs use exact font outlines so reader extraction does not invent
 characters; those outlines do not receive TrueType hinting. Generic readers may reorder RTL extraction (including lam-alef) despite exact `/V`, ToUnicode and ActualText. Auto-sized RTL and marks
 fit positioned ink bounds; explicitly fixed sizes can still clip.
 
-Other contextual scripts and cross-script-specific combining
-marks remain subsequent milestones. Missing glyphs, invalid paths/metrics,
+Practical collection/CFF font packaging and explicit font fallback remain subsequent milestones. Missing glyphs, invalid paths/metrics,
 unsupported font formats and resource limits produce explicit refusal. A single
 unpartitionable cluster may use at most 256 UTF-16 units (the PDF ToUnicode
 512-byte destination limit). Existing ownership, source-preservation and mixed
