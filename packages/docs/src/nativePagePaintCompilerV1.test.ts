@@ -2358,8 +2358,15 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(active.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [], sections: [] }))
   })
 
-  it('lazily shapes and paints source-bound endnote continuation with a full-width rule', async () => {
+  it.each(['endnote', 'footnote'] as const)('lazily shapes and paints source-bound %s continuation with a full-width rule', async (kind) => {
     const input = continuedEndnotePaintFixture()
+    if (kind === 'footnote') {
+      const replace = (text: string) => text.replaceAll('endnote', 'footnote').replaceAll('Endnote', 'Footnote')
+      input.document = JSON.parse(replace(JSON.stringify(input.document)))
+      input.resolved_layout = JSON.parse(replace(JSON.stringify(input.resolved_layout)))
+      input.font_inventory_json = replace(input.font_inventory_json)
+      rewriteInventory(input, inventory => { for (const reference of inventory.references) reference.scope_ids.sort() })
+    }
     const before = structuredClone(input)
     const prepared = await prepareNativeDocxPagePaintV1(input)
     const layout = prepared.page_paint_request.paginated_layout

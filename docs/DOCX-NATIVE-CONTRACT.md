@@ -599,6 +599,18 @@ separator even when moved to a fresh page; only later slices of the same note
 use the source-bound continuation sentinel. Custom continuation notices remain
 unsupported source semantics.
 
+Footnote continuation also admits one content footnote in one single-column
+section, with paragraph-only body content and its reference on the final body
+page. It uses the same complete-paragraph constraints as endnote continuation.
+The first paragraph and ordinary separator must fit below the existing body
+on the reference page. Complete note paragraphs fill the available note area;
+remaining paragraphs continue onto note-only pages with the authored
+continuation separator. Every footnote slice is aligned to the page body bottom.
+The source label appears only in its original paragraph. Missing or unsupported
+activated separators, an oversized paragraph, and any failed replay discard
+all pages. Carried footnotes competing with later body pages, multiple continued
+notes, and within-paragraph splits remain outside this profile.
+
 Slices retain the existing page/story placement IDs and full source line
 identities. Content lines and the original label occur exactly once across
 all pages; no label, paragraph, or separator is synthesized. Request-bound

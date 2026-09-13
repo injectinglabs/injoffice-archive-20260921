@@ -697,7 +697,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   if (!paginated.ok) failIssues('native pagination failed validation', paginated.issues)
   if (continuationPass === 0 && paginated.value.status === 'refused') {
     const activation = paginated.value.diagnostics.find((entry) => entry.code === 'note-continuation-shaping-required')
-    const sentinel = activation && fieldDocument.notes.find((story) => story.id === activation.scope_id && story.kind === 'endnote' && story.note_role === 'continuation-separator')
+    const sentinel = activation && fieldDocument.notes.find((story) => story.id === activation.scope_id && (story.kind === 'endnote' || story.kind === 'footnote') && story.note_role === 'continuation-separator')
     if (sentinel?.blocks.length === 1 && sentinel.blocks[0]?.paragraph) {
       paragraphWidths.set(sentinel.blocks[0].paragraph.id, dimensions.width)
       continue
