@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/notofonts/noto-cjk",
+  "commit": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+  "path": "Sans/SubsetOTF/JP/NotoSansJP-Regular.otf",
+  "sourceSha256": "dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073",
+  "license": "NotoCJK-OFL.txt",
+  "licenseSha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+  "generator": "node scripts/generate-pdf-cff-fixture.mjs /path/to/pinned/NotoSansJP-Regular.otf",
+  "subsetFont": "2.7.0",
+  "harfbuzzjs": "0.10.3",
+  "subsetWasmSha256": "3a5d246b0e4c0017084775e9f2c7fce96e45d09b1a354fd9e2e440c88fb9890d",
+  "text": "Aé é Ω 日本語かなカナ",
+  "options": {
+    "targetFormat": "truetype",
+    "glyphNames": true
+  },
+  "glyphs": 24,
+  "fontDictionaries": 8,
+  "sha256": "acb6751700c879536d79e083c645a33c506760fa04e2223e089935b02fb90fcd"
+}
