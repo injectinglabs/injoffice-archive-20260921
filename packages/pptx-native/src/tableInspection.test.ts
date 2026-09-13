@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { NativePptxDeck } from './types'
-import { decodeNativePptxTableInspection, type NativePptxTableInspection } from './tableInspection'
+import { decodeNativePptxTableInspection, createNativePptxTableGeometryPreview, type NativePptxTableInspection } from './tableInspection'
 
 const sha = 'a'.repeat(64)
 function fixture() {
@@ -71,5 +71,38 @@ describe('read-only source-bound PPTX table decoder', () => {
     const other = fixture()
     Object.assign(other.input.tables[0]!, { passthrough: [] })
     expect(() => decodeNativePptxTableInspection(other.input, other.deck, sha)).toThrow()
+  })
+})
+
+
+describe('source-positioned table geometry preview', () => {
+  it('requires decoder-bound immutable source and explicit policy', () => {
+    const {deck,input}=fixture()
+    expect(()=>createNativePptxTableGeometryPreview(input,'host-sans-12pt-clipped-v1')).toThrow()
+    const admitted=decodeNativePptxTableInspection(input,deck,sha)
+    expect(()=>createNativePptxTableGeometryPreview(admitted,'other' as never)).toThrow()
+    expect(()=>{admitted.tables[0]!.rect.x=20}).toThrow()
+    expect(()=>createNativePptxTableGeometryPreview(structuredClone(admitted),'host-sans-12pt-clipped-v1')).toThrow()
+    const preview=createNativePptxTableGeometryPreview(admitted,'host-sans-12pt-clipped-v1')
+    expect(preview).toMatchObject({packageSHA256:sha,sourceRevision:`rev-${sha}`,fontSize:16,lineHeight:20,inset:2,cssPixelsPerInch:96})
+    expect(preview.slides[0]).toMatchObject({sourceBounds:{x:-1,y:2,width:100,height:200},width:100/9525,height:200/9525})
+    expect(preview.slides[0]!.tables[0]!.cells[0]!.paragraphs).toEqual(['Plain <text> 😀',''])
+    expect(Object.isFrozen(preview.slides[0]!.tables[0]!.cells[0]!.paragraphs)).toBe(true)
+    expect(JSON.stringify(preview)).not.toContain('passthrough')
+  })
+  it('retains source displacement and overlap rather than repositioning tables into a grid',()=>{
+    const {deck,input}=fixture(), second=structuredClone(input.tables[0]!)
+    second.object_id='cNvPr-124';second.source_sha256='e'.repeat(64);second.rect.x=49;second.rect.y=52
+    deck.slides[0]!.passthrough.push({...deck.slides[0]!.passthrough[0]!,token:'other',fingerprintSha256:second.source_sha256})
+    input.tables.push(second)
+    const preview=createNativePptxTableGeometryPreview(decodeNativePptxTableInspection(input,deck,sha),'host-sans-12pt-clipped-v1')
+    expect(preview.slides[0]!.tables[1]!.rect).toEqual({x:50/9525,y:50/9525,width:100/9525,height:200/9525})
+    expect(preview.slides[0]!.sourceBounds).toEqual({x:-1,y:2,width:150,height:250})
+  })
+  it('omits an oversized arrangement as a whole with a visible reason',()=>{
+    const {deck,input}=fixture();input.tables[0]!.rect.width=1_000_000_000;input.tables[0]!.cells[0]!.rect.width=1_000_000_000
+    const preview=createNativePptxTableGeometryPreview(decodeNativePptxTableInspection(input,deck,sha),'host-sans-12pt-clipped-v1')
+    expect(preview.slides).toEqual([])
+    expect(preview.omissions[0]!.reason).toContain('16384 CSS pixel')
   })
 })

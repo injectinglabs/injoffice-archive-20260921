@@ -8,3 +8,10 @@
 .pptx-table-text-scroll p { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pptx-table-text-result details { margin-top: .75rem; }
 .pptx-table-text-result details p { overflow-wrap: anywhere; }
+.pptx-table-geometry { margin-block: 1rem; }
+.pptx-table-geometry-scroll { max-width: 100%; max-height: 36rem; overflow: auto; border: 1px solid var(--ds-line); background: var(--ds-surface, white); }
+.pptx-table-geometry-plane { position: relative; isolation: isolate; }
+.pptx-table-geometry-frame { position: absolute; }
+.pptx-table-geometry-cell { position: absolute; box-sizing: border-box; overflow: hidden; outline: 1px dashed var(--ds-text-muted, #666); outline-offset: -1px; font-family: sans-serif; font-weight: normal; font-style: normal; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ds-text, #111); }
+.pptx-table-geometry-cell p { margin: 0; padding: 0; font: inherit; line-height: inherit; }
+.pptx-table-geometry-links { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-bottom: 1rem; }

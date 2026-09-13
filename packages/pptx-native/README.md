@@ -78,3 +78,26 @@ normalized to this subset; it is an element-scoped capability-backed refusal.
 
 See [`docs/PPTX-NATIVE-CONTRACT.md`](../../docs/PPTX-NATIVE-CONTRACT.md) for
 identity, passthrough, compatibility, canonical JSON, and WireDeck migration rules.
+
+### Source-positioned table inspection
+
+`createNativePptxTableGeometryPreview(inspection, 'host-sans-12pt-clipped-v1')`
+creates a read-only arrangement plan from the immutable result of
+`decodeNativePptxTableInspection` (including `inspectTables` in the browser WASM
+client). Cloned or deserialized inputs must be decoded against their source deck
+and package hash again. The planner does not accept arbitrary geometry as source
+authority and exposes no mutation or passthrough tokens.
+
+Coordinates use 96 CSS pixels per inch. Each slide's extent is the union of its
+inspected table frames, with its original EMU origin retained; this is not a full
+slide rectangle. Positions, overlaps and cell geometry are retained. A whole
+arrangement exceeding 16384 CSS pixels in either dimension is omitted with a
+reason, without fitting or relocating individual tables. Inspection omissions
+remain present.
+
+The named host display policy is generic sans-serif 12 pt (16 CSS pixels), 20 px
+line height, 2 px inset, top-left wrapping and clipping within each stored cell.
+Hosts must disclose that fonts, styles, borders, fills, alignment and spacing are
+not authored Office paint. Keep the full reading-order text available because
+clipping can hide text. The playground exposes this through a separate explicit
+button after browser-local table inspection, without changing native rendering.

@@ -9710,6 +9710,11 @@
               "signature": "export declare const compatibilityStatusValues: readonly [\"editable\", \"preserveOnly\", \"refused\"]"
             },
             {
+              "name": "createNativePptxTableGeometryPreview",
+              "kind": "function",
+              "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1'): NativePptxTableGeometryPreview"
+            },
+            {
               "name": "decodeNativePptxTableInspection",
               "kind": "function",
               "signature": "export declare function decodeNativePptxTableInspection(input: unknown, deck: NativePptxDeck, packageSHA256: string): NativePptxTableInspection"
@@ -9863,6 +9868,21 @@
               "name": "NativePptxInspectionRect",
               "kind": "type",
               "signature": "NativePptxInspectionRect"
+            },
+            {
+              "name": "NativePptxTableGeometryCell",
+              "kind": "type",
+              "signature": "NativePptxTableGeometryCell"
+            },
+            {
+              "name": "NativePptxTableGeometryPreview",
+              "kind": "type",
+              "signature": "NativePptxTableGeometryPreview"
+            },
+            {
+              "name": "NativePptxTableGeometrySlide",
+              "kind": "type",
+              "signature": "NativePptxTableGeometrySlide"
             },
             {
               "name": "NativePptxTableInspection",
