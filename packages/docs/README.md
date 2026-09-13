@@ -873,7 +873,7 @@ uses the pinned HarfBuzz shaper and glyph outlines from the supplied regular
 TrueType face, verifies its family and actual byte digest, and returns local
 rectangle paint or an explicit refusal. There is no platform-font lookup.
 
-This first profile requires one direct inline DrawingML rectangle, identity
+The local shape profile requires one direct DrawingML rectangle, identity
 transforms, matching explicit extents, zero effect extents, explicit sRGB/no
 fill and solid/no line, explicit insets/top alignment/no autofit, and printable ASCII text with explicit regular font, size, color and en-US language.
 The original single-line profile remains supported. A second profile admits
@@ -888,6 +888,21 @@ millipoint paint conversion is exact. Unmarked whitespace, inheritance,
 unqualified wrapping, overflow, themes, effects, compatibility branches and linked/grouped
 shapes remain refused. All original native drawing diagnostics and mutation
 restrictions remain intact.
+
+Inline rectangles remain supported. A bounded floating variant also accepts
+explicit `wp:anchor` page-relative horizontal and vertical `posOffset` values,
+zero distances/effect extents, `simplePos=0` with zero simple coordinates,
+`relativeHeight=0`, `behindDoc=0`, `locked=0`, `layoutInCell=1`,
+`allowOverlap=1`, and `wrapNone`. Its optional `page_anchor` evidence records
+the `page-offset-no-wrap-v1` policy, container and offset-leaf source anchors,
+and nonnegative `x_emu`/`y_emu` values at most 127,000,000 and divisible by 127.
+These witnesses participate in the local paint input digest for single-line,
+hard-break and wrapped text. Margin/paragraph-relative positioning, alignment,
+negative offsets, other wrapping/layer policies and unknown attributes refuse.
+Coordinates follow the source [DrawingML anchor](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.wordprocessing.anchor?view=openxml-3.0.1).
+This evidence does not select a physical page, prove page containment, compose
+with body text, or remove drawing warnings; the compiler still paints only the
+local rectangle.
 
 The browser-safe `decodeNativeDocxTextboxShapePaintV1(document, evidence, index,
 output, expectedFontSHA256)` checks source geometry, path bounds and the exact
