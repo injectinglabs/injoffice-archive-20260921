@@ -1,3 +1,4 @@
+import {NativeDocxTextboxGeometry} from './NativeDocxTextboxGeometry'
 import {createNativeDocxNestedTextInventoryV1,type NativeDocxNestedTextInventoryV1,createNativeDocxTextboxInventoryV1,type NativeDocxTextboxInventoryV1} from '@injoffice/docs/native-docx'
 import {createElement,useEffect,useRef,useState} from 'react'
 import {createDocxWasmClient} from '@injoffice/docx-wasm'
@@ -69,7 +70,7 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
   }catch(reason){if(active.current===controller&&!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Partial source text could not be qualified.')}
   finally{client?.terminate();if(active.current===controller){active.current=null;setBusy(false)}}
  }
- return <section aria-label="Browser-local read-only partial text">
+ return <><NativeDocxTextboxGeometry bytes={bytes} packageDigest={packageDigest}/><section aria-label="Browser-local read-only partial text">
   <p>This optional text-only view resolves source styles in your browser. No file is uploaded, including when the editor uses server mode.</p>
   <DsButton disabled={busy} onClick={()=>void run()}>Show read-only partial text</DsButton>
   <DsButton disabled={busy} onClick={()=>void run(true)}>Show partial text with comments</DsButton>
@@ -80,5 +81,5 @@ export function NativeDocxPartialText({bytes,packageDigest}:{bytes:Uint8Array;pa
   {busy&&<p role="status">Reading source text in the browser…</p>}
   {error&&<p role="status">{error}</p>}
   {result?.source.package_sha256===packageDigest&&<><NativeDocxPartialTextView preview={result}/>{nestedText?.source.package_sha256===packageDigest&&<NativeDocxNestedTextInventoryView inventory={nestedText}/>}<NativeDocxEquationList equations={equations}/>{textboxes?.source.package_sha256===packageDigest&&<NativeDocxTextboxInventoryView inventory={textboxes}/>}{review?.source.package_sha256===packageDigest&&<NativeDocxReviewInventoryView review={review}/>}</>}
- </section>
+ </section></>
 }

@@ -49,6 +49,20 @@ export default defineConfig(async ({ command }) => {
   const plugins: Plugin[] = [react(), pdfAssets()]
   if (command === 'serve') {
     const { handlePdfNodeRequest } = await import('./pdfNodeHost.ts')
+    const { handleDocxTextboxGeometryRequest } = await import('./src/docxTextboxGeometryHost.ts')
+    plugins.push({
+      name: 'injoffice-textbox-geometry-host',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          void handleDocxTextboxGeometryRequest(req, res).then((handled) => {
+            if (!handled) next()
+          }).catch(() => {
+            if (!res.headersSent) res.writeHead(400)
+            res.end()
+          })
+        })
+      },
+    })
     const { handleAgentProposalRequest } = await import('./agentProposalHost.ts')
     plugins.push({
       name: 'injoffice-agent-proposal-host',
