@@ -199,7 +199,26 @@ export interface NativeLiteralBar {
  categoryAxis:NativeLiteralBarAxis
  valueAxis:NativeLiteralBarAxis
 }
+export interface NativeLiteralConnectedSeries {
+ index:number
+ order:number
+ title?:string
+ values:string[]
+ xValues?:string[]
+ color:string
+ widthEmu:number
+}
+/** Explicit straight source lines; categories are empty only for XY scatter. */
+export interface NativeLiteralConnected {
+ profile:'literal-line-v1'|'literal-scatter-v1'
+ dataOrigin:'literal'
+ categories:string[]
+ series:NativeLiteralConnectedSeries[]
+ xAxis:NativeLiteralBarAxis
+ yAxis:NativeLiteralBarAxis
+}
 export interface NativeOpaqueChart {
+ literalConnected?:NativeLiteralConnected
  literalBar?:NativeLiteralBar
   literalDoughnut?: NativeLiteralDoughnut
   literalPie?: NativeLiteralPie

@@ -1,16 +1,8 @@
-import type {NativeLiteralBarAxis} from '@injoffice/pptx-native'
+import type {NativeLiteralBarAxis,NativeLiteralConnected} from '@injoffice/pptx-native'
 import type {RenderPathCommand,RenderStroke} from './types.js'
 import {chartRational as r,chartRationalDecimal as decimal,chartRationalSubtract as subtract,chartRationalDivide as divide,chartRationalCompare as compare,chartRationalCoordinate as coordinate} from './chartRational.js'
 import {clipChartUnitSegment,type ChartRationalPoint} from './chartSegmentClip.js'
 
-/** Private source record pending the additive native line/scatter integration. */
-export interface LiteralConnectedRecord {
- readonly profile:'literal-line-v1'|'literal-scatter-v1'
- readonly categories:readonly string[]
- readonly series:readonly {readonly index:number;readonly order:number;readonly title?:string;readonly values:readonly string[];readonly xValues?:readonly string[];readonly color:string;readonly widthEmu:number}[]
- readonly xAxis:NativeLiteralBarAxis
- readonly yAxis:NativeLiteralBarAxis
-}
 export interface LiteralConnectedVector {readonly seriesIndex?:number;readonly segmentIndices?:readonly number[];readonly axis?:'x'|'y';readonly path:readonly RenderPathCommand[];readonly stroke:RenderStroke}
 const zero=r(0n),one=r(1n),rgb=/^#[0-9A-F]{6}$/
 function exactScale(axis:NativeLiteralBarAxis){
@@ -25,8 +17,8 @@ function validateAxis(axis:NativeLiteralBarAxis):void{
 function same(a:ChartRationalPoint,b:ChartRationalPoint):boolean{return compare(a.x,b.x)===0&&compare(a.y,b.y)===0}
 
 /** Shared implementation; source family wrappers require their exact profile. */
-export function createNativeConnectedLinePaths(chart:LiteralConnectedRecord,cx:number,cy:number):readonly LiteralConnectedVector[]{
- if(!Number.isSafeInteger(cx)||!Number.isSafeInteger(cy)||cx<1||cy<1||cx>281474976710655||cy>281474976710655||!['literal-line-v1','literal-scatter-v1'].includes(chart.profile)||chart.series.length<1||chart.series.length>16)throw new RangeError('invalid connected chart frame/profile')
+export function createNativeConnectedLinePaths(chart:NativeLiteralConnected,cx:number,cy:number):readonly LiteralConnectedVector[]{
+ if(!Number.isSafeInteger(cx)||!Number.isSafeInteger(cy)||cx<1||cy<1||cx>281474976710655||cy>281474976710655||chart.dataOrigin!=='literal'||!['literal-line-v1','literal-scatter-v1'].includes(chart.profile)||chart.series.length<1||chart.series.length>16)throw new RangeError('invalid connected chart frame/profile')
  const scatter=chart.profile==='literal-scatter-v1',xAxis=chart.xAxis,yAxis=chart.yAxis
  validateAxis(xAxis);validateAxis(yAxis)
  if(xAxis.id===yAxis.id||xAxis.crossAxisId!==yAxis.id||yAxis.crossAxisId!==xAxis.id||xAxis.position!=='b'||yAxis.position!=='l')throw new RangeError('invalid connected chart axes')
@@ -58,7 +50,7 @@ export function createNativeConnectedLinePaths(chart:LiteralConnectedRecord,cx:n
  if(!yAxis.deleted){const x=coordinate(xCross,cx,xAxis.orientation==='maxMin');vectors.push({axis:'y',path:[{kind:'moveTo',x,y:0},{kind:'lineTo',x,y:cy}],stroke:{color:yAxis.color!,widthEmu:yAxis.widthEmu!,cap:'flat',dash:'solid'}})}
  return vectors
 }
-export function createNativeLiteralLinePaths(chart:LiteralConnectedRecord,cx:number,cy:number):readonly LiteralConnectedVector[]{
+export function createNativeLiteralLinePaths(chart:NativeLiteralConnected,cx:number,cy:number):readonly LiteralConnectedVector[]{
  if(chart.profile!=='literal-line-v1')throw new RangeError('expected literal line profile')
  return createNativeConnectedLinePaths(chart,cx,cy)
 }

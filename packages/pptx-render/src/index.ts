@@ -1,3 +1,6 @@
+export {createNativeLiteralLinePaths} from './literalLine.js'
+export {createNativeLiteralScatterPaths} from './literalScatter.js'
+export type {LiteralConnectedVector} from './literalLine.js'
 export {createNativeLiteralBarPaths} from './literalBar.js'
 export type {LiteralBarVector} from './literalBar.js'
 export { createNativeLiteralDoughnutPaths } from './literalDoughnut.js'

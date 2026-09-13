@@ -146,26 +146,28 @@ func extractNativeLiteralBar(payload []byte, part string, d nativeExtractDialect
 	if source == nil {
 		return nil
 	}
-	axis := func(a nativeChartAxis, value bool) NativeLiteralBarAxis {
-		result := NativeLiteralBarAxis{ID: a.ID, CrossAxisID: a.CrossAxisID, Orientation: a.Orientation, Position: a.Position, Deleted: a.Deleted}
-		if !a.Deleted {
-			result.Color = &a.Color
-			result.WidthEMU = &a.Width
-		}
-		if value {
-			result.Min = &a.Min
-			result.Max = &a.Max
-			result.CrossesAt = &a.CrossesAt
-		}
-		return result
-	}
+
 	direction := "bar"
 	if source.Direction == "col" {
 		direction = "column"
 	}
-	result := &NativeLiteralBar{Profile: "literal-bar-v1", BarDirection: direction, Grouping: "clustered", DataOrigin: "literal", GapWidth: source.GapWidth, Overlap: 0, Categories: source.Categories, Series: []NativeLiteralBarSeries{}, CategoryAxis: axis(source.CategoryAxis, false), ValueAxis: axis(source.ValueAxis, true)}
+	result := &NativeLiteralBar{Profile: "literal-bar-v1", BarDirection: direction, Grouping: "clustered", DataOrigin: "literal", GapWidth: source.GapWidth, Overlap: 0, Categories: source.Categories, Series: []NativeLiteralBarSeries{}, CategoryAxis: nativeLiteralChartAxis(source.CategoryAxis, false), ValueAxis: nativeLiteralChartAxis(source.ValueAxis, true)}
 	for _, series := range source.Series {
 		result.Series = append(result.Series, NativeLiteralBarSeries{Index: series.Index, Order: series.Order, Title: series.Title, Values: series.Values, Colors: series.Colors})
+	}
+	return result
+}
+
+func nativeLiteralChartAxis(a nativeChartAxis, value bool) NativeLiteralBarAxis {
+	result := NativeLiteralBarAxis{ID: a.ID, CrossAxisID: a.CrossAxisID, Orientation: a.Orientation, Position: a.Position, Deleted: a.Deleted}
+	if !a.Deleted {
+		result.Color = &a.Color
+		result.WidthEMU = &a.Width
+	}
+	if value {
+		result.Min = &a.Min
+		result.Max = &a.Max
+		result.CrossesAt = &a.CrossesAt
 	}
 	return result
 }

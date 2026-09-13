@@ -1,3 +1,5 @@
+import {createNativeLiteralLinePaths} from './literalLine.js'
+import {createNativeLiteralScatterPaths} from './literalScatter.js'
 import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
 import {createNativeLiteralBarPaths} from './literalBar.js'
 import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
@@ -1926,6 +1928,19 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         return {kind:'group',...base,children}
       }
 
+      const connected=element.chart.literalConnected
+      if(connected && state.options.literalConnectedPreview===true){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalConnected`,'Connected chart vectors exceed RenderTree nesting budget')
+        state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
+        const vectors=(connected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(connected,base.bounds.cx,base.bounds.cy)
+        const children=vectors.filter(vector=>vector.path.length>0).map((vector,index)=>{
+          const path=`$.elements.${element.id}.literalConnected.${index}`
+          takeNode(state,path)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}
+        })
+        // Exact centerline clipping alone cannot contain the stroke envelope.
+        return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
+      }
       const bar=element.chart.literalBar
       if(bar && state.options.literalBarPreview===true){
         const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
@@ -1984,6 +1999,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   const lineLayoutPolicy = options.lineLayoutPolicy
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
+  if(options.literalConnectedPreview!==undefined&&typeof options.literalConnectedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalConnectedPreview','literal connected opt-in must be boolean')
   if(options.literalBarPreview!==undefined&&typeof options.literalBarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBarPreview','literal bar opt-in must be boolean')
   if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
 	if(options.inheritedTextPreview!==undefined&&typeof options.inheritedTextPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','inherited text opt-in must be boolean')

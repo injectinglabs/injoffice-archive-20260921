@@ -356,6 +356,8 @@ export interface CompileSlideOptions {
   readonly literalDoughnutPreview?: boolean
   /** Read-only literal clustered bars using explicit source scales and host frame fitting. Default off. */
   readonly literalBarPreview?: boolean
+  /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
+  readonly literalConnectedPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */

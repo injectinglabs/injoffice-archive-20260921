@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "dfeaea50f80f234b14618f7d0b7150f801228425eae3151544ec78afb98d6d49"
+const NativePPTXSchemaSHA256 = "bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -98,6 +98,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"colors", "index", "order", "title", "values"},
 		Required:   []string{"colors", "index", "order", "values"},
 	},
+	"NativeLiteralConnected": {
+		Properties: []string{"categories", "dataOrigin", "profile", "series", "xAxis", "yAxis"},
+		Required:   []string{"categories", "dataOrigin", "profile", "series", "xAxis", "yAxis"},
+	},
+	"NativeLiteralConnectedSeries": {
+		Properties: []string{"color", "index", "order", "title", "values", "widthEmu", "xValues"},
+		Required:   []string{"color", "index", "order", "values", "widthEmu"},
+	},
 	"NativeLiteralDoughnut": {
 		Properties: []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "holeSize", "profile", "values"},
@@ -107,7 +115,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalBar", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalBar", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {
