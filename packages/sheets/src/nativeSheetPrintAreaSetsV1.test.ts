@@ -62,6 +62,27 @@ describe('source-bound multi-range print areas',()=>{
   expect(()=>selectNativeSheetPrintAreaSetV1(model,'7',source)).toThrow('unavailable')
   expect(()=>compileNativeSheetPrintAreaSetPreviewV1([compile(resolved)],source)).toThrow('unavailable')
  })
+ it('plans complete mixed formula unions in source order and retains bounded whole-source provenance',()=>{
+  const areas=[{row:5,column:5,end_row:7,end_column:6},{row:5,column:1,end_row:5,end_column:1},{row:9,column:0,end_row:10,end_column:1}]
+  const {objects,model,compile,part}=fixture(areas)
+  const warnings=[
+   'Read-only print areas resolved from absolute rectangles and bounded OFFSET components in source order. Each area starts a separate approximate preview sequence.',
+   "Source _xlnm.Print_Area formula: 'Data Set'!$F$6:$G$8,OFFSET('Data Set'!$D$3,3,-2),OFFSET('Data Set'!$A$10,0,0,'Data Set'!$H$1,2)",
+   "OFFSET saved numeric argument: 'Data Set'!$H$1 = 02. Reinspect the source package after changing this cell.",
+  ]
+  objects.print_area_sets![0]!.warnings=warnings
+  const source=decodeNativeWorkbookObjectsV1(objects,objects.package_sha256)
+  const selected=selectNativeSheetPrintAreaSetV1(model,'7',source)
+  expect(selected).toEqual(areas)
+  const plan=compileNativeSheetPrintAreaSetPreviewV1(selected.map(compile),source)
+  expect(plan.total_pages).toBe(3)
+  expect(plan.areas.map(a=>a.viewport)).toEqual(areas)
+  expect(plan.areas.every(a=>a.plan.pages[0]!.number===1&&a.plan.read_only)).toBe(true)
+  expect(plan.areas.every(a=>JSON.stringify(a.plan.warnings.slice(-3))===JSON.stringify(warnings))).toBe(true)
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1([compile(areas[0]!)],source)).toThrow('complete source set')
+  source.print_area_sets=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['A later OFFSET component is unavailable.']}]
+  expect(()=>compileNativeSheetPrintAreaSetPreviewV1(selected.map(compile),source)).toThrow('unavailable')
+ })
  it('rejects overlaps, duplicate identities, empty/oversized sets and closed-shape violations',()=>{
   const entry=fixture().objects.print_area_sets![0]!
   for(const input of [[entry,entry],[{...entry,areas:[]}],[{...entry,areas:Array(17).fill(ranges[0])}],[{...entry,areas:[ranges[0],ranges[0]]}],[{...entry,areas:[ranges[0],{row:10,column:7,end_row:12,end_column:9}]}],[{...entry,status:'unavailable'}],[{...entry,extra:1}],[{...entry,areas:[{...ranges[0],extra:1}]}],[Object.assign(Object.create({extra:true}),entry)],[{...entry,warnings:['bad\nwarning']}],[{...entry,areas:[{row:-0,column:0,end_row:1,end_column:1}]}]])expect(()=>decodeNativeSheetPrintAreaSetsV1(input)).toThrow()
