@@ -85,11 +85,11 @@ func extractNativeLiteralPie(payload []byte, part string, d nativeExtractDialect
 		return nil
 	}
 	count, err := val(lit.Children[1], "ptCount", 1, 64)
-	if err != nil || int(count) != len(lit.Children)-2 || int(count) != len(ser.Children)-3 {
+	if err != nil || count != int64(len(lit.Children)-2) || count != int64(len(ser.Children)-3) {
 		return nil
 	}
 	result := &NativeLiteralPie{Profile: "literal-pie-v1", FirstSliceAngle: angle, Values: []int64{}, Colors: []string{}}
-	for i := 0; i < int(count); i++ {
+	for i := 0; i < len(lit.Children)-2; i++ {
 		pt := lit.Children[i+2]
 		if pt.Name != (xml.Name{Space: d.chart, Local: "pt"}) || requireOnlyNativeAttrs(pt, xml.Name{Local: "idx"}) != nil || requireOnlyNativeChildren(pt, xml.Name{Space: d.chart, Local: "v"}) != nil || len(pt.Children) != 1 {
 			return nil
