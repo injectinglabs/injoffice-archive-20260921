@@ -363,6 +363,8 @@ function validateElement(
   } else if (element.kind === 'chart') {
     if (element.compatibility.status !== 'preserveOnly') add(issues, `${path}.compatibility.status`, 'native.opaqueChart', 'opaque charts must be preserveOnly')
     if (element.chart.literalPie && element.chart.literalPie.values.length !== element.chart.literalPie.colors.length) add(issues, `${path}.chart.literalPie`, 'native.chartValues', 'point colors must match literal values')
+    if (element.chart.literalDoughnut && element.chart.literalDoughnut.values.length !== element.chart.literalDoughnut.colors.length) add(issues, `${path}.chart.literalDoughnut`, 'native.chartValues', 'point colors must match literal values')
+    if (element.chart.literalPie && element.chart.literalDoughnut) add(issues, `${path}.chart`, 'native.chartProfiles', 'chart cannot carry multiple literal families')
     if (element.chart.previewAssetId && !assets.has(element.chart.previewAssetId)) add(issues, `${path}.chart.previewAssetId`, 'native.assetReference', 'references an unknown asset id')
     else if (element.chart.previewAssetId && !assets.get(element.chart.previewAssetId)?.contentType.startsWith('image/')) add(issues, `${path}.chart.previewAssetId`, 'native.assetType', 'chart previews must reference an image asset')
     if (element.chart.opaqueRef.ownerPart !== element.chart.chartPart) add(issues, `${path}.chart.opaqueRef.ownerPart`, 'native.chartReference', 'must equal chartPart')

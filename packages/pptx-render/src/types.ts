@@ -23,7 +23,8 @@ export const PPTX_RENDER_TREE_VERSION = 'pptx-render-tree/v2' as const
 export const PPTX_RENDER_LIMITS = Object.freeze({
   maxDepth: 64,
   maxNodes: 250_000,
-  maxPathCommands: 256,
+  // A full two-degree annulus needs 363 commands; retain one fill path.
+  maxPathCommands: 512,
   maxPaintCommands: 1_000_000,
   maxGlyphs: 2_000_000,
   maxClusters: 2_000_000,
@@ -347,6 +348,8 @@ export interface CompileSlideOptions {
   readonly textLayout: NativePptxTextLayout
   /** Read-only saved-frame preview of explicitly marked spAutoFit projections; never resizes or qualifies Office fidelity. */
   readonly sourceFrameAutoFitPreview?: boolean
+  /** Explicit source-literal vector doughnut preview with host annular fitting and polygon arcs. */
+  readonly literalDoughnutPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */

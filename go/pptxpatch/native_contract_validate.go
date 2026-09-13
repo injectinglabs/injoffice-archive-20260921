@@ -903,6 +903,26 @@ func (v *nativeValidator) chart(chart NativeOpaqueChart, p string) {
 		}
 	}
 
+	if pie := chart.LiteralDoughnut; pie != nil {
+		if pie.Profile != "literal-doughnut-v1" || pie.HoleSize < 10 || pie.HoleSize > 90 || pie.FirstSliceAngle < 0 || pie.FirstSliceAngle > 360 || len(pie.Values) < 1 || len(pie.Values) > 64 || len(pie.Values) != len(pie.Colors) {
+			v.add(p+".literalDoughnut", "native.chartValues", "invalid literal doughnut profile")
+		}
+		for _, value := range pie.Values {
+			if value < 1 || value > 1_000_000_000 {
+				v.add(p+".literalDoughnut.values", "schema.range", "literal doughnut value outside bounds")
+			}
+		}
+		for _, color := range pie.Colors {
+			if len(color) != 7 || color[0] != '#' || !inspectionRGB.MatchString(color[1:]) || strings.ToUpper(color) != color {
+				v.add(p+".literalDoughnut.colors", "schema.pattern", "invalid literal doughnut RGB")
+			}
+		}
+	}
+
+	if chart.LiteralPie != nil && chart.LiteralDoughnut != nil {
+		v.add(p, "native.chartProfiles", "chart cannot carry multiple literal families")
+	}
+
 	v.part(chart.ChartPart, p+".chartPart")
 	if !nativeIDPattern.MatchString(chart.RelationshipID) {
 		v.add(p+".relationshipId", "schema.pattern", "has an invalid relationship id")
