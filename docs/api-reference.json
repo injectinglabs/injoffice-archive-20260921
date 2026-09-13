@@ -10117,6 +10117,16 @@
               "signature": "export interface NativeAsset"
             },
             {
+              "name": "NativeChartAxisLabels",
+              "kind": "type",
+              "signature": "export interface NativeChartAxisLabels"
+            },
+            {
+              "name": "NativeChartAxisLabelStyle",
+              "kind": "type",
+              "signature": "export interface NativeChartAxisLabelStyle"
+            },
+            {
               "name": "NativeChartElement",
               "kind": "type",
               "signature": "export interface NativeChartElement extends NativeElementBase"
@@ -10459,7 +10469,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"bed38683c553ea72a3ea2d09d263147968d78f809904623a8e07e84b3c920204\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"d100863e7014ec6abb6d680c0e9f2263426f5ed6c9769e20aea9cd4870363219\""
             },
             {
               "name": "provenanceValues",
@@ -10572,6 +10582,16 @@
               "name": "LiteralConnectedVector",
               "kind": "type",
               "signature": "LiteralConnectedVector"
+            },
+            {
+              "name": "NativePptxGlyphExtents",
+              "kind": "type",
+              "signature": "NativePptxGlyphExtents"
+            },
+            {
+              "name": "NativePptxGlyphExtentsRequest",
+              "kind": "type",
+              "signature": "NativePptxGlyphExtentsRequest"
             },
             {
               "name": "NativePptxTextDefaults",
