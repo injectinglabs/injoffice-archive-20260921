@@ -332,6 +332,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if !paragraphs && element.Paragraphs != nil {
 			v.add(p+".paragraphs", "native.elementUnion", "is not allowed for this element kind")
 		}
+		if !preset && element.Geometry != nil {
+			v.add(p+".geometry", "native.elementUnion", "is not allowed for this element kind")
+		}
 		if !preset && element.Preset != nil {
 			v.add(p+".preset", "native.elementUnion", "is not allowed for this element kind")
 		}
@@ -381,11 +384,20 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	case NativeElementKindShape:
 		commonForbidden(true, true, true, true, false, false, false, false, false, false)
-		if element.Preset == nil {
+		if element.Geometry != nil {
+			v.geometry(*element.Geometry, p+".geometry")
+			if element.Preset != nil {
+				v.add(p+".geometry", "native.geometry", "preset and geometry are mutually exclusive")
+			}
+			if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+				v.add(p+".geometry", "native.geometryAuthority", "evaluated geometry must remain read-only")
+			}
+		}
+		if element.Preset == nil && element.Geometry == nil {
 			if element.Compatibility.Status != NativeCompatibilityStatusRefused {
 				v.add(p+".preset", "native.shapePreset", "is required unless the shape is explicitly refused")
 			}
-		} else {
+		} else if element.Preset != nil {
 			v.shapePreset(element.Preset, p+".preset")
 		}
 		v.placeholder(element.Placeholder, p+".placeholder")

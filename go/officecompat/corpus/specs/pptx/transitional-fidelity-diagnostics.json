@@ -166,7 +166,7 @@
           },
           {
             "code": "pptx.autoshape-geometry-unavailable",
-            "message": "custom, inherited, or missing shape geometry is preserved but not approximated",
+            "message": "custom geometry is outside the evaluated profile: geometry path budget exceeded",
             "scope": {
               "elementId": "element-9c68cb285f2e2b25bd06e8b1",
               "partName": "relocated/slides/slide-a.xml",
@@ -333,7 +333,7 @@
               },
               {
                 "code": "pptx.autoshape-geometry-unavailable",
-                "message": "custom, inherited, or missing shape geometry is preserved but not approximated",
+                "message": "custom geometry is outside the evaluated profile: geometry path budget exceeded",
                 "scope": {
                   "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                   "partName": "relocated/slides/slide-a.xml",
@@ -448,7 +448,7 @@
                   },
                   {
                     "code": "pptx.autoshape-geometry-unavailable",
-                    "message": "custom, inherited, or missing shape geometry is preserved but not approximated",
+                    "message": "custom geometry is outside the evaluated profile: geometry path budget exceeded",
                     "scope": {
                       "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                       "partName": "relocated/slides/slide-a.xml",

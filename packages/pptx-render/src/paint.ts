@@ -91,7 +91,8 @@ function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRec
   if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : { kind: 'clipRect', rect: node.clip.rect })
   switch (node.kind) {
     case 'shape':
-      surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, fill: node.fill?.color, stroke: node.stroke })
+      if(node.geometryPaths) for(const part of node.geometryPaths) surface.push({kind:'path',sourceElementId:node.sourceElementId,path:part.path,fill:part.fillMode==='norm'?node.fill?.color:undefined,stroke:part.stroke?node.stroke:undefined})
+      else surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, fill: node.fill?.color, stroke: node.stroke })
       if (node.textBody) paintTextBody(node.textBody, surface)
       break
     case 'text':

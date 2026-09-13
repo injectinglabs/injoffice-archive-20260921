@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "0805f1321fdaef1391b7ffc4d6ef62cf2a483fcdf30f1dde29f4d09fc7798b19"
+const NativePPTXSchemaSHA256 = "2ab073314e79a01fb3afc7c72e6a36d32ecb3e1712dfd41a4339ba9d1dd4090a"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -66,6 +66,22 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"elementId", "partName", "slideId"},
 		Required:   []string{},
 	},
+	"NativeEvaluatedGeometry": {
+		Properties: []string{"paths", "profile", "textRect"},
+		Required:   []string{"paths", "profile", "textRect"},
+	},
+	"NativeGeometryCommand": {
+		Properties: []string{"clockwise", "kind", "largeArc", "rx", "ry", "x", "x1", "x2", "y", "y1", "y2"},
+		Required:   []string{"kind"},
+	},
+	"NativeGeometryPath": {
+		Properties: []string{"commands", "fillMode", "stroke"},
+		Required:   []string{"commands", "fillMode", "stroke"},
+	},
+	"NativeGeometryTextRect": {
+		Properties: []string{"cx", "cy", "x", "y"},
+		Required:   []string{"cx", "cy", "x", "y"},
+	},
 	"NativeGroupElement": {
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
@@ -103,7 +119,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"assets", "compatibility", "contractVersion", "documentId", "origin", "size", "slides"},
 	},
 	"NativeShapeElement": {
-		Properties: []string{"animation", "compatibility", "fill", "id", "kind", "name", "paragraphs", "passthrough", "placeholder", "preset", "provenance", "source", "stroke", "textBody", "transform"},
+		Properties: []string{"animation", "compatibility", "fill", "geometry", "id", "kind", "name", "paragraphs", "passthrough", "placeholder", "preset", "provenance", "source", "stroke", "textBody", "transform"},
 		Required:   []string{"compatibility", "id", "kind", "paragraphs", "passthrough", "provenance", "transform"},
 	},
 	"NativeSize": {

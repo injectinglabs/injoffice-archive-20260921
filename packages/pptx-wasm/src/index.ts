@@ -255,6 +255,7 @@ function validateMutation(deck: NativePptxDeck, input: PptxNativeMutationRequest
     if (!target?.source) throw new NativeWasmError('UNSUPPORTED_TARGET', `PPTX mutation target ${JSON.stringify(operation.elementId)} is not a parsed source element.`)
     if (target.source.fingerprintSha256 !== operation.expectedFingerprintSha256) throw new NativeWasmError('STALE_FINGERPRINT', `PPTX mutation target ${JSON.stringify(operation.elementId)} has a stale fingerprint.`)
     if (target.compatibility.status === 'refused') throw new NativeWasmError('UNSUPPORTED_TARGET', `PPTX mutation target ${JSON.stringify(operation.elementId)} is refused.`)
+    if (target.kind==='shape'&&target.geometry) throw new NativeWasmError('UNSUPPORTED_TARGET','Custom geometry is preview-only.')
     if (operation.kind === 'text.replace') {
       rejectUnknownKeys(operation, ['operationId', 'kind', 'elementId', 'expectedFingerprintSha256', 'paragraphs'], `operation ${index}`)
       if (target.kind !== 'text' && target.kind !== 'shape') throw new NativeWasmError('UNSUPPORTED_OPERATION', 'text.replace supports only extracted text and shape elements.')
