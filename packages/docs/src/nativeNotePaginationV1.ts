@@ -3,7 +3,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
  * This module has no package I/O or rendering authority. It admits whole notes and bounded paragraph-boundary
- * endnote continuation; any ambiguity returns
+ * final-page footnote and endnote continuation; any ambiguity returns
  * one refusal and leaves the caller responsible for discarding every page.
  */
 
@@ -313,10 +313,10 @@ function placeGroup(
   return undefined
 }
 
-/** Only an already overflowing single endnote can activate a continuation sentinel.
+/** Only an already overflowing single note can activate a continuation sentinel.
  * Complete source paragraphs express the slices; deterministic replay verifies
  * their order and exact-once line coverage without synthesizing note labels. */
-function continueEndnote(
+function continueNote(
   layout: NativeDocxPaginatedLayoutSuccessV1,
   document: NativeDocxDocumentV1,
   resolved: NativeDocxResolvedLayoutInputV1,
@@ -328,11 +328,16 @@ function continueEndnote(
   occupiedBottom: number,
 ): NativeDocxNotePaginationRefusalV1 | undefined {
   const story = reference.story
+  const footnote = reference.kind === 'footnote'
   const fail = (message: string): NativeDocxNotePaginationRefusalV1 => ({ scope_id: story.id, code: 'note-overflow-unsupported', message })
-  if (document.sections.length !== 1 || document.notes.some((note) => note.kind === 'footnote') ||
-    document.notes.filter((note) => (note.note_role ?? 'content') === 'content').length !== 1) return fail('Endnote continuation requires one endnote, one section, and no footnotes')
+  if (document.sections.length !== 1 || document.notes.some((note) => note.kind !== reference.kind) ||
+    document.notes.filter((note) => (note.note_role ?? 'content') === 'content').length !== 1) return fail('Note continuation requires one content note and one section')
+  // No later body page may compete with carried footnote content. Body reflow
+  // with carried reservations requires a separate qualification/planning path.
+  if (footnote && document.body.blocks.some((block) => block.kind !== 'paragraph')) return fail('Footnote continuation requires paragraph-only body content')
+  if (footnote && reference.pageOrdinal !== layout.pages.at(-1)!.ordinal) return fail('Footnote continuation requires its reference on the final body page')
   const paragraphs = storyParagraphs(story)
-  if (!paragraphs || paragraphs.length < 2) return fail('Endnote continuation requires at least two complete paragraphs')
+  if (!paragraphs || paragraphs.length < 2) return fail('Note continuation requires at least two complete paragraphs')
   const resolvedByID = new Map(resolved.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
   for (const paragraph of paragraphs) {
     const lines = shapedByParagraph.get(paragraph.id)
@@ -340,29 +345,29 @@ function continueEndnote(
     if (!lines || !properties || lines.spacing_before_millipoints !== 0 || lines.spacing_after_millipoints !== 0 ||
       properties.keep_next === true || properties.page_break_before === true ||
       (lines.lines.length > 1 && properties.keep_lines !== true) || paragraph.runs.some((run) => run.page_field !== undefined || run.layout_page_field !== undefined)) {
-      return fail('Continued endnote paragraphs require zero spacing, no fields or cross-paragraph breaks, and keep_lines for multiline content')
+      return fail('Continued note paragraphs require zero spacing, no fields or cross-paragraph breaks, and keep_lines for multiline content')
     }
   }
-  const continuations = document.notes.filter((note) => note.kind === 'endnote' && note.note_role === 'continuation-separator')
+  const continuations = document.notes.filter((note) => note.kind === reference.kind && note.note_role === 'continuation-separator')
   const continuation = continuations[0]
   if (continuations.length !== 1 || !continuation || !exactInstructionSentinelProjection(continuation) ||
     continuation.relationship_id !== story.relationship_id || continuation.part_name !== story.part_name) {
-    return { scope_id: story.id, code: 'note-separator-unsupported', message: 'Endnote continuation requires one exact source-bound continuation separator' }
+    return { scope_id: story.id, code: 'note-separator-unsupported', message: 'Note continuation requires one exact source-bound continuation separator' }
   }
   const activeScopes = new Set([continuation.id, ...continuation.blocks.flatMap((block) => [block.id, ...(block.paragraph?.runs.map((run) => run.id) ?? [])])])
   if (document.unsupported.some((entry) => activeScopes.has(entry.scope_id)) || resolved.diagnostics.some((entry) => activeScopes.has(entry.scope_id)) ||
     shaped.diagnostics.some((entry) => activeScopes.has(entry.scope_id) || entry.source_id !== undefined && activeScopes.has(entry.source_id))) {
-    return { scope_id: continuation.id, code: 'note-separator-unsupported', message: 'Activated endnote continuation separator has unsupported source, layout, or shaping semantics' }
+    return { scope_id: continuation.id, code: 'note-separator-unsupported', message: 'Activated note continuation separator has unsupported source, layout, or shaping semantics' }
   }
   const continuationParagraph = continuation.blocks[0]!.paragraph!
   if (!shapedByParagraph.has(continuationParagraph.id)) return {
-    scope_id: continuation.id, code: 'note-continuation-shaping-required', message: 'Endnote continuation requires activated separator shaping',
+    scope_id: continuation.id, code: 'note-continuation-shaping-required', message: 'Note continuation requires activated separator shaping',
   }
   for (const sentinel of [separator, continuation]) {
     const paragraph = shapedByParagraph.get(sentinel.blocks[0]!.id)
     if (!paragraph || paragraph.lines.length !== 1 || paragraph.lines[0]!.fragments.length !== 0 ||
       paragraph.spacing_before_millipoints !== 0 || paragraph.spacing_after_millipoints !== 0) {
-      return { scope_id: sentinel.id, code: 'note-separator-unsupported', message: 'Continued endnotes require exact one-line, zero-spacing instruction separators' }
+      return { scope_id: sentinel.id, code: 'note-separator-unsupported', message: 'Continued notes require exact one-line, zero-spacing instruction separators' }
     }
   }
   let page = layout.pages.at(-1)!
@@ -371,7 +376,7 @@ function continueEndnote(
   const section = layout.sections.at(-1)!
   const template = page
   const appendPage = (): NativeDocxNotePaginationRefusalV1 | undefined => {
-    if (layout.pages.length >= 2_048) return { scope_id: story.id, code: 'resource-limit', message: 'Continued endnotes exceed the page budget' }
+    if (layout.pages.length >= 2_048) return { scope_id: story.id, code: 'resource-limit', message: 'Continued notes exceed the page budget' }
     const ordinal = section.page_ids.length
     page = { ...structuredClone(template), id: `page:${section.section_id}:${ordinal}`, ordinal: layout.pages.length, section_page_ordinal: ordinal, paragraph_slices: [], lines: [], note_stories: [] }
     layout.pages.push(page)
@@ -395,12 +400,13 @@ function continueEndnote(
       end += 1
     }
     if (end === start) {
-      if (occupiedBottom === column.y_millipoints) return fail('One complete endnote paragraph plus its separator cannot fit an empty page')
+      if (footnote && start === 0) return fail('The first footnote paragraph and ordinary separator must fit on the reference page')
+      if (occupiedBottom === column.y_millipoints) return fail('One complete note paragraph plus its separator cannot fit an empty page')
       const failure = appendPage()
       if (failure) return failure
       continue
     }
-    const failure = placeGroup(page, column, [{ story: sentinel }, { story: { ...story, blocks: story.blocks.slice(start, end) }, reference }], shapedByParagraph, budget, occupiedBottom, 'flow')
+    const failure = placeGroup(page, column, [{ story: sentinel }, { story: { ...story, blocks: story.blocks.slice(start, end) }, reference }], shapedByParagraph, budget, occupiedBottom, footnote ? 'bottom' : 'flow')
     if (failure) return failure
     start = end
     if (start < paragraphs.length) {
@@ -562,7 +568,10 @@ export function placeNativeDocxNotesV1(
     if (footnotes.some((entry) => entry.sectionID !== column.section_id || entry.columnID !== column.id || entry.columnOrdinal !== column.ordinal)) return { scope_id: page.id, code: 'note-structure-unsupported', message: 'One footnote group cannot cross section or column provenance' }
     const occupiedBottom = contentBottom(page, column, contentBottomIndex)
     if (occupiedBottom === undefined) return { scope_id: page.id, code: 'note-structure-unsupported', message: 'Body/table bottom does not exact-join qualified page geometry' }
-    const failure = placeGroup(page, column, [{ story: separator }, ...footnotes.map((reference) => ({ story: reference.story, reference }))], shapedByParagraph, budget, occupiedBottom, 'bottom')
+    let failure = placeGroup(page, column, [{ story: separator }, ...footnotes.map((reference) => ({ story: reference.story, reference }))], shapedByParagraph, budget, occupiedBottom, 'bottom')
+    if (failure?.code === 'note-overflow-unsupported' && footnotes.length === 1 && !reservation) {
+      failure = continueNote(staged, document, resolved, shaped, footnotes[0]!, separator, shapedByParagraph, budget, occupiedBottom)
+    }
     if (failure) return failure
   }
 
@@ -581,7 +590,7 @@ export function placeNativeDocxNotesV1(
       const whole = placedStory(endnotes[0]!.story, shapedByParagraph, page, column, 0, 1)
       const rule = placedStory(separator, shapedByParagraph, page, column, 0, 0)
       if (!('code' in whole) && !('code' in rule) && whole.height_millipoints + rule.height_millipoints > column.height_millipoints) {
-        const continued = continueEndnote(staged, document, resolved, shaped, endnotes[0]!, separator, shapedByParagraph, budget, occupiedBottom)
+        const continued = continueNote(staged, document, resolved, shaped, endnotes[0]!, separator, shapedByParagraph, budget, occupiedBottom)
         if (continued) return continued
         failure = undefined
       }
