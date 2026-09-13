@@ -29,7 +29,7 @@
   "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
   "injoffice": {
     "entries": { "index": "src/index.ts", "browser": "src/browser.ts" },
-    "legalFiles": ["NOTICE", "LICENSE-UNICODE.txt"]
+    "legalFiles": ["NOTICE", "LICENSE-UNICODE.txt", "packages/pdf/third-party/BIDI-JS-LICENSE.txt"]
   },
   "scripts": {
     "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
