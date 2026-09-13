@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestExtractNativeWorkbookV2PreservesNumberFormatSections(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		for _, format := range []string{`#,##0.00;(#,##0.00);0`, `0.00;[Red](0.00)`} {
+			entries := nativeWorkbookFixture(strict)
+			entries["Meta/Styles.style"] = strings.Replace(entries["Meta/Styles.style"], `formatCode="0.000"`, `formatCode="`+format+`"`, 1)
+			workbook, err := ExtractNativeWorkbookV2(buildZip(t, entries))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := workbook.Styles[1].Effective.NumberFormat
+			if got == nil || *got != format {
+				t.Fatalf("source sections changed (strict=%v): got %v, want %q", strict, got, format)
+			}
+		}
+	}
+}
+
 func TestExtractNativeWorkbookV2ProjectsDisplayIdentity(t *testing.T) {
 	entries := nativeWorkbookFixture(false)
 	entries["Book/Workbook.xml"] = strings.Replace(entries["Book/Workbook.xml"], `<bookViews>`, `<workbookPr date1904="0"/><bookViews>`, 1)
