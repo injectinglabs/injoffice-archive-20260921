@@ -122,7 +122,9 @@ func nativeSettingsNeutralShapeDefaults(result *NativePaginationSettingsV1, node
 func nativeSettingsNeutralMathPr(result *NativePaginationSettingsV1, node *nativeXMLNode) bool {
 	// ECMA-376 22.1.2.62: document mathPr apply to OMML. The Word-emitted default
 	// 11-child subset matches omitted mathPr (Cambria Math, wrapIndent 1440 twips,
-	// centerGroup display, subSup/undOvr limits). Other values remain unsupported.
+	// centerGroup display, subSup/undOvr limits). smallFrac must be explicitly
+	// off; dispDef must be on (omitted val or 1/true/on). Inverted booleans
+	// change nested fraction size and display-equation indentation.
 	if !nativeSettingsExactNode(result, node, map[xml.Name]bool{}, true) {
 		return false
 	}
@@ -141,14 +143,23 @@ func nativeSettingsNeutralMathPr(result *NativePaginationSettingsV1, node *nativ
 			return false
 		}
 		value, present := nativeAttr(child, nativeMathNamespace, "val")
-		if key == "smallFrac" || key == "dispDef" {
-			if !present {
-				value = "true"
-			} else if _, valid := nativeLexicalOnOff(value); !valid {
+		switch key {
+		case "smallFrac":
+			enabled, valid := nativeLexicalOnOff(value)
+			if !present || !valid || enabled {
 				return false
 			}
-		} else if expected, exists := allowed[key]; !exists || !present || value != expected {
-			return false
+		case "dispDef":
+			if present {
+				enabled, valid := nativeLexicalOnOff(value)
+				if !valid || !enabled {
+					return false
+				}
+			}
+		default:
+			if expected, exists := allowed[key]; !exists || !present || value != expected {
+				return false
+			}
 		}
 		seen[key] = value
 	}

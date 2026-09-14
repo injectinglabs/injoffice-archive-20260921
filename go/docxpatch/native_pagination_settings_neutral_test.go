@@ -150,6 +150,9 @@ func TestExtractNativePaginationSettingsV1NeutralExtrasFailClosed(t *testing.T) 
 		{"multi-char decimal", `<w:decimalSymbol w:val=".,"/>`, "INVALID_SETTINGS_STRUCTURE"},
 		{"incomplete math", `<m:mathPr><m:mathFont m:val="Cambria Math"/><m:wrapIndent m:val="1440"/></m:mathPr>`, "UNKNOWN_SETTINGS_ELEMENT"},
 		{"non-default math wrap", strings.Replace(nativeAttestedMathPr(), `m:val="1440"`, `m:val="720"`, 1), "UNKNOWN_SETTINGS_ELEMENT"},
+		{"smallFrac true", strings.Replace(nativeAttestedMathPr(), `<m:smallFrac m:val="0"/>`, `<m:smallFrac m:val="true"/>`, 1), "UNKNOWN_SETTINGS_ELEMENT"},
+		{"smallFrac implicit on", strings.Replace(nativeAttestedMathPr(), `<m:smallFrac m:val="0"/>`, `<m:smallFrac/>`, 1), "UNKNOWN_SETTINGS_ELEMENT"},
+		{"dispDef false", strings.Replace(nativeAttestedMathPr(), `<m:dispDef/>`, `<m:dispDef m:val="false"/>`, 1), "UNKNOWN_SETTINGS_ELEMENT"},
 		{"unknown math child", `<m:mathPr><m:unknown m:val="1"/></m:mathPr>`, "UNKNOWN_SETTINGS_ELEMENT"},
 		{"foreign markup", `<x:unknown xmlns:x="urn:foreign"/>`, "UNKNOWN_SETTINGS_ELEMENT"},
 	} {
@@ -175,6 +178,8 @@ func TestExtractNativePaginationSettingsV1NeutralExtrasIndividualAdmission(t *te
 		{"shape defaults", nativeAttestedShapeDefaults()},
 		{"math defaults", nativeAttestedMathPr()},
 		{"math smallFrac off", strings.Replace(nativeAttestedMathPr(), `m:val="0"`, `m:val="off"`, 1)},
+		{"math smallFrac false", strings.Replace(nativeAttestedMathPr(), `<m:smallFrac m:val="0"/>`, `<m:smallFrac m:val="false"/>`, 1)},
+		{"math dispDef true", strings.Replace(nativeAttestedMathPr(), `<m:dispDef/>`, `<m:dispDef m:val="true"/>`, 1)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			settings := extractNativePaginationSettingsMarkup(t, wordMLTransitional, test.markup+nativeMode15Compat())
