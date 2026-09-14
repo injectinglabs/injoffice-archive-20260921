@@ -85,7 +85,25 @@ async function upload(path){const handle=await cdp.send('Runtime.evaluate',{expr
 async function evaluate(expression){const value=await cdp.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(value.exceptionDetails)throw Error(value.exceptionDetails.exception?.description??value.exceptionDetails.text);return value.result.value}
 async function assert(expression,label){if(!await evaluate(expression))throw Error('Failed: '+label);checks++}
 async function poll(check,label,timeout=30000){const end=Date.now()+timeout;while(Date.now()<end){if(await check())return;await new Promise(resolve=>setTimeout(resolve,75))}throw Error('Timed out: '+label)}
-async function click(label){await poll(()=>evaluate(`(()=>{const b=Array.from(${panel}?.querySelectorAll('button')??[]).find(b=>b.textContent.trim()===${JSON.stringify(label)});if(!b||b.disabled)return false;b.click();return true})()`),label)}
+async function click(label) {
+  const handle = await cdp.send('Runtime.evaluate', { expression: 'globalThis' })
+  try {
+    await poll(async () => {
+      const value = await cdp.send('Runtime.callFunctionOn', {
+        objectId: handle.result.objectId,
+        functionDeclaration: `function(label) {
+          const panel = document.querySelector('[aria-label="Read-only source-style recovery"]');
+          const button = Array.from(panel?.querySelectorAll('button') ?? []).find(button => button.textContent.trim() === label);
+          if (!button || button.disabled) return false;
+          button.click(); return true;
+        }`,
+        arguments: [{ value: label }], returnByValue: true,
+      })
+      if (value.exceptionDetails) throw Error(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text)
+      return value.result.value
+    }, label)
+  } finally { await cdp.send('Runtime.releaseObject', { objectId: handle.result.objectId }) }
+}
 
 function findChrome() {
   for (const candidate of [process.env.CHROME_PATH, process.env.CHROME_BIN, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].filter(Boolean)) {
