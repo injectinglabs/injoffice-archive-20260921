@@ -15560,9 +15560,19 @@
               "signature": "export declare function adaptWorkbookMutationBatchV1(workbook: NativeWorkbookV2, input: WorkbookMutationBatchV1): XlsxNativeMutationTransactionV1"
             },
             {
+              "name": "createXlsxSourceStylePreviewClient",
+              "kind": "function",
+              "signature": "export declare function createXlsxSourceStylePreviewClient(options?: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>): XlsxSourceStylePreviewClient"
+            },
+            {
               "name": "createXlsxWasmClient",
               "kind": "function",
               "signature": "export declare function createXlsxWasmClient(options?: XlsxWasmClientOptions): XlsxWasmClient"
+            },
+            {
+              "name": "decodeXlsxSourceStylePreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeXlsxSourceStylePreviewV1(json: string, packageSHA256: string): XlsxSourceStylePreviewV1"
             },
             {
               "name": "DEFAULT_XLSX_WASM_MAX_MUTATION_PAYLOAD_BYTES",
@@ -15608,6 +15618,26 @@
               "name": "XlsxNativeStyleMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
+              "name": "XlsxSourceStyleCellV1",
+              "kind": "type",
+              "signature": "export type XlsxSourceStyleCellV1 = ReturnType<typeof readCell>"
+            },
+            {
+              "name": "XlsxSourceStylePreviewClient",
+              "kind": "interface",
+              "signature": "export interface XlsxSourceStylePreviewClient"
+            },
+            {
+              "name": "XlsxSourceStylePreviewV1",
+              "kind": "type",
+              "signature": "export type XlsxSourceStylePreviewV1 = ReturnType<typeof readPreview>"
+            },
+            {
+              "name": "XlsxSourceStyleV1",
+              "kind": "type",
+              "signature": "export type XlsxSourceStyleV1 = ReturnType<typeof readStyle>"
             },
             {
               "name": "XlsxWasmAssetUrls",

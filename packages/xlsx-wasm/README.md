@@ -125,3 +125,26 @@ complete saved numeric caches. Values may be stale; inspection never evaluates
 formulas or fetches external links. Chart styling, categories, drawing placement,
 and Office fidelity are not implied. Table metadata is reported, but built-in
 table-style rendering remains unqualified.
+
+## Separate source-style recovery
+
+`createXlsxSourceStylePreviewClient()` exposes only `preview(bytes)` and
+`terminate()`. It uses the self-contained `xlsxsource.worker.js` asset, whose
+fixed profile refuses extraction and mutation messages. The native
+`previewSourceStyles` binding is separate from `extract` and `inspect`.
+
+The client snapshots bytes before hashing and inspection, checks the returned
+package identity, and decodes a closed, bounded, recursively frozen
+`XlsxSourceStylePreviewV1`. It preserves all source conflicts and cache warnings.
+This is an approximate read-only grid, with no workbook revision, editing or
+repaired-file export. A source hash is an identity join, not authentication for
+arbitrary JSON; use the trusted native worker. The usual abort, timeout and
+termination behavior applies. Hosts must clear previous edit state on a failed
+new-source open and discard stale/cancelled preview results.
+
+The playground offers this recovery only after browser-local extraction fails.
+It preserves the original refusal, source records, merges and saved formula
+results. Supported number/date display reuses the deterministic formatter; the
+exact source-declared `#,##0.00" €"` suffix has an additional browser text path.
+Unqualified formats visibly fall back to their saved lexical. No print settings
+or recalculation are applied. See [the profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md).
