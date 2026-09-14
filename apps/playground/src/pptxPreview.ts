@@ -17,12 +17,11 @@ export function previewIssue(element: NativeElement, assets: NativeAsset[]): str
   const { x, y, cx, cy } = element.transform
   if (![x, y, cx, cy].every(Number.isFinite) || cx <= 0 || cy <= 0) return 'Object preserved; preview geometry unavailable'
   if (element.compatibility.status === 'refused') return 'Unsupported object preserved in the source file'
-  if (element.kind === 'group') return 'Grouped content preserved; group preview unavailable'
   if (element.kind === 'table') return 'Table preserved; table preview unavailable'
   if (element.kind === 'chart' && !previewImage(assets.find((asset) => asset.id === element.chart.previewAssetId))) return 'Chart preserved; no embedded preview image'
   if (element.kind === 'picture' && !previewImage(assets.find((asset) => asset.id === element.assetId))) return 'Image preserved; supported preview bytes unavailable'
   if (element.kind === 'picture' && element.compatibility.diagnostics.some((diagnostic) => diagnostic.code === 'pptx.picture-crop-unavailable')) return 'Image preserved; source crop cannot be previewed'
-  if (element.kind === 'shape' && !element.preset) return 'Shape preserved; geometry unavailable'
+  if (element.kind === 'shape' && !element.preset && !element.geometry) return 'Shape preserved; geometry unavailable'
   return undefined
 }
 
