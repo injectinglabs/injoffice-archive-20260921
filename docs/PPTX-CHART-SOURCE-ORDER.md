@@ -22,7 +22,11 @@ unchanged. Pie/doughnut remain the existing single-series contract.
 zero, sparse arrays, XY point order, cluster slots, bubble sizing, area accumulation
 and workbook reference joins for bar, line, scatter and bubble. The worker test
 generates nine real PPTX fixture families and separate chart-only derivatives,
-retaining original packages and their hashes. Label variants author axis labels
+retaining original packages and their hashes. The original workbook-scatter
+fixture repeats identical XY points and remains a valid zero-length regression.
+Its chart-only derivative uses the actual saved X cells B2:C2 (4, -2), keeping
+original Y references and stale caches, so browser pixel checks exercise visible
+segments. Label variants author axis labels
 in XML before extraction; invalid label positions are refused. It extracts actual
 embedded XLSX bytes and compiles both unlabeled and supplied-font labeled previews
 through the worker compiler and framed production worker subprocess while

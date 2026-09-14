@@ -35,6 +35,15 @@ func nativeSeriesOrderChartOnly(t *testing.T, original []byte, labels, invalidLa
 		if entry.Name == "relocated/slides/slide-a.xml" {
 			data = regexp.MustCompile(`(?s)<p:sp>.*?</p:sp>`).ReplaceAllString(data, "")
 		}
+
+		// Original workbook-scatter samples repeat identical XY points.
+		// Only this separately named chart-only derivative selects two different
+		// saved X cells, retaining per-series Y references and all stale caches.
+		if strings.Contains(data, "<c:scatterChart>") && strings.Contains(data, "<c:externalData") {
+			data = regexp.MustCompile(`(?s)<c:xVal>.*?</c:xVal>`).ReplaceAllStringFunc(data, func(x string) string {
+				return regexp.MustCompile(`<c:f>.*?</c:f>`).ReplaceAllStringFunc(x, func(string) string { return `<c:f>Data!$B$2:$C$2</c:f>` })
+			})
+		}
 		if labels && strings.HasPrefix(entry.Name, "relocated/charts/") && strings.HasSuffix(entry.Name, ".xml") {
 			data = strings.ReplaceAll(data, `<c:tickLblPos val="none"/>`, `<c:tickLblPos val="low"/>`)
 			data = strings.ReplaceAll(data, `</c:spPr><c:crossAx`, `</c:spPr>`+nativeAxisTextXML(false)+`<c:crossAx`)
