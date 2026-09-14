@@ -2,7 +2,7 @@
 
 `xlsxpatch.PreviewNativeSourceStylesV1(originalBytes)` returns a separate
 `injoffice.xlsx.source-style-preview` envelope (`version: 1`, `read_only: true`,
-`fidelity: approximate`). It is a Go API; browser integration is a follow-on.
+`fidelity: approximate`). The Go API and the separate browser WASM client share this envelope.
 It never constructs a `NativeWorkbookV2`, revision, mutation capability, or
 rewritten ZIP. Strict extraction and mutation retain their existing refusal.
 
@@ -50,3 +50,25 @@ The public Go API reports seven conflicts, the navy `#1E2761` fill, three merges
 and saved SUMIF results `2229.7` and `249.5`; strict extraction still refuses.
 Tests cover the separate authority boundary and malformed/unsupported sources.
 No browser visual or Excel print-calibration claim follows from this API test.
+
+## Browser recovery and verification
+
+The playground offers an explicit browser-local source preview after strict
+extraction refuses. A newly opened source clears the old editing session before
+extraction. Recovery uses a dedicated worker that accepts only read-only
+inspection messages, and a separate closed JSON decoder with source-hash,
+style/cell/conflict/merge joins. Results are recursively frozen. Cancel,
+replacement and unmount terminate the worker and invalidate late results.
+
+The HTML grid displays source styles and merged anchors once. Source values,
+formula text, conflict IDs and display fallbacks remain inspectable. An exact
+source-declared euro suffix is supported for browser text without changing the
+strict glyph formatter. All other unsupported formats fall back with a visible
+warning. Host typography/geometry remains approximate; there is no editing,
+repair/export or print-calibration authority.
+
+Synthetic CI browser qualification opens an editable source, replaces it with
+the conflicting source, verifies old edit controls disappear, renders through
+the actual dedicated WASM worker, checks merge/color/cache output and no upload,
+and delivers late replies after cancellation/replacement. Screenshot artifacts
+support visual review. External benchmark files are not loaded in CI.

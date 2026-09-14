@@ -1,3 +1,4 @@
+import { XlsxSourceStylePreview } from '../components/XlsxSourceStylePreview'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { adaptWorkbookMutationBatchV1 } from '@injoffice/xlsx-wasm'
 import {
@@ -117,6 +118,7 @@ export default function NativeRoundTripPage() {
   useEffect(()=>setObjects(null),[workbook,mode])
   const [authoritativeBytes, setAuthoritativeBytes] = useState<Uint8Array | null>(null)
   const [artifactId, setArtifactId] = useState('')
+  const [failedSource, setFailedSource] = useState<{bytes: Uint8Array; name: string} | null>(null)
   const [sourceName, setSourceName] = useState('workbook.xlsx')
   const [selection, setSelection] = useState('')
   const [previewSheetID, setPreviewSheetID] = useState('')
@@ -173,6 +175,7 @@ export default function NativeRoundTripPage() {
   }
 
   const clearSession = () => {
+    setFailedSource(null)
     setWorkbook(null)
     setPreviewSheetID('')
     setAuthoritativeBytes(null)
@@ -199,6 +202,9 @@ export default function NativeRoundTripPage() {
   }
 
   const extractFile = async (blob: Blob, name: string) => {
+    clearSession()
+    setSourceName(name)
+    let sourceBytes: Uint8Array | undefined
     setBusy(true)
     setError('')
     setStatus(`Extracting ${name} into the native XLSX contract…`)
@@ -206,6 +212,7 @@ export default function NativeRoundTripPage() {
     setOutput(null)
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer())
+      sourceBytes = bytes
       const extracted = await runtimeFor(mode).extract(bytes)
       const next = extracted.workbook
       setAuthoritativeBytes(bytes)
@@ -218,6 +225,7 @@ export default function NativeRoundTripPage() {
       setError(reason instanceof Error ? reason.message : String(reason))
       if (mode === 'browser') {
         resetBrowserRuntime()
+        if (sourceBytes) setFailedSource({ bytes: sourceBytes, name })
         setStatus('Browser extraction did not complete. No workbook bytes were uploaded; choose Server fallback explicitly if you want to retry remotely.')
       } else {
         setStatus('Server extraction did not complete. Check the configured XLSX API and retry.')
@@ -395,6 +403,7 @@ export default function NativeRoundTripPage() {
           : 'Server fallback is unavailable in this build. Developers can configure it with VITE_INJOFFICE_API_BASE.'}</p>
       </details>
       {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
+      {failedSource && mode === 'browser' && !workbook && <XlsxSourceStylePreview bytes={failedSource.bytes} name={failedSource.name} />}
 
       <div className="native-workspace ds-split">
         <section className={`native-main ds-split-main${workbook && activeSheet && bounds ? ' ds-split-main--flush' : ''}`} aria-label="Extracted workbook preview">
