@@ -5,7 +5,7 @@ import {nativeChartDecimal as decimal} from './chartDecimalValidation.js'
 
 function record(value:unknown,required:string,optional=''):value is Record<string,unknown>{
  if(!value||typeof value!=='object'||Array.isArray(value))return false
- const keys=new Set([...required.split(' '),...optional.split(' ')])
+ const keys=new Set([...required.split(' '),...optional.split(' ')].filter(Boolean))
  return required.split(' ').every(k=>Object.hasOwn(value,k))&&Object.keys(value).every(k=>keys.has(k))
 }
 function integer(value:unknown,low:number,high:number):value is number{return Number.isSafeInteger(value)&&!Object.is(value,-0)&&(value as number)>=low&&(value as number)<=high}

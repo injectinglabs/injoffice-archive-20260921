@@ -1,6 +1,6 @@
 import {useId,useState} from 'react'
 import type {NativeElement,NativePptxDeck} from '@injoffice/pptx-native'
-import {createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
+import {createNativeLiteralAreaPaths,createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
 
 export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
  const [enabled,setEnabled]=useState(false)
@@ -13,8 +13,19 @@ export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
   <label><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)}/> Preview supported source literal charts</label>
   <p>Read-only vectors from explicit source values and colors. Each chart is shown separately with host frame fitting. Circular charts use polygon arcs; Cartesian charts use explicit linear scales and clipped data geometry. This preview does not reproduce PowerPoint plot layout. Formula caches, source labels and legends are unsupported.</p>
   {enabled&&charts.map((chart,chartIndex)=>{
+   const area=chart.chart.literalArea
    const connected=chart.chart.literalConnected
-   if(connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
+   if(area?.xAxis.labels||area?.yAxis.labels||connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
+   if(area){
+    const vectors=createNativeLiteralAreaPaths(area,chart.transform.cx,chart.transform.cy)
+    return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal {area.grouping} area · preserved, read-only</figcaption>
+     <svg role="img" aria-label={`${chart.name??'Area chart'}: ${area.series.length} series. Source values are listed below.`} viewBox={`0 0 ${chart.transform.cx} ${chart.transform.cy}`} style={{width:400,maxWidth:'100%',height:260,overflow:'hidden'}}>
+      <defs><clipPath id={`${clipPrefix}-${chartIndex}`}><rect x={0} y={0} width={chart.transform.cx} height={chart.transform.cy}/></clipPath></defs>
+      <g clipPath={`url(#${clipPrefix}-${chartIndex})`}>{vectors.map((vector,i)=><path key={i} fill={vector.color??'none'} stroke={vector.stroke?.color} strokeWidth={vector.stroke?.widthEmu} strokeLinecap="butt" d={vector.path.map(p=>p.kind==='moveTo'?`M ${p.x} ${p.y}`:p.kind==='lineTo'?`L ${p.x} ${p.y}`:p.kind==='close'?'Z':'').join(' ')}/>)}</g>
+     </svg><p>Explicit value scale: {area.yAxis.min} to {area.yAxis.max}. Each series has one compound fill. Standard overlaps paint in authored series order as a host preview policy; PowerPoint overlap order is not established. Negative stacked values are unsupported. Zero-total percentages and zero-area bands have no fill.</p>
+     <table><caption>Source data (host table, separate from slide labels)</caption><thead><tr><th>Category</th>{area.series.map(series=><th key={series.index}>{series.title??`Series ${series.index}`}</th>)}</tr></thead><tbody>{area.categories.map((category,i)=><tr key={i}><th>{category}</th>{area.series.map(series=><td key={series.index}>{series.values[i]}</td>)}</tr>)}</tbody></table>
+    </figure>
+   }
    if(connected){
     const scatter=connected.profile==='literal-scatter-v1'
     const vectors=(scatter?createNativeLiteralScatterPaths:createNativeLiteralLinePaths)(connected,chart.transform.cx,chart.transform.cy)
