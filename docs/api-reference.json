@@ -8025,7 +8025,7 @@
             {
               "name": "NativeWasmOperation",
               "kind": "type",
-              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'evaluate' | 'apply'"
+              "signature": "export type NativeWasmOperation = 'init' | 'extract' | 'inspect' | 'chartWorkbooks' | 'evaluate' | 'apply'"
             },
             {
               "name": "NativeWasmOperationOptions",
@@ -10057,14 +10057,54 @@
               "signature": "export declare const animationEffectValues: readonly [\"fade\", \"flyIn\"]"
             },
             {
+              "name": "assertAdmittedChartWorkbookInspection",
+              "kind": "function",
+              "signature": "export declare function assertAdmittedChartWorkbookInspection(value: NativePptxChartWorkbookInspection): void"
+            },
+            {
               "name": "assertNativePptx",
               "kind": "function",
               "signature": "export declare function assertNativePptx(input: unknown): asserts input is NativePptxDeck"
             },
             {
+              "name": "assertResolvedWorkbookChart",
+              "kind": "function",
+              "signature": "export declare function assertResolvedWorkbookChart(value: NativeResolvedWorkbookChart): void"
+            },
+            {
               "name": "canonicalizeNativePptx",
               "kind": "function",
               "signature": "export declare function canonicalizeNativePptx(deck: NativePptxDeck): NativePptxDeck"
+            },
+            {
+              "name": "ChartWorkbookBinding",
+              "kind": "type",
+              "signature": "export interface ChartWorkbookBinding"
+            },
+            {
+              "name": "ChartWorkbookCellVisibility",
+              "kind": "type",
+              "signature": "export interface ChartWorkbookCellVisibility"
+            },
+            {
+              "name": "ChartWorkbookExtractor",
+              "kind": "type",
+              "signature": "ChartWorkbookExtractor"
+            },
+            {
+              "name": "ChartWorkbookRange",
+              "kind": "type",
+              "signature": "export interface ChartWorkbookRange"
+            },
+            {
+              "name": "ChartWorkbookReference",
+              "kind": "type",
+              "signature": "export interface ChartWorkbookReference"
+            },
+            {
+              "name": "ChartWorkbookResolvedValues",
+              "kind": "type",
+              "signature": "export interface ChartWorkbookResolvedValues"
             },
             {
               "name": "compatibilityStatusValues",
@@ -10075,6 +10115,16 @@
               "name": "createNativePptxTableGeometryPreview",
               "kind": "function",
               "signature": "export declare function createNativePptxTableGeometryPreview(inspection: NativePptxTableInspection, policy: 'host-sans-12pt-clipped-v1', paintOptions?: { policy: NativePptxTablePaint['policy']; }): NativePptxTableGeometryPreview"
+            },
+            {
+              "name": "createResolvedWorkbookChart",
+              "kind": "function",
+              "signature": "export declare function createResolvedWorkbookChart(inspection: NativePptxChartWorkbookInspection, chartIndex: number, values: readonly ChartWorkbookResolvedValues[]): NativeResolvedWorkbookChart"
+            },
+            {
+              "name": "decodeNativePptxChartWorkbookInspection",
+              "kind": "function",
+              "signature": "export declare function decodeNativePptxChartWorkbookInspection(json: string, deck: NativePptxDeck, packageSHA256: string): Promise<NativePptxChartWorkbookInspection>"
             },
             {
               "name": "decodeNativePptxTableInspection",
@@ -10095,6 +10145,11 @@
               "name": "elementKindValues",
               "kind": "const",
               "signature": "export declare const elementKindValues: readonly [\"text\", \"shape\", \"connector\", \"picture\", \"table\", \"chart\", \"group\"]"
+            },
+            {
+              "name": "extractChartWorkbookReferences",
+              "kind": "function",
+              "signature": "export declare function extractChartWorkbookReferences(binding: ChartWorkbookBinding, references: readonly ChartWorkbookReference[], embeddedBytes: Uint8Array, extract: ChartWorkbookExtractor): Promise<readonly ChartWorkbookResolvedValues[]>"
             },
             {
               "name": "NativeAnimation",
@@ -10277,6 +10332,11 @@
               "signature": "NativePlaceholderType"
             },
             {
+              "name": "NativePptxChartWorkbookInspection",
+              "kind": "type",
+              "signature": "export interface NativePptxChartWorkbookInspection"
+            },
+            {
               "name": "NativePptxDeck",
               "kind": "type",
               "signature": "export interface NativePptxDeck"
@@ -10287,9 +10347,19 @@
               "signature": "NativePptxInspectedCell"
             },
             {
+              "name": "NativePptxInspectedChartWorkbook",
+              "kind": "type",
+              "signature": "export interface NativePptxInspectedChartWorkbook"
+            },
+            {
               "name": "NativePptxInspectedTable",
               "kind": "type",
               "signature": "NativePptxInspectedTable"
+            },
+            {
+              "name": "NativePptxInspectedWorkbookChart",
+              "kind": "type",
+              "signature": "export interface NativePptxInspectedWorkbookChart"
             },
             {
               "name": "NativePptxInspectionRect",
@@ -10327,9 +10397,24 @@
               "signature": "NativePptxTablePaint"
             },
             {
+              "name": "NativePptxWorkbookChartSeries",
+              "kind": "type",
+              "signature": "export interface NativePptxWorkbookChartSeries"
+            },
+            {
+              "name": "NativePptxWorkbookChartSource",
+              "kind": "type",
+              "signature": "export interface NativePptxWorkbookChartSource"
+            },
+            {
               "name": "NativeProvenance",
               "kind": "type",
               "signature": "NativeProvenance"
+            },
+            {
+              "name": "NativeResolvedWorkbookChart",
+              "kind": "type",
+              "signature": "NativeResolvedWorkbookChart"
             },
             {
               "name": "NativeShapeElement",
@@ -10432,6 +10517,26 @@
               "signature": "NativeValidationIssue"
             },
             {
+              "name": "NativeWorkbookBarData",
+              "kind": "type",
+              "signature": "NativeWorkbookBarData"
+            },
+            {
+              "name": "NativeWorkbookChartRefusal",
+              "kind": "type",
+              "signature": "NativeWorkbookChartRefusal"
+            },
+            {
+              "name": "NativeWorkbookChartResolution",
+              "kind": "type",
+              "signature": "NativeWorkbookChartResolution"
+            },
+            {
+              "name": "NativeWorkbookConnectedData",
+              "kind": "type",
+              "signature": "NativeWorkbookConnectedData"
+            },
+            {
               "name": "originValues",
               "kind": "const",
               "signature": "export declare const originValues: readonly [\"authored\", \"parsed\"]"
@@ -10475,6 +10580,11 @@
               "name": "provenanceValues",
               "kind": "const",
               "signature": "export declare const provenanceValues: readonly [\"authored\", \"parsed\"]"
+            },
+            {
+              "name": "resolveNativePptxWorkbookCharts",
+              "kind": "function",
+              "signature": "export declare function resolveNativePptxWorkbookCharts(inspection: NativePptxChartWorkbookInspection, extract: ChartWorkbookExtractor): Promise<NativeWorkbookChartResolution>"
             },
             {
               "name": "shapePresetValues",
@@ -10567,6 +10677,11 @@
               "name": "createNativeLiteralScatterPaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralScatterPaths(chart: NativeLiteralConnected, cx: number, cy: number): readonly LiteralConnectedVector[]"
+            },
+            {
+              "name": "createNativeWorkbookChartPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector)[]"
             },
             {
               "name": "createRecordingPaintSurface",
@@ -13637,7 +13752,7 @@
             {
               "name": "XLSX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"8017eca7536f5d3d1e943fc04387ebad042c522b825f3b208ad6a5b0b05174ea\""
+              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"987cea5431a49990432bdf4b101a05054d7ac262d9cfc2411cb18639657d371e\""
             },
             {
               "name": "XLSX_NATIVE_V2_MEDIA_TYPE",
@@ -13672,7 +13787,7 @@
             {
               "name": "XLSX_NATIVE_V2_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:35297ab41a07d92fc705770dfdf10c717cde3400dde24e78955e0ce1bf4b017c\""
+              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:1ebf8027a17b482beb4cbc484180b8854b880a60e21998e4e3e360adc7b0c4c7\""
             },
             {
               "name": "XLSX_NATIVE_V2_VERSION",
