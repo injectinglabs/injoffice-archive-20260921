@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } fro
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import { decodePDFRawStream, PDFDocument, PDFName } from 'pdf-lib'
+import { decodePDFRawStream, PDFDocument, PDFName, PDFHexString } from 'pdf-lib'
 import { launchChromeForCDP, terminateProcess } from './chrome-cdp-startup.mjs'
 import { startShowcaseDevServer } from './showcase-smoke-dev-server.mjs'
 
@@ -25,6 +25,7 @@ let server, chrome, socket, sequence = 0
 const pending = new Map()
 const errors = []
 const postRequests = []
+let replacingDownloadedSource = false
 const panel = '[data-demo-surface="pdf"] #pdf-operation-panel'
 const textInput = `${panel} [aria-label="Form value: Unicode sample"]`
 const appearanceSelect = `${panel} [aria-label="Saved text appearance"]`
@@ -84,6 +85,10 @@ try {
       else task.resolve(message.result)
     } else if (message.method === 'Runtime.exceptionThrown') {
       errors.push(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text)
+    } else if (message.method === 'Page.javascriptDialogOpening') {
+      const expected = replacingDownloadedSource && message.params.type === 'confirm' && message.params.message === 'Open another PDF and discard your current edits? Download your edited PDF first if you want to keep it.'
+      if (!expected) errors.push('Unexpected browser dialog: ' + message.params.message)
+      void send('Page.handleJavaScriptDialog', { accept: expected }).catch(error => errors.push(error.message))
     } else if (message.method === 'Fetch.requestPaused') {
       const { requestId, request } = message.params
       const url = new URL(request.url)
@@ -210,7 +215,7 @@ try {
     const scriptDoc = await PDFDocument.load(readFileSync(resolve(scriptOutput, scriptDownload)))
     assert.equal(scriptDoc.getForm().getTextField('Unicode sample').getText(), value, 'script export retains exact logical form value')
   }
-  for (const [filename, value] of [['NotoSansDevanagari-Regular.otf', 'क्षि नमस्ते'], ['NotoSansJP-CID-subset.otf', 'Aé Ω 日本語かなカナ']]) {
+  for (const [filename, value] of [['NotoSansDevanagari-Regular.otf', 'क्षि नमस्ते'], ['NotoSansJP-CID-subset.otf', 'Aé Ω 日本語 侮侮\uFE00 倦倦\u{E0100}'], ['NotoSansKR-CID-subset.otf', '한글 한글']]) {
     const cffPath = resolve(import.meta.dirname, '../packages/pdf/testdata/fonts', filename)
     const originalFont = readFileSync(cffPath)
     await upload('[aria-label="Embedded appearance font"]', cffPath)
@@ -244,6 +249,11 @@ try {
     assert.equal(String(program.dict.get(PDFName.of('Subtype'))), '/CIDFontType0C')
     assert.equal(decodePDFRawStream(program).decode()[0], 1)
     assert.match(Buffer.from(decodePDFRawStream(cffFont.lookup(PDFName.of('Encoding'))).decode()).toString(), /begincidchar/)
+    if (filename === 'NotoSansKR-CID-subset.otf') {
+      assert.equal(cffFonts.keys().length, 2, 'composed/decomposed aliases have separate Type0 font views')
+      const views = cffFonts.keys().map(name => cffFonts.lookup(name))
+      assert.equal(views[0].get(PDFName.of('DescendantFonts')).toString(), views[1].get(PDFName.of('DescendantFonts')).toString(), 'views share the same embedded font program')
+    }
     assert.deepEqual(readFileSync(cffPath), originalFont)
   }
   const collectionPath = resolve(import.meta.dirname, '../packages/pdf/testdata/fonts/NotoSans-Devanagari-Bengali.ttc')
@@ -286,10 +296,50 @@ try {
   await setValue(textInput, '\u{10FFFF}')
   await apply()
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'missing glyph is refused')
+  // True automatic-size source: setting DA0 after widget creation avoids
+  // pdf-lib's initial default-appearance generation replacing the authored zero.
+  const autoDoc = await PDFDocument.create(), autoField = autoDoc.getForm().createTextField('Unicode sample')
+  autoField.setText('BEFORE'); autoField.addToPage(autoDoc.addPage([400, 300]), { x: 20, y: 180, width: 350, height: 80 }); autoField.setFontSize(0)
+  const autoPath = resolve(output, 'automatic-source.pdf')
+  writeFileSync(autoPath, await autoDoc.save({ updateFieldAppearances: false }))
+  replacingDownloadedSource = true
+  await upload('[aria-label="Open a PDF file"]', autoPath)
+  replacingDownloadedSource = false
+  await until(`document.querySelector(${JSON.stringify(textInput)})?.value === 'BEFORE' && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'automatic source loads and clears draft')
+  await setValue(appearanceSelect, 'embedded', true)
+  await until(`!!document.querySelector('[aria-label="Embedded appearance font"]')`, 'automatic embedded input')
+  await upload('[aria-label="Embedded appearance font"]', require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Oblique.ttf'))
+  await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Selected: DejaVuSans-Oblique.ttf')`, 'italic font upload')
+  for (const [label, value] of [['italic-auto', 'j'], ['glyphless', '\u200B\u00AD\u{E0100}']]) {
+    await setValue(textInput, value)
+    await apply()
+    await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'automatic appearance generated')
+    await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(value)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'automatic saved document reloads')
+    const destination = mkdtempSync(resolve(output, label + '-'))
+    await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: destination })
+    await evaluate(`Array.from(document.querySelectorAll('[data-demo-surface="pdf"] button')).find(button => button.textContent.trim() === 'Download edited PDF').click()`)
+    let file
+    for (let attempt = 0; attempt < 300; attempt++) { file = readdirSync(destination).find(name => name.endsWith('.pdf')); if (file) break; await pause(100) }
+    assert.ok(file, 'UI downloads completed appearance')
+    const saved = await PDFDocument.load(readFileSync(resolve(destination, file))), field = saved.getForm().getTextField('Unicode sample')
+    assert.equal(field.getText(), value)
+    const ap = saved.context.lookup(field.acroField.getWidgets()[0].getNormalAppearance())
+    const content = Buffer.from(decodePDFRawStream(ap).decode()).toString('latin1')
+    if (label === 'glyphless') {
+      assert.ok(content.includes(`/ActualText ${PDFHexString.fromText(value).toString()}`))
+      assert.ok(content.includes('<> Tj')); assert.doesNotMatch(content, /<[0-9A-F]+> Tj/)
+    } else {
+      const scale = Number(content.match(/\/DejaVuSans-Oblique ([\d.]+) Tf/)[1]) / 2048
+      const matrix = [...content.matchAll(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/g)][1]
+      // Independently pinned DejaVu italic j bounds, not production ink output.
+      assert.ok(Number(matrix[1]) - 231 * scale >= 2 - 1e-7)
+      assert.ok(Number(matrix[2]) - 426 * scale >= 2 - 1e-7)
+    }
+  }
   assert.deepEqual(readFileSync(sourcePath), Buffer.from(source), 'source bytes stay unchanged')
   assert.deepEqual(errors, [])
   assert.deepEqual(postRequests, [])
-  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL/multiscript, name/CID-keyed CFF resources, selected TTC face/reset, missing-glyph refusal)')
+  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL/multiscript, name/CID-keyed CFF resources, selected TTC face/reset, variation selectors/Hangul, glyphless source semantics, italic automatic ink fit, missing-glyph refusal)')
 } finally {
   socket?.close()
   for (const task of pending.values()) clearTimeout(task.timer)
