@@ -16,10 +16,10 @@ export function validNativeLiteralConnected(c:NativeLiteralConnected):boolean{
   const exponent=Math.min(low.exponent,high.exponent)
   if(low.coefficient*10n**BigInt(low.exponent-exponent)>=high.coefficient*10n**BigInt(high.exponent-exponent))return false
  }
- const seen=new Set<number>()
- for(const [order,s]of c.series.entries()){
-  if(seen.has(s.index)||s.order!==order||s.values.some(v=>!decimal(v)))return false
-  seen.add(s.index)
+ const seen=new Set<number>(),orders=new Set<number>()
+ for(const [,s]of c.series.entries()){
+  if(!s||!Number.isSafeInteger(s.index)||Object.is(s.index,-0)||s.index<0||s.index>4294967295||seen.has(s.index)||!Number.isSafeInteger(s.order)||Object.is(s.order,-0)||s.order<0||s.order>=c.series.length||orders.has(s.order)||s.values.some(v=>!decimal(v)))return false
+  seen.add(s.index);orders.add(s.order)
   if(scatter?(!s.xValues||s.xValues.length!==s.values.length||s.xValues.some(v=>!decimal(v))):(s.xValues!==undefined||s.values.length!==c.categories.length))return false
  }
  return true

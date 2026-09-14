@@ -67,7 +67,7 @@ func TestNativeChartConnectedSeriesOrderAndCategoryEquality(t *testing.T) {
 		second := strings.NewReplacer(`idx val="5"`, `idx val="9"`, `order val="0"`, `order val="1"`, `Connected series`, `Second series`, `123456`, `ABCDEF`).Replace(first)
 		source := strings.Replace(original, first, second+first, 1)
 		chart := extractNativeChartConnected([]byte(source), "chart.xml", d, scatter)
-		if chart == nil || len(chart.Series) != 2 || chart.Series[0].Index != 5 || chart.Series[1].Index != 9 || chart.Series[1].Color != "#ABCDEF" {
+		if chart == nil || len(chart.Series) != 2 || chart.Series[0].Index != 9 || chart.Series[1].Index != 5 || chart.Series[0].Color != "#ABCDEF" {
 			t.Fatalf("source series order lost: %#v", chart)
 		}
 		if !scatter {

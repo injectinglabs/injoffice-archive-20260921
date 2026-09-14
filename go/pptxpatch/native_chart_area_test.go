@@ -41,7 +41,7 @@ func TestNativeChartAreaPublicContract(t *testing.T) {
 			if _, err = DecodeNativePPTXJSON(malformed); err == nil {
 				t.Fatal("unknown area property admitted")
 			}
-			if area.Grouping == "percentStacked" && strings.Join(area.Series[0].Values, ",") != "1e-100,-0,9007199254740993" {
+			if area.Grouping == "percentStacked" && strings.Join(area.Series[0].Values, ",") != "2e-100,0.0,18014398509481986" {
 				t.Fatal("source lexemes lost in public profile")
 			}
 			chart.Chart.LiteralPie = &NativeLiteralPie{Profile: "literal-pie-v1", Values: []int64{1}, Colors: []string{"#000000"}}

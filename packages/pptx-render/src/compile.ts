@@ -2159,7 +2159,7 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
           }
           if(stackedBar||stackedLine)state.diagnostics.push({severity:'warning',code:workbook?'chart.workbookStackedPreview':'chart.literalStackedPreview',message:'Signed stacks preserve XML series order and original order metadata. Bars accumulate signs separately; lines use algebraic cumulative tops. Percentages divide by each category sum of absolute values; zero totals produce zero boundaries. Host plot fitting and integer rounding apply.',slideId:state.slide.id,elementId:element.id})
           if(bubble)state.diagnostics.push({severity:'warning',code:'chart.bubblePreview',message:BUBBLE_PREVIEW_DISCLOSURE,slideId:state.slide.id,elementId:element.id})
-          if(area)state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and compound fills. Standard series paint in authored order as a host preview policy; Office overlap order and plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
+          if(area)state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and compound fills. Standard series paint in XML series sequence as a host preview policy; Office overlap order and plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
           state.diagnostics.push({severity:'warning',code:'chart.axisLabelsPreview',message:`Source labels use exact supplied fonts and ${CHART_AXIS_LAYOUT_POLICY}: conservative outline hulls, one-point label gap, three-point outside ticks and fixed-decimal half-away rounding. Plot margins are measured host layout, not PowerPoint layout reproduction.`,slideId:state.slide.id,elementId:element.id})
           return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
         }catch(error){
@@ -2185,7 +2185,7 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
           const path=`$.elements.${element.id}.literalArea.${index}`;takeNode(state,path)
           return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedAreaPath(vector.path,path,state.budget),...(vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
         })
-        state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and one compound fill per series. Standard series paint in authored order as a host preview policy; Office overlap order and plot layout are not reproduced. Zero bands paint no fill.',slideId:state.slide.id,elementId:element.id})
+        state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and one compound fill per series. Standard series paint in XML series sequence as a host preview policy; Office overlap order and plot layout are not reproduced. Zero bands paint no fill.',slideId:state.slide.id,elementId:element.id})
         return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
       }
 

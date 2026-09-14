@@ -3,7 +3,6 @@ package pptxpatch
 import (
 	"encoding/xml"
 	"slices"
-	"sort"
 	"unicode/utf16"
 )
 
@@ -100,12 +99,12 @@ func extractNativeChartArea(payload []byte, part string, d nativeExtractDialect)
 	if len(result.Series) == 0 {
 		return nil
 	}
-	sort.Slice(result.Series, func(i, j int) bool { return result.Series[i].Order < result.Series[j].Order })
+	// Preserve XML series sequence; order is a complete metadata permutation.
 	// The source record retains lexemes; exact cumulative geometry belongs to
 	// the renderer. Admission needs only already-bounded decimal signs/order,
 	// not allocating every rational band during read-only extraction.
 	for i, series := range result.Series {
-		if series.Order != int64(i) {
+		if !orders[int64(i)] {
 			return nil
 		}
 		if grouping != "standard" {

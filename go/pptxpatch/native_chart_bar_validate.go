@@ -62,12 +62,13 @@ func validNativeLiteralBar(bar *NativeLiteralBar) bool {
 	if err != nil || !cross.isZero() || minimum.compare(maximum) >= 0 || minimum.compare(zero) > 0 || maximum.compare(zero) < 0 {
 		return false
 	}
-	indices := map[int64]bool{}
-	for i, series := range bar.Series {
-		if series.Index < 0 || series.Index > 4294967295 || indices[series.Index] || series.Order != int64(i) || len(series.Values) != len(bar.Categories) || len(series.Colors) != len(bar.Categories) || (series.Title != nil && len(utf16.Encode([]rune(*series.Title))) > 1024) {
+	indices, orders := map[int64]bool{}, map[int64]bool{}
+	for _, series := range bar.Series {
+		if series.Index < 0 || series.Index > 4294967295 || indices[series.Index] || series.Order < 0 || series.Order >= int64(len(bar.Series)) || orders[series.Order] || len(series.Values) != len(bar.Categories) || len(series.Colors) != len(bar.Categories) || (series.Title != nil && len(utf16.Encode([]rune(*series.Title))) > 1024) {
 			return false
 		}
 		indices[series.Index] = true
+		orders[series.Order] = true
 		for j, value := range series.Values {
 			if _, err := parseNativeChartDecimal(value); err != nil || !color(series.Colors[j]) {
 				return false

@@ -25,17 +25,18 @@ func nativeChartStackBands(series []nativeChartStackSeries, grouping string) ([]
 	if count < 1 || count > nativeChartMaxCategories {
 		return nil, fmt.Errorf("invalid chart stack point count")
 	}
-	seen := map[int64]bool{}
+	seen, orders := map[int64]bool{}, map[int64]bool{}
 	values := make([][]*big.Rat, len(series))
 	totals := make([]*big.Rat, count)
 	for point := range totals {
 		totals[point] = new(big.Rat)
 	}
 	for order, item := range series {
-		if item.Index < 0 || item.Index > 4294967295 || seen[item.Index] || item.Order != int64(order) || len(item.Values) != count {
+		if item.Index < 0 || item.Index > 4294967295 || seen[item.Index] || item.Order < 0 || item.Order >= int64(len(series)) || orders[item.Order] || len(item.Values) != count {
 			return nil, fmt.Errorf("invalid chart stack series alignment")
 		}
 		seen[item.Index] = true
+		orders[item.Order] = true
 		values[order] = make([]*big.Rat, count)
 		for point, raw := range item.Values {
 			decimal, err := parseNativeChartDecimal(raw)
