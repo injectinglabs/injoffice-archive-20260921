@@ -1010,7 +1010,7 @@ The version 1 single-rectangle API remains available.
 
 The playground's **Upload to helper and preview page-placed textboxes** action
 uses `/v1/docx/page-preview-textboxes`. It validates the current package and
-embedded-font inventory before mounting all page rectangles above the body paint in source order.
+embedded-font inventory before mounting page rectangles in their authored front/behind stacking order.
 Navigation mounts one page at a time; replacing the source clears old pages
 and requires a new explicit upload. `scripts/smoke-docx-textbox-notes-browser.mjs`
 checks this flow, single-paragraph note splitting, and three-note continuation
@@ -1032,5 +1032,11 @@ edges, the SVG clips the outward half of the stroke without shifting geometry.
 
 The original version 1 API continues to accept only its page-offset policy.
 The helper routes additional positions to version 2. Other wrapping policies,
-inline shapes, anchors after text, margin-side/parity positioning, and different
-stacking layers remain outside this read-only rectangle preview.
+inline shapes, anchors after text, and margin-side/parity positioning remain
+outside this read-only rectangle preview.
+
+Version 2 also preserves source `behindDoc` and unsigned `relativeHeight` in
+optional `stacking` evidence. Behind-body textboxes paint before body commands;
+foreground textboxes paint after them. Each group uses ascending relative height,
+with source order breaking ties. The transport array stays in source order and
+every stacking record is checked against source evidence before any page mounts.

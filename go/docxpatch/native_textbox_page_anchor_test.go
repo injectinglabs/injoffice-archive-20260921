@@ -3,6 +3,7 @@ package docxpatch
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -62,9 +63,9 @@ func TestNativeTextboxPageAnchorRefusals(t *testing.T) {
 	for _, tc := range []struct{ name, from, to string }{
 		{"unknown origin", `relativeFrom="page"`, `relativeFrom="unknown"`},
 		{"simple position", `simplePos="0"`, `simplePos="1"`},
-		{"behind text", `behindDoc="0"`, `behindDoc="1"`},
+		{"invalid behind", `behindDoc="0"`, `behindDoc="2"`},
 		{"overlap", `allowOverlap="1"`, `allowOverlap="0"`},
-		{"layer", `relativeHeight="0"`, `relativeHeight="1"`},
+		{"layer overflow", `relativeHeight="0"`, `relativeHeight="4294967296"`},
 		{"distance", `distT="0"`, `distT="127"`},
 		{"wrapping", `<wp:wrapNone/>`, `<wp:wrapSquare wrapText="bothSides"/>`},
 		{"negative overflow", `>914400<`, `>-127000127<`},
@@ -144,6 +145,37 @@ func TestNativeTextboxRelativePositionEvidence(t *testing.T) {
 				if got != base || (align && (alignment != value || offset != 0)) || (!align && (alignment != "" || offset != -127)) || a.XMLSHA256 != nativeSHA([]byte(main)[*a.StartByte:*a.EndByte]) {
 					t.Fatal(p)
 				}
+			}
+		}
+	}
+}
+
+func TestNativeTextboxStackingEvidence(t *testing.T) {
+	for _, rank := range []string{"0", "1", "4294967295"} {
+		for _, behind := range []string{"0", "1", "false", "true"} {
+			drawing := strings.NewReplacer(`relativeHeight="0"`, `relativeHeight="`+rank+`"`, `behindDoc="0"`, `behindDoc="`+behind+`"`).Replace(nativePageTextboxFixture())
+			source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(nativeMutationMain(`<w:p><w:r>`+drawing+`</w:r></w:p>`))))
+			doc, err := ExtractNativeDocumentV1(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := inspectNativeTextboxGeometry(source, doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out == nil || len(out.Items) != 1 || out.Items[0].Geometry == nil || out.Items[0].PageAnchor == nil {
+				t.Fatal("missing stacked geometry")
+			}
+			anchor := out.Items[0].PageAnchor
+			if rank == "0" && (behind == "0" || behind == "false") {
+				if anchor.Stacking != nil || anchor.Policy != "page-offset-no-wrap-v1" {
+					t.Fatal(anchor)
+				}
+				continue
+			}
+			want, _ := strconv.ParseUint(rank, 10, 32)
+			if anchor.Policy != "relative-position-no-wrap-v2" || anchor.Stacking == nil || anchor.Stacking.BehindDoc != (behind == "1" || behind == "true") || uint64(anchor.Stacking.RelativeHeight) != want {
+				t.Fatal(anchor)
 			}
 		}
 	}

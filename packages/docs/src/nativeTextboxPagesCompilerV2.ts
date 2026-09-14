@@ -25,7 +25,8 @@ export async function renderNativeDocxTextboxPagesPreviewV2(input:NativeDocxPage
   const page=body.pages.find(p=>p.lines.some(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0))
   if(!page)throw new TypeError('Textbox anchor paragraph has no page')
   const {x,y}=resolveTextboxPosition(projection.document,item,page,paint)
-  return {textbox_index:index,page_id:page.id,x_millipoints:x,y_millipoints:y,paint}
+  const stacking=item.page_anchor!.policy==='relative-position-no-wrap-v2'?item.page_anchor!.stacking:undefined
+  return {...(stacking?{stacking}:{}),textbox_index:index,page_id:page.id,x_millipoints:x,y_millipoints:y,paint}
  })
  return decodeNativeDocxTextboxPagesPreviewV2(source,projection.geometry,{protocol:DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL,version:2,fidelity:'approximate',read_only:true,warning:DOCX_TEXTBOX_PAGES_PREVIEW_WARNING,source_sha256:nativeTextboxGeometryDigestV1(source),source_diagnostics:projection.source_diagnostics,body_paint:body,textboxes},digests)
 }

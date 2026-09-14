@@ -6,7 +6,7 @@ import type {NativeDocxPagePaintSuccessV1} from './nativePagePaintV1.js'
 import {decodeNativeDocxTextboxGeometryV1,decodeNativeDocxTextboxShapePaintV1,nativeTextboxGeometryDigestV1,nativeTextboxGeometryPlainData,type NativeDocxTextboxShapePaintV1} from './nativeTextboxGeometryPreviewV1.js'
 
 export const DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL='injoffice.docx.textbox-page-preview' as const
-export const DOCX_TEXTBOX_PAGES_PREVIEW_WARNING='Read-only approximate textbox composition in source order; original drawing restrictions remain.' as const
+export const DOCX_TEXTBOX_PAGES_PREVIEW_WARNING='Read-only approximate textbox composition with source stacking; original drawing restrictions remain.' as const
 
 export function projectNativeDocxTextboxPagesV2(source:unknown,evidence:unknown){
  const decoded=decodeNativeDocxDocument(source)
@@ -39,7 +39,7 @@ export interface NativeDocxTextboxPagesPreviewV2 {
  source_sha256:string
  source_diagnostics:ReturnType<typeof projectNativeDocxTextboxPagesV2>['source_diagnostics']
  body_paint:NativeDocxPagePaintSuccessV1
- textboxes:{textbox_index:number;page_id:string;x_millipoints:number;y_millipoints:number;paint:NativeDocxTextboxShapePaintV1}[]
+ textboxes:{stacking?:{behind_doc:boolean;relative_height:number};textbox_index:number;page_id:string;x_millipoints:number;y_millipoints:number;paint:NativeDocxTextboxShapePaintV1}[]
 }
 
 export function decodeNativeDocxTextboxPagesPreviewV2(source:unknown,evidence:unknown,input:unknown,expectedFontSHA256s:readonly string[]):NativeDocxTextboxPagesPreviewV2{
@@ -54,8 +54,10 @@ export function decodeNativeDocxTextboxPagesPreviewV2(source:unknown,evidence:un
  const body=decoded.value,{document}=projection,provenance=body.provenance
  if(provenance.document_id!==document.document_id||provenance.revision!==document.revision||provenance.package_sha256!==document.source.package_sha256||provenance.main_part!==document.source.main_part||provenance.body_story_id!==document.body.id)throw new TypeError('Textbox body source mismatch')
  const textboxes=value.textboxes.map((textbox,ordinal)=>{
-  keys(textbox,'page_id,paint,textbox_index,x_millipoints,y_millipoints')
   const {item,index}=projection.items[ordinal]!
+  const stacking=item.page_anchor!.policy==='relative-position-no-wrap-v2'?item.page_anchor!.stacking:undefined
+  keys(textbox,stacking?'page_id,paint,stacking,textbox_index,x_millipoints,y_millipoints':'page_id,paint,textbox_index,x_millipoints,y_millipoints')
+  if(stacking&&nativeTextboxGeometryDigestV1(textbox.stacking)!==nativeTextboxGeometryDigestV1(stacking))throw new TypeError('Textbox stacking does not match source')
   const pages=body.pages.filter(p=>p.lines.some(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0)),page=pages[0]
   const paint=decodeNativeDocxTextboxShapePaintV1(source,projection.geometry,index,textbox.paint,expectedFontSHA256s[index]!)
   if(!page)throw new TypeError('Textbox placement has no page')

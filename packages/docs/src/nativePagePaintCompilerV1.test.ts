@@ -2828,4 +2828,20 @@ describe('source-anchored textbox page composition',()=>{
   }
  },20000)
 
+ it('binds stacking to source evidence and refuses changed or omitted layers',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  const f=multipleTextboxFixture()
+  for(const [i,item] of f.evidence.items.entries())item.page_anchor={...item.page_anchor!,policy:'relative-position-no-wrap-v2',horizontal_relative:'page',vertical_relative:'page',stacking:{behind_doc:i===1,relative_height:i===0?4294967295:1}}
+  const result=await render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)
+  expect(result.textboxes.map(t=>t.stacking)).toEqual([{behind_doc:false,relative_height:4294967295},{behind_doc:true,relative_height:1}])
+  for(const mutate of [(v:typeof result)=>{delete v.textboxes[1]!.stacking},(v:typeof result)=>{v.textboxes[0]!.stacking!.relative_height=1},(v:typeof result)=>{v.textboxes[1]!.stacking!.behind_doc=false}]){
+   const bad=structuredClone(result);mutate(bad);expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+  }
+  for(const invalid of [{behind_doc:1,relative_height:1},{behind_doc:false,relative_height:-1},{behind_doc:false,relative_height:4294967296},{behind_doc:false,relative_height:1.5}]){
+   const bad=structuredClone(f.evidence);(bad.items[0]!.page_anchor as unknown as {stacking:unknown}).stacking=invalid
+   await expect(render(f.input,bad,[FONT_BYTES,FONT_BYTES],provider)).rejects.toThrow()
+  }
+ },15000)
+
 })

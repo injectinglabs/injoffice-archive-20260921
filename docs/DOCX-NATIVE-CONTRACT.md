@@ -809,4 +809,14 @@ Source margins come from the owning section, not a note-reduced body box.
 The first placed owner line resolves character, paragraph and line origins;
 column placement uses that line's section-qualified column. Original drawing
 restrictions and source bytes are preserved. This does not add body wrapping,
-inline placement, later-run anchoring, parity-relative margins or stacking modes.
+inline placement, later-run anchoring, or parity-relative margins.
+
+Nondefault textbox stacking is carried in the source-container-bound `stacking`
+record (`behind_doc`: boolean, `relative_height`: unsigned 32-bit integer).
+Its presence routes page-offset shapes through the version 2 position policy;
+the original version 1 API continues to refuse them. Composition preserves the
+source-ordered array and validates exact stacking records. The browser partitions
+behind/foreground shapes around body paint and sorts each partition by relative
+height with stable source-order ties. Changing, omitting or adding a stacking
+record invalidates the entire composition. See [the remaining delivery
+plan](DOCX-TEXTBOX-LAYOUT-PLAN.md).
