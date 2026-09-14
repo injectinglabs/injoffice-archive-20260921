@@ -74,6 +74,7 @@ import {
   qualifyNativeDocxInlineImageV1,
   type NativeDocxPagePaintMediaAssetV1,
 } from './nativeImagePagePaintV1.js'
+import {qualifyNativeDocxInlineTextboxV1} from './nativeTextboxInlineV1.js'
 import type { NativeDocxResolvedNumberingSourceV1, NativeDocxResolvedRunPropertiesV1 } from './nativeResolvedLayout.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
@@ -1091,6 +1092,14 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) sourceImageCounts.set(coveragePrefix + nativeRun.id, (sourceImageCounts.get(coveragePrefix + nativeRun.id) ?? 0) + 1)
             coveredFragmentIDs.add(coveragePrefix + fragment.id)
             continue
+          } else if (fragment.source_kind === 'textbox') {
+            if (nativeRun.kind !== 'drawing' || !nativeRun.drawing || fragment.text !== '' || fragment.glyphs.length !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Textbox fragment must be one glyphless inline drawing atom') }
+            const qualified = qualifyNativeDocxInlineTextboxV1(pagination.document, nativeRun.id, nativeRun.drawing)
+            if (!qualified.ok || fragment.advance_inline_millipoints !== (qualified.ok ? qualified.value.width_millipoints : -1) || fragment.ascent_millipoints !== (qualified.ok ? qualified.value.height_millipoints : -1) || fragment.descent_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, qualified.ok ? 'Textbox fragment geometry changed after source projection' : qualified.message) }
+            highlights.push({kind:'fill_text_highlight', id:`paint:${placed.id}:${fragment.id}:highlight`, line_id:line.id, fragment_id:fragment.id, source_id:fragment.source_id, x_millipoints:fragmentX, y_millipoints:baselineY-qualified.value.height_millipoints, width_millipoints:qualified.value.width_millipoints, height_millipoints:qualified.value.height_millipoints, fill_rgb:qualified.value.fill_rgb})
+            fragmentX += fragment.advance_inline_millipoints
+            coveredFragmentIDs.add(coveragePrefix + fragment.id)
+            continue
           }
         }
         coveredFragmentIDs.add(coveragePrefix + fragment.id)
@@ -1328,6 +1337,11 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           line?.fragments.forEach((fragment) => {
             const resolved = resolvedRuns.get(fragment.source_id)
             const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placed.paragraph_id)?.numbering?.marker_properties : resolved?.properties
+            if (fragment.source_kind === 'textbox') {
+              const run = resolvedRuns.get(fragment.source_id) ? nativeRuns.get(fragment.source_id) : undefined
+              const qualified = run?.drawing ? qualifyNativeDocxInlineTextboxV1(request.value.pagination_request.document, run.id, run.drawing) : undefined
+              if (qualified?.ok) expectedHighlights.push({pageIndex, command:{kind:'fill_text_highlight', id:`paint:${placed.id}:${fragment.id}:highlight`, line_id:line.id, fragment_id:fragment.id, source_id:fragment.source_id, x_millipoints:fragmentX, y_millipoints:placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width_millipoints:qualified.value.width_millipoints, height_millipoints:qualified.value.height_millipoints, fill_rgb:qualified.value.fill_rgb}})
+            }
             if (fragment.source_kind !== 'image') {
               const underline = nativeTextUnderlineCommandsV1(properties?.underline, properties?.color, fragment, placed.id, line.id, fragmentX, placed.y_millipoints + line.ascent_millipoints)
               if (!underline.ok) add(issues, 'BROKEN_REFERENCE', '/output/pages', underline.message)

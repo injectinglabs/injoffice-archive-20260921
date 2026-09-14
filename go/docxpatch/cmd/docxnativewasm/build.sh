@@ -24,10 +24,11 @@ cp "$wasm_exec" "$output_dir/wasm_exec.js"
 size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # Includes the same-byte style resolver used by partial text/equation inspection.
 # Enforce the same bounded budget in local package builds and CI.
-# An additional 16 KiB covers source-bound textbox axes, alignment and stacking.
-max_size=$((13 * 1024 * 1024 / 2 + 16 * 1024))
+# An additional 32 KiB covers source-bound textbox axes, alignment, stacking,
+# and inline textbox source evidence.
+max_size=$((13 * 1024 * 1024 / 2 + 32 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 16 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 32 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2

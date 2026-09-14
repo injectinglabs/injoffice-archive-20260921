@@ -2478,9 +2478,6 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	if container.Name.Local == "anchor" && !nativeExactPageAnchor(container, wpNS, aNS) {
 		return refuse("FLOATING_DRAWING_SEMANTICS_PRESERVED", "Only exact page-relative wrapNone or bothSides wrapSquare anchors with explicit layering and overlap are projected", container)
 	}
-	if container.Name.Local == "inline" && !nativeExactInlinePictureContainer(container, wpNS, aNS) {
-		return refuse("INLINE_DRAWING_SEMANTICS_PRESERVED", "Inline pictures with unmodeled container attributes or children remain preserve-only", container)
-	}
 	extent := firstDirectNativeChild(container, wpNS, "extent")
 	if extent == nil {
 		return refuse("DRAWING_EXTENT_REQUIRED", "Picture extent is missing", container)
@@ -2489,6 +2486,23 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	height, okHeight := nativePositiveInt64Attr(extent, "", "cy")
 	if !okWidth || !okHeight {
 		return refuse("INVALID_DRAWING_EXTENT", "Picture extent must contain positive safe cx/cy values", extent)
+	}
+	// A bounded inline WPS text box is an inline atom, rather than an image.
+	// Reuse the strict geometry parser so source extraction and textbox evidence
+	// accept exactly the same shape subset. Anything malformed falls through to
+	// the ordinary preserve-only drawing refusals below.
+	if container.Name.Local == "inline" {
+		if geometry, text := nativeParseTextboxGeometry(node, extractor.wordNS); geometry != nil {
+			return &NativeDrawingV1{
+				ID: extractor.objectID("drawing", partName, node, ""), Anchor: extractor.anchor(partName, node),
+				Placement: "inline", WidthEMU: nativeInt64(geometry.WidthEMU), HeightEMU: nativeInt64(geometry.HeightEMU),
+				TextboxText: nativeString(text), TextboxFillRGB: nativeString(geometry.FillRGB), TextboxLineRGB: nativeString(geometry.LineRGB),
+				EditPolicy: nativeReadOnlyPolicy("EXTRACT_ONLY", "Native inline textbox extraction does not yet expose guarded drawing replacement"),
+			}, true
+		}
+	}
+	if container.Name.Local == "inline" && !nativeExactInlinePictureContainer(container, wpNS, aNS) {
+		return refuse("INLINE_DRAWING_SEMANTICS_PRESERVED", "Inline pictures with unmodeled container attributes or children remain preserve-only", container)
 	}
 	var inlineEffects *NativeDrawingCropV1
 	if effects := directNativeChildren(container, wpNS, "effectExtent"); len(effects) > 0 {

@@ -31,7 +31,8 @@ func TestNativeTextboxGeometry(t *testing.T) {
 	if item.Geometry == nil || item.Owner.Status != "supported" || item.Geometry.WidthEMU != 2743200 || item.Geometry.InsetsEMU[0] != 91440 || item.Geometry.FillRGB != "FFF2CC" || item.Geometry.LineWidthEMU != 12700 || item.Owner.Paragraphs[0] != "Rectangle source" {
 		t.Fatalf("bad geometry: %#v", item)
 	}
-	if !bytes.Equal(source, before) || result.Document.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" || !hasUnsupportedCode(&result.Document, "PICTURE_GRAPHIC_REQUIRED") {
+	run := result.Document.Body.Blocks[0].Paragraph.Runs[0]
+	if !bytes.Equal(source, before) || result.Document.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" || run.Drawing == nil || run.Drawing.TextboxText == nil || *run.Drawing.TextboxText != "Rectangle source" || run.Drawing.TextboxFillRGB == nil || *run.Drawing.TextboxFillRGB != "FFF2CC" || hasUnsupportedCode(&result.Document, "PICTURE_GRAPHIC_REQUIRED") {
 		t.Fatal("source/mutation/diagnostics changed")
 	}
 }

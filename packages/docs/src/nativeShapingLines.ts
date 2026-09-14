@@ -71,6 +71,7 @@ import {
   type NativeDocxResolvedRunV1,
 } from './nativeResolvedLayout.js'
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
+import {qualifyNativeDocxInlineTextboxV1} from './nativeTextboxInlineV1.js'
 import { resolveNativeDocxParagraphBidiPlanV1, type NativeDocxParagraphBidiPlanV1 } from './nativeBidiPlanV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { compareNativeValidationIssues } from './nativeDeterminism.js'
@@ -162,7 +163,7 @@ export interface NativeDocxPositionedGlyphV1 {
 export interface NativeDocxLineFragmentV1 {
   script_transform?: NativeDocxScriptTransformV1
   id: string
-  source_kind: 'run' | 'list-marker' | 'tab' | 'image'
+  source_kind: 'run' | 'list-marker' | 'tab' | 'image' | 'textbox'
   /** Native run id for authored text/controls; paragraph id for a list marker. */
   source_id: string
   start_utf16: number
@@ -356,7 +357,7 @@ interface SourceSpan {
 
 interface FragmentAtom {
   scriptTransform?: NativeDocxScriptTransformV1
-  sourceKind: 'run' | 'list-marker' | 'tab' | 'image'
+  sourceKind: 'run' | 'list-marker' | 'tab' | 'image' | 'textbox'
   sourceID: string
   startUtf16: number
   endUtf16: number
@@ -1443,6 +1444,14 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
   if (reportBlockingDiagnostics(context, run.id, paragraphID, run.id)) return []
   if (resolved.properties.hidden) return []
   if (run.kind === 'drawing') {
+    const textbox = run.drawing ? qualifyNativeDocxInlineTextboxV1(context.request.document, run.id, run.drawing) : undefined
+    if (textbox?.ok) {
+      if (!reserveVirtualAtom(context, paragraphID, run.id)) return []
+      const level = plan.paragraph.levels[plan.runStarts.get(run.id) ?? -1] ?? plan.paragraph.baseLevel
+      const direction = (level & 1) === 1 ? 'rtl' : 'ltr'
+      const metrics: ScaledLineMetrics = {fontSizeMilliPoints: textbox.value.height_millipoints, ascentMilliPoints: textbox.value.height_millipoints, descentMilliPoints: 0, lineGapMilliPoints: 0, lineHeightMilliPoints: textbox.value.height_millipoints}
+      return [{kind:'atom', atom:{sourceKind:'textbox', sourceID:run.id, startUtf16:0, endUtf16:0, text:'', direction, bidiLevel:level, script:'Zyyy', language:resolved.properties.language ?? 'und', whitespace:false, unsafeToBreak:false, breakAfter:false, dynamicTab:false, advance:textbox.value.width_millipoints, metrics, glyphs:[]}}]
+    }
     const qualified = run.drawing ? qualifyNativeDocxInlineImageV1(context.request.document, run.id, run.drawing) : undefined
     if (!qualified?.ok) {
       addDiagnostic(context, { code: 'drawing-layout-unsupported', severity: 'unsupported', scope_id: paragraphID, source_id: run.id, message: qualified?.message ?? 'Drawing payload is missing' })
