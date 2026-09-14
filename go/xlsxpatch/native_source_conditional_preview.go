@@ -70,6 +70,7 @@ const sourceBarSheetURI = "{78C0D931-6437-407d-A8EE-F0AAD7539E65}"
 var sourceConditionalText = regexp.MustCompile(`^[A-Z]{1,64}$`)
 var sourceConditionalGUID = regexp.MustCompile(`^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$`)
 
+//go:noinline
 func sourceConditionalError() error {
 	return fmt.Errorf("xlsxpatch: source conditional preview: unqualified rule, extension, differential style or input")
 }
@@ -108,9 +109,13 @@ func scNode(n *previewXML, ns, name string, attrs ...string) bool {
 	}
 	return nativeRichNode(n, ns, name, keys...) && strings.TrimSpace(n.text) == ""
 }
+
+//go:noinline
 func scLeaf(n *previewXML, ns, name string, attrs ...string) bool {
 	return scNode(n, ns, name, attrs...) && len(n.children) == 0
 }
+
+//go:noinline
 func scChildren(n *previewXML, ns string, names ...string) bool {
 	if n == nil || len(n.children) != len(names) {
 		return false
@@ -135,10 +140,10 @@ func scInt(s string, low, high int) (int, bool) {
 	return n, e == nil && n >= low && n <= high && strconv.Itoa(n) == s
 }
 func scRGB(n *previewXML, ns, name string) (string, bool) {
-	if !scLeaf(n, ns, name, "rgb") || !nativeConditionalRGB.MatchString(n.attr("rgb")) {
+	if !scLeaf(n, ns, name, "rgb") || !nativeConditionalRGB.MatchString(scAttr(n, "rgb")) {
 		return "", false
 	}
-	return "#" + strings.ToUpper(n.attr("rgb")[2:]), true
+	return "#" + strings.ToUpper(scAttr(n, "rgb")[2:]), true
 }
 
 func (out *NativeSourceStylePreviewV2) qualifySourceConditions(root *previewXML, styles []byte) error {
@@ -160,13 +165,13 @@ func (out *NativeSourceStylePreviewV2) qualifySourceConditions(root *previewXML,
 			return sourceConditionalError()
 		}
 		rule := cf.children[0]
-		priority, ok := scInt(rule.attr("priority"), 1, 65535)
+		priority, ok := scInt(scAttr(rule, "priority"), 1, 65535)
 		if !ok {
 			return sourceConditionalError()
 		}
-		switch rule.attr("type") {
+		switch scAttr(rule, "type") {
 		case "cellIs":
-			if out.TextRule != nil || !scNode(rule, ns, "cfRule", "type", "priority", "operator", "aboveAverage", "equalAverage", "bottom", "percent", "rank", "text", "dxfId") || rule.attr("operator") != "equal" || !scChildren(rule, ns, "formula") {
+			if out.TextRule != nil || !scNode(rule, ns, "cfRule", "type", "priority", "operator", "aboveAverage", "equalAverage", "bottom", "percent", "rank", "text", "dxfId") || scAttr(rule, "operator") != "equal" || !scChildren(rule, ns, "formula") {
 				return sourceConditionalError()
 			}
 			for _, a := range rule.attrs {
@@ -185,31 +190,31 @@ func (out *NativeSourceStylePreviewV2) qualifySourceConditions(root *previewXML,
 			if !ok || len(literal) < 3 || literal[0] != '"' || literal[len(literal)-1] != '"' || !sourceConditionalText.MatchString(literal[1:len(literal)-1]) {
 				return sourceConditionalError()
 			}
-			id, ok := scInt(rule.attr("dxfId"), 0, 0)
+			id, ok := scInt(scAttr(rule, "dxfId"), 0, 0)
 			if !ok {
 				return sourceConditionalError()
 			}
-			out.TextRule = &NativeSourceTextRuleV2{Range: cf.attr("sqref"), Priority: priority, DXFID: id, Text: literal[1 : len(literal)-1], Cells: []NativeSourceTextEffectV2{}}
+			out.TextRule = &NativeSourceTextRuleV2{Range: scAttr(cf, "sqref"), Priority: priority, DXFID: id, Text: literal[1 : len(literal)-1], Cells: []NativeSourceTextEffectV2{}}
 		case "dataBar":
 			if out.DataBar != nil || !scNode(rule, ns, "cfRule", "type", "priority") || !scChildren(rule, ns, "dataBar", "extLst") {
 				return sourceConditionalError()
 			}
 			bar := rule.children[0]
-			if !scNode(bar, ns, "dataBar", "showValue", "minLength", "maxLength") || bar.attr("showValue") != "1" || !scChildren(bar, ns, "cfvo", "cfvo", "color") {
+			if !scNode(bar, ns, "dataBar", "showValue", "minLength", "maxLength") || scAttr(bar, "showValue") != "1" || !scChildren(bar, ns, "cfvo", "cfvo", "color") {
 				return sourceConditionalError()
 			}
-			lo, ok := scInt(bar.attr("minLength"), 0, 100)
-			hi, ok2 := scInt(bar.attr("maxLength"), 0, 100)
+			lo, ok := scInt(scAttr(bar, "minLength"), 0, 100)
+			hi, ok2 := scInt(scAttr(bar, "maxLength"), 0, 100)
 			if !ok || !ok2 || lo >= hi {
 				return sourceConditionalError()
 			}
 			bounds := [2]int{}
 			for i := 0; i < 2; i++ {
 				n := bar.children[i]
-				if !scLeaf(n, ns, "cfvo", "type", "val") || n.attr("type") != "num" {
+				if !scLeaf(n, ns, "cfvo", "type", "val") || scAttr(n, "type") != "num" {
 					return sourceConditionalError()
 				}
-				v, ok := scInt(n.attr("val"), 0, 1000000000)
+				v, ok := scInt(scAttr(n, "val"), 0, 1000000000)
 				if !ok {
 					return sourceConditionalError()
 				}
@@ -224,14 +229,14 @@ func (out *NativeSourceStylePreviewV2) qualifySourceConditions(root *previewXML,
 				return sourceConditionalError()
 			}
 			ext := list.children[0]
-			if !scNode(ext, ns, "ext", "uri") || ext.attr("uri") != sourceBarRuleURI || !scChildren(ext, sourceX14, "id") {
+			if !scNode(ext, ns, "ext", "uri") || scAttr(ext, "uri") != sourceBarRuleURI || !scChildren(ext, sourceX14, "id") {
 				return sourceConditionalError()
 			}
 			id, ok := scText(ext.children[0], sourceX14, "id")
 			if !ok || !sourceConditionalGUID.MatchString(id) {
 				return sourceConditionalError()
 			}
-			out.DataBar = &NativeSourceDataBarV2{Range: cf.attr("sqref"), Priority: priority, ExtensionID: id, Minimum: bounds[0], Maximum: bounds[1], MinLength: lo, MaxLength: hi, Color: color, Cells: []NativeSourceBarEffectV2{}}
+			out.DataBar = &NativeSourceDataBarV2{Range: scAttr(cf, "sqref"), Priority: priority, ExtensionID: id, Minimum: bounds[0], Maximum: bounds[1], MinLength: lo, MaxLength: hi, Color: color, Cells: []NativeSourceBarEffectV2{}}
 		default:
 			return sourceConditionalError()
 		}
@@ -267,7 +272,7 @@ func (out *NativeSourceStylePreviewV2) qualifySourceBarExtension(list *previewXM
 		return sourceConditionalError()
 	}
 	ext := list.children[0]
-	if !scNode(ext, ns, "ext", "uri") || ext.attr("uri") != sourceBarSheetURI || !scChildren(ext, sourceX14, "conditionalFormattings") {
+	if !scNode(ext, ns, "ext", "uri") || scAttr(ext, "uri") != sourceBarSheetURI || !scChildren(ext, sourceX14, "conditionalFormattings") {
 		return sourceConditionalError()
 	}
 	group := ext.children[0]
@@ -283,16 +288,16 @@ func (out *NativeSourceStylePreviewV2) qualifySourceBarExtension(list *previewXM
 		return sourceConditionalError()
 	}
 	rule := cf.children[0]
-	if !scNode(rule, sourceX14, "cfRule", "type", "id") || rule.attr("type") != "dataBar" || rule.attr("id") != bar.ExtensionID || !scChildren(rule, sourceX14, "dataBar") {
+	if !scNode(rule, sourceX14, "cfRule", "type", "id") || scAttr(rule, "type") != "dataBar" || scAttr(rule, "id") != bar.ExtensionID || !scChildren(rule, sourceX14, "dataBar") {
 		return sourceConditionalError()
 	}
 	b := rule.children[0]
-	if !scNode(b, sourceX14, "dataBar", "minLength", "maxLength", "axisPosition", "gradient") || b.attr("axisPosition") != "none" || b.attr("gradient") != "true" || b.attr("minLength") != strconv.Itoa(bar.MinLength) || b.attr("maxLength") != strconv.Itoa(bar.MaxLength) || !scChildren(b, sourceX14, "cfvo", "cfvo", "negativeFillColor", "axisColor") {
+	if !scNode(b, sourceX14, "dataBar", "minLength", "maxLength", "axisPosition", "gradient") || scAttr(b, "axisPosition") != "none" || scAttr(b, "gradient") != "true" || scAttr(b, "minLength") != strconv.Itoa(bar.MinLength) || scAttr(b, "maxLength") != strconv.Itoa(bar.MaxLength) || !scChildren(b, sourceX14, "cfvo", "cfvo", "negativeFillColor", "axisColor") {
 		return sourceConditionalError()
 	}
 	for i, v := range []int{bar.Minimum, bar.Maximum} {
 		n := b.children[i]
-		if !scNode(n, sourceX14, "cfvo", "type") || n.attr("type") != "num" || !scChildren(n, sourceXM, "f") {
+		if !scNode(n, sourceX14, "cfvo", "type") || scAttr(n, "type") != "num" || !scChildren(n, sourceXM, "f") {
 			return sourceConditionalError()
 		}
 		val, ok := scText(n.children[0], sourceXM, "f")
@@ -335,17 +340,17 @@ func (out *NativeSourceStylePreviewV2) qualifySourceDXF(data []byte) error {
 	if !walk(root) {
 		return sourceConditionalError()
 	}
-	dxfs := root.child("dxfs")
+	dxfs := scChild(root, "dxfs")
 	if out.TextRule == nil {
 		if count == 0 {
 			return nil
 		}
-		if count == 1 && scLeaf(dxfs, ns, "dxfs", "count") && dxfs.attr("count") == "0" {
+		if count == 1 && scLeaf(dxfs, ns, "dxfs", "count") && scAttr(dxfs, "count") == "0" {
 			return nil
 		}
 		return sourceConditionalError()
 	}
-	if count != 1 || !scNode(dxfs, ns, "dxfs", "count") || dxfs.attr("count") != "1" || !scChildren(dxfs, ns, "dxf") {
+	if count != 1 || !scNode(dxfs, ns, "dxfs", "count") || scAttr(dxfs, "count") != "1" || !scChildren(dxfs, ns, "dxf") {
 		return sourceConditionalError()
 	}
 	dxf := dxfs.children[0]
@@ -353,7 +358,7 @@ func (out *NativeSourceStylePreviewV2) qualifySourceDXF(data []byte) error {
 		return sourceConditionalError()
 	}
 	font, fill := dxf.children[0], dxf.children[1]
-	if !scNode(font, ns, "font") || !scChildren(font, ns, "b", "color") || !scLeaf(font.children[0], ns, "b", "val") || font.children[0].attr("val") != "1" || !scNode(fill, ns, "fill") || !scChildren(fill, ns, "patternFill") {
+	if !scNode(font, ns, "font") || !scChildren(font, ns, "b", "color") || !scLeaf(font.children[0], ns, "b", "val") || scAttr(font.children[0], "val") != "1" || !scNode(fill, ns, "fill") || !scChildren(fill, ns, "patternFill") {
 		return sourceConditionalError()
 	}
 	pattern := fill.children[0]
@@ -441,30 +446,39 @@ func (out *NativeSourceStylePreviewV2) qualifySourceConditionalInputs() error {
 // Record and disclose the bounded source form; do not silently simulate it.
 func (out *NativeSourceStylePreviewV2) qualifySourceFrozenView(root *previewXML, admitted map[*previewXML]bool) error {
 	ns := spreadsheetMLTransitional
-	view := root.child("sheetViews").child("sheetView")
+	view := scChild(scChild(root, "sheetViews"), "sheetView")
 	if view == nil {
 		return nil
 	}
-	pane := view.child("pane")
+	pane := scChild(view, "pane")
 	if pane == nil {
 		return nil
 	}
-	if !scLeaf(pane, ns, "pane", "xSplit", "ySplit", "topLeftCell", "activePane", "state") || pane.attr("xSplit") != "0" || pane.attr("state") != "frozen" || pane.attr("activePane") != "bottomLeft" || !scChildren(view, ns, "pane", "selection", "selection") {
+	if !scLeaf(pane, ns, "pane", "xSplit", "ySplit", "topLeftCell", "activePane", "state") || scAttr(pane, "xSplit") != "0" || scAttr(pane, "state") != "frozen" || scAttr(pane, "activePane") != "bottomLeft" || !scChildren(view, ns, "pane", "selection", "selection") {
 		return sourceConditionalError()
 	}
-	rows, ok := scInt(pane.attr("ySplit"), 1, 127)
-	if !ok || pane.attr("topLeftCell") != cellReference(rows, 0) {
+	rows, ok := scInt(scAttr(pane, "ySplit"), 1, 127)
+	if !ok || scAttr(pane, "topLeftCell") != cellReference(rows, 0) {
 		return sourceConditionalError()
 	}
 	for i, which := range []string{"topLeft", "bottomLeft"} {
 		selection := view.children[i+1]
-		if !scLeaf(selection, ns, "selection", "pane", "activeCell", "activeCellId", "sqref") || selection.attr("pane") != which || selection.attr("activeCell") != "A1" || selection.attr("activeCellId") != "0" || selection.attr("sqref") != "A1" {
+		if !scLeaf(selection, ns, "selection", "pane", "activeCell", "activeCellId", "sqref") || scAttr(selection, "pane") != which || scAttr(selection, "activeCell") != "A1" || scAttr(selection, "activeCellId") != "0" || scAttr(selection, "sqref") != "A1" {
 			return sourceConditionalError()
 		}
 		admitted[selection] = true
 	}
 	admitted[pane] = true
-	out.FrozenView = &NativeSourceFrozenViewV2{rows, pane.attr("topLeftCell"), pane.attr("activePane")}
+	out.FrozenView = &NativeSourceFrozenViewV2{rows, scAttr(pane, "topLeftCell"), scAttr(pane, "activePane")}
 	out.Warnings = append(out.Warnings, "Source frozen rows and pane selection are recorded but not applied to the read-only grid viewport.")
 	return nil
 }
+
+// Keep repeated XML attribute scans out of the large qualification functions.
+// WASM code size is bounded; this changes code generation, not validation.
+//
+//go:noinline
+func scAttr(n *previewXML, name string) string { return n.attr(name) }
+
+//go:noinline
+func scChild(n *previewXML, name string) *previewXML { return n.child(name) }
