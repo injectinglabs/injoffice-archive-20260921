@@ -2880,6 +2880,12 @@ describe('source-anchored textbox page composition',()=>{
    const bad=structuredClone(result);bad.anchor_request!.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!.advance_inline_millipoints++
    expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST])).toThrow()
    delete bad.anchor_request;expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST])).toThrow()
+   const sourceForgery=structuredClone(result),request=sourceForgery.anchor_request!
+   request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!.text='Z'
+   const {nativeDocxPagePaintShapedLinesSha256V1:hashLines}=await import('./nativePagePaintV1.js')
+   request.integrity.shaped_lines_sha256=hashLines(request.pagination_request.shaped_lines,request.page_field_variants,request.pagination_request.column_shaped_lines)
+   sourceForgery.body_paint.provenance.shaped_lines.sha256=request.integrity.shaped_lines_sha256
+   expect(()=>decode(f.document,f.evidence,sourceForgery,[FONT_DIGEST])).toThrow('Textbox anchor fragment text does not match source')
   }
  },15000)
 

@@ -27,13 +27,16 @@ export function textboxAnchorLine(document:NativeDocxDocumentV1,item:NativeDocxT
   for(const f of line.fragments){
    if(!Number.isSafeInteger(f.advance_inline_millipoints)||f.advance_inline_millipoints<0||!Number.isSafeInteger(f.logical_order)||f.logical_order<0||logical.has(f.logical_order)||!['ltr','rtl'].includes(f.direction))throw new TypeError('Invalid textbox anchor fragment metrics')
    logical.add(f.logical_order)
-   if(f.source_kind==='list-marker')continue
+   if(!['run','list-marker','tab','image'].includes(f.source_kind))throw new TypeError('Invalid textbox anchor fragment kind')
+   if(f.source_kind==='list-marker'){if(f.source_id!==paragraph.id)throw new TypeError('Textbox marker has no source paragraph');continue}
    const run=paragraph.runs.find(r=>r.id===f.source_id)
    if(!run)throw new TypeError('Textbox anchor fragment has no source run')
+   if((run.kind==='text'&&f.source_kind!=='run')||(run.kind==='control'&&run.control==='tab'&&f.source_kind!=='tab')||(run.kind==='drawing'&&f.source_kind!=='image'))throw new TypeError('Textbox anchor fragment kind does not match source')
    if(run.kind==='text'&&!run.page_field&&(!Number.isSafeInteger(f.start_utf16)||!Number.isSafeInteger(f.end_utf16)||f.start_utf16<0||f.end_utf16<f.start_utf16||f.end_utf16>(run.text?.length??0)||f.text!==run.text?.slice(f.start_utf16,f.end_utf16)))throw new TypeError('Textbox anchor fragment text does not match source')
   }
   return line
  }
+ for(const entry of placed)shaped(entry)
  let selected=placed[0]!,x=selected.line.x_millipoints,found=false
  for(const run of preceding.slice().reverse()){
   if(run.kind==='text'&&run.text===''&&!run.page_field)continue
