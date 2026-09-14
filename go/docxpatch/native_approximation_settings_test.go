@@ -45,8 +45,20 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 			if (approx.Status == "eligible") != test.eligible {
 				t.Fatalf("wrong eligibility %#v", approx)
 			}
-			if test.eligible && (len(approx.ApproximatedSettings) == 0 || len(approx.Reasons) <= len(strict.Diagnostics)) {
-				t.Fatalf("missing source facts/warnings %#v", approx)
+			if test.eligible && len(approx.Reasons) == 0 {
+				t.Fatalf("eligible approximation must retain a reason: %#v", approx)
+			}
+			for _, fact := range approx.ApproximatedSettings {
+				matched := false
+				for _, diagnostic := range strict.Diagnostics {
+					if diagnostic.Path == fact.Path {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					t.Fatalf("approximated fact %s %s has no matching strict diagnostic; join would 422", fact.Kind, fact.Path)
+				}
 			}
 			after, err := ExtractNativePaginationSettingsV1(data)
 			if err != nil {
@@ -56,5 +68,39 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 				t.Fatal("strict settings changed")
 			}
 		})
+	}
+}
+
+func TestNativeApproximationOmitsSilentNeutralExtrasFromFacts(t *testing.T) {
+	math := `<m:mathPr xmlns:m="` + nativeMathNamespace + `"><m:mathFont m:val="Cambria Math"/><m:brkBin m:val="before"/><m:brkBinSub m:val="--"/><m:smallFrac m:val="0"/><m:dispDef/><m:lMargin m:val="0"/><m:rMargin m:val="0"/><m:defJc m:val="centerGroup"/><m:wrapIndent m:val="1440"/><m:intLim m:val="subSup"/><m:naryLim m:val="undOvr"/></m:mathPr>`
+	shape := `<w:shapeDefaults xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:v="urn:schemas-microsoft-com:vml"><o:shapedefaults v:ext="edit" spidmax="1026"/><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout></w:shapeDefaults>`
+	markup := math + shape + `<w:themeFontLang w:val="en-US"/><w:decimalSymbol w:val="."/><w:listSeparator w:val=","/>` +
+		`<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`
+	data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`">`+markup+`</w:settings>`)))
+	strict, err := ExtractNativePaginationSettingsV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approx, err := ExtractNativeDocxApproximationEligibilityV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approx.Status != "eligible" || approx.LegacyCompatibilityMode == nil || *approx.LegacyCompatibilityMode != 14 {
+		t.Fatalf("mode 14 plus Word extras must stay approximately eligible: %#v", approx)
+	}
+	if len(approx.ApproximatedSettings) != 1 || approx.ApproximatedSettings[0].Kind != "enableOpenTypeFeatures" {
+		t.Fatalf("silent-neutral extras must not be facts; extra compat flags must: %#v", approx.ApproximatedSettings)
+	}
+	for _, fact := range approx.ApproximatedSettings {
+		matched := false
+		for _, diagnostic := range strict.Diagnostics {
+			if diagnostic.Path == fact.Path {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("fact %s missing diagnostic", fact.Path)
+		}
 	}
 }
