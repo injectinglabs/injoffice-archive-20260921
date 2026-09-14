@@ -13,10 +13,11 @@ export interface NativeDocxTextboxGeometryItemV1 {owner:NativeDocxTextboxV1;geom
 export interface NativeDocxTextboxGeometryEvidenceV1 {items:NativeDocxTextboxGeometryItemV1[];omitted_count:number}
 
 /** Copy only bounded plain own data, without invoking accessors or toJSON. */
-export function nativeTextboxGeometryPlainData(value:unknown):unknown {
+export function nativeTextboxGeometryPlainData(value:unknown,maxNodes=50000):unknown {
+ if(!Number.isSafeInteger(maxNodes)||maxNodes<1||maxNodes>500000)throw new TypeError('Invalid textbox traversal bound')
  let nodes=0,bytes=0
  const visit=(value:unknown,depth=0):unknown=>{
- if(++nodes>50000)throw new TypeError("Textbox traversal budget")
+ if(++nodes>maxNodes)throw new TypeError("Textbox traversal budget")
  if(typeof value==='string'){bytes+=value.length;if(bytes>8000000)throw new TypeError("Textbox text budget")}
  if(depth>16)throw new TypeError('Textbox data nesting limit')
  if(value===null||typeof value==='string'||typeof value==='boolean'||typeof value==='number')return value
