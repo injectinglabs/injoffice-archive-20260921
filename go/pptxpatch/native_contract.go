@@ -273,14 +273,19 @@ type NativeLiteralAreaSeries struct {
 	Values []string `json:"values"`
 	Color  string   `json:"color"`
 }
+type NativeAreaSourceBaseline struct {
+	Crossing string `json:"crossing"`
+	Value    string `json:"value"`
+}
 type NativeLiteralArea struct {
-	Profile    string                    `json:"profile"`
-	DataOrigin string                    `json:"dataOrigin"`
-	Grouping   string                    `json:"grouping"`
-	Categories []string                  `json:"categories"`
-	Series     []NativeLiteralAreaSeries `json:"series"`
-	XAxis      NativeLiteralBarAxis      `json:"xAxis"`
-	YAxis      NativeLiteralBarAxis      `json:"yAxis"`
+	SourceBaseline *NativeAreaSourceBaseline `json:"sourceBaseline,omitempty"`
+	Profile        string                    `json:"profile"`
+	DataOrigin     string                    `json:"dataOrigin"`
+	Grouping       string                    `json:"grouping"`
+	Categories     []string                  `json:"categories"`
+	Series         []NativeLiteralAreaSeries `json:"series"`
+	XAxis          NativeLiteralBarAxis      `json:"xAxis"`
+	YAxis          NativeLiteralBarAxis      `json:"yAxis"`
 }
 type NativeLiteralBubbleSeries struct {
 	Index   int64    `json:"index"`

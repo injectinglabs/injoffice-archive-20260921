@@ -4,7 +4,7 @@ import {createChartStackBands,type ChartStackGrouping,type ChartStackSeries} fro
 import type {RenderPathCommand} from './types.js'
 
 export interface CartesianAreaGeometry {readonly seriesIndex:number;readonly rings:readonly (readonly RenderPathCommand[])[]}
-export interface CartesianAreaScale {readonly min:string;readonly max:string;readonly reverseX?:boolean;readonly reverseY?:boolean}
+export interface CartesianAreaScale {readonly min:string;readonly max:string;readonly baseline?:string;readonly reverseX?:boolean;readonly reverseY?:boolean}
 const zero=r(0n),one=r(1n)
 function interpolate(a:ChartRationalPoint,b:ChartRationalPoint,t:ChartRational):ChartRationalPoint{return {x:add(a.x,mul(sub(b.x,a.x),t)),y:add(a.y,mul(sub(b.y,a.y),t))}}
 function same(a:ChartRationalPoint,b:ChartRationalPoint):boolean{return cmp(a.x,b.x)===0&&cmp(a.y,b.y)===0}
@@ -82,8 +82,12 @@ export function createCartesianAreaPaths(series:readonly ChartStackSeries[],grou
  const min=decimal(scale.min),max=decimal(scale.max),span=sub(max,min)
  if(cmp(min,max)>=0||cmp(min,zero)>0||cmp(max,zero)<0)throw new RangeError('invalid explicit area scale')
  const stack=createChartStackBands(series,grouping)
+ const baseline=scale.baseline===undefined?zero:decimal(scale.baseline)
+ if(cmp(baseline,min)<0||cmp(baseline,max)>0)throw new RangeError('area baseline outside scale')
  const y=(value:ChartRational)=>div(sub(value,min),span)
- return stack.bands.map(band=>{
+ return stack.bands.map((original,index)=>{
+  // Closure alone changes; source values, cumulative tops and later lowers do not.
+  const band=grouping==='standard'||index===0?{...original,lower:original.lower.map(()=>baseline)}:original
   const count=band.lower.length,rings:RenderPathCommand[][]=[],polygons:ChartRationalPoint[][]=[]
   for(let point=1;point<count;point++){
    const left=r(BigInt(2*point-1),BigInt(2*count)),right=r(BigInt(2*point+1),BigInt(2*count))
