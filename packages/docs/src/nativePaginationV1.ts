@@ -1164,10 +1164,14 @@ function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParag
   const placed: NativeDocxPlacedLineV1[] = []
   for (let offset = 0; offset < count; offset += 1) {
     const line = paragraph.lines[start + offset]!
+    if (line.exclusion_end_millipoints !== undefined && lineY < line.exclusion_end_millipoints) {
+      lineY = line.exclusion_end_millipoints
+    }
     if (!lineGeometryValid(context, paragraph, line)) return
     const x = checkedSum(column.x_millipoints, line.inline_offset_millipoints)
     const y = checkedSum(column.y_millipoints, lineY)
-    if (x === undefined || y === undefined) {
+    const bottom = checkedSum(lineY, line.line_height_millipoints)
+    if (x === undefined || y === undefined || bottom === undefined || bottom > column.height_millipoints) {
       refuse(context, 'resource-limit', line.id, 'Line placement coordinate exceeds the bounded integer range')
       return
     }

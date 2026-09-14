@@ -1362,7 +1362,8 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout,true)).toThrow('source-derived exclusion')
     expect(decodeNativeDocxPagePaintRequestV1(request).ok).toBe(false)
     d.x_emu=2540000;expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)).toThrow('two text intervals')
-    d.x_emu=914400;d.width_emu=5943600;expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)).toThrow('fully blocks')
+    d.x_emu=914400;d.width_emu=5943600
+    expect(deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)['paragraph:1']![0]!.end_millipoints).toBeGreaterThan(0)
   })
   it('explicitly refuses square wrapping combined with fixed or autofit table flow', async () => {
     for(const layout of ['fixed','autofit'] as const){
