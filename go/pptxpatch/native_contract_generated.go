@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "c010147f4c7c7a7da4f34bcf00a0b8867b59a932a8c9c2aa382ce6f03f731d45"
+const NativePPTXSchemaSHA256 = "1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -138,6 +138,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"colors", "firstSliceAngle", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
+	"NativeLiteralRadar": {
+		Properties: []string{"categories", "categoryAxis", "dataOrigin", "profile", "series", "style", "valueAxis"},
+		Required:   []string{"categories", "categoryAxis", "dataOrigin", "profile", "series", "style", "valueAxis"},
+	},
+	"NativeLiteralRadarSeries": {
+		Properties: []string{"color", "fill", "index", "order", "title", "values", "widthEmu"},
+		Required:   []string{"color", "index", "order", "values", "widthEmu"},
+	},
 	"NativeLiteralStackedBar": {
 		Properties: []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
 		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
@@ -147,7 +155,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalArea", "literalBar", "literalBubble", "literalConnected", "literalDoughnut", "literalPie", "literalStackedBar", "literalStackedLine", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalArea", "literalBar", "literalBubble", "literalConnected", "literalDoughnut", "literalPie", "literalRadar", "literalStackedBar", "literalStackedLine", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

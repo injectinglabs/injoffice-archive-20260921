@@ -960,13 +960,16 @@ func (v *nativeValidator) chart(chart NativeOpaqueChart, p string) {
 		v.add(p+".literalStackedLine", "native.chartValues", "invalid literal stacked line profile")
 	}
 	profiles := 0
-	for _, present := range []bool{chart.LiteralStackedBar != nil, chart.LiteralStackedLine != nil, chart.LiteralBubble != nil, chart.LiteralArea != nil, chart.LiteralConnected != nil, chart.LiteralBar != nil, chart.LiteralPie != nil, chart.LiteralDoughnut != nil} {
+	for _, present := range []bool{chart.LiteralRadar != nil, chart.LiteralStackedBar != nil, chart.LiteralStackedLine != nil, chart.LiteralBubble != nil, chart.LiteralArea != nil, chart.LiteralConnected != nil, chart.LiteralBar != nil, chart.LiteralPie != nil, chart.LiteralDoughnut != nil} {
 		if present {
 			profiles++
 		}
 	}
 	if profiles > 1 {
 		v.add(p, "native.chartProfiles", "chart cannot carry multiple literal families")
+	}
+	if chart.LiteralRadar != nil && !validNativeLiteralRadar(chart.LiteralRadar) {
+		v.add(p+".literalRadar", "native.chartValues", "invalid literal radar profile")
 	}
 	if chart.LiteralBubble != nil && !validNativeLiteralBubble(chart.LiteralBubble) {
 		v.add(p+".literalBubble", "native.chartValues", "invalid literal bubble profile")

@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "c010147f4c7c7a7da4f34bcf00a0b8867b59a932a8c9c2aa382ce6f03f731d45" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -496,6 +496,46 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "values"
     ]
   },
+  "NativeLiteralRadar": {
+    "schemaName": "literalRadar",
+    "properties": [
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "profile",
+      "series",
+      "style",
+      "valueAxis"
+    ],
+    "required": [
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "profile",
+      "series",
+      "style",
+      "valueAxis"
+    ]
+  },
+  "NativeLiteralRadarSeries": {
+    "schemaName": "literalRadarSeries",
+    "properties": [
+      "color",
+      "fill",
+      "index",
+      "order",
+      "title",
+      "values",
+      "widthEmu"
+    ],
+    "required": [
+      "color",
+      "index",
+      "order",
+      "values",
+      "widthEmu"
+    ]
+  },
   "NativeLiteralStackedBar": {
     "schemaName": "literalStackedBar",
     "properties": [
@@ -554,6 +594,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "literalConnected",
       "literalDoughnut",
       "literalPie",
+      "literalRadar",
       "literalStackedBar",
       "literalStackedLine",
       "opaqueRef",
@@ -1832,6 +1873,110 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalRadarSeries": {
+      "x-binding-name": "NativeLiteralRadarSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "color",
+        "widthEmu"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        },
+        "widthEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20116800
+        },
+        "fill": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        }
+      }
+    },
+    "literalRadar": {
+      "x-binding-name": "NativeLiteralRadar",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "style",
+        "categories",
+        "series",
+        "categoryAxis",
+        "valueAxis"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-radar-v1"
+        },
+        "dataOrigin": {
+          "type": "string",
+          "const": "literal"
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "filled"
+          ]
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 256,
+          "items": {
+            "type": "string"
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalRadarSeries"
+          }
+        },
+        "categoryAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "valueAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      }
+    },
     "literalBubbleSeries": {
       "x-binding-name": "NativeLiteralBubbleSeries",
       "type": "object",
@@ -2758,6 +2903,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalStackedLine": {
           "$ref": "#/$defs/literalStackedLine"
+        },
+        "literalRadar": {
+          "$ref": "#/$defs/literalRadar"
         },
         "literalBubble": {
           "$ref": "#/$defs/literalBubble"

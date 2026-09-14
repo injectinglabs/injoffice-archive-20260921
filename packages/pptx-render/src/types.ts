@@ -382,13 +382,15 @@ export interface CompileSlideOptions {
   readonly literalDoughnutPreview?: boolean
   /** Read-only literal clustered bars using explicit source scales and host frame fitting. Default off. */
   readonly literalBarPreview?: boolean
-  /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
   /** Explicit source literal stacked/percent bar and line preview; default off. */
   readonly literalStackedPreview?: boolean
+  /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
   readonly literalConnectedPreview?: boolean
-  /** Opt-in exact source literal area bands; standard overlap uses authored order as a host preview policy. */
+  /** Literal standard/filled radar only; bounded source-radial-plot-v1, default off. */
+  readonly literalRadarPreview?: boolean
   /** Explicit source bubble values with disclosed plot-minor-radius-v1 sizing. */
   readonly literalBubblePreview?: boolean
+  /** Opt-in exact source literal area bands; standard overlap uses XML series sequence as a host preview policy. */
   readonly literalAreaPreview?: boolean
   /** Supplied-font source axis labels with disclosed measured host margins. */
   readonly chartAxisLabelsPreview?: boolean

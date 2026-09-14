@@ -65,7 +65,7 @@ browser response limits; none of these limits changed. The 256-category signed
 clipping fixture produces one 1,280-command compound fill and passes the real
 worker decoder. Zero-area bands produce no fill while explicit axes remain.
 
-The PPTX-only WASM ceiling is 7.5 MiB (7,864,320 bytes), enforced by the same
+At the area milestone, the PPTX-only WASM ceiling was 7.5 MiB (7,864,320 bytes), enforced by the same
 `go/pptxpatch/cmd/pptxnativewasm/max-bytes.txt` in the local build and CI. On
 Go 1.23.0 darwin/arm64, the integrated workbook/guide baseline is 7,594,533 raw
 bytes (2,024,934 gzip-9 bytes); the connected area artifact is 7,650,837 raw bytes (2,034,994 gzip-9

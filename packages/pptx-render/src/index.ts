@@ -1,3 +1,5 @@
+export {createNativeLiteralRadarPaths,RADAR_PREVIEW_POLICY,RADAR_PREVIEW_DISCLOSURE} from './literalRadar.js'
+export type {LiteralRadarVector} from './literalRadar.js'
 export {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_POLICY,BUBBLE_PREVIEW_DISCLOSURE} from './literalBubble.js'
 export type {LiteralBubbleVector} from './literalBubble.js'
 export {createNativeLiteralAreaPaths} from './literalArea.js'

@@ -10,8 +10,8 @@ export interface NativeLiteralRadarSeries {
  readonly widthEmu:number
  readonly fill?:string
 }
-/** Dedicated source record, not exported or attached until radial semantics and
- * connected authority are qualified. Literal values retain source spellings. */
+/** Literal-only source record. Values retain source spellings; workbook radar
+ * has no public attachment or resolved-data authority in this slice. */
 export interface NativeLiteralRadar {
  readonly profile:'literal-radar-v1'
  readonly dataOrigin:'literal'

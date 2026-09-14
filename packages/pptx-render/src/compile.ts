@@ -1,3 +1,4 @@
+import {createNativeLiteralRadarPaths,RADAR_PREVIEW_DISCLOSURE} from './literalRadar.js'
 import {sourceGraphicFramePaintBounds} from './sourceGraphicFramePaintBounds.js'
 import {sourceGraphicFrameLayout,projectSourceGraphicFrameLayout,sourceGraphicFramePaintTransform,qualifySourceGraphicFrameSpans} from './sourceGraphicFramePolicy.js'
 import {sourceTableTextBounds} from './sourceTableTextBounds.js'
@@ -1942,7 +1943,8 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     const layout=sourceGraphicFrameLayout(sourceFrame(element.transform),sourceParents,state.budget.affine)
     const projection=projectSourceGraphicFrameLayout(layout,state.budget.maxCoordinateEmu,state.budget.affine)
     const bounds=await sourceGraphicFramePaintBounds(node,state.options.textLayout.glyphExtents,state.budget.affine)
-    const x=projection.hullOutsetXEmu,y=projection.hullOutsetYEmu
+    const radialOutset=element.chart.literalRadar&&state.options.literalRadarPreview===true&&!state.workbookCharts.has(element.id)&&node.kind==='group'?1:0
+    const x=projection.hullOutsetXEmu+radialOutset,y=projection.hullOutsetYEmu+radialOutset
     checkedWorldAffine(parentWorld,node.transform,{x:bounds.x-x,y:bounds.y-y,cx:bounds.cx+2*x,cy:bounds.cy+2*y},`$.elements.${element.id}.physicalPaintHull`,state.budget)
   }
   return node
@@ -2086,6 +2088,20 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
       }
 
       const workbook=state.workbookCharts.get(element.id)
+      const radar=workbook?undefined:element.chart.literalRadar
+      if(radar&&state.options.literalRadarPreview===true){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalRadar`,'Radar vectors exceed nesting budget')
+        const vectors=createNativeLiteralRadarPaths(radar,base.bounds.cx,base.bounds.cy)
+        const children=vectors.map((vector,index)=>{
+          const path=`$.elements.${element.id}.literalRadar.${index}`
+          // Qualify the complete round-join stroke hull plus the independent
+          // numerical outset before plot clipping can hide any source ink.
+          checkLeafBounds(vector.inkBounds);takeNode(state,path)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.color?{fill:{color:vector.color}}:{}),stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}
+        })
+        state.diagnostics.push({severity:'warning',code:'chart.literalRadarPreview',message:RADAR_PREVIEW_DISCLOSURE,slideId:state.slide.id,elementId:element.id})
+        return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
+      }
       const stackedBar=workbook?.data.profile==='workbook-stacked-bar-v1'?workbook.data:workbook?undefined:element.chart.literalStackedBar
       const stackedLine=workbook?.data.profile==='workbook-stacked-line-v1'?workbook.data:workbook?undefined:element.chart.literalStackedLine
       const stackedEnabled=state.options.literalStackedPreview===true
@@ -2261,6 +2277,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
   if(options.chartAxisLabelsPreview!==undefined&&typeof options.chartAxisLabelsPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.chartAxisLabelsPreview','axis labels opt-in must be boolean')
   if(options.literalStackedPreview!==undefined&&typeof options.literalStackedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalStackedPreview','literal stacked opt-in must be boolean')
+  if(options.literalRadarPreview!==undefined&&typeof options.literalRadarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalRadarPreview','literal radar opt-in must be boolean')
   if(options.literalBubblePreview!==undefined&&typeof options.literalBubblePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBubblePreview','literal bubble opt-in must be boolean')
   if(options.literalAreaPreview!==undefined&&typeof options.literalAreaPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalAreaPreview','literal area opt-in must be boolean')
   if(options.literalConnectedPreview!==undefined&&typeof options.literalConnectedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalConnectedPreview','literal connected opt-in must be boolean')

@@ -51,8 +51,10 @@ function radarPoint(radial:ReturnType<typeof r>,direction:ReturnType<typeof rada
  return {x:coordinate(x,cx),y:coordinate(y,cy)}
 }
 function radarInkBounds(points:readonly {x:number;y:number}[],width:number):RenderRect{
- const pad=Math.ceil(width/2)+1,left=Math.min(...points.map(p=>p.x))-pad,top=Math.min(...points.map(p=>p.y))-pad,right=Math.max(...points.map(p=>p.x))+pad,bottom=Math.max(...points.map(p=>p.y))+pad
- return {x:left,y:top,cx:right-left,cy:bottom-top}
+ const pad=Math.ceil(width/2)+1
+ let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity
+ for(const point of points){left=Math.min(left,point.x);top=Math.min(top,point.y);right=Math.max(right,point.x);bottom=Math.max(bottom,point.y)}
+ return {x:left-pad,y:top-pad,cx:right-left+2*pad,cy:bottom-top+2*pad}
 }
 /** Reference-qualified no-label value-axis spokes. The category axis supplies
  * angular order, not a separate visible outline in this bounded Office profile.
