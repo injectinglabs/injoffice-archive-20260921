@@ -18,7 +18,7 @@ const grid = `${panel}?.querySelector('table[aria-label="Approximate read-only s
 let server, chrome, cdp, checks = 0
 try {
   run('go', ['test', '-count=1', '-run', conditional ? '^TestSourceConditionalPreview$' : '^TestSourceStylePreviewKeepsStrictAuthority$', '.'], resolve(root, 'go/xlsxpatch'), conditional ? { XLSX_SOURCE_CONDITIONAL_EVIDENCE_DIR: scratch } : { XLSX_SOURCE_STYLE_EVIDENCE_DIR: scratch })
-  run('npm', ['run', 'build:renderer', '-w', 'apps/playground', '--', '--base=/injoffice-smoke/'], root, { VITE_INJOFFICE_API_BASE: '' })
+  if (!process.argv.includes('--skip-build')) run('npm', ['run', 'build:renderer', '-w', 'apps/playground', '--', '--base=/injoffice-smoke/'], root, { VITE_INJOFFICE_API_BASE: '' })
   const source = resolve(scratch, 'source.xlsx'), valid = resolve(root, 'go/xlsxpatch/testdata/excel-authored/happy-tree.xlsx')
   const sourceHash = 'sha256:' + createHash('sha256').update(readFileSync(source)).digest('hex')
   server = await startShowcaseServer(resolve(root, 'apps/playground/dist'))

@@ -130,7 +130,8 @@ colors and bold text, while data bars sit behind their unchanged saved values.
 Warnings retain the approximate geometry, cached-result and viewport omissions.
 No native editing or download authority is exposed by either preview client.
 
-The synthetic Chrome qualification runs both profiles. The conditional case
+The synthetic Chrome qualification builds the renderer once, then runs both
+profiles in separate browser processes with independent fixtures and servers. The conditional case
 checks actual V1 refusal/V2 fallback, source hash, merge/header colors, saved
 status/number values, differential colors and bar width. Cancellation and source
 replacement wait for an actual V2 inspection before delivering delayed replies.
