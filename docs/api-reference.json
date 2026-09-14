@@ -10257,6 +10257,16 @@
               "signature": "export interface NativeGroupElement extends NativeElementBase"
             },
             {
+              "name": "NativeLiteralArea",
+              "kind": "type",
+              "signature": "export interface NativeLiteralArea"
+            },
+            {
+              "name": "NativeLiteralAreaSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralAreaSeries"
+            },
+            {
               "name": "NativeLiteralBar",
               "kind": "type",
               "signature": "export interface NativeLiteralBar"
@@ -10574,7 +10584,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"59e93ffa50686c82b4ec9bb0d57fcd99ff583f253e82b538e93086fa29c0fc75\""
             },
             {
               "name": "provenanceValues",
@@ -10654,6 +10664,11 @@
               "signature": "export declare function connectorPath(cx: number, cy: number, flipH: boolean): readonly RenderPathCommand[]"
             },
             {
+              "name": "createNativeLiteralAreaPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralAreaPaths(chart: LiteralAreaInput, cx: number, cy: number): readonly LiteralAreaVector[]"
+            },
+            {
               "name": "createNativeLiteralBarPaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralBarPaths(chart: LiteralBarRecord, cx: number, cy: number): readonly LiteralBarVector[]"
@@ -10687,6 +10702,11 @@
               "name": "createRecordingPaintSurface",
               "kind": "function",
               "signature": "export declare function createRecordingPaintSurface(maxCommands?: number): RecordingPaintSurface"
+            },
+            {
+              "name": "LiteralAreaVector",
+              "kind": "type",
+              "signature": "LiteralAreaVector"
             },
             {
               "name": "LiteralBarVector",
