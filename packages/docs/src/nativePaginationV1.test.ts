@@ -1954,10 +1954,12 @@ describe('authored whole-footnote paragraph chains', () => {
     expect(paginated(input(16, '1', 95000)).pages[0]!.note_stories![1]!.lines).toHaveLength(16)
     expect(paginateNativeDocxV1(input(17, '1', 200000))).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [] }) }))
   })
-  it('refuses broken chains, overflowing pairs and forged diagnostic admission atomically', () => {
+  it('admits explicitly unchained paragraphs and refuses overflowing pairs and forged diagnostic admission', () => {
+    const unchained=input()
+    unchained.resolved_layout.paragraphs.find(p=>p.paragraph_id===unchained.document.notes[1]!.blocks[0]!.id)!.properties.keep_next=false
+    expect(paginated(unchained).pages[0]!.note_stories![1]!.lines).toHaveLength(2)
     const cases = [input(2, '1', 20000)]
     for (const mutate of [
-      (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs.find((p) => p.paragraph_id === r.document.notes[1]!.blocks[0]!.id)!.properties.keep_next = false },
       (r: NativeDocxPaginationRequestV1) => { r.resolved_layout.paragraphs.at(-1)!.properties.keep_next = true },
       (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.severity = 'unsupported' },
       (r: NativeDocxPaginationRequestV1) => { r.shaped_lines.diagnostics.at(-1)!.source_id = r.document.notes[1]!.blocks[0]!.paragraph!.runs[0]!.id },
@@ -2057,8 +2059,8 @@ describe('final-body-page footnote continuation',()=>{
    expect(decodeNativeDocxPaginatedLayoutForRequest(forged,request).ok).toBe(false)
   }
  })
- it('refuses without partial pages when the reference cannot retain the first note paragraph or has later body pages',()=>{
-  for(const bodyLines of [3,5]){
+ it('refuses when a three-line widow group cannot retain the first footnote slice',()=>{
+  for(const bodyLines of [3]){
    const result=paginateNativeDocxV1(continuedFootnoteFixture(bodyLines))
    expect(result.ok).toBe(true)
    if(result.ok)expect(result.value).toEqual(expect.objectContaining({status:'refused',pages:[],sections:[]}))
@@ -2123,6 +2125,109 @@ describe('line-boundary note continuation',()=>{
    const result=paginateNativeDocxV1(request)
    expect(result.ok).toBe(true)
    if(result.ok)expect(result.value).toMatchObject({status:'refused',pages:[],sections:[]})
+  }
+ })
+})
+
+
+describe('joint body and continued footnote flow',()=>{
+ function input(bodyCount=8,noteCount=1){
+  const request=fixture({lineCounts:Array.from({length:bodyCount},()=>1),bodyHeight:40_000})
+  addFootnote(request,'1','1',10_000)
+  const note=request.document.notes.find(n=>n.note_role==='content')!,shape=request.shaped_lines.paragraphs.find(p=>p.paragraph_id===note.blocks[0]!.id)!,first=shape.lines[0]!
+  shape.lines=Array.from({length:6},(_,ordinal)=>({...structuredClone(first),id:`line:${shape.paragraph_id}:${ordinal}`,ordinal,fragments:ordinal?[]:structuredClone(first.fragments),logical_to_visual:ordinal?[]:[0]}))
+  shape.block_advance_millipoints=60_000
+  request.resolved_layout.paragraphs.find(p=>p.paragraph_id===shape.paragraph_id)!.properties.widow_control=false
+  const template=continuedFootnoteFixture(),sentinel=template.document.notes.at(-1)!
+  sentinel.relationship_id=request.document.notes[0]!.relationship_id
+  request.document.notes.push(structuredClone(sentinel))
+  request.resolved_layout.paragraphs.push(structuredClone(template.resolved_layout.paragraphs.find(p=>p.paragraph_id===sentinel.blocks[0]!.id)!))
+  request.shaped_lines.paragraphs.push(structuredClone(template.shaped_lines.paragraphs.find(p=>p.paragraph_id===sentinel.blocks[0]!.id)!))
+  for(let i=2;i<=noteCount;i++)addFootnote(request,String(i),String(i),10_000)
+  return request
+ }
+ function coverage(request:NativeDocxPaginationRequestV1){
+  const before=structuredClone(request),output=paginated(request)
+  expect(output.pages.flatMap(p=>p.lines.map(l=>l.line_id))).toEqual(request.document.body.blocks.flatMap(b=>request.shaped_lines.paragraphs.find(p=>p.paragraph_id===b.id)!.lines.map(l=>l.id)))
+  for(const note of request.document.notes.filter(n=>n.note_role==='content')){
+   const expected=note.blocks.flatMap(b=>request.shaped_lines.paragraphs.find(p=>p.paragraph_id===b.id)!.lines.map(l=>l.id))
+   expect(output.pages.flatMap(p=>p.note_stories?.filter(n=>n.story_id===note.id).flatMap(n=>n.lines.map(l=>l.line_id))??[])).toEqual(expected)
+  }
+  for(const page of output.pages){
+   const bodyBottom=page.lines.reduce((y,l)=>Math.max(y,l.y_millipoints+l.height_millipoints),page.body_box.y_millipoints)
+   expect(page.note_stories?.[0]?.top_millipoints??bodyBottom).toBeGreaterThanOrEqual(bodyBottom)
+  }
+  expect(request).toEqual(before);expect(paginated(request)).toEqual(output)
+  expect(decodeNativeDocxPaginatedLayoutForRequest(output,request).ok).toBe(true)
+  return output
+ }
+ it('shares carried note slices with later body paragraphs and restores full body height afterward',()=>{
+  const output=coverage(input())
+  expect(output.pages.map(p=>p.lines.length)).toEqual([1,1,1,4,1])
+  expect(output.pages.slice(0,3).map(p=>p.note_stories!.map(n=>n.note_role))).toEqual([['separator','content'],['continuation-separator','content'],['continuation-separator','content']])
+ })
+ it('finishes a carried note and starts another under one continuation rule on its reference page',()=>{
+  const request=input(8,2),output=coverage(request)
+  expect(output.pages[1]!.lines).toHaveLength(0)
+  expect(output.pages[2]!.note_stories!.map(n=>[n.note_role,n.number])).toEqual([['continuation-separator',undefined],['content',1],['content',2]])
+  expect(output.pages[2]!.lines[0]!.paragraph_id).toBe('paragraph:2')
+  for(const mutation of ['drop','order','reference','body'] as const){
+   const forged=structuredClone(output)
+   if(mutation==='drop')forged.pages[1]!.note_stories![1]!.lines.pop()
+   if(mutation==='order')forged.pages[2]!.note_stories!.reverse()
+   if(mutation==='reference')forged.pages[2]!.note_stories![2]!.reference_run_id='run:paragraph:1'
+   if(mutation==='body')forged.pages[2]!.lines[0]!.y_millipoints++
+   expect(decodeNativeDocxPaginatedLayoutForRequest(forged,request).ok).toBe(false)
+  }
+ })
+ it('handles three references without a two-note limit',()=>{
+  const output=coverage(input(8,3))
+  expect(output.pages.flatMap(p=>p.note_stories?.filter(n=>n.note_role==='content').map(n=>n.number)??[])).toEqual([1,1,1,2,3])
+ })
+ it('handles large reference groups and retains the existing request traversal budget',()=>{
+  const make=(count:number)=>{const r=fixture({lineCounts:Array.from({length:count},()=>1),bodyHeight:20_000_000});for(let i=1;i<=count;i++)addFootnote(r,String(i),String(i));return r}
+  const output=paginated(make(200))
+  expect(output.pages).toHaveLength(1)
+  expect(output.pages[0]!.lines).toHaveLength(200)
+  expect(output.pages[0]!.note_stories!.slice(1).map(n=>n.number)).toEqual(Array.from({length:200},(_,i)=>i+1))
+  expect(paginateNativeDocxV1(make(1000))).toMatchObject({ok:false,issues:expect.arrayContaining([expect.objectContaining({code:'LIMIT_EXCEEDED'})])})
+ })
+ it('splits later body text while keeping every paragraph slice in source order',()=>{
+  const output=coverage(continuedFootnoteFixture(6))
+  expect(output.pages.flatMap(p=>p.lines.map(l=>l.source_line_ordinal))).toEqual([0,1,2,3,4,5])
+  expect(output.pages.filter(p=>p.lines.length&&p.note_stories?.[0]?.note_role==='continuation-separator')).not.toHaveLength(0)
+ })
+ it('honors explicit later page breaks and indivisible body paragraphs',()=>{
+  const broken=input()
+  broken.resolved_layout.paragraphs.find(p=>p.paragraph_id==='paragraph:5')!.properties.page_break_before=true
+  const output=coverage(broken)
+  expect(output.pages.at(-1)!.lines[0]!.paragraph_id).toBe('paragraph:5')
+  const kept=input(),shape=kept.shaped_lines.paragraphs.find(p=>p.paragraph_id==='paragraph:2')!,first=shape.lines[0]!
+  shape.lines=Array.from({length:3},(_,ordinal)=>({...structuredClone(first),id:`line:${shape.paragraph_id}:${ordinal}`,ordinal,fragments:ordinal?[]:first.fragments,logical_to_visual:ordinal?[]:first.logical_to_visual}))
+  shape.block_advance_millipoints=30_000
+  kept.resolved_layout.paragraphs.find(p=>p.paragraph_id===shape.paragraph_id)!.properties.keep_lines=true
+  const placed=coverage(kept)
+  expect(placed.pages.filter(p=>p.lines.some(l=>l.paragraph_id===shape.paragraph_id))).toHaveLength(1)
+ })
+ it('recomputes source geometry before committing note placements',()=>{
+  const request=input(),output=coverage(request)
+  for(const mutate of [(v:typeof output)=>{v.pages[0]!.lines[0]!.x_millipoints++},(v:typeof output)=>{v.pages[0]!.width_millipoints++}]){
+   const staged=structuredClone(output);mutate(staged);const before=structuredClone(staged)
+   expect(placeNativeDocxNotesV1(staged,request.document,request.resolved_layout,request.shaped_lines,undefined,request)).toBeDefined()
+   expect(staged).toEqual(before)
+  }
+ })
+ it('refuses missing activated separators, impossible kept groups, and page/line budgets atomically',()=>{
+  const requests=[input(),input()]
+  const note=requests[1]!.document.notes.find(n=>n.note_role==='content')!
+  requests[1]!.resolved_layout.paragraphs.find(p=>p.paragraph_id===note.blocks[0]!.id)!.properties.keep_lines=true
+  const sentinel=requests[0]!.document.notes.pop()!
+  requests[0]!.resolved_layout.paragraphs=requests[0]!.resolved_layout.paragraphs.filter(p=>p.paragraph_id!==sentinel.blocks[0]!.id)
+  requests[0]!.shaped_lines.paragraphs=requests[0]!.shaped_lines.paragraphs.filter(p=>p.story_id!==sentinel.id)
+  for(const request of requests)expect(paginateNativeDocxV1(request)).toMatchObject({ok:true,value:{status:'refused',pages:[],sections:[]}})
+  for(const [limits,key,bound] of [[DOCX_PAGINATION_LIMITS,'maxPages',1],[DOCX_NOTE_PAGINATION_LIMITS,'maxNoteLines',15]] as const){
+   const original=limits[key as keyof typeof limits]
+   try{Object.assign(limits,{[key]:bound});expect(paginateNativeDocxV1(input())).toMatchObject({ok:true,value:{status:'refused',pages:[],sections:[]}})}finally{Object.assign(limits,{[key]:original})}
   }
  })
 })

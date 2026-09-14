@@ -1,9 +1,11 @@
+import {planNativeDocxFootnoteFlowV1} from './nativeFootnoteFlowV1.js'
+import type {NativeDocxPaginationRequestV1} from './nativePaginationV1.js'
 import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationProfileV1, type NativeDocxFootnoteAreaMeasurementV1, type NativeDocxFootnoteReferenceV1 } from './nativeFootnoteReservationV1.js'
 /**
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
  * This module has no package I/O or rendering authority. It admits whole notes and shaped-line-boundary
- * final-page footnote and endnote continuation; any ambiguity returns
+ * footnote/body flow and endnote continuation; any ambiguity returns
  * one refusal and leaves the caller responsible for discarding every page.
  */
 
@@ -453,6 +455,7 @@ export function placeNativeDocxNotesV1(
   resolved: NativeDocxResolvedLayoutInputV1,
   shaped: NativeDocxShapedLinesV1,
   reservation?: NativeDocxFootnoteReservationProfileV1,
+  flowRequest?: NativeDocxPaginationRequestV1,
 ): NativeDocxNotePaginationRefusalV1 | undefined {
   // Reproduce qualification and measured pair fit from the actual placement inputs;
   // never trust a caller-supplied paragraph list or a decoded object's identity.
@@ -572,6 +575,50 @@ export function placeNativeDocxNotesV1(
   }
   if (seen.size !== content.size) return { scope_id: document.document_id, code: 'note-reference-ambiguous', message: 'Every content note must be referenced exactly once' }
   if (references.length > DOCX_NOTE_PAGINATION_LIMITS.maxNotes) return { scope_id: document.document_id, code: 'resource-limit', message: `Notes exceed ${DOCX_NOTE_PAGINATION_LIMITS.maxNotes}` }
+
+  if (flowRequest) {
+    // Recompute from the actual source, then verify the body's exact page/line
+    // assignment before attaching any note slices. No supplied plan is trusted.
+    const flow = planNativeDocxFootnoteFlowV1({...flowRequest,document,resolved_layout:resolved,shaped_lines:shaped})
+    if (!flow) return {scope_id:document.document_id,code:'note-structure-unsupported',message:'Footnote flow source no longer qualifies'}
+    if ('code' in flow) return flow
+    if (flow.pages.length !== staged.pages.length) return {scope_id:document.document_id,code:'note-overflow-unsupported',message:'Body pages do not match the joint footnote plan'}
+    const referencesByStory = new Map(references.map(reference=>[reference.story.id,reference]))
+    for (const [ordinal,planned] of flow.pages.entries()) {
+      const page=staged.pages[ordinal]!,column=qualifiedNoteColumn(page)
+      if ('code' in column) return column
+      const sourceColumn=flow.geometry.columns[0]!
+      if(page.kind!=='content'||page.ordinal!==ordinal||page.section_id!==flow.section_id||page.width_millipoints!==flow.geometry.page_width_millipoints||page.height_millipoints!==flow.geometry.page_height_millipoints||column.section_id!==flow.section_id||(['id','ordinal','x_millipoints','y_millipoints','width_millipoints','height_millipoints'] as const).some(key=>column[key]!==sourceColumn[key])) return {scope_id:page.id,code:'note-overflow-unsupported',message:'Body page geometry does not match the joint footnote source'}
+      const expected=planned.body.flatMap(slice=>shapedByParagraph.get(slice.paragraph_id)!.lines.slice(slice.start,slice.end).map(line=>({line,paragraph_id:slice.paragraph_id})))
+      let expectedY=column.y_millipoints
+      if (page.lines.length!==expected.length||page.lines.some((line,index)=>{
+        const source=expected[index]!,y=expectedY;expectedY+=source.line.line_height_millipoints
+        return line.line_id!==source.line.id||line.paragraph_id!==source.paragraph_id||line.source_line_ordinal!==source.line.ordinal||line.section_id!==column.section_id||line.column_id!==column.id||line.column_ordinal!==column.ordinal||line.x_millipoints!==column.x_millipoints+source.line.inline_offset_millipoints||line.y_millipoints!==y||line.height_millipoints!==source.line.line_height_millipoints||line.width_millipoints!==source.line.advance_inline_millipoints
+      })) return {scope_id:page.id,code:'note-overflow-unsupported',message:'Body source lines do not match the joint footnote plan'}
+      if (!planned.notes.length) continue
+      const sliceShapes=new Map<string,NativeDocxShapedParagraphV1>()
+      const sentinel=planned.separator!
+      sliceShapes.set(sentinel.blocks[0]!.id,shapedByParagraph.get(sentinel.blocks[0]!.id)!)
+      const stories:Array<{story:NativeDocxStoryV1;reference?:NoteReference}>=[{story:sentinel}]
+      for (const slice of planned.notes) {
+        const note=flow.notes.get(slice.story_id)!,reference=referencesByStory.get(slice.story_id)
+        if (!reference||slice.start===0&&reference.pageOrdinal!==ordinal) return {scope_id:slice.story_id,code:'note-reference-ambiguous',message:'First footnote slice must share its source reference page'}
+        const selected=note.lines.slice(slice.start,slice.end),ids=new Set(selected.map(entry=>entry.paragraph_id))
+        for (const entry of selected) {
+          if (!sliceShapes.has(entry.paragraph_id)) sliceShapes.set(entry.paragraph_id,{...shapedByParagraph.get(entry.paragraph_id)!,lines:[]})
+          sliceShapes.get(entry.paragraph_id)!.lines.push(entry.line)
+        }
+        stories.push({story:{...note.story,blocks:note.story.blocks.filter(block=>ids.has(block.id))},reference})
+      }
+      const occupiedBottom=page.lines.reduce((bottom,line)=>Math.max(bottom,line.y_millipoints+line.height_millipoints),column.y_millipoints)
+      const failure=placeGroup(page,column,stories,sliceShapes,budget,occupiedBottom,'bottom')
+      if (failure) return failure
+      if (page.note_stories!.reduce((sum,note)=>sum+note.height_millipoints,0)!==planned.note_height) return {scope_id:page.id,code:'note-overflow-unsupported',message:'Footnote slices do not equal the reserved page height'}
+    }
+    layout.pages.splice(0,layout.pages.length,...staged.pages)
+    layout.sections.splice(0,layout.sections.length,...staged.sections)
+    return undefined
+  }
 
   const qualifiedTables = qualifyNativeDocxTablesV1(document, resolved)
   if (qualifiedTables.status !== 'qualified') return { scope_id: qualifiedTables.diagnostics[0]?.scope_id ?? document.document_id, code: 'note-structure-unsupported', message: qualifiedTables.diagnostics[0]?.message ?? 'Table geometry is unavailable for exact note placement' }

@@ -601,17 +601,32 @@ separator even when moved to a fresh page; only later slices of the same note
 use the source-bound continuation sentinel. Custom continuation notices remain
 unsupported source semantics.
 
-Footnote continuation also admits one content footnote in one single-column
-section, with paragraph-only body content and its reference on the final body
-page. It uses the same source line and keep/widow constraints as endnotes.
-The first legal line group and ordinary separator must fit below the existing
-body on the reference page. Note lines fill the available note area;
-remaining lines continue onto note-only pages with the authored
-continuation separator. Every footnote slice is aligned to the page body bottom.
-The source label appears only in its original paragraph. Missing or unsupported
-activated separators, an unsatisfiable line group, and any failed replay discard
-all pages. Carried footnotes competing with later body pages and multiple
-continued notes remain outside this profile.
+Footnote continuation admits multiple content footnotes in one single-column,
+single-section paragraph body with modern settings and no header/footer stories.
+The joint flow profile requires zero-spacing left-to-right body/note paragraphs,
+no numbering, fields, drawings, run controls or `keep_next`. Body
+`page_break_before` remains effective. Existing whole-note reservations retain
+their separate authored keep-chain profile.
+
+The planner consumes body lines and footnotes together. It reserves a legal
+note prefix before admitting subsequent body lines and honors body and note
+keep/widow groups. Every new note retains its first legal slice on its reference
+page. If an earlier carried note prevents the next reference group fitting, a
+note-only page advances the carried note before retrying the body group. Notes
+remain in reference order: an earlier note finishes before a later note begins.
+A carried note may finish beside a newly referenced note under one continuation
+separator. A page without carried content uses the ordinary separator. Once the
+notes finish, later body pages regain their full height.
+
+Every footnote slice is aligned to the page body bottom. The source label appears
+only in its original paragraph. Activated separator shaping remains lazy. The
+final note placement recomputes the plan from the actual source and checks its
+body page/line assignments and measured reserved height before committing.
+Missing or unsupported activated separators, unsatisfiable line groups, budget
+exhaustion, and failed replay discard all pages. The note limit is the existing
+10,000 notes, with at most 100,000 total placed body/note/separator lines and
+2,048 pages; the existing request traversal budget also applies. Mixed footnotes/endnotes, note tables and unsupported body profiles
+remain outside this joint flow profile.
 
 Slices retain the existing page/story placement IDs and full source line
 identities. Content lines and the original label occur exactly once across

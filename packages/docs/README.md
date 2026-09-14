@@ -351,23 +351,29 @@ native IDs, and contain paragraphs only. Each content story must have exactly
 one matching native reference in the body and exactly one self-label reference;
 decimal labels are assigned from body reference order, independently per note
 kind, starting at one. One qualified separator story is required per used kind.
-Footnotes are placed as an atomic separator-plus-notes group in the unused
+Whole footnotes are placed as an atomic separator-plus-notes group in the unused
 bottom region of the referencing page. Endnotes are placed as one atomic group
 on the final content page, or on one new final page when the existing page has
 insufficient room. Every placed note and note line carries its exact section
 and column identity. The normal `-1` sentinel produces one deterministic
 bounded separator rule; an unused `0` continuation sentinel stays inert.
-Bounded continuation admits a single endnote, or a single footnote referenced
-on the final body page of a paragraph-only, single-column, single-section body.
-The note splits at shaped-line boundaries within zero-spacing paragraphs,
-without keep-with-next, explicit page breaks or fields. `keep_lines=true`
-keeps a paragraph intact. Default or enabled widow/orphan control requires at
-least two lines on both sides of an internal split; explicit false permits
-a single-line slice. A footnote's first legal line group plus ordinary separator
-must fit on its reference page. Later slices occupy note-only pages at page bottom,
-using the authored continuation separator and retaining the sole original label.
-The compiler shapes the continuation separator only when pagination activates it.
-Source replay rejects dropped, duplicated, moved or misidentified slices.
+Bounded endnote continuation admits a single endnote in one single-column section.
+Footnote continuation can share pages with later body paragraphs and additional
+notes in a single-column, single-section paragraph body. The joint flow uses
+zero-spacing, left-to-right paragraphs without numbering, fields, drawings,
+run controls or keep-with-next chains. Body page-break-before remains supported.
+The existing whole-note reservation profile still handles its authored keep chains.
+
+Notes split at shaped-line boundaries. `keep_lines=true` keeps a paragraph
+intact, and default/enabled widow control requires two lines on each side of an
+internal split. Each new note starts on its reference page. Carried notes reserve
+space before later body lines; when the next reference cannot fit beside the
+carried note, a note-only page advances that note first. A carried note and new
+notes can share one continuation separator. Full body height returns after the
+notes finish. Every note slice sits at page bottom and retains its original
+source lines and sole label. The compiler shapes the continuation separator only
+when activated. Source replay rejects dropped, duplicated, moved or misidentified
+body and note slices; an impossible group discards the entire projection.
 
 Because keep-with-next constrains a paragraph boundary rather than making every
 line indivisible, v1 accepts a keep chain only when every multiline member is
@@ -999,5 +1005,6 @@ uses `/v1/docx/page-preview-textboxes`. It validates the current package and
 embedded-font inventory before mounting the rectangle above the body paint.
 Navigation mounts one page at a time; replacing the source clears old pages
 and requires a new explicit upload. `scripts/smoke-docx-textbox-notes-browser.mjs`
-checks this flow and four-page footnote continuation with real DOCX fixtures,
+checks this flow, single-paragraph note splitting, and three-note continuation
+alongside later body text with real DOCX fixtures,
 actual font outlines, SVG raster pixels and source-byte preservation in Chrome.

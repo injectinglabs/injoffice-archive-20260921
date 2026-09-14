@@ -17,15 +17,18 @@ import (
 // Synthetic OOXML source fixture, not a Word visual reference. Keeps real
 // package/font/relationship provenance through extraction and optional paint QA.
 func TestNativeEndnoteContinuationSource(t *testing.T) {
-	testNativeNoteContinuationSource(t, "endnote", false)
+	testNativeNoteContinuationSource(t, "endnote", false, false)
 }
 func TestNativeFootnoteContinuationSource(t *testing.T) {
-	testNativeNoteContinuationSource(t, "footnote", false)
+	testNativeNoteContinuationSource(t, "footnote", false, false)
 }
 func TestNativeFootnoteLineContinuationSource(t *testing.T) {
-	testNativeNoteContinuationSource(t, "footnote", true)
+	testNativeNoteContinuationSource(t, "footnote", true, false)
 }
-func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool) {
+func TestNativeFootnoteSharedFlowSource(t *testing.T) {
+	testNativeNoteContinuationSource(t, "footnote", true, true)
+}
+func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines, sharedFlow bool) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
 		t.Skip("optional installed DejaVu font unavailable")
@@ -59,6 +62,17 @@ func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool
 	parts["word/settings.xml"] = []byte(strings.Replace(string(parts["word/settings.xml"]), "</w:settings>", `<w:endnotePr><w:endnote w:id="-1"/><w:endnote w:id="0"/></w:endnotePr></w:settings>`, 1))
 	parts["word/styles.xml"] = []byte(strings.ReplaceAll(string(parts["word/styles.xml"]), `w:after="120"`, `w:after="0"`))
 	parts["word/document.xml"] = []byte(`<w:document xmlns:w="` + wns + `"><w:body><w:p><w:r><w:t>Reference </w:t></w:r><w:r><w:endnoteReference w:id="1"/></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="13200" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`)
+	if sharedFlow {
+		var later strings.Builder
+		for index := 2; index <= 9; index++ {
+			fmt.Fprintf(&later, `<w:p><w:r><w:t>Later body paragraph %d</w:t></w:r>`, index)
+			if index == 3 || index == 5 {
+				fmt.Fprintf(&later, `<w:r><w:endnoteReference w:id="%d"/></w:r>`, (index+1)/2)
+			}
+			later.WriteString(`</w:p>`)
+		}
+		parts["word/document.xml"] = []byte(strings.Replace(string(parts["word/document.xml"]), `<w:sectPr>`, later.String()+`<w:sectPr>`, 1))
+	}
 	var content strings.Builder
 	count := 7
 	if splitLines {
@@ -83,6 +97,13 @@ func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool
 		content.WriteString(`<w:r><w:t>` + text + `</w:t></w:r></w:p>`)
 	}
 	parts["word/endnotes.xml"] = []byte(`<w:endnotes xmlns:w="` + wns + `"><w:endnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:endnote><w:endnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:endnote><w:endnote w:id="1">` + content.String() + `</w:endnote></w:endnotes>`)
+	if sharedFlow {
+		var additional strings.Builder
+		for index := 2; index <= 3; index++ {
+			fmt.Fprintf(&additional, `<w:endnote w:id="%d"><w:p><w:r><w:endnoteRef/></w:r><w:r><w:t> Additional note %d</w:t></w:r></w:p></w:endnote>`, index, index)
+		}
+		parts["word/endnotes.xml"] = []byte(strings.Replace(string(parts["word/endnotes.xml"]), `</w:endnotes>`, additional.String()+`</w:endnotes>`, 1))
+	}
 	if kind == "footnote" {
 		converted := map[string][]byte{}
 		for name, data := range parts {
@@ -136,8 +157,12 @@ func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool
 	if len(document.Unsupported) != 0 || len(resolved.Diagnostics) != 0 || settings.Profile != "word-modern-default" {
 		t.Fatalf("fixture was not qualified: source=%#v resolved=%#v settings=%#v", document.Unsupported, resolved.Diagnostics, settings)
 	}
-	if len(document.Notes) != 3 {
-		t.Fatalf("want three source stories, got %d", len(document.Notes))
+	expectedNotes, expectedLabels := 3, 1
+	if sharedFlow {
+		expectedNotes, expectedLabels = 5, 3
+	}
+	if len(document.Notes) != expectedNotes {
+		t.Fatalf("unexpected source story count: %d", len(document.Notes))
 	}
 	labels, kept, sentinels := 0, 0, 0
 	for _, story := range document.Notes {
@@ -166,11 +191,13 @@ func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool
 	if splitLines {
 		expectedKept = 0
 	}
-	if labels != 1 || kept != expectedKept || sentinels != 2 || !bytes.Equal(before, source) {
+	if labels != expectedLabels || kept != expectedKept || sentinels != 2 || !bytes.Equal(before, source) {
 		t.Fatalf("source changed: labels=%d kept=%d sentinels=%d", labels, kept, sentinels)
 	}
 	envKind := strings.ToUpper(kind)
-	if splitLines {
+	if sharedFlow {
+		envKind += "_FLOW"
+	} else if splitLines {
 		envKind += "_LINE"
 	}
 	if out := os.Getenv("INJOFFICE_" + envKind + "_EVIDENCE_DIR"); out != "" {

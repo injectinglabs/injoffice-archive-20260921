@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -125,10 +125,33 @@ try {
   }
   await assert(`${native}.querySelectorAll('svg').length===1&&${native}.querySelector('svg path')!==null&&${docs}?.dataset.demoDirty!=='true'`,'final split paragraph page remains painted and source stays clean')
   await screenshot('docx-footnote-line-last.png')
+  const flowFixture=resolve(flowDir,'footnote-continuation.docx'),flowHash=hash(readFileSync(flowFixture))
+  const flowSource=JSON.parse(readFileSync(resolve(flowDir,'source.json'),'utf8')).document
+  const flowBodyIDs=flowSource.body.blocks.map(b=>b.id)
+  const flowNotes=flowSource.notes.filter(n=>n.note_role==='content').map(n=>({paragraphID:n.blocks[0].id,labelID:n.blocks[0].paragraph.runs.find(r=>r.reference?.role==='label').id,referenceParagraphID:flowSource.body.blocks.find(b=>b.paragraph.runs.some(r=>r.reference?.target_id===n.id)).id}))
+  await setFixtureData({flowHash,flowBodyIDs,flowNotes})
+  await upload(flowFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'shared-flow replacement')
+  await assert('window.__nativeDocxPosts.length===4','shared-flow document needs new upload consent')
+  await click('Upload to helper and render native pages')
+  await poll(()=>evaluate(`${native}?.textContent.includes('native pages')&&${native}?.querySelector('svg path')!==null`),'shared body and note flow',45000)
+  const flowPages=await evaluate('window.__nativeDocxPaint.pages.length')
+  await assert('window.__nativeDocxPosts.length===5&&window.__nativeDocxPosts[4].hash===window.__nativeDocxFixture.flowHash','shared-flow upload preserves source bytes')
+  await assert(`window.__nativeDocxPaint.pages.slice(1).some(p=>p.lines.some(l=>l.region==='body')&&p.lines.some(l=>l.region==='footnote')&&p.commands.some(c=>c.kind==='stroke_note_separator'&&c.x2_millipoints-c.x1_millipoints===468000))`,'continued note and later body text share a page')
+  await assert(`JSON.stringify(window.__nativeDocxPaint.pages.flatMap(p=>p.lines.filter(l=>l.region==='body').map(l=>l.paragraph_id)))===JSON.stringify(window.__nativeDocxFixture.flowBodyIDs)`,'all later body paragraphs retain source order exactly once')
+  await assert(`window.__nativeDocxFixture.flowNotes.every(n=>{const pages=window.__nativeDocxPaint.pages,lines=pages.flatMap(p=>p.lines.filter(l=>l.paragraph_id===n.paragraphID));return lines.length>0&&lines.every((l,i)=>l.source_line_ordinal===i)&&new Set(lines.map(l=>l.line_id)).size===lines.length&&pages.findIndex(p=>p.lines.some(l=>l.paragraph_id===n.paragraphID))===pages.findIndex(p=>p.lines.some(l=>l.paragraph_id===n.referenceParagraphID))&&pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===n.labelID).length===1})`,'all three notes start on their reference page and preserve source lines and labels')
+  await assert(`window.__nativeDocxPaint.pages.every(p=>{const body=p.lines.filter(l=>l.region==='body'),notes=p.lines.filter(l=>l.region==='footnote');return !body.length||!notes.length||Math.max(...body.map(l=>l.y_millipoints+l.height_millipoints))<=Math.min(...notes.map(l=>l.y_millipoints))})`,'body and note regions never overlap')
+  for(let ordinal=0;ordinal<flowPages;ordinal++){
+    if(ordinal){await click('Next native page');await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${ordinal+1}"]')!==null`),'shared-flow page '+(ordinal+1))}
+    await assert(`${native}.querySelectorAll('svg').length===1&&${native}.querySelectorAll('svg path').length===window.__nativeDocxPaint.pages[${ordinal}].commands.filter(c=>c.kind==='fill_glyph_path').length`,'all shared-flow glyphs mount on page '+(ordinal+1))
+    if(ordinal===1||ordinal===flowPages-1)await screenshot('docx-footnote-flow-page-'+(ordinal+1)+'.png')
+  }
+  await assert(`${docs}?.dataset.demoDirty!=='true'&&window.__nativeDocxPosts.length===5`,'shared-flow navigation preserves source without further uploads')
+  if(hash(readFileSync(flowFixture))!==flowHash)throw Error('Shared-flow source changed')
   if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,uploads:4},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,uploads:5},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()
