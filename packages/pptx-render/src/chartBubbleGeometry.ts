@@ -22,12 +22,12 @@ export function createChartBubbleGeometry(series:readonly ChartBubbleSeries[],sc
  if(!integer(cx,1,281474976710655)||!integer(cy,1,281474976710655)||!scale||scale.sizingPolicy!=='plot-minor-radius-v1'||!integer(scale.bubbleScale,0,300)||!['area','w'].includes(scale.sizeRepresents)||(scale.reverseX!==undefined&&typeof scale.reverseX!=='boolean')||(scale.reverseY!==undefined&&typeof scale.reverseY!=='boolean')||!Array.isArray(series)||series.length<1||series.length>16)throw new RangeError('invalid bubble profile/frame')
  const xMin=decimal(scale.xMin),xMax=decimal(scale.xMax),yMin=decimal(scale.yMin),yMax=decimal(scale.yMax)
  if(compare(xMin,xMax)>=0||compare(yMin,yMax)>=0)throw new RangeError('invalid bubble scale')
- const indices=new Set<number>(),source:{s:ChartBubbleSeries;x:ChartRational[];y:ChartRational[];z:ChartRational[]}[]=[]
+ const indices=new Set<number>(),orders=new Set<number>(),source:{s:ChartBubbleSeries;x:ChartRational[];y:ChartRational[];z:ChartRational[]}[]=[]
  let maximum=zero
  for(let order=0;order<series.length;order++){
   const s=series[order]!
-  if(!s||!integer(s.index,0,4294967295)||indices.has(s.index)||!integer(s.order,0,15)||s.order!==order||!Array.isArray(s.values)||!Array.isArray(s.xValues)||!Array.isArray(s.sizes)||s.values.length<1||s.values.length>256||s.xValues.length!==s.values.length||s.sizes.length!==s.values.length)throw new RangeError('invalid bubble series')
-  indices.add(s.index)
+  if(!s||!integer(s.index,0,4294967295)||indices.has(s.index)||!integer(s.order,0,15)||!Number.isSafeInteger(s.order)||Object.is(s.order,-0)||s.order<0||s.order>=series.length||orders.has(s.order)||!Array.isArray(s.values)||!Array.isArray(s.xValues)||!Array.isArray(s.sizes)||s.values.length<1||s.values.length>256||s.xValues.length!==s.values.length||s.sizes.length!==s.values.length)throw new RangeError('invalid bubble series')
+  indices.add(s.index);orders.add(s.order)
   const x=s.xValues.map(decimal),y=s.values.map(decimal),z=s.sizes.map(decimal)
   // for-of also detects sparse arrays (map alone would retain the holes).
   for(const collection of [x,y,z])for(const value of collection)if(!value)throw new RangeError('sparse bubble values')

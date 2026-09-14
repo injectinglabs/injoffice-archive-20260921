@@ -29,11 +29,11 @@ export function validNativeLiteralBubble(value:unknown):value is NativeLiteralBu
  if(!record(value,'profile dataOrigin bubbleScale sizeRepresents series xAxis yAxis')||value.profile!=='literal-bubble-v1'||value.dataOrigin!=='literal'||!integer(value.bubbleScale,0,300)||!['area','w'].includes(value.sizeRepresents as string)||!Array.isArray(value.series)||value.series.length<1||value.series.length>16)return false
  const x=value.xAxis,y=value.yAxis
  if(!axis(x)||!axis(y)||x.position!=='b'||y.position!=='l'||x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||!validNativeChartAxisLabels(x,y,true)||!validNativeChartAxisLabels(y,x,true))return false
- const seen=new Set<number>()
+ const seen=new Set<number>(),orders=new Set<number>()
  for(let order=0;order<value.series.length;order++){
   const s=value.series[order]
-  if(!record(s,'index order xValues values sizes colors','title')||!integer(s.index,0,4294967295)||seen.has(s.index)||!integer(s.order,0,15)||s.order!==order||(s.title!==undefined&&(typeof s.title!=='string'||s.title.length>1024))||!Array.isArray(s.values)||s.values.length<1||s.values.length>256||!Array.isArray(s.xValues)||!Array.isArray(s.sizes)||!Array.isArray(s.colors)||s.xValues.length!==s.values.length||s.sizes.length!==s.values.length||s.colors.length!==s.values.length)return false
-  seen.add(s.index)
+  if(!record(s,'index order xValues values sizes colors','title')||!integer(s.index,0,4294967295)||seen.has(s.index)||!integer(s.order,0,15)||s.order>=value.series.length||orders.has(s.order)||(s.title!==undefined&&(typeof s.title!=='string'||s.title.length>1024))||!Array.isArray(s.values)||s.values.length<1||s.values.length>256||!Array.isArray(s.xValues)||!Array.isArray(s.sizes)||!Array.isArray(s.colors)||s.xValues.length!==s.values.length||s.sizes.length!==s.values.length||s.colors.length!==s.values.length)return false
+  seen.add(s.index);orders.add(s.order)
   for(let i=0;i<s.values.length;i++){
    for(const raw of [s.xValues[i],s.values[i]])if(typeof raw!=='string'||!decimal(raw))return false
    if(typeof s.sizes[i]!=='string'||!rgb(s.colors[i]))return false

@@ -61,7 +61,7 @@ function source(value:unknown):NativePptxWorkbookChartSource{
  if(series.length<1)return fail()
  series.forEach((value,i)=>{
   const item=object(value,'index order valueReference','title titleReference categoryReference xReference sizeReference colors color widthEmu')
-  const index=integer(item.index,0,4294967295);const order=integer(item.order,0,15);if(ids.has(index)||orders.has(order)||order>=series.length||!stacked&&order!==i)return fail();ids.add(index);orders.add(order)
+  const index=integer(item.index,0,4294967295);const order=integer(item.order,0,15);if(ids.has(index)||orders.has(order)||order>=series.length)return fail();ids.add(index);orders.add(order)
   if(item.title!==undefined){if(typeof item.title!=='string'||item.title.length>1024||item.titleReference!==undefined)return fail();totalText+=item.title.length}
   if(item.titleReference!==undefined){if(reference(item.titleReference,'strRef').range.count!==1)return fail();refs++}
   const values=reference(item.valueReference,'numRef');refs++

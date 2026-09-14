@@ -9,8 +9,8 @@ preview use the same complete-series geometry. Labels additionally require
 chart ownership and editing permissions remain unchanged.
 
 `standard` area uses an independent zero baseline and admits signed source
-decimals. `stacked` accumulates nonnegative values in ascending authored series
-`order`, separately for each category. `percentStacked` divides cumulative
+decimals. `stacked` accumulates nonnegative values in XML series
+sequence, separately for each category. `percentStacked` divides cumulative
 boundaries by the exact total for that category, on the unit scale where 1 is
 100%. A zero total yields only zero boundaries and no filled geometry. Explicit
 source axes remain independent; no scale is inferred from an empty result.
@@ -22,7 +22,7 @@ mixed-sign accumulation and percent denominators. This is a remaining scope row,
 not a claim that mixed-sign stacking is complete.
 
 Area source qualification requires one area family, dense matching literal
-category/value lists, unique source indices and contiguous authored order,
+category/value lists, unique source indices and a complete contiguous authored order permutation,
 explicit uniform RGB fill with no outline, and the existing qualified explicit
 Cartesian axes. It refuses point-specific formatting, inferred theme paint,
 missing data, caches substituted for source values, extra chart families, and
@@ -39,7 +39,7 @@ single compound path without outlines, so artificial interval borders are not
 painted and separate antialiasing does not introduce seams. The source-qualified renderer
 enforces at most 1,536 generated area commands per series for at most 256
 categories. The generic custom-path limit remains unchanged. Standard area
-series can overlap: this preview paints in ascending authored series order as
+series can overlap: this preview paints in XML series sequence as
 an explicit host policy. Authored order alone does not establish Office paint
 order or visual parity. Stacked bar/line families and mixed-sign stacking remain
 separate completion rows; this area option does not claim to complete them.
@@ -72,7 +72,7 @@ bytes (2,024,934 gzip-9 bytes); the connected area artifact is 7,650,837 raw byt
 bytes, deterministic zero timestamp). Removing unused extraction-time rational
 band computation saved 11,603 bytes without changing admission: the source
 already qualifies counts, indices, dense alignment and decimal lexemes, then
-checks contiguous series order and the supported nonnegative stacking domain.
+checks a complete contiguous series order permutation and the supported nonnegative stacking domain.
 Exact band computation remains tested and the renderer retains exact rational
 geometry. No validation was removed to fit a package budget. DOCX/XLSX ceilings
 are unchanged. Artifact sizes depend on the Go toolchain.
