@@ -29,7 +29,7 @@ func TestNativePresetSourceAdjustments(t *testing.T) {
 		if *normal.Paths[0].Commands[1].X != 2000000 {
 			t.Fatal("omitted avLst did not use defaults")
 		}
-		for _, bad := range []string{`<a:avLst><a:gd name="unknown" fmla="val 1"/></a:avLst>`, `<a:avLst><a:gd name="adj" fmla="*/ 1 2 3"/></a:avLst>`, `<a:avLst><a:gd name="adj" fmla="val 1"/><a:gd name="adj" fmla="val 2"/></a:avLst>`, `<a:avLst extra="1"/>`, `<a:avLst/><a:avLst/>`, `<a:extLst/>`, `<a:avLst><a:gd name="adj" fmla="val 9007199254740992"/></a:avLst>`} {
+		for _, bad := range []string{`<a:avLst><a:gd name="unknown" fmla="val 1"/></a:avLst>`, `<a:avLst><a:gd name="adj" fmla="*/ 1 2 3"/></a:avLst>`, `<a:avLst extra="1"/>`, `<a:avLst/><a:avLst/>`, `<a:extLst/>`, `<a:avLst><a:gd name="adj" fmla="val 9007199254740992"/></a:avLst>`} {
 			if geometry, err := parse(bad); err == nil || geometry != nil {
 				t.Fatalf("invalid source override accepted: %s", bad)
 			}
