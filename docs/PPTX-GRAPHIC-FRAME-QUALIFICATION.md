@@ -23,23 +23,21 @@ or source authority are invented by these helpers.
 
 ## Reference matrix and remaining policy decision
 
-PresentationML graphicFrame/xfrm uses DrawingML CT_Transform2D. An atomic chart
-surface can rotate/scale its plot and labels coherently, but an odd reflection
-would mirror glyphs unless a separately qualified chart text policy intervenes.
-Shape/table counter-reflection must not be silently applied to chart labels.
+PresentationML graphicFrame/xfrm uses DrawingML CT_Transform2D. The qualified
+source-anchor policy below keeps table/chart surfaces axis-aligned and preserves
+supplied glyph metrics; it does not apply shape counter-reflection to chart text.
 
-An external matrix retains source hashes for table/chart baseline, R30, H, V,
-and a nested R30/H group with horizontal scale 1.5 and child R90. The normalized
-Office-openable chart container is preserved; only slide1.xml changes. The table
-uses asymmetric labels and distinct colors. The coordinator's sole Office owner
-exports isolated source copies and compares saved XML before pixel/coordinate
-interpretation. These references will determine the disclosed text policy before
-shared source guards change. No Office parity claim follows from helper tests.
+The external matrix retains original and Office-saved table/chart sources, frame
+fill discriminators, hashes, and vector/raster outputs. The coordinator's sole
+Office owner exported isolated copies and compared source transforms separately
+from their rendered positions. The resulting source-anchor policy and known
+Office importer difference are detailed below. No Office parity claim follows
+from helper tests alone.
 
 Required connected evidence includes rotated/reflected/anisotropic actual font
 outlines, an outside-cell-x negative control, retained outside-cell-y overflow,
 active slide clipping, complete world/error-budget failures, immutable source,
-and preview-only mutation restrictions. Shared hooks follow the bubble-chart
+and preview-only mutation restrictions. Shared hooks follow the serialized chart
 integration handoff; this helper preparation is not a standalone completion PR.
 
 ### Direct-frame implementation difference
