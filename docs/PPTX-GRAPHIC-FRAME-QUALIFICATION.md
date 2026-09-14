@@ -80,3 +80,23 @@ The initial conventional ancestor composition failed six nested discriminators a
 The preview must preserve the exact original frame and intrinsic table tracks, not infer or apply that importer rewrite. Original-vs-normalized comparisons remain retained qualification evidence; they are not relabeled as successful Office parity tests. Permanent tests instead assert independently derived source-model invariants and actual Office-retained source cases. Product admission still requires the explicit source-only profile, read-only mutation guard, complete ink/control/clip hull checks, and connected browser evidence.
 
 Microsoft's [grouping support documentation](https://support.microsoft.com/en-gb/office/graphics-visuals/group-or-ungroup-shapes-pictures-or-other-objects) says the Group command is unavailable when the selection contains a table, including in the macOS instructions. This is UI behavior, not a prohibition in the source XML grammar and not a reason to drop grouped-table support. It reinforces keeping the imported table normalization evidence distinct from chart grouping behavior.
+
+## Connected implementation checkpoint
+
+The connected source profile now retains raw source transforms and intrinsic table
+tracks, refuses mutation of profiled targets and ancestor contexts, and qualifies
+complete paint bounds. The file preview uses the public compiler, paints all cell
+backgrounds before text, and preserves its explicit browser-font approximation.
+
+Actual Go extraction and WASM-to-font-worker checks cover four qualified source
+tables: intrinsic, rotated group, vertical overflow, and above-slide placement.
+Fixture generation asserts one source-profiled table before downstream use.
+The earlier external fixture draft used unsupported body properties and cell
+horizontal clipping and yielded no tables; those outputs are retained as failed
+inputs, not successful qualification. Source cell horizontal clipping remains
+unadmitted by the existing parser; contract/worker clipping tests do not establish
+source admission. No parser guard was broadened to accommodate the fixtures.
+
+Final browser pixel verification is pending: the resumed environment aborts Chrome
+before it exposes a debugging target. Native worker output and server-side React
+markup checks are partial evidence and do not substitute for that visual gate.

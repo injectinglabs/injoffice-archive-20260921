@@ -306,10 +306,18 @@ func (extractor *nativeExtractor) extractNativeGroup(
 		Source:        &NativeSourceAnchor{PartName: slidePart, ObjectID: objectID, FingerprintSHA256: fingerprint},
 		Compatibility: NativeCompatibility{Status: worst, Diagnostics: diagnostics},
 	}
-	if nativeComplexAffineGroup(element) {
-		if nativeHasGraphicFrameDescendant(element.Children) {
-			return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-affine-graphic-frame-unavailable", "new affine group mappings containing table or chart text require separate text-orientation qualification; the complete group is preserved")
+	hasGraphicFrames, frameErr := nativeMarkGraphicFrameDescendants(element.Children)
+	if frameErr != nil {
+		return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-diagnostic-budget-unavailable", "graphic-frame descendant policy exceeds the bounded diagnostic scope")
+	}
+	if hasGraphicFrames {
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		if len(element.Compatibility.Diagnostics) >= nativeMaxDiagnosticsPerScope {
+			return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-diagnostic-budget-unavailable", "graphic-frame source diagnostics exceed the bounded contract")
 		}
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.group-source-graphic-frame-preview", Message: "group graphic frames use source-anchored preview without rewriting intrinsic table tracks"})
+	}
+	if nativeComplexAffineGroup(element) {
 		nativeMarkAffineDescendants(element.Children)
 	}
 	_, _, _, _, legacyErr := nativeGroupAffineComponents(element.Transform, *element.ChildTransform)

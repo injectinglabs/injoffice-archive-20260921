@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "9236b308738a589a35d9e53e2cdc784b2dafa4ba99472b6ebae58a511df47f81" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "c010147f4c7c7a7da4f34bcf00a0b8867b59a932a8c9c2aa382ce6f03f731d45" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -115,6 +115,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "animation",
       "chart",
       "compatibility",
+      "graphicFrameLayout",
       "id",
       "kind",
       "name",
@@ -793,6 +794,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "properties": [
       "animation",
       "compatibility",
+      "graphicFrameLayout",
       "id",
       "kind",
       "name",
@@ -3289,6 +3291,9 @@ export const PPTX_NATIVE_SCHEMA = {
         "compatibility"
       ],
       "properties": {
+        "graphicFrameLayout": {
+          "const": "source-anchored-v1"
+        },
         "kind": {
           "const": "table"
         },
@@ -3341,6 +3346,9 @@ export const PPTX_NATIVE_SCHEMA = {
         "compatibility"
       ],
       "properties": {
+        "graphicFrameLayout": {
+          "const": "source-anchored-v1"
+        },
         "kind": {
           "const": "chart"
         },

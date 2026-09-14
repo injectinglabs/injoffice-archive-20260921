@@ -1,4 +1,5 @@
 import {describe,it,expect} from 'vitest'
+import {readFileSync} from 'node:fs'
 import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {PptxFilePreviewVector} from './components/PptxFilePreview'
@@ -61,4 +62,22 @@ describe('public local-file geometry projection',()=>{
   expect(html).toContain('Text preview unavailable');expect(html).not.toContain('漢字')
  })
 
+})
+
+it('paints all source table backgrounds before overflowing browser text and keeps the horizontal strip slide bounded',async()=>{
+ const deck=JSON.parse(readFileSync(new URL('../../../go/pptxpatch/testdata/native-contract/valid/parsed-full.json',import.meta.url),'utf8')) as NativePptxDeck
+ const table=deck.slides[0]!.elements.find(e=>e.kind==='table')!
+ if(table.kind!=='table')throw Error('table')
+ table.graphicFrameLayout='source-anchored-v1';table.compatibility=compatibility
+ table.transform={x:127000,y:254000,cx:2000000,cy:2000000,rotationAngle:1800000}
+ table.table={columnWidths:[2000000],rowHeights:[1000000,1000000],rows:['Overflowing first row','Second row'].map(text=>[{text,fill:'EEEEEE',paragraphs:[{runs:[{text}]}],textBody:{...body,horizontalOverflow:'clip'}}])}
+ deck.slides=[deck.slides[0]!];deck.slides[0]!.elements=[table];deck.assets=[]
+ const before=JSON.stringify(deck),geometry=await compileFilePreviewGeometry(deck,0),html=renderToStaticMarkup(createElement(PptxFilePreviewVector,{deck,geometry}))
+ expect(html).toContain('Overflowing first row');expect(html).toContain('Second row')
+ expect(html.lastIndexOf('data-file-preview-cell-background')).toBeLessThan(html.indexOf('data-file-preview-text'))
+ expect(html.match(/clipPathUnits="userSpaceOnUse"/g)).toHaveLength(2)
+ expect(html).toContain('overflow:visible');expect(html).not.toContain('Table preview unavailable')
+ expect(JSON.stringify(deck)).toBe(before)
+ const node=geometry.tree.nodes[0]!
+ expect(geometry.matrices.get(node.transform)?.slice(0,4)).toEqual([1,0,0,1])
 })
