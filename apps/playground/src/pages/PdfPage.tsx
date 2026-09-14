@@ -634,11 +634,11 @@ export default function PdfPage() {
                   <option value="Helvetica">Generate with Helvetica</option>
                   <option value="Times-Roman">Generate with Times Roman</option>
                   <option value="Courier">Generate with Courier</option>
-                  <option value="embedded">Embed a local TrueType font</option>
+                  <option value="embedded">Embed a local outline font</option>
                 </DsSelect>
               </DsField>
-              {formAppearanceFont === 'embedded' && <DsField label="TrueType appearance font">
-                <input type="file" accept=".ttf,.ttc,.otc,font/ttf,font/collection" aria-label="TrueType appearance font" disabled={locked || fieldBytes !== bytes} onChange={event => {
+              {formAppearanceFont === 'embedded' && <DsField label="Embedded appearance font">
+                <input type="file" accept=".ttf,.otf,.ttc,.otc,font/ttf,font/otf,font/collection" aria-label="Embedded appearance font" disabled={locked || fieldBytes !== bytes} onChange={event => {
                   const file = event.currentTarget.files?.[0]
                   event.currentTarget.value = ''
                   const generation = ++fontLoadGeneration.current
@@ -646,7 +646,7 @@ export default function PdfPage() {
                   setEmbeddedFaceIndex('0')
                   setFormNotice(null)
                   if (!file) return
-                  if (file.size < 12 || file.size > 16 * 1024 * 1024) { setError('Choose a TrueType font or collection no larger than 16 MiB.'); return }
+                  if (file.size < 12 || file.size > 16 * 1024 * 1024) { setError('Choose a TrueType/CFF font or collection no larger than 16 MiB.'); return }
                   void file.arrayBuffer().then(buffer => {
                     if (generation === fontLoadGeneration.current) { setEmbeddedFormFont({ name: file.name, bytes: new Uint8Array(buffer) }); setError(null) }
                   }).catch(reason => { if (generation === fontLoadGeneration.current) setError(errorMessage(reason)) })
@@ -655,9 +655,9 @@ export default function PdfPage() {
               </DsField>}
               {formAppearanceFont === 'embedded' && embeddedIsCollection && <DsField label="Collection face index">
                 <DsInput type="number" aria-label="Collection face index" min={0} max={Math.max(0, Math.min(64, embeddedFaceCount) - 1)} step={1} value={embeddedFaceIndex} disabled={locked || fieldBytes !== bytes} onChange={event => { setEmbeddedFaceIndex(event.target.value); setFormNotice(null) }} />
-                <span className="ds-muted">{embeddedFaceCount > 0 && embeddedFaceCount <= 64 ? `${embeddedFaceCount} faces. Zero selects the first face; choose up to ${embeddedFaceCount - 1}. The selected face must have fixed TrueType outlines.` : 'Unsupported collection face count.'}</span>
+                <span className="ds-muted">{embeddedFaceCount > 0 && embeddedFaceCount <= 64 ? `${embeddedFaceCount} faces. Zero selects the first face; choose up to ${embeddedFaceCount - 1}. The selected face must have fixed TrueType or CFF1 outlines.` : 'Unsupported collection face count.'}</span>
               </DsField>}
-              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType font supports Unicode text covered by that font and HarfBuzz, including contextual scripts, combining marks, ligatures and mixed direction. The single font must cover the entire value. The selected complete face is saved in the PDF; extra cluster glyphs may use exact font outlines. Generic readers may reorder extracted complex text; saved form values retain the exact input. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
+              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType or CFF1 font supports Unicode text covered by that font and HarfBuzz, including contextual scripts, combining marks, ligatures and mixed direction. The single font must cover the entire value. The selected complete outline program is saved in the PDF; extra cluster glyphs may use exact font outlines. Generic readers may reorder extracted complex text; saved form values retain the exact input. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
               <DsField label="Saved choice appearance">
                 <DsSelect aria-label="Saved choice appearance" value={formChoiceAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
                   setFormChoiceAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
