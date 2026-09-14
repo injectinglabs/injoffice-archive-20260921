@@ -134,8 +134,8 @@ func TestNativeSourceAffineTextBoxAndUprightBoundary(t *testing.T) {
 			t.Fatal("text box source orientation lost")
 		}
 		if upright {
-			if text.Compatibility.Status != NativeCompatibilityStatusRefused || text.TextBody != nil {
-				t.Fatal("unsupported upright text admitted")
+			if text.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || text.TextBody == nil || text.TextBody.Upright == nil || !*text.TextBody.Upright {
+				t.Fatal("upright source metadata or preview-only authority lost")
 			}
 		} else if text.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || text.TextBody == nil {
 			t.Fatal("text box affine qualification failed")

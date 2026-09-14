@@ -58,6 +58,7 @@ export function createRecordingPaintSurface(maxCommands: number = PPTX_RENDER_LI
 
 function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: PaintSurface): void {
   for (const paragraph of paragraphs) {
+    if(paragraph.transform){surface.push({kind:'save'});surface.push({kind:'transform',transform:paragraph.transform})}
     for (const run of paragraph.marker ? [paragraph.marker,...paragraph.runs] : paragraph.runs) {
       if (run.status === 'refused') {
         surface.push({
@@ -69,6 +70,7 @@ function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: Pa
         surface.push({ kind: 'glyphRun', sourceElementId: run.sourceElementId, run })
       }
     }
+    if(paragraph.transform)surface.push({kind:'restore'})
   }
 }
 

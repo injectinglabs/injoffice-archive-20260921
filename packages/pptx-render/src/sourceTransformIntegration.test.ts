@@ -61,3 +61,12 @@ it('compiles 200 ordinary noncardinal cubic callouts with one aggregate affine b
  input.slides[0]!.elements=Array.from({length:1000},(_,i)=>({...input.slides[0]!.elements[i%200]!,id:`over-${i}`}))
  await expect(compileNativePptxSlide(input,0,{textLayout:layout})).rejects.toThrow('Aggregate affine operation')
 })
+
+it('does not reinterpret authored conventional groups when new text orientation is requested',async()=>{
+ const child=shape();delete child.transform.rotationAngle
+ child.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'none',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow',upright:true}
+ const group:NativeElement={kind:'group',id:'group',provenance:'authored',transform:{x:0,y:0,cx:4000000,cy:2000000},childTransform:{x:0,y:0,cx:2000000,cy:2000000},children:[child],passthrough:[],compatibility}
+ await expect(compileNativePptxSlide(deck(group),0,{textLayout:layout})).rejects.toThrow('authored conventional affine group')
+ delete child.textBody.upright
+ expect((await compileNativePptxSlide(deck(group),0,{textLayout:layout})).nodes).toHaveLength(1)
+})

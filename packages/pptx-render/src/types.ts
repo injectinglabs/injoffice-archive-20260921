@@ -159,6 +159,8 @@ export interface RenderTextRunNode {
 }
 
 export interface RenderParagraphNode {
+  /** Exact fractional layout placement; glyph advances remain unchanged. */
+  readonly transform?: RenderTransform
   readonly marker?: RenderTextRunNode
   readonly kind: 'paragraph'
   readonly sourceElementId: string
