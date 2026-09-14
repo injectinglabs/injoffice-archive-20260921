@@ -1,5 +1,5 @@
-import { decodeXlsxSourceStylePreviewV1, type XlsxSourceStylePreviewV1 } from './sourceStyles.js'
-export { decodeXlsxSourceStylePreviewV1, type XlsxSourceStylePreviewV1, type XlsxSourceStyleV1, type XlsxSourceStyleCellV1 } from './sourceStyles.js'
+import { decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1 } from './sourceStyles.js'
+export { decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1, type XlsxSourceStyleV1, type XlsxSourceStyleCellV1 } from './sourceStyles.js'
 import {
   NativeWasmError,
   createNativeWasmClient,
@@ -317,18 +317,28 @@ export interface XlsxSourceStylePreviewClient {
   terminate(): void
 }
 export function createXlsxSourceStylePreviewClient(options: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'> = {}): XlsxSourceStylePreviewClient {
+  return createSourcePreviewClient(options, new URL('./xlsxsource.worker.js', import.meta.url), decodeXlsxSourceStylePreviewV1)
+}
+export interface XlsxSourceStylePreviewV2Client {
+  preview(bytes: Uint8Array, options?: XlsxWasmOperationOptions): Promise<XlsxSourceStylePreviewV2>
+  terminate(): void
+}
+export function createXlsxSourceStylePreviewV2Client(options: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'> = {}): XlsxSourceStylePreviewV2Client {
+  return createSourcePreviewClient(options, new URL('./xlsxsource2.worker.js', import.meta.url), decodeXlsxSourceStylePreviewV2)
+}
+function createSourcePreviewClient<T>(options: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>, defaultWorker: URL, decode: (json: string, hash: string) => T) {
   const assets = resolveXlsxWasmAssetUrls(options)
-  const workerUrl = toUrl(options.workerUrl, new URL('./xlsxsource.worker.js', import.meta.url))
+  const workerUrl = toUrl(options.workerUrl, defaultWorker)
   const limit = boundedLimit(options.maxPackageBytes, DEFAULT_XLSX_WASM_MAX_PACKAGE_BYTES, XLSX_WASM_NATIVE_MAX_PACKAGE_BYTES, 'maxPackageBytes')
   const native = createNativeWasmClient({ format: 'xlsx', workerFactory: () => (options.workerFactory ?? createBrowserWorker)(workerUrl), assets: { wasmUrl: assets.wasmUrl, goRuntimeUrl: assets.goRuntimeUrl }, operationTimeoutMs: options.operationTimeoutMs })
   return {
-    async preview(bytes, operation = {}) {
+    async preview(bytes: Uint8Array, operation: XlsxWasmOperationOptions = {}) {
       assertPackageSize(bytes, limit)
       const snapshot = new Uint8Array(bytes)
       const digest = await globalThis.crypto.subtle.digest('SHA-256', snapshot)
       const hash = 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('')
       const json = await native.inspect(snapshot, operation)
-      return decodeXlsxSourceStylePreviewV1(json, hash)
+      return decode(json, hash)
     },
     terminate: () => native.terminate(),
   }

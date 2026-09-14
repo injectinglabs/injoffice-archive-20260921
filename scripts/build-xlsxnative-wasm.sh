@@ -34,6 +34,7 @@ if [[ -n $package_out ]]; then
   mkdir -p "$package_out"
   cp "$out/xlsxnative.wasm" "$out/wasm_exec.js" "$package_worker" "$package_out/"
   cat "$root/packages/xlsx-wasm/worker/xlsxsource.worker.js" "$package_worker" > "$package_out/xlsxsource.worker.js"
+  cat "$root/packages/xlsx-wasm/worker/xlsxsource2.worker.js" "$package_worker" > "$package_out/xlsxsource2.worker.js"
 fi
 
 size=$(wc -c < "$out/xlsxnative.wasm" | tr -d ' ')
