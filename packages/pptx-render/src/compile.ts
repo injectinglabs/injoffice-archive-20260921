@@ -1943,7 +1943,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     const layout=sourceGraphicFrameLayout(sourceFrame(element.transform),sourceParents,state.budget.affine)
     const projection=projectSourceGraphicFrameLayout(layout,state.budget.maxCoordinateEmu,state.budget.affine)
     const bounds=await sourceGraphicFramePaintBounds(node,state.options.textLayout.glyphExtents,state.budget.affine)
-    const radialOutset=element.chart.literalRadar&&state.options.literalRadarPreview===true&&!state.workbookCharts.has(element.id)&&node.kind==='group'?1:0
+    const radialOutset=node.kind==='group'&&(state.workbookCharts.get(element.id)?.data.profile==='workbook-radar-v1'||element.chart.literalRadar&&state.options.literalRadarPreview===true&&!state.workbookCharts.has(element.id))?1:0
     const x=projection.hullOutsetXEmu+radialOutset,y=projection.hullOutsetYEmu+radialOutset
     checkedWorldAffine(parentWorld,node.transform,{x:bounds.x-x,y:bounds.y-y,cx:bounds.cx+2*x,cy:bounds.cy+2*y},`$.elements.${element.id}.physicalPaintHull`,state.budget)
   }
@@ -2088,18 +2088,19 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
       }
 
       const workbook=state.workbookCharts.get(element.id)
-      const radar=workbook?undefined:element.chart.literalRadar
-      if(radar&&state.options.literalRadarPreview===true){
+      const radar=workbook?.data.profile==='workbook-radar-v1'?workbook.data:workbook?undefined:element.chart.literalRadar
+      if(radar&&(workbook||state.options.literalRadarPreview===true)){
         if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalRadar`,'Radar vectors exceed nesting budget')
-        const vectors=createNativeLiteralRadarPaths(radar,base.bounds.cx,base.bounds.cy)
+        const vectors=workbook?createNativeWorkbookChartPaths(workbook,base.bounds.cx,base.bounds.cy):createNativeLiteralRadarPaths(radar as import('@injoffice/pptx-native').NativeLiteralRadar,base.bounds.cx,base.bounds.cy)
         const children=vectors.map((vector,index)=>{
           const path=`$.elements.${element.id}.literalRadar.${index}`
           // Qualify the complete round-join stroke hull plus the independent
           // numerical outset before plot clipping can hide any source ink.
+          if(!('inkBounds' in vector))throw new RenderCompileError('render.invalidChart',path,'Radar requires qualified ink bounds')
           checkLeafBounds(vector.inkBounds);takeNode(state,path)
           return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.color?{fill:{color:vector.color}}:{}),stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}
         })
-        state.diagnostics.push({severity:'warning',code:'chart.literalRadarPreview',message:RADAR_PREVIEW_DISCLOSURE,slideId:state.slide.id,elementId:element.id})
+        state.diagnostics.push({severity:'warning',code:workbook?'chart.workbookRadarPreview':'chart.literalRadarPreview',message:workbook?'Authoritative embedded-workbook radar cells; chart caches ignored. '+RADAR_PREVIEW_DISCLOSURE.replace('Source literal radar','Workbook radar').replace(' and workbook radar',''):RADAR_PREVIEW_DISCLOSURE,slideId:state.slide.id,elementId:element.id})
         return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
       }
       const stackedBar=workbook?.data.profile==='workbook-stacked-bar-v1'?workbook.data:workbook?undefined:element.chart.literalStackedBar

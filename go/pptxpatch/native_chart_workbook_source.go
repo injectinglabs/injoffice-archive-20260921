@@ -6,6 +6,7 @@ import (
 
 type nativeChartWorkbookSource struct {
 	Family         string
+	RadarStyle     string
 	Grouping       string
 	Overlap        *int64
 	Direction      string
@@ -22,6 +23,17 @@ type nativeChartWorkbookSource struct {
 // values into the existing literal-only parser. Rendering awaits an explicit
 // embedded-workbook resolver; all existing literal profiles stay unchanged.
 func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtractDialect) *nativeChartWorkbookSource {
+	if radar := extractNativeChartRadarSource(payload, part, d, true); radar != nil {
+		x, y := radar.CategoryAxis, radar.ValueAxis
+		if x.Labels != nil || y.Labels != nil || x.Position != "b" || y.Position != "l" || x.ID == y.ID {
+			return nil
+		}
+		out := &nativeChartWorkbookSource{Family: "radarChart", RadarStyle: radar.Style, XAxis: x, YAxis: y, ExternalData: radar.ExternalData, DispBlanksAs: radar.DispBlanksAs, Series: []nativeChartWorkbookSeries{}}
+		for _, s := range radar.Series {
+			out.Series = append(out.Series, nativeChartWorkbookSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: s.TitleReference, CategoryReference: s.CategoryReference, ValueReference: s.ValueReference, Color: s.Color, Width: s.Width, Fill: s.Fill})
+		}
+		return out
+	}
 	if bubble := extractNativeChartBubbleSource(payload, part, d, true); bubble != nil {
 		out := &nativeChartWorkbookSource{Family: "bubbleChart", BubbleScale: &bubble.BubbleScale, SizeRepresents: bubble.SizeRepresents, XAxis: bubble.XAxis, YAxis: bubble.YAxis, ExternalData: bubble.ExternalData, DispBlanksAs: bubble.DispBlanksAs, Series: []nativeChartWorkbookSeries{}}
 		for _, s := range bubble.Series {

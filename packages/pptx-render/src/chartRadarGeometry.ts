@@ -1,5 +1,5 @@
-import type {NativeLiteralRadar} from '@injoffice/pptx-native'
-import {validNativeLiteralRadar} from '@injoffice/pptx-native'
+import type {NativeRadarData} from '@injoffice/pptx-native'
+import {validNativeRadarData} from '@injoffice/pptx-native'
 import {chartRational as r,chartRationalDecimal as decimal,chartRationalAdd as add,chartRationalSubtract as sub,chartRationalMultiply as mul,chartRationalDivide as div,chartRationalCoordinate as coordinate} from './chartRational.js'
 import type {RenderPathCommand,RenderRect,RenderStroke} from './types.js'
 
@@ -16,8 +16,8 @@ export interface RadarSeriesVector {
 }
 /** Dedicated geometry only: caller owns source admission, axis paint, plot clip
  * and complete transformed ink qualification. No source array is rewritten. */
-export function createChartRadarSeriesGeometry(chart:NativeLiteralRadar,cx:number,cy:number):readonly RadarSeriesVector[]{
- if(!validNativeLiteralRadar(chart))throw new RangeError('unqualified radar chart profile')
+export function createChartRadarSeriesGeometry(chart:NativeRadarData,cx:number,cy:number):readonly RadarSeriesVector[]{
+ if(!validNativeRadarData({style:chart.style,categories:chart.categories,series:chart.series,categoryAxis:chart.categoryAxis,valueAxis:chart.valueAxis}))throw new RangeError('unqualified radar chart profile')
  if(!Number.isSafeInteger(cx)||!Number.isSafeInteger(cy)||cx<1||cy<1||cx>100_000_000||cy>100_000_000)throw new RangeError('radar frame coordinate budget exceeded')
  const count=chart.categories.length,radius=r(BigInt(Math.min(cx,cy)),2n),minimum=decimal(chart.valueAxis.min!),span=sub(decimal(chart.valueAxis.max!),minimum)
  const directions=radarDirections(count,chart.categoryAxis.orientation==='maxMin',cx,cy)
@@ -59,7 +59,7 @@ function radarInkBounds(points:readonly {x:number;y:number}[],width:number):Rend
 /** Reference-qualified no-label value-axis spokes. The category axis supplies
  * angular order, not a separate visible outline in this bounded Office profile.
  * Standard spokes precede data; filled spokes follow data. */
-export function createChartRadarGeometry(chart:NativeLiteralRadar,cx:number,cy:number):readonly RadarSeriesVector[]{
+export function createChartRadarGeometry(chart:NativeRadarData,cx:number,cy:number):readonly RadarSeriesVector[]{
  const data=createChartRadarSeriesGeometry(chart,cx,cy)
  if(chart.valueAxis.deleted)return data
  const points=radarDirections(chart.categories.length,chart.categoryAxis.orientation==='maxMin',cx,cy).map(d=>radarPoint(r(1n),d,r(BigInt(Math.min(cx,cy)),2n),cx,cy)),center={x:Math.round(cx/2),y:Math.round(cy/2)}
