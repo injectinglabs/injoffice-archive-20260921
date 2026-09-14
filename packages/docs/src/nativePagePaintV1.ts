@@ -72,9 +72,9 @@ import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualify
 import {
   decodeNativeDocxPagePaintMediaAssetsV1,
   qualifyNativeDocxInlineImageV1,
-  qualifyNativeDocxInlineTextboxV1,
   type NativeDocxPagePaintMediaAssetV1,
 } from './nativeImagePagePaintV1.js'
+import {qualifyNativeDocxInlineTextboxV1} from './nativeTextboxInlineV1.js'
 import type { NativeDocxResolvedNumberingSourceV1, NativeDocxResolvedRunPropertiesV1 } from './nativeResolvedLayout.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'

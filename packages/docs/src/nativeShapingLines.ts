@@ -70,7 +70,8 @@ import {
   type NativeDocxResolvedRunPropertiesV1,
   type NativeDocxResolvedRunV1,
 } from './nativeResolvedLayout.js'
-import { qualifyNativeDocxInlineImageV1, qualifyNativeDocxInlineTextboxV1 } from './nativeImagePagePaintV1.js'
+import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
+import {qualifyNativeDocxInlineTextboxV1} from './nativeTextboxInlineV1.js'
 import { resolveNativeDocxParagraphBidiPlanV1, type NativeDocxParagraphBidiPlanV1 } from './nativeBidiPlanV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { compareNativeValidationIssues } from './nativeDeterminism.js'
