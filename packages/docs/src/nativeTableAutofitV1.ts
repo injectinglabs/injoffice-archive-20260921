@@ -66,10 +66,12 @@ export function resolveNativeDocxTableAutofitV1(table: NativeDocxTableV1, contai
   // Auto width is not permission to discard consistent authored preferences.
   // Qualify only the non-conflicting case: every cell repeats its grid width,
   // all unwrapped content fits that preference, and the complete grid fits the
-  // section. This is not a general Word autofit algorithm or a fixed-grid
-  // override: explicit table widths and conflicting/wrapping preferences keep
-  // the existing content policy below. Final source-bound shaping replays this
-  // same decision, and the named policy enters the table projection hash.
+  // section. Empty cells contribute only padding; they do not invent column
+  // widths or shrink a fitting authored grid. This is not a general Word autofit
+  // algorithm or a fixed-grid override: explicit table widths and
+  // conflicting/wrapping preferences keep the existing content policy below.
+  // Final source-bound shaping replays this same decision, and the named policy
+  // enters the table projection hash.
   const preferredGridWidth = grid.reduce((a,b) => a+b,0)
   const preservePreferences = table.width_twips === undefined
     && preferredGridWidth <= available

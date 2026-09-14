@@ -13,8 +13,9 @@ import type {
   NativeDocxTableCellV1,
   NativeDocxTableV1,
 } from './nativeContract.js'
-import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
+import type { NativeDocxResolvedLayoutInputV1, NativeDocxResolvedTableV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
+import { validNativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
 
@@ -181,8 +182,36 @@ function cellHasVisibleContent(cell: NativeDocxTableCellV1): boolean {
   return cell.paragraphs.some((paragraph) => paragraph.runs.some((run) => (run.kind === 'text' && (run.text ?? '') !== '') || run.kind === 'drawing' || (run.kind === 'control' && run.control !== 'tab' && run.control !== 'line-break')))
 }
 
-function tableStyleBlocksPaint(resolved: NativeDocxResolvedLayoutInputV1, tableID: string): boolean {
-  return resolved.diagnostics.some((diagnostic) => diagnostic.scope_id === tableID && (diagnostic.code === 'CONDITIONAL_TABLE_STYLE_PRESERVED' || diagnostic.code === 'TABLE_STYLE_EFFECTS_PRESERVED' || diagnostic.code === 'MISSING_TABLE_STYLE'))
+function diagnosticIdentity(code: string, scopeID: string, partName = '', path = ''): string {
+  return JSON.stringify([code, scopeID, partName, path])
+}
+
+function tableStyleBlocksPaint(resolved: NativeDocxResolvedLayoutInputV1, tableID: string, covered?: ReadonlySet<string>): boolean {
+  return resolved.diagnostics.some((diagnostic) => {
+    if (diagnostic.scope_id !== tableID) return false
+    if (diagnostic.code === 'CONDITIONAL_TABLE_STYLE_PRESERVED' || diagnostic.code === 'MISSING_TABLE_STYLE') return true
+    return diagnostic.code === 'TABLE_STYLE_EFFECTS_PRESERVED' && !covered?.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? ''))
+  })
+}
+
+/** Paint-only join of independently attested automatic-border evidence.
+ * Source table borders stay absent; this does not implement Word auto color. */
+function qualifiedAutomaticBorderPaint(table: NativeDocxTableV1, resolvedTable: NativeDocxResolvedTableV1, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1): { borders: NativeDocxTableBordersV1; covered: Set<string> } | undefined {
+  const evidence = resolvedTable.automatic_border_preview
+  if (!evidence || table.borders || resolvedTable.borders || evidence.package_sha256 !== document.source.package_sha256 || !validNativeDocxAutomaticBorderEvidenceV1(evidence)) return undefined
+  const cells = table.rows.flatMap((row) => row.cells)
+  if (JSON.stringify(cells.map((cell) => cell.id)) !== JSON.stringify(evidence.cell_ids)) return undefined
+  if (cells.some((cell) => cell.borders || cell.grid_span !== 1 || cell.vertical_merge !== 'none' || cell.shading_rgb !== undefined && cell.shading_rgb !== 'FFFFFF')) return undefined
+  const resolvedKeys = new Set(resolved.diagnostics.map((diagnostic) => diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? '')))
+  const covered = new Set<string>()
+  for (const diagnostic of evidence.source_diagnostics) {
+    if (diagnostic.scope_id !== table.id || diagnostic.part_name !== evidence.source_part) return undefined
+    if (diagnostic.code === 'TABLE_STYLE_EFFECTS_PRESERVED') {
+      if (evidence.source_path !== `${diagnostic.path}/w:tblBorders[1]` || !resolvedKeys.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name, diagnostic.path))) return undefined
+    } else if (diagnostic.code !== 'UNMODELED_TABLE_PROPERTY' || diagnostic.path !== evidence.source_path) return undefined
+    covered.add(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name, diagnostic.path))
+  }
+  return { borders: structuredClone(evidence.borders), covered }
 }
 
 /** Resolve an explicit percentage against its section, preserving authored grid
@@ -246,6 +275,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   const resolvedTables = new Map(resolved.tables.map((entry) => [entry.table_id, entry]))
   const tables: NativeDocxQualifiedTableV1[] = []
   const paragraphWidths = new Map<string, number>()
+  const coveredStyleDiagnostics = new Set<string>()
   let rows = 0
   let cells = 0
   const tableContainers = new Map<string, { width: number; sectionID: string }>()
@@ -268,8 +298,10 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   for (const sourceTable of sourceTables) {
     const resolvedTable = resolvedTables.get(sourceTable.id)
     if (!resolvedTable) return fail(sourceTable.id, 'Table does not exact-join the resolved layout')
-    if (tableStyleBlocksPaint(resolved, sourceTable.id)) return fail(sourceTable.id, 'Table styles and conditional style effects are outside the bounded page-paint subset')
-    const paintBorders = sourceTable.borders ?? resolvedTable.borders
+    const automaticBorders = qualifiedAutomaticBorderPaint(sourceTable, resolvedTable, document, resolved)
+    if (automaticBorders) for (const key of automaticBorders.covered) coveredStyleDiagnostics.add(key)
+    if (tableStyleBlocksPaint(resolved, sourceTable.id, automaticBorders?.covered)) return fail(sourceTable.id, 'Table styles and conditional style effects are outside the bounded page-paint subset')
+    const paintBorders = sourceTable.borders ?? resolvedTable.borders ?? automaticBorders?.borders
     if ((sourceTable.table_style_id || resolvedTable.style_id) && !bordersValid(paintBorders)) return fail(sourceTable.id, 'Simple table style did not project exact table-level border commands')
     let table = paintBorders === sourceTable.borders ? sourceTable : { ...sourceTable, borders: paintBorders }
     let widthPolicy: NativeDocxQualifiedTableV1['width_policy']
@@ -369,7 +401,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     }
     tables.push({ ...(widthPolicy ? { width_policy: widthPolicy } : {}), table, width_millipoints: tableWidth, x_millipoints: tableX, grid_widths_millipoints: gridMP, rows: qualifiedRows })
   }
-  if (resolved.diagnostics.some((diagnostic) => sourceTables.some((table) => diagnostic.scope_id === table.id || table.rows.some((row) => row.cells.some((cell) => cell.id === diagnostic.scope_id || cell.paragraphs.some((paragraph) => paragraph.id === diagnostic.scope_id || paragraph.runs.some((run) => run.id === diagnostic.scope_id))))))) return fail(document.document_id, 'Resolved-layout diagnostics touch a table or descendant and exact table paint is unavailable')
+  if (resolved.diagnostics.some((diagnostic) => !coveredStyleDiagnostics.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? '')) && sourceTables.some((table) => diagnostic.scope_id === table.id || table.rows.some((row) => row.cells.some((cell) => cell.id === diagnostic.scope_id || cell.paragraphs.some((paragraph) => paragraph.id === diagnostic.scope_id || paragraph.runs.some((run) => run.id === diagnostic.scope_id))))))) return fail(document.document_id, 'Resolved-layout diagnostics touch a table or descendant and exact table paint is unavailable')
   return { status: 'qualified', tables, paragraph_widths: paragraphWidths, sha256: nativeDocxTableProjectionSha256V1(tables) }
 }
 

@@ -69,3 +69,59 @@ func TestResolvedTableGeometryCascade(t *testing.T) {
 		}
 	}
 }
+
+func TestResolvedTableGeometryTableGridAutoWidth(t *testing.T) {
+	borders := `<w:tblBorders>`
+	for _, edge := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
+		borders += `<w:` + edge + ` w:val="single" w:sz="4" w:space="0" w:color="auto"/>`
+	}
+	borders += `</w:tblBorders>`
+	margins := `<w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>`
+	for _, ns := range []string{wordMLTransitional, wordMLStrict} {
+		for _, tc := range []struct {
+			name, extra, look string
+			wantGeometry      bool
+		}{
+			{name: "table-grid auto look", look: `<w:tblLook w:val="04A0"/>`, wantGeometry: true},
+			{name: "unknown geometry child", extra: `<w:futureTable/>`},
+			{name: "malformed look", look: `<w:tblLook w:val="FFFF"/>`},
+		} {
+			t.Run(tc.name+ns, func(t *testing.T) {
+				styles := `<w:styles xmlns:w="` + ns + `"><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr>` + margins + `</w:tblPr></w:style><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:uiPriority w:val="39"/><w:rsid w:val="005E46CA"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr>` + margins + borders + tc.extra + `</w:tblPr></w:style></w:styles>`
+				parts := resolvedStylesTestParts(styles)
+				parts["word/document.xml"] = `<w:document xmlns:w="` + ns + `"><w:body><w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/>` + tc.look + `</w:tblPr><w:tblGrid><w:gridCol w:w="1510"/><w:gridCol w:w="1511"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="1510" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>1</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="1511" w:type="dxa"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl><w:p/><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/></w:sectPr></w:body></w:document>`
+				if ns == wordMLStrict {
+					for k, v := range parts {
+						parts[k] = strings.ReplaceAll(strings.ReplaceAll(v, wordMLTransitional, wordMLStrict), relBaseTransitional, relBaseStrict)
+					}
+				}
+				data := buildNativeDOCX(t, nativeEntries(parts))
+				before := string(data)
+				layout, err := ResolveNativeDocumentLayoutV1(data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := layout.Tables[0].Geometry
+				if !tc.wantGeometry {
+					if got != nil {
+						t.Fatalf("unexpected geometry %#v", got)
+					}
+				} else {
+					want := NativeResolvedTableGeometryV1{Layout: "autofit", Alignment: "left", WidthType: "auto", CellMargins: NativeTableCellMarginsV1{LeftTwips: 108, RightTwips: 108}}
+					if got == nil || *got != want {
+						t.Fatalf("geometry %#v, want %#v", got, want)
+					}
+					if !hasResolutionDiagnostic(layout, "TABLE_STYLE_EFFECTS_PRESERVED") {
+						t.Fatalf("missing auto-border diagnostic: %#v", layout.Diagnostics)
+					}
+					if layout.Tables[0].AutomaticBorderPreview == nil {
+						t.Fatal("missing automatic-border evidence")
+					}
+				}
+				if string(data) != before {
+					t.Fatal("source changed")
+				}
+			})
+		}
+	}
+}
