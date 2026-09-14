@@ -121,3 +121,19 @@ func extractNativeChartStackedBar(payload []byte, part string, d nativeExtractDi
 	result.ValueAxis = *value
 	return result
 }
+
+func extractNativeLiteralStackedBar(payload []byte, part string, d nativeExtractDialect) *NativeLiteralStackedBar {
+	source := extractNativeChartStackedBar(payload, part, d)
+	if source == nil {
+		return nil
+	}
+	direction := "bar"
+	if source.Direction == "col" {
+		direction = "column"
+	}
+	out := &NativeLiteralStackedBar{Profile: "literal-stacked-bar-v1", DataOrigin: "literal", Grouping: source.Grouping, BarDirection: direction, GapWidth: source.GapWidth, Overlap: 100, Categories: source.Categories, Series: []NativeLiteralBarSeries{}, CategoryAxis: nativeLiteralChartAxis(source.CategoryAxis, false), ValueAxis: nativeLiteralChartAxis(source.ValueAxis, true)}
+	for _, s := range source.Series {
+		out.Series = append(out.Series, NativeLiteralBarSeries{Index: s.Index, Order: s.Order, Title: s.Title, Values: s.Values, Colors: s.Colors})
+	}
+	return out
+}

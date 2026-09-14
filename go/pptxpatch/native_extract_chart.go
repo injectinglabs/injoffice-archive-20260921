@@ -93,13 +93,15 @@ func (extractor *nativeExtractor) extractNativeChartGraphicFrame(node *nativeXML
 	}
 	relID := relationshipID
 	chart := NativeOpaqueChart{
-		LiteralBubble:    extractNativeLiteralBubble(chartPayload, chartRel.Part, dialect),
-		LiteralArea:      extractNativeLiteralArea(chartPayload, chartRel.Part, dialect),
-		LiteralConnected: extractNativeLiteralConnected(chartPayload, chartRel.Part, dialect),
-		LiteralBar:       extractNativeLiteralBar(chartPayload, chartRel.Part, dialect),
-		LiteralDoughnut:  extractNativeLiteralDoughnut(chartPayload, chartRel.Part, dialect),
-		LiteralPie:       extractNativeLiteralPie(chartPayload, chartRel.Part, dialect),
-		ChartPart:        chartRel.Part, RelationshipID: relationshipID, OpaqueRef: opaqueRef, PreviewAssetID: previewAssetID,
+		LiteralStackedBar:  extractNativeLiteralStackedBar(chartPayload, chartRel.Part, dialect),
+		LiteralStackedLine: extractNativeLiteralStackedLine(chartPayload, chartRel.Part, dialect),
+		LiteralBubble:      extractNativeLiteralBubble(chartPayload, chartRel.Part, dialect),
+		LiteralArea:        extractNativeLiteralArea(chartPayload, chartRel.Part, dialect),
+		LiteralConnected:   extractNativeLiteralConnected(chartPayload, chartRel.Part, dialect),
+		LiteralBar:         extractNativeLiteralBar(chartPayload, chartRel.Part, dialect),
+		LiteralDoughnut:    extractNativeLiteralDoughnut(chartPayload, chartRel.Part, dialect),
+		LiteralPie:         extractNativeLiteralPie(chartPayload, chartRel.Part, dialect),
+		ChartPart:          chartRel.Part, RelationshipID: relationshipID, OpaqueRef: opaqueRef, PreviewAssetID: previewAssetID,
 	}
 	element := NativeElement{
 		Kind: NativeElementKindChart, ID: elementID, Provenance: NativeProvenanceParsed,

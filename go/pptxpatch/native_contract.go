@@ -300,17 +300,25 @@ type NativeLiteralBubble struct {
 	XAxis          NativeLiteralBarAxis        `json:"xAxis"`
 	YAxis          NativeLiteralBarAxis        `json:"yAxis"`
 }
+type NativeLiteralStackedBar = NativeLiteralBar
+type NativeLiteralStackedLine struct {
+	NativeLiteralConnected
+	Grouping string `json:"grouping"`
+}
+
 type NativeOpaqueChart struct {
-	LiteralBubble    *NativeLiteralBubble    `json:"literalBubble,omitempty"`
-	LiteralArea      *NativeLiteralArea      `json:"literalArea,omitempty"`
-	LiteralConnected *NativeLiteralConnected `json:"literalConnected,omitempty"`
-	LiteralBar       *NativeLiteralBar       `json:"literalBar,omitempty"`
-	LiteralDoughnut  *NativeLiteralDoughnut  `json:"literalDoughnut,omitempty"`
-	LiteralPie       *NativeLiteralPie       `json:"literalPie,omitempty"`
-	ChartPart        string                  `json:"chartPart"`
-	RelationshipID   string                  `json:"relationshipId"`
-	OpaqueRef        NativePassthroughRef    `json:"opaqueRef"`
-	PreviewAssetID   *string                 `json:"previewAssetId,omitempty"`
+	LiteralStackedBar  *NativeLiteralStackedBar  `json:"literalStackedBar,omitempty"`
+	LiteralStackedLine *NativeLiteralStackedLine `json:"literalStackedLine,omitempty"`
+	LiteralBubble      *NativeLiteralBubble      `json:"literalBubble,omitempty"`
+	LiteralArea        *NativeLiteralArea        `json:"literalArea,omitempty"`
+	LiteralConnected   *NativeLiteralConnected   `json:"literalConnected,omitempty"`
+	LiteralBar         *NativeLiteralBar         `json:"literalBar,omitempty"`
+	LiteralDoughnut    *NativeLiteralDoughnut    `json:"literalDoughnut,omitempty"`
+	LiteralPie         *NativeLiteralPie         `json:"literalPie,omitempty"`
+	ChartPart          string                    `json:"chartPart"`
+	RelationshipID     string                    `json:"relationshipId"`
+	OpaqueRef          NativePassthroughRef      `json:"opaqueRef"`
+	PreviewAssetID     *string                   `json:"previewAssetId,omitempty"`
 }
 
 // NativeElement is the Go binding for the schema's discriminated union.
