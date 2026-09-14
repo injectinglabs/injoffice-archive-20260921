@@ -6,7 +6,7 @@ and alignment are already merged. Each item below requires source-bound
 inspection, layout/composition, browser presentation, positive and refusal
 regressions, real-DOCX evidence, green CI, and merge before it is delivered.
 
-- [ ] Stacking: honor front/behind-body placement and unsigned relative height;
+- [x] Stacking (merged in PR #179): honor front/behind-body placement and unsigned relative height;
   preserve source order for ties; prove overlap pixels and reject forged layers.
 - [ ] Parity-relative margins: resolve authored inside/outside and physical margin
   bases and alignments on odd/even pages, with source section geometry.

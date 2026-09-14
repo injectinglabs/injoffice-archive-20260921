@@ -63,12 +63,12 @@ func nativeTextboxPageOffsets(n *nativeXMLNode, wp, a string) (int64, int64, boo
 func nativeTextboxPositionAxis(p *nativeXMLNode, wp string, horizontal bool) (int64, string, string, bool) {
 	relative, _ := nativeUnqualifiedAttr(p, "relativeFrom")
 	switch relative {
-	case "page", "margin":
-	case "column", "character":
+	case "page", "margin", "insideMargin", "outsideMargin":
+	case "column", "character", "leftMargin", "rightMargin":
 		if !horizontal {
 			return 0, "", "", false
 		}
-	case "paragraph", "line":
+	case "paragraph", "line", "topMargin", "bottomMargin":
 		if horizontal {
 			return 0, "", "", false
 		}
@@ -93,7 +93,7 @@ func nativeTextboxPositionAxis(p *nativeXMLNode, wp string, horizontal bool) (in
 		return 0, "", "", false
 	}
 	switch c.Text {
-	case "center":
+	case "center", "inside", "outside":
 	case "left", "right":
 		if !horizontal {
 			return 0, "", "", false

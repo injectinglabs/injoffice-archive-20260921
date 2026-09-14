@@ -17,6 +17,7 @@ import (
 func TestNativeTextboxPageSource(t *testing.T)          { testNativeTextboxPageSource(t, 1) }
 func TestNativeMultipleTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2) }
 func TestNativeRelativeTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2, true) }
+func TestNativeParityTextboxPagesSource(t *testing.T)   { testNativeTextboxPageSource(t, 2, false) }
 func TestNativeStackedTextboxPagesSource(t *testing.T)  { testNativeTextboxPageSource(t, 4) }
 func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
@@ -59,12 +60,23 @@ func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 		main := strings.Replace(string(parts["word/document.xml"]), `<w:sectPr>`, paragraph+`<w:sectPr>`, 1)
 		parts["word/document.xml"] = []byte(strings.Replace(main, `w:bottom="1440"`, `w:bottom="14000"`, 1))
 	}
-	if len(relative) > 0 {
+	if len(relative) > 0 && relative[0] {
 		main := string(parts["word/document.xml"])
 		main = strings.Replace(main, `<wp:positionH relativeFrom="page"><wp:posOffset>914400</wp:posOffset>`, `<wp:positionH relativeFrom="margin"><wp:align>center</wp:align>`, 1)
 		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>1828800</wp:posOffset>`, `<wp:positionV relativeFrom="page"><wp:align>center</wp:align>`, 1)
 		main = strings.Replace(main, `<wp:positionH relativeFrom="page"><wp:posOffset>3657600</wp:posOffset>`, `<wp:positionH relativeFrom="column"><wp:posOffset>-457200</wp:posOffset>`, 1)
 		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>2743200</wp:posOffset>`, `<wp:positionV relativeFrom="paragraph"><wp:posOffset>914400</wp:posOffset>`, 1)
+		parts["word/document.xml"] = []byte(main)
+	}
+	if len(relative) > 0 && !relative[0] {
+		main := strings.Replace(string(parts["word/document.xml"]), `w:bottom="14000"`, `w:bottom="1440"`, 1)
+		main = strings.Replace(main, `</w:p><w:p><w:r>`, `</w:p>`+strings.Repeat(`<w:p><w:r><w:rPr><w:rFonts w:ascii="DejaVu Sans" w:hAnsi="DejaVu Sans"/><w:sz w:val="24"/></w:rPr><w:t>Flow.</w:t></w:r></w:p>`, 50)+`<w:p><w:r>`, 1)
+		for _, axis := range []string{"H", "V"} {
+			for _, offset := range []string{"914400", "1828800", "3657600", "2743200"} {
+				main = strings.ReplaceAll(main, `<wp:position`+axis+` relativeFrom="page"><wp:posOffset>`+offset+`</wp:posOffset>`, `<wp:position`+axis+` relativeFrom="insideMargin"><wp:align>center</wp:align>`)
+			}
+		}
+		main = strings.NewReplacer(`cx="2743200" cy="914400"`, `cx="609600" cy="457200"`, `Rectangle source`, `Box`, `>Second rectangle<`, `>Box<`).Replace(main)
 		parts["word/document.xml"] = []byte(main)
 	}
 	if count == 4 {
@@ -123,7 +135,7 @@ func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	}
 	for _, item := range inspected.Geometry.Items {
 		if item.PageAnchor == nil || item.Geometry == nil || item.Owner.Status != "supported" {
-			t.Fatal("incomplete textbox source")
+			t.Fatalf("incomplete textbox source: %+v", item)
 		}
 	}
 	settings, err := docxpatch.ExtractNativePaginationSettingsV1(source)
@@ -142,11 +154,14 @@ func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	if count == 2 {
 		env = "INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR"
 	}
-	if len(relative) > 0 {
+	if len(relative) > 0 && relative[0] {
 		env = "INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR"
 	}
 	if count == 4 {
 		env = "INJOFFICE_TEXTBOX_STACK_EVIDENCE_DIR"
+	}
+	if len(relative) > 0 && !relative[0] {
+		env = "INJOFFICE_TEXTBOX_PARITY_EVIDENCE_DIR"
 	}
 	if out := os.Getenv(env); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {

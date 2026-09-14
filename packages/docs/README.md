@@ -1032,7 +1032,7 @@ edges, the SVG clips the outward half of the stroke without shifting geometry.
 
 The original version 1 API continues to accept only its page-offset policy.
 The helper routes additional positions to version 2. Other wrapping policies,
-inline shapes, anchors after text, and margin-side/parity positioning remain
+inline shapes and anchors after text remain
 outside this read-only rectangle preview.
 
 Version 2 also preserves source `behindDoc` and unsigned `relativeHeight` in
@@ -1040,3 +1040,12 @@ optional `stacking` evidence. Behind-body textboxes paint before body commands;
 foreground textboxes paint after them. Each group uses ascending relative height,
 with source order breaking ties. The transport array stays in source order and
 every stacking record is checked against source evidence before any page mounts.
+
+Physical textbox margin regions include `leftMargin`, `rightMargin`, `topMargin`,
+`bottomMargin`, `insideMargin`, and `outsideMargin`. Inside selects left/top on
+odd physical pages and right/bottom on even pages; outside selects the opposite.
+The same parity rule applies to `inside`/`outside` alignment within a region.
+Parity uses the paginated physical ordinal, including blank pages, independently
+of displayed PAGE field restarts. Margin coordinates use the source section,
+not the body area reduced for footnotes. See Microsoft's [horizontal placement](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/4fa5d949-3bc9-49b0-aa3c-ad6286ef01bc)
+and [vertical placement](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e8351af1-c736-4e34-8bf1-1a7497b6cd41).

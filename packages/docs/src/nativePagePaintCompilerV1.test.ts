@@ -2828,6 +2828,37 @@ describe('source-anchored textbox page composition',()=>{
   }
  },20000)
 
+ it('resolves parity margin regions and inside/outside alignment using physical page order',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {resolveTextboxPosition:resolve}=await import('./nativeTextboxPositionV2.js')
+  const f=textboxFixture(),output=await render(f.input,f.evidence,[FONT_BYTES],provider)
+  const page=output.body_paint.pages[0]!,item=f.evidence.items[0]!,paint={...output.textboxes[0]!.paint,width_millipoints:36000,height_millipoints:18000}
+  Object.assign(f.document.sections[0]!.page.margins,{left_twips:1800,right_twips:1080,top_twips:720,bottom_twips:2160})
+  const original=item.page_anchor!
+  for(const ordinal of [0,1])for(const outside of [false,true]){
+   const base=outside?'outsideMargin':'insideMargin',right=(ordinal===1)!==outside
+   item.page_anchor={...original,policy:'relative-position-no-wrap-v2',horizontal_relative:base,vertical_relative:base,horizontal_align:'center',vertical_align:'center',x_emu:0,y_emu:0}
+   expect(resolve(f.document,item,{...page,ordinal},paint)).toEqual({x:right?567000:27000,y:right?729000:9000})
+   item.page_anchor.horizontal_relative='page';item.page_anchor.vertical_relative='page';item.page_anchor.horizontal_align=outside?'outside':'inside';item.page_anchor.vertical_align=outside?'outside':'inside'
+   expect(resolve(f.document,item,{...page,ordinal},paint)).toEqual({x:right?576000:0,y:right?774000:0})
+  }
+  for(const [h,v,x,y] of [['leftMargin','topMargin',27000,9000],['rightMargin','bottomMargin',567000,729000]] as const){
+   item.page_anchor={...original,policy:'relative-position-no-wrap-v2',horizontal_relative:h,vertical_relative:v,horizontal_align:'center',vertical_align:'center',x_emu:0,y_emu:0}
+   expect(resolve(f.document,item,page,paint)).toEqual({x,y})
+  }
+ })
+ it('binds parity alignment and coordinates to complete source evidence',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  const f=multipleTextboxFixture(true)
+  for(const item of f.evidence.items){const p=item.page_anchor!;item.page_anchor={...p,policy:'relative-position-no-wrap-v2',horizontal_relative:'page',vertical_relative:'page',horizontal_align:'inside',vertical_align:'outside',x_emu:0,y_emu:0,horizontal_anchor:{...p.horizontal_anchor,path:p.horizontal_anchor.path.replace('posOffset','align')},vertical_anchor:{...p.vertical_anchor,path:p.vertical_anchor.path.replace('posOffset','align')}}}
+  const result=await render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)
+  expect(result.textboxes.map(b=>[b.x_millipoints,b.y_millipoints])).toEqual([[0,720000],[396000,0]])
+  expect(decode(f.document,f.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toEqual(result)
+  const bad=structuredClone(result);bad.textboxes[1]!.x_millipoints=0
+  expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+ })
+
  it('binds stacking to source evidence and refuses changed or omitted layers',async()=>{
   const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
   const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
