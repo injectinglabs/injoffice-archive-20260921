@@ -97,3 +97,6 @@ export type {NativeLiteralBubble,NativeLiteralBubbleSeries} from './chartBubbleT
 export {validNativeLiteralBubble} from './chartBubbleValidation.js'
 
 export type {NativeWorkbookBubbleData} from './chartWorkbookResolution.js'
+
+export type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStackedTypes.js'
+export {validNativeLiteralStackedBar,validNativeLiteralStackedLine} from './chartStackedValidation.js'
