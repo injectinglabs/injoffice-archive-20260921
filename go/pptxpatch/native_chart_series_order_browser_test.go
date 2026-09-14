@@ -1,14 +1,56 @@
 package pptxpatch
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+// Derive separate chart-only packages without rewriting the original fixture.
+// Label variants are authored in XML before extraction, never in private models.
+func nativeSeriesOrderChartOnly(t *testing.T, original []byte, labels, invalidLabels bool) []byte {
+	archive, err := zip.NewReader(bytes.NewReader(original), int64(len(original)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := []nativeExtractZipPart{}
+	for _, entry := range archive.File {
+		r, e := entry.Open()
+		if e != nil {
+			t.Fatal(e)
+		}
+		raw, e := io.ReadAll(r)
+		r.Close()
+		if e != nil {
+			t.Fatal(e)
+		}
+		data := string(raw)
+		if entry.Name == "relocated/slides/slide-a.xml" {
+			data = regexp.MustCompile(`(?s)<p:sp>.*?</p:sp>`).ReplaceAllString(data, "")
+		}
+		if labels && strings.HasPrefix(entry.Name, "relocated/charts/") && strings.HasSuffix(entry.Name, ".xml") {
+			data = strings.ReplaceAll(data, `<c:tickLblPos val="none"/>`, `<c:tickLblPos val="low"/>`)
+			data = strings.ReplaceAll(data, `</c:spPr><c:crossAx`, `</c:spPr>`+nativeAxisTextXML(false)+`<c:crossAx`)
+			data = regexp.MustCompile(`(?s)<c:valAx>.*?</c:valAx>`).ReplaceAllStringFunc(data, func(axis string) string {
+				axis = strings.Replace(axis, `<c:majorTickMark`, `<c:numFmt formatCode="0.0" sourceLinked="0"/><c:majorTickMark`, 1)
+				return strings.Replace(axis, `</c:valAx>`, `<c:majorUnit val="5"/></c:valAx>`, 1)
+			})
+			data = strings.ReplaceAll(data, `</c:catAx>`, `<c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="0"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/><c:noMultiLvlLbl val="1"/></c:catAx>`)
+		}
+		if invalidLabels {
+			data = strings.ReplaceAll(data, `tickLblPos val="low"`, `tickLblPos val="nextTo"`)
+		}
+		parts = append(parts, nativeExtractZipPart{name: entry.Name, data: data})
+	}
+	return writeNativeExtractZip(t, parts)
+}
 
 func TestNativeSeriesOrderBrowserFixtures(t *testing.T) {
 	for _, name := range []string{"bar", "line", "scatter", "area", "bubble", "workbook-bar", "workbook-line", "workbook-scatter", "workbook-bubble"} {
@@ -78,31 +120,62 @@ func TestNativeSeriesOrderBrowserFixtures(t *testing.T) {
 			} else {
 				input = nativeChartFixture(t, nativeChartFixtureOptions{omitPreview: true, chartXML: source})
 			}
-			deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
-			if err != nil || len(deck.Slides) == 0 {
-				t.Fatal(err)
-			}
-			if out := os.Getenv("INJOFFICE_PPTX_SERIES_ORDER_FIXTURES"); out != "" {
-				if err = os.MkdirAll(out, 0700); err != nil {
+			original := bytes.Clone(input)
+			for _, variant := range []string{"", "-chart-only", "-chart-only-labels", "-chart-only-invalid-labels"} {
+				candidate := input
+				if variant != "" {
+					candidate = nativeSeriesOrderChartOnly(t, input, strings.HasSuffix(variant, "labels"), strings.HasSuffix(variant, "invalid-labels"))
+				}
+				invalidLabels := strings.HasSuffix(variant, "invalid-labels")
+				name := name + variant
+				deck, err := ExtractNativePPTX(candidate, nativeTestExtractOptions())
+				if err != nil || len(deck.Slides) == 0 {
 					t.Fatal(err)
 				}
-				deckJSON, _ := json.Marshal(deck)
-				if err = os.WriteFile(filepath.Join(out, name+"-deck.json"), deckJSON, 0600); err != nil {
-					t.Fatal(err)
+				if variant != "" && len(deck.Slides[0].Elements) != 1 {
+					t.Fatal("derived source is not chart-only")
+				}
+				if !workbook {
+					raw, _ := json.Marshal(nativeFixtureChart(t, deck.Slides[0]).Chart)
+					if strings.Contains(string(raw), `"profile":"literal-`) == invalidLabels {
+						t.Fatalf("source label qualification drift: %s", raw)
+					}
 				}
 				if workbook {
-					inspection, e := InspectNativePPTXChartWorkbooks(input)
-					if e != nil {
-						t.Fatal(e)
+					inspection, e := InspectNativePPTXChartWorkbooks(candidate)
+					if e != nil || (len(inspection.Charts) == 1) == invalidLabels {
+						t.Fatal("workbook source label qualification drift", e)
 					}
-					raw, _ := json.Marshal(inspection)
-					if err = os.WriteFile(filepath.Join(out, name+"-inspection.json"), raw, 0600); err != nil {
+				}
+				if out := os.Getenv("INJOFFICE_PPTX_SERIES_ORDER_FIXTURES"); out != "" {
+					if err = os.MkdirAll(out, 0700); err != nil {
+						t.Fatal(err)
+					}
+					identity, _ := json.Marshal(map[string]string{"originalPackageSHA256": nativeSHA256(original), "packageSHA256": nativeSHA256(candidate), "variant": variant})
+					if err = os.WriteFile(filepath.Join(out, name+"-source-identity.json"), identity, 0600); err != nil {
+						t.Fatal(err)
+					}
+					deckJSON, _ := json.Marshal(deck)
+					if err = os.WriteFile(filepath.Join(out, name+"-deck.json"), deckJSON, 0600); err != nil {
+						t.Fatal(err)
+					}
+					if workbook {
+						inspection, e := InspectNativePPTXChartWorkbooks(candidate)
+						if e != nil {
+							t.Fatal(e)
+						}
+						raw, _ := json.Marshal(inspection)
+						if err = os.WriteFile(filepath.Join(out, name+"-inspection.json"), raw, 0600); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if err = os.WriteFile(filepath.Join(out, name+".pptx"), candidate, 0600); err != nil {
 						t.Fatal(err)
 					}
 				}
-				if err = os.WriteFile(filepath.Join(out, name+".pptx"), input, 0600); err != nil {
-					t.Fatal(err)
-				}
+			}
+			if !bytes.Equal(input, original) {
+				t.Fatal("original fixture mutated")
 			}
 		})
 	}

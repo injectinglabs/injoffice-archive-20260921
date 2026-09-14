@@ -3,13 +3,17 @@ import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync,mkdirSync} from
 import {createHash} from 'node:crypto'
 import {createServer} from 'node:net'
 import {tmpdir} from 'node:os'
-import {resolve} from 'node:path'
+import {resolve,dirname,delimiter} from 'node:path'
 import {launchChromeForCDP,terminateProcess} from './chrome-cdp-startup.mjs'
+import {nativePptxSvgPath} from '../apps/playground/src/components/nativePptxSvgUnits.ts'
 import {startShowcaseDevServer} from './showcase-smoke-dev-server.mjs'
+// The helper launches `node`; inherit the exact runtime running this harness.
+process.env.PATH=dirname(process.execPath)+delimiter+(process.env.PATH??'')
 const root=resolve(import.meta.dirname,'..'),scratch=mkdtempSync(resolve(tmpdir(),'injoffice-series-order-browser-'))
 const artifacts=process.env.SHOWCASE_OUTPUT?resolve(process.env.SHOWCASE_OUTPUT):mkdtempSync(resolve(tmpdir(),'injoffice-series-order-evidence-'));mkdirSync(artifacts,{recursive:true})
-const profiles=[],errors=[],section=`document.querySelector('[aria-label="Measured native presentation"]')`,literal=`document.querySelector('[aria-label="Source literal chart preview"]')`,proof=[]
+const profiles=[],errors=[],section=`document.querySelector('[aria-label="Measured native presentation"]')`,proof=[]
 let helper,server,chrome,cdp
+const names=['bar','line','scatter','area','bubble','workbook-bar','workbook-line','workbook-scatter','workbook-bubble'].flatMap(name=>[name+'-chart-only',name+'-chart-only-labels'])
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex')
 function command(cmd,args,cwd=root,env={}){const r=spawnSync(cmd,args,{cwd,env:{...process.env,...env},encoding:'utf8',timeout:90000});if(r.status!==0)throw new Error(`${cmd}: ${r.stderr}\n${r.stdout}`)}
 try{
@@ -31,7 +35,7 @@ try{
  await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:`{const original=fetch;window.__areaPosts=[];window.__areaResponses=[];window.fetch=async(input,init)=>{if(init?.method==='POST'&&String(input).includes('/v1/')){const bytes=await init.body.arrayBuffer();const digest=await crypto.subtle.digest('SHA-256',bytes);window.__areaPosts.push({url:String(input),hash:[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('')})}const response=await original(input,init);if(String(input).includes('/v1/pptx/slide-preview'))window.__areaResponses.push(await response.clone().json());return response}}`})
  await cdp.send('Page.navigate',{url:`${server.url}#/slides?feature=pptx-native`})
  await poll(()=>evaluate(`!!document.querySelector('input[type=file]')`),'file input')
- for(const [index,name] of ['bar','line','scatter','area','bubble','workbook-bar','workbook-line','workbook-scatter','workbook-bubble'].entries()){
+ for(const [index,name] of names.entries()){
   const workbook=name.startsWith('workbook-'),fixture=resolve(artifacts,name+'.pptx'),digest=hash(readFileSync(fixture));await upload(fixture)
   await poll(()=>evaluate(`${section}?.textContent.includes('Nothing is uploaded')&&${section}?.querySelector('svg')===null`),'replacement resets consent')
   await assert(`window.__areaPosts.length===${index}`,'opening never submits source')
@@ -40,13 +44,21 @@ try{
   await clickRender()
   await poll(()=>evaluate(`window.__areaResponses.length===${index+1}&&!!${section}.querySelector('svg')`),'actual source to worker browser replay',45000)
   await assert(`window.__areaPosts[${index}].hash===${JSON.stringify(digest)}`,'unchanged upload source')
-  const response=await evaluate(`window.__areaResponses[${index}]`),colors=[]
-  const visit=nodes=>{for(const n of nodes){if(n.kind==='path'){const color=n.fill==='none'?n.stroke:n.fill;if(['1E88E5','E53935','43A047'].includes(color))colors.push(color)}if(n.kind==='group')visit(n.children)}};visit(response.nodes)
+  const response=await evaluate(`window.__areaResponses[${index}]`),colors=[],expectedPaths=[]
+  const visit=nodes=>{for(const n of nodes){if(n.kind==='path'){const color=n.fill==='none'?n.stroke:n.fill;if(['1E88E5','E53935','43A047'].includes(color))colors.push(color);if(['1E88E5','E53935','43A047','ABCDEF'].includes(color)){expectedPaths.push({fill:n.fill==='none'?'none':'#'+n.fill,stroke:n.stroke?'#'+n.stroke:null,d:nativePptxSvgPath(n.d)})}}if(n.kind==='group')visit(n.children)}};visit(response.nodes)
   if(JSON.stringify([...new Set(colors)])!==JSON.stringify(['1E88E5','E53935','43A047']))throw Error(name+': source painter sequence lost')
+  const dom=await evaluate(`[...${section}.querySelector('svg[aria-label="Measured native slide 1"]').querySelectorAll('path')].map(n=>({fill:n.getAttribute('fill'),stroke:n.getAttribute('stroke'),d:n.getAttribute('d')})).filter(n=>['#1E88E5','#E53935','#43A047','#ABCDEF'].includes(n.fill==='none'?n.stroke:n.fill))`)
+  if(JSON.stringify(dom.map(n=>(n.fill==='none'?n.stroke:n.fill).slice(1)).filter(c=>c!=='ABCDEF'))!==JSON.stringify(colors))throw Error(name+': production DOM path sequence/count differs from worker')
+  if(JSON.stringify(dom)!==JSON.stringify(expectedPaths))throw Error(name+': production DOM changed point/series geometry or paint identity')
+  if(name.endsWith('-labels')){
+   if(!response.diagnostics.some(d=>d.includes('chart.axisLabelsPreview')))throw Error(name+': source labels refused')
+   await assert(`!!${section}.querySelector('svg [data-native-source-role="contentRun"]')`,'source labels reach production component')
+  }
+  writeFileSync(resolve(artifacts,name+'-dom.json'),JSON.stringify(dom,null,2))
   writeFileSync(resolve(artifacts,name+'-preview.json'),JSON.stringify(response,null,2))
   const shot=await cdp.send('Page.captureScreenshot',{format:'png'});writeFileSync(resolve(artifacts,name+'.png'),Buffer.from(shot.data,'base64'))
   if(hash(readFileSync(fixture))!==digest)throw Error('source changed')
-  proof.push({name,packageSHA256:digest,sourcePreserved:true,sequence:[2,0,1]})
+  proof.push({name,packageSHA256:digest,sourcePreserved:true,sequence:[2,0,1],runtime:process.execPath,domPathCount:dom.length})
  }
  if(errors.length)throw new Error(errors.join('\n'))
  writeFileSync(resolve(artifacts,'proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify({result:'PASS',artifacts,cases:proof},null,2))
