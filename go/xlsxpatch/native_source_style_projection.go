@@ -207,6 +207,11 @@ func projectSourceStyle(r *styleRegistry, id int) (NativeSourceStyleV1, error) {
 // The host grid ignores print settings. Content and stored geometry ownership
 // are separately closed; unknown visual or structural families are refused.
 func qualifySourceStyleSheet(root *previewXML, ns string) error {
+	return qualifySourceStyleSheetWithNodes(root, ns, nil)
+}
+
+// admitted contains only fully qualified nodes from the original worksheet tree.
+func qualifySourceStyleSheetWithNodes(root *previewXML, ns string, admitted map[*previewXML]bool) error {
 	fail := func() error {
 		return fmt.Errorf("xlsxpatch: source-style preview: unqualified worksheet structure or geometry")
 	}
@@ -265,6 +270,9 @@ func qualifySourceStyleSheet(root *previewXML, ns string) error {
 		}
 		seen := map[string]bool{}
 		for _, c := range n.children {
+			if admitted[c] {
+				continue
+			}
 			if !strings.Contains(" "+children[n.name.Local]+" ", " "+c.name.Local+" ") {
 				return fail()
 			}
