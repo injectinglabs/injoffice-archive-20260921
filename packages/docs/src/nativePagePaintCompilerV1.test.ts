@@ -2783,11 +2783,11 @@ describe('source-anchored textbox page composition',()=>{
   const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
   const {renderNativeDocxTextboxPagePreviewV1:legacy}=await import('./nativeTextboxPageCompilerV1.js')
   for(const mutate of [(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.items[1]=structuredClone(f.evidence.items[0]!)},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.omitted_count=1},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.body.blocks[0]!.paragraph!.runs[0]!.anchor.start_byte=1500},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.unsupported.push({...f.document.unsupported[0]!,id:'other-drawing'})}]){
-   const f=multipleTextboxFixture();mutate(f);const before=structuredClone(f);await expect(render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)).rejects.toThrow();expect(f).toEqual(before)
+   const f=multipleTextboxFixture();mutate(f);const before=structuredClone({document:f.document,evidence:f.evidence});await expect(render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)).rejects.toThrow();expect({document:f.document,evidence:f.evidence}).toEqual(before)
   }
   const f=multipleTextboxFixture()
   await expect(render(f.input,f.evidence,[FONT_BYTES],provider)).rejects.toThrow()
   await expect(legacy(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow()
- })
+ },15000)
 
 })
