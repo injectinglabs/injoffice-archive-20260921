@@ -94,7 +94,7 @@ func TestNativeBubbleSeriesPointPaintOrderAndBudgets(t *testing.T) {
 	second := strings.NewReplacer(`idx val="5"`, `idx val="9"`, `order val="0"`, `order val="1"`, `123456`, `ABCDEF`).Replace(original)
 	combined := strings.Replace(input, original, second+original, 1)
 	source := extractNativeChartBubbleSource([]byte(combined), "chart.xml", d, false)
-	if source == nil || source.Series[0].Index != 5 || source.Series[1].Index != 9 || source.Series[1].Colors[0] != "#ABCDEF" {
+	if source == nil || source.Series[0].Index != 9 || source.Series[1].Index != 5 || source.Series[0].Colors[0] != "#ABCDEF" {
 		t.Fatal("series order or paint lost")
 	}
 	override := `<c:dPt><c:idx val="2"/><c:spPr><a:solidFill><a:srgbClr val="AABBCC"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`

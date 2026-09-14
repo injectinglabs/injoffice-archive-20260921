@@ -24,11 +24,12 @@ export function createCartesianConnectedPaths(chart:Omit<NativeLiteralConnected,
  if(xAxis.id===yAxis.id||xAxis.crossAxisId!==yAxis.id||yAxis.crossAxisId!==xAxis.id||xAxis.position!=='b'||yAxis.position!=='l')throw new RangeError('invalid connected chart axes')
  if(scatter?chart.categories.length!==0:(chart.categories.length<1||chart.categories.length>256||chart.categories.some(c=>typeof c!=='string')||chart.categories.reduce((n,c)=>n+c.length,0)>32768||xAxis.min!==undefined||xAxis.max!==undefined||xAxis.crossesAt!==undefined))throw new RangeError('invalid connected chart categories')
  const yScale=exactScale(yAxis),xScale=scatter?exactScale(xAxis):undefined
- const vectors:CartesianConnectedVector[]=[],seen=new Set<number>()
+ const vectors:CartesianConnectedVector[]=[],seen=new Set<number>(),orders=new Set<number>()
  const screen=(point:ChartRationalPoint)=>({x:coordinate(point.x,cx,xAxis.orientation==='maxMin'),y:coordinate(point.y,cy,yAxis.orientation==='minMax')})
+ for(let i=0;i<chart.series.length;i++)if(!Object.hasOwn(chart.series,i)||!chart.series[i])throw new RangeError('sparse chart series')
  chart.series.forEach((series,order)=>{
-  if(!Number.isInteger(series.index)||series.index<0||series.index>4294967295||seen.has(series.index)||series.order!==order||series.values.length<1||series.values.length>256||!rgb.test(series.color)||!Number.isInteger(series.widthEmu)||series.widthEmu<1||series.widthEmu>20116800||(series.title!==undefined&&(typeof series.title!=='string'||series.title.length>1024)))throw new RangeError('invalid connected chart series')
-  seen.add(series.index)
+  if(!Number.isInteger(series.index)||Object.is(series.index,-0)||series.index<0||series.index>4294967295||seen.has(series.index)||!Number.isSafeInteger(series.order)||Object.is(series.order,-0)||series.order<0||series.order>=chart.series.length||orders.has(series.order)||series.values.length<1||series.values.length>256||!rgb.test(series.color)||!Number.isInteger(series.widthEmu)||series.widthEmu<1||series.widthEmu>20116800||(series.title!==undefined&&(typeof series.title!=='string'||series.title.length>1024)))throw new RangeError('invalid connected chart series')
+  seen.add(series.index);orders.add(series.order)
   if(scatter?(!series.xValues||series.xValues.length!==series.values.length):(series.xValues!==undefined||series.values.length!==chart.categories.length))throw new RangeError('connected chart point counts differ')
   const points=series.values.map((value,index):ChartRationalPoint=>({x:scatter?xScale!(series.xValues![index]!):r(BigInt(2*index+1),BigInt(2*chart.categories.length)),y:yScale(value)}))
   const path:RenderPathCommand[]=[],segmentIndices:number[]=[]

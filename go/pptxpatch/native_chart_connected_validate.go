@@ -71,12 +71,13 @@ func validNativeLiteralConnected(c *NativeLiteralConnected) bool {
 			return false
 		}
 	}
-	seen := map[int64]bool{}
-	for i, s := range c.Series {
-		if s.Index < 0 || s.Index > 4294967295 || seen[s.Index] || s.Order != int64(i) || len(s.Values) < 1 || len(s.Values) > 256 || !color(s.Color) || s.WidthEMU < 1 || s.WidthEMU > 20116800 || (s.Title != nil && len(utf16.Encode([]rune(*s.Title))) > 1024) {
+	seen, orders := map[int64]bool{}, map[int64]bool{}
+	for _, s := range c.Series {
+		if s.Index < 0 || s.Index > 4294967295 || seen[s.Index] || s.Order < 0 || s.Order >= int64(len(c.Series)) || orders[s.Order] || len(s.Values) < 1 || len(s.Values) > 256 || !color(s.Color) || s.WidthEMU < 1 || s.WidthEMU > 20116800 || (s.Title != nil && len(utf16.Encode([]rune(*s.Title))) > 1024) {
 			return false
 		}
 		seen[s.Index] = true
+		orders[s.Order] = true
 		if scatter {
 			if len(s.XValues) != len(s.Values) {
 				return false

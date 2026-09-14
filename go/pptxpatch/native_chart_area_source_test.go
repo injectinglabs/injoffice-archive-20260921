@@ -66,7 +66,7 @@ func TestNativeChartAreaSourceSeriesOrder(t *testing.T) {
 	second := strings.NewReplacer(`idx val="5"`, `idx val="9"`, `order val="0"`, `order val="1"`, `123456`, `ABCDEF`).Replace(first)
 	source := strings.Replace(original, first, second+first, 1)
 	area := extractNativeChartArea([]byte(source), "chart.xml", d)
-	if area == nil || len(area.Series) != 2 || area.Series[0].Index != 5 || area.Series[1].Index != 9 || area.Series[1].Color != "#ABCDEF" {
+	if area == nil || len(area.Series) != 2 || area.Series[0].Index != 9 || area.Series[1].Index != 5 || area.Series[0].Color != "#ABCDEF" {
 		t.Fatal("authored order lost", area)
 	}
 	for _, invalidSecond := range []string{

@@ -2,7 +2,6 @@ package pptxpatch
 
 import (
 	"encoding/xml"
-	"sort"
 )
 
 type nativeChartWorkbookSource struct {
@@ -98,10 +97,7 @@ func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtra
 		return nil
 	}
 	stacked := source.Grouping == "stacked" || source.Grouping == "percentStacked"
-	// XML sequence drives new signed stacks; original order metadata is retained.
-	if !stacked {
-		sort.Slice(source.Series, func(i, j int) bool { return source.Series[i].Order < source.Series[j].Order })
-	}
+	// All families retain XML sequence and original order metadata.
 	for i := range source.Series {
 		if !orders[int64(i)] {
 			return nil

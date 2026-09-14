@@ -2,7 +2,6 @@ package pptxpatch
 
 import (
 	"encoding/xml"
-	"sort"
 )
 
 // Private preparation descriptor. Reference cells remain unresolved until the
@@ -128,9 +127,9 @@ func extractNativeChartBubbleSource(payload []byte, part string, d nativeExtract
 	if len(out.Series) == 0 {
 		return nil
 	}
-	sort.Slice(out.Series, func(i, j int) bool { return out.Series[i].Order < out.Series[j].Order })
-	for i, s := range out.Series {
-		if s.Order != int64(i) {
+	// Preserve XML series sequence; order is a complete metadata permutation.
+	for i := range out.Series {
+		if !orders[int64(i)] {
 			return nil
 		}
 	}
