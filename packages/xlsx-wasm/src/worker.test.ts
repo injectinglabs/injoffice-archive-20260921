@@ -7,6 +7,7 @@ const workerSource = readFileSync(new URL('../worker/xlsxnative.worker.js', impo
 type Binding = {
   extract(bytes: Uint8Array): unknown
   previewSourceStyles?(bytes: Uint8Array): unknown
+  previewSourceStylesV2?(bytes: Uint8Array): unknown
   inspect?(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
 }
@@ -18,11 +19,12 @@ type WorkerMessage = {
   result?: { contractJson?: string }
 }
 
-function createWorkerHarness(binding: Binding, sourceStyleOnly = false) {
+function createWorkerHarness(binding: Binding, sourceStyleOnly: boolean | 2 = false) {
   const messages: WorkerMessage[] = []
   let closed = false
   const globals: Record<string, unknown> = {
-    xlsxSourceStylePreview: sourceStyleOnly,
+    xlsxSourceStylePreview: sourceStyleOnly === true,
+    xlsxSourceStylePreviewVersion: sourceStyleOnly === 2 ? 2 : undefined,
     ArrayBuffer,
     Error,
     Promise,
@@ -128,4 +130,13 @@ it('source-style worker cannot call extraction or mutation', async () => {
   expect(await worker.extract('extract')).toMatchObject({ok:false,error:{code:'READ_ONLY_PROFILE',fatal:false}})
   expect(await worker.apply('apply')).toMatchObject({ok:false,error:{code:'READ_ONLY_PROFILE',fatal:false}})
   expect(worker.isClosed()).toBe(false)
+})
+
+it('V2 source worker selects only its conditional binding and refuses editing', async () => {
+  const forbidden = () => { throw new Error('unexpected binding') }
+  const worker = createWorkerHarness({ extract: forbidden, apply: forbidden, previewSourceStyles: forbidden, previewSourceStylesV2: () => ({ ok: true, value: '{"version":2}' }) }, 2)
+  expect(await worker.init()).toMatchObject({ ok: true })
+  expect(await worker.inspect('preview')).toMatchObject({ ok: true, result: { contractJson: '{"version":2}' } })
+  expect(await worker.extract('extract')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
+  expect(await worker.apply('apply')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
 })

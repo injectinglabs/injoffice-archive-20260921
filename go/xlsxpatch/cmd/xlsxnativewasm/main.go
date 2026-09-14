@@ -17,6 +17,7 @@ func main() {
 	obj.Set("extract", guarded(jsExtract))
 	obj.Set("inspect", guarded(jsInspect))
 	obj.Set("previewSourceStyles", guarded(jsPreviewSourceStyles))
+	obj.Set("previewSourceStylesV2", guarded(jsPreviewSourceStylesV2))
 	obj.Set("apply", guarded(jsApply))
 	js.Global().Set("xlsxnative", obj)
 	if ready := js.Global().Get("xlsxnativeOnReady"); ready.Type() == js.TypeFunction {
@@ -203,6 +204,26 @@ func jsPreviewSourceStyles(_ js.Value, args []js.Value) any {
 		return fail(err.Error())
 	}
 	preview, err := xlsxpatch.PreviewNativeSourceStylesV1(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	encoded, err := json.Marshal(preview)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
+}
+
+// The V2 binding returns only separately qualified conditional source evidence.
+func jsPreviewSourceStylesV2(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return fail("previewSourceStylesV2(bytes) requires 1 argument")
+	}
+	data, err := bytesFromJS(args[0])
+	if err != nil {
+		return fail(err.Error())
+	}
+	preview, err := xlsxpatch.PreviewNativeSourceStylesV2(data)
 	if err != nil {
 		return fail(err.Error())
 	}

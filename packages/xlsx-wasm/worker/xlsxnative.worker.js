@@ -10,7 +10,8 @@
 const PROTOCOL = 'injoffice.native-wasm-worker'
 const VERSION = 1
 const FORMAT = 'xlsx'
-const SOURCE_STYLE_ONLY = self.xlsxSourceStylePreview === true
+const SOURCE_STYLE_OPERATION = self.xlsxSourceStylePreviewVersion === 2 ? 'previewSourceStylesV2' : self.xlsxSourceStylePreview === true ? 'previewSourceStyles' : null
+const SOURCE_STYLE_ONLY = SOURCE_STYLE_OPERATION !== null
 const MAX_ERROR_LENGTH = 4096
 
 let boot
@@ -109,7 +110,7 @@ async function initialize(assets) {
       (reason) => stopRuntime(reason),
     )
   await Promise.race([ready, runtimeExit])
-  if (!self.xlsxnative || (SOURCE_STYLE_ONLY ? typeof self.xlsxnative.previewSourceStyles !== 'function' : typeof self.xlsxnative.extract !== 'function' || typeof self.xlsxnative.apply !== 'function')) {
+  if (!self.xlsxnative || (SOURCE_STYLE_ONLY ? typeof self.xlsxnative[SOURCE_STYLE_OPERATION] !== 'function' : typeof self.xlsxnative.extract !== 'function' || typeof self.xlsxnative.apply !== 'function')) {
     throw new Error(SOURCE_STYLE_ONLY ? 'xlsxnative source-style preview binding was not installed' : 'xlsxnative extract/apply bindings were not installed')
   }
   if (runtimeFailure) throw runtimeFailure
@@ -145,7 +146,7 @@ onmessage = async (event) => {
       return
     }
     if (request.op === 'extract' || request.op === 'inspect') {
-      const operation = SOURCE_STYLE_ONLY ? 'previewSourceStyles' : request.op
+      const operation = SOURCE_STYLE_ONLY ? SOURCE_STYLE_OPERATION : request.op
       if (typeof self.xlsxnative[operation] !== 'function') throw new NativeBindingError('Supplemental inspection is unavailable in this engine version', false)
       const contractJson = unwrap(self.xlsxnative[operation](new Uint8Array(request.bytes)), 'json')
       respond(request, { ok: true, result: { contractJson } })

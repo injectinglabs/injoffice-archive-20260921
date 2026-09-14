@@ -87,6 +87,10 @@ type previewXML struct {
 	text     string
 }
 
+// Repeated XML lookups stay shared to keep browser WASM code size bounded.
+// This changes compiler inlining only; lookup and qualification semantics remain unchanged.
+//
+//go:noinline
 func (n *previewXML) attr(name string) string {
 	for _, a := range n.attrs {
 		if a.Name.Space == "" && a.Name.Local == name {
@@ -95,6 +99,8 @@ func (n *previewXML) attr(name string) string {
 	}
 	return ""
 }
+
+//go:noinline
 func (n *previewXML) child(name string) *previewXML {
 	if n == nil {
 		return nil

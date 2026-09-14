@@ -15760,6 +15760,11 @@
               "signature": "export declare function createXlsxSourceStylePreviewClient(options?: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>): XlsxSourceStylePreviewClient"
             },
             {
+              "name": "createXlsxSourceStylePreviewV2Client",
+              "kind": "function",
+              "signature": "export declare function createXlsxSourceStylePreviewV2Client(options?: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>): XlsxSourceStylePreviewV2Client"
+            },
+            {
               "name": "createXlsxWasmClient",
               "kind": "function",
               "signature": "export declare function createXlsxWasmClient(options?: XlsxWasmClientOptions): XlsxWasmClient"
@@ -15768,6 +15773,11 @@
               "name": "decodeXlsxSourceStylePreviewV1",
               "kind": "function",
               "signature": "export declare function decodeXlsxSourceStylePreviewV1(json: string, packageSHA256: string): XlsxSourceStylePreviewV1"
+            },
+            {
+              "name": "decodeXlsxSourceStylePreviewV2",
+              "kind": "function",
+              "signature": "export declare function decodeXlsxSourceStylePreviewV2(json: string, packageSHA256: string): XlsxSourceStylePreviewV2"
             },
             {
               "name": "DEFAULT_XLSX_WASM_MAX_MUTATION_PAYLOAD_BYTES",
@@ -15828,6 +15838,16 @@
               "name": "XlsxSourceStylePreviewV1",
               "kind": "type",
               "signature": "export type XlsxSourceStylePreviewV1 = ReturnType<typeof readPreview>"
+            },
+            {
+              "name": "XlsxSourceStylePreviewV2",
+              "kind": "type",
+              "signature": "export type XlsxSourceStylePreviewV2 = ReturnType<typeof readConditionalPreview>"
+            },
+            {
+              "name": "XlsxSourceStylePreviewV2Client",
+              "kind": "interface",
+              "signature": "export interface XlsxSourceStylePreviewV2Client"
             },
             {
               "name": "XlsxSourceStyleV1",

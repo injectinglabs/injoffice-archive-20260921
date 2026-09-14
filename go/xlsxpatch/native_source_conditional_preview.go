@@ -70,6 +70,7 @@ const sourceBarSheetURI = "{78C0D931-6437-407d-A8EE-F0AAD7539E65}"
 var sourceConditionalText = regexp.MustCompile(`^[A-Z]{1,64}$`)
 var sourceConditionalGUID = regexp.MustCompile(`^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$`)
 
+//go:noinline
 func sourceConditionalError() error {
 	return fmt.Errorf("xlsxpatch: source conditional preview: unqualified rule, extension, differential style or input")
 }
@@ -108,9 +109,13 @@ func scNode(n *previewXML, ns, name string, attrs ...string) bool {
 	}
 	return nativeRichNode(n, ns, name, keys...) && strings.TrimSpace(n.text) == ""
 }
+
+//go:noinline
 func scLeaf(n *previewXML, ns, name string, attrs ...string) bool {
 	return scNode(n, ns, name, attrs...) && len(n.children) == 0
 }
+
+//go:noinline
 func scChildren(n *previewXML, ns string, names ...string) bool {
 	if n == nil || len(n.children) != len(names) {
 		return false
