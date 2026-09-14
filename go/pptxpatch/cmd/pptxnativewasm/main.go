@@ -13,6 +13,7 @@ func main() {
 	api := js.Global().Get("Object").New()
 	api.Set("extract", guarded(jsExtract))
 	api.Set("inspect", guarded(jsInspect))
+	api.Set("inspectChartWorkbooks", guarded(jsInspectChartWorkbooks))
 	api.Set("apply", guarded(jsApply))
 	api.Set("evaluatePreset", guarded(jsEvaluatePreset))
 	js.Global().Set("pptxnative", api)
@@ -187,4 +188,19 @@ func bytesToJS(data []byte) (js.Value, error) {
 		return js.Undefined(), fmt.Errorf("copied %d bytes, want %d", copied, len(data))
 	}
 	return result, nil
+}
+
+func jsInspectChartWorkbooks(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return fail("inspectChartWorkbooks(bytes) requires one argument")
+	}
+	data, err := bytesFromJS(args[0])
+	if err != nil {
+		return fail(err.Error())
+	}
+	encoded, err := inspectChartWorkbooksJSON(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
 }

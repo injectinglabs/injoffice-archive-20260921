@@ -56,3 +56,5 @@ export type {
 export {renderTransformMatrix} from './sourceRenderTransform.js'
 export {SourceAffineBudget} from './sourceAffine.js'
 export type {SourceAffineTransport} from './sourceAffine.js'
+
+export {createNativeWorkbookChartPaths} from './workbookChartPaths.js'

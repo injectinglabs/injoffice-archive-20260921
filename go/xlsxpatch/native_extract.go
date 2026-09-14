@@ -811,6 +811,21 @@ func (extractor *nativeWorkbookExtractor) extractWorkbookRoutes(data []byte) ([]
 				}
 				continue
 			}
+			if depth == 2 && token.Name == (xml.Name{Space: extractor.namespace, Local: "bookViews"}) {
+				qualified, err := consumeNativeChartDataMetadata(decoder, token, extractor.namespace)
+				if err != nil {
+					return nil, err
+				}
+				code := "UNMODELED_WORKBOOK_FEATURE"
+				if qualified {
+					code = "WORKBOOK_VIEW_METADATA"
+				}
+				if err := extractor.addUnsupported(code, "workbook-features", "workbook", extractor.workbook.part, "", "workbook feature is preserved exactly outside the v1 sheet projection"); err != nil {
+					return nil, err
+				}
+				depth--
+				continue
+			}
 			if depth == 2 {
 				if err := extractor.addUnsupported("UNMODELED_WORKBOOK_FEATURE", "workbook-features", "workbook", extractor.workbook.part, "", "workbook feature is preserved exactly outside the v1 sheet projection"); err != nil {
 					return nil, err

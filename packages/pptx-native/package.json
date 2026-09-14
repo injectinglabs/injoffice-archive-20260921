@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/generate-pptx-native-contract.mjs --check && vitest run"
   },
+  "dependencies": { "@injoffice/sheets": "0.1.0" },
   "devDependencies": {
     "@types/node": "^26.0.0",
     "typescript": "7.0.2",
