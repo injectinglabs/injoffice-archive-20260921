@@ -36,7 +36,7 @@ size=$(wc -c < "$out/pptxnative.wasm" | tr -d ' ')
 echo "pptxnative.wasm ${size} bytes" >&2
 max_bytes=$(cat "$src/max-bytes.txt")
 if (( size > max_bytes )); then
-  echo "pptxnative.wasm exceeds the 7.5 MiB size ceiling" >&2
+  echo "pptxnative.wasm exceeds the 7.75 MiB size ceiling" >&2
   exit 1
 fi
 echo "copied wasm_exec.js from $wasm_exec" >&2

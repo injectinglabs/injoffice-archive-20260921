@@ -1,3 +1,4 @@
+import type {NativeLiteralRadar} from './chartRadarTypes.js'
 import type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStackedTypes.js'
 import type {NativeLiteralBubble} from './chartBubbleTypes.js'
 import type {NativeLiteralArea} from './chartAreaTypes.js'
@@ -244,6 +245,7 @@ export interface NativeLiteralConnected {
 export interface NativeOpaqueChart {
  literalStackedBar?:NativeLiteralStackedBar
  literalStackedLine?:NativeLiteralStackedLine
+ literalRadar?:NativeLiteralRadar
  literalBubble?:NativeLiteralBubble
  literalArea?:NativeLiteralArea
  literalConnected?:NativeLiteralConnected

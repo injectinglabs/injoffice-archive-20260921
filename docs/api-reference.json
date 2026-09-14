@@ -10392,6 +10392,16 @@
               "signature": "export interface NativeLiteralPie"
             },
             {
+              "name": "NativeLiteralRadar",
+              "kind": "type",
+              "signature": "export interface NativeLiteralRadar"
+            },
+            {
+              "name": "NativeLiteralRadarSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralRadarSeries"
+            },
+            {
               "name": "NativeLiteralStackedBar",
               "kind": "type",
               "signature": "export interface NativeLiteralStackedBar extends Omit<NativeLiteralBar, 'profile' | 'grouping' | 'overlap'>"
@@ -10699,7 +10709,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"c010147f4c7c7a7da4f34bcf00a0b8867b59a932a8c9c2aa382ce6f03f731d45\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86\""
             },
             {
               "name": "provenanceValues",
@@ -10750,6 +10760,11 @@
               "name": "validNativeLiteralBubble",
               "kind": "function",
               "signature": "export declare function validNativeLiteralBubble(value: unknown): value is NativeLiteralBubble"
+            },
+            {
+              "name": "validNativeLiteralRadar",
+              "kind": "function",
+              "signature": "export declare function validNativeLiteralRadar(v: unknown): v is NativeLiteralRadar"
             },
             {
               "name": "validNativeLiteralStackedBar",
@@ -10834,6 +10849,11 @@
               "signature": "export declare function createNativeLiteralPiePaths(pie: NativeLiteralPie, cx: number, cy: number): readonly"
             },
             {
+              "name": "createNativeLiteralRadarPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralRadarPaths(chart: NativeLiteralRadar, cx: number, cy: number): readonly import(\"./chartRadarGeometry.js\").RadarSeriesVector[]"
+            },
+            {
               "name": "createNativeLiteralScatterPaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralScatterPaths(chart: NativeLiteralConnected, cx: number, cy: number): readonly LiteralConnectedVector[]"
@@ -10877,6 +10897,11 @@
               "name": "LiteralConnectedVector",
               "kind": "type",
               "signature": "LiteralConnectedVector"
+            },
+            {
+              "name": "LiteralRadarVector",
+              "kind": "type",
+              "signature": "LiteralRadarVector"
             },
             {
               "name": "LiteralStackedBarVector",
@@ -10952,6 +10977,16 @@
               "name": "presetPath",
               "kind": "function",
               "signature": "export declare function presetPath(preset: NativeShapePreset, cx: number, cy: number): readonly RenderPathCommand[]"
+            },
+            {
+              "name": "RADAR_PREVIEW_DISCLOSURE",
+              "kind": "const",
+              "signature": "export declare const RADAR_PREVIEW_DISCLOSURE = \"Source literal radar uses source-radial-plot-v1: closed standard lines or filled polygons, top-first clockwise categories and explicit radial scales. XML series sequence and reversed source axes are retained. Value-axis spokes paint before standard data and after filled data. Host circular plot fitting and bounded angular rounding apply; PowerPoint margins, radial labels, markers and workbook radar are not reproduced.\""
+            },
+            {
+              "name": "RADAR_PREVIEW_POLICY",
+              "kind": "export",
+              "signature": "RADAR_PREVIEW_POLICY"
             },
             {
               "name": "RecordingPaintSurface",
