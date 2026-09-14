@@ -8,6 +8,7 @@ import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PA
 import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
 import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
+import { DOCX_AUTO_BORDER_POLICY, type NativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 const anchor = (path: string, start: number, end: number) => ({ part_name: 'word/document.xml', path, start_byte: start, end_byte: end, xml_sha256: HASH })
@@ -363,5 +364,102 @@ describe('bounded native DOCX table page-paint geometry', () => {
     negativeZero[0].table.indent_twips = -0
     expect(() => nativeDocxTableProjectionSha256V1(negativeZero)).toThrow(/canonical|wire/)
     expect(() => nativeDocxTableProjectionSha256V1(Array.from({ length: 1_001 }, () => qualified.tables[0]!) as any)).toThrow(/bounded/)
+  })
+
+  function tableGridEvidence(table: NonNullable<NativeDocxPaginationRequestV1['document']['body']['blocks'][number]['table']>): NativeDocxAutomaticBorderEvidenceV1 {
+    const path = '/w:styles[1]/w:style[5]/w:tblPr[1]/w:tblBorders[1]'
+    return {
+      policy: DOCX_AUTO_BORDER_POLICY, read_only: true, package_sha256: HASH, page_background: 'absent-on-white-preview', background_rgb: 'FFFFFF',
+      source_part: 'word/styles.xml', source_path: path, source_sha256: HASH,
+      borders: {
+        top: { style: 'single', size_eighth_points: 4, color_rgb: '000000' }, right: { style: 'single', size_eighth_points: 4, color_rgb: '000000' },
+        bottom: { style: 'single', size_eighth_points: 4, color_rgb: '000000' }, left: { style: 'single', size_eighth_points: 4, color_rgb: '000000' },
+        inside_horizontal: { style: 'single', size_eighth_points: 4, color_rgb: '000000' }, inside_vertical: { style: 'single', size_eighth_points: 4, color_rgb: '000000' },
+      },
+      automatic_edges: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
+      cell_ids: table.rows.flatMap((row) => row.cells.map((cell) => cell.id)),
+      source_diagnostics: [{ code: 'TABLE_STYLE_EFFECTS_PRESERVED', scope_id: table.id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[5]/w:tblPr[1]' }],
+    }
+  }
+
+  function tableGridAutofitRequest(): NativeDocxPaginationRequestV1 {
+    const request = fixture()
+    const table = request.document.body.blocks[0]!.table!
+    const page = request.document.sections[0]!.page
+    page.width_twips = 11_906
+    page.height_twips = 16_838
+    page.orientation = 'portrait'
+    page.margins = { top_twips: 1_417, right_twips: 1_417, bottom_twips: 1_417, left_twips: 1_417, header_twips: 708, footer_twips: 708, gutter_twips: 0 }
+    page.column_spacing_twips = 708
+    delete table.width_twips
+    delete table.layout
+    delete table.alignment
+    delete table.indent_twips
+    delete table.cell_margins
+    delete table.borders
+    table.table_style_id = 'TableGrid'
+    table.grid_widths_twips = [1_510, 1_511]
+    for (const [rowIndex, row] of table.rows.entries()) {
+      delete row.cells[0]!.shading_rgb
+      row.cells[0]!.width_twips = 1_510
+      row.cells[0]!.paragraphs[0]!.runs = [{ id: `run:cell:${rowIndex + 1}`, anchor: anchor(`/w:document[1]/w:body[1]/w:tbl[1]/w:tr[${rowIndex + 1}]/w:tc[1]/w:r[1]`, 101 + rowIndex, 109 + rowIndex), kind: 'text', text: `${rowIndex + 1}` }]
+      const emptyParagraph = structuredClone(row.cells[0]!.paragraphs[0]!)
+      emptyParagraph.id = `paragraph:cell:${rowIndex + 1}:empty`
+      emptyParagraph.anchor = anchor(`/w:document[1]/w:body[1]/w:tbl[1]/w:tr[${rowIndex + 1}]/w:tc[2]/w:p[1]`, 200 + rowIndex, 210 + rowIndex)
+      emptyParagraph.runs = []
+      row.cells.push({ id: `cell:${rowIndex + 1}:empty`, anchor: anchor(`/w:document[1]/w:body[1]/w:tbl[1]/w:tr[${rowIndex + 1}]/w:tc[2]`, 190 + rowIndex, 220 + rowIndex), width_twips: 1_511, grid_span: 1, vertical_merge: 'none', paragraphs: [emptyParagraph] })
+      request.resolved_layout.paragraphs.push({ paragraph_id: emptyParagraph.id, applied_styles: [], properties: { spacing_after_twips: 0, line: 240, line_rule: 'auto' }, paragraph_mark_properties: {} })
+      const shapedEmpty = structuredClone(request.shaped_lines.paragraphs[0]!)
+      shapedEmpty.paragraph_id = emptyParagraph.id
+      shapedEmpty.lines = [{ ...shapedEmpty.lines[0]!, id: `line:${emptyParagraph.id}:0`, fragments: [] }]
+      request.shaped_lines.paragraphs.push(shapedEmpty)
+      request.shaped_lines.paragraphs[rowIndex]!.lines[0]!.fragments = [{
+        id: `fragment:paragraph:cell:${rowIndex + 1}:0:0`, source_kind: 'run', source_id: `run:cell:${rowIndex + 1}`, start_utf16: 0, end_utf16: 1,
+        text: `${rowIndex + 1}`, direction: 'ltr', bidi_level: 0, logical_order: 0, script: 'Latn', language: 'fr-FR', whitespace: false,
+        advance_inline_millipoints: 5_000, justification_expansion_millipoints: 0, ascent_millipoints: 5_000, descent_millipoints: -1_000, line_gap_millipoints: 0, glyphs: [],
+      }]
+    }
+    request.resolved_layout.tables[0]!.style_id = 'TableGrid'
+    request.resolved_layout.tables[0]!.geometry = { layout: 'autofit', alignment: 'left', indent_twips: 0, width_type: 'auto', width_value: 0, cell_margins: { top_twips: 0, right_twips: 108, bottom_twips: 0, left_twips: 108 } }
+    request.resolved_layout.diagnostics.push({ code: 'TABLE_STYLE_EFFECTS_PRESERVED', severity: 'unsupported', scope_id: table.id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[5]/w:tblPr[1]', preservation: 'preserve-verbatim', message: 'Automatic table borders are preserved' })
+    const trailing = paragraph('paragraph:after', 9)
+    request.document.body.blocks.push({ kind: 'paragraph', id: trailing.id, paragraph: trailing })
+    request.resolved_layout.paragraphs.push({ paragraph_id: trailing.id, applied_styles: [], properties: { spacing_after_twips: 160, line: 259, line_rule: 'auto' }, paragraph_mark_properties: {} })
+    return request
+  }
+
+  it('preserves authored TableGrid auto-width geometry when automatic-border evidence exact-joins', () => {
+    const request = tableGridAutofitRequest()
+    const table = request.document.body.blocks[0]!.table!
+    request.resolved_layout.tables[0]!.automatic_border_preview = tableGridEvidence(table)
+    const original = JSON.stringify(request.document)
+    const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(qualified).toMatchObject({
+      status: 'qualified',
+      tables: [{
+        width_millipoints: 151_050,
+        grid_widths_millipoints: [75_500, 75_550],
+        table: { borders: { top: { style: 'single', size_eighth_points: 4, color_rgb: '000000' } } },
+        width_policy: { name: 'source-preferred-nonconflicting-v1', source_grid_widths_twips: [1_510, 1_511], preferred_width_twips: null, container_width_twips: 9_072 },
+      }],
+    })
+    expect(JSON.stringify(request.document)).toBe(original)
+    expect(table.borders).toBeUndefined()
+    expect(table.layout).toBeUndefined()
+    expect(table.width_twips).toBeUndefined()
+  })
+
+  it('refuses TableGrid auto-width paint without joining automatic-border evidence, merges, or unsatisfied minima', () => {
+    for (const mode of ['missing-preview', 'forged-cells', 'merge', 'wide-word', 'conditional'] as const) {
+      const request = tableGridAutofitRequest()
+      const table = request.document.body.blocks[0]!.table!
+      const evidence = tableGridEvidence(table)
+      if (mode !== 'missing-preview') request.resolved_layout.tables[0]!.automatic_border_preview = evidence
+      if (mode === 'forged-cells') evidence.cell_ids = ['cell:other']
+      if (mode === 'merge') table.rows[0]!.cells[0]!.vertical_merge = 'restart'
+      if (mode === 'wide-word') request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!.advance_inline_millipoints = 1_000_000_000
+      if (mode === 'conditional') request.resolved_layout.diagnostics.push({ code: 'CONDITIONAL_TABLE_STYLE_PRESERVED', severity: 'unsupported', scope_id: table.id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[5]', preservation: 'preserve-verbatim', message: 'first-row effects' })
+      expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)).toMatchObject({ status: 'refused', tables: [] })
+    }
   })
 })
