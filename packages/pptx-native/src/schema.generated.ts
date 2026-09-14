@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "a1c98fe855b1ee2561ba979e5fa1a912bb37abea4d7a2d21d79836fe71de731b" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -384,6 +384,47 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "values"
     ]
   },
+  "NativeLiteralBubble": {
+    "schemaName": "literalBubble",
+    "properties": [
+      "bubbleScale",
+      "dataOrigin",
+      "profile",
+      "series",
+      "sizeRepresents",
+      "xAxis",
+      "yAxis"
+    ],
+    "required": [
+      "bubbleScale",
+      "dataOrigin",
+      "profile",
+      "series",
+      "sizeRepresents",
+      "xAxis",
+      "yAxis"
+    ]
+  },
+  "NativeLiteralBubbleSeries": {
+    "schemaName": "literalBubbleSeries",
+    "properties": [
+      "colors",
+      "index",
+      "order",
+      "sizes",
+      "title",
+      "values",
+      "xValues"
+    ],
+    "required": [
+      "colors",
+      "index",
+      "order",
+      "sizes",
+      "values",
+      "xValues"
+    ]
+  },
   "NativeLiteralConnected": {
     "schemaName": "literalConnected",
     "properties": [
@@ -460,6 +501,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "chartPart",
       "literalArea",
       "literalBar",
+      "literalBubble",
       "literalConnected",
       "literalDoughnut",
       "literalPie",
@@ -1738,6 +1780,124 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalBubbleSeries": {
+      "x-binding-name": "NativeLiteralBubbleSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "colors",
+        "xValues",
+        "sizes"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        },
+        "xValues": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "literalBubble": {
+      "x-binding-name": "NativeLiteralBubble",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "series",
+        "xAxis",
+        "yAxis",
+        "bubbleScale",
+        "sizeRepresents"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-bubble-v1"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBubbleSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "bubbleScale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "sizeRepresents": {
+          "type": "string",
+          "enum": [
+            "area",
+            "w"
+          ]
+        }
+      }
+    },
     "literalAreaSeries": {
       "x-binding-name": "NativeLiteralAreaSeries",
       "type": "object",
@@ -2350,6 +2510,9 @@ export const PPTX_NATIVE_SCHEMA = {
         "opaqueRef"
       ],
       "properties": {
+        "literalBubble": {
+          "$ref": "#/$defs/literalBubble"
+        },
         "chartPart": {
           "$ref": "#/$defs/partName"
         },

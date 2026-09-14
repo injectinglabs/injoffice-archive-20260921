@@ -41,6 +41,8 @@ type NativePPTXInspectedWorkbookChart struct {
 	Workbook            NativePPTXChartWorkbookBinding `json:"workbook"`
 }
 type NativePPTXWorkbookChartSource struct {
+	BubbleScale     *int64                          `json:"bubbleScale,omitempty"`
+	SizeRepresents  string                          `json:"sizeRepresents,omitempty"`
 	Family          string                          `json:"family"`
 	BarDirection    string                          `json:"barDirection,omitempty"`
 	GapWidth        *int64                          `json:"gapWidth,omitempty"`
@@ -57,6 +59,7 @@ type NativePPTXWorkbookChartSeries struct {
 	TitleReference    *NativePPTXChartWorkbookReference `json:"titleReference,omitempty"`
 	CategoryReference *NativePPTXChartWorkbookReference `json:"categoryReference,omitempty"`
 	XReference        *NativePPTXChartWorkbookReference `json:"xReference,omitempty"`
+	SizeReference     *NativePPTXChartWorkbookReference `json:"sizeReference,omitempty"`
 	ValueReference    *NativePPTXChartWorkbookReference `json:"valueReference"`
 	Colors            []string                          `json:"colors,omitempty"`
 	Color             string                            `json:"color,omitempty"`
@@ -92,8 +95,8 @@ func nativeWorkbookPublicReference(ref *nativeChartReference) *NativePPTXChartWo
 	return &NativePPTXChartWorkbookReference{Kind: ref.Kind, Formula: ref.Formula, CachePresent: ref.CachePresent, Range: NativePPTXChartWorkbookRange{Sheet: r.Sheet, StartRow: r.StartRow, StartColumn: r.StartColumn, EndRow: r.EndRow, EndColumn: r.EndColumn, Count: r.Count}}
 }
 func nativeWorkbookPublicSource(source *nativeChartWorkbookSource) NativePPTXWorkbookChartSource {
-	family := map[string]string{"barChart": "bar", "lineChart": "line", "scatterChart": "scatter"}[source.Family]
-	result := NativePPTXWorkbookChartSource{Family: family, Series: []NativePPTXWorkbookChartSeries{}, DispBlanksAs: source.DispBlanksAs}
+	family := map[string]string{"barChart": "bar", "lineChart": "line", "scatterChart": "scatter", "bubbleChart": "bubble"}[source.Family]
+	result := NativePPTXWorkbookChartSource{Family: family, BubbleScale: source.BubbleScale, SizeRepresents: source.SizeRepresents, Series: []NativePPTXWorkbookChartSeries{}, DispBlanksAs: source.DispBlanksAs}
 	result.XAxis = nativeLiteralChartAxis(source.XAxis, source.XAxis.Min != "")
 	result.YAxis = nativeLiteralChartAxis(source.YAxis, source.YAxis.Min != "")
 	if family == "bar" {
@@ -101,8 +104,8 @@ func nativeWorkbookPublicSource(source *nativeChartWorkbookSource) NativePPTXWor
 		result.GapWidth = &source.GapWidth
 	}
 	for _, s := range source.Series {
-		out := NativePPTXWorkbookChartSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: nativeWorkbookPublicReference(s.TitleReference), CategoryReference: nativeWorkbookPublicReference(s.CategoryReference), XReference: nativeWorkbookPublicReference(s.XReference), ValueReference: nativeWorkbookPublicReference(s.ValueReference), Colors: s.Colors, Color: s.Color}
-		if family != "bar" {
+		out := NativePPTXWorkbookChartSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: nativeWorkbookPublicReference(s.TitleReference), CategoryReference: nativeWorkbookPublicReference(s.CategoryReference), XReference: nativeWorkbookPublicReference(s.XReference), ValueReference: nativeWorkbookPublicReference(s.ValueReference), SizeReference: nativeWorkbookPublicReference(s.SizeReference), Colors: s.Colors, Color: s.Color}
+		if family == "line" || family == "scatter" {
 			out.WidthEMU = &s.Width
 		}
 		result.Series = append(result.Series, out)
