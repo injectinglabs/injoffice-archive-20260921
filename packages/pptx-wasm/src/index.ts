@@ -14,7 +14,10 @@ import {
   type NativeElement,
   type NativePptxDeck,
   type NativeTransform,
+  type NativeEvaluatedGeometry,
 } from '@injoffice/pptx-native'
+import { snapshotPresetRequest, decodePresetGeometry, type PptxPresetGeometryRequest } from './preset.js'
+export type { PptxPresetGeometryRequest } from './preset.js'
 
 export type { NativePptxTableInspection, NativePptxInspectedTable, NativePptxInspectedCell, NativePptxInspectionRect, NativePptxTableOmission } from '@injoffice/pptx-native'
 
@@ -118,6 +121,8 @@ export class PptxNativeContractError extends TypeError {
 }
 
 export interface PptxWasmClient {
+  /** Read-only DrawingML preset evaluation for authored, preserve-only shapes. */
+  evaluatePreset(request: PptxPresetGeometryRequest, options?: PptxWasmOperationOptions): Promise<NativeEvaluatedGeometry>
   extract(bytes: Uint8Array, options?: PptxWasmOperationOptions): Promise<NativePptxDeck>
   /** Plain source table text and geometry; no authored styling or mutation authority. */
   inspectTables(bytes: Uint8Array, options?: PptxWasmOperationOptions): Promise<NativePptxTableInspection>
@@ -158,6 +163,13 @@ class PptxWasmClientImpl implements PptxWasmClient {
     private readonly maxPackageBytes: number,
     private readonly maxMutationPayloadBytes: number,
   ) {}
+
+  async evaluatePreset(request: PptxPresetGeometryRequest, options: PptxWasmOperationOptions = {}): Promise<NativeEvaluatedGeometry> {
+    const payload = snapshotPresetRequest(request)
+    const json = await this.native.evaluate(payload, options)
+    try { return decodePresetGeometry(json, payload) }
+    catch (error) { this.native.terminate(); throw error }
+  }
 
   extract(bytes: Uint8Array, options: PptxWasmOperationOptions = {}): Promise<NativePptxDeck> {
     assertPackageSize(bytes, this.maxPackageBytes)
