@@ -15,6 +15,7 @@ type nativeChartWorkbookSeries struct {
 	Colors            []string
 	Color             string
 	Width             int64
+	Fill              *string
 }
 
 func nativeChartWorkbookSeriesHeader(c *nativeChartCursor, d nativeExtractDialect) (*nativeChartWorkbookSeries, bool) {

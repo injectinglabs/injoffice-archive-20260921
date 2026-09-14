@@ -47,27 +47,33 @@ function axis(value:unknown,numeric:boolean):NativeLiteralBarAxis{
  return a as unknown as NativeLiteralBarAxis
 }
 function source(value:unknown):NativePptxWorkbookChartSource{
- const s=object(value,'family xAxis yAxis series plotVisibleOnly','barDirection gapWidth dispBlanksAs bubbleScale sizeRepresents grouping overlap')
- if(!['bar','line','scatter','bubble'].includes(s.family as string)||s.plotVisibleOnly!==false||s.dispBlanksAs!==undefined&&!['gap','zero','span'].includes(s.dispBlanksAs as string))return fail()
+ const s=object(value,'family xAxis yAxis series plotVisibleOnly','barDirection gapWidth dispBlanksAs bubbleScale sizeRepresents grouping overlap radarStyle')
+ if(!['bar','line','scatter','bubble','radar'].includes(s.family as string)||s.plotVisibleOnly!==false||s.dispBlanksAs!==undefined&&!['gap','zero','span'].includes(s.dispBlanksAs as string))return fail()
  const stacked=s.grouping!==undefined
  if(stacked&&(!['bar','line'].includes(s.family as string)||!['stacked','percentStacked'].includes(s.grouping as string)))return fail()
  if(stacked&&s.family==='bar'?s.overlap!==100:s.overlap!==undefined)return fail()
+ const radar=s.family==='radar'
+ if(radar?!['standard','filled'].includes(s.radarStyle as string):s.radarStyle!==undefined)return fail()
  const bar=s.family==='bar',bubble=s.family==='bubble',scatter=s.family==='scatter'||bubble,horizontal=bar&&s.barDirection==='bar'
  if(bar){if(!['col','bar'].includes(s.barDirection as string))return fail();integer(s.gapWidth,0,500)}else if(s.barDirection!==undefined||s.gapWidth!==undefined)return fail()
  if(bubble){integer(s.bubbleScale,0,300);if(!['area','w'].includes(s.sizeRepresents as string))return fail()}else if(s.bubbleScale!==undefined||s.sizeRepresents!==undefined)return fail()
  const x=axis(s.xAxis,scatter||horizontal),y=axis(s.yAxis,!horizontal)
  if(x.position!=='b'||y.position!=='l'||x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||!validNativeChartAxisLabels(x,y,scatter||horizontal)||!validNativeChartAxisLabels(y,x,!horizontal))return fail()
+ if(radar&&(x.labels!==undefined||y.labels!==undefined))return fail()
  const series=array(s.series,16),ids=new Set<number>(),orders=new Set<number>();let count:number|undefined,totalText=0,refs=0
  if(series.length<1)return fail()
  series.forEach((value,i)=>{
-  const item=object(value,'index order valueReference','title titleReference categoryReference xReference sizeReference colors color widthEmu')
+  const item=object(value,'index order valueReference','title titleReference categoryReference xReference sizeReference colors color widthEmu fill')
   const index=integer(item.index,0,4294967295);const order=integer(item.order,0,15);if(ids.has(index)||orders.has(order)||order>=series.length)return fail();ids.add(index);orders.add(order)
   if(item.title!==undefined){if(typeof item.title!=='string'||item.title.length>1024||item.titleReference!==undefined)return fail();totalText+=item.title.length}
   if(item.titleReference!==undefined){if(reference(item.titleReference,'strRef').range.count!==1)return fail();refs++}
   const values=reference(item.valueReference,'numRef');refs++
+  if(radar&&(values.range.count<3||values.range.count>256))return fail()
+  if(radar&&s.radarStyle==='filled')rgb(item.fill);else if(item.fill!==undefined)return fail()
   if(scatter){if(item.categoryReference!==undefined||reference(item.xReference,'numRef').range.count!==values.range.count)return fail()}
   else{if(item.xReference!==undefined||reference(item.categoryReference,'strRef').range.count!==values.range.count||count!==undefined&&count!==values.range.count)return fail();count=values.range.count}
   refs++
+  if(radar&&i>0&&(item.categoryReference as ChartWorkbookReference).formula!==((series[0] as Record<string,unknown>).categoryReference as ChartWorkbookReference).formula)return fail()
   if(bubble){if(reference(item.sizeReference,'numRef').range.count!==values.range.count)return fail();refs++}else if(item.sizeReference!==undefined)return fail()
   if(bar||bubble){const colors=array(item.colors,256);if(colors.length!==values.range.count||item.color!==undefined||item.widthEmu!==undefined)return fail();colors.forEach(rgb)}
   else{if(item.colors!==undefined)return fail();rgb(item.color);integer(item.widthEmu,1,20116800)}
