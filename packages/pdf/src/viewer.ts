@@ -1,6 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { paintLinkBorders } from './linkBorders.js';
+import { ensureType3SpaceAdvances } from './type3SpaceAdvance.js';
 
 export interface SearchMatch {
   pageIndex: number;
@@ -122,7 +123,7 @@ export class PdfViewerDocument {
     // pdfjs-dist transfers/detaches a `data` buffer it's handed — copy first so
     // callers can safely keep using their own `bytes` afterward (e.g. locate a
     // rect via the viewer, then pass the same bytes to applyTextEdits).
-    const task = pdfjsLib.getDocument(loadParameters(bytes, options));
+    const task = pdfjsLib.getDocument(loadParameters(await ensureType3SpaceAdvances(bytes), options));
     try {
       const proxy = await task.promise;
       return new PdfViewerDocument(proxy, task);
