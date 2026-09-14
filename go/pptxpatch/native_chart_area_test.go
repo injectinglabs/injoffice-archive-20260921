@@ -55,7 +55,7 @@ func TestNativeChartAreaPublicContract(t *testing.T) {
 func TestNativeChartAreaPublicRefusals(t *testing.T) {
 	d, _ := nativeDialectForPresentation(xmlNamePresentation(false))
 	for _, mutate := range []func(*NativeLiteralArea){
-		func(a *NativeLiteralArea) { a.Grouping = "stacked" },
+		func(a *NativeLiteralArea) { a.Grouping = "stacked"; a.SourceBaseline = nil },
 		func(a *NativeLiteralArea) { a.DataOrigin = "embedded-workbook" },
 		func(a *NativeLiteralArea) { a.Series[0].Values = []string{"1"} },
 		func(a *NativeLiteralArea) { a.YAxis.CrossesAt = stringPointer("1") },

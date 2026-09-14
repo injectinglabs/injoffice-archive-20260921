@@ -109,8 +109,8 @@ func extractNativeChartArea(payload []byte, part string, d nativeExtractDialect)
 		}
 		if grouping != "standard" {
 			for _, raw := range series.Values {
-				value, err := parseNativeChartDecimal(raw)
-				if err != nil || value.coefficient.Sign() < 0 {
+				_, err := parseNativeChartDecimal(raw)
+				if err != nil {
 					return nil
 				}
 			}
