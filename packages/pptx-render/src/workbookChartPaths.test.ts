@@ -7,13 +7,15 @@ import {createNativeWorkbookChartPaths} from './workbookChartPaths.js'
 import {createNativeLiteralBarPaths} from './literalBar.js'
 import {createNativeLiteralLinePaths} from './literalLine.js'
 
-async function resolved(family:'bar'|'line'|'scatter'){
+async function resolved(family:'bar'|'line'|'scatter'|'bubble'){
  const {deck,result}=fixture(),source=result.charts[0]!.source as any,s=source.series[0]
  source.family=family
  const reference=(formula:string,kind:'strRef'|'numRef')=>({kind,formula,range:parseChartWorkbookRange(formula),cachePresent:true})
  s.valueReference=reference('Lexical!A1:A2','numRef');s.categoryReference=reference('Lexical!C1:C2','strRef')
- if(family!=='bar'){delete source.barDirection;delete source.gapWidth;delete s.colors;s.color='#FF0000';s.widthEmu=1}
- if(family==='scatter'){delete s.categoryReference;s.xReference=s.valueReference;Object.assign(source.xAxis,{min:'-10',max:'10',crossesAt:'0'})}
+ if(family!=='bar'){delete source.barDirection;delete source.gapWidth}
+ if(family==='line'||family==='scatter'){delete s.colors;s.color='#FF0000';s.widthEmu=1}
+ if(family==='bubble'){source.bubbleScale=100;source.sizeRepresents='area';s.sizeReference=s.valueReference}
+ if(family==='scatter'||family==='bubble'){delete s.categoryReference;s.xReference=s.valueReference;Object.assign(source.xAxis,{min:'-10',max:'10',crossesAt:'0'})}
  const inspection=await decodeNativePptxChartWorkbookInspection(JSON.stringify(result),deck,sha)
  const chart=inspection.charts[0]!
  // Complete trusted-callback contract stub. Actual dual-WASM source evidence is
@@ -21,7 +23,7 @@ async function resolved(family:'bar'|'line'|'scatter'){
  const workbook=JSON.parse(readFileSync(new URL('../../../go/xlsxpatch/testdata/native-xlsx-v2/valid/lexical-render.json',import.meta.url),'utf8'))
  workbook.source.package_sha256=`sha256:${chart.workbook.sha256}`;workbook.revision=`rev:${chart.workbook.sha256}`
  workbook.sheets[0].cells.push({row:1,column:0,ref:'A2',style_id:0,value:{kind:'number',storage:'number',lexical:'2',rich:false},editable:true},{row:1,column:2,ref:'C2',ooxml_type:'inlineStr',style_id:0,value:{kind:'string',storage:'inline',text:'World',rich:false},editable:true})
- const refs=[...new Map([s.categoryReference,s.xReference,s.valueReference].filter(Boolean).map(ref=>[JSON.stringify(ref),ref])).values()]
+ const refs=[...new Map([s.categoryReference,s.xReference,s.valueReference,s.sizeReference].filter(Boolean).map(ref=>[JSON.stringify(ref),ref])).values()]
  const values=await extractChartWorkbookReferences(chart.workbook,refs,new Uint8Array([1,2,3]),async()=>JSON.stringify(workbook))
  return createResolvedWorkbookChart(inspection,0,values)
 }
@@ -64,4 +66,16 @@ it('compiles admitted workbook families only by explicit source-bound opt-in',as
   const element=deck.slides[0]!.elements[0]!;element.source!.fingerprintSha256='b'.repeat(64)
   await expect(compileNativePptxSlide(deck,0,options)).rejects.toThrow(/stale/)
  }
+})
+
+it('renders admitted workbook bubble circles without routing them to connected lines',async()=>{
+ const chart=await resolved('bubble'),vectors=createNativeWorkbookChartPaths(chart,1000,1000)
+ expect(chart.data.profile).toBe('workbook-bubble-v1');expect(vectors[0]!.path.filter(c=>c.kind==='arcTo')).toHaveLength(2)
+ expect(vectors[0]).toMatchObject({seriesIndex:0,pointIndex:0,color:'#FF0000'})
+ const {compileNativePptxSlide}=await import('./compile.js'),{deck}=fixture()
+ const element=deck.slides[0]!.elements.find(e=>e.kind==='chart')!;deck.slides[0]!.elements=[element]
+ const tree=await compileNativePptxSlide(deck,0,{textLayout:noTextLayout,workbookChartsPreview:[chart]})
+ expect(tree.diagnostics.some(d=>d.code==='chart.bubblePreview')).toBe(true)
+ expect(tree.nodes[0]!.kind).toBe('group')
+ expect(()=>createNativeWorkbookChartPaths(structuredClone(chart),1000,1000)).toThrow(/admitted/)
 })

@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "a1c98fe855b1ee2561ba979e5fa1a912bb37abea4d7a2d21d79836fe71de731b"
+const NativePPTXSchemaSHA256 = "8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -114,6 +114,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"colors", "index", "order", "title", "values"},
 		Required:   []string{"colors", "index", "order", "values"},
 	},
+	"NativeLiteralBubble": {
+		Properties: []string{"bubbleScale", "dataOrigin", "profile", "series", "sizeRepresents", "xAxis", "yAxis"},
+		Required:   []string{"bubbleScale", "dataOrigin", "profile", "series", "sizeRepresents", "xAxis", "yAxis"},
+	},
+	"NativeLiteralBubbleSeries": {
+		Properties: []string{"colors", "index", "order", "sizes", "title", "values", "xValues"},
+		Required:   []string{"colors", "index", "order", "sizes", "values", "xValues"},
+	},
 	"NativeLiteralConnected": {
 		Properties: []string{"categories", "dataOrigin", "profile", "series", "xAxis", "yAxis"},
 		Required:   []string{"categories", "dataOrigin", "profile", "series", "xAxis", "yAxis"},
@@ -131,7 +139,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalArea", "literalBar", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalArea", "literalBar", "literalBubble", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

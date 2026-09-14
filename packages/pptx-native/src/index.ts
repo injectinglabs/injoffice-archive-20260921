@@ -92,3 +92,8 @@ export {createResolvedWorkbookChart,assertResolvedWorkbookChart} from './chartWo
 export type {NativeResolvedWorkbookChart,NativeWorkbookBarData,NativeWorkbookConnectedData} from './chartWorkbookResolution.js'
 export {resolveNativePptxWorkbookCharts} from './chartWorkbookCoordinator.js'
 export type {NativeWorkbookChartResolution,NativeWorkbookChartRefusal} from './chartWorkbookCoordinator.js'
+
+export type {NativeLiteralBubble,NativeLiteralBubbleSeries} from './chartBubbleTypes.js'
+export {validNativeLiteralBubble} from './chartBubbleValidation.js'
+
+export type {NativeWorkbookBubbleData} from './chartWorkbookResolution.js'

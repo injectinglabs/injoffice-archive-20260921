@@ -282,7 +282,26 @@ type NativeLiteralArea struct {
 	XAxis      NativeLiteralBarAxis      `json:"xAxis"`
 	YAxis      NativeLiteralBarAxis      `json:"yAxis"`
 }
+type NativeLiteralBubbleSeries struct {
+	Index   int64    `json:"index"`
+	Order   int64    `json:"order"`
+	Title   *string  `json:"title,omitempty"`
+	XValues []string `json:"xValues"`
+	Values  []string `json:"values"`
+	Sizes   []string `json:"sizes"`
+	Colors  []string `json:"colors"`
+}
+type NativeLiteralBubble struct {
+	Profile        string                      `json:"profile"`
+	DataOrigin     string                      `json:"dataOrigin"`
+	BubbleScale    int64                       `json:"bubbleScale"`
+	SizeRepresents string                      `json:"sizeRepresents"`
+	Series         []NativeLiteralBubbleSeries `json:"series"`
+	XAxis          NativeLiteralBarAxis        `json:"xAxis"`
+	YAxis          NativeLiteralBarAxis        `json:"yAxis"`
+}
 type NativeOpaqueChart struct {
+	LiteralBubble    *NativeLiteralBubble    `json:"literalBubble,omitempty"`
 	LiteralArea      *NativeLiteralArea      `json:"literalArea,omitempty"`
 	LiteralConnected *NativeLiteralConnected `json:"literalConnected,omitempty"`
 	LiteralBar       *NativeLiteralBar       `json:"literalBar,omitempty"`

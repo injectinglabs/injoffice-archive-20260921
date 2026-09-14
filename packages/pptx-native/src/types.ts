@@ -1,3 +1,4 @@
+import type {NativeLiteralBubble} from './chartBubbleTypes.js'
 import type {NativeLiteralArea} from './chartAreaTypes.js'
 import type {
   NativeAnimationEffect,
@@ -240,6 +241,7 @@ export interface NativeLiteralConnected {
  yAxis:NativeLiteralBarAxis
 }
 export interface NativeOpaqueChart {
+ literalBubble?:NativeLiteralBubble
  literalArea?:NativeLiteralArea
  literalConnected?:NativeLiteralConnected
  literalBar?:NativeLiteralBar

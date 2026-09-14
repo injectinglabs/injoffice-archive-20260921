@@ -4,11 +4,11 @@ import type {ChartWorkbookBinding,ChartWorkbookReference} from './chartWorkbookT
 export interface NativePptxWorkbookChartSeries {
  readonly index:number;readonly order:number;readonly title?:string
  readonly titleReference?:ChartWorkbookReference;readonly categoryReference?:ChartWorkbookReference
- readonly xReference?:ChartWorkbookReference;readonly valueReference:ChartWorkbookReference
+ readonly sizeReference?:ChartWorkbookReference;readonly xReference?:ChartWorkbookReference;readonly valueReference:ChartWorkbookReference
  readonly colors?:readonly string[];readonly color?:string;readonly widthEmu?:number
 }
 export interface NativePptxWorkbookChartSource {
- readonly family:'bar'|'line'|'scatter';readonly barDirection?:'col'|'bar';readonly gapWidth?:number
+ readonly family:'bar'|'line'|'scatter'|'bubble';readonly bubbleScale?:number;readonly sizeRepresents?:'area'|'w';readonly barDirection?:'col'|'bar';readonly gapWidth?:number
  readonly xAxis:NativeLiteralBarAxis;readonly yAxis:NativeLiteralBarAxis
  readonly series:readonly NativePptxWorkbookChartSeries[];readonly plotVisibleOnly:false
  readonly dispBlanksAs?:'gap'|'zero'|'span'
