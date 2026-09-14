@@ -293,6 +293,7 @@ function validateElement(
     validateParagraphMarkers(element.paragraphs, `${path}.paragraphs`, issues)
     for (const paragraph of element.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
     if (element.textBody?.writingMode && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody.writingMode`,'native.verticalPreview','parsed vertical text must remain read-only')
+    if (((element.textBody?.rotationAngle60000??0)!==0||element.textBody?.upright===true) && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody`,'native.textOrientationPreview','parsed body rotation and upright text must remain read-only')
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
   }
 

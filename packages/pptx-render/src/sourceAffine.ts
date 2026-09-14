@@ -28,6 +28,8 @@ function rational(n:bigint,d=1n):AffineRational {
 const add=(a:AffineRational,b:AffineRational)=>rational(a.numerator*b.denominator+b.numerator*a.denominator,a.denominator*b.denominator)
 const neg=(a:AffineRational)=>rational(-a.numerator,a.denominator)
 const sub=(a:AffineRational,b:AffineRational)=>add(a,neg(b))
+// Internal layout helpers share this arithmetic; these are not package exports.
+export {rational as sourceAffineRational,add as addSourceAffineRationals,sub as subtractSourceAffineRationals}
 const mul=(a:AffineRational,b:AffineRational)=>rational(a.numerator*b.numerator,a.denominator*b.denominator)
 const absolute=(a:AffineRational)=>rational(abs(a.numerator),a.denominator)
 const integer=(n:number)=>{if(!Number.isSafeInteger(n))throw new RangeError('Affine input requires safe integers');return rational(BigInt(n))}

@@ -197,14 +197,17 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 			return nil, fmt.Errorf("pptxpatch: native extract: invalid text flow")
 		}
 	}
-	if value, ok := exactNativeAttr(bodyPr, "", "rot"); ok {
-		rotation, parseErr := parseCanonicalNativeInt(value, -2147483648, 2147483647)
-		if parseErr != nil {
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid text rotation")
-		}
-		if rotation != 0 {
-			return nil, unsupportedNativeTextLayout("rotated text is not representable")
-		}
+	orientation, orientationErr := parseNativeTextOrientation(bodyPr)
+	if orientationErr != nil {
+		return nil, orientationErr
+	}
+	var bodyRotation *int64
+	var upright *bool
+	if orientation.HasRotation {
+		bodyRotation = &orientation.Rotation
+	}
+	if orientation.HasUpright {
+		upright = &orientation.Upright
 	}
 	if value, ok := exactNativeAttr(bodyPr, "", "numCol"); ok {
 		columns, parseErr := parseCanonicalNativeInt(value, 1, 2147483647)
@@ -218,7 +221,7 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 	if _, ok := exactNativeAttr(bodyPr, "", "spcCol"); ok {
 		return nil, unsupportedNativeTextLayout("column spacing is not representable")
 	}
-	for _, name := range []string{"rtlCol", "fromWordArt", "anchorCtr", "forceAA", "upright", "compatLnSpc", "spcFirstLastPara"} {
+	for _, name := range []string{"rtlCol", "fromWordArt", "anchorCtr", "forceAA", "compatLnSpc", "spcFirstLastPara"} {
 		if value, ok := exactNativeAttr(bodyPr, "", name); ok {
 			enabled, boolErr := nativeBool(value)
 			if boolErr != nil {
@@ -234,7 +237,8 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		LeftInsetEMU: &left, RightInsetEMU: &right, TopInsetEMU: &top, BottomInsetEMU: &bottom,
 		Wrap: wrap, VerticalAnchor: anchor, AutoFit: autoFit,
 		HorizontalOverflow: "overflow", VerticalOverflow: "overflow",
-		WritingMode: writingMode,
+		WritingMode:        writingMode,
+		RotationAngle60000: bodyRotation, Upright: upright,
 	}, nil
 }
 
@@ -247,6 +251,10 @@ func nativeMarkSourceFrameAutoFit(element *NativeElement) {
 }
 
 func nativeMarkVerticalTextPreview(element *NativeElement) {
+	if nativeTextBodyHasOrientation(element.TextBody) {
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.text-orientation-preview", Message: "Separate body rotation and upright text use a bounded read-only layout policy; source geometry and text remain preserved."})
+	}
 	if element.TextBody == nil || element.TextBody.WritingMode == nil {
 		return
 	}

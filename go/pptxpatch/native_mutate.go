@@ -568,6 +568,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		if element.TextBody != nil && element.TextBody.WritingMode != nil {
 			return nil, fmt.Errorf("%s: vertical text is preview-only", prefix)
 		}
+		if nativeTextBodyHasOrientation(element.TextBody) {
+			return nil, fmt.Errorf("%s: separate body rotation and upright text are preview-only", prefix)
+		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
 			if diagnostic.Code == nativeInheritedTextPreviewCode {
 				return nil, fmt.Errorf("%s: inherited text approximation is preview-only", prefix)
