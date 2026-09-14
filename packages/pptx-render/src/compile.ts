@@ -1,3 +1,5 @@
+import {bindWorkbookCharts} from './workbookChartBindings.js'
+import {createNativeWorkbookChartPaths} from './workbookChartPaths.js'
 import {sourceTextBounds} from './sourceTextBounds.js'
 import {sourceHierarchyAffine,SourceAffineBudget,convertSourceAffine,decodeSourceAffine,composeSourceAffines,qualifySourceAffinePoint,type SourceAffineFrame,type QualifiedSourceAffine} from './sourceAffine.js'
 import {sourceRenderTransform} from './sourceRenderTransform.js'
@@ -90,6 +92,7 @@ interface Budget {
 }
 
 interface CompileState {
+  readonly workbookCharts: ReturnType<typeof bindWorkbookCharts>
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly sourceFrameAutoFitPreview: boolean
 	readonly inheritedTextElements: ReadonlySet<string>
@@ -1989,14 +1992,19 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         return {kind:'group',...base,children}
       }
 
-      const connected=element.chart.literalConnected
-      const labeledBar=element.chart.literalBar
+      const workbook=state.workbookCharts.get(element.id)
+      const connected=workbook&&workbook.data.profile!=='workbook-bar-v1'?workbook.data:element.chart.literalConnected
+      const labeledBar=workbook?.data.profile==='workbook-bar-v1'?workbook.data:element.chart.literalBar
+      const connectedEnabled=workbook!==undefined||state.options.literalConnectedPreview===true
+      const barEnabled=workbook!==undefined||state.options.literalBarPreview===true
+      const vectorsFor=(cx:number,cy:number)=>workbook?createNativeWorkbookChartPaths(workbook,cx,cy):element.chart.literalConnected?(element.chart.literalConnected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(element.chart.literalConnected,cx,cy):createNativeLiteralBarPaths(element.chart.literalBar!,cx,cy)
+      if(workbook)state.diagnostics.push({severity:'warning',code:'chart.workbookDataPreview',message:'Authoritative saved embedded-workbook cells with source-bound ranges and diagnostics; chart caches are ignored. Host plot fitting, exact decimal geometry and integer rounding apply; source ownership remains read-only.',slideId:state.slide.id,elementId:element.id})
       const hasAxisLabels=Boolean(connected?.xAxis.labels||connected?.yAxis.labels||labeledBar?.categoryAxis.labels||labeledBar?.valueAxis.labels)
-      if(hasAxisLabels && state.options.chartAxisLabelsPreview===true && (connected&&state.options.literalConnectedPreview===true||labeledBar&&state.options.literalBarPreview===true)){
+      if(hasAxisLabels && state.options.chartAxisLabelsPreview===true && (connected&&connectedEnabled||labeledBar&&barEnabled)){
         try {
           if(depth+2>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}`,'Axis plot and labels exceed nesting budget')
           const inputs:ChartAxisLabelInput[]=connected?[
-            {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...(connected.profile==='literal-line-v1'?{categories:connected.categories}:{})},
+            {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...((connected.profile==='literal-line-v1'||connected.profile==='workbook-line-v1')?{categories:connected.categories}:{})},
             {axis:connected.yAxis,perpendicular:connected.xAxis,horizontal:false},
           ]:[
             {axis:labeledBar!.categoryAxis,perpendicular:labeledBar!.valueAxis,horizontal:labeledBar!.barDirection==='column',categories:labeledBar!.categories},
@@ -2015,7 +2023,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
             return {body,bounds:await measureChartAxisText(body,state.options.textLayout.glyphExtents)}
           })
           const plot=layout.plot
-          const vectors=connected?(connected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(connected,plot.cx,plot.cy):createNativeLiteralBarPaths(labeledBar!,plot.cx,plot.cy)
+          const vectors=vectorsFor(plot.cx,plot.cy)
           const data=vectors.filter(v=>v.path.length>0).map((vector,index)=>{
             const path=`$.elements.${element.id}.axisPlot.${index}`;takeNode(state,path)
             return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},preset:'rect' as const,path:boundedPath(vector.path,path),...('color' in vector&&vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
@@ -2039,30 +2047,30 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
         }
       }
 
-      if(connected && !hasAxisLabels && state.options.literalConnectedPreview===true){
+      if(connected && !hasAxisLabels && connectedEnabled){
         if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalConnected`,'Connected chart vectors exceed RenderTree nesting budget')
-        state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
-        const vectors=(connected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(connected,base.bounds.cx,base.bounds.cy)
+        if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
+        const vectors=vectorsFor(base.bounds.cx,base.bounds.cy)
         const children=vectors.filter(vector=>vector.path.length>0).map((vector,index)=>{
           const path=`$.elements.${element.id}.literalConnected.${index}`
           takeNode(state,path)
-          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
         })
         // Exact centerline clipping alone cannot contain the stroke envelope.
         return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
       }
-      const bar=element.chart.literalBar
-      if(bar && !hasAxisLabels && state.options.literalBarPreview===true){
+      const bar=labeledBar
+      if(bar && !hasAxisLabels && barEnabled){
         const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
         const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*bar.series.length+bar.gapWidth))
         if(!fits)state.diagnostics.push({severity:'refusal',code:'chart.barFrameTooSmall',message:'The integer preview frame cannot retain distinct source bars.',slideId:state.slide.id,elementId:element.id})
         else {
           if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalBar`,'Literal bar vectors exceed RenderTree nesting budget')
-          state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
-          const children=createNativeLiteralBarPaths(bar,base.bounds.cx,base.bounds.cy).map((vector,index)=>{
+          if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
+          const children=vectorsFor(base.bounds.cx,base.bounds.cy).map((vector,index)=>{
             const path=`$.elements.${element.id}.literalBar.${index}`
             takeNode(state,path)
-            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...(vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:vector.stroke}:{})}
+            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedPath(vector.path,path),...('color' in vector&&vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:vector.stroke}:{})}
           })
           return {kind:'group',...base,children}
         }
@@ -2166,6 +2174,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   checkCoordinate(deck.size.cx, '$.size.cx', budget, true)
   checkCoordinate(deck.size.cy, '$.size.cy', budget, true)
   const state: CompileState = {
+    workbookCharts: bindWorkbookCharts(deck, options.workbookChartsPreview),
     lineLayoutPolicy,
     sourceFrameAutoFitPreview: options.sourceFrameAutoFitPreview === true,
 		inheritedTextElements,

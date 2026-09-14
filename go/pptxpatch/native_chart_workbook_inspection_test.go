@@ -2,6 +2,8 @@ package pptxpatch
 
 import (
 	"encoding/base64"
+	"fmt"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -85,5 +87,76 @@ func TestNativeChartWorkbookInspectionOmissionAndResourceDedup(t *testing.T) {
 	result, e = InspectNativePPTXChartWorkbooks(input)
 	if e != nil || len(result.Charts) != 0 || len(result.Workbooks) != 0 || len(result.Omissions) != 1 {
 		t.Fatalf("refused source not disclosed: %#v %v", result, e)
+	}
+}
+
+func TestNativeChartWorkbookInspectionRecordBudget(t *testing.T) {
+	for _, count := range []int{64, 65} {
+		input := nativeWorkbookInspectionFixture(t, false, "column", func(parts map[string]string) {
+			var frames strings.Builder
+			for i := 1; i < count; i++ {
+				frames.WriteString(nativeChartGraphicFrameXML(false, i+3, "Chart", ""))
+			}
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, frames.String()+`</p:spTree>`, 1)
+		})
+		result, err := InspectNativePPTXChartWorkbooks(input)
+		if count == 64 {
+			if err != nil || len(result.Charts) != 64 {
+				t.Fatalf("exact record limit: %v %d", err, len(result.Charts))
+			}
+		} else if err == nil || !strings.Contains(err.Error(), "record budget") {
+			t.Fatalf("record overflow: %v", err)
+		}
+	}
+}
+
+func TestNativeChartWorkbookInspectionResourceBudgets(t *testing.T) {
+	for _, test := range []struct {
+		count     int
+		large     bool
+		wantError string
+	}{{8, false, ""}, {9, false, "resource count"}, {2, true, ""}, {3, true, "aggregate workbook"}} {
+		var completeParts map[string]string
+		_ = nativeWorkbookInspectionFixture(t, false, "column", func(parts map[string]string) {
+			completeParts = parts
+			d, _ := nativeDialectForPresentation(xmlNamePresentation(false))
+			if test.large {
+				parts["relocated/embeddings/Data.xlsx"] = strings.Repeat("x", 8*1024*1024)
+			}
+			for i := 1; i < test.count; i++ {
+				chart := fmt.Sprintf("chart%d.xml", i)
+				book := fmt.Sprintf("Data%d.xlsx", i)
+				rel := fmt.Sprintf("rChart%d", i)
+				parts["relocated/charts/"+chart] = parts["relocated/charts/source.xml"]
+				parts["relocated/charts/_rels/"+chart+".rels"] = strings.Replace(parts["relocated/charts/_rels/source.xml.rels"], "Data.xlsx", book, 1)
+				size := 1
+				if test.large && i == 1 {
+					size = 8 * 1024 * 1024
+				}
+				parts["relocated/embeddings/"+book] = strings.Repeat("y", size)
+				parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/relocated/charts/`+chart+`" ContentType="`+contentTypeChart+`"/><Override PartName="/relocated/embeddings/`+book+`" ContentType="`+nativeChartWorkbookContentType+`"/></Types>`, 1)
+				parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `</Relationships>`, `<Relationship Id="`+rel+`" Type="`+d.rels+`/chart" Target="../charts/`+chart+`"/></Relationships>`, 1)
+				frame := strings.Replace(nativeChartGraphicFrameXML(false, i+3, "Chart", ""), `r:id="rIdChart"`, `r:id="`+rel+`"`, 1)
+				parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, frame+`</p:spTree>`, 1)
+			}
+		})
+		names := make([]string, 0, len(completeParts))
+		for name := range completeParts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		zipParts := make([]nativeExtractZipPart, 0, len(names))
+		for _, name := range names {
+			zipParts = append(zipParts, nativeExtractZipPart{name: name, data: completeParts[name]})
+		}
+		input := writeNativeExtractZip(t, zipParts)
+		result, err := InspectNativePPTXChartWorkbooks(input)
+		if test.wantError == "" {
+			if err != nil || len(result.Workbooks) != test.count {
+				t.Fatalf("exact resource limit: %v %d", err, len(result.Workbooks))
+			}
+		} else if err == nil || !strings.Contains(err.Error(), test.wantError) {
+			t.Fatalf("resource overflow: %v", err)
+		}
 	}
 }

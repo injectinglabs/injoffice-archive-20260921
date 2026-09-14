@@ -1,4 +1,5 @@
 import type {
+  NativeResolvedWorkbookChart,
   NativeArrowEnd,
   NativeCompatibilityStatus,
   NativeDiagnosticSeverity,
@@ -368,6 +369,8 @@ export interface NativePptxTextLayout {
 }
 
 export interface CompileSlideOptions {
+  /** Explicit immutable source-bound workbook resolutions; omission retains opaque chart fallback. */
+  readonly workbookChartsPreview?: readonly NativeResolvedWorkbookChart[]
   readonly textLayout: NativePptxTextLayout
   /** Read-only saved-frame preview of explicitly marked spAutoFit projections; never resizes or qualifies Office fidelity. */
   readonly sourceFrameAutoFitPreview?: boolean

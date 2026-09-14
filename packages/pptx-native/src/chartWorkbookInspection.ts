@@ -40,7 +40,7 @@ function axis(value:unknown,numeric:boolean):NativeLiteralBarAxis{
  if(a.labels!==undefined){
   const l=object(a.labels,'profile position majorTickMark style','majorUnit numberFormat'),s=object(l.style,'fontFamily fontSize color bold italic language')
   if(l.profile!=='explicit-axis-labels-v1'||!['low','high'].includes(l.position as string)||!['none','out'].includes(l.majorTickMark as string))return fail()
-  text(s.fontFamily,128);integer(s.fontSize,1,400000);rgb(s.color);bool(s.bold);bool(s.italic);text(s.language,128)
+  text(s.fontFamily,128);integer(s.fontSize,1,400000);if(typeof s.color!=='string'||/^[A-F0-9]{6}$/.exec(s.color)?.[0]!==s.color)return fail();bool(s.bold);bool(s.italic);text(s.language,128)
   if(numeric){decimal(l.majorUnit);if(typeof l.numberFormat!=='string'||/^0(?:\.0{1,6})?$/.exec(l.numberFormat)?.[0]!==l.numberFormat)return fail()}
   else if(l.majorUnit!==undefined||l.numberFormat!==undefined)return fail()
  }

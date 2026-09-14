@@ -4,7 +4,7 @@
 package xlsxpatch
 
 const NativeXLSXV2SchemaID = "https://schemas.injoffice.dev/xlsx/native-v2.schema.json"
-const NativeXLSXV2SchemaSHA256 = "sha256:35297ab41a07d92fc705770dfdf10c717cde3400dde24e78955e0ce1bf4b017c"
+const NativeXLSXV2SchemaSHA256 = "sha256:1ebf8027a17b482beb4cbc484180b8854b880a60e21998e4e3e360adc7b0c4c7"
 const nativeXLSXV2SchemaProtocol = "injoffice.xlsx.native"
 const nativeXLSXV2SchemaVersion = 2
 const NativeXLSXV2MediaType = "application/vnd.injoffice.xlsx-native.v2+json"
@@ -52,6 +52,8 @@ var nativeXLSXV2BindingShapes = map[string]nativeXLSXV2BindingShape{
 }
 
 var nativeXLSXV2SchemaUnsupportedClassifications = map[string]nativeUnsupportedClassification{
+	"WORKBOOK_VIEW_METADATA":             {capability: "workbook-features", scope: "workbook", impact: nativeUnsupportedNoImpact},
+	"WORKSHEET_DIMENSION_METADATA":       {capability: "worksheet-features", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"CELL_ATTRIBUTES":                    {capability: "cell-markup", scope: "sheet", impact: nativeUnsupportedCellImpact},
 	"CELL_EXTENSIONS":                    {capability: "extensions", scope: "sheet", impact: nativeUnsupportedCellImpact},
 	"CELL_METADATA":                      {capability: "cell-metadata", scope: "sheet", impact: nativeUnsupportedCellImpact},

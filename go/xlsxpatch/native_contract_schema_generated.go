@@ -4,7 +4,7 @@
 package xlsxpatch
 
 const NativeXLSXSchemaID = "https://schemas.injoffice.dev/xlsx/native-v1.schema.json"
-const NativeXLSXSchemaSHA256 = "8017eca7536f5d3d1e943fc04387ebad042c522b825f3b208ad6a5b0b05174ea"
+const NativeXLSXSchemaSHA256 = "987cea5431a49990432bdf4b101a05054d7ac262d9cfc2411cb18639657d371e"
 const nativeXLSXSchemaProtocol = "injoffice.xlsx.native"
 const nativeXLSXSchemaVersion = 1
 const nativeXLSXSchemaMaxJsonBytes = 134217728
@@ -50,6 +50,8 @@ var nativeXLSXBindingShapes = map[string]nativeXLSXBindingShape{
 }
 
 var nativeXLSXSchemaUnsupportedClassifications = map[string]nativeUnsupportedClassification{
+	"WORKBOOK_VIEW_METADATA":             {capability: "workbook-features", scope: "workbook", impact: nativeUnsupportedNoImpact},
+	"WORKSHEET_DIMENSION_METADATA":       {capability: "worksheet-features", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"CELL_ATTRIBUTES":                    {capability: "cell-markup", scope: "sheet", impact: nativeUnsupportedCellImpact},
 	"CELL_EXTENSIONS":                    {capability: "extensions", scope: "sheet", impact: nativeUnsupportedCellImpact},
 	"CELL_METADATA":                      {capability: "cell-metadata", scope: "sheet", impact: nativeUnsupportedCellImpact},

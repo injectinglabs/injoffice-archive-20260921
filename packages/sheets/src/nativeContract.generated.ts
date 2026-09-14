@@ -2,7 +2,7 @@
 // Source: schemas/xlsx-native-v1.schema.json
 
 export const XLSX_NATIVE_SCHEMA_ID = "https://schemas.injoffice.dev/xlsx/native-v1.schema.json" as const
-export const XLSX_NATIVE_SCHEMA_SHA256 = "8017eca7536f5d3d1e943fc04387ebad042c522b825f3b208ad6a5b0b05174ea" as const
+export const XLSX_NATIVE_SCHEMA_SHA256 = "987cea5431a49990432bdf4b101a05054d7ac262d9cfc2411cb18639657d371e" as const
 export const XLSX_NATIVE_PROTOCOL = "injoffice.xlsx.native" as const
 export const XLSX_NATIVE_VERSION = 1 as const
 export const XLSX_NATIVE_RESOURCE_LIMITS = {
@@ -21,6 +21,16 @@ export const XLSX_NATIVE_RESOURCE_LIMITS = {
   "maxIssues": 100
 } as const
 export const XLSX_NATIVE_UNSUPPORTED_CLASSIFICATIONS = {
+  "WORKBOOK_VIEW_METADATA": {
+    "capability": "workbook-features",
+    "scope": "workbook",
+    "impact": "none"
+  },
+  "WORKSHEET_DIMENSION_METADATA": {
+    "capability": "worksheet-features",
+    "scope": "sheet",
+    "impact": "none"
+  },
   "CELL_ATTRIBUTES": {
     "capability": "cell-markup",
     "scope": "sheet",
@@ -841,6 +851,16 @@ export const XLSX_NATIVE_SCHEMA = {
     "maxIssues": 100
   },
   "x-unsupported-classifications": {
+    "WORKBOOK_VIEW_METADATA": {
+      "capability": "workbook-features",
+      "scope": "workbook",
+      "impact": "none"
+    },
+    "WORKSHEET_DIMENSION_METADATA": {
+      "capability": "worksheet-features",
+      "scope": "sheet",
+      "impact": "none"
+    },
     "CELL_ATTRIBUTES": {
       "capability": "cell-markup",
       "scope": "sheet",
