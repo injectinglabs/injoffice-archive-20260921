@@ -47,6 +47,7 @@ try {
   await upload(source)
   await poll(() => evaluate(`Boolean(${panel})`), 'strict refusal and recovery option', 45000)
   await assert(`!Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Save to XLSX')`, 'old editing session cleared on refused source')
+  await assert(`!document.querySelector('[aria-label="Mutation controls"]')`, 'recovery replaces the empty editing workspace')
   await click('Preview source styles')
   await poll(() => evaluate(`Boolean(${grid})`), 'actual source-style WASM result', 45000)
   await assert(`${panel}.textContent.includes(${JSON.stringify(sourceHash)})`, 'exact source package identity')

@@ -405,7 +405,7 @@ export default function NativeRoundTripPage() {
       {error && <DsCallout tone="refuse" title={mode === 'browser' ? 'Browser engine' : 'Server response'}>{error}</DsCallout>}
       {failedSource && mode === 'browser' && !workbook && <XlsxSourceStylePreview bytes={failedSource.bytes} name={failedSource.name} />}
 
-      <div className="native-workspace ds-split">
+      {!failedSource && <div className="native-workspace ds-split">
         <section className={`native-main ds-split-main${workbook && activeSheet && bounds ? ' ds-split-main--flush' : ''}`} aria-label="Extracted workbook preview">
           {workbook && activeSheet && bounds ? (
             <>
@@ -544,7 +544,7 @@ export default function NativeRoundTripPage() {
             )}
           </div>
         </aside>
-      </div>
+      </div>}
     </div>
   )
 }
