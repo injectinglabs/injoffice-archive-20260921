@@ -21,3 +21,13 @@ it('does not let shared-string-table uncertainty affect numeric-only source refe
  expect(qualify([item],'1',['B1'],false)).toHaveLength(1)
  expect(()=>qualify([item],'1',['A1'],true)).toThrow(/SHARED_STRING_TABLE_ATTRIBUTES/)
 })
+
+it('retains qualified metadata provenance without masking adjacent unknown records',()=>{
+ const view=diagnostic({code:'WORKBOOK_VIEW_METADATA',capability:'workbook-features',scope_id:'workbook'})
+ const dimension=diagnostic({code:'WORKSHEET_DIMENSION_METADATA',capability:'worksheet-features'})
+ expect(qualify([view,dimension],'1',['B1'],false)).toEqual([view,dimension])
+ for(const code of ['UNMODELED_WORKBOOK_FEATURE','UNMODELED_WORKSHEET_FEATURE']){
+  const unknown=diagnostic({code,scope_id:code==='UNMODELED_WORKBOOK_FEATURE'?'workbook':'sheet:1'})
+  for(const items of [[view,dimension,unknown],[unknown,view,dimension]])expect(()=>qualify(items,'1',['B1'],false)).toThrow(code)
+ }
+})

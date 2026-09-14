@@ -89,3 +89,5 @@ export type {NativePptxChartWorkbookInspection,NativePptxInspectedWorkbookChart,
 
 export {createResolvedWorkbookChart,assertResolvedWorkbookChart} from './chartWorkbookResolution.js'
 export type {NativeResolvedWorkbookChart,NativeWorkbookBarData,NativeWorkbookConnectedData} from './chartWorkbookResolution.js'
+export {resolveNativePptxWorkbookCharts} from './chartWorkbookCoordinator.js'
+export type {NativeWorkbookChartResolution,NativeWorkbookChartRefusal} from './chartWorkbookCoordinator.js'

@@ -40,3 +40,28 @@ it('uses exact connected math for workbook line/XY while preserving family admis
  expect(createNativeWorkbookChartPaths(scatter,1000,100)[0]!.path).toEqual([{kind:'moveTo',x:562,y:44},{kind:'lineTo',x:600,y:40}])
  expect(()=>createNativeLiteralLinePaths(line.data as any,1000,100)).toThrow(/literal line profile/)
 })
+
+const noTextLayout:import('./types.js').NativePptxTextLayout={
+ manifest:{version:1,manifestId:'geometry-only',revision:'1',faces:[{faceId:'unused',family:'Unused',weight:400,style:'normal',stretch:100,source:{kind:'host',resourceId:'unused'}}],fallbackChains:[]},
+ resolver:{providerId:'unused',providerRevision:'1',resolve(){throw Error('No text')},load(){throw Error('No font')}},shaper:{providerId:'unused',providerRevision:'1',shape(){throw Error('No glyphs')}},defaults:{fontFamilies:['Unused'],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'},
+}
+it('compiles admitted workbook families only by explicit source-bound opt-in',async()=>{
+ const {compileNativePptxSlide,createRecordingPaintSurface,paintSlideRenderTree}=await import('./index.js')
+ for(const family of ['bar','line','scatter'] as const){
+  const chart=await resolved(family),{deck}=fixture();deck.slides[0]!.elements=deck.slides[0]!.elements.filter(e=>e.kind==='chart')
+  const before=JSON.stringify(deck),options={textLayout:noTextLayout,workbookChartsPreview:[chart]}
+  expect((await compileNativePptxSlide(deck,0,{textLayout:noTextLayout})).nodes[0]!.kind).toBe('image')
+  const tree=await compileNativePptxSlide(deck,0,options),group=tree.nodes[0]!
+  expect(group.kind).toBe('group');expect(tree.diagnostics.some(d=>d.code==='chart.workbookDataPreview')).toBe(true)
+  expect(tree.diagnostics.some(d=>d.code==='chart.literalBarPreview'||d.code==='chart.literalConnectedPreview')).toBe(false)
+  const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface);expect(surface.finish().filter(c=>c.kind==='path').length).toBeGreaterThan(0)
+  if(family!=='bar')expect(group.clip?.kind).toBe('rect')
+  expect(JSON.stringify(deck)).toBe(before)
+  await expect(compileNativePptxSlide(deck,0,{...options,workbookChartsPreview:[chart,chart]})).rejects.toThrow(/duplicated/)
+  await expect(compileNativePptxSlide(deck,0,{...options,workbookChartsPreview:[structuredClone(chart)]})).rejects.toThrow(/admitted/)
+  const changed=structuredClone(deck);changed.sourceRevision=`rev-${'b'.repeat(64)}`
+  await expect(compileNativePptxSlide(changed,0,options)).rejects.toThrow(/source deck/)
+  const element=deck.slides[0]!.elements[0]!;element.source!.fingerprintSha256='b'.repeat(64)
+  await expect(compileNativePptxSlide(deck,0,options)).rejects.toThrow(/stale/)
+ }
+})
