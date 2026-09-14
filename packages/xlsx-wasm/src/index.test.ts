@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
@@ -20,6 +21,7 @@ import {
   XLSX_WASM_NATIVE_MAX_PACKAGE_BYTES,
   adaptWorkbookMutationBatchV1,
   createXlsxWasmClient,
+  createXlsxSourceStylePreviewClient,
   resolveXlsxWasmAssetUrls,
 } from './index'
 
@@ -261,4 +263,31 @@ describe('XLSX WASM package client', () => {
     const client = createXlsxWasmClient()
     await expect(client.extract(new Uint8Array([1]))).rejects.toMatchObject({ code: 'WORKER_UNAVAILABLE', fatal: true })
   })
+})
+
+it('dedicated source-style client snapshots bytes, joins identity, and only inspects', async () => {
+  const bytes = new Uint8Array([1,2,3])
+  const projection = JSON.parse(readFileSync(new URL('../testdata/source-style-preview.json', import.meta.url),'utf8'))
+  projection.package_sha256 = 'sha256:' + createHash('sha256').update(bytes).digest('hex')
+  const worker = new FakeWorker('{}', JSON.stringify(projection))
+  let url = ''
+  const client = createXlsxSourceStylePreviewClient({workerFactory: path => {url=path;return worker}})
+  const pending = client.preview(bytes)
+  bytes[0] = 99
+  const result = await pending
+  expect(result.package_sha256).toBe(projection.package_sha256)
+  expect(url).toContain('xlsxsource.worker.js')
+  expect(worker.requests.map(request=>request.op)).toEqual(['init','inspect'])
+  expect(client).not.toHaveProperty('apply');expect(client).not.toHaveProperty('extract')
+  expect(Object.isFrozen(result.sheets[0]?.cells)).toBe(true)
+  client.terminate();expect(worker.terminated).toBe(true)
+})
+
+it('terminating source preview during hashing cannot start a worker', async () => {
+  let calls = 0
+  const client = createXlsxSourceStylePreviewClient({workerFactory:()=>{calls++;return new FakeWorker()}})
+  const pending = client.preview(new Uint8Array([1,2,3]))
+  client.terminate()
+  await expect(pending).rejects.toMatchObject({code:'TERMINATED'})
+  expect(calls).toBe(0)
 })

@@ -59,6 +59,18 @@ jobs:
           name: docx-textbox-notes-browser
           path: artifacts/docx-textbox-notes
           if-no-files-found: ignore
+      - name: XLSX read-only source grid in Chrome
+        timeout-minutes: 4
+        env:
+          SHOWCASE_OUTPUT: artifacts/xlsx-source-style
+        run: node scripts/smoke-xlsx-source-style-browser.mjs
+      - name: XLSX source grid screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: xlsx-source-style-browser
+          path: artifacts/xlsx-source-style
+          if-no-files-found: ignore
       - name: Qualification harness unit tests
         run: |
           test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf

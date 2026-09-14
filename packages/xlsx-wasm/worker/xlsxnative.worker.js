@@ -10,6 +10,7 @@
 const PROTOCOL = 'injoffice.native-wasm-worker'
 const VERSION = 1
 const FORMAT = 'xlsx'
+const SOURCE_STYLE_ONLY = self.xlsxSourceStylePreview === true
 const MAX_ERROR_LENGTH = 4096
 
 let boot
@@ -108,8 +109,8 @@ async function initialize(assets) {
       (reason) => stopRuntime(reason),
     )
   await Promise.race([ready, runtimeExit])
-  if (!self.xlsxnative || typeof self.xlsxnative.extract !== 'function' || typeof self.xlsxnative.apply !== 'function') {
-    throw new Error('xlsxnative extract/apply bindings were not installed')
+  if (!self.xlsxnative || (SOURCE_STYLE_ONLY ? typeof self.xlsxnative.previewSourceStyles !== 'function' : typeof self.xlsxnative.extract !== 'function' || typeof self.xlsxnative.apply !== 'function')) {
+    throw new Error(SOURCE_STYLE_ONLY ? 'xlsxnative source-style preview binding was not installed' : 'xlsxnative extract/apply bindings were not installed')
   }
   if (runtimeFailure) throw runtimeFailure
   initialized = true
@@ -139,9 +140,14 @@ onmessage = async (event) => {
   try {
     await boot
     if (runtimeFailure) throw runtimeFailure
+    if (SOURCE_STYLE_ONLY && request.op !== 'inspect') {
+      refuse(request, 'READ_ONLY_PROFILE', 'Source-style preview accepts only read-only inspection.', false)
+      return
+    }
     if (request.op === 'extract' || request.op === 'inspect') {
-      if (typeof self.xlsxnative[request.op] !== 'function') throw new NativeBindingError('Supplemental inspection is unavailable in this engine version', false)
-      const contractJson = unwrap(self.xlsxnative[request.op](new Uint8Array(request.bytes)), 'json')
+      const operation = SOURCE_STYLE_ONLY ? 'previewSourceStyles' : request.op
+      if (typeof self.xlsxnative[operation] !== 'function') throw new NativeBindingError('Supplemental inspection is unavailable in this engine version', false)
+      const contractJson = unwrap(self.xlsxnative[operation](new Uint8Array(request.bytes)), 'json')
       respond(request, { ok: true, result: { contractJson } })
       return
     }

@@ -1,3 +1,5 @@
+import { decodeXlsxSourceStylePreviewV1, type XlsxSourceStylePreviewV1 } from './sourceStyles.js'
+export { decodeXlsxSourceStylePreviewV1, type XlsxSourceStylePreviewV1, type XlsxSourceStyleV1, type XlsxSourceStyleCellV1 } from './sourceStyles.js'
 import {
   NativeWasmError,
   createNativeWasmClient,
@@ -307,4 +309,27 @@ function toUrl(value: string | URL | undefined, fallback: URL): string {
   const resolved = typeof value === 'string' ? value : value.href
   if (resolved.length === 0) throw new TypeError('XLSX WASM asset URLs must not be empty')
   return resolved
+}
+
+/** A dedicated worker with only a read-only preview capability. */
+export interface XlsxSourceStylePreviewClient {
+  preview(bytes: Uint8Array, options?: XlsxWasmOperationOptions): Promise<XlsxSourceStylePreviewV1>
+  terminate(): void
+}
+export function createXlsxSourceStylePreviewClient(options: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'> = {}): XlsxSourceStylePreviewClient {
+  const assets = resolveXlsxWasmAssetUrls(options)
+  const workerUrl = toUrl(options.workerUrl, new URL('./xlsxsource.worker.js', import.meta.url))
+  const limit = boundedLimit(options.maxPackageBytes, DEFAULT_XLSX_WASM_MAX_PACKAGE_BYTES, XLSX_WASM_NATIVE_MAX_PACKAGE_BYTES, 'maxPackageBytes')
+  const native = createNativeWasmClient({ format: 'xlsx', workerFactory: () => (options.workerFactory ?? createBrowserWorker)(workerUrl), assets: { wasmUrl: assets.wasmUrl, goRuntimeUrl: assets.goRuntimeUrl }, operationTimeoutMs: options.operationTimeoutMs })
+  return {
+    async preview(bytes, operation = {}) {
+      assertPackageSize(bytes, limit)
+      const snapshot = new Uint8Array(bytes)
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', snapshot)
+      const hash = 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('')
+      const json = await native.inspect(snapshot, operation)
+      return decodeXlsxSourceStylePreviewV1(json, hash)
+    },
+    terminate: () => native.terminate(),
+  }
 }

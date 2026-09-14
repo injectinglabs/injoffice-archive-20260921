@@ -24,7 +24,7 @@
   "homepage": "https://github.com/injectinglabs/injoffice#readme",
   "bugs": { "url": "https://github.com/injectinglabs/injoffice/issues" },
   "injoffice": {
-    "assets": ["xlsxnative.worker.js", "xlsxnative.wasm", "wasm_exec.js"],
+    "assets": ["xlsxnative.worker.js", "xlsxsource.worker.js", "xlsxnative.wasm", "wasm_exec.js"],
     "tscOnly": true,
     "legalFiles": ["NOTICE"]
   },

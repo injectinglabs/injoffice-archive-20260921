@@ -16,6 +16,7 @@ func main() {
 	obj := js.Global().Get("Object").New()
 	obj.Set("extract", guarded(jsExtract))
 	obj.Set("inspect", guarded(jsInspect))
+	obj.Set("previewSourceStyles", guarded(jsPreviewSourceStyles))
 	obj.Set("apply", guarded(jsApply))
 	js.Global().Set("xlsxnative", obj)
 	if ready := js.Global().Get("xlsxnativeOnReady"); ready.Type() == js.TypeFunction {
@@ -190,4 +191,24 @@ func bytesToJS(data []byte) (js.Value, error) {
 		return js.Undefined(), fmt.Errorf("copied %d bytes, want %d", copied, len(data))
 	}
 	return dst, nil
+}
+
+// previewSourceStyles is a separate read-only operation, never native extraction.
+func jsPreviewSourceStyles(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return fail("previewSourceStyles(bytes) requires 1 argument")
+	}
+	data, err := bytesFromJS(args[0])
+	if err != nil {
+		return fail(err.Error())
+	}
+	preview, err := xlsxpatch.PreviewNativeSourceStylesV1(data)
+	if err != nil {
+		return fail(err.Error())
+	}
+	encoded, err := json.Marshal(preview)
+	if err != nil {
+		return fail(err.Error())
+	}
+	return ok(string(encoded))
 }
