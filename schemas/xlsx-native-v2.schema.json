@@ -22,6 +22,8 @@
     "maxIssues": 100
   },
   "x-unsupported-classifications": {
+    "WORKBOOK_VIEW_METADATA": { "capability": "workbook-features", "scope": "workbook", "impact": "none" },
+    "WORKSHEET_DIMENSION_METADATA": { "capability": "worksheet-features", "scope": "sheet", "impact": "none" },
     "CELL_ATTRIBUTES": { "capability": "cell-markup", "scope": "sheet", "impact": "cell" },
     "CELL_EXTENSIONS": { "capability": "extensions", "scope": "sheet", "impact": "cell" },
     "CELL_METADATA": { "capability": "cell-metadata", "scope": "sheet", "impact": "cell" },

@@ -25,7 +25,7 @@ export function createResolvedWorkbookChart(inspection:NativePptxChartWorkbookIn
  const source=inspection.charts[chartIndex]!,records=new Map<string,ChartWorkbookResolvedValues>(),used=new Set<string>()
  for(const value of values){
   assertChartWorkbookValues(value)
-  if(value.workbookPart!==source.workbook.part||value.workbookSHA256!==source.workbook.sha256||value.workbookRevision!==`rev:${source.workbook.sha256}`)throw new TypeError('resolved workbook identity does not match chart source')
+  if(value.workbookRelationshipId!==source.workbook.relationshipId||value.workbookPart!==source.workbook.part||value.workbookSHA256!==source.workbook.sha256||value.workbookRevision!==`rev:${source.workbook.sha256}`)throw new TypeError('resolved workbook identity does not match chart source')
   const key=`${value.kind}\0${value.formula}\0${value.chartCacheIgnored}`;if(records.has(key))throw new TypeError('duplicate resolved chart reference');records.set(key,value)
  }
  const get=(reference:ChartWorkbookReference):string[]=>{

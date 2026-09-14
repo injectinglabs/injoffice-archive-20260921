@@ -4,7 +4,7 @@ type NativeWorkbookUnsupportedV2=NativeWorkbookV2['unsupported'][number]
 // These features cannot replace literal cell values or hidden flags. They are
 // still returned as provenance. Unknown features fail closed; XLSX's mutation
 // impact classification alone is not a chart-data semantic classification.
-const harmless=new Set(['SHEET_PROTECTION','SHEET_VIEW_GEOMETRY','MERGED_CELLS','CONDITIONAL_FORMATTING','DATA_VALIDATION','HYPERLINKS','DRAWING_REFERENCE','TABLE_REFERENCE','RICH_SHARED_STRING'])
+const harmless=new Set(['WORKBOOK_VIEW_METADATA','WORKSHEET_DIMENSION_METADATA','SHEET_PROTECTION','SHEET_VIEW_GEOMETRY','MERGED_CELLS','CONDITIONAL_FORMATTING','DATA_VALIDATION','HYPERLINKS','DRAWING_REFERENCE','TABLE_REFERENCE','RICH_SHARED_STRING'])
 export function qualifyChartWorkbookDiagnostics(items:readonly NativeWorkbookUnsupportedV2[],sheetId:string,addresses:readonly string[],usesSharedStrings:boolean):readonly NativeWorkbookUnsupportedV2[]{
  if(!Array.isArray(items)||items.length>16384)throw new RangeError('workbook source diagnostic budget exceeded')
  const selected=new Set(addresses),result:NativeWorkbookUnsupportedV2[]=[]
