@@ -43,8 +43,8 @@ func TestNativeGeometryGuideOrderAndRefusal(t *testing.T) {
 	if err := g.evaluate([]nativeGeometryGuide{{"a", "*/ w 1 3"}, {"b1", "+- a 5 0"}}); err != nil || g.values["b1"] != 205 {
 		t.Fatalf("ordered evaluation: %v %v", g, err)
 	}
-	if err := g.evaluate([]nativeGeometryGuide{{"a", "val 1"}}); err == nil {
-		t.Fatal("duplicate accepted")
+	if err := g.evaluate([]nativeGeometryGuide{{"a", "+- a 1 0"}}); err != nil || g.values["a"] != 201 || g.values["b1"] != 205 {
+		t.Fatal("sequential replacement did not preserve earlier results")
 	}
 	if err := g.evaluate([]nativeGeometryGuide{{"future", "val later"}, {"later", "val 1"}}); err == nil {
 		t.Fatal("forward reference accepted")

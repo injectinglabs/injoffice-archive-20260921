@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// Geometry evaluation stays in floating point until its public EMU boundary.
+// Geometry evaluation retains exact rational and conservative interval shadows
+// until its public EMU boundary.
 // Budgets are independent of XML size limits and include adjustment guides.
 const nativeGeometryMaxGuides = 1024
 
@@ -90,7 +91,11 @@ func (g nativeGeometryGuides) evaluateWithIntermediateLimit(guides []nativeGeome
 			return fmt.Errorf("ambiguous numeric geometry guide name %q", guide.Name)
 		}
 		if _, exists := g.values[guide.Name]; exists {
-			return fmt.Errorf("duplicate geometry guide %q", guide.Name)
+			// Built-ins are immutable inputs. User guides, including adjustment
+			// guides, are sequential assignments and may replace a prior result.
+			if _, assigned := g.symbols[guide.Name]; !assigned {
+				return fmt.Errorf("geometry guide shadows built-in %q", guide.Name)
+			}
 		}
 		value, err := g.formulaWithIntermediateLimit(guide.Formula, limit)
 		if err != nil {
@@ -100,14 +105,18 @@ func (g nativeGeometryGuides) evaluateWithIntermediateLimit(guides []nativeGeome
 		if exactErr != nil {
 			return fmt.Errorf("guide %q: %w", guide.Name, exactErr)
 		}
-		g.values[guide.Name] = value
-		g.exact[guide.Name] = exact
+		// Every shadow must observe the same pre-assignment environment. In
+		// particular, "a = sin(a)" reads the old a for value, interval and
+		// symbolic identity, and a failed assignment changes none of them.
 		interval, intervalErr := g.intervalFormula(strings.Fields(guide.Formula), exact)
 		if intervalErr != nil {
 			return fmt.Errorf("guide %q: %w", guide.Name, intervalErr)
 		}
+		symbol := g.formulaSymbol(strings.Fields(guide.Formula), exact)
+		g.values[guide.Name] = value
+		g.exact[guide.Name] = exact
 		g.intervals[guide.Name] = interval
-		g.symbols[guide.Name] = g.formulaSymbol(strings.Fields(guide.Formula), exact)
+		g.symbols[guide.Name] = symbol
 	}
 	return nil
 }

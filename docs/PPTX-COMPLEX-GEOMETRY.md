@@ -2,11 +2,11 @@
 
 The custom geometry engine evaluates DrawingML in the Go source parser. The native boundary carries numeric paths and a text rectangle, not XML or an executable guide language. Source geometry remains preserve-only; shape mutation does not rewrite custom paths.
 
-This describes the custom-path engine introduced in the first geometry milestone. The [preset catalog extension](PPTX-PRESET-CATALOG.md) adds catalog definitions, declared adjustment overrides, all six path fill modes and numerical qualification. Arbitrary rotations, broader custom-guide authoring and interactive geometry handles remain subsequent work; neither milestone establishes Office visual parity.
+This describes the custom-path engine introduced in the first geometry milestone. The [preset catalog extension](PPTX-PRESET-CATALOG.md) adds catalog definitions, declared adjustment overrides, all six path fill modes and numerical qualification. Source shape/group transforms and the local file-preview integration are documented separately. Interactive geometry handles, upright/separate body text rotation and newly complex graphic-frame qualification remain outside this engine milestone; no milestone establishes Office visual parity.
 
 ## Evaluation
 
-The engine supports the seventeen ECMA-376 guide operations: `*/`, `+-`, `+/`, `?:`, `abs`, `at2`, `cat2`, `cos`, `max`, `min`, `mod`, `pin`, `sat2`, `sin`, `sqrt`, `tan`, and `val`. It evaluates adjustment values followed by ordered shape guides. Built-in frame, divisor, and angle guides follow the finite list in §20.1.10.56. Names cannot shadow built-ins, earlier guides, or numeric operands. Forward references and undefined numeric domains refuse the whole geometry.
+The engine supports the seventeen ECMA-376 guide operations: `*/`, `+-`, `+/`, `?:`, `abs`, `at2`, `cat2`, `cos`, `max`, `min`, `mod`, `pin`, `sat2`, `sin`, `sqrt`, `tan`, and `val`. It evaluates adjustment values followed by ordered shape guides. Built-in frame, divisor, and angle guides follow the finite list in §20.1.10.56. User guide names may be reassigned in source order, including adjustment-list assignments followed by shape-guide assignments. Each formula reads the preceding bindings; all value, rational, interval and symbolic shadows are calculated before replacing the named result. Previously captured values remain unchanged. Built-in names and numeric-operand ambiguity retain explicit refusal. Forward references, initial self-references and undefined numeric domains refuse the whole geometry.
 
 Calculations retain exact rational shadows where algebra permits and conservative interval estimates for non-rational results; see the catalog extension for numerical budgets and refusal policy. Coordinates round at the final integer-EMU boundary. Path `w` and `h` scale each axis independently. A missing axis extent uses the shape frame. Text rectangle guides use the frame coordinate system, independently of path coordinate spaces; missing `rect` uses the full frame.
 
@@ -29,7 +29,7 @@ After rounding, an exact integer predicate checks that the endpoint chord fits t
 
 The engine accepts at most 1,024 adjustment/shape guides combined, 128 paths, 512 emitted commands per path, and 8,192 emitted commands overall. Numeric values must remain finite and within the native safe-integer envelope. The renderer must also honor its smaller configured coordinate and aggregate paint limits.
 
-Unknown attributes or child elements, invalid point counts, commands before the first move, unresolved operands, duplicate guide names, nonempty unqualified handles/connections, and unsupported path paint clauses refuse the entire geometry. No successfully parsed prefix is exposed as a complete shape.
+Unknown attributes or child elements, invalid point counts, commands before the first move, unresolved operands, ambiguous numeric guide names, built-in shadowing, nonempty unqualified handles/connections, and unsupported path paint clauses refuse the entire geometry. No successfully parsed prefix is exposed as a complete shape.
 
 ## Sources and evidence
 
@@ -42,3 +42,11 @@ Dedicated Go tests exercise all operators, order and budget guards, both Bezier 
 This milestone serves the native source API, public `compileNativePptxSlide` renderer, native paint worker, and the existing `NativePptxVector` view of worker results. The legacy `PptxFilePreview` fallback does not interpret evaluated paths; its integration remains an explicit next task. The next geometry milestone adds the data-driven preset catalog and adjustment evaluation on top of this engine.
 
 The renderer checks numeric path coordinates, controls, and evaluated text rectangles against both local and cumulative transform limits. Arc limit checks use a conservative whole-ellipse envelope around the start point, so near-limit shapes can be refused even when their visible arc occupies a smaller region. The browser transport additionally retains its existing ±1,000,000,000 coordinate ceiling and eight-megabyte path-data budget.
+
+## Sequential custom guide qualification
+
+ECMA-376 §20.1.9.11 defines ordered calculation and assignment to guide names; §20.1.10.28 defines the name as a token without a uniqueness constraint. Custom geometry now follows the same source-order reassignment semantics already used by the pinned preset catalog. For example, `a=1/3; old=a; a=a*3; a=a+2` leaves `old=1/3` and `a=3`, with exact rational shadows. Later path and text-rectangle operands use the final binding. This does not enable forward dependency resolution or overwrite built-in frame/angle inputs.
+
+A failed individual assignment changes none of its stored shadows, and a failed source geometry still exposes no partial geometry. Repeated names count as separate operations toward the existing 1,024 combined adjustment/guide limit; rational bits, intermediate magnitude, interval uncertainty, arc qualification and final coordinate budgets are unchanged. The original custom XML and source ownership remain preserved and read-only.
+
+Permanent tests cover earlier aliases, self-reassignment, rational and noncardinal interval results, atomic failed writes, reserved/numeric-name refusal, cross-list adjustment bindings, both source dialects and repeated-name budget exhaustion. A generated PPTX fixture captures successive edge values 250,000, 1,750,000 and 2,000,000 EMU; actual Go/WASM and local browser preview verify these distinct path coordinates. The negative fixture references an unavailable later name and remains refused.
