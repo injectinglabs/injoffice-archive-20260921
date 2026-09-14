@@ -381,6 +381,8 @@ export interface CompileSlideOptions {
   /** Read-only literal clustered bars using explicit source scales and host frame fitting. Default off. */
   readonly literalBarPreview?: boolean
   /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
+  /** Explicit source literal stacked/percent bar and line preview; default off. */
+  readonly literalStackedPreview?: boolean
   readonly literalConnectedPreview?: boolean
   /** Opt-in exact source literal area bands; standard overlap uses authored order as a host preview policy. */
   /** Explicit source bubble values with disclosed plot-minor-radius-v1 sizing. */

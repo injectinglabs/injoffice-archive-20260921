@@ -1,3 +1,4 @@
+import type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStackedTypes.js'
 import type {NativeLiteralBubble} from './chartBubbleTypes.js'
 import type {NativeLiteralArea} from './chartAreaTypes.js'
 import type {
@@ -241,6 +242,8 @@ export interface NativeLiteralConnected {
  yAxis:NativeLiteralBarAxis
 }
 export interface NativeOpaqueChart {
+ literalStackedBar?:NativeLiteralStackedBar
+ literalStackedLine?:NativeLiteralStackedLine
  literalBubble?:NativeLiteralBubble
  literalArea?:NativeLiteralArea
  literalConnected?:NativeLiteralConnected

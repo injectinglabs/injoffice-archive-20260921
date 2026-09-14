@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "9236b308738a589a35d9e53e2cdc784b2dafa4ba99472b6ebae58a511df47f81" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -495,6 +495,54 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "values"
     ]
   },
+  "NativeLiteralStackedBar": {
+    "schemaName": "literalStackedBar",
+    "properties": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ],
+    "required": [
+      "barDirection",
+      "categories",
+      "categoryAxis",
+      "dataOrigin",
+      "gapWidth",
+      "grouping",
+      "overlap",
+      "profile",
+      "series",
+      "valueAxis"
+    ]
+  },
+  "NativeLiteralStackedLine": {
+    "schemaName": "literalStackedLine",
+    "properties": [
+      "categories",
+      "dataOrigin",
+      "grouping",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ],
+    "required": [
+      "categories",
+      "dataOrigin",
+      "grouping",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ]
+  },
   "NativeOpaqueChart": {
     "schemaName": "opaqueChart",
     "properties": [
@@ -505,6 +553,8 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "literalConnected",
       "literalDoughnut",
       "literalPie",
+      "literalStackedBar",
+      "literalStackedLine",
       "opaqueRef",
       "previewAssetId",
       "relationshipId"
@@ -2500,6 +2550,197 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalStackedBar": {
+      "x-binding-name": "NativeLiteralStackedBar",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "barDirection",
+        "grouping",
+        "dataOrigin",
+        "gapWidth",
+        "overlap",
+        "categories",
+        "series",
+        "categoryAxis",
+        "valueAxis"
+      ],
+      "properties": {
+        "profile": {
+          "const": "literal-stacked-bar-v1"
+        },
+        "barDirection": {
+          "type": "string",
+          "enum": [
+            "column",
+            "bar"
+          ]
+        },
+        "grouping": {
+          "enum": [
+            "stacked",
+            "percentStacked"
+          ]
+        },
+        "dataOrigin": {
+          "type": "string",
+          "const": "literal"
+        },
+        "gapWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "overlap": {
+          "const": 100
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBarSeries"
+          }
+        },
+        "categoryAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "valueAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        }
+      }
+    },
+    "literalStackedLine": {
+      "x-binding-name": "NativeLiteralStackedLine",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "categories",
+        "series",
+        "xAxis",
+        "yAxis",
+        "grouping"
+      ],
+      "properties": {
+        "profile": {
+          "const": "literal-stacked-line-v1"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalConnectedSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "grouping": {
+          "enum": [
+            "stacked",
+            "percentStacked"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "literal-line-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "categories": {
+                "minItems": 1
+              },
+              "series": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "xValues"
+                    ]
+                  }
+                }
+              },
+              "xAxis": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "min"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "max"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "crossesAt"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "categories": {
+                "maxItems": 0
+              },
+              "series": {
+                "items": {
+                  "required": [
+                    "xValues"
+                  ]
+                }
+              },
+              "xAxis": {
+                "required": [
+                  "min",
+                  "max",
+                  "crossesAt"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "opaqueChart": {
       "x-binding-name": "NativeOpaqueChart",
       "type": "object",
@@ -2510,6 +2751,12 @@ export const PPTX_NATIVE_SCHEMA = {
         "opaqueRef"
       ],
       "properties": {
+        "literalStackedBar": {
+          "$ref": "#/$defs/literalStackedBar"
+        },
+        "literalStackedLine": {
+          "$ref": "#/$defs/literalStackedLine"
+        },
         "literalBubble": {
           "$ref": "#/$defs/literalBubble"
         },
