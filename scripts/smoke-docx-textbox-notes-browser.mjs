@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -66,7 +66,8 @@ try {
       const response = await originalFetch(input, init);
       if(init?.method==='POST'&&String(input).endsWith('/v1/docx/page-preview-textboxes')) {
         const value=await response.clone().json();window.__nativeDocxTextbox=value;
-        if(window.__corruptTextbox&&value.preview){value.preview.textbox.x_millipoints++;return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
+        if(window.__corruptTextbox&&value.preview){const box=value.preview.version===2?value.preview.textboxes.at(-1):value.preview.textbox;box.x_millipoints++;return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
+        if(window.__dropTextbox&&value.preview?.version===2){value.preview.textboxes.pop();return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
       }
       if (init?.method === 'POST' && String(input).endsWith('/v1/docx/page-preview')) window.__nativeDocxPaint = (await response.clone().json()).page_paint_output;
       return response;
@@ -147,11 +148,39 @@ try {
     if(ordinal===1||ordinal===flowPages-1)await screenshot('docx-footnote-flow-page-'+(ordinal+1)+'.png')
   }
   await assert(`${docs}?.dataset.demoDirty!=='true'&&window.__nativeDocxPosts.length===5`,'shared-flow navigation preserves source without further uploads')
+  const multiFixture=resolve(multiDir,'page-textbox.docx'),multiHash=hash(readFileSync(multiFixture))
+  const multiSource=JSON.parse(readFileSync(resolve(multiDir,'source.json'),'utf8'))
+  await setFixtureData({multiHash,multiParagraphIDs:multiSource.textbox_geometry.items.map(i=>i.owner.paragraph_id),multiDiagnosticIDs:multiSource.textbox_geometry.items.map(i=>i.owner.diagnostic_id)})
+  await upload(multiFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'multiple-textbox replacement')
+  await assert('window.__nativeDocxPosts.length===5','multiple textboxes require fresh upload consent')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('2 approximate, read-only pages')&&${native}?.querySelector('[data-native-textbox]')!==null`),'multiple textbox pages',45000)
+  const multiPages=await evaluate('window.__nativeDocxTextbox.preview.body_paint.pages.length')
+  await assert('window.__nativeDocxPosts.length===6&&window.__nativeDocxPosts[5].hash===window.__nativeDocxFixture.multiHash&&window.__nativeDocxTextbox.preview.version===2&&window.__nativeDocxTextbox.preview.textboxes.length===2','two source rectangles bind the exact uploaded document')
+  await assert('window.__nativeDocxFixture.multiDiagnosticIDs.every(id=>window.__nativeDocxTextbox.preview.source_diagnostics.some(d=>d.id===id))','every original drawing restriction remains in the multiple preview')
+  for(let ordinal=0;ordinal<multiPages;ordinal++){
+    if(ordinal){await click('Next approximate page');await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${ordinal+1}"]')!==null`),'multiple-textbox page '+(ordinal+1))}
+    await assert(`(()=>{const result=window.__nativeDocxTextbox.preview,page=result.body_paint.pages[${ordinal}],box=result.textboxes[${ordinal}],mounted=${native}.querySelector('[data-native-textbox]');return ${native}.querySelectorAll('[data-native-textbox]').length===1&&mounted.getAttribute('data-native-textbox-id')===window.__nativeDocxFixture.multiDiagnosticIDs[${ordinal}]&&box.page_id===page.id&&page.lines.some(l=>l.paragraph_id===window.__nativeDocxFixture.multiParagraphIDs[${ordinal}])&&${native}.querySelectorAll('svg path').length===page.commands.filter(c=>c.kind==='fill_glyph_path').length+box.paint.paths.length})()`,'only the source-bound textbox and all glyphs mount on page '+(ordinal+1))
+    await assert(`(()=>{const box=${native}.querySelector('[data-native-textbox]'),rect=box.querySelector('rect');return box.getAttribute('transform')==='translate(${ordinal?288000:72000} ${ordinal?216000:144000})'&&rect.getAttribute('fill')==='${ordinal?'#DDEEFF':'#FFF2CC'}'})()`,'authored coordinates and color on textbox page '+(ordinal+1))
+    await screenshot('docx-multiple-textbox-page-'+(ordinal+1)+'.png')
+  }
+  await evaluate('window.__corruptTextbox=true')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('Textbox placement does not fit')&&${native}?.querySelector('svg')===null`),'corrupt second textbox refusal',45000)
+  await assert('window.__nativeDocxPosts.length===7','a forged second textbox clears the entire preview')
+  await evaluate('window.__corruptTextbox=false;window.__dropTextbox=true')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('cover every source rectangle')&&${native}?.querySelector('svg')===null`),'missing second textbox refusal',45000)
+  await assert('window.__nativeDocxPosts.length===8','an omitted textbox cannot produce a partial preview')
+  await evaluate('window.__dropTextbox=false')
+  await assert(`${docs}?.dataset.demoDirty!=='true'`,'multiple-textbox rendering and refusals preserve source')
+  if(hash(readFileSync(multiFixture))!==multiHash)throw Error('Multiple-textbox source changed')
   if(hash(readFileSync(flowFixture))!==flowHash)throw Error('Shared-flow source changed')
   if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,uploads:5},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,uploads:8},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()
