@@ -7,6 +7,14 @@ import (
 )
 
 func sourceStyleXFSupported(data []byte, e styleTableEntry, ns string) bool {
+	return sourceStyleXFWithAlignment(data, e, ns, sourceStyleAlignmentSupported)
+}
+
+func sourceStyleAlignmentSupported(c xml.StartElement) bool {
+	return styleAttributesOnly(c, "horizontal", "vertical", "wrapText", "textRotation", "indent", "shrinkToFit")
+}
+
+func sourceStyleXFWithAlignment(data []byte, e styleTableEntry, ns string, alignment func(xml.StartElement) bool) bool {
 	if !styleAttributesOnly(e.start, "numFmtId", "fontId", "fillId", "borderId", "xfId", "applyNumberFormat", "applyFont", "applyFill", "applyBorder", "applyAlignment", "applyProtection") {
 		return false
 	}
@@ -21,7 +29,7 @@ func sourceStyleXFSupported(data []byte, e styleTableEntry, ns string) bool {
 		seen[c.start.Name.Local] = true
 		switch c.start.Name.Local {
 		case "alignment":
-			if !styleAttributesOnly(c.start, "horizontal", "vertical", "wrapText", "textRotation", "indent", "shrinkToFit") {
+			if !alignment(c.start) {
 				return false
 			}
 			for _, k := range []string{"textRotation", "indent"} {
@@ -49,6 +57,10 @@ func sourceStyleXFSupported(data []byte, e styleTableEntry, ns string) bool {
 	return true
 }
 func projectSourceStyle(r *styleRegistry, id int) (NativeSourceStyleV1, error) {
+	return projectSourceStyleWithQualifiers(r, id, sourceStyleXFSupported, nil)
+}
+
+func projectSourceStyleWithQualifiers(r *styleRegistry, id int, qualifyXF func([]byte, styleTableEntry, string) bool, extraFont func(xml.StartElement) bool) (NativeSourceStyleV1, error) {
 	out := NativeSourceStyleV1{ID: id, Borders: map[string]string{}, Warnings: []string{}}
 	fail := func(m string) (NativeSourceStyleV1, error) {
 		return out, fmt.Errorf("xlsxpatch: source-style preview: style %d: %s", id, m)
@@ -56,7 +68,7 @@ func projectSourceStyle(r *styleRegistry, id int) (NativeSourceStyleV1, error) {
 	xf := r.cellXfs[id]
 	base := effectiveCellStyleXF(r.styleXfs[xf.xfID])
 	ns := r.index.namespace
-	if !sourceStyleXFSupported(r.data, r.index.cellXfs.entries[id], ns) || !sourceStyleXFSupported(r.data, r.index.cellStyleXfs.entries[xf.xfID], ns) {
+	if !qualifyXF(r.data, r.index.cellXfs.entries[id], ns) || !qualifyXF(r.data, r.index.cellStyleXfs.entries[xf.xfID], ns) {
 		return fail("unqualified XF or parent properties")
 	}
 	fontID := effectiveStyleComponent(xf.fontID, base.fontID, xf.applyFont)
@@ -91,7 +103,9 @@ func projectSourceStyle(r *styleRegistry, id int) (NativeSourceStyleV1, error) {
 				return fail("unsupported font color")
 			}
 		default:
-			return fail("unmodeled font effect")
+			if extraFont == nil || !extraFont(c.start) {
+				return fail("unmodeled font effect")
+			}
 		}
 	}
 	out.ParentID = xf.xfID

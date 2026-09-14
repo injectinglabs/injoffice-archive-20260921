@@ -56,6 +56,10 @@ type activeStyleNode struct {
 }
 
 func parseStyleTable(data []byte) (styleTableIndex, error) {
+	return parseStyleTableWithCount(data, styleTableCount)
+}
+
+func parseStyleTableWithCount(data []byte, readCount func(xml.StartElement) (int, error)) (styleTableIndex, error) {
 	index := styleTableIndex{}
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	depth := 0
@@ -97,7 +101,7 @@ func parseStyleTable(data []byte) (styleTableIndex, error) {
 				if container.startTagEnd != 0 {
 					return styleTableIndex{}, fmt.Errorf("duplicate %s style table", token.Name.Local)
 				}
-				count, err := styleTableCount(token)
+				count, err := readCount(token)
 				if err != nil {
 					return styleTableIndex{}, fmt.Errorf("%s: %w", token.Name.Local, err)
 				}

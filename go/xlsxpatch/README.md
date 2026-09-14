@@ -414,3 +414,9 @@ row viewport without simulating it. V1, strict extraction and mutation remain
 unchanged. See [the source-style profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md)
 for exact bounds and refusals. The WASM distribution exposes a separate V2 read-only client and worker, and
 the playground can display its source-qualified effects.
+
+`PreviewNativeRichSourceV1` separately previews a complete source content rectangle
+with qualified inline rich text when only the parent-XF count is absent. It
+records observed count, original hashes, unused styles and omitted blank bands;
+strict extraction and mutation remain unchanged. See
+[the bounded rich-source contract](../../docs/XLSX-RICH-SOURCE-PREVIEW.md).
