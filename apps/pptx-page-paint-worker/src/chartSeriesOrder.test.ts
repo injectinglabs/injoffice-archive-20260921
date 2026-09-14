@@ -33,6 +33,19 @@ it('preserves source sequence through actual PPTX inspection, embedded XLSX deco
   expect(envelope.result.nodes).toEqual(on.nodes)
   const paths:any[]=[];const walk=(nodes:any[])=>{for(const n of nodes){if(n.kind==='path')paths.push(n);if(n.kind==='group')walk(n.children)}};walk(on.nodes)
   const colors=paths.map(n=>n.fill==='none'?n.stroke:n.fill).filter(c=>['1E88E5','E53935','43A047'].includes(c))
+  if(name==='workbook-scatter'){
+   const segments=paths.filter(n=>['1E88E5','E53935','43A047'].includes(n.stroke))
+   expect(segments).toHaveLength(3)
+   for(const segment of segments){const coordinates=segment.d.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g)!.map(Number);expect(coordinates[0]).not.toBe(coordinates[2])}
+  }
+  if(name==='workbook-scatter'&&!labels){
+   const originalBytes=readFileSync(resolve(scratch,name+'.pptx')),originalDeck=JSON.parse(readFileSync(resolve(scratch,name+'-deck.json'),'utf8')),inspectionJson=readFileSync(resolve(scratch,name+'-inspection.json'),'utf8')
+   const original=await compilePptxPreview({...request,deck:originalDeck,package_sha256:hash(originalBytes),workbook_chart_data:{...request.workbook_chart_data,inspection_json:inspectionJson}})
+   const degenerate:any[]=[];const visit=(nodes:any[])=>{for(const n of nodes){if(n.kind==='path'&&['1E88E5','E53935','43A047'].includes(n.stroke))degenerate.push(n);if(n.kind==='group')visit(n.children)}};visit(original.nodes)
+   expect(degenerate).toHaveLength(3)
+   for(const segment of degenerate){const coords=segment.d.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g)!.map(Number);expect(coords.slice(0,2)).toEqual(coords.slice(2,4))}
+   expect(hash(readFileSync(resolve(scratch,name+'.pptx')))).toBe(hash(originalBytes))
+  }
   expect([...new Set(colors)],name+JSON.stringify(on.diagnostics)).toEqual(['1E88E5','E53935','43A047'])
   if(labels){expect(on.diagnostics.join(' ')).toContain('chart.axisLabelsPreview');expect(JSON.stringify(on.nodes)).toContain('contentRun');expect(on.font_digests).toHaveLength(1)}
   expect(JSON.stringify(request)).toBe(before);expect(hash(readFileSync(resolve(scratch,fixtureName+'.pptx')))).toBe(hash(bytes))
