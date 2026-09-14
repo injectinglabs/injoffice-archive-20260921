@@ -2779,7 +2779,7 @@ describe('source-anchored textbox page composition',()=>{
   expect(decode(before.document,before.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toEqual(result)
   expect(()=>decode(f.document,f.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toThrow()
  })
- it('refuses missing fonts, duplicate evidence, unknown drawings and anchors after text atomically',async()=>{
+ it('refuses missing fonts, duplicate evidence, unknown drawings and overlapping anchors atomically',async()=>{
   const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
   const {renderNativeDocxTextboxPagePreviewV1:legacy}=await import('./nativeTextboxPageCompilerV1.js')
   for(const mutate of [(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.items[1]=structuredClone(f.evidence.items[0]!)},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.omitted_count=1},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.body.blocks[0]!.paragraph!.runs[0]!.anchor.start_byte=1500},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.unsupported.push({...f.document.unsupported[0]!,id:'other-drawing'})}]){
@@ -2857,6 +2857,56 @@ describe('source-anchored textbox page composition',()=>{
   expect(decode(f.document,f.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toEqual(result)
   const bad=structuredClone(result);bad.textboxes[1]!.x_millipoints=0
   expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+ })
+
+ function lateTextboxFixture(text='A '){
+  const f=textboxFixture(),p=f.document.body.blocks[0]!.paragraph!,item=f.evidence.items[0]!
+  f.document.body.anchor.end_byte=10000;f.document.sections[0]!.anchor=anchor(f.document.sections[0]!.anchor.path,9500,9600)
+  p.anchor.end_byte=5000;p.runs[0]!.anchor.path=p.anchor.path+'/w:r[1]';p.runs[0]!.text=text
+  for(const a of [item.owner.anchor,item.page_anchor!.source_anchor,item.page_anchor!.horizontal_anchor,item.page_anchor!.vertical_anchor]){a.start_byte+=2000;a.end_byte+=2000;a.path=a.path.replace('/w:r[1]','/w:r[2]')}
+  item.page_anchor={...item.page_anchor!,policy:'relative-position-no-wrap-v2',horizontal_relative:'character',vertical_relative:'line',x_emu:0,y_emu:0}
+  return f
+ }
+ it('places anchors after shaped text advances including trailing spaces and wrapped pages',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  for(const text of ['A ','A '.repeat(160)]){
+   const f=lateTextboxFixture(text)
+   if(text.length>10)f.document.sections[0]!.page.margins.bottom_twips=13200
+   const result=await render(f.input,f.evidence,[FONT_BYTES],provider)
+   const last=result.body_paint.pages.at(-1)!,line=last.lines.filter(l=>l.region==='body').at(-1)!,box=result.textboxes[0]!
+   expect(box.page_id).toBe(last.id);expect(box.x_millipoints).toBe(line.x_millipoints+line.width_millipoints);expect(box.y_millipoints).toBe(line.y_millipoints)
+   expect(result.anchor_request).toBeDefined();expect(decode(f.document,f.evidence,result,[FONT_DIGEST])).toEqual(result)
+   const bad=structuredClone(result);bad.anchor_request!.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!.advance_inline_millipoints++
+   expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST])).toThrow()
+   delete bad.anchor_request;expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST])).toThrow()
+   const sourceForgery=structuredClone(result),request=sourceForgery.anchor_request!
+   request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!.fragments[0]!.text='Z'
+   const {nativeDocxPagePaintShapedLinesSha256V1:hashLines}=await import('./nativePagePaintV1.js')
+   request.integrity.shaped_lines_sha256=hashLines(request.pagination_request.shaped_lines,request.page_field_variants,request.pagination_request.column_shaped_lines)
+   sourceForgery.body_paint.provenance.shaped_lines.sha256=request.integrity.shaped_lines_sha256
+   expect(()=>decode(f.document,f.evidence,sourceForgery,[FONT_DIGEST])).toThrow('Textbox anchor fragment text does not match source')
+  }
+ },15000)
+
+ it('locates anchors after tabs and hard breaks, before following text',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  for(const control of ['tab','line-break'] as const){
+   const f=lateTextboxFixture(),p=f.document.body.blocks[0]!.paragraph!,resolved=f.input.resolved_layout as NativeDocxResolvedLayoutInputV1
+   p.runs.push({kind:'control',id:'run:control',anchor:anchor(p.anchor.path+'/w:r[1]/w:br[1]',1810,1850),control},{kind:'text',id:'run:after',anchor:anchor(p.anchor.path+'/w:r[3]/w:t[1]',3500,3800),text:'After'})
+   for(const run_id of ['run:control','run:after'])resolved.runs.push({...structuredClone(resolved.runs[0]!),run_id})
+   rewriteInventory(f.input,i=>{i.references[0]!.scope_ids.push('run:control','run:after');i.references[0]!.scope_ids.sort()})
+   const result=await render(f.input,f.evidence,[FONT_BYTES],provider),lines=result.body_paint.pages[0]!.lines.filter(l=>l.region==='body'),line=lines[control==='tab'?0:1]!
+   expect(result.textboxes[0]).toMatchObject({x_millipoints:control==='tab'?108000:72000,y_millipoints:line.y_millipoints})
+  }
+ })
+ it('uses the logical end of a right-to-left run as the character origin',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const f=lateTextboxFixture('אבג'),resolved=f.input.resolved_layout as NativeDocxResolvedLayoutInputV1
+  resolved.paragraphs[0]!.properties={bidi:true,alignment:'start'}
+  f.evidence.items[0]!.owner.paragraphs=['Box'];Object.assign(f.evidence.items[0]!.geometry!,{width_emu:609600,height_emu:457200})
+  const result=await render(f.input,f.evidence,[FONT_BYTES],provider),line=result.body_paint.pages[0]!.lines[0]!
+  expect(result.textboxes[0]!.x_millipoints).toBe(line.x_millipoints)
  })
 
  it('binds stacking to source evidence and refuses changed or omitted layers',async()=>{

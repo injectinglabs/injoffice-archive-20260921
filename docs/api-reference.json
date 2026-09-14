@@ -4841,7 +4841,7 @@
             {
               "name": "nativeTextboxGeometryPlainData",
               "kind": "function",
-              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
+              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown, maxNodes?: number): unknown"
             },
             {
               "name": "NativeTextboxPageAnchorV1",
@@ -5657,7 +5657,7 @@
             {
               "name": "nativeTextboxGeometryPlainData",
               "kind": "function",
-              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown): unknown"
+              "signature": "export declare function nativeTextboxGeometryPlainData(value: unknown, maxNodes?: number): unknown"
             },
             {
               "name": "NativeTextboxPageAnchorV1",
