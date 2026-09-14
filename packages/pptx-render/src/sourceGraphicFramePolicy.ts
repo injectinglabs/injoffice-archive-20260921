@@ -40,7 +40,7 @@ export function qualifySourceGraphicFrameSpans(world:QualifiedSourceAffine,spans
 
 
 export interface SourceGraphicFrameLayout {
- readonly policy:'office-graphic-frame-anchor-v1'
+ readonly policy:'source-graphic-frame-anchor-v1'
  readonly width:AffineRational
  readonly height:AffineRational
  /** Translation only: glyph metrics and intrinsic table tracks are not scaled. */
@@ -48,7 +48,7 @@ export interface SourceGraphicFrameLayout {
 }
 
 /** Named implementation policy, qualified against the retained Office matrix.
- * Direct graphic-frame orientation is not painted. Ancestors map its center;
+ * Direct graphic-frame orientation is not painted. Normalized ancestors map its center;
  * the leaf's raw rotation quadrant chooses the physical anchor's scale axes.
  * Width/height remain rational: callers must not silently round layout thresholds;
  * integer consumers must use the separately named projection policy.
@@ -60,20 +60,41 @@ export function sourceGraphicFrameLayout(leaf:SourceAffineFrame,parents:readonly
  const integer=(n:number)=>sourceAffineRational(BigInt(n))
  const half=(n:AffineRational)=>sourceAffineRational(n.numerator,n.denominator*2n)
  const multiply=(a:AffineRational,b:AffineRational)=>{budget.charge(16);return sourceAffineRational(a.numerator*b.numerator,a.denominator*b.denominator)}
- let center:QualifiedSourceAffine={values:[one,zero,zero,one,addSourceAffineRationals(integer(leaf.x),sourceAffineRational(BigInt(leaf.cx),2n)),addSourceAffineRationals(integer(leaf.y),sourceAffineRational(BigInt(leaf.cy),2n))],errors:[zero,zero,zero,zero,zero,zero],depth:1}
- let sx=one,sy=one
- for(let i=0;i<parents.length;i++){
+ // Source nesting is bounded by the ancestor array. Arithmetic compositions
+ // do not add nesting, but all still charge the shared operation budget.
+ const compose=(a:QualifiedSourceAffine,b:QualifiedSourceAffine)=>composeSourceAffines({...a,depth:0},{...b,depth:0},budget)
+ const exact=(values:QualifiedSourceAffine['values'],depth=0):QualifiedSourceAffine=>({values,errors:[zero,zero,zero,zero,zero,zero],depth})
+ const translated=(x:AffineRational,y:AffineRational)=>exact([one,zero,zero,one,x,y])
+ const negative=(r:AffineRational)=>sourceAffineRational(-r.numerator,r.denominator)
+ const centerOnly=(matrix:QualifiedSourceAffine):QualifiedSourceAffine=>({values:[one,zero,zero,one,matrix.values[4],matrix.values[5]],errors:[zero,zero,zero,zero,matrix.errors[4],matrix.errors[5]],depth:matrix.depth})
+ const quadrant=(angle:number)=>angle>=2700000&&angle<8100000||angle>=13500000&&angle<18900000
+ let mapping=exact([one,zero,zero,one,zero,zero]),orientation=mapping,sx=one,sy=one
+ // Rebuild each group's physical anchor before descending. Multiplying raw
+ // group matrices would scale a rotated group's axes in the wrong space.
+ for(let i=parents.length-1;i>=0;i--){
   const parent=parents[i]
   if(!parent)throw new RangeError('Missing graphic-frame ancestor')
-  center=composeSourceAffines(sourceAffine(parent.frame,parent.child,budget),center,budget)
-  sx=multiply(sx,sourceAffineRational(BigInt(parent.frame.cx),BigInt(parent.child.cx)))
-  sy=multiply(sy,sourceAffineRational(BigInt(parent.frame.cy),BigInt(parent.child.cy)))
+  sourceAffine(parent.frame,parent.child,budget)
+  const f=parent.frame,ch=parent.child
+  const groupCenter=centerOnly(compose(mapping,translated(addSourceAffineRationals(integer(f.x),half(integer(f.cx))),addSourceAffineRationals(integer(f.y),half(integer(f.cy))))))
+  if(quadrant(f.rotation??0))[sx,sy]=[sy,sx]
+  sx=multiply(sx,sourceAffineRational(BigInt(f.cx),BigInt(ch.cx)))
+  sy=multiply(sy,sourceAffineRational(BigInt(f.cy),BigInt(ch.cy)))
+  const rawOrientation=sourceAffine({x:0,y:0,cx:2,cy:2,rotation:f.rotation,flipH:f.flipH,flipV:f.flipV},undefined,budget)
+  const localOrientation:QualifiedSourceAffine={...rawOrientation,values:[...rawOrientation.values.slice(0,4),zero,zero] as unknown as QualifiedSourceAffine['values'],errors:[...rawOrientation.errors.slice(0,4),zero,zero] as unknown as QualifiedSourceAffine['errors']}
+  orientation=compose(orientation,localOrientation)
+  const childCenter=translated(negative(addSourceAffineRationals(integer(ch.x),half(integer(ch.cx)))),negative(addSourceAffineRationals(integer(ch.y),half(integer(ch.cy)))))
+  mapping=compose(groupCenter,compose(orientation,compose(exact([sx,zero,zero,sy,zero,zero]),childCenter)))
+  // Intermediate arithmetic compositions are not additional source nesting.
+  mapping.depth=parents.length-i
+  orientation.depth=parents.length-i
  }
+ const center=centerOnly(compose(mapping,translated(addSourceAffineRationals(integer(leaf.x),half(integer(leaf.cx))),addSourceAffineRationals(integer(leaf.y),half(integer(leaf.cy))))))
  const angle=leaf.rotation??0,swap=angle>=2700000&&angle<8100000||angle>=13500000&&angle<18900000
  const width=multiply(integer(leaf.cx),swap?sy:sx),height=multiply(integer(leaf.cy),swap?sx:sy)
  budget.charge(32)
- const origin:QualifiedSourceAffine={values:[one,zero,zero,one,subtractSourceAffineRationals(center.values[4],half(width)),subtractSourceAffineRationals(center.values[5],half(height))],errors:[zero,zero,zero,zero,center.errors[4],center.errors[5]],depth:center.depth}
- return {policy:'office-graphic-frame-anchor-v1',width,height,origin}
+ const origin:QualifiedSourceAffine={values:[one,zero,zero,one,subtractSourceAffineRationals(center.values[4],half(width)),subtractSourceAffineRationals(center.values[5],half(height))],errors:[zero,zero,zero,zero,center.errors[4],center.errors[5]],depth:parents.length+1}
+ return {policy:'source-graphic-frame-anchor-v1',width,height,origin}
 }
 
 export interface SourceGraphicFrameProjectedLayout {
