@@ -26,10 +26,11 @@ export function createCartesianBarPaths(chart:Omit<LiteralBarRecord,'profile'|'d
  if(200n*extent<denominator)throw new RangeError('literal bar frame cannot retain distinct bars')
  const categoryCoordinate=(numerator:bigint)=>roundRatio((categoryReverse?denominator-numerator:numerator)*extent,denominator)
  const valueCoordinate=(raw:string)=>{let decimal=parseChartDecimal(raw);if(compareChartDecimals(decimal,minimum)<0)decimal=minimum;if(compareChartDecimals(decimal,maximum)>0)decimal=maximum;return chartDecimalCoordinate(decimal,minimum,maximum,valueExtent,valueReverse)}
- const baseline=valueCoordinate('0'),vectors:CartesianBarVector[]=[],indices=new Set<number>()
+ const baseline=valueCoordinate('0'),vectors:CartesianBarVector[]=[],indices=new Set<number>(),orders=new Set<number>()
+ for(let i=0;i<chart.series.length;i++)if(!Object.hasOwn(chart.series,i)||!chart.series[i])throw new RangeError('sparse chart series')
  chart.series.forEach((series,seriesOrder)=>{
-  if(!Number.isInteger(series.index)||series.index<0||series.index>4294967295||indices.has(series.index)||series.order!==seriesOrder||series.values.length!==count||series.colors.length!==count||(series.title!==undefined&&(typeof series.title!=='string'||series.title.length>1024)))throw new RangeError('invalid literal bar series')
-  indices.add(series.index)
+  if(!Number.isInteger(series.index)||Object.is(series.index,-0)||series.index<0||series.index>4294967295||indices.has(series.index)||!Number.isSafeInteger(series.order)||Object.is(series.order,-0)||series.order<0||series.order>=chart.series.length||orders.has(series.order)||series.values.length!==count||series.colors.length!==count||(series.title!==undefined&&(typeof series.title!=='string'||series.title.length>1024)))throw new RangeError('invalid literal bar series')
+  indices.add(series.index);orders.add(series.order)
   series.values.forEach((raw,pointIndex)=>{
    const color=series.colors[pointIndex]!;if(!rgb.test(color))throw new RangeError('invalid literal bar color')
    const numerator=BigInt(2*pointIndex*(100*seriesCount+chart.gapWidth)+chart.gapWidth+200*seriesOrder)

@@ -15,7 +15,7 @@ function axis(a:NativeLiteralBarAxis):void{
 
 /** Literal data only. One compound fill per entire source series: artificial
  * interval edges never become separately antialiased/stroked shape boundaries.
- * Standard multi-series overlap follows ascending authored order as an explicit
+ * Standard multi-series overlap follows XML series sequence as an explicit
  * preview policy, without claiming Office painter-order parity. Axis labels are
  * handled by the separately qualified shared text-layout integration. */
 export function createNativeLiteralAreaPaths(chart:LiteralAreaInput,cx:number,cy:number):readonly LiteralAreaVector[]{

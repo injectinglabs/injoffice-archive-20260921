@@ -29,7 +29,7 @@ func TestNativeChartAreaPercentSourceLexemesAndZeroTotal(t *testing.T) {
 		if area == nil || len(area.Series) != 2 || !slices.Equal(area.Categories, []string{"A", "B", "C"}) {
 			t.Fatal("qualified lexical source fixture was refused")
 		}
-		expected := [][]string{{"1e-100", "-0", "9007199254740993"}, {"2e-100", "0.0", "18014398509481986"}}
+		expected := [][]string{{"2e-100", "0.0", "18014398509481986"}, {"1e-100", "-0", "9007199254740993"}}
 		series := make([]nativeChartStackSeries, 2)
 		for i, item := range area.Series {
 			if !slices.Equal(item.Values, expected[i]) {
@@ -42,7 +42,7 @@ func TestNativeChartAreaPercentSourceLexemesAndZeroTotal(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, point := range []int{0, 2} {
-			if bands[0].Upper[point].RatString() != "1/3" || bands[1].Lower[point].RatString() != "1/3" || bands[1].Upper[point].RatString() != "1" {
+			if bands[0].Upper[point].RatString() != "2/3" || bands[1].Lower[point].RatString() != "2/3" || bands[1].Upper[point].RatString() != "1" {
 				t.Fatal("tiny/large exact source values lost their common ratio")
 			}
 		}

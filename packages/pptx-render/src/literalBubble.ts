@@ -10,7 +10,7 @@ export interface LiteralBubbleVector {
  readonly bubbleBounds?:RenderRect
 }
 export const BUBBLE_PREVIEW_POLICY='plot-minor-radius-v1'
-export const BUBBLE_PREVIEW_DISCLOSURE='Source bubble sizes use plot-minor-radius-v1: the global maximum radius is one tenth of the smaller host plot extent at scale 100; area/width and source scale are retained. Circles paint in series order then point index and clip to the whole plot. This is host sizing, not PowerPoint plot layout.'
+export const BUBBLE_PREVIEW_DISCLOSURE='Source bubble sizes use plot-minor-radius-v1: the global maximum radius is one tenth of the smaller host plot extent at scale 100; area/width and source scale are retained. Circles paint in XML series sequence then point index and clip to the whole plot. This is host sizing, not PowerPoint plot layout.'
 
 /** Shared visual-value implementation, called only after the appropriate literal
  * or source-bound workbook admission. The temporary validation shape below is

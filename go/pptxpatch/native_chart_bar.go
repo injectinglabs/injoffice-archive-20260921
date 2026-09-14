@@ -3,7 +3,6 @@ package pptxpatch
 import (
 	"encoding/xml"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -80,9 +79,9 @@ func extractNativeChartBar(payload []byte, part string, d nativeExtractDialect) 
 	if len(result.Series) == 0 {
 		return nil
 	}
-	sort.Slice(result.Series, func(i, j int) bool { return result.Series[i].Order < result.Series[j].Order })
-	for i, series := range result.Series {
-		if series.Order != int64(i) {
+	// Preserve XML series sequence; order is a complete metadata permutation.
+	for i := range result.Series {
+		if !orders[int64(i)] {
 			return nil
 		}
 	}
