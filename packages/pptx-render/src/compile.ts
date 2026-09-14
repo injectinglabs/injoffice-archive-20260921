@@ -1,3 +1,5 @@
+import {createNativeLiteralStackedBarPaths} from './literalStackedBar.js'
+import {createNativeLiteralStackedLinePaths} from './literalStackedLine.js'
 import {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_DISCLOSURE} from './literalBubble.js'
 import {createNativeLiteralAreaPaths} from './literalArea.js'
 import {bindWorkbookCharts} from './workbookChartBindings.js'
@@ -2051,15 +2053,18 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       }
 
       const workbook=state.workbookCharts.get(element.id)
+      const stackedBar=workbook?undefined:element.chart.literalStackedBar
+      const stackedLine=workbook?undefined:element.chart.literalStackedLine
+      const stackedEnabled=state.options.literalStackedPreview===true
       const area=workbook?undefined:element.chart.literalArea
       const areaEnabled=state.options.literalAreaPreview===true
       const bubble=workbook?.data.profile==='workbook-bubble-v1'?workbook.data:workbook?undefined:element.chart.literalBubble
       const bubbleEnabled=workbook!==undefined||state.options.literalBubblePreview===true
-      const connected=workbook?(workbook.data.profile==='workbook-line-v1'||workbook.data.profile==='workbook-scatter-v1'?workbook.data:undefined):element.chart.literalConnected
-      const labeledBar=workbook?.data.profile==='workbook-bar-v1'?workbook.data:element.chart.literalBar
-      const connectedEnabled=workbook!==undefined||state.options.literalConnectedPreview===true
-      const barEnabled=workbook!==undefined||state.options.literalBarPreview===true
-      const vectorsFor=(cx:number,cy:number)=>workbook?createNativeWorkbookChartPaths(workbook,cx,cy):element.chart.literalBubble?createNativeLiteralBubblePaths(element.chart.literalBubble,cx,cy):area?createNativeLiteralAreaPaths(area,cx,cy):element.chart.literalConnected?(element.chart.literalConnected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(element.chart.literalConnected,cx,cy):createNativeLiteralBarPaths(element.chart.literalBar!,cx,cy)
+      const connected=workbook?(workbook.data.profile==='workbook-line-v1'||workbook.data.profile==='workbook-scatter-v1'?workbook.data:undefined):stackedLine??element.chart.literalConnected
+      const labeledBar=workbook?.data.profile==='workbook-bar-v1'?workbook.data:stackedBar??element.chart.literalBar
+      const connectedEnabled=workbook!==undefined||(stackedLine?stackedEnabled:state.options.literalConnectedPreview===true)
+      const barEnabled=workbook!==undefined||(stackedBar?stackedEnabled:state.options.literalBarPreview===true)
+      const vectorsFor=(cx:number,cy:number)=>workbook?createNativeWorkbookChartPaths(workbook,cx,cy):stackedBar?createNativeLiteralStackedBarPaths(stackedBar,cx,cy):stackedLine?createNativeLiteralStackedLinePaths(stackedLine,cx,cy):element.chart.literalBubble?createNativeLiteralBubblePaths(element.chart.literalBubble,cx,cy):area?createNativeLiteralAreaPaths(area,cx,cy):element.chart.literalConnected?(element.chart.literalConnected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(element.chart.literalConnected,cx,cy):createNativeLiteralBarPaths(element.chart.literalBar!,cx,cy)
       const checkBubbleBounds=(vectors:ReturnType<typeof vectorsFor>,x=0,y=0)=>{
         let bounds:RenderRect|undefined
         for(const vector of vectors)if('bubbleBounds' in vector&&vector.bubbleBounds){
@@ -2083,7 +2088,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
             {axis:area.xAxis,perpendicular:area.yAxis,horizontal:true,categories:area.categories},
             {axis:area.yAxis,perpendicular:area.xAxis,horizontal:false},
           ]:connected?[
-            {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...((connected.profile==='literal-line-v1'||connected.profile==='workbook-line-v1')?{categories:connected.categories}:{})},
+            {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...((connected.profile==='literal-line-v1'||connected.profile==='literal-stacked-line-v1'||connected.profile==='workbook-line-v1')?{categories:connected.categories}:{})},
             {axis:connected.yAxis,perpendicular:connected.xAxis,horizontal:false},
           ]:[
             {axis:labeledBar!.categoryAxis,perpendicular:labeledBar!.valueAxis,horizontal:labeledBar!.barDirection==='column',categories:labeledBar!.categories},
@@ -2119,6 +2124,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
             checkedWorldAffine(world,translationTransform(0,0),label.bounds,`$.elements.${element.id}.axisLabels.${index}`,state.budget)
             children.push({kind:'text',...base,clip:undefined,zIndex:children.length,transform:translationTransform(label.x,label.y),bounds:{x:label.bounds.x-label.x,y:label.bounds.y-label.y,cx:label.bounds.cx,cy:label.bounds.cy},textBody:label.body})
           }
+          if(stackedBar||stackedLine)state.diagnostics.push({severity:'warning',code:'chart.literalStackedPreview',message:'Signed stacks preserve XML series order and original order metadata. Bars accumulate signs separately; lines use algebraic cumulative tops. Percentages divide by each category sum of absolute values; zero totals produce zero boundaries. Host plot fitting and integer rounding apply.',slideId:state.slide.id,elementId:element.id})
           if(bubble)state.diagnostics.push({severity:'warning',code:'chart.bubblePreview',message:BUBBLE_PREVIEW_DISCLOSURE,slideId:state.slide.id,elementId:element.id})
           if(area)state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and compound fills. Standard series paint in authored order as a host preview policy; Office overlap order and plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
           state.diagnostics.push({severity:'warning',code:'chart.axisLabelsPreview',message:`Source labels use exact supplied fonts and ${CHART_AXIS_LAYOUT_POLICY}: conservative outline hulls, one-point label gap, three-point outside ticks and fixed-decimal half-away rounding. Plot margins are measured host layout, not PowerPoint layout reproduction.`,slideId:state.slide.id,elementId:element.id})
@@ -2152,7 +2158,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
 
       if(connected && !hasAxisLabels && connectedEnabled){
         if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalConnected`,'Connected chart vectors exceed RenderTree nesting budget')
-        if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
+        if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalConnectedPreview',message:stackedLine?'Signed stacked lines preserve XML series order and algebraic cumulative tops; percentages divide by each category sum of absolute values. Host plot fitting applies.':'Straight source literal line/XY vectors with exact segment clipping and integer rounding. Host frame fitting; labels and PowerPoint plot layout are not reproduced. Singleton or fully clipped series have no painted line.',slideId:state.slide.id,elementId:element.id})
         const vectors=vectorsFor(base.bounds.cx,base.bounds.cy)
         const children=vectors.filter(vector=>vector.path.length>0).map((vector,index)=>{
           const path=`$.elements.${element.id}.literalConnected.${index}`
@@ -2165,11 +2171,11 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       const bar=labeledBar
       if(bar && !hasAxisLabels && barEnabled){
         const categoryExtent=bar.barDirection==='column'?base.bounds.cx:base.bounds.cy
-        const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*bar.series.length+bar.gapWidth))
+        const fits=BigInt(categoryExtent)*100n >= BigInt(bar.categories.length*(100*(stackedBar?1:bar.series.length)+bar.gapWidth))
         if(!fits)state.diagnostics.push({severity:'refusal',code:'chart.barFrameTooSmall',message:'The integer preview frame cannot retain distinct source bars.',slideId:state.slide.id,elementId:element.id})
         else {
           if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalBar`,'Literal bar vectors exceed RenderTree nesting budget')
-          if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
+          if(!workbook)state.diagnostics.push({severity:'warning',code:'chart.literalBarPreview',message:stackedBar?'Signed stacked bars preserve XML series order; percentages use each category sum of absolute values. Host frame fitting and integer rounding apply.':'Source literal clustered bars on explicit linear axes, fitted to the host frame with integer rounding. Categories are metadata; source slide labels and Office plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
           const children=vectorsFor(base.bounds.cx,base.bounds.cy).map((vector,index)=>{
             const path=`$.elements.${element.id}.literalBar.${index}`
             takeNode(state,path)
@@ -2221,6 +2227,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
   if(options.chartAxisLabelsPreview!==undefined&&typeof options.chartAxisLabelsPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.chartAxisLabelsPreview','axis labels opt-in must be boolean')
+  if(options.literalStackedPreview!==undefined&&typeof options.literalStackedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalStackedPreview','literal stacked opt-in must be boolean')
   if(options.literalBubblePreview!==undefined&&typeof options.literalBubblePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBubblePreview','literal bubble opt-in must be boolean')
   if(options.literalAreaPreview!==undefined&&typeof options.literalAreaPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalAreaPreview','literal area opt-in must be boolean')
   if(options.literalConnectedPreview!==undefined&&typeof options.literalConnectedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalConnectedPreview','literal connected opt-in must be boolean')
