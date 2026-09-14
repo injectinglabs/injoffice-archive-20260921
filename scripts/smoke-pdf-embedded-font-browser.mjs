@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { resolve, basename } from 'node:path'
 import { decodePDFRawStream, PDFDocument, PDFName, PDFHexString } from 'pdf-lib'
 import { launchChromeForCDP, terminateProcess } from './chrome-cdp-startup.mjs'
 import { startShowcaseDevServer } from './showcase-smoke-dev-server.mjs'
@@ -26,6 +26,7 @@ const pending = new Map()
 const errors = []
 const postRequests = []
 let replacingDownloadedSource = false
+let expectedFontName
 const panel = '[data-demo-surface="pdf"] #pdf-operation-panel'
 const textInput = `${panel} [aria-label="Form value: Unicode sample"]`
 const appearanceSelect = `${panel} [aria-label="Saved text appearance"]`
@@ -51,9 +52,19 @@ async function until(expression, label) {
     if (error) throw new Error(`${label}: ${error}`)
     await pause(100)
   } while (Date.now() < deadline)
-  throw new Error(`Timed out: ${label}\n${await evaluate(`document.querySelector(${JSON.stringify(panel)})?.textContent`)}`)
+  throw new Error(`Timed out: ${label}\n${JSON.stringify(await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panel)});
+    const button = [...(panel?.querySelectorAll('button') ?? [])].find(b => b.textContent.trim() === 'Apply form values');
+    return {text: panel?.textContent, applyDisabled: button?.disabled,
+      input: document.querySelector(${JSON.stringify(textInput)})?.value,
+      inputDisabled: document.querySelector(${JSON.stringify(textInput)})?.disabled,
+      appearance: document.querySelector(${JSON.stringify(appearanceSelect)})?.value,
+      appearanceDisabled: document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled,
+      operation: window.__pdfFontApply};
+  })()`))}`)
 }
 async function upload(selector, file) {
+  if (selector === '[aria-label="Embedded appearance font"]') expectedFontName = basename(file)
   const { result } = await send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})` })
   assert.ok(result.objectId, `file input exists: ${selector}`)
   await send('DOM.setFileInputFiles', { objectId: result.objectId, files: [file] })
@@ -64,7 +75,36 @@ const setValue = (selector, value, select = false) => evaluate(`(() => {
   Object.getOwnPropertyDescriptor(${select ? 'HTMLSelectElement' : 'HTMLInputElement'}.prototype, 'value').set.call(input, ${JSON.stringify(value)});
   input.dispatchEvent(new Event(${JSON.stringify(select ? 'change' : 'input')}, { bubbles: true }));
 })()`)
-const apply = () => evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(`${panel} button`)})).find(button => button.textContent.trim() === 'Apply form values').click()`)
+async function apply(expectedValue) {
+  // Readiness and the one click share a browser task: a render cannot disable
+  // the button between our check and dispatch. Never retry an issued click.
+  await until(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panel)});
+    const button = [...(panel?.querySelectorAll('button') ?? [])].find(b => b.textContent.trim() === 'Apply form values');
+    const input = document.querySelector(${JSON.stringify(textInput)});
+    const appearance = document.querySelector(${JSON.stringify(appearanceSelect)});
+    if (!button || button.disabled || !input || input.disabled || input.value !== ${JSON.stringify(expectedValue)} ||
+        !appearance || appearance.disabled || appearance.value !== 'embedded' ||
+        !panel.textContent.includes(${JSON.stringify('Selected: ' + expectedFontName)})) return false;
+    const previous = new Set(panel.querySelectorAll('[role="status"]'));
+    window.__pdfFontApply = {clicked: true, freshResult: false, expectedValue: ${JSON.stringify(expectedValue)}};
+    const observer = new MutationObserver(() => {
+      const result = [...panel.querySelectorAll('[role="status"]')].find(node =>
+        !previous.has(node) && /Generated 1 widget appearance|No form values applied[.]/.test(node.textContent));
+      if (result) {
+        window.__pdfFontApply.freshResult = true;
+        window.__pdfFontApply.result = result.textContent;
+        observer.disconnect();
+      }
+    });
+    observer.observe(panel, {childList: true, subtree: true, characterData: true});
+    button.click();
+    return true;
+  })()`, 'expected draft/font and enabled Apply');
+  // The old summary may have identical text. Require a newly mounted result
+  // notice from this operation before any caller checks its contents.
+  await until('window.__pdfFontApply?.freshResult === true', 'fresh Apply result');
+}
 
 try {
   server = await startShowcaseDevServer(resolve(import.meta.dirname, '../apps/playground'))
@@ -112,7 +152,7 @@ try {
   await upload('[aria-label="Embedded appearance font"]', fontPath)
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Selected: DejaVuSans.ttf')`, 'local font read')
   await setValue(textInput, 'AV café Ω Ж 😀')
-  await apply()
+  await apply('AV café Ω Ж 😀')
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser fontkit creates embedded appearance')
   await until(`document.querySelector(${JSON.stringify(textInput)})?.value === 'AV café Ω Ж 😀' && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'saved document finishes reloading')
   await evaluate(`Array.from(document.querySelectorAll('[data-demo-surface="pdf"] button')).find(button => button.textContent.trim() === 'Download edited PDF').click()`)
@@ -141,7 +181,7 @@ try {
   assert.match(cmap, /<D83DDE00>/, 'supplementary scalar survives ToUnicode')
   const shapedValue = 'e\u0301 ffi a\u0301\u0323'
   await setValue(textInput, shapedValue)
-  await apply()
+  await apply(shapedValue)
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser HarfBuzz creates positioned cluster appearance')
   await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(shapedValue)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'shaped saved document finishes reloading')
   const shapedOutput = mkdtempSync(resolve(output, 'shaped-'))
@@ -170,7 +210,7 @@ try {
   } finally { await extraction.destroy() }
   const rtlValue = 'abc (السَّلَام 123) xyz'
   await setValue(textInput, rtlValue)
-  await apply()
+  await apply(rtlValue)
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser creates contextual RTL appearance')
   await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(rtlValue)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'RTL saved document finishes reloading')
   const rtlOutput = mkdtempSync(resolve(output, 'rtl-'))
@@ -199,7 +239,7 @@ try {
     await upload('[aria-label="Embedded appearance font"]', fixtureFont)
     await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes(${JSON.stringify(`Selected: ${fontName}-Regular.ttf`)})`, 'local script font read')
     await setValue(textInput, value)
-    await apply()
+    await apply(value)
     await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser creates contextual script appearance')
     await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(value)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'script document finishes reloading')
     const scriptOutput = mkdtempSync(resolve(output, `${fontName}-`))
@@ -221,7 +261,7 @@ try {
     await upload('[aria-label="Embedded appearance font"]', cffPath)
     await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes(${JSON.stringify('Selected: ' + filename)})`, 'CFF font upload')
     await setValue(textInput, value)
-    await apply()
+    await apply(value)
     await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'CFF font saves contextual appearance')
     await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(value)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'CFF document finishes reloading')
     const cffOutput = mkdtempSync(resolve(output, filename + '-'))
@@ -266,7 +306,7 @@ try {
   await setValue(faceInput, '1')
   const collectionValue = 'ক্ষি বাংলা'
   await setValue(textInput, collectionValue)
-  await apply()
+  await apply(collectionValue)
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser embeds selected second collection face')
   await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(collectionValue)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'collection document finishes reloading')
   const collectionOutput = mkdtempSync(resolve(output, 'collection-'))
@@ -294,7 +334,7 @@ try {
   await upload('[aria-label="Embedded appearance font"]', collectionPath)
   await until(`document.querySelector(${JSON.stringify(faceInput)})?.value === '0'`, 'new font upload resets face index')
   await setValue(textInput, '\u{10FFFF}')
-  await apply()
+  await apply('\u{10FFFF}')
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'missing glyph is refused')
   // True automatic-size source: setting DA0 after widget creation avoids
   // pdf-lib's initial default-appearance generation replacing the authored zero.
@@ -312,7 +352,7 @@ try {
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Selected: DejaVuSans-Oblique.ttf')`, 'italic font upload')
   for (const [label, value] of [['italic-auto', 'j'], ['glyphless', '\u200B\u00AD\u{E0100}']]) {
     await setValue(textInput, value)
-    await apply()
+    await apply(value)
     await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'automatic appearance generated')
     await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(value)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'automatic saved document reloads')
     const destination = mkdtempSync(resolve(output, label + '-'))
