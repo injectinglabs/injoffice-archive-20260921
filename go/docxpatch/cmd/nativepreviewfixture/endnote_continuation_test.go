@@ -72,7 +72,10 @@ func testNativeNoteContinuationSource(t *testing.T, kind string) {
 	if kind == "footnote" {
 		converted := map[string][]byte{}
 		for name, data := range parts {
-			converted[strings.ReplaceAll(name, "endnote", "footnote")] = []byte(strings.ReplaceAll(string(data), "endnote", "footnote"))
+			if strings.HasSuffix(name, ".xml") || strings.HasSuffix(name, ".rels") {
+				data = []byte(strings.NewReplacer("endnote", "footnote", "Endnote", "Footnote").Replace(string(data)))
+			}
+			converted[strings.ReplaceAll(name, "endnote", "footnote")] = data
 		}
 		parts = converted
 	}

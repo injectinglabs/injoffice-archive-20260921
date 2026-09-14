@@ -45,8 +45,20 @@ jobs:
       - name: Installed WASM tarballs in Chrome
         timeout-minutes: 10
         run: npm run test:wasm-tarball-browser
-      # Keep fast qualification-harness tests here. Full browser/rendering and
-      # performance runs are opt-in in rendering-qualification.yml.
+      # Keep focused page-preview checks here; the full rendering corpus and
+      # performance runs remain opt-in in rendering-qualification.yml.
+      - name: DOCX textbox and footnote pages in Chrome
+        timeout-minutes: 4
+        env:
+          SHOWCASE_OUTPUT: artifacts/docx-textbox-notes
+        run: node scripts/smoke-docx-textbox-notes-browser.mjs
+      - name: DOCX page preview screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docx-textbox-notes-browser
+          path: artifacts/docx-textbox-notes
+          if-no-files-found: ignore
       - name: Qualification harness unit tests
         run: |
           test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf

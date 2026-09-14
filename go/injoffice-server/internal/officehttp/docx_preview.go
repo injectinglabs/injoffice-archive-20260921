@@ -21,6 +21,7 @@ import (
 
 const DOCXPreviewPath = "/v1/docx/page-preview"
 const DOCXApproximatePreviewPath = "/v1/docx/page-preview-approximate"
+const DOCXTextboxPreviewPath = "/v1/docx/page-preview-textboxes"
 const DOCXFontSubstitutionPreviewPath = "/v1/docx/page-preview-font-substitution"
 
 // DOCXPreviewOptions explicitly enables a local Node compiler. The worker path
@@ -207,12 +208,17 @@ func handleDOCXApproximatePreview(w http.ResponseWriter, r *http.Request, option
 
 func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}, approximate bool) {
 	fontSubstitution := r.URL.Path == DOCXFontSubstitutionPreviewPath
+	textbox := r.URL.Path == DOCXTextboxPreviewPath
 	if r.Method != http.MethodPost {
 		xlsxhttp.WriteError(w, http.StatusMethodNotAllowed, errors.New("POST required"))
 		return
 	}
 	if options.WorkerPath == "" {
 		xlsxhttp.WriteError(w, http.StatusServiceUnavailable, errors.New("native page preview is not enabled by the server operator"))
+		return
+	}
+	if textbox && r.URL.RawQuery != "" {
+		xlsxhttp.WriteError(w, http.StatusBadRequest, errors.New("textbox preview accepts no query options"))
 		return
 	}
 	if fontSubstitution && (r.URL.RawQuery != "" || options.FontManifestPath == "") {
@@ -241,7 +247,23 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 		return
 	}
 	var result json.RawMessage
-	if fontSubstitution {
+	if textbox {
+		var inspected []byte
+		inspected, err = docxpatch.InspectNativePartialSourceV1(data)
+		if err == nil {
+			var source struct {
+				Geometry json.RawMessage `json:"textbox_geometry"`
+			}
+			err = json.Unmarshal(inspected, &source)
+			if err == nil {
+				args := []string{}
+				if options.FontManifestPath != "" {
+					args = append(args, "--font-manifest", options.FontManifestPath)
+				}
+				result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-textbox-pages", map[string]any{"prepare": input, "evidence": source.Geometry}, 192*1024*1024, 64*1024*1024, args...)
+			}
+		}
+	} else if fontSubstitution {
 		var composition map[string]any
 		composition, err = docxFontPreviewComposition(input, data)
 		if err == nil {
