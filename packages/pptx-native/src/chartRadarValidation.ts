@@ -1,4 +1,4 @@
-import type {NativeLiteralRadar} from './chartRadarTypes.js'
+import type {NativeLiteralRadar,NativeRadarData} from './chartRadarTypes.js'
 import {validNativeLiteralArea} from './chartAreaValidation.js'
 import {nativeChartDecimal} from './chartDecimalValidation.js'
 const integer=(v:unknown,min:number,max:number)=>typeof v==='number'&&Number.isSafeInteger(v)&&!Object.is(v,-0)&&v>=min&&v<=max
@@ -16,7 +16,11 @@ function dense(v:unknown,min:number,max:number):v is unknown[]{
 /** Closed first radial profile. Cartesian validation is reused only for exact
  * category/value/axis source records, never for radial geometry or label layout. */
 export function validNativeLiteralRadar(v:unknown):v is NativeLiteralRadar{
- if(!record(v,'profile dataOrigin style categories series categoryAxis valueAxis')||v.profile!=='literal-radar-v1'||v.dataOrigin!=='literal'||!['standard','filled'].includes(v.style as string)||!dense(v.categories,3,256)||!dense(v.series,1,16))return false
+ if(!record(v,'profile dataOrigin style categories series categoryAxis valueAxis')||v.profile!=='literal-radar-v1'||v.dataOrigin!=='literal')return false
+ const {profile,dataOrigin,...data}=v;return validNativeRadarData(data)
+}
+export function validNativeRadarData(v:unknown):v is NativeRadarData{
+ if(!record(v,'style categories series categoryAxis valueAxis')||!['standard','filled'].includes(v.style as string)||!dense(v.categories,3,256)||!dense(v.series,1,16))return false
  const projected=[],orders=new Set<number>()
  for(const s of v.series){
   if(!record(s,'index order values color widthEmu','title fill')||!integer(s.order,0,v.series.length-1)||orders.has(s.order as number)||!integer(s.widthEmu,1,20116800)||!rgb(s.color)||!dense(s.values,v.categories.length,v.categories.length))return false

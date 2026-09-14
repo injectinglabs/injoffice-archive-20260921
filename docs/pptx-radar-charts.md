@@ -1,6 +1,6 @@
 # Source-bound radar charts: qualification work
 
-The connected literal-only profile attaches qualified standard/filled radar to native extraction and opt-in rendering. Literal categories and numeric spellings remain bound to the original chart part, relationship and opaque fingerprint. Workbook radar remains unadmitted; its private syntax preparation does not supply resolved data or public rendering authority.
+The connected literal-only profile attaches qualified standard/filled radar to native extraction and opt-in rendering. Literal categories and numeric spellings remain bound to the original chart part, relationship and opaque fingerprint. A separate [embedded-workbook profile](PPTX-WORKBOOK-RADAR.md) resolves source references through exact saved XLSX cells; it never attaches those values as literal data.
 
 ## Source inventory
 
@@ -13,14 +13,14 @@ The source style enum has `standard`, `marker` and `filled`. [Office requires an
 * Dense 3–256 category/value pairs and 1–16 series. Preserve indexed point order and original series metadata; XML series sequence determines paint order in the retained references, while original numeric order metadata is retained.
 * Standard closed series lines and filled closed polygons, with complete explicit RGB line/fill styles. Markers, point paint overrides, labels, grids, themes/defaults and extensions remain refused until their own semantics are qualified. This does not claim those remaining requirements are complete.
 * One explicit category axis and one explicit linear numeric axis, linked by exact IDs. Reuse bounded decimal and source-axis primitives where their semantics match; do not project radial labels through Cartesian label layout.
-* Literal values stay literal. The workbook parser returns category/value/title references only, with no cached data authority. Resolution must later use the existing actual-XLSX engine, strict decoder and source-bound weak-set admission.
+* Literal values stay literal. The workbook parser returns category/value/title references only, with no cached data authority. The separate workbook profile uses the existing actual-XLSX engine, strict decoder and source-bound weak-set admission.
 * Exact radial ratios precede any angular projection or final EMU quantization. Frame size, node and path budgets remain bounded. The first geometry profile requires every value within its explicit scale. Out-of-scale polygons remain refused instead of silently clamping data.
 
 The Office automation owner supplied standard/filled/marker, 4/5-category, signed/zero, reversed-axis, XML-order permutation and axis-isolation cases. The qualified observations and retained normalization differences are recorded below.
 
 ## Shared handoff
 
-The literal-radar record has Go/TypeScript/schema validation and strict exclusion from other literal families. `literalRadarPreview:true` enables public compilation; the supplied-font worker routes the existing source-chart toggle to this option. Default-off preserves opaque/image fallback. Existing source-frame normalization remains authoritative for own rotated/reflected and grouped frames; generated vector ink is qualified before plot clipping. Workbook inspection/resolution and radial axis labels receive no radar hook.
+The literal-radar record has Go/TypeScript/schema validation and strict exclusion from other literal families. `literalRadarPreview:true` enables public compilation; the supplied-font worker routes the existing source-chart toggle to this option. Default-off preserves opaque/image fallback. Existing source-frame normalization remains authoritative for own rotated/reflected and grouped frames; generated vector ink is qualified before plot clipping. The separate workbook opt-in retains its own inspection/resolution authority. Radial axis labels remain unsupported.
 
 ## Reference-qualified bounded rendering policy
 
@@ -50,8 +50,8 @@ categories plus the 512-command spoke node. Complete stroke hulls plus one EMU
 numerical allowance are checked before plot clipping, including source-frame size
 uncertainty. The extra allowance is attached only when literal radar is enabled
 and rendered; default-off placeholders retain their existing bounds. Source axis
-labels, markers, grids, themes/defaults, point overrides, outside-scale points and
-workbook radar remain unavailable.
+labels, markers, grids, themes/defaults, point overrides and outside-scale points
+remain unavailable. Workbook radar uses its separate source-bound profile.
 
 `scripts/smoke-pptx-literal-radar-browser.mjs` generates all sixteen sources and
 uses the actual helper/worker and production SVG component. It compares each

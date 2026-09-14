@@ -41,6 +41,7 @@ type NativePPTXInspectedWorkbookChart struct {
 	Workbook            NativePPTXChartWorkbookBinding `json:"workbook"`
 }
 type NativePPTXWorkbookChartSource struct {
+	RadarStyle      string                          `json:"radarStyle,omitempty"`
 	Grouping        string                          `json:"grouping,omitempty"`
 	Overlap         *int64                          `json:"overlap,omitempty"`
 	BubbleScale     *int64                          `json:"bubbleScale,omitempty"`
@@ -64,6 +65,7 @@ type NativePPTXWorkbookChartSeries struct {
 	SizeReference     *NativePPTXChartWorkbookReference `json:"sizeReference,omitempty"`
 	ValueReference    *NativePPTXChartWorkbookReference `json:"valueReference"`
 	Colors            []string                          `json:"colors,omitempty"`
+	Fill              *string                           `json:"fill,omitempty"`
 	Color             string                            `json:"color,omitempty"`
 	WidthEMU          *int64                            `json:"widthEmu,omitempty"`
 }
@@ -97,8 +99,8 @@ func nativeWorkbookPublicReference(ref *nativeChartReference) *NativePPTXChartWo
 	return &NativePPTXChartWorkbookReference{Kind: ref.Kind, Formula: ref.Formula, CachePresent: ref.CachePresent, Range: NativePPTXChartWorkbookRange{Sheet: r.Sheet, StartRow: r.StartRow, StartColumn: r.StartColumn, EndRow: r.EndRow, EndColumn: r.EndColumn, Count: r.Count}}
 }
 func nativeWorkbookPublicSource(source *nativeChartWorkbookSource) NativePPTXWorkbookChartSource {
-	family := map[string]string{"barChart": "bar", "lineChart": "line", "scatterChart": "scatter", "bubbleChart": "bubble"}[source.Family]
-	result := NativePPTXWorkbookChartSource{Family: family, BubbleScale: source.BubbleScale, SizeRepresents: source.SizeRepresents, Series: []NativePPTXWorkbookChartSeries{}, DispBlanksAs: source.DispBlanksAs}
+	family := map[string]string{"barChart": "bar", "lineChart": "line", "scatterChart": "scatter", "bubbleChart": "bubble", "radarChart": "radar"}[source.Family]
+	result := NativePPTXWorkbookChartSource{Family: family, RadarStyle: source.RadarStyle, BubbleScale: source.BubbleScale, SizeRepresents: source.SizeRepresents, Series: []NativePPTXWorkbookChartSeries{}, DispBlanksAs: source.DispBlanksAs}
 	if source.Grouping == "stacked" || source.Grouping == "percentStacked" {
 		result.Grouping = source.Grouping
 		result.Overlap = source.Overlap
@@ -110,8 +112,8 @@ func nativeWorkbookPublicSource(source *nativeChartWorkbookSource) NativePPTXWor
 		result.GapWidth = &source.GapWidth
 	}
 	for _, s := range source.Series {
-		out := NativePPTXWorkbookChartSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: nativeWorkbookPublicReference(s.TitleReference), CategoryReference: nativeWorkbookPublicReference(s.CategoryReference), XReference: nativeWorkbookPublicReference(s.XReference), ValueReference: nativeWorkbookPublicReference(s.ValueReference), SizeReference: nativeWorkbookPublicReference(s.SizeReference), Colors: s.Colors, Color: s.Color}
-		if family == "line" || family == "scatter" {
+		out := NativePPTXWorkbookChartSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: nativeWorkbookPublicReference(s.TitleReference), CategoryReference: nativeWorkbookPublicReference(s.CategoryReference), XReference: nativeWorkbookPublicReference(s.XReference), ValueReference: nativeWorkbookPublicReference(s.ValueReference), SizeReference: nativeWorkbookPublicReference(s.SizeReference), Colors: s.Colors, Color: s.Color, Fill: s.Fill}
+		if family == "line" || family == "scatter" || family == "radar" {
 			out.WidthEMU = &s.Width
 		}
 		result.Series = append(result.Series, out)
