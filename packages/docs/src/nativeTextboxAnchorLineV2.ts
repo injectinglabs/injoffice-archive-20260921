@@ -21,6 +21,17 @@ export function textboxAnchorLine(document:NativeDocxDocumentV1,item:NativeDocxT
   const p=(request.page_field_variants?.find(v=>v.page_id===entry.page.id)?.shaped_lines??request.pagination_request.shaped_lines).paragraphs.find(p=>p.paragraph_id===paragraph.id)
   const line=p?.lines[entry.line.source_line_ordinal]
   if(!line||line.id!==entry.line.line_id)throw new TypeError('Textbox anchor line does not match source shaping')
+  const sourcePage=request.paginated_layout.pages.find(p=>p.id===entry.page.id),sourceLine=sourcePage?.lines.find(l=>l.id===entry.line.placed_line_id)
+  if(!sourceLine||sourceLine.line_id!==line.id||sourceLine.x_millipoints!==entry.line.x_millipoints||sourceLine.y_millipoints!==entry.line.y_millipoints||sourceLine.width_millipoints!==entry.line.width_millipoints||sourceLine.height_millipoints!==entry.line.height_millipoints||line.advance_inline_millipoints!==entry.line.width_millipoints||entry.line.y_millipoints+line.ascent_millipoints!==entry.line.baseline_y_millipoints||line.fragments.reduce((n,f)=>n+f.advance_inline_millipoints,0)!==line.advance_inline_millipoints)throw new TypeError('Textbox anchor metrics do not match body paint')
+  const logical=new Set<number>()
+  for(const f of line.fragments){
+   if(!Number.isSafeInteger(f.advance_inline_millipoints)||f.advance_inline_millipoints<0||!Number.isSafeInteger(f.logical_order)||f.logical_order<0||logical.has(f.logical_order)||!['ltr','rtl'].includes(f.direction))throw new TypeError('Invalid textbox anchor fragment metrics')
+   logical.add(f.logical_order)
+   if(f.source_kind==='list-marker')continue
+   const run=paragraph.runs.find(r=>r.id===f.source_id)
+   if(!run)throw new TypeError('Textbox anchor fragment has no source run')
+   if(run.kind==='text'&&!run.page_field&&(!Number.isSafeInteger(f.start_utf16)||!Number.isSafeInteger(f.end_utf16)||f.start_utf16<0||f.end_utf16<f.start_utf16||f.end_utf16>(run.text?.length??0)||f.text!==run.text?.slice(f.start_utf16,f.end_utf16)))throw new TypeError('Textbox anchor fragment text does not match source')
+  }
   return line
  }
  let selected=placed[0]!,x=selected.line.x_millipoints,found=false

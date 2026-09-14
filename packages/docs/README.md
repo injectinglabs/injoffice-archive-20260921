@@ -1052,7 +1052,8 @@ and [vertical placement](https://learn.microsoft.com/en-us/openspecs/office_file
 
 Textboxes anchored after body text use their actual source insertion boundary.
 V2 carries an `anchor_request` only when preceding runs require it; the browser
-strictly joins that request to the projected source and complete body paint.
+joins its source, shaping, pagination, font and media hashes to the body paint,
+then verifies the anchor line and fragment metrics against source text.
 Coordinates use shaped advances, including spaces and tabs, logical bidi order,
 and the next line after a hard break. The selected line determines the page and
 column; paragraph-relative vertical positions use that paragraph's first line

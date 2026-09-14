@@ -1,5 +1,6 @@
 import {textboxAnchorLine,textboxHasPrecedingRuns} from './nativeTextboxAnchorLineV2.js'
-import {decodeNativeDocxPagePaintForRequestV1,type NativeDocxPagePaintRequestV1} from './nativePagePaintV1.js'
+import type {NativeDocxPagePaintRequestV1} from './nativePagePaintV1.js'
+import {canonicalWireSha256} from './nativePagePaintWireV1.js'
 /** Browser-safe composition of every source-qualified page textbox. */
 import {resolveTextboxPosition} from './nativeTextboxPositionV2.js'
 import {decodeNativeDocxDocument} from './nativeContract.js'
@@ -60,8 +61,9 @@ export function decodeNativeDocxTextboxPagesPreviewV2(source:unknown,evidence:un
  if(late){
   const request=value.anchor_request!
   if(!request||nativeTextboxGeometryDigestV1(request.body_field_source??request.pagination_request?.document)!==nativeTextboxGeometryDigestV1(document))throw new TypeError('Textbox anchor layout does not match source')
-  const joined=decodeNativeDocxPagePaintForRequestV1(body,request,request.outline_provider)
-  if(!joined.ok||joined.value.status!=='painted')throw new TypeError('Textbox anchor layout does not match body paint')
+  const pagination=request.pagination_request,shaped=pagination.shaped_lines,variants=request.page_field_variants,columns=pagination.column_shaped_lines
+  const shapedInput=columns?{shaped_lines:shaped,column_shaped_lines:columns,...(variants?{page_field_variants:variants}:{})}:variants?{shaped_lines:shaped,page_field_variants:variants}:shaped
+  if(request.protocol!=='injoffice.docx.page-paint-request'||request.version!==1||request.paginated_layout.status!=='paginated'||canonicalWireSha256(shapedInput)!==body.provenance.shaped_lines.sha256||canonicalWireSha256(request.paginated_layout)!==body.provenance.paginated_layout.sha256||canonicalWireSha256(request.font_manifest)!==body.provenance.font_manifest.sha256||canonicalWireSha256(request.media_assets)!==body.provenance.media_assets.sha256||canonicalWireSha256(pagination.pagination_settings)!==canonicalWireSha256(body.provenance.pagination_settings)||request.outline_provider.provider_id!==body.provenance.providers.outline_id||request.outline_provider.provider_revision!==body.provenance.providers.outline_revision)throw new TypeError('Textbox anchor layout does not match body paint')
  }
  const textboxes=value.textboxes.map((textbox,ordinal)=>{
   const {item,index}=projection.items[ordinal]!
