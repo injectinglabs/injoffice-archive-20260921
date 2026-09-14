@@ -1,3 +1,5 @@
+export {createNativeLiteralAreaPaths} from './literalArea.js'
+export type {LiteralAreaVector} from './literalArea.js'
 export {createNativeLiteralLinePaths} from './literalLine.js'
 export {createNativeLiteralScatterPaths} from './literalScatter.js'
 export type {LiteralConnectedVector} from './literalLine.js'

@@ -380,6 +380,8 @@ export interface CompileSlideOptions {
   readonly literalBarPreview?: boolean
   /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
   readonly literalConnectedPreview?: boolean
+  /** Opt-in exact source literal area bands; standard overlap uses authored order as a host preview policy. */
+  readonly literalAreaPreview?: boolean
   /** Supplied-font source axis labels with disclosed measured host margins. */
   readonly chartAxisLabelsPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */

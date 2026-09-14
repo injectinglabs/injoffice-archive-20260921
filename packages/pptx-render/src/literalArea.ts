@@ -1,17 +1,9 @@
-import type {NativeLiteralBarAxis} from '@injoffice/pptx-native'
+import type {NativeLiteralBarAxis,NativeLiteralArea} from '@injoffice/pptx-native'
 import type {RenderPathCommand,RenderStroke} from './types.js'
 import {createCartesianAreaPaths} from './cartesianAreaPaths.js'
 import {chartRational as rational,chartRationalDecimal as decimal,chartRationalSubtract as subtract,chartRationalDivide as divide,chartRationalCoordinate as coordinate} from './chartRational.js'
-import type {ChartStackGrouping,ChartStackSeries} from './chartStacking.js'
 
-/** Structural counterpart of the dedicated native area record until its shared
- * public export is handed over. No cross-package source import is required. */
-export interface LiteralAreaInput {
- readonly profile:'literal-area-v1';readonly dataOrigin:'literal';readonly grouping:ChartStackGrouping
- readonly categories:readonly string[]
- readonly series:readonly (ChartStackSeries&{readonly color:string;readonly title?:string})[]
- readonly xAxis:NativeLiteralBarAxis;readonly yAxis:NativeLiteralBarAxis
-}
+export type LiteralAreaInput = NativeLiteralArea
 export interface LiteralAreaVector {
  readonly seriesIndex?:number;readonly axis?:'x'|'y'
  readonly path:readonly RenderPathCommand[];readonly color?:string;readonly stroke?:RenderStroke

@@ -1,3 +1,4 @@
+export type {NativeLiteralArea,NativeLiteralAreaSeries} from './chartAreaTypes.js'
 export { canonicalizeNativePptx, stringifyNativePptx } from './canonical'
 export { decodeNativePptxTableInspection, createNativePptxTableGeometryPreview } from './tableInspection'
 export type { NativePptxTablePaint, NativePptxTableGeometryPreview, NativePptxTableGeometrySlide, NativePptxTableGeometryCell, NativePptxInspectionRect, NativePptxInspectedCell, NativePptxInspectedTable, NativePptxTableOmission, NativePptxTableInspection } from './tableInspection'
