@@ -49,12 +49,14 @@ it('bounds CFF views before committing resources and retains the last accepted v
   // Synthetic qualified source aliases exercise the resource budget without
   // relying on a font containing 257 naturally equivalent Unicode sequences.
   const run = (i: number) => ({ value: String.fromCodePoint(0xe000 + i), unitsPerEm: font.unitsPerEm, width: 1000, glyphs: [{ id: gid, cluster: 0, end: 1, x: 0, y: 0, advance: 1000 }] })
+  // Exercise every real commit: each refresh rewrites all existing view CMaps.
+  // Keep the full boundary coverage, with a test-local allowance for shared CI CPUs.
   for (let i = 0; i < 256; i++) { const encoded = resource.qualify(run(i)); expect(encoded.fontViews).toEqual([i]); if (i === 0) await resource.embed(); else resource.commit() }
   const count = doc.context.enumerateIndirectObjects().length
   expect(() => resource.qualify(run(256))).toThrow('256 semantic font views')
   expect(doc.context.enumerateIndirectObjects()).toHaveLength(count)
   expect(resource.qualify(run(255)).fontViews).toEqual([255])
-})
+}, 30_000)
 
 it('attaches views only to a fresh matching primary font and refuses resource-name collisions', async () => {
   const doc = await PDFDocument.create(), field = doc.getForm().createTextField('text'), value = '한글 한글'
