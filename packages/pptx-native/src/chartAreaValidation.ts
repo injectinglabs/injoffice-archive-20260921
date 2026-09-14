@@ -46,7 +46,7 @@ export function validNativeLiteralArea(value:unknown):value is NativeLiteralArea
   const series=value.series[order]
   if(!record(series,'index order values color','title')||!integer(series.index,0,4294967295)||indices.has(series.index)||!integer(series.order,0,15)||series.order>=value.series.length||orders.has(series.order)||!rgb(series.color)||(series.title!==undefined&&(typeof series.title!=='string'||series.title.length>1024))||!Array.isArray(series.values)||series.values.length!==value.categories.length)return false
   indices.add(series.index);orders.add(series.order)
-  for(const raw of series.values){if(typeof raw!=='string')return false;const number=decimal(raw);if(!number||value.grouping!=='standard'&&number.coefficient<0n)return false}
+  for(const raw of series.values){if(typeof raw!=='string')return false;const number=decimal(raw);if(!number||value.grouping!=='standard'&&number.coefficient<0n&&value.sourceBaseline===undefined)return false}
  }
  return true
 }

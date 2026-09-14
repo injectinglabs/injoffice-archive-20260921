@@ -21,11 +21,11 @@ it('retains legacy zero closure and binds explicit source minimum without shifti
   expect(bound[1]).toEqual(legacy[1]);expect(bound[0]).not.toEqual(legacy[0])
  }
 })
-it('refuses forged baseline descriptors and retains negative stacked refusal',()=>{
+it('refuses forged baseline descriptors and retains legacy signed refusal',()=>{
  const base=area();for(const sourceBaseline of [null,{crossing:'max',value:'-10'},{crossing:'min',value:'-10.0'},{crossing:'min',value:'0'},{crossing:'min',value:'-10',extra:true}]){
   const chart={...base,sourceBaseline} as NativeLiteralArea;expect(validNativeLiteralArea(chart)).toBe(false);expect(()=>createNativeLiteralAreaPaths(chart,100,100)).toThrow()
  }
- for(const grouping of ['stacked','percentStacked'] as const){const chart={...area(grouping),sourceBaseline:{crossing:'min' as const,value:'-10'}};chart.series=[{...chart.series[0]!,values:['-1','0','1']},{...chart.series[1]!}];expect(validNativeLiteralArea(chart)).toBe(false);expect(()=>createNativeLiteralAreaPaths(chart,100,100)).toThrow()}
+ for(const grouping of ['stacked','percentStacked'] as const){const chart={...area(grouping)};chart.series=[{...chart.series[0]!,values:['-1','0','1']},{...chart.series[1]!}];expect(validNativeLiteralArea(chart)).toBe(false);expect(()=>createNativeLiteralAreaPaths(chart,100,100)).toThrow()}
 })
 it('uses the same source minimum for existing outward horizontal ticks without changing legacy axes',()=>{
  const c=area(),axis={...c.xAxis,labels:{profile:'explicit-axis-labels-v1' as const,position:'low' as const,majorTickMark:'out' as const,style:{fontFamily:'DejaVu Sans',fontSize:1200,color:'000000',bold:false,italic:false,language:'en-US'}}},perpendicular={...c.yAxis,max:'0'},plot={x:100,y:100,cx:1000,cy:1000}
