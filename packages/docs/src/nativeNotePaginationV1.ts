@@ -2,7 +2,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
 /**
  * Exact bounded footnote/endnote placement over canonical native page output.
  *
- * This module has no package I/O or rendering authority. It admits whole notes and bounded paragraph-boundary
+ * This module has no package I/O or rendering authority. It admits whole notes and shaped-line-boundary
  * final-page footnote and endnote continuation; any ambiguity returns
  * one refusal and leaves the caller responsible for discarding every page.
  */
@@ -314,7 +314,7 @@ function placeGroup(
 }
 
 /** Only an already overflowing single note can activate a continuation sentinel.
- * Complete source paragraphs express the slices; deterministic replay verifies
+ * Source shaped lines express the slices; deterministic replay verifies
  * their order and exact-once line coverage without synthesizing note labels. */
 function continueNote(
   layout: NativeDocxPaginatedLayoutSuccessV1,
@@ -337,17 +337,18 @@ function continueNote(
   if (footnote && document.body.blocks.some((block) => block.kind !== 'paragraph')) return fail('Footnote continuation requires paragraph-only body content')
   if (footnote && reference.pageOrdinal !== layout.pages.at(-1)!.ordinal) return fail('Footnote continuation requires its reference on the final body page')
   const paragraphs = storyParagraphs(story)
-  if (!paragraphs || paragraphs.length < 2) return fail('Note continuation requires at least two complete paragraphs')
+  if (!paragraphs || paragraphs.length === 0) return fail('Note continuation requires source paragraphs')
   const resolvedByID = new Map(resolved.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
   for (const paragraph of paragraphs) {
     const lines = shapedByParagraph.get(paragraph.id)
     const properties = resolvedByID.get(paragraph.id)?.properties
     if (!lines || !properties || lines.spacing_before_millipoints !== 0 || lines.spacing_after_millipoints !== 0 ||
       properties.keep_next === true || properties.page_break_before === true ||
-      (lines.lines.length > 1 && properties.keep_lines !== true) || paragraph.runs.some((run) => run.page_field !== undefined || run.layout_page_field !== undefined)) {
-      return fail('Continued note paragraphs require zero spacing, no fields or cross-paragraph breaks, and keep_lines for multiline content')
+      paragraph.runs.some((run) => run.page_field !== undefined || run.layout_page_field !== undefined)) {
+      return fail('Continued note paragraphs require zero spacing and no fields or cross-paragraph breaks')
     }
   }
+  if (paragraphs.reduce((count,p)=>count+(shapedByParagraph.get(p.id)?.lines.length??0),0)<2) return fail('A single note line cannot be continued')
   const continuations = document.notes.filter((note) => note.kind === reference.kind && note.note_role === 'continuation-separator')
   const continuation = continuations[0]
   if (continuations.length !== 1 || !continuation || !exactInstructionSentinelProjection(continuation) ||
@@ -384,32 +385,60 @@ function continueNote(
     occupiedBottom = column.y_millipoints
     return undefined
   }
+  // Preserve source line ordinals and cluster/glyph coverage. A boundary is
+  // legal only when it satisfies the source paragraph's keep/widow policy.
+  const entries = paragraphs.flatMap(paragraph => {
+    const shapedParagraph = shapedByParagraph.get(paragraph.id)!
+    return shapedParagraph.lines.map(line => ({paragraph, shapedParagraph, line}))
+  })
+  if (entries.length+budget.lines>DOCX_NOTE_PAGINATION_LIMITS.maxNoteLines) return {scope_id:story.id,code:'resource-limit',message:'Continued note exceeds the line budget'}
+  const blockByID = new Map(story.blocks.map(block=>[block.id,block]))
+  const paragraphStart = new Map<string, number>()
+  const paragraphEnd = new Map<string, number>()
+  entries.forEach((entry,index) => {
+    if (!paragraphStart.has(entry.paragraph.id)) paragraphStart.set(entry.paragraph.id,index)
+    paragraphEnd.set(entry.paragraph.id,index+1)
+  })
   let start = 0
-  while (start < paragraphs.length) {
+  while (start < entries.length) {
     const sentinel = start === 0 ? separator : continuation
     const measuredSeparator = placedStory(sentinel, shapedByParagraph, page, column, 0, 0)
     if ('code' in measuredSeparator) return measuredSeparator
     let height = measuredSeparator.height_millipoints
     let end = start
-    while (end < paragraphs.length) {
-      const candidate = { ...story, blocks: story.blocks.slice(end, end + 1) }
-      const measured = placedStory(candidate, shapedByParagraph, page, column, 0, 1)
-      if ('code' in measured) return measured
-      if (occupiedBottom + height + measured.height_millipoints > column.y_millipoints + column.height_millipoints) break
-      height += measured.height_millipoints
-      end += 1
+    while (end < entries.length && occupiedBottom + height + entries[end]!.line.line_height_millipoints <= column.y_millipoints + column.height_millipoints) {
+      height += entries[end]!.line.line_height_millipoints
+      end++
+    }
+    while (end > start && end < entries.length) {
+      const entry = entries[end-1]!,id=entry.paragraph.id
+      if (entries[end]!.paragraph.id !== id) break
+      const properties = resolvedByID.get(id)!.properties
+      const first = Math.max(start,paragraphStart.get(id)!)
+      if (properties.keep_lines !== true && (!(properties.widow_control ?? true) ||
+        end-first >= 2 && paragraphEnd.get(id)!-end >= 2)) break
+      end--
     }
     if (end === start) {
-      if (footnote && start === 0) return fail('The first footnote paragraph and ordinary separator must fit on the reference page')
-      if (occupiedBottom === column.y_millipoints) return fail('One complete note paragraph plus its separator cannot fit an empty page')
+      if (footnote && start === 0) return fail('The first footnote line group and ordinary separator must fit on the reference page')
+      if (occupiedBottom === column.y_millipoints) return fail('One note line group plus its separator cannot fit an empty page while honoring keep/widow constraints')
       const failure = appendPage()
       if (failure) return failure
       continue
     }
-    const failure = placeGroup(page, column, [{ story: sentinel }, { story: { ...story, blocks: story.blocks.slice(start, end) }, reference }], shapedByParagraph, budget, occupiedBottom, footnote ? 'bottom' : 'flow')
+    const selected = entries.slice(start,end)
+    const ids = new Set(selected.map(entry=>entry.paragraph.id))
+    const sliceShapes = new Map([[sentinel.blocks[0]!.id,shapedByParagraph.get(sentinel.blocks[0]!.id)!]])
+    for (const entry of selected) {
+      const id=entry.paragraph.id
+      if (!sliceShapes.has(id)) sliceShapes.set(id,{...entry.shapedParagraph,lines:[]})
+      sliceShapes.get(id)!.lines.push(entry.line)
+    }
+    const sliceStory = {...story,blocks:[...ids].map(id=>blockByID.get(id)!)}
+    const failure = placeGroup(page, column, [{ story: sentinel }, { story: sliceStory, reference }], sliceShapes, budget, occupiedBottom, footnote ? 'bottom' : 'flow')
     if (failure) return failure
     start = end
-    if (start < paragraphs.length) {
+    if (start < entries.length) {
       const failure = appendPage()
       if (failure) return failure
     }
