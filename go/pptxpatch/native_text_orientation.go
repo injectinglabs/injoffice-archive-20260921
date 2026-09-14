@@ -46,3 +46,7 @@ func parseNativeTextOrientation(node *nativeXMLNode) (nativeTextOrientation, err
 func (orientation nativeTextOrientation) normalizedRotation() int64 {
 	return (orientation.Rotation%21600000 + 21600000) % 21600000
 }
+
+func nativeTextBodyHasOrientation(body *NativeTextBodyLayout) bool {
+	return body != nil && ((body.RotationAngle60000 != nil && *body.RotationAngle60000 != 0) || (body.Upright != nil && *body.Upright))
+}

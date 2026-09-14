@@ -323,6 +323,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	if element.TextBody != nil && element.TextBody.WritingMode != nil && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
 		v.add(p+".textBody.writingMode", "native.verticalPreview", "parsed vertical text must remain read-only")
 	}
+	if nativeTextBodyHasOrientation(element.TextBody) && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
+		v.add(p+".textBody", "native.textOrientationPreview", "parsed body rotation and upright text must remain read-only")
+	}
 	if element.Provenance == NativeProvenanceParsed && slidePart == "" {
 		v.add(p+".provenance", "native.sourceOwnership", "parsed elements require an owning parsed slide with a source anchor")
 	} else if element.Provenance == NativeProvenanceParsed && element.Source != nil && element.Source.PartName != slidePart {
@@ -567,6 +570,9 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	}
 	if body.WritingMode != nil && *body.WritingMode != "vertical-clockwise" {
 		v.add(p+".writingMode", "schema.enum", "must equal vertical-clockwise")
+	}
+	if body.RotationAngle60000 != nil && (*body.RotationAngle60000 < -2147483648 || *body.RotationAngle60000 > 2147483647) {
+		v.add(p+".rotationAngle60000", "schema.bounds", "must be a signed 32-bit DrawingML angle")
 	}
 	if body.HorizontalOverflow != "overflow" && body.HorizontalOverflow != "clip" {
 		v.add(p+".horizontalOverflow", "schema.const", "must equal overflow")

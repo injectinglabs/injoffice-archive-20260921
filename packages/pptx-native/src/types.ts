@@ -114,6 +114,9 @@ export interface NativeTextBodyLayout {
   horizontalOverflow: 'overflow' | 'clip'
   verticalOverflow: 'overflow'
   writingMode?: 'vertical-clockwise'
+  /** Raw signed DrawingML body angle; distinct from the shape transform. */
+  rotationAngle60000?: number
+  upright?: boolean
 }
 
 export interface NativeStroke {
