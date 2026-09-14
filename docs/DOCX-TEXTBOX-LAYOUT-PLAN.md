@@ -8,7 +8,7 @@ regressions, real-DOCX evidence, green CI, and merge before it is delivered.
 
 - [x] Stacking (merged in PR #179): honor front/behind-body placement and unsigned relative height;
   preserve source order for ties; prove overlap pixels and reject forged layers.
-- [ ] Parity-relative margins: resolve authored inside/outside and physical margin
+- [x] Parity-relative margins (merged in PR #182): resolve authored inside/outside and physical margin
   bases and alignments on odd/even pages, with source section geometry.
 - [ ] Anchors after text: locate the source drawing's actual shaped line and
   character position rather than always using the paragraph's first line.

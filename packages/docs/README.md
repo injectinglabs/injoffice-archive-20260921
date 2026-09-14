@@ -1032,7 +1032,7 @@ edges, the SVG clips the outward half of the stroke without shifting geometry.
 
 The original version 1 API continues to accept only its page-offset policy.
 The helper routes additional positions to version 2. Other wrapping policies,
-inline shapes and anchors after text remain
+inline shapes remain
 outside this read-only rectangle preview.
 
 Version 2 also preserves source `behindDoc` and unsigned `relativeHeight` in
@@ -1049,3 +1049,13 @@ Parity uses the paginated physical ordinal, including blank pages, independently
 of displayed PAGE field restarts. Margin coordinates use the source section,
 not the body area reduced for footnotes. See Microsoft's [horizontal placement](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/4fa5d949-3bc9-49b0-aa3c-ad6286ef01bc)
 and [vertical placement](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e8351af1-c736-4e34-8bf1-1a7497b6cd41).
+
+Textboxes anchored after body text use their actual source insertion boundary.
+V2 carries an `anchor_request` only when preceding runs require it; the browser
+strictly joins that request to the projected source and complete body paint.
+Coordinates use shaped advances, including spaces and tabs, logical bidi order,
+and the next line after a hard break. The selected line determines the page and
+column; paragraph-relative vertical positions use that paragraph's first line
+on the selected page. Source documents and drawing restrictions are preserved.
+The bounded V2 copy permits 500,000 nodes for the additional layout attestation;
+ordinary geometry inputs retain their 50,000-node bound.

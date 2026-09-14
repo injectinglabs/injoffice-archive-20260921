@@ -1,3 +1,4 @@
+import {textboxAnchorLine,textboxHasPrecedingRuns} from './nativeTextboxAnchorLineV2.js'
 import {resolveTextboxPosition} from './nativeTextboxPositionV2.js'
 /** Node-only atomic composition of source-qualified page textboxes. */
 import {prepareNativeDocxPagePaintV1,type NativeDocxPagePaintPrepareInputV1,type NativeDocxHostFontsV1} from './nativePagePaintCompilerV1.js'
@@ -22,11 +23,10 @@ export async function renderNativeDocxTextboxPagesPreviewV2(input:NativeDocxPage
  if(!compiled.ok||compiled.value.status!=='painted')throw new TypeError('Textbox page body refused')
  const body=compiled.value
  const textboxes=boxes.map(({item,index,paint})=>{
-  const page=body.pages.find(p=>p.lines.some(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0))
-  if(!page)throw new TypeError('Textbox anchor paragraph has no page')
-  const {x,y}=resolveTextboxPosition(projection.document,item,page,paint)
+  const context=textboxAnchorLine(projection.document,item,body,prepared.page_paint_request),page=context.page
+  const {x,y}=resolveTextboxPosition(projection.document,item,page,paint,context)
   const stacking=item.page_anchor!.policy==='relative-position-no-wrap-v2'?item.page_anchor!.stacking:undefined
   return {...(stacking?{stacking}:{}),textbox_index:index,page_id:page.id,x_millipoints:x,y_millipoints:y,paint}
  })
- return decodeNativeDocxTextboxPagesPreviewV2(source,projection.geometry,{protocol:DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL,version:2,fidelity:'approximate',read_only:true,warning:DOCX_TEXTBOX_PAGES_PREVIEW_WARNING,source_sha256:nativeTextboxGeometryDigestV1(source),source_diagnostics:projection.source_diagnostics,body_paint:body,textboxes},digests)
+ return decodeNativeDocxTextboxPagesPreviewV2(source,projection.geometry,{protocol:DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL,version:2,fidelity:'approximate',read_only:true,warning:DOCX_TEXTBOX_PAGES_PREVIEW_WARNING,source_sha256:nativeTextboxGeometryDigestV1(source),source_diagnostics:projection.source_diagnostics,...(projection.items.some(({item})=>textboxHasPrecedingRuns(projection.document,item))?{anchor_request:prepared.page_paint_request}:{}),body_paint:body,textboxes},digests)
 }
