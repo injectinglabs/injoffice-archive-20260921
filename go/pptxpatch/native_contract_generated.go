@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c"
+const NativePPTXSchemaSHA256 = "9236b308738a589a35d9e53e2cdc784b2dafa4ba99472b6ebae58a511df47f81"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -138,8 +138,16 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"colors", "firstSliceAngle", "profile", "values"},
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
+	"NativeLiteralStackedBar": {
+		Properties: []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
+	},
+	"NativeLiteralStackedLine": {
+		Properties: []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
+		Required:   []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
+	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalArea", "literalBar", "literalBubble", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalArea", "literalBar", "literalBubble", "literalConnected", "literalDoughnut", "literalPie", "literalStackedBar", "literalStackedLine", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {

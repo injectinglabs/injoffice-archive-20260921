@@ -62,3 +62,8 @@ export {SourceAffineBudget} from './sourceAffine.js'
 export type {SourceAffineTransport} from './sourceAffine.js'
 
 export {createNativeWorkbookChartPaths} from './workbookChartPaths.js'
+
+export {createNativeLiteralStackedBarPaths} from './literalStackedBar.js'
+export type {LiteralStackedBarVector} from './literalStackedBar.js'
+export {createNativeLiteralStackedLinePaths} from './literalStackedLine.js'
+export type {LiteralStackedLineVector} from './literalStackedLine.js'

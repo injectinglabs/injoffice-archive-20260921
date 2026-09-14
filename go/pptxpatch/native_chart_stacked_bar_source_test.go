@@ -1,8 +1,10 @@
 package pptxpatch
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,7 +69,7 @@ func TestNativeChartStackedBarXMLOrder(t *testing.T) {
 func TestNativeStackedBrowserFixtures(t *testing.T) {
 	for _, family := range []string{"bar", "line"} {
 		for _, grouping := range []string{"stacked", "percentStacked"} {
-			for _, mode := range []string{"mixed", "zero", "permuted", "reversed", "horizontal"} {
+			for _, mode := range []string{"mixed", "zero", "permuted", "reversed", "horizontal", "labels"} {
 				if family == "line" && mode == "horizontal" {
 					continue
 				}
@@ -113,6 +115,17 @@ func TestNativeStackedBrowserFixtures(t *testing.T) {
 					if mode == "horizontal" {
 						source = strings.NewReplacer(`barDir val="col"`, `barDir val="bar"`, `axPos val="b"`, `axPos val="l"`, `axPos val="l"`, `axPos val="b"`).Replace(source)
 					}
+					if mode == "labels" {
+						source = strings.ReplaceAll(source, `<c:tickLblPos val="none"/>`, `<c:tickLblPos val="low"/>`)
+						source = strings.ReplaceAll(source, `</c:spPr><c:crossAx`, `</c:spPr>`+nativeAxisTextXML(false)+`<c:crossAx`)
+						source = strings.Replace(source, `<c:axPos val="l"/>`, `<c:axPos val="l"/><c:numFmt formatCode="0.0" sourceLinked="0"/>`, 1)
+						unit := "5"
+						if grouping == "percentStacked" {
+							unit = ".5"
+						}
+						source = strings.Replace(source, `</c:valAx>`, `<c:majorUnit val="`+unit+`"/></c:valAx>`, 1)
+						source = strings.Replace(source, `</c:catAx>`, `<c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="0"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/><c:noMultiLvlLbl val="1"/></c:catAx>`, 1)
+					}
 					d, _ := nativeDialectForPresentation(xmlNamePresentation(false))
 					if family == "bar" && extractNativeChartStackedBar([]byte(source), "chart.xml", d) == nil {
 						t.Fatal("bar fixture refused")
@@ -122,6 +135,58 @@ func TestNativeStackedBrowserFixtures(t *testing.T) {
 					}
 					frame := strings.NewReplacer(`y="2000000"`, `y="700000"`, `cx="3000000" cy="2000000"`, `cx="9000000" cy="5000000"`).Replace(nativeChartGraphicFrameXML(false, 3, name, ""))
 					input := nativeChartFixture(t, nativeChartFixtureOptions{omitPreview: true, chartXML: source, frameXML: frame})
+					archive, err := zip.NewReader(bytes.NewReader(input), int64(len(input)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					parts := []nativeExtractZipPart{}
+					for _, entry := range archive.File {
+						r, err := entry.Open()
+						if err != nil {
+							t.Fatal(err)
+						}
+						payload, err := io.ReadAll(r)
+						r.Close()
+						if err != nil {
+							t.Fatal(err)
+						}
+						data := string(payload)
+						if entry.Name == "relocated/slides/slide-a.xml" {
+							for {
+								start := strings.Index(data, "<p:sp>")
+								if start < 0 {
+									break
+								}
+								end := start + strings.Index(data[start:], "</p:sp>") + len("</p:sp>")
+								data = data[:start] + data[end:]
+							}
+						}
+						parts = append(parts, nativeExtractZipPart{name: entry.Name, data: data})
+					}
+					input = writeNativeExtractZip(t, parts)
+					deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+					if err != nil {
+						t.Fatal(err)
+					}
+					element := nativeFixtureChart(t, deck.Slides[0])
+					if family == "bar" && element.Chart.LiteralStackedBar == nil || family == "line" && element.Chart.LiteralStackedLine == nil {
+						t.Fatal("stacked attachment missing")
+					}
+					if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+						t.Fatal("source ownership changed")
+					}
+					encoded, err := MarshalNativePPTXJSON(deck)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err = DecodeNativePPTXJSON(encoded); err != nil {
+						t.Fatal(err)
+					}
+					element.Chart.LiteralBubble = &NativeLiteralBubble{}
+					if len(ValidateNativePPTX(deck)) == 0 {
+						t.Fatal("competing chart profiles accepted")
+					}
+
 					if output := os.Getenv("INJOFFICE_PPTX_STACKED_FIXTURES"); output != "" {
 						if err := os.MkdirAll(output, 0700); err != nil {
 							t.Fatal(err)
