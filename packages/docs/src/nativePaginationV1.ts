@@ -48,6 +48,7 @@ import { layoutNativeDocxTableRowsV1, nativeDocxTableRowGroupSizeV1, qualifyNati
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { planNativeDocxColumnParagraphFlowV1, type NativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
+import {planNativeDocxFootnoteFlowV1, type NativeDocxFootnoteFlowV1} from './nativeFootnoteFlowV1.js'
 import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationV1 } from './nativeFootnoteReservationV1.js'
 import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
@@ -297,6 +298,7 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
+  footnoteFlow?: NativeDocxFootnoteFlowV1
   footnoteReservation?: NativeDocxFootnoteReservationV1
   reservedBottomHeight?: number
   reservationPages?: Map<number, { reference_run_ids: string[]; height_millipoints: number }>
@@ -1646,6 +1648,18 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
     }
     startSection(context, group.section, groupIndex === 0)
     if (context.refused) return
+    if (context.footnoteFlow) {
+      for (const [ordinal, page] of context.footnoteFlow.pages.entries()) {
+        while (!context.refused && context.currentPage!.ordinal < ordinal) startNextFlowColumn(context)
+        if (context.refused) return
+        context.reservedBottomHeight = page.note_height
+        for (const slice of page.body) {
+          placeSlice(context, shaped.get(slice.paragraph_id)!, slice.start, slice.end-slice.start, 0)
+          if (context.refused) return
+        }
+      }
+      continue
+    }
     if (context.footnoteReservation) {
       const reservation = context.footnoteReservation
       context.reservationPages = new Map()
@@ -1803,6 +1817,11 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
   refuseUnsupportedSource(context)
   const groups = sectionGroups(context)
   const indexed = validateAndIndexParagraphs(context, groups)
+  if (!context.refused && !approximateLegacySettings && !context.footnoteReservation && request.document.notes.some(story=>story.kind==='footnote')) {
+    const flow = planNativeDocxFootnoteFlowV1(request)
+    if (flow && 'code' in flow) refuse(context, flow.code, flow.scope_id, flow.message)
+    else context.footnoteFlow = flow
+  }
   if (!context.refused) paginateGroups(context, groups, indexed.resolved, indexed.shaped)
   if (!context.refused) {
     const noteFailure = placeNativeDocxNotesV1({
@@ -1813,7 +1832,7 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
       diagnostics: context.diagnostics,
       sections: context.sections,
       pages: context.pages,
-    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation)
+    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation, context.footnoteFlow ? request : undefined)
     if (noteFailure) refuse(context, noteFailure.code, noteFailure.scope_id, noteFailure.message)
     else if (context.footnoteReservation) {
       const reservation = context.footnoteReservation
