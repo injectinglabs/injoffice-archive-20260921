@@ -1,11 +1,14 @@
 package pptxpatch
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -198,6 +201,118 @@ func TestNativeGraphicFrameBrowserFixtures(t *testing.T) {
 		for ext, data := range map[string][]byte{".pptx": input, "-go.json": encoded} {
 			if err := os.WriteFile(filepath.Join(dir, name+ext), data, 0644); err != nil {
 				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestNativeGraphicFrameChartBrowserFixtures(t *testing.T) {
+	dir := os.Getenv("INJOFFICE_PPTX_GRAPHIC_FRAME_FIXTURE_DIR")
+	if dir == "" {
+		t.Skip("external source/WASM/browser chart proof")
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, workbook := range []bool{false, true} {
+		for _, grouped := range []bool{false, true} {
+			name := "chart-literal"
+			if workbook {
+				name = "chart-workbook"
+			}
+			if grouped {
+				name += "-group"
+			} else {
+				name += "-baseline"
+			}
+			source := nativeLabeledBarXML(false)
+			if workbook {
+				source = strings.Replace(source, nativeBarSeriesXML(false), nativeWorkbookSeriesXML(false, false, false), 1)
+				source = strings.ReplaceAll(source, "Sheet1!", "Data!")
+				source = strings.Replace(source, `</c:chart>`, `<c:plotVisOnly val="0"/><c:dispBlanksAs val="gap"/></c:chart>`, 1)
+				source = strings.Replace(source, `</c:chartSpace>`, `<c:externalData xmlns:r="`+nsOfficeRelsTransitional+`" r:id="workbook"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`, 1)
+			}
+			// Series color differs from supplied-label glyph color, so the browser can
+			// prove both actual data paths and unscaled axis glyphs independently.
+			start, end := strings.Index(source, "<c:ser"), strings.Index(source, "</c:ser>")+len("</c:ser>")
+			source = source[:start] + strings.NewReplacer("123456", "E53935", "ABCDEF", "E53935").Replace(source[start:end]) + source[end:]
+			var input []byte
+			if workbook {
+				input = nativeWorkbookInspectionFixture(t, false, "column", func(parts map[string]string) {
+					parts["relocated/charts/source.xml"] = source
+					parts["relocated/embeddings/Data.xlsx"] = string(nativeStackedWorkbookBytes(t, "mixed"))
+				})
+			} else {
+				input = nativeChartFixture(t, nativeChartFixtureOptions{omitPreview: true, chartXML: source})
+			}
+			frame := strings.NewReplacer(`x="1000000" y="2000000"`, `x="0" y="0"`, `cx="3000000" cy="2000000"`, `cx="6000001" cy="4000001"`).Replace(nativeChartGraphicFrameXML(false, 3, name, ""))
+			frame = strings.Replace(frame, `<p:xfrm>`, `<p:xfrm rot="1800000" flipV="1">`, 1)
+			if grouped {
+				frame = `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="8" name="Nonuniform reflected rotated chart"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm rot="1800000" flipH="1"><a:off x="2000000" y="1000000"/><a:ext cx="7500000" cy="4000000"/><a:chOff x="0" y="0"/><a:chExt cx="6000000" cy="4000000"/></a:xfrm></p:grpSpPr>` + frame + `</p:grpSp>`
+			}
+			archive, err := zip.NewReader(bytes.NewReader(input), int64(len(input)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts := []nativeExtractZipPart{}
+			for _, entry := range archive.File {
+				reader, err := entry.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := io.ReadAll(reader)
+				reader.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				data := string(raw)
+				if entry.Name == "relocated/slides/slide-a.xml" {
+					data = regexp.MustCompile(`(?s)<p:sp>.*?</p:sp>`).ReplaceAllString(data, "")
+					data = regexp.MustCompile(`(?s)<p:graphicFrame.*?</p:graphicFrame>`).ReplaceAllStringFunc(data, func(string) string { return frame })
+				}
+				parts = append(parts, nativeExtractZipPart{name: entry.Name, data: data})
+			}
+			input = writeNativeExtractZip(t, parts)
+			before := append([]byte(nil), input...)
+			deck, err := ExtractNativePPTX(input, nativeAtomicTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var charts []NativeElement
+			var visit func([]NativeElement)
+			visit = func(es []NativeElement) {
+				for _, e := range es {
+					if e.Kind == NativeElementKindChart {
+						charts = append(charts, e)
+					}
+					visit(e.Children)
+				}
+			}
+			visit(deck.Slides[0].Elements)
+			if len(charts) != 1 {
+				t.Fatalf("%s: expected one chart, got %d: %#v", name, len(charts), deck.Slides[0].Compatibility)
+			}
+			chart := charts[0]
+			if chart.GraphicFrameLayout == nil || *chart.GraphicFrameLayout != nativeSourceAnchoredGraphicFrame || chart.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || *chart.Transform.Cx != 6000001 || *chart.Transform.Cy != 4000001 || *chart.Transform.RotationAngle != 1800000 || !bytes.Equal(input, before) {
+				t.Fatal(name, "source frame/profile mutated or absent")
+			}
+			if !workbook && chart.Chart.LiteralBar == nil {
+				t.Fatal(name, "literal source chart unavailable")
+			}
+			if workbook {
+				inspection, err := InspectNativePPTXChartWorkbooks(input)
+				if err != nil || len(inspection.Charts) != 1 || len(inspection.Workbooks) != 1 || len(inspection.Omissions) != 0 {
+					t.Fatalf("%s: workbook closure unavailable: %v %#v", name, err, inspection)
+				}
+			}
+			encoded, err := json.MarshalIndent(deck, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for ext, data := range map[string][]byte{".pptx": input, "-go.json": encoded} {
+				if err := os.WriteFile(filepath.Join(dir, name+ext), data, 0644); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}

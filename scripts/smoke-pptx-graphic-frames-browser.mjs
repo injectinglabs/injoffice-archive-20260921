@@ -12,7 +12,7 @@ const root=resolve(import.meta.dirname,'..');
 const out=process.env.SHOWCASE_OUTPUT?resolve(process.env.SHOWCASE_OUTPUT):mkdtempSync(resolve(tmpdir(),'injoffice-frame-browser-'));
 mkdirSync(out,{recursive:true});
 const fixtures=resolve(out,'fixtures');
-const generated=spawnSync('go',['test','-run','^TestNativeGraphicFrameBrowserFixtures$','-count=1','.'],{cwd:resolve(root,'go/pptxpatch'),env:{...process.env,INJOFFICE_PPTX_GRAPHIC_FRAME_FIXTURE_DIR:fixtures},encoding:'utf8',timeout:90000});
+const generated=spawnSync('go',['test','-run','^TestNativeGraphicFrame.*BrowserFixtures$','-count=1','.'],{cwd:resolve(root,'go/pptxpatch'),env:{...process.env,INJOFFICE_PPTX_GRAPHIC_FRAME_FIXTURE_DIR:fixtures},encoding:'utf8',timeout:90000});
 if(generated.status!==0)throw Error('Source fixture generation failed: '+generated.stdout+'\n'+generated.stderr);
 const {build}=await import(resolve(root,'node_modules/vite/dist/node/index.js'));
 const {launchChromeForCDP,terminateProcess}=await import(resolve(root,'scripts/chrome-cdp-startup.mjs'));
@@ -48,11 +48,75 @@ for(const name of names){
  writeFileSync(resolve(out,name+'-node-wasm.json'),snapshot);
  writeFileSync(resolve(out,name+'-node-preview.json'),JSON.stringify(preview,null,2));
 }
+
+const chartNames=['chart-literal-baseline','chart-literal-group','chart-workbook-baseline','chart-workbook-group'];
+const xlsxWasm=readFileSync(resolve(root,'packages/xlsx-wasm/dist/xlsxnative.wasm'));
+const xlsxGo=new Go();xlsxGo.run((await WebAssembly.instantiate(xlsxWasm,xlsxGo.importObject)).instance);
+function sourceChart(deck,name){
+ const charts=flatten(deck.slides[0]?.elements??[]).filter(e=>e.kind==='chart');
+ if(charts.length!==1)throw Error(name+': expected exactly one chart');
+ const c=charts[0];
+ if(c.graphicFrameLayout!=='source-anchored-v1'||c.provenance!=='parsed'||!c.source||c.compatibility.status!=='preserveOnly'||c.transform.cx!==6000001||c.transform.cy!==4000001||c.transform.rotationAngle!==1800000)throw Error(name+': source chart/profile/raw frame drift');
+ return c;
+}
+// Opaque capability tokens are intentionally engine-instance-specific. Compare
+// all source-bearing fields while requiring each engine to retain its own token.
+function chartMetadata(chart){
+ if(typeof chart.opaqueRef?.token!=='string'||!chart.opaqueRef.token)throw Error('Missing chart capability token');
+ return {...chart,opaqueRef:{...chart.opaqueRef,token:'engine-specific'}};
+}
+function chartRequest(deck,bytes,name){
+ const request={deck,slide_index:0,package_sha256:hash(bytes),font_manifest_path:manifest};
+ if(!name.includes('workbook'))return {...request,source_chart_preview:true};
+ const result=pptxnative.inspectChartWorkbooks(bytes);if(!result.ok)throw Error(result.error);
+ const inspection=JSON.parse(result.value);
+ if(inspection.charts.length!==1||inspection.workbooks.length!==1||inspection.omissions.length)throw Error(name+': workbook source closure missing');
+ const workbooks=inspection.workbooks.map(w=>{
+  const embedded=Buffer.from(w.bytesBase64,'base64');if(hash(embedded)!==w.sha256)throw Error('embedded digest drift');
+  const result=xlsxnative.extract(embedded);if(!result.ok)throw Error(result.error);
+  return {part:w.part,sha256:w.sha256,contract_json:result.value};
+ });
+ return {...request,workbook_chart_preview:true,workbook_chart_data:{inspection_json:result.value,workbooks}};
+}
+function glyphAxes(nodes,parent=[1,0,0,1,0,0]){
+ const multiply=(a,b)=>[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3],a[0]*b[4]+a[2]*b[5]+a[4],a[1]*b[4]+a[3]*b[5]+a[5]];
+ return nodes.flatMap(n=>n.kind==='group'?glyphAxes(n.children,multiply(parent,n.transform)):n.kind==='path'&&n.fill==='123456'?[parent.slice(0,4)]:[]);
+}
+const chartPreviews=new Map();
+for(const name of chartNames){
+ const bytes=readFileSync(resolve(fixtures,name+'.pptx')),before=hash(bytes),r=pptxnative.extract(bytes);if(!r.ok)throw Error(r.error);
+ const deck=JSON.parse(r.value),chart=sourceChart(deck,name),retained=sourceChart(JSON.parse(readFileSync(resolve(fixtures,name+'-go.json'))),name+' Go');
+ if(!isDeepStrictEqual(chartMetadata(chart.chart),chartMetadata(retained.chart))||!isDeepStrictEqual(chart.transform,retained.transform)){writeFileSync(resolve(out,name+'-metadata-difference.json'),JSON.stringify({actual:chart,expected:retained},null,2));throw Error(name+': chart source metadata differs '+out);}
+ const snapshot=JSON.stringify(deck),request=chartRequest(deck,bytes,name),requestBefore=JSON.stringify(request),preview=await compilePptxPreview(request);
+ if(JSON.stringify(deck)!==snapshot||JSON.stringify(request)!==requestBefore||hash(bytes)!==before)throw Error(name+': chart source/engine request mutated');
+ const nodes=flatten(preview.nodes),series=nodes.filter(n=>n.kind==='path'&&n.fill==='E53935'),axes=glyphAxes(preview.nodes);
+ if(series.length!==2||axes.length<4||nodes.some(n=>n.kind==='placeholder')||preview.diagnostics.some(d=>/unavailable|refused/i.test(d)))throw Error(name+': expected real series and supplied-label paths: '+JSON.stringify(preview.diagnostics));
+ if(!preview.diagnostics.some(d=>d.startsWith('graphicFrame.sourceAnchoredPreview')))throw Error(name+': source frame profile not compiled');
+ const expectedWidth=name.endsWith('-group')?7500001:6000001;
+ const frameNode=nodes.find(n=>n.kind==='group'&&n.clip?.cx===expectedWidth&&n.clip?.cy===4000001);
+ if(!frameNode||!isDeepStrictEqual(frameNode.transform.slice(0,4),[1,0,0,1]))throw Error(name+': projected physical frame/axis orientation missing');
+ const plot=frameNode.children.find(n=>n.kind==='group'&&n.clip)?.clip;
+ if(!plot)throw Error(name+': actual plot clip missing');
+ const expectedValues=name.includes('workbook')?[4,4]:[0.5,12.5];
+ for(let i=0;i<series.length;i++){
+  const coordinates=series[i].d.match(/-?\d+(?:\.\d+)?/g).map(Number),ys=coordinates.filter((_,at)=>at%2===1);
+  if(Math.abs(Math.max(...ys)-Math.min(...ys)-plot.cy*expectedValues[i]/30)>1)throw Error(name+': source values do not control actual bar heights (stale cache must not win)');
+ }
+
+ if(name.endsWith('-group')){
+  if(!preview.diagnostics.some(d=>d.includes('nearest-EMU physical dimensions')))throw Error(name+': physical projection evidence absent');
+  const baseline=chartPreviews.get(name.replace('-group','-baseline'));
+  if(axes.some(a=>!isDeepStrictEqual(a,glyphAxes(baseline.nodes)[0])))throw Error(name+': source ancestor stretched/reflected glyph axes');
+ }
+ chartPreviews.set(name,preview);
+ preflight.push({name,sourceSHA256:before,seriesPaths:series.length,axisGlyphPaths:axes.length,glyphAxes:axes[0],projectedWidth:expectedWidth,sourceFrame:chart.transform});
+ writeFileSync(resolve(out,name+'-node-preview.json'),JSON.stringify(preview,null,2));
+}
 const negative=pptxnative.extract(readFileSync(resolve(fixtures,'table-unqualified-x-clip.pptx')));
 if(!negative.ok)throw Error('Negative fixture extraction failed before refusal inventory');
 if(flatten(JSON.parse(negative.value).slides[0].elements).some(e=>e.kind==='table'))throw Error('Unsupported x-clip fixture unexpectedly admitted');
-writeFileSync(resolve(out,'preflight.json'),JSON.stringify({root,wasmSHA256:hash(candidateWasm),fontHash,preflight,negative:'unsupported source table x-clip remains unadmitted',browser:'not run'},null,2));
-console.log('Preflight PASS: four source-profiled tables, actual glyphs, immutable source, retained negative refusal. Evidence: '+out);
+writeFileSync(resolve(out,'preflight.json'),JSON.stringify({root,wasmSHA256:hash(candidateWasm),xlsxWasmSHA256:hash(xlsxWasm),fontHash,preflight,negative:'unsupported source table x-clip remains unadmitted',browser:'not run'},null,2));
+console.log('Preflight PASS: four source tables and four literal/workbook charts, actual glyphs, immutable source, retained negative refusal. Evidence: '+out);
 if(process.argv.includes('--preflight-only'))process.exit(0);
 const entry=resolve(root,'virtual-affine-browser.js');
 const built=await build({configFile:false,root,logLevel:'warn',plugins:[{name:'affine-proof',resolveId:id=>id===entry?entry:undefined,load:id=>id===entry?"import {createElement} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';import {NativePptxVector} from './apps/playground/src/components/NativePptxSlides.tsx';import {PptxFilePreviewVector} from './apps/playground/src/components/PptxFilePreview.tsx';import {compileFilePreviewGeometry} from './apps/playground/src/filePreviewGeometry.ts';const root=createRoot(document.body);globalThis.renderLegacy=async deck=>{const geometry=await compileFilePreviewGeometry(deck,0);flushSync(()=>root.render(createElement(PptxFilePreviewVector,{deck,geometry})));};globalThis.renderPreview=preview=>flushSync(()=>root.render(createElement(NativePptxVector,{preview})));":undefined}],define:{'process.env.NODE_ENV':'"production"'},build:{write:false,minify:false,lib:{entry,name:'AffineProof',formats:['iife']}}});
@@ -89,7 +153,29 @@ try{
    results.push({name,surface,sourceSHA256:batch.sha256,tableTransform:table.transform,box,normalized,pixels});
   }
  }
- writeFileSync(resolve(out,'proof.json'),JSON.stringify({wasmSHA256:createHash('sha256').update(wasm).digest('hex'),wasmBytes:wasm.length,fontHash,results,qualification:'Actual source Go/WASM + public compiler/font worker + existing browser vector component. Source-anchored intrinsic table tracks and unscaled glyphs; active slide clips and retained vertical overflow; source cell-x clipping remains unqualified on native and explicitly approximate legacy surfaces. No Office parity claim.'},null,2));console.log('Graphic-frame actual WASM + worker + native/legacy browser PASS');
+
+ for(const name of chartNames){
+  const batch=await extract(name),bytes=readFileSync(resolve(fixtures,name+'.pptx')),chart=sourceChart(batch.deck,name+' browser');
+  const retained=sourceChart(JSON.parse(readFileSync(resolve(fixtures,name+'-go.json'))),name+' Go');
+  if(!isDeepStrictEqual(chartMetadata(chart.chart),chartMetadata(retained.chart))||!isDeepStrictEqual(chart.transform,retained.transform))throw Error('Browser chart source drift');
+  const snapshot=JSON.stringify(batch.deck),preview=await compilePptxPreview(chartRequest(batch.deck,bytes,name));
+  if(JSON.stringify(batch.deck)!==snapshot)throw Error('Browser extracted chart mutated');
+  await evaluate(`renderPreview(${JSON.stringify(preview)})`);
+  await evaluate(`document.querySelector('svg').scrollIntoView({block:'center',inline:'center',behavior:'instant'})`);
+  const dom=await evaluate(`(()=>{const svg=document.querySelector('svg'),r=svg.getBoundingClientRect();if(r.width<2||r.height<2||r.left<0||r.top<0||r.right>innerWidth||r.bottom>innerHeight)throw Error('Chart not fully visible');return {seriesPaths:svg.querySelectorAll('path[fill="#E53935"]').length,axisPaths:svg.querySelectorAll('path[fill="#123456"]').length,clip:{x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}}})()`);
+  if(dom.seriesPaths!==2||dom.axisPaths<4)throw Error('Missing actual browser chart or label paths');
+  const expectedWidth=name.endsWith('-group')?7500001:6000001;
+  const projected=await evaluate(`Array.from(document.querySelectorAll('svg clipPath rect')).some(r=>Math.abs(Number(r.getAttribute('width'))*12700-${expectedWidth})<0.000001&&Math.abs(Number(r.getAttribute('height'))*12700-4000001)<0.000001)`);
+  if(!projected)throw Error('Browser projected frame clip differs from physical layout');
+
+  const shot=await cdp.send('Page.captureScreenshot',{format:'png',clip:dom.clip,captureBeyondViewport:true});
+  writeFileSync(resolve(out,name+'-native.png'),Buffer.from(shot.data,'base64'));
+  const painted=await evaluate(`(async()=>{const image=new Image();image.src='data:image/png;base64,${shot.data}';await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);const d=ctx.getImageData(0,0,c.width,c.height).data;let series=0,labels=0;for(let i=0;i<d.length;i+=4){if(d[i]>180&&d[i+1]<110&&d[i+2]<110)series++;if(d[i]<80&&d[i+1]>d[i]+5&&d[i+2]>d[i+1]+5&&d[i+2]<160)labels++;}return {series,labels}})()`);
+  if(painted.series<10||painted.labels<10)throw Error(name+': chart screenshot lacks visible series/axis glyph ink '+JSON.stringify(painted));
+  if(hash(readFileSync(resolve(fixtures,name+'.pptx')))!==batch.sha256)throw Error('Chart source bytes changed');
+  results.push({name,surface:'native',sourceSHA256:batch.sha256,sourceFrame:chart.transform,projectedWidth:expectedWidth,dom,painted,glyphAxes:glyphAxes(preview.nodes)[0]});
+ }
+ writeFileSync(resolve(out,'proof.json'),JSON.stringify({wasmSHA256:createHash('sha256').update(wasm).digest('hex'),wasmBytes:wasm.length,xlsxWasmSHA256:hash(xlsxWasm),fontHash,results,qualification:'Actual source Go/WASM + public compiler/font worker + existing browser vector component. Source-anchored intrinsic table tracks and unscaled glyphs; literal and embedded-workbook chart source values with supplied labels, projected physical frame clips and unchanged glyph axes; active slide clips and retained vertical overflow; source cell-x clipping remains unqualified on native and explicitly approximate legacy surfaces. No Office parity claim.'},null,2));console.log('Graphic-frame actual WASM + worker + native/legacy browser PASS');
 }catch(error){
  writeFileSync(resolve(out,'failure.txt'),error instanceof Error?error.stack??error.message:String(error));
  if(cdp){try{const shot=await cdp.send('Page.captureScreenshot',{format:'png'});writeFileSync(resolve(out,'failure.png'),Buffer.from(shot.data,'base64'));}catch{}}
