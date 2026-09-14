@@ -437,6 +437,124 @@
         "colors": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#[0-9A-F]{6}$" } }
       }
     },
+    "literalBubbleSeries": {
+      "x-binding-name": "NativeLiteralBubbleSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "colors",
+        "xValues",
+        "sizes"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          }
+        },
+        "xValues": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "literalBubble": {
+      "x-binding-name": "NativeLiteralBubble",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "series",
+        "xAxis",
+        "yAxis",
+        "bubbleScale",
+        "sizeRepresents"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-bubble-v1"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalBubbleSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "bubbleScale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "sizeRepresents": {
+          "type": "string",
+          "enum": [
+            "area",
+            "w"
+          ]
+        }
+      }
+    },
     "literalAreaSeries": {
       "x-binding-name": "NativeLiteralAreaSeries",
       "type": "object",
@@ -1045,6 +1163,7 @@
       "additionalProperties": false,
       "required": ["chartPart", "relationshipId", "opaqueRef"],
       "properties": {
+        "literalBubble": { "$ref": "#/$defs/literalBubble" },
         "chartPart": { "$ref": "#/$defs/partName" },
         "relationshipId": { "$ref": "#/$defs/nativeId" },
         "opaqueRef": { "$ref": "#/$defs/passthroughRef" },

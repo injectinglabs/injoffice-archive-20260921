@@ -11,6 +11,7 @@ type nativeChartWorkbookSeries struct {
 	CategoryReference *nativeChartReference
 	XReference        *nativeChartReference
 	ValueReference    *nativeChartReference
+	SizeReference     *nativeChartReference
 	Colors            []string
 	Color             string
 	Width             int64
