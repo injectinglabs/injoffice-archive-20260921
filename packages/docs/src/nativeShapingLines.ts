@@ -199,6 +199,8 @@ export interface NativeDocxShapedLineV1 {
   inline_offset_millipoints: number
   /** Source-derived square-wrap left edge, independently checked at page paint. */
   exclusion_start_millipoints?: number
+  /** Source-derived vertical exclusion end, relative to the body box. */
+  exclusion_end_millipoints?: number
   advance_inline_millipoints: number
   ascent_millipoints: number
   descent_millipoints: number
@@ -1789,13 +1791,18 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
   }
 }
 
-export type NativeDocxLineIntervalPlanV1 = Readonly<Record<string, readonly { start_millipoints: number; width_millipoints: number }[]>>
+export type NativeDocxLineIntervalPlanV1 = Readonly<Record<string, readonly { start_millipoints: number; width_millipoints: number; end_millipoints?: number }[]>>
 
 function offeredLineInterval(context: NativeShapingContext, paragraphID: string, ordinal: number, start: number, width: number): { start: number; width: number } {
   const interval = context.lineIntervals?.[paragraphID]?.[ordinal]
   if (!interval) return { start, width }
   const left = Math.max(start, interval.start_millipoints)
   return { start: left, width: Math.min(start + width, interval.start_millipoints + interval.width_millipoints) - left }
+}
+
+function applyLineExclusionEnd(context: NativeShapingContext, paragraphID: string, ordinal: number, line: NativeDocxShapedLineV1): void {
+  const end = context.lineIntervals?.[paragraphID]?.[ordinal]?.end_millipoints
+  if (end !== undefined) line.exclusion_end_millipoints = end
 }
 
 function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atoms: FragmentAtom[], lines: NativeDocxShapedLineV1[], baseWidth: number, start: number, end: number, firstDelta: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreakRunID?: string, firstLineStart?: number): void {
@@ -1815,6 +1822,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
       return
     }
     const line = materializeLine(context, paragraphID, lines.length, [], Math.max(0, width), startOffset, alignment, direction, paragraphMarkMetrics, hardBreakRunID)
+    if (line) applyLineExclusionEnd(context, paragraphID, lines.length, line)
     if (line && startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
     if (line) lines.push(line)
     return
@@ -1837,6 +1845,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
     const lineAtoms = atoms.slice(offset, lineEnd)
     const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreakRunID : undefined, lineEnd < atoms.length)
     if (!line) return
+    applyLineExclusionEnd(context, paragraphID, lines.length, line)
     if (startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
     if (line.advance_inline_millipoints > width) addDiagnostic(context, { code: 'cluster-overflow', severity: 'deferred', scope_id: paragraphID, source_id: lineAtoms[0]?.sourceID, message: 'One cluster exceeds the offered width and remains intact on an overfull line' })
     lines.push(line)

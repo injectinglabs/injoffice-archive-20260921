@@ -1164,10 +1164,14 @@ function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParag
   const placed: NativeDocxPlacedLineV1[] = []
   for (let offset = 0; offset < count; offset += 1) {
     const line = paragraph.lines[start + offset]!
+    if (line.exclusion_end_millipoints !== undefined && lineY < line.exclusion_end_millipoints) {
+      lineY = line.exclusion_end_millipoints
+    }
     if (!lineGeometryValid(context, paragraph, line)) return
     const x = checkedSum(column.x_millipoints, line.inline_offset_millipoints)
     const y = checkedSum(column.y_millipoints, lineY)
-    if (x === undefined || y === undefined) {
+    const bottom = checkedSum(lineY, line.line_height_millipoints)
+    if (x === undefined || y === undefined || bottom === undefined || bottom > column.height_millipoints - (context.reservedBottomHeight ?? 0)) {
       refuse(context, 'resource-limit', line.id, 'Line placement coordinate exceeds the bounded integer range')
       return
     }
@@ -1191,7 +1195,8 @@ function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParag
     }
     lineY = nextY
   }
-  const height = lineY - topRelative
+  const actualTopRelative = placed.length > 0 ? placed[0]!.y_millipoints - column.y_millipoints : topRelative
+  const height = lineY - actualTopRelative
   const sliceOrdinal = context.sliceCountForParagraph?.get(paragraph.paragraph_id) ?? 0
   context.sliceCountForParagraph?.set(paragraph.paragraph_id, sliceOrdinal + 1)
   const previousLocation = context.lastSliceLocation.get(paragraph.paragraph_id)
@@ -1208,7 +1213,7 @@ function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParag
     first_line_ordinal: start,
     last_line_ordinal: start + count - 1,
     line_ids: placed.map((entry) => entry.line_id),
-    top_millipoints: checkedSum(column.y_millipoints, topRelative)!,
+    top_millipoints: checkedSum(column.y_millipoints, actualTopRelative)!,
     height_millipoints: height,
     space_before_millipoints: spaceBefore,
     continued_from_previous_page: hasContinuation && previousLocation?.pageOrdinal !== page.ordinal,
@@ -1237,16 +1242,31 @@ function sumLineHeights(lines: readonly NativeDocxShapedLineV1[], start = 0, end
   return result
 }
 
-function maxLinesThatFit(lines: readonly NativeDocxShapedLineV1[], start: number, available: number): number {
+function maxLinesThatFit(lines: readonly NativeDocxShapedLineV1[], start: number, available: number, initialY = 0): number {
   let height = 0
+  let lineY = initialY
   let count = 0
   for (let index = start; index < lines.length; index += 1) {
-    const next = checkedSum(height, lines[index]!.line_height_millipoints)
-    if (next === undefined || next > available) break
-    height = next
+    const line = lines[index]!
+    const effectiveY = Math.max(lineY, line.exclusion_end_millipoints ?? lineY)
+    const next = checkedSum(effectiveY, line.line_height_millipoints)
+    const consumed = next === undefined ? undefined : next - initialY
+    if (next === undefined || consumed === undefined || consumed > available) break
+    lineY = next
+    height = consumed
     count += 1
   }
   return count
+}
+
+function flowHeight(lines: readonly NativeDocxShapedLineV1[], startY: number): number | undefined {
+  let lineY = startY
+  for (const line of lines) {
+    lineY = Math.max(lineY, line.exclusion_end_millipoints ?? lineY)
+    lineY = checkedSum(lineY, line.line_height_millipoints) ?? NaN
+    if (!Number.isSafeInteger(lineY)) return undefined
+  }
+  return lineY - startY
 }
 
 function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShapedParagraphV1, resolved: NativeDocxResolvedParagraphV1): void {
@@ -1261,8 +1281,9 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   const initialGap = paragraphGap(context, paragraph, false)
   const keepLines = resolved.properties.keep_lines === true
   if (keepLines) {
-    const required = checkedSum(initialGap, totalHeight)
-    if (required === undefined || totalHeight > (currentColumn(context)?.height_millipoints ?? 0)) {
+    const requiredLines = flowHeight(paragraph.lines, context.cursorY + initialGap)
+    const required = requiredLines === undefined ? undefined : checkedSum(initialGap, requiredLines)
+    if (required === undefined || requiredLines === undefined || requiredLines > (currentColumn(context)?.height_millipoints ?? 0)) {
       refuse(context, 'keep-lines-unsatisfiable', paragraph.paragraph_id, 'keep_lines paragraph cannot fit in one section column')
       return
     }
@@ -1283,7 +1304,7 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
     const continuation = start > 0
     const gap = paragraphGap(context, paragraph, continuation)
     const available = remainingHeight(context) - gap
-    let fit = maxLinesThatFit(paragraph.lines, start, available)
+    let fit = maxLinesThatFit(paragraph.lines, start, available, context.cursorY + gap)
     if (fit === 0) {
       if (columnHasContent(context)) {
         startNextFlowColumn(context)

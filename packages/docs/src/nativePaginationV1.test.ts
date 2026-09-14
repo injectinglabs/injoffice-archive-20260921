@@ -723,6 +723,14 @@ describe('native DOCX pagination v1', () => {
     expect(value.pages[1]!.paragraph_slices[0]).toEqual(expect.objectContaining({ continued_from_previous_page: true, continues_on_next_page: false }))
   })
 
+  it('accounts for vertical square-wrap exclusions while selecting a page slice', () => {
+    const request = fixture({ lineCounts: [3, 1], bodyHeight: 30_000, properties: [{}, { widow_control: false }] })
+    request.shaped_lines.paragraphs[1]!.lines[0]!.exclusion_start_millipoints = 0
+    request.shaped_lines.paragraphs[1]!.lines[0]!.exclusion_end_millipoints = 15_000
+    const output = paginated(request)
+    expect(output.pages.map((page) => page.lines.map((line) => line.y_millipoints))).toEqual([[5_000, 15_000, 25_000], [20_000]])
+  })
+
   it('honors page_break_before and keep_lines', () => {
     const pageBreak = paginated(fixture({ lineCounts: [1, 1], properties: [{}, { page_break_before: true }] }))
     expect(pageBreak.pages.map((page) => page.lines.map((line) => line.paragraph_id))).toEqual([['paragraph:1'], ['paragraph:2']])
