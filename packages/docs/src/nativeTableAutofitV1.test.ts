@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { NativeDocxTableV1 } from './nativeContract.js'
+import type { NativeDocxEditPolicyV1, NativeDocxTableV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { resolveNativeDocxTableAutofitV1 } from './nativeTableAutofitV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 const anchor = (path: string) => ({ part_name: 'word/document.xml', path, start_byte: 1, end_byte: 2, xml_sha256: HASH })
-const policy = { mode: 'read-only' as const, allowed_operations: [] as const, refusal: { code: 'NATIVE_READ_ONLY', message: 'Source remains authoritative.', preservation: 'refuse-mutation' as const } }
+const policy: NativeDocxEditPolicyV1 = { mode: 'read-only', allowed_operations: [], refusal: { code: 'NATIVE_READ_ONLY', message: 'Source remains authoritative.', preservation: 'refuse-mutation' } }
 
 function shapedParagraph(id: string, advance = 0): NativeDocxShapedLinesV1['paragraphs'][number] {
   return {
