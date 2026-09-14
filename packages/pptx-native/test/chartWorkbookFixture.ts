@@ -1,5 +1,5 @@
 import {readFileSync} from 'node:fs'
-import type {NativePptxDeck} from '../src/types.js'
+import type {NativePptxDeck} from '@injoffice/pptx-native'
 import {parseChartWorkbookRange} from '../src/chartWorkbookRange.js'
 export const sha='a'.repeat(64),workbookSHA='039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
 export function fixture(){

@@ -1,3 +1,4 @@
+import {workbookChartsForPreview} from './workbookCharts.js'
 import {chartGlyphExtents} from './chartGlyphExtents.js'
 import {readFileSync,statSync} from 'node:fs'
 import {isAbsolute} from 'node:path'
@@ -52,6 +53,9 @@ function fontProviders(path:string,allowSubstitution=false){
 
 export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const request=object(input)
+ if(request.workbook_chart_preview!==undefined&&typeof request.workbook_chart_preview!=='boolean')throw new Error('Workbook chart preview requires a boolean opt-in')
+ if(request.workbook_chart_preview===true&&request.source_chart_preview===true)throw new Error('Chart preview modes are mutually exclusive')
+ if((request.workbook_chart_preview===true)!==(request.workbook_chart_data!==undefined))throw new Error('Workbook chart data requires its exact opt-in')
  if(request.source_chart_preview!==undefined&&typeof request.source_chart_preview!=='boolean')throw new Error('Source chart preview requires a boolean opt-in')
  if(request.source_frame_autofit_preview!==undefined&&typeof request.source_frame_autofit_preview!=='boolean')throw new Error('Autofit preview requires a boolean opt-in')
  if(request.inherited_text_preview!==undefined&&typeof request.inherited_text_preview!=='boolean')throw new Error('Inherited text preview requires a boolean opt-in')
@@ -60,6 +64,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  assertNativePptx(request.deck)
  const deck=request.deck as NativePptxDeck
  if(deck.origin!=='parsed'||request.slide_index as number<0||request.slide_index as number>=deck.slides.length)throw new Error('Preview requires a parsed source slide')
+ const workbookResolution=request.workbook_chart_preview===true?await workbookChartsForPreview(request.workbook_chart_data,deck,request.package_sha256):undefined
  const fonts=fontProviders(request.font_manifest_path,request.font_substitution_preview===true)
  const checkParagraphs=(paragraphs:readonly NativeParagraph[])=>{for(const paragraph of paragraphs)for(const run of paragraph.runs){if(![...fonts.resources.values()].some(r=>r.face.family===run.fontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator font unavailable: ${run.fontFamily??'unresolved family'} / ${run.bold?'bold':'regular'} / ${run.italic?'italic':'normal'}`)}}
  const checkMarkerFonts=(paragraphs:readonly NativeParagraph[])=>{for(const p of paragraphs){if(!p.bulletFontFamily)continue;const run=p.runs[0];if(!run||![...fonts.resources.values()].some(r=>r.face.family===p.bulletFontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator bullet font unavailable: ${p.bulletFontFamily}`)}}
@@ -74,7 +79,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const inheritedTextCount=countInherited(deck.slides[request.slide_index as number]!.elements)
  if(inheritedTextCount>0&&request.inherited_text_preview!==true)throw new Error('Inherited text requires explicit preview opt-in')
  if(sourceFrameAutoFitCount>0&&request.source_frame_autofit_preview!==true)throw new Error('Source-frame autofit requires explicit preview opt-in')
- const tree=await compileNativePptxSlide(deck,request.slide_index as number,{literalBarPreview:request.source_chart_preview===true,literalConnectedPreview:request.source_chart_preview===true,chartAxisLabelsPreview:request.source_chart_preview===true,inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{glyphExtents:chartGlyphExtents(fonts.resources,fonts.outlines),manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
+ const tree=await compileNativePptxSlide(deck,request.slide_index as number,{workbookChartsPreview:workbookResolution?.charts,literalBarPreview:request.source_chart_preview===true,literalConnectedPreview:request.source_chart_preview===true,chartAxisLabelsPreview:request.source_chart_preview===true||request.workbook_chart_preview===true,inheritedTextPreview:request.inherited_text_preview===true,sourceFrameAutoFitPreview:request.source_frame_autofit_preview===true,lineLayoutPolicy:'max-run-natural-v1',maxGlyphs:20000,maxNodes:20000,textLayout:{glyphExtents:chartGlyphExtents(fonts.resources,fonts.outlines),manifest:fonts.manifest,resolver:fonts.resolver,shaper:createHarfBuzzTextShaperV1({sourceRevision:'pptx-preview-v1'}),defaults:{fontFamilies:[],fontSizeHundredthPt:1200,script:'Latn',language:'en-US',direction:'ltr'}}})
  const recording=createRecordingPaintSurface();paintSlideRenderTree(tree,recording)
  const substitutions:NonNullable<PptxPreview['font_substitutions']>=[]
  const root:Extract<PreviewNode,{kind:'group'}>={kind:'group',transform:[1,0,0,1,0,0],children:[]}
@@ -144,6 +149,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  const result:PptxPreview={version:1,package_sha256:request.package_sha256,slide_index:request.slide_index as number,slide_count:deck.slides.length,width:tree.size.cx,height:tree.size.cy,background:tree.background.color,policy:'max-run-natural-v1',nodes:root.children,diagnostics,font_digests:[...fonts.resources.values()].map(r=>r.face.contentDigest),resources:[]}
  result.resources=[...resources.values()].sort((a,b)=>a.part_name.toLowerCase()<b.part_name.toLowerCase()?-1:1)
  if(request.source_chart_preview===true){result.source_chart_preview=true;result.chart_axis_layout_policy='supplied-outline-margins-v1'}
+ if(request.workbook_chart_preview===true){result.workbook_chart_preview=true;result.chart_axis_layout_policy='supplied-outline-margins-v1';for(const refusal of workbookResolution!.refusals)result.diagnostics.push(`Workbook chart ${refusal.objectId}: ${refusal.reason}`.slice(0,2048))}
  if(sourceFrameAutoFitCount>0)result.source_frame_autofit_count=sourceFrameAutoFitCount
  if(inheritedTextCount>0){result.inherited_text_preview_count=inheritedTextCount;result.inherited_text_policy='source-latin-inheritance-approximate-v1'}
  if(substitutions.length){result.font_substitutions=substitutions;result.font_substitution_policy=EXPLICIT_FONT_POLICY_V1;result.font_substitution_policy_sha256=fonts.policyDigest}

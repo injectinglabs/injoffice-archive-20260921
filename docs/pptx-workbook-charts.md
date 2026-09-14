@@ -23,8 +23,8 @@ client validates source closure against a separately extracted deck from its
 private source snapshot, checks resource hashes and canonical base64, rejects
 duplicate JSON members and unsafe integers, and returns frozen admitted records.
 
-Limits per inspection are64 chart/omission records,8 unique workbook resources,
-8MiB per workbook,16MiB aggregate workbook bytes and32MiB serialized response.
+Limits per inspection are 64 chart/omission records, 8 unique workbook resources,
+8 MiB per workbook, 16 MiB aggregate workbook bytes and 32 MiB serialized response.
 The caller's existing PPTX package limit still applies. Unknown fields and
 unreported or duplicate chart/resource identities refuse.
 
@@ -53,21 +53,54 @@ The first source profile requires explicit `plotVisOnly=false`. XLSX row/column
 visibility values are retained as dimension-record metadata, without claiming
 their hidden attributes were explicitly written and without applying a guessed
 filter. `dispBlanksAs` is retained; missing cells still refuse rather than being
-silently interpreted as gaps, zeros or spans. Resolution caps64 references,
-256 values per reference,16,384 total values,2million source records,
-32,768 category UTF-16 units and4,096 returned source diagnostics.
+silently interpreted as gaps, zeros or spans. Resolution caps 64 references,
+256 values per reference, 16,384 total values, 2 million source records,
+32,768 category UTF-16 units and 4,096 returned source diagnostics.
 
 Current diagnostic qualification is deliberately conservative. Referenced
 opaque cells/formula ranges and unknown workbook/worksheet/visibility source
 features refuse; harmless style/protection/decoration diagnostics remain visible
-as source provenance. Generic XLSX diagnostics currently combine ordinary
-metadata with unqualified semantics. Ordinary workbook admission is pending an
-upstream authority classification; production code never strips source metadata
-to obtain admission.
+as source provenance. XLSX now emits distinct `WORKBOOK_VIEW_METADATA` and
+`WORKSHEET_DIMENSION_METADATA` records for closed qualified view/used-range
+subtrees. These records remain preserved; adjacent generic unknown records
+remain separate and still refuse. Qualification accepts only known, typed,
+unqualified attributes, native namespaces and XML whitespace. Extension/MC/
+foreign content is not promoted. Ordinary workbook metadata is never stripped.
 
-Native resolved chart rendering, server composition and ordinary source
-qualification are the remaining integration work in this milestone. Formula
-recalculation, defined names/noncontiguous ranges, visibility filtering, blank
-semantics, inherited styles, automatic axes, additional chart families and full
-chart typography remain separate required work. Inspection alone does not
-complete native chart support.
+`resolveNativePptxWorkbookCharts(inspection, extractor)` extracts each unique
+resource once and returns separately admitted charts and source-scoped refusals.
+Its aggregate budget is 16,384 referenced points and 2 million scanned records.
+The public `createResolvedWorkbookChart` factory accepts only admitted inspection
+and value records; plain JSON copies cannot bypass either decoder. Workbook data
+uses separate `workbook-bar-v1`, `workbook-line-v1` and `workbook-scatter-v1`
+profiles. Original literal records and their source guards are unchanged.
+
+Pass the admitted records as `workbookChartsPreview` to
+`compileNativePptxSlide`; omission retains opaque image/placeholder fallback.
+Compilation binds package revision and the exact slide, frame and chart source
+fingerprints again. It uses shared exact decimal geometry, source paint, integer
+endpoint rounding and plot stroke clipping. Axis labels additionally require
+`chartAxisLabelsPreview` and exact supplied fonts under the existing bounded
+Latin/Common/Inherited label policy. Plot margins and placement remain disclosed
+host layout, not PowerPoint layout equivalence.
+
+The playground helper mode `charts=source-workbook` is separately selected from
+`charts=source-literal`. Go runs both existing extraction engines, then the paint
+worker validates their JSON and source bindings through the same public adapters.
+No pre-resolved geometry crosses that trust boundary. The aggregate serialized
+UTF-8 workbook payload is capped at 8 MiB inside the existing 16 MiB worker
+request/response limits. The strict `workbook_chart_preview` response flag must
+match the request. Operator font configuration and upload consent are unchanged.
+
+The metadata classification also exposes an existing cell-writer behavior: adding
+its exact recalculation `calcPr` XML can introduce a previously deduplicated generic
+workbook record. Only cell transactions whose produced workbook XML is byte-for-
+byte the existing `workbookWithFullRecalculation` result may add that one derived
+record. All old inventory records and the default strict comparator remain intact;
+`calcPr` has not been classified as chart-neutral.
+
+Formula recalculation, defined names/noncontiguous ranges, visibility filtering,
+blank semantics, inherited styles, automatic axes, additional chart families and
+full chart typography remain required follow-up work. This milestone connects
+qualified saved workbook values to native vectors; it does not complete all native
+chart support.
