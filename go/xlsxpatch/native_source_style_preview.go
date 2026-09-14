@@ -145,6 +145,16 @@ func PreviewNativeSourceStylesV1(data []byte) (*NativeSourceStylePreviewV1, erro
 	if len(registry.cellXfs) > 128 || len(registry.styleXfs) > 128 || len(registry.fonts) > 128 || len(registry.fills) > 128 || len(registry.borders) > 128 {
 		return fail("style tables exceed 128 records")
 	}
+	if registry.index.numFmts != nil {
+		if len(registry.index.numFmts.entries) > 128 {
+			return fail("number-format table exceeds 128 records")
+		}
+		for _, entry := range registry.index.numFmts.entries {
+			if !styleAttributesOnly(entry.start, "numFmtId", "formatCode") {
+				return fail("unqualified number-format attributes")
+			}
+		}
+	}
 	result := &NativeSourceStylePreviewV1{Protocol: "injoffice.xlsx.source-style-preview", Version: 1, ReadOnly: true, Fidelity: "approximate", PackageSHA256: nativeWorkbookDigest(data), WorkbookPart: location.part, StylesPart: stylesPart, StrictError: strictError, Warnings: []string{"Read-only source grid. Absent fill/number-format apply flags use the directly recorded IDs; conflicts remain explicit. No source bytes are repaired.", "Browser font matching, column widths, wrapping and border metrics are approximate. Print settings and workbook calculation are not applied; saved formula caches may be stale."}, Conflicts: []NativeSourceStyleConflictV1{}, Styles: []NativeSourceStyleV1{}, Sheets: []NativeSourceStyleSheetV1{}}
 	for _, xf := range registry.styleXfs {
 		if err = registry.validateXFReferenceIDs(xf, false); err != nil {

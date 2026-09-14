@@ -55,6 +55,9 @@ func TestSourceStylePreviewRefusesUnsafeSources(t *testing.T) {
 		"explicit-false-format": func(p map[string]string) {
 			p["Meta/Styles.style"] = strings.Replace(p["Meta/Styles.style"], `numFmtId="164" fontId="0" fillId="1"`, `applyNumberFormat="0" numFmtId="164" fontId="0" fillId="1"`, 1)
 		},
+		"number-format-metadata": func(p map[string]string) {
+			p["Meta/Styles.style"] = strings.Replace(p["Meta/Styles.style"], `<numFmt numFmtId="164"`, `<numFmt unknown="1" numFmtId="164"`, 1)
+		},
 		"invalid-id": func(p map[string]string) {
 			p["Meta/Styles.style"] = strings.Replace(p["Meta/Styles.style"], `fillId="1"`, `fillId="99"`, 1)
 		},
