@@ -41,3 +41,17 @@ func TestTableBordersKeepExplicitAndDifferentialOverrides(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeTableBordersStayOffUnmeasuredStyles(t *testing.T) {
+	for _, style := range []string{"TableStyleMedium9", "TableStyleMedium1", "TableStyleLight1"} {
+		parts := medium2OriginalRegionsFixture()
+		parts["Tables/table.xml"] = strings.Replace(parts["Tables/table.xml"], `name="TableStyleMedium2"`, `name="`+style+`"`, 1)
+		got, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
+		if err != nil {
+			t.Fatalf("%s: %v", style, err)
+		}
+		if got.Tables[0].BorderPreview != nil {
+			t.Fatalf("%s painted unmeasured borders: %+v", style, got.Tables[0].BorderPreview)
+		}
+	}
+}
