@@ -50,7 +50,8 @@ export interface SourceGraphicFrameLayout {
 /** Named implementation policy, qualified against the retained Office matrix.
  * Direct graphic-frame orientation is not painted. Ancestors map its center;
  * the leaf's raw rotation quadrant chooses the physical anchor's scale axes.
- * Width/height remain rational: callers must not round these layout thresholds.
+ * Width/height remain rational: callers must not silently round layout thresholds;
+ * integer consumers must use the separately named projection policy.
  * This helper alone does not admit source or authorize mutations. */
 export function sourceGraphicFrameLayout(leaf:SourceAffineFrame,parents:readonly {frame:SourceAffineFrame;child:Pick<SourceAffineFrame,'x'|'y'|'cx'|'cy'>}[],budget:SourceAffineBudget):SourceGraphicFrameLayout {
  if(!Array.isArray(parents)||parents.length>=64)throw new RangeError('Graphic-frame hierarchy depth exceeded')
@@ -73,4 +74,34 @@ export function sourceGraphicFrameLayout(leaf:SourceAffineFrame,parents:readonly
  budget.charge(32)
  const origin:QualifiedSourceAffine={values:[one,zero,zero,one,subtractSourceAffineRationals(center.values[4],half(width)),subtractSourceAffineRationals(center.values[5],half(height))],errors:[zero,zero,zero,zero,center.errors[4],center.errors[5]],depth:center.depth}
  return {policy:'office-graphic-frame-anchor-v1',width,height,origin}
+}
+
+export interface SourceGraphicFrameProjectedLayout {
+ readonly policy:'nearest-emu-physical-layout-v1'
+ readonly widthEmu:number
+ readonly heightEmu:number
+ readonly widthError:AffineRational
+ readonly heightError:AffineRational
+ /** Whole-EMU outward hull allowances, separate from affine conversion error. */
+ readonly hullOutsetXEmu:number
+ readonly hullOutsetYEmu:number
+}
+
+/** Layout is performed directly on this disclosed projected frame. A caller
+ * must retain the exact source layout and qualify actual output hulls expanded
+ * by these size allowances; fit/wrap decisions are not claimed to equal those
+ * of the unquantized frame. No glyph-scale correction is permitted. */
+export function projectSourceGraphicFrameLayout(layout:Pick<SourceGraphicFrameLayout,'width'|'height'>,maxCoordinateEmu:number,budget:SourceAffineBudget):SourceGraphicFrameProjectedLayout {
+ if(!Number.isSafeInteger(maxCoordinateEmu)||maxCoordinateEmu<1||maxCoordinateEmu>281474976710655)throw new RangeError('Invalid graphic-frame projection coordinate budget')
+ const project=(input:AffineRational)=>{
+  budget.charge(32)
+  if(typeof input?.numerator!=='bigint'||typeof input?.denominator!=='bigint'||input.numerator<=0n||input.denominator<=0n)throw new RangeError('Physical layout dimension must be positive')
+  const r=sourceAffineRational(input.numerator,input.denominator)
+  const rounded=(2n*r.numerator+r.denominator)/(2n*r.denominator)
+  if(rounded<1n||rounded>BigInt(maxCoordinateEmu))throw new RangeError('Projected graphic-frame dimension outside coordinate budget')
+  const delta=rounded*r.denominator-r.numerator,error=sourceAffineRational(delta<0n?-delta:delta,r.denominator)
+  return {value:Number(rounded),error,outset:error.numerator===0n?0:1}
+ }
+ const width=project(layout.width),height=project(layout.height)
+ return {policy:'nearest-emu-physical-layout-v1',widthEmu:width.value,heightEmu:height.value,widthError:width.error,heightError:height.error,hullOutsetXEmu:width.outset,hullOutsetYEmu:height.outset}
 }
