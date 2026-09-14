@@ -39,7 +39,7 @@ func TestNativeChartWorkbookSourceFamilies(t *testing.T) {
 				{`</c:plotArea>`, `</c:plotArea><c:legend/>`},
 				{`</c:chartSpace>`, `<c:extLst/></c:chartSpace>`},
 				{`grouping val="clustered"`, `grouping val="stacked"`},
-				{`grouping val="standard"`, `grouping val="stacked"`},
+				{`grouping val="standard"`, `grouping val="unknown"`},
 				{`scatterStyle val="line"`, `scatterStyle val="smoothMarker"`},
 				{`<c:autoTitleDeleted val="1"/>`, `<c:autoTitleDeleted val="0"/>`},
 				{`<c:axId val="10"/>`, `<c:axId val="999"/>`},

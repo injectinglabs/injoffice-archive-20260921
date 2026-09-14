@@ -7,6 +7,8 @@ import (
 
 type nativeChartWorkbookSource struct {
 	Family         string
+	Grouping       string
+	Overlap        *int64
 	Direction      string
 	GapWidth       int64
 	BubbleScale    *int64
@@ -59,11 +61,11 @@ func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtra
 		if !ok {
 			return nil
 		}
-		if _, ok = nativeChartToken(body.take("grouping"), "clustered"); !ok {
+		if source.Grouping, ok = nativeChartToken(body.take("grouping"), "clustered", "stacked", "percentStacked"); !ok {
 			return nil
 		}
 	} else if family == "lineChart" {
-		if _, ok = nativeChartToken(body.take("grouping"), "standard"); !ok {
+		if source.Grouping, ok = nativeChartToken(body.take("grouping"), "standard", "stacked", "percentStacked"); !ok {
 			return nil
 		}
 	} else {
@@ -95,9 +97,13 @@ func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtra
 	if len(source.Series) == 0 {
 		return nil
 	}
-	sort.Slice(source.Series, func(i, j int) bool { return source.Series[i].Order < source.Series[j].Order })
-	for i, s := range source.Series {
-		if s.Order != int64(i) {
+	stacked := source.Grouping == "stacked" || source.Grouping == "percentStacked"
+	// XML sequence drives new signed stacks; original order metadata is retained.
+	if !stacked {
+		sort.Slice(source.Series, func(i, j int) bool { return source.Series[i].Order < source.Series[j].Order })
+	}
+	for i := range source.Series {
+		if !orders[int64(i)] {
 			return nil
 		}
 	}
@@ -106,8 +112,15 @@ func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtra
 		if !ok {
 			return nil
 		}
-		if _, ok = nativeChartPercentage(body.take("overlap"), d, 0, 0); !ok {
+		overlap := int64(0)
+		if stacked {
+			overlap = 100
+		}
+		if _, ok = nativeChartPercentage(body.take("overlap"), d, overlap, overlap); !ok {
 			return nil
+		}
+		if stacked {
+			source.Overlap = &overlap
 		}
 	} else if family == "lineChart" {
 		if _, ok = nativeChartInteger(body.take("marker"), 0, 0); !ok {

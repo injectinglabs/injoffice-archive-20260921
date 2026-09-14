@@ -8,6 +8,7 @@ export interface NativePptxWorkbookChartSeries {
  readonly colors?:readonly string[];readonly color?:string;readonly widthEmu?:number
 }
 export interface NativePptxWorkbookChartSource {
+ readonly grouping?:'stacked'|'percentStacked';readonly overlap?:100
  readonly family:'bar'|'line'|'scatter'|'bubble';readonly bubbleScale?:number;readonly sizeRepresents?:'area'|'w';readonly barDirection?:'col'|'bar';readonly gapWidth?:number
  readonly xAxis:NativeLiteralBarAxis;readonly yAxis:NativeLiteralBarAxis
  readonly series:readonly NativePptxWorkbookChartSeries[];readonly plotVisibleOnly:false
