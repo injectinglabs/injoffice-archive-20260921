@@ -73,14 +73,14 @@ the actual dedicated WASM worker, checks merge/color/cache output and no upload,
 and delivers late replies after cancellation/replacement. Screenshot artifacts
 support visual review. External benchmark files are not loaded in CI.
 
-## Conditional source evidence V2 (Go API)
+## Conditional source evidence V2
 
 `xlsxpatch.PreviewNativeSourceStylesV2(originalBytes)` returns version 2 of the
 same read-only protocol. `grid` is the V1 base-style envelope; the outer object
 adds source styles/worksheet SHA-256 identities, warnings, nullable `text_rule`,
 `data_bar` and `frozen_view` records. It does not create an editable workbook,
 relax V1, repair the ZIP or evaluate formulas. V2 requires at least one qualified
-conditional rule. Browser integration is a separate follow-on.
+conditional rule. The browser uses a separate V2 worker and closed decoder.
 
 The closed initial profile admits at most one rule of each kind:
 
@@ -120,4 +120,21 @@ Tests use a synthetic merged-header workbook with two conditional cells,
 exercise linked-rule/DXF/range/cache/viewport refusals, and assert V1, strict
 extraction and mutation still refuse the conflicting source. Optional
 `XLSX_SOURCE_CONDITIONAL_EVIDENCE_DIR` exports only that synthetic fixture and
-JSON for future worker/browser contract tests. External workbooks stay local.
+JSON for worker/browser contract tests. External workbooks stay local.
+
+The playground first tries V1, then V2 if V1 refuses. Each attempt owns and
+terminates its worker; generation checks guard retries, cancellation, source
+replacement and unmount. Only V2 effects joined to the decoded source cells may
+change the preview: matched status cells receive the declared font/background
+colors and bold text, while data bars sit behind their unchanged saved values.
+Warnings retain the approximate geometry, cached-result and viewport omissions.
+No native editing or download authority is exposed by either preview client.
+
+The synthetic Chrome qualification builds the renderer once, then runs both
+profiles in separate browser processes with independent fixtures and servers. The conditional case
+checks actual V1 refusal/V2 fallback, source hash, merge/header colors, saved
+status/number values, differential colors and bar width. Cancellation and source
+replacement wait for an actual V2 inspection before delivering delayed replies.
+Screenshots are retained in the `xlsx-source-conditional-browser` CI artifact.
+This does not replace local unchanged-source browser review or an independent
+Excel print calibration matrix.

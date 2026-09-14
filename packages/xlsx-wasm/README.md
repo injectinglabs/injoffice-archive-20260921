@@ -148,3 +148,11 @@ results. Supported number/date display reuses the deterministic formatter; the
 exact source-declared `#,##0.00" €"` suffix has an additional browser text path.
 Unqualified formats visibly fall back to their saved lexical. No print settings
 or recalculation are applied. See [the profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md).
+
+`createXlsxSourceStylePreviewV2Client()` uses its own self-contained
+`xlsxsource2.worker.js` and the Go conditional source preview binding. Its only
+operations are `preview` and `terminate`. The immutable V2 result nests the V1
+base grid and carries qualified text-rule, data-bar and optional frozen-viewport
+records. `decodeXlsxSourceStylePreviewV2` checks each effect against its source
+cell, range, cache state, style and bounds before returning it. Hashes identify
+trusted native-worker output; they are not signatures for arbitrary JSON.

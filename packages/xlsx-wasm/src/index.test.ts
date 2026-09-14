@@ -22,6 +22,7 @@ import {
   adaptWorkbookMutationBatchV1,
   createXlsxWasmClient,
   createXlsxSourceStylePreviewClient,
+  createXlsxSourceStylePreviewV2Client,
   resolveXlsxWasmAssetUrls,
 } from './index'
 
@@ -290,4 +291,20 @@ it('terminating source preview during hashing cannot start a worker', async () =
   client.terminate()
   await expect(pending).rejects.toMatchObject({code:'TERMINATED'})
   expect(calls).toBe(0)
+})
+
+it('V2 client uses the dedicated worker and joins an immutable byte snapshot', async () => {
+  const bytes = new Uint8Array([1, 2, 3])
+  const projection = JSON.parse(readFileSync(new URL('../testdata/source-conditional-preview.json', import.meta.url), 'utf8'))
+  projection.grid.package_sha256 = 'sha256:' + createHash('sha256').update(bytes).digest('hex')
+  const worker = new FakeWorker('{}', JSON.stringify(projection))
+  let url = ''
+  const client = createXlsxSourceStylePreviewV2Client({ workerFactory: path => { url = path; return worker } })
+  const pending = client.preview(bytes); bytes[0] = 99
+  const result = await pending
+  expect(result.grid.package_sha256).toBe(projection.grid.package_sha256)
+  expect(url).toContain('xlsxsource2.worker.js')
+  expect(worker.requests.map(request => request.op)).toEqual(['init', 'inspect'])
+  expect(client).not.toHaveProperty('apply'); expect(client).not.toHaveProperty('extract')
+  client.terminate(); expect(worker.terminated).toBe(true)
 })

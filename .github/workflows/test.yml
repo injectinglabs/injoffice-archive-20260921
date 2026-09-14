@@ -59,17 +59,33 @@ jobs:
           name: docx-textbox-notes-browser
           path: artifacts/docx-textbox-notes
           if-no-files-found: ignore
-      - name: XLSX read-only source grid in Chrome
+      - name: XLSX read-only source grids in Chrome
         timeout-minutes: 4
         env:
-          SHOWCASE_OUTPUT: artifacts/xlsx-source-style
-        run: node scripts/smoke-xlsx-source-style-browser.mjs
+          VITE_INJOFFICE_API_BASE: ''
+        run: |
+          npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+          SHOWCASE_OUTPUT=artifacts/xlsx-source-style node scripts/smoke-xlsx-source-style-browser.mjs --skip-build &
+          xlsx_source_style_pid=$!
+          SHOWCASE_OUTPUT=artifacts/xlsx-source-conditional node scripts/smoke-xlsx-source-style-browser.mjs --conditional --skip-build &
+          xlsx_source_conditional_pid=$!
+          xlsx_source_status=0
+          wait "$xlsx_source_style_pid" || xlsx_source_status=1
+          wait "$xlsx_source_conditional_pid" || xlsx_source_status=1
+          exit "$xlsx_source_status"
       - name: XLSX source grid screenshots
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: xlsx-source-style-browser
           path: artifacts/xlsx-source-style
+          if-no-files-found: ignore
+      - name: XLSX conditional source grid screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: xlsx-source-conditional-browser
+          path: artifacts/xlsx-source-conditional
           if-no-files-found: ignore
       - name: Qualification harness unit tests
         run: |

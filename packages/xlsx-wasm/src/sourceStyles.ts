@@ -120,3 +120,68 @@ export function decodeXlsxSourceStylePreviewV1(json: string, packageSHA256: stri
   }
   return preview
 }
+
+function nullable<T>(read: Read<T>): Read<T | null> { return value => value === null ? null : read(value) }
+const sourceRef = string(5, /^[A-Z]{1,2}[1-9][0-9]{0,2}$/)
+const conditionalWord = string(64, /^[A-Z]{1,64}$/)
+const ruleRange = string(11, /^[A-Z]{1,2}[1-9][0-9]{0,2}(?::[A-Z]{1,2}[1-9][0-9]{0,2})?$/)
+const readConditionalPreview = shape({
+  protocol: literal('injoffice.xlsx.source-style-preview'), version: literal(2), read_only: literal(true), fidelity: literal('approximate'),
+  grid: readPreview, styles_sha256: hash, worksheet_sha256: hash, warnings,
+  frozen_view: nullable(shape({ frozen_rows: number(1, 127), top_left_cell: sourceRef, active_pane: literal('bottomLeft') })),
+  text_rule: nullable(shape({ range: ruleRange, priority: number(1, 65535), dxf_id: literal(0), text: conditionalWord, bold: literal(true), font_color: rgb, background_color: rgb,
+    cells: array(shape({ ref: sourceRef, value: conditionalWord, cached: boolean, matched: boolean }), 4096, 1),
+  })),
+  data_bar: nullable(shape({ range: ruleRange, priority: number(1, 65535), extension_id: string(38, /^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/), minimum: number(0, 1e9), maximum: number(0, 1e9), min_length: number(0, 100), max_length: number(0, 100), color: rgb, gradient: literal(true),
+    cells: array(shape({ ref: sourceRef, value: number(0, 1e9), length_percent: number(0, 100, false) }), 4096, 1),
+  })),
+})
+export type XlsxSourceStylePreviewV2 = ReturnType<typeof readConditionalPreview>
+
+/** Source-qualified conditional evidence, joined to the separately validated
+ * base grid. This decoder only consumes trusted native worker output. */
+export function decodeXlsxSourceStylePreviewV2(json: string, packageSHA256: string): XlsxSourceStylePreviewV2 {
+  if (typeof json !== 'string' || json.length > 4 * 1024 * 1024) return fail()
+  const preview = readConditionalPreview(JSON.parse(json) as unknown)
+  const grid = decodeXlsxSourceStylePreviewV1(JSON.stringify(preview.grid), packageSHA256)
+  const sheet = grid.sheets[0]!
+  const cells = new Map(sheet.cells.map(cell => [cell.ref, cell]))
+  const styles = new Map(grid.styles.map(style => [style.id, style]))
+  if (preview.warnings.length < 2 || !preview.text_rule && !preview.data_bar) return fail()
+  if (preview.text_rule && preview.data_bar && preview.text_rule.priority === preview.data_bar.priority) return fail()
+  if (preview.frozen_view && (preview.frozen_view.frozen_rows >= sheet.row_heights.length || preview.frozen_view.top_left_cell !== `A${preview.frozen_view.frozen_rows + 1}` || preview.warnings.length < 3)) return fail()
+  const occupied = new Set<string>()
+  const point = (ref: string): [number, number] => {
+    const match = /^([A-Z]+)([1-9][0-9]*)$/.exec(ref)
+    if (!match) return fail()
+    let col = 0
+    for (const letter of match[1]!) col = col * 26 + letter.charCodeAt(0) - 64
+    return [Number(match[2]) - 1, col - 1]
+  }
+  const join = (range: string, effects: readonly { ref: string }[], validate: (cell: XlsxSourceStyleCellV1, index: number) => void) => {
+    const [first, last = first] = range.split(':')
+    const [top, left] = point(first!), [bottom, right] = point(last!)
+    if (bottom < top || right < left || bottom >= sheet.row_heights.length || right >= sheet.column_widths.length || (bottom - top + 1) * (right - left + 1) !== effects.length) return fail()
+    for (let i = 0; i < effects.length; i++) {
+      const ref = effects[i]!.ref, cell = cells.get(ref)
+      const row = top + Math.floor(i / (right - left + 1)), col = left + i % (right - left + 1)
+      if (!cell || cell.row !== row || cell.column !== col || occupied.has(ref) || sheet.merges.some(m => row >= m.row && row <= m.end_row && col >= m.column && col <= m.end_column)) return fail()
+      occupied.add(ref); validate(cell, i)
+    }
+  }
+  const text = preview.text_rule
+  if (text) join(text.range, text.cells, (cell, i) => {
+    const effect = text.cells[i]!
+    if (cell.kind !== 'string' || cell.text !== effect.value || cell.cached !== effect.cached || effect.matched !== (effect.value === text.text)) return fail()
+  })
+  const bar = preview.data_bar
+  if (bar) {
+    if (bar.minimum >= bar.maximum || bar.min_length >= bar.max_length) return fail()
+    join(bar.range, bar.cells, (cell, i) => {
+      const effect = bar.cells[i]!
+      const expected = bar.min_length + (effect.value - bar.minimum) / (bar.maximum - bar.minimum) * (bar.max_length - bar.min_length)
+      if (cell.kind !== 'number' || cell.formula || cell.cached || cell.lexical !== String(effect.value) || styles.get(cell.style_id)!.fill_color || effect.value < bar.minimum || effect.value > bar.maximum || Math.abs(effect.length_percent - expected) > 1e-9) return fail()
+    })
+  }
+  return Object.freeze({ ...preview, grid })
+}
