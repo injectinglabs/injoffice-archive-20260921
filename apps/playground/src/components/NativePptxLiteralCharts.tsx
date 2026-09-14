@@ -14,6 +14,7 @@ export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
   <p>Read-only vectors from explicit source values and colors. Each chart is shown separately with host frame fitting. Circular charts use polygon arcs; Cartesian charts use explicit linear scales and clipped data geometry. This preview does not reproduce PowerPoint plot layout. Formula caches, source labels and legends are unsupported.</p>
   {enabled&&charts.map((chart,chartIndex)=>{
    const connected=chart.chart.literalConnected
+   if(connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
    if(connected){
     const scatter=connected.profile==='literal-scatter-v1'
     const vectors=(scatter?createNativeLiteralScatterPaths:createNativeLiteralLinePaths)(connected,chart.transform.cx,chart.transform.cy)

@@ -339,10 +339,25 @@ export interface NativePptxTextOverride {
   readonly wordSpacingMilliPoints?: number
 }
 
+/** Conservative font-outline control hull in the returned integer design grid. */
+export interface NativePptxGlyphExtents {
+ readonly faceId:string
+ readonly contentDigest:string
+ readonly glyphId:number
+ readonly unitsPerEm:number
+ readonly bounds: {readonly xMin:number;readonly yMin:number;readonly xMax:number;readonly yMax:number}|null
+}
+export interface NativePptxGlyphExtentsRequest {
+ readonly faceId:string
+ readonly contentDigest:string
+ readonly glyphId:number
+}
 export interface NativePptxTextLayout {
   readonly manifest: NativeFontManifest
   readonly resolver: NativeFontResolver
   readonly shaper: NativeTextShaper
+  /** Optional supplied-font outline hulls; required only for measured chart axis labels. */
+  readonly glyphExtents?: (request:NativePptxGlyphExtentsRequest)=>NativePptxGlyphExtents|Promise<NativePptxGlyphExtents>
   readonly defaults: NativePptxTextDefaults
   /** Host-supplied language/script/direction metadata. The core never infers these from characters. */
   readonly resolveRun?: (context: NativePptxTextRunContext) => NativePptxTextOverride
@@ -358,6 +373,8 @@ export interface CompileSlideOptions {
   readonly literalBarPreview?: boolean
   /** Straight source literal line/XY vectors with exact segment clipping and host plot fitting. Default off. */
   readonly literalConnectedPreview?: boolean
+  /** Supplied-font source axis labels with disclosed measured host margins. */
+  readonly chartAxisLabelsPreview?: boolean
   /** Explicit source-literal vector pie preview with host circle fitting and polygon arcs. */
   readonly literalPiePreview?: boolean
 	/** Explicit opt-in to the declared source Latin inheritance approximation. */
