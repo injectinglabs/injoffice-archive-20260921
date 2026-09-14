@@ -58,7 +58,12 @@ export async function compileFilePreviewGeometry(deck:NativePptxDeck,index:numbe
    if(element.textBody?.writingMode==='vertical-clockwise'&&element.paragraphs.some(p=>p.bullet!==false||p.level!==0||(p.marginLeftEmu??0)!==0||(p.indentEmu??0)!==0||p.runs.some(r=>!r.text||!/^[\x20-\x7e]+$/.test(r.text))))textIssues.set(element.id,'Vertical text requires supported Latin content and paragraph semantics.')
    element.paragraphs=[]
   }
-  if(element.kind==='table')for(const row of element.table.rows)for(const cell of row)if(cell.paragraphs)cell.paragraphs=[]
+  if(element.kind==='table')for(let rowIndex=0;rowIndex<element.table.rows.length;rowIndex++)for(let columnIndex=0;columnIndex<element.table.rows[rowIndex]!.length;columnIndex++){
+   const cell=element.table.rows[rowIndex]![columnIndex]!
+   if(cell.textBody?.writingMode==='vertical-clockwise'&&cell.paragraphs?.some(p=>p.bullet!==false||p.level!==0||(p.marginLeftEmu??0)!==0||(p.indentEmu??0)!==0||p.runs.some(r=>!r.text||!/^[\x20-\x7e]+$/.test(r.text))))textIssues.set(`${element.id}-cell-${rowIndex*element.table.columnWidths.length+columnIndex}`,'Vertical table text requires supported Latin content and paragraph semantics.')
+   cell.text=''
+   if(cell.paragraphs)cell.paragraphs=[]
+  }
   return [element]
  })
  projection.slides[index]!.elements=select(projection.slides[index]!.elements,deck.slides[index]!.elements)
@@ -73,6 +78,10 @@ export async function compileFilePreviewGeometry(deck:NativePptxDeck,index:numbe
   if(node.kind==='shape'||node.kind==='text'){
    if(node.textBody?.orientationTransform)matrices.set(node.textBody.orientationTransform,filePreviewMatrix(node.textBody.orientationTransform,budget))
    if(node.textBody?.transform)matrices.set(node.textBody.transform,filePreviewMatrix(node.textBody.transform,budget))
+  }
+  if(node.kind==='table')for(const cell of node.cells){
+   if(cell.textBody?.orientationTransform)matrices.set(cell.textBody.orientationTransform,filePreviewMatrix(cell.textBody.orientationTransform,budget))
+   if(cell.textBody?.transform)matrices.set(cell.textBody.transform,filePreviewMatrix(cell.textBody.transform,budget))
   }
   if(node.kind==='group')node.children.forEach(visit)
  }

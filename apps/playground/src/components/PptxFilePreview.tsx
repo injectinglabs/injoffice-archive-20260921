@@ -7,6 +7,7 @@ import {compileFilePreviewGeometry,filePreviewLength as n,filePreviewPath,type F
 
 export function PptxFilePreviewVector({deck,geometry}:{deck:NativePptxDeck;geometry:FilePreviewGeometry}){
  const prefix=useId().replace(/:/g,''),matrix=(value:RenderNode['transform'])=>`matrix(${geometry.matrices.get(value)!.join(' ')})`
+ const issueFor=(element:NativeElement)=>element.kind==='table'&&element.graphicFrameLayout==='source-anchored-v1'&&element.compatibility.status==='preserveOnly'?undefined:previewIssue(element,deck.assets)
  const rectProps=(r:RenderRect)=>({x:n(r.x),y:n(r.y),width:n(r.cx),height:n(r.cy)})
  function path(command:Extract<PaintCommand,{kind:'path'}>,key:string):ReactNode{
   const stroke=command.stroke,props={fill:previewColor(command.fill,'none'),stroke:previewColor(stroke?.color,'none'),strokeWidth:stroke?n(stroke.widthEmu):undefined,strokeLinecap:stroke?.cap==='flat'?'butt' as const:stroke?.cap,strokeLinejoin:stroke?.join,strokeMiterlimit:stroke?.miterLimit}
@@ -16,7 +17,7 @@ export function PptxFilePreviewVector({deck,geometry}:{deck:NativePptxDeck;geome
   if(command.path.length===1&&first?.kind==='ellipse')return <ellipse key={key} cx={n(first.rect.x+first.rect.cx/2)} cy={n(first.rect.y+first.rect.cy/2)} rx={n(first.rect.cx/2)} ry={n(first.rect.cy/2)} {...props}/>
   return <path key={key} d={filePreviewPath(command.path)} {...props}/>
  }
- function approximateText(original:Extract<NativeElement,{kind:'shape'|'text'}>,bounds:RenderRect,body?:RenderTextBodyNode):ReactNode{
+ function approximateText(original:Pick<Extract<NativeElement,{kind:'shape'|'text'}>,'id'|'paragraphs'|'textBody'>,bounds:RenderRect,body?:RenderTextBodyNode):ReactNode{
   if(!original.paragraphs.length)return null
   if(body?.status==='refused'||geometry.textIssues.has(original.id))return <text {...{x:n(bounds.x),y:n(bounds.y)+12}} fontSize={10}>Text preview unavailable</text>
   const vertical=Boolean(body?.transform),box=vertical?{x:0,y:0,cx:bounds.cy,cy:bounds.cx}:bounds
@@ -33,7 +34,7 @@ export function PptxFilePreviewVector({deck,geometry}:{deck:NativePptxDeck;geome
  function object(node:RenderNode,key:string):ReactNode{
   const original=geometry.originals.get(node.sourceElementId)
   if(!original)return null
-  const issue=previewIssue(original,deck.assets),clip=node.clip,id=`${prefix}-${key}`
+  const issue=issueFor(original),clip=node.clip,id=`${prefix}-${key}`
   const placeholder=(label:string)=><><rect {...rectProps(node.bounds)} fill="#f5f6f6" stroke="#5a6560" strokeDasharray="3 2"/><text x={n(node.bounds.x)+4} y={n(node.bounds.y)+14} fontSize={10}>{label}</text></>
   let content:ReactNode
   if(node.kind==='placeholder'||issue)content=placeholder(`${original.kind} preview unavailable`)
@@ -43,8 +44,25 @@ export function PptxFilePreviewVector({deck,geometry}:{deck:NativePptxDeck;geome
    content=raster?(crop?<svg {...rectProps(node.bounds)} viewBox={`${crop.left} ${crop.top} ${100000-crop.left-crop.right} ${100000-crop.top-crop.bottom}`} preserveAspectRatio="none" overflow="hidden"><image href={raster} width={100000} height={100000} preserveAspectRatio="none"/></svg>:<image href={raster} {...rectProps(node.bounds)} preserveAspectRatio="none"/>):placeholder('Image preview unavailable')
   }else if(node.kind==='shape'||node.kind==='connector'||node.kind==='text'){
    content=<>{(geometry.paths.get(node.sourceElementId)??[]).map((command,i)=>path(command,`${key}-path-${i}`))}{(original.kind==='shape'||original.kind==='text')&&approximateText(original,(node.kind==='shape'||node.kind==='text')&&node.textBody?node.textBody.bounds:node.bounds,node.kind==='shape'||node.kind==='text'?node.textBody:undefined)}</>
+  }else if(node.kind==='table'&&original.kind==='table'&&original.graphicFrameLayout==='source-anchored-v1'){
+   content=<>{node.cells.map((cell,i)=><rect key={`background-${i}`} data-file-preview-cell-background={`${original.id}-${i}`} {...rectProps(cell.bounds)} fill={previewColor(cell.fill?.color,'none')} stroke={previewColor(cell.border?.color,'none')} strokeWidth={cell.border?n(cell.border.widthEmu):undefined}/>)}{node.cells.map((cell,i)=>{
+    const source=original.table.rows[cell.rowIndex]?.[cell.columnIndex]
+    if(!source)return null
+    const textSource={id:`${original.id}-cell-${i}`,paragraphs:source.paragraphs??[{runs:[{text:source.text}]}],textBody:source.textBody}
+    const text=approximateText(textSource,cell.textBody?.bounds??{x:0,y:0,cx:cell.bounds.cx,cy:cell.bounds.cy},cell.textBody)
+    // Browser text remains explicitly approximate. This x strip spans the
+    // complete slide in cell-local coordinates; the outer slide clip supplies
+    // the y boundary, without claiming native measured browser glyph bounds.
+    const tableY=geometry.matrices.get(node.transform)![5]!*12700
+    const strip={x:0,y:-tableY-cell.bounds.y,cx:cell.bounds.cx,cy:geometry.tree.size.cy}
+    const clipId=`${id}-cell-${i}`
+    return <g key={i} data-file-preview-cell={`${original.id}-${i}`} transform={`translate(${n(cell.bounds.x)} ${n(cell.bounds.y)})`}>
+     {source.textBody?.horizontalOverflow==='clip'&&<defs><clipPath id={clipId} clipPathUnits="userSpaceOnUse"><rect {...rectProps(strip)}/></clipPath></defs>}
+     <g clipPath={source.textBody?.horizontalOverflow==='clip'?`url(#${clipId})`:undefined}>{text}</g>
+    </g>
+   })}</>
   }else content=placeholder('Table preview unavailable')
-  return <g key={key} data-file-preview-object={original.id} transform={matrix(node.transform)}><title>{original.name||original.kind}{issue?`: ${issue}`:''}</title>
+  return <g key={key} data-file-preview-object={original.id} transform={matrix(node.transform)}><title>{`${original.name||original.kind}${issue?`: ${issue}`:''}`}</title>
    {clip&&<defs><clipPath id={id} clipPathUnits="userSpaceOnUse"><rect {...rectProps(clip.rect)} rx={clip.kind==='roundRect'?n(clip.radiusEmu):undefined}/></clipPath></defs>}
    <g clipPath={clip?`url(#${id})`:undefined}>{content}</g>
   </g>
@@ -63,7 +81,7 @@ export default function PptxFilePreview({deck}:{deck:NativePptxDeck}){
  },[deck,index])
  if(!slide||!size)return <p className="ds-status">No previewable slide dimensions are available. The source file is unchanged.</p>
  const active=result?.deck===deck&&result.index===index?result:undefined,geometry=active?.geometry
- const issues=geometry?[...geometry.originals.values()].flatMap(element=>{const issue=previewIssue(element,deck.assets);return issue?[`${element.name||element.kind}: ${issue}`]:[]}):[]
+ const issues=geometry?[...geometry.originals.values()].flatMap(element=>{const issue=element.kind==='table'&&element.graphicFrameLayout==='source-anchored-v1'&&element.compatibility.status==='preserveOnly'?undefined:previewIssue(element,deck.assets);return issue?[`${element.name||element.kind}: ${issue}`]:[]}):[]
  if(geometry)for(const [id,message] of geometry.textIssues)issues.push(`${geometry.originals.get(id)?.name||id}: ${message}`)
  if(geometry?.omitted)issues.push(`Preview limited to 500 objects; ${geometry.omitted} remaining objects are preserved.`)
  return <section aria-label="Presentation file preview" className="ds-panel">

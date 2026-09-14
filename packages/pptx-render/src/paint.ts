@@ -139,7 +139,11 @@ function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRec
           // CT_TableCellProperties clips at cell edges, not its text insets.
           // This slice permits only top-level unrotated tables. Reuse the slide
           // vertical clip in cell coordinates, preserving vertical overflow.
-          if(cell.textBody.horizontalOverflow==='clip') {
+          if(cell.horizontalTextClip){
+            const clip=cell.horizontalTextClip
+            if(cell.textBody.horizontalOverflow!=='clip'||clip.x!==0||clip.cx!==cell.bounds.cx||[clip.x,clip.y,clip.cx,clip.cy,clip.y+clip.cy].some(v=>!Number.isSafeInteger(v))||clip.cx<=0||clip.cy<=0)throw new RenderCompileError('render.horizontalClip','$.table','invalid qualified cell-local text clip')
+            surface.push({kind:'clipRect',rect:clip})
+          } else if(cell.textBody.horizontalOverflow==='clip') {
             if(depth!==1||node.transform.sourceAffine!==undefined||node.transform.aPpm!==1000000||node.transform.dPpm!==1000000||node.transform.bPpm!==0||node.transform.cPpm!==0)throw new RenderCompileError('render.horizontalClip','$.table','horizontal clipping requires a top-level unrotated table')
             surface.push({kind:'clipRect',rect:{x:0,y:slideClip.y-node.transform.tyEmu-cell.bounds.y,cx:cell.bounds.cx,cy:slideClip.cy}})
           }

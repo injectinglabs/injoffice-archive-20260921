@@ -154,6 +154,11 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	if sourceTypography {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
 	}
+	if nativeHasSourceAffine(transform) || !nativeTableFrameMatches(element) {
+		if err := nativeMarkGraphicFrameLayout(&element); err != nil {
+			return NativeElement{}, err
+		}
+	}
 	nativePreserveTextCheckingMetadata(&element, node, dialect)
 	return element, nil
 }
@@ -240,27 +245,21 @@ func validateNativeTableTransform(node *nativeXMLNode, dialect nativeExtractDial
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	if raw, ok := exactNativeAttr(node, "", "rot"); ok {
-		rotation, parseErr := parseCanonicalNativeInt(raw, -nativeMaxSafeInteger, nativeMaxSafeInteger)
-		if parseErr != nil {
-			return NativeTransform{}, fmt.Errorf("pptxpatch: native extract: invalid table rotation")
-		}
-		if rotation != 0 {
-			return NativeTransform{}, refuseNativeGraphicFrame("pptx.table-transform-unavailable", "rotated tables are preserved but not approximated")
-		}
+	orientation, err := parseNativeSourceAffine(node)
+	if err != nil {
+		return NativeTransform{}, err
 	}
-	for _, name := range []string{"flipH", "flipV"} {
-		if raw, ok := exactNativeAttr(node, "", name); ok {
-			flipped, boolErr := nativeBool(raw)
-			if boolErr != nil {
-				return NativeTransform{}, fmt.Errorf("pptxpatch: native extract: invalid table %s", name)
-			}
-			if flipped {
-				return NativeTransform{}, refuseNativeGraphicFrame("pptx.table-transform-unavailable", "flipped tables are preserved but not approximated")
-			}
-		}
+	result := NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
+	if orientation.Rotation != 0 {
+		result.RotationAngle = int64Pointer(orientation.Rotation)
 	}
-	return NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}, nil
+	if orientation.FlipH {
+		result.FlipH = &orientation.FlipH
+	}
+	if orientation.FlipV {
+		result.FlipV = &orientation.FlipV
+	}
+	return result, nil
 }
 
 func requiredCanonicalNativeTableInt(node *nativeXMLNode, local string, minimum, maximum int64) (int64, error) {
@@ -332,7 +331,7 @@ func (extractor *nativeExtractor) extractNativeTableNode(node *nativeXMLNode, tr
 	if requireEmptyNativeElement(tableProperties) != nil {
 		return nativeExactTable{}, refuseNativeGraphicFrame("pptx.table-style-unavailable", "table styles, banding, inheritance, fills, and effects are preserved but not resolved")
 	}
-	columns, columnTotal, err := extractNativeTableGrid(grid, dialect)
+	columns, _, err := extractNativeTableGrid(grid, dialect)
 	if err != nil {
 		return nativeExactTable{}, err
 	}
@@ -367,9 +366,7 @@ func (extractor *nativeExtractor) extractNativeTableNode(node *nativeXMLNode, tr
 		table.RowHeights = append(table.RowHeights, height)
 		table.Rows = append(table.Rows, row)
 	}
-	if transform.Cx == nil || transform.Cy == nil || columnTotal != *transform.Cx || rowTotal != *transform.Cy {
-		return nativeExactTable{}, refuseNativeGraphicFrame("pptx.table-geometry-unavailable", "table frame extents must equal the exact row and column track totals")
-	}
+
 	return nativeExactTable{table: table, outputNodes: usage.outputNodes, textCodeUnits: usage.textCodeUnits}, nil
 }
 

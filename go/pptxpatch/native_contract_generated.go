@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "9236b308738a589a35d9e53e2cdc784b2dafa4ba99472b6ebae58a511df47f81"
+const NativePPTXSchemaSHA256 = "c010147f4c7c7a7da4f34bcf00a0b8867b59a932a8c9c2aa382ce6f03f731d45"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -55,7 +55,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"bold", "color", "fontFamily", "fontSize", "italic", "language"},
 	},
 	"NativeChartElement": {
-		Properties: []string{"animation", "chart", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
+		Properties: []string{"animation", "chart", "compatibility", "graphicFrameLayout", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"chart", "compatibility", "id", "kind", "passthrough", "provenance", "source", "transform"},
 	},
 	"NativeCompatibility": {
@@ -203,7 +203,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"text"},
 	},
 	"NativeTableElement": {
-		Properties: []string{"animation", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "table", "transform"},
+		Properties: []string{"animation", "compatibility", "graphicFrameLayout", "id", "kind", "name", "passthrough", "provenance", "source", "table", "transform"},
 		Required:   []string{"compatibility", "id", "kind", "passthrough", "provenance", "table", "transform"},
 	},
 	"NativeTextBodyLayout": {
