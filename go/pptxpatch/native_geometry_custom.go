@@ -187,6 +187,7 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 		}
 	}
 	p := nativeGeometryPathBuilder{sx: 1, sy: 1}
+	exactUnitScale := true
 	for _, axis := range []struct {
 		key    string
 		extent float64
@@ -199,8 +200,10 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 				return nil, fmt.Errorf("invalid geometry path coordinate extent")
 			}
 			*axis.scale = axis.extent / v
+			exactUnitScale = exactUnitScale && v == axis.extent && nativeGeometryExactIntegerAttribute(empty, node, axis.key, v)
 		}
 	}
+	exactPen, exactStart := false, false
 	pathUncertainty := 0.0
 	addUncertainty := func(value float64) error {
 		pathUncertainty += value
@@ -219,6 +222,7 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 			if err := p.close(); err != nil {
 				return nil, err
 			}
+			exactPen = exactStart
 		case "arcTo":
 			if err := requireOnlyNativeAttrs(command, xml.Name{Local: "wR"}, xml.Name{Local: "hR"}, xml.Name{Local: "stAng"}, xml.Name{Local: "swAng"}); err != nil {
 				return nil, err
@@ -234,6 +238,7 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 				}
 				values = append(values, v)
 			}
+			exactArc := nativeGeometryExactCardinalArc(g, command, p, exactPen && exactUnitScale, values)
 			// A polar ellipse can magnify angular uncertainty by rMax²/rMin.
 			// Bound radius sensitivity conservatively by the cubed aspect ratio.
 			maxR, minR := math.Max(values[0], values[1]), math.Min(values[0], values[1])
@@ -260,7 +265,9 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 				// The construction allowance includes up to four split segments,
 				// libm conversion, ellipse conditioning and floating additions.
 				magnitude := math.Max(maxR, math.Max(math.Abs(p.pen.x), math.Abs(p.pen.y)))
-				uncertainty += 1024 * 2.220446049250313e-16 * scale * magnitude * aspect * aspect * aspect
+				if !exactArc {
+					uncertainty += 1024 * 2.220446049250313e-16 * scale * magnitude * aspect * aspect * aspect
+				}
 				if err := addUncertainty(uncertainty); err != nil {
 					return nil, err
 				}
@@ -268,6 +275,7 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 			if err := p.arc(values[0], values[1], values[2], values[3]); err != nil {
 				return nil, err
 			}
+			exactPen = exactArc
 		default:
 			if err := requireOnlyNativeAttrs(command); err != nil {
 				return nil, err
@@ -311,7 +319,11 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 						return nil, err
 					}
 				}
+				exactPen = exactUnitScale && p.sx == 1 && p.sy == 1 && nativeGeometryExactIntegerAttribute(g, point, "x", x) && nativeGeometryExactIntegerAttribute(g, point, "y", y)
 				points = append(points, nativeGeometryPoint{x, y})
+			}
+			if kind == "moveTo" {
+				exactStart = exactPen
 			}
 			mapped := map[string]string{"moveTo": "moveTo", "lnTo": "lineTo", "quadBezTo": "quadBezierTo", "cubicBezTo": "cubicBezierTo"}[kind]
 			if err := p.vertices(mapped, points...); err != nil {
