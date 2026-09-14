@@ -395,3 +395,13 @@ Custom table styles, conditional formatting, header/data DXFs, unqualified theme
 colors and ambiguous style options leave the palette unavailable. Explicit cell
 formatting keeps precedence. Borders, totals formatting and missing-cell paint
 remain unsupported. This projection never modifies native mutation authority.
+
+## Read-only source-style recovery
+
+`PreviewNativeSourceStylesV1` provides a separate, approximate source grid for
+one visible worksheet whose strict style registry refuses absent
+`applyFill`/`applyNumberFormat` conflicts. It reports the original package and
+style hashes, conflicting IDs, source geometry, merges, and saved formula
+results. It creates no editable workbook or revision and does not repair bytes,
+calculate formulas, or apply print settings. See the
+[bounded profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md).
