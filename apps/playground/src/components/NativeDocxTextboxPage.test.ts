@@ -2,7 +2,7 @@ import {createElement} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {describe,it,expect} from 'vitest'
 import {NativeDocxPages} from './NativeDocxPages'
-import {NativeDocxTextboxOnPage,decodeTextboxPageResponse} from './NativeDocxTextboxPage'
+import {NativeDocxTextboxOnPage,decodeTextboxPageResponse,textboxLayer,type TextboxPlacement} from './NativeDocxTextboxPage'
 import type {NativeDocxTextboxPagePreviewV1} from '@injoffice/docs/native-docx'
 
 describe('page-placed textbox UI',()=>{
@@ -19,4 +19,11 @@ describe('page-placed textbox UI',()=>{
  it('refuses incomplete helper data before a page can mount',()=>{
   for(const value of [{},{document:{},evidence:{},font_inventory_json:'{}',preview:{}},{document:{},evidence:{},font_inventory_json:'{}',preview:{},font_url:'https://untrusted.invalid/font'}])expect(()=>decodeTextboxPageResponse(value,'sha256:'+'a'.repeat(64))).toThrow()
  })
+ it('partitions behind-body shapes and sorts each layer stably by source rank',()=>{
+  const boxes=[{page_id:'a',stacking:{behind_doc:false,relative_height:20}},{page_id:'b',stacking:{behind_doc:true,relative_height:4294967295}},{page_id:'c',stacking:{behind_doc:false,relative_height:1}},{page_id:'d',stacking:{behind_doc:false,relative_height:20}},{page_id:'e'}] as TextboxPlacement[]
+  expect(textboxLayer(boxes,true).map(b=>b.page_id)).toEqual(['b'])
+  expect(textboxLayer(boxes,false).map(b=>b.page_id)).toEqual(['e','c','a','d'])
+  expect(boxes.map(b=>b.page_id)).toEqual(['a','b','c','d','e'])
+ })
+
 })
