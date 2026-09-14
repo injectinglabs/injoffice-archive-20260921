@@ -55,7 +55,7 @@
       "protocol": "injoffice.xlsx.native",
       "version": 1,
       "schemaPath": "schemas/xlsx-native-v1.schema.json",
-      "schemaSha256": "8017eca7536f5d3d1e943fc04387ebad042c522b825f3b208ad6a5b0b05174ea"
+      "schemaSha256": "987cea5431a49990432bdf4b101a05054d7ac262d9cfc2411cb18639657d371e"
     }
   },
   "resourceProfiles": {
