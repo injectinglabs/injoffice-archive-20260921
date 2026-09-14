@@ -17,12 +17,15 @@ import (
 // Synthetic OOXML source fixture, not a Word visual reference. Keeps real
 // package/font/relationship provenance through extraction and optional paint QA.
 func TestNativeEndnoteContinuationSource(t *testing.T) {
-	testNativeNoteContinuationSource(t, "endnote")
+	testNativeNoteContinuationSource(t, "endnote", false)
 }
 func TestNativeFootnoteContinuationSource(t *testing.T) {
-	testNativeNoteContinuationSource(t, "footnote")
+	testNativeNoteContinuationSource(t, "footnote", false)
 }
-func testNativeNoteContinuationSource(t *testing.T, kind string) {
+func TestNativeFootnoteLineContinuationSource(t *testing.T) {
+	testNativeNoteContinuationSource(t, "footnote", true)
+}
+func testNativeNoteContinuationSource(t *testing.T, kind string, splitLines bool) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
 		t.Skip("optional installed DejaVu font unavailable")
@@ -57,12 +60,23 @@ func testNativeNoteContinuationSource(t *testing.T, kind string) {
 	parts["word/styles.xml"] = []byte(strings.ReplaceAll(string(parts["word/styles.xml"]), `w:after="120"`, `w:after="0"`))
 	parts["word/document.xml"] = []byte(`<w:document xmlns:w="` + wns + `"><w:body><w:p><w:r><w:t>Reference </w:t></w:r><w:r><w:endnoteReference w:id="1"/></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="13200" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`)
 	var content strings.Builder
-	for index := 1; index <= 7; index++ {
-		content.WriteString(`<w:p><w:pPr><w:keepLines/></w:pPr>`)
+	count := 7
+	if splitLines {
+		count = 1
+	}
+	for index := 1; index <= count; index++ {
+		if splitLines {
+			content.WriteString(`<w:p><w:pPr><w:keepLines w:val="0"/><w:widowControl/></w:pPr>`)
+		} else {
+			content.WriteString(`<w:p><w:pPr><w:keepLines/></w:pPr>`)
+		}
 		if index == 1 {
 			content.WriteString(`<w:r><w:endnoteRef/></w:r>`)
 		}
 		text := fmt.Sprintf(" Endnote paragraph %d", index)
+		if splitLines {
+			text = strings.Repeat(" Footnote line continuation preserves source text.", 30)
+		}
 		if index == 2 {
 			text = strings.Repeat(" Endnote paragraph 2 with retained lines.", 4)
 		}
@@ -128,7 +142,7 @@ func testNativeNoteContinuationSource(t *testing.T, kind string) {
 	labels, kept, sentinels := 0, 0, 0
 	for _, story := range document.Notes {
 		if story.NoteRole == "content" {
-			if len(story.Blocks) != 7 {
+			if len(story.Blocks) != count {
 				t.Fatal("source paragraphs were dropped")
 			}
 			for _, block := range story.Blocks {
@@ -148,10 +162,18 @@ func testNativeNoteContinuationSource(t *testing.T, kind string) {
 			}
 		}
 	}
-	if labels != 1 || kept != 7 || sentinels != 2 || !bytes.Equal(before, source) {
+	expectedKept := 7
+	if splitLines {
+		expectedKept = 0
+	}
+	if labels != 1 || kept != expectedKept || sentinels != 2 || !bytes.Equal(before, source) {
 		t.Fatalf("source changed: labels=%d kept=%d sentinels=%d", labels, kept, sentinels)
 	}
-	if out := os.Getenv("INJOFFICE_" + strings.ToUpper(kind) + "_EVIDENCE_DIR"); out != "" {
+	envKind := strings.ToUpper(kind)
+	if splitLines {
+		envKind += "_LINE"
+	}
+	if out := os.Getenv("INJOFFICE_" + envKind + "_EVIDENCE_DIR"); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {
 			t.Fatal(err)
 		}

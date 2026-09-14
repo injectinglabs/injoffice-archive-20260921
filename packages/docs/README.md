@@ -359,10 +359,12 @@ and column identity. The normal `-1` sentinel produces one deterministic
 bounded separator rule; an unused `0` continuation sentinel stays inert.
 Bounded continuation admits a single endnote, or a single footnote referenced
 on the final body page of a paragraph-only, single-column, single-section body.
-The note splits only between complete zero-spacing paragraphs, without
-keep-with-next, explicit page breaks or fields; multiline paragraphs require
-`keep_lines=true`. A footnote's first paragraph plus ordinary separator must
-fit on its reference page. Later slices occupy note-only pages at page bottom,
+The note splits at shaped-line boundaries within zero-spacing paragraphs,
+without keep-with-next, explicit page breaks or fields. `keep_lines=true`
+keeps a paragraph intact. Default or enabled widow/orphan control requires at
+least two lines on both sides of an internal split; explicit false permits
+a single-line slice. A footnote's first legal line group plus ordinary separator
+must fit on its reference page. Later slices occupy note-only pages at page bottom,
 using the authored continuation separator and retaining the sole original label.
 The compiler shapes the continuation separator only when pagination activates it.
 Source replay rejects dropped, duplicated, moved or misidentified slices.
@@ -377,7 +379,7 @@ single-column physical grid; next-column requires an identical exact grid.
 Equal-width columns must divide exactly, while explicit columns must completely
 describe equal widths and authored gaps; omitted explicit spacing is standard
 zero. Note reflow or splitting outside the qualified whole-note reservation and
-paragraph-boundary continuation profiles refuses the complete projection;
+shaped-line continuation profiles refuses the complete projection;
 an unused continuation separator remains inert. Custom
 numbering/restarts/positions, ambiguous or duplicate
 references, missing labels or separators, cycles, nested tables, drawings,
