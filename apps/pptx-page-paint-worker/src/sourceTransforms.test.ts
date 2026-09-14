@@ -43,3 +43,42 @@ it('paints supplied outline glyphs under a noncardinal source affine through the
  expect(b!/a!).toBeCloseTo(1/Math.sqrt(3),12)
  expect(JSON.stringify(before)).toBe(copy);expect(result.font_digests).toEqual([digest])
 })
+
+it('composes the primary +90 shape / -90 body example without rotating supplied glyph metrics',async()=>{
+ const baseline=paths((await compilePptxPreview(fixture())).nodes).filter(path=>path.fill==='123456')
+ const input=fixture(false,false,5400000)
+ input.deck.slides[0].elements[0].textBody.rotationAngle60000=-5400000
+ const snapshot=JSON.stringify(input),result=await compilePptxPreview(input)
+ const glyphs=paths(result.nodes).filter(path=>path.fill==='123456')
+ expect(glyphs,JSON.stringify(result)).toHaveLength(6)
+ for(let i=0;i<glyphs.length;i++)for(let coordinate=0;coordinate<6;coordinate++)expect(glyphs[i]!.matrix[coordinate]).toBeCloseTo(baseline[i]!.matrix[coordinate]!,7)
+ expect(JSON.stringify(input)).toBe(snapshot)
+})
+it('upright cancels source rotation and reflection while retaining actual positive font axes',async()=>{
+ const baseline=paths((await compilePptxPreview(fixture())).nodes).filter(path=>path.fill==='123456')
+ for(const [h,v,angle] of [[false,false,5400000],[true,false,1800000],[false,true,10800000],[true,true,16200000]] as const){
+  const input=fixture(h,v,angle);input.deck.slides[0].elements[0].textBody.upright=true
+  input.deck.slides[0].elements[0].textBody.rotationAngle60000=1800000
+  const result=await compilePptxPreview(input),glyphs=paths(result.nodes).filter(path=>path.fill==='123456')
+  expect(glyphs,JSON.stringify(result)).toHaveLength(6)
+  for(let i=0;i<glyphs.length;i++)for(let axis=0;axis<4;axis++)expect(glyphs[i]!.matrix[axis]).toBeCloseTo(baseline[i]!.matrix[axis]!,7)
+ }
+})
+
+it('keeps upright actual glyph scale under an anisotropic parsed group with a fractional area',async()=>{
+ const input=fixture(),shape=input.deck.slides[0].elements[0]
+ shape.transform={x:0,y:0,cx:4000000,cy:2000000,rotationAngle:5400000}
+ shape.textBody.upright=true;shape.textBody.verticalAnchor='center';shape.paragraphs[0].align='center'
+ const original=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))
+ const group=original.slides[0].elements.find((element:{kind:string})=>element.kind==='group')
+ group.transform={x:2000000,y:2000000,cx:6000000,cy:2000000};group.childTransform={x:0,y:0,cx:4000000,cy:2000000}
+ group.children=[shape];group.compatibility=shape.compatibility;input.deck.slides[0].elements=[group]
+ const baseline=paths((await compilePptxPreview(fixture())).nodes).filter(path=>path.fill==='123456')
+ const result=await compilePptxPreview(input),glyphs=paths(result.nodes).filter(path=>path.fill==='123456')
+ expect(glyphs,JSON.stringify(result)).toHaveLength(6)
+ for(let i=0;i<glyphs.length;i++){
+  expect(glyphs[i]!.matrix[0]).toBeCloseTo(baseline[i]!.matrix[0]!*1.5,7)
+  expect(glyphs[i]!.matrix[3]).toBeCloseTo(baseline[i]!.matrix[3]!,7)
+  expect(glyphs[i]!.matrix[1]).toBeCloseTo(0,7);expect(glyphs[i]!.matrix[2]).toBeCloseTo(0,7)
+ }
+})

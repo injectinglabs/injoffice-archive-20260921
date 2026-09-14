@@ -4,6 +4,10 @@ import {createNativeWorkbookChartPaths} from './workbookChartPaths.js'
 import {sourceTextBounds} from './sourceTextBounds.js'
 import {sourceHierarchyAffine,SourceAffineBudget,convertSourceAffine,decodeSourceAffine,composeSourceAffines,qualifySourceAffinePoint,type SourceAffineFrame,type QualifiedSourceAffine} from './sourceAffine.js'
 import {sourceRenderTransform} from './sourceRenderTransform.js'
+import {sourceBodyRotation,sourceUprightTextArea,type ExactTextArea} from './sourceTextOrientation.js'
+import {exactTextLineWidth,exactTextAdvanceFits,exactTextAlignmentOffset,exactTextAnchorOffset,exactTextOffsetSum} from './sourceTextLayoutRational.js'
+import {exactTextTranslation} from './sourceTextPlacement.js'
+import {sourceAffineRational,type AffineRational} from './sourceAffine.js'
 import type {RenderTransform} from './types.js'
 import {layoutChartAxes,chartAxisTickVectors,CHART_AXIS_LAYOUT_POLICY,type ChartAxisLabelInput} from './chartAxisLayout.js'
 import {measureChartAxisText} from './chartAxisText.js'
@@ -198,6 +202,7 @@ interface TextContainerContext {
   readonly elementKind: 'text' | 'shape' | 'table'
   readonly bounds: RenderRect
   readonly layout?: NativeTextBodyLayout
+  readonly exactArea?: ExactTextArea
 }
 
 interface WrapPoint {
@@ -805,6 +810,15 @@ function qualifiedRenderAffine(transform:RenderTransform,budget:Budget):Qualifie
 type SourceParent={frame:SourceAffineFrame;child:Pick<SourceAffineFrame,'x'|'y'|'cx'|'cy'>}
 const sourceFrame=(transform:NativeElement['transform']):SourceAffineFrame=>({...transform,rotation:transform.rotationAngle??(transform.quarterTurns??0)*5400000})
 const qualifiedWorldAffine=(world:WorldAffine):QualifiedSourceAffine=>world.precise??{values:[world.a,world.b,world.c,world.d,world.tx,world.ty],errors:[RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO],depth:0}
+function exactTextAreaEnvelope(area:ExactTextArea,state:CompileState,path:string):RenderRect {
+  const floor=(value:AffineRational)=>value.numerator/value.denominator-(value.numerator<0n&&value.numerator%value.denominator!==0n?1n:0n)
+  const ceil=(value:AffineRational)=>-floor({numerator:-value.numerator,denominator:value.denominator})
+  const x=Number(floor(area.x)),y=Number(floor(area.y))
+  const right=Number(ceil(exactTextOffsetSum(area.x,area.cx,state.budget.affine))),bottom=Number(ceil(exactTextOffsetSum(area.y,area.cy,state.budget.affine)))
+  const result={x,y,cx:right-x,cy:bottom-y}
+  for(const [key,value]of Object.entries(result))checkCoordinate(value,path+'.'+key,state.budget,key==='cx'||key==='cy')
+  return result
+}
 const complexSourceParent=(parent:SourceParent):boolean=>{
   const {frame,child}=parent
   if(frame.rotation||frame.flipH||frame.flipV)return true
@@ -1382,7 +1396,7 @@ function singleConsumableSeparator(
   )
 }
 
-function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number, continuationWidth = width): Generator<WrapLineRange> {
+function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number|AffineRational, continuationWidth = width,affineBudget?:SourceAffineBudget): Generator<WrapLineRange> {
   if (shaped.length === 0) {
     yield { startRunIndex: 0, startClusterIndex: 0, endRunIndex: 0, endClusterIndex: 0 }
     return
@@ -1404,7 +1418,7 @@ function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: num
   while (cursor.runIndex < shaped.length) {
     const nextAdvance = advance + wrapAtomAdvance(shaped, cursor.runIndex, cursor.clusterIndex)
     if (!Number.isSafeInteger(nextAdvance)) throw new TextBodyLayoutRefusal('text.wrapUnavailable', 'cluster advances exceed integer precision during text wrapping')
-    if (nextAdvance > width) {
+    if (typeof width==='number'?nextAdvance > width:!exactTextAdvanceFits(nextAdvance,width,affineBudget!)) {
       if (hasBreakOpportunity && (breakEndRunIndex !== lineStartRunIndex || breakEndClusterIndex !== lineStartClusterIndex)) {
         yield {
           startRunIndex: lineStartRunIndex,
@@ -1616,8 +1630,9 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     const indent = measuredParagraph ? paragraph.indentEmu ?? 0 : 0
     if (measuredParagraph && (paragraph.align===undefined || paragraph.bullet===undefined || paragraph.level===undefined || (paragraph.level!==0&&(paragraph.marginLeftEmu===undefined||paragraph.indentEmu===undefined)))) throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','measured paragraphs need explicit alignment/list semantics and explicit offsets at nonzero levels')
     const firstTextOffset=margin+(paragraph.bullet?0:indent)
-    const firstWidth=context.bounds.cx-firstTextOffset,continuationWidth=context.bounds.cx-margin
-    if(measuredParagraph&&(!Number.isSafeInteger(firstWidth)||!Number.isSafeInteger(continuationWidth)||firstWidth<=0||continuationWidth<=0))throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','paragraph margins leave no positive text line width')
+    const firstWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,firstTextOffset,state.budget.affine):context.bounds.cx-firstTextOffset
+    const continuationWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,margin,state.budget.affine):context.bounds.cx-margin
+    if(measuredParagraph&&!context.exactArea&&(!Number.isSafeInteger(firstWidth)||!Number.isSafeInteger(continuationWidth)||(firstWidth as number)<=0||(continuationWidth as number)<=0))throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','paragraph margins leave no positive text line width')
     if (context.layout && state.nativeTextInheritanceUnresolved && paragraph.runs.some(nativeRunLacksExplicitFont)) {
       throw new TextBodyLayoutRefusal('text.inheritanceUnavailable', 'native layout refuses runs that still need unresolved presentation/layout/master/theme fonts')
     }
@@ -1664,7 +1679,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     }
     const squareWrap = context.layout?.wrap === 'square'
     const lineRanges: Iterable<WrapLineRange> = squareWrap
-      ? squareWrappedLineRanges(shaped, firstWidth, continuationWidth)
+      ? squareWrappedLineRanges(shaped, firstWidth, continuationWidth,state.budget.affine)
       : [{ startRunIndex: 0, startClusterIndex: 0, endRunIndex: shaped.length, endClusterIndex: 0 }]
     const fragmentProgress: FragmentProgress[] | undefined = squareWrap
       ? shaped.map(() => ({ clusterIndex: 0, glyphIndex: 0, glyphPenXEmu: 0, glyphPenYEmu: 0 }))
@@ -1716,7 +1731,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(lineHeight, path, state.budget, true)
       const align = paragraph.align ?? 'left'
       const textOffset=lineIndex===0?firstTextOffset:margin
-      const lineStart = textOffset+alignOffset(align, context.bounds.cx-textOffset, advance)
+      const lineStart = textOffset+(context.exactArea?0:alignOffset(align, context.bounds.cx-textOffset, advance))
+      const lineTransform=context.exactArea?sourceRenderTransform(exactTextTranslation(exactTextAlignmentOffset(align,exactTextLineWidth(context.exactArea.cx,textOffset,state.budget.affine),advance,state.budget.affine),sourceAffineRational(0n),state.budget.maxCoordinateEmu,state.budget.affine),state.budget.affine):undefined
       let cursor = direction === 'rtl' ? lineStart + advance : lineStart
       const runs = lineShaped.map((item, fragmentIndex) => {
         takeTextFragment(state, `${path}.runs[${fragmentIndex}]`)
@@ -1746,6 +1762,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
         kind: 'paragraph', sourceElementId: context.elementId, paragraphIndex, lineIndex,
         align, direction, level: paragraph.level ?? 0, bullet: paragraph.bullet ?? false,
         x: lineStart, y, widthEmu: advance, heightEmu: lineHeight, runs,
+        ...(lineTransform?{transform:lineTransform}:{}),
         ...(marker?{marker}:{}),
         ...(consumedSoftSeparators === undefined ? {} : { consumedSoftSeparators }),
       })
@@ -1762,6 +1779,12 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(y, path, state.budget)
       lineIndex++
     }
+  }
+  if(context.exactArea){
+    const anchor=state.lineLayoutPolicy?context.layout?.verticalAnchor??'top':'top'
+    const offsetY=exactTextOffsetSum(context.exactArea.y,exactTextAnchorOffset(anchor,context.exactArea.cy,y,state.budget.affine),state.budget.affine)
+    const placement=exactTextTranslation(context.exactArea.x,offsetY,state.budget.maxCoordinateEmu,state.budget.affine)
+    return result.map(paragraph=>({...paragraph,transform:sourceRenderTransform(composeSourceAffines(placement,qualifiedRenderAffine(paragraph.transform!,state.budget),state.budget.affine),state.budget.affine)}))
   }
   const offsetX = context.bounds.x
   const remainder = context.bounds.cy - y
@@ -1800,11 +1823,13 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     if (approximateSourceFrame) state.diagnostics.push({ severity: 'warning', code: 'text.sourceFrameAutoFitApproximate', message: 'Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint.', slideId: state.slide.id, elementId: context.elementId })
     const vertical = context.layout?.writingMode === 'vertical-clockwise'
     if (vertical && paragraphs.some(paragraph=>paragraph.bullet!==false || paragraph.level!==0 || (paragraph.marginLeftEmu??0)!==0 || (paragraph.indentEmu??0)!==0 || paragraph.runs.some(run=>!run.text || !/^[\x20-\x7e]+$/.test(run.text)))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires nonempty ASCII Latin text and no bullets or paragraph offsets.')
-    const layoutContext = vertical ? {...context,bounds:{x:0,y:0,cx:context.bounds.cy,cy:context.bounds.cx}} : context
+    const verticalArea=context.exactArea?{x:sourceAffineRational(0n),y:sourceAffineRational(0n),cx:context.exactArea.cy,cy:context.exactArea.cx}:undefined
+    const layoutContext = vertical ? {...context,bounds:{x:0,y:0,cx:context.bounds.cy,cy:context.bounds.cx},...(verticalArea?{exactArea:verticalArea}:{})} : context
     const compiled = await compileParagraphs(paragraphs, layoutContext, state)
     if(vertical && compiled.some(paragraph=>paragraph.runs.some(run=>run.direction!=='ltr'))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires qualified left-to-right Latin shaping.')
-    const transform = vertical ? {aPpm:0,bPpm:1_000_000,cPpm:-1_000_000,dPpm:0,txEmu:context.bounds.x+context.bounds.cx,tyEmu:context.bounds.y} : undefined
-    if(transform){checkCoordinate(transform.txEmu,path,state.budget);checkCoordinate(transform.tyEmu,path,state.budget)}
+    const zero=sourceAffineRational(0n),one=sourceAffineRational(1n)
+    const transform = vertical ? context.exactArea?sourceRenderTransform({values:[zero,one,sourceAffineRational(-1n),zero,exactTextOffsetSum(context.exactArea.x,context.exactArea.cx,state.budget.affine),context.exactArea.y],errors:[zero,zero,zero,zero,zero,zero],depth:1},state.budget.affine):{aPpm:0,bPpm:1_000_000,cPpm:-1_000_000,dPpm:0,txEmu:context.bounds.x+context.bounds.cx,tyEmu:context.bounds.y} : undefined
+    if(transform&&!transform.sourceAffine){checkCoordinate(transform.txEmu,path,state.budget);checkCoordinate(transform.tyEmu,path,state.budget)}
     const deterministic = Boolean(context.layout && state.lineLayoutPolicy)
     if (deterministic) state.diagnostics.push({severity:'warning',code:'text.deterministicLayout',message:'Measured native glyphs use InjOffice max-run-natural-v1 line boxes and anchor offsets; this policy is not an Office visual-equivalence claim.',slideId:state.slide.id,elementId:context.elementId})
     return {
@@ -1892,7 +1917,7 @@ async function compileTableCells(element: Extract<NativeElement, { kind: 'table'
   return cells
 }
 
-async function compileElement(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine, sourceParents:readonly SourceParent[]=[]): Promise<RenderNode> {
+async function compileElement(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine, sourceParents:readonly SourceParent[]=[],legacyOrientationUnsupported=false): Promise<RenderNode> {
   if (depth > state.budget.maxDepth) {
     throw new RenderCompileError('render.depthBudget', `$.elements.${element.id}`, `RenderTree nesting exceeds ${state.budget.maxDepth}`)
   }
@@ -1926,19 +1951,37 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
   const world = sourceWorld?checkedWorldAffine(sourceWorld,translationTransform(0,0),base.bounds,`$.elements.${element.id}`,state.budget):checkedWorldAffine(parentWorld,base.transform,base.bounds,`$.elements.${element.id}`,state.budget)
   const checkLeafBounds=(bounds:RenderRect)=>checkedWorldAffine(world,translationTransform(0,0),bounds,`$.elements.${element.id}`,state.budget)
 
-  const compileSourceText=async(paragraphs:readonly NativeParagraph[],bounds:RenderRect,layout:Extract<NativeElement,{kind:'text'|'shape'}>['textBody']):Promise<RenderTextBodyNode>=>{
-    const body=await compileTextBody(paragraphs,{elementId:element.id,elementKind:element.kind as 'text'|'shape',bounds,layout},state)
-    if(!sourceTransform)return body
+  const compileSourceText=async(paragraphs:readonly NativeParagraph[],bounds:RenderRect,layout:Extract<NativeElement,{kind:'text'|'shape'}>['textBody']) :Promise<RenderTextBodyNode>=>{
     const frame=sourceFrame(element.transform)
+    const oriented=(layout?.rotationAngle60000??0)!==0||layout?.upright===true
+    if(oriented&&legacyOrientationUnsupported)throw new RenderCompileError('text.legacyGroupOrientation',`$.elements.${element.id}.textBody`,'new body orientation under an authored conventional affine group requires an explicit source-mode hierarchy')
+    const upright=layout?.upright?sourceUprightTextArea(frame,sourceParents,bounds,state.budget.affine):undefined
+    const layoutBounds=upright?exactTextAreaEnvelope(upright.area,state,`$.elements.${element.id}.uprightArea`):bounds
+    const body=await compileTextBody(paragraphs,{elementId:element.id,elementKind:element.kind as 'text'|'shape',bounds:layoutBounds,layout,...(upright?{exactArea:upright.area}:{})},state)
+    if(body.status==='refused'){
+      checkedWorldAffine(world,translationTransform(0,0),bounds,`$.elements.${element.id}.textRefusal`,state.budget)
+      return {...body,bounds}
+    }
+    if(!sourceTransform&&!oriented)return body
     const reflected=[frame,...sourceParents.map(parent=>parent.frame)].reduce((value,item)=>value!==((item.flipH??false)!==(item.flipV??false)),false)
-    const orientationTransform=reflected?{aPpm:-1000000,bPpm:0,cPpm:0,dPpm:1000000,txEmu:element.transform.cx,tyEmu:0}:undefined
+    const orientationTransform=upright?sourceRenderTransform(upright.orientation,state.budget.affine):oriented||reflected?sourceRenderTransform(sourceBodyRotation(frame,sourceParents,layout?.rotationAngle60000??0,state.budget.affine),state.budget.affine):undefined
     // DrawingML H flips affect the outline. Counter-reflect about the source
     // frame before the text-only vertical mapping to retain readable glyphs.
     let textWorld=world
-    if(orientationTransform)textWorld=checkedWorldAffine(textWorld,orientationTransform,localBounds(element.transform.cx,element.transform.cy),`$.elements.${element.id}.textOrientation`,state.budget)
+    if(orientationTransform)textWorld=checkedWorldAffine(textWorld,orientationTransform,localBounds(frame.cx,frame.cy),`$.elements.${element.id}.textOrientation`,state.budget)
     if(body.transform)textWorld=checkedWorldAffine(textWorld,body.transform,body.bounds,`$.elements.${element.id}.textBody`,state.budget)
-    const hull=sourceTransform.sourceAffine||reflected?await sourceTextBounds(body,state.options.textLayout.glyphExtents):body.bounds
-    checkedWorldAffine(textWorld,translationTransform(0,0),hull,`$.elements.${element.id}.textHull`,state.budget)
+    if(sourceTransform?.sourceAffine||reflected||oriented){
+      if(body.paragraphs.some(paragraph=>paragraph.transform)){
+        for(const paragraph of body.paragraphs){
+          const hull=await sourceTextBounds({...body,bounds:{x:0,y:0,cx:0,cy:0},paragraphs:[paragraph]},state.options.textLayout.glyphExtents)
+          checkedWorldAffine(textWorld,paragraph.transform??translationTransform(0,0),hull,`$.elements.${element.id}.textHull`,state.budget)
+        }
+      }else{
+        const hull=await sourceTextBounds(body,state.options.textLayout.glyphExtents)
+        checkedWorldAffine(textWorld,translationTransform(0,0),hull,`$.elements.${element.id}.textHull`,state.budget)
+      }
+    }else checkedWorldAffine(textWorld,translationTransform(0,0),body.bounds,`$.elements.${element.id}.textHull`,state.budget)
+    if(oriented)state.diagnostics.push({severity:'warning',code:'text.sourceOrientationPolicy',message:'Body rotation uses the group-scaled anchor; upright uses exact source-upright-physical-quadrants-v1 text areas with unchanged glyph metrics. This bounded preview is not Office layout equivalence.',slideId:state.slide.id,elementId:element.id})
     return {...body,...(orientationTransform?{orientationTransform}:{})}
   }
   switch (element.kind) {
@@ -2121,7 +2164,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     case 'group': {
       const children: RenderNode[] = []
       for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
-        children.push(await compileElement(element.children[childIndex]!, childIndex, depth + 1, state, world, sourceGroup?[{frame:sourceFrame(element.transform),child:element.childTransform!},...sourceParents]:sourceParents))
+        children.push(await compileElement(element.children[childIndex]!, childIndex, depth + 1, state, world, sourceGroup?[{frame:sourceFrame(element.transform),child:element.childTransform!},...sourceParents]:sourceParents,legacyOrientationUnsupported||(!sourceGroup&&(base.transform.aPpm!==1000000||base.transform.dPpm!==1000000||base.transform.bPpm!==0||base.transform.cPpm!==0))))
       }
       const group: RenderGroupNode = { kind: 'group', ...base, children }
       return group

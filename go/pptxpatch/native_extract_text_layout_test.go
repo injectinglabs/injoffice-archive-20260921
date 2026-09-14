@@ -29,7 +29,12 @@ func TestExtractNativePPTXTextBodyDefaultsAndExplicitEquivalents(t *testing.T) {
 			if left.Compatibility.Status != NativeCompatibilityStatusEditable || right.Compatibility.Status != NativeCompatibilityStatusEditable || len(left.Passthrough) != 0 || len(right.Passthrough) != 0 {
 				t.Fatalf("exact body layouts were not editable: default=%#v explicit=%#v", left, right)
 			}
-			if left.TextBody == nil || !reflect.DeepEqual(left.TextBody, right.TextBody) {
+			if right.TextBody == nil || right.TextBody.RotationAngle60000 == nil || *right.TextBody.RotationAngle60000 != 0 || right.TextBody.Upright == nil || *right.TextBody.Upright {
+				t.Fatal("explicit zero orientation presence lost")
+			}
+			rightLayout := *right.TextBody
+			rightLayout.RotationAngle60000, rightLayout.Upright = nil, nil
+			if left.TextBody == nil || !reflect.DeepEqual(left.TextBody, &rightLayout) {
 				t.Fatalf("schema defaults did not materialize exactly: default=%#v explicit=%#v", left.TextBody, right.TextBody)
 			}
 			want := NativeTextBodyLayout{

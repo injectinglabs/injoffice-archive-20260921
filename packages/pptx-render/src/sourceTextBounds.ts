@@ -13,7 +13,13 @@ export async function sourceTextBounds(body:RenderTextBodyNode,extents:NativePpt
  for(const paragraph of body.paragraphs){
   include(paragraph.x,paragraph.y);include(paragraph.x+paragraph.widthEmu,paragraph.y+paragraph.heightEmu)
   for(const run of paragraph.marker?[paragraph.marker,...paragraph.runs]:paragraph.runs){
-   if(run.status==='refused')continue
+   if(run.status==='refused'){
+    // Match the actual paint placeholder, which can exceed a zero-advance
+    // refused run's paragraph box. It participates in every affine/clip hull.
+    include(run.x,paragraph.y)
+    include(run.x+Math.max(1,Math.round(run.fontSizeMilliPoints*127/10)),paragraph.y+Math.max(1,run.lineHeightEmu))
+    continue
+   }
    if(run.glyphs.length&&(!extents||!run.faceId||!run.contentDigest))throw new RangeError('Arbitrary source transforms require supplied glyph control hulls')
    for(const glyph of run.glyphs){
     const value=await extents!({faceId:run.faceId!,contentDigest:run.contentDigest!,glyphId:glyph.glyphId})

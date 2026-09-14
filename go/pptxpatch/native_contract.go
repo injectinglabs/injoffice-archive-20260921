@@ -131,6 +131,8 @@ type NativeTextBodyLayout struct {
 	HorizontalOverflow string                   `json:"horizontalOverflow"`
 	VerticalOverflow   string                   `json:"verticalOverflow"`
 	WritingMode        *string                  `json:"writingMode,omitempty"`
+	RotationAngle60000 *int64                   `json:"rotationAngle60000,omitempty"`
+	Upright            *bool                    `json:"upright,omitempty"`
 }
 
 type NativeArrowEnd struct {

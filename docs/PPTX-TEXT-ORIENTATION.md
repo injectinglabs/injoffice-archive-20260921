@@ -1,8 +1,11 @@
-# DrawingML text orientation preparation
+# DrawingML source text orientation
 
-This lane is not yet connected to source extraction or the public renderer.
-Nonzero `bodyPr@rot` and `upright=true` remain explicitly refused until the
-shared contract/compiler integration and actual-font browser proof are complete.
+Source extraction, the public compiler, recording paint and the font worker now
+preview separate `bodyPr@rot` and `upright=true` for text boxes and shapes.
+The native contract preserves raw signed `rotationAngle60000` and explicit
+`upright` presence. Nonzero rotation/upright parsed targets remain preserve-only,
+and actual mutation resolution rejects them. Existing absent/default behavior
+is unchanged. This is a bounded deterministic preview, not Office layout parity.
 
 ## Source rules and preview policy
 
@@ -58,31 +61,41 @@ font metrics and is deliberately avoided. Body rotation is
 ignored when upright is true. Writing-mode direction, alignment, clipping and
 glyph orientation remain separate decisions. Exact quadrant boundaries, all
 flips, nonuniform groups, asymmetric insets, real glyph ink and overflow controls
-must be covered before admission. The precise area helper remains subject
-to independent review before shared implementation. Its rational bounds cannot
-be passed to the current integer `RenderRect` layout by rounding. The subsequent
-layout adapter must use exact rational wrap comparisons and anchor offsets,
-then qualify any final paint conversion. Existing source dimensions and insets
+are covered by independently reviewed exact helpers and connected supplied-font
+tests. Rational area bounds are not rounded into integer layout rectangles:
+the layout adapter compares wrap thresholds and computes anchor offsets exactly,
+then qualifies final paint conversion. Existing source dimensions and insets
 remain immutable.
 
-### Proposed connected layout representation
+### Connected layout representation
 
 `sourceTextLayoutRational` now provides bounded exact margin subtraction, wrap
 comparisons and alignment/anchor offsets using the affine engine's existing
-rational arithmetic. The current paragraph transport still stores integer run
-positions. Integration must retain fractional line-alignment residuals in a
-paragraph-local affine translation, rather than rescaling glyph metrics or
-rounding the area before wrapping. The unchanged integer metrics and advances
+rational arithmetic. The paragraph transport retains integer run positions and stores fractional
+line-alignment and area-origin residuals in a paragraph-local affine translation.
+Glyph metrics are not rescaled and the area is not rounded before wrapping. The unchanged integer metrics and advances
 remain authoritative for shaping; a fractional origin belongs to placement.
 
-The exact text clip must likewise be independent of glyph scaling. A proposed
-paint sequence applies the area's diagonal affine, clips an integer reference
-rectangle, then applies the exact inverse before painting glyphs. This uses the
-existing transform/clip commands, retaining the clip in device coordinates.
-Both transforms must be derived from the same bounded exact area, validated
-consistently by worker transport, and included in full world/error budgets.
-Outward integer envelopes may be used for bounds checks, never as replacements
-for the intended exact clip. These connected changes are not yet implemented.
+Current admitted shape/text bodies permit overflow in both axes, so their exact
+rational area controls wrapping and placement without introducing a new body
+clip. The existing slide clip remains active. Outward integer area envelopes
+are used only for bounds qualification. Every paragraph's actual glyph and
+refusal-placeholder hull is checked under its placement, text orientation and
+final world matrix before painting.
+
+The prepared exact clip/inverse helper is reserved for future independently
+qualified fractional clip policies; it is not substituted for source overflow.
+New orientation inside authored conventional nontranslation groups explicitly
+refuses unless the caller uses a source-mode hierarchy. Existing authored group
+behavior without new orientation fields remains unchanged.
+
+Actual functional fixtures exercise Go and WASM extraction, public compilation,
+supplied DejaVu Sans glyph outlines and the existing browser vector component:
++90 shape/−90 body, a fractional upright area under 1.5× horizontal group scale,
+and reflected/noncardinal upright text. A separate above-slide upright fixture
+retains glyph paths but paints zero glyph pixels under the active slide clip.
+Independent tests also cover raw signed limits, explicit zero/false presence,
+immutable source bytes and actual mutation refusal.
 
 ## Required graphic-frame integration
 
