@@ -59,9 +59,6 @@ func evaluateNativePresetSource(node *nativeXMLNode, ns string, width, height in
 			if !ok {
 				return nil, fmt.Errorf("missing preset adjustment name")
 			}
-			if _, exists := adjustments[key]; exists {
-				return nil, fmt.Errorf("duplicate preset adjustment")
-			}
 			formula, _ := exactNativeAttr(guide, "", "fmla")
 			fields := strings.Fields(formula)
 			if len(fields) != 2 || fields[0] != "val" {
@@ -71,6 +68,9 @@ func evaluateNativePresetSource(node *nativeXMLNode, ns string, width, height in
 			if err != nil || value > nativeMaxSafeInteger || value < -nativeMaxSafeInteger {
 				return nil, fmt.Errorf("invalid preset adjustment value")
 			}
+			// Source guides assign in document order. Validate every assignment
+			// before replacing the previous literal; counting remains based on
+			// source entries, not the number of distinct adjustment names.
 			adjustments[key] = value
 		}
 	}
