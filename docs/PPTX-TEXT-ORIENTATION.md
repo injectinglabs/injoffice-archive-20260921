@@ -65,6 +65,25 @@ layout adapter must use exact rational wrap comparisons and anchor offsets,
 then qualify any final paint conversion. Existing source dimensions and insets
 remain immutable.
 
+### Proposed connected layout representation
+
+`sourceTextLayoutRational` now provides bounded exact margin subtraction, wrap
+comparisons and alignment/anchor offsets using the affine engine's existing
+rational arithmetic. The current paragraph transport still stores integer run
+positions. Integration must retain fractional line-alignment residuals in a
+paragraph-local affine translation, rather than rescaling glyph metrics or
+rounding the area before wrapping. The unchanged integer metrics and advances
+remain authoritative for shaping; a fractional origin belongs to placement.
+
+The exact text clip must likewise be independent of glyph scaling. A proposed
+paint sequence applies the area's diagonal affine, clips an integer reference
+rectangle, then applies the exact inverse before painting glyphs. This uses the
+existing transform/clip commands, retaining the clip in device coordinates.
+Both transforms must be derived from the same bounded exact area, validated
+consistently by worker transport, and included in full world/error budgets.
+Outward integer envelopes may be used for bounds checks, never as replacements
+for the intended exact clip. These connected changes are not yet implemented.
+
 ## Required graphic-frame integration
 
 PresentationML `graphicFrame/xfrm` uses DrawingML `CT_Transform2D`, so its own
@@ -76,6 +95,15 @@ under the final world matrix. Their current horizontal clip implementation is
 explicitly limited to a top-level unrotated table. Replacing that guard requires
 a qualified local clip that preserves vertical overflow; dropping the guard or
 clipping every cell to its full rectangle would change behavior.
+
+The dedicated `sourceTableTextClip` helper constructs a finite cell-local strip
+with unchanged cell x boundaries and a vertical span enclosing every measured
+glyph/control and refusal-placeholder hull. It retains the existing slide clip.
+The local affine qualifier must pass before outward rounding includes its full
+1/8-EMU allowance; the caller must additionally qualify the returned strip under
+the final world transform. Actual rotated/flipped/anisotropic browser controls
+must prove outside-x ink disappears while outside-y ink remains visible before
+source admission changes.
 
 Charts require equivalent source-label orientation and full label/plot/control
 hulls, including axis text and its existing supplied-font rules. These source,
