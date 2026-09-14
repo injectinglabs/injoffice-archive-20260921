@@ -93,7 +93,7 @@ func TestExtractNativePPTXGroupedTableRetainsAffineAndOrder(t *testing.T) {
 		t.Fatalf("group affine changed: %#v", projected)
 	}
 	child := projected.Children[0]
-	if *child.Transform.X != 400000 || *child.Transform.Y != 200000 || *child.Transform.Cx != 1000000 || *child.Transform.Cy != 500000 || child.Table == nil || child.Compatibility.Status != NativeCompatibilityStatusEditable {
+	if *child.Transform.X != 400000 || *child.Transform.Y != 200000 || *child.Transform.Cx != 1000000 || *child.Transform.Cy != 500000 || child.Table == nil || child.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || child.GraphicFrameLayout == nil || *child.GraphicFrameLayout != nativeSourceAnchoredGraphicFrame {
 		t.Fatalf("grouped table local geometry changed: %#v", child)
 	}
 	if issues := ValidateNativePPTX(deck); len(issues) != 0 {

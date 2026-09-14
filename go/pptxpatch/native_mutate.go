@@ -513,7 +513,7 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 	var markAffineTargets func([]NativeElement, bool)
 	markAffineTargets = func(elements []NativeElement, inherited bool) {
 		for _, element := range elements {
-			blocked := inherited || nativeComplexAffineGroup(element)
+			blocked := inherited || nativeComplexAffineGroup(element) || element.GraphicFrameLayout != nil
 			if blocked {
 				affineTargets[element.ID] = true
 			}
@@ -561,6 +561,9 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 		}
 		if element.Geometry != nil {
 			return nil, fmt.Errorf("%s: custom geometry is preview-only", prefix)
+		}
+		if element.GraphicFrameLayout != nil {
+			return nil, fmt.Errorf("pptxpatch: source-anchored graphic frames are preview-only")
 		}
 		if element.Transform.QuarterTurns != nil || nativeHasSourceAffine(element.Transform) {
 			return nil, fmt.Errorf("%s: source quarter-turn transforms are preview-only", prefix)

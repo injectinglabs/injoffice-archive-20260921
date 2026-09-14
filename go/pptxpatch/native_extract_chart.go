@@ -118,6 +118,11 @@ func (extractor *nativeExtractor) extractNativeChartGraphicFrame(node *nativeXML
 		Message: "Chart is preserved as an opaque relationship graph.",
 		Scope:   &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &partName},
 	})
+	if nativeHasSourceAffine(transform) {
+		if err := nativeMarkGraphicFrameLayout(&element); err != nil {
+			return NativeElement{}, err
+		}
+	}
 	return element, nil
 }
 

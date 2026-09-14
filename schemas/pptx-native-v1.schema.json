@@ -1644,6 +1644,7 @@
       "additionalProperties": false,
       "required": ["kind", "id", "provenance", "transform", "table", "passthrough", "compatibility"],
       "properties": {
+        "graphicFrameLayout": { "const": "source-anchored-v1" },
         "kind": { "const": "table" },
         "id": { "$ref": "#/$defs/nativeId" },
         "provenance": { "$ref": "#/$defs/provenance" },
@@ -1662,6 +1663,7 @@
       "additionalProperties": false,
       "required": ["kind", "id", "provenance", "transform", "chart", "source", "passthrough", "compatibility"],
       "properties": {
+        "graphicFrameLayout": { "const": "source-anchored-v1" },
         "kind": { "const": "chart" },
         "id": { "$ref": "#/$defs/nativeId" },
         "provenance": { "$ref": "#/$defs/provenance" },

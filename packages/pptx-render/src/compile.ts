@@ -1,3 +1,6 @@
+import {sourceGraphicFramePaintBounds} from './sourceGraphicFramePaintBounds.js'
+import {sourceGraphicFrameLayout,projectSourceGraphicFrameLayout,sourceGraphicFramePaintTransform,qualifySourceGraphicFrameSpans} from './sourceGraphicFramePolicy.js'
+import {sourceTableTextBounds} from './sourceTableTextBounds.js'
 import {createNativeLiteralStackedBarPaths} from './literalStackedBar.js'
 import {createNativeLiteralStackedLinePaths} from './literalStackedLine.js'
 import {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_DISCLOSURE} from './literalBubble.js'
@@ -1873,11 +1876,11 @@ function scaleTracks(source: readonly number[], count: number, target: number): 
   return result
 }
 
-async function compileTableCells(element: Extract<NativeElement, { kind: 'table' }>, state: CompileState): Promise<readonly RenderTableCellNode[]> {
+async function compileTableCells(element: Extract<NativeElement, { kind: 'table' }>, state: CompileState, sourceWorld?:WorldAffine): Promise<readonly RenderTableCellNode[]> {
   const rowCount = element.table.rows.length
   const columnCount = element.table.columnWidths.length
-  const widths = scaleTracks(element.table.columnWidths, columnCount, element.transform.cx)
-  const heights = scaleTracks(element.table.rowHeights, rowCount, element.transform.cy)
+  const widths = element.graphicFrameLayout?[...element.table.columnWidths]:scaleTracks(element.table.columnWidths, columnCount, element.transform.cx)
+  const heights = element.graphicFrameLayout?[...element.table.rowHeights]:scaleTracks(element.table.rowHeights, rowCount, element.transform.cy)
   const cells: RenderTableCellNode[] = []
   let y = 0
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -1913,6 +1916,19 @@ async function compileTableCells(element: Extract<NativeElement, { kind: 'table'
         }, state))[0]!
         cells.push({ ...common, paragraph })
       }
+      if(sourceWorld){
+        const compiled=cells[cells.length-1]!
+        const cellWorld=checkedWorldAffine(sourceWorld,translationTransform(x,y),{x:0,y:0,cx:bounds.cx,cy:bounds.cy},`$.elements.${element.id}.cells.${rowIndex}.${columnIndex}`,state.budget)
+        if(compiled.border){const pad=Math.ceil(compiled.border.widthEmu/2);checkedWorldAffine(cellWorld,translationTransform(0,0),{x:-pad,y:-pad,cx:bounds.cx+2*pad,cy:bounds.cy+2*pad},`$.elements.${element.id}.cellBorder`,state.budget)}
+        if(compiled.textBody){
+          const measured=await sourceTableTextBounds(compiled.textBody,bounds.cx,qualifiedWorldAffine(cellWorld),state.options.textLayout.glyphExtents,state.budget.maxCoordinateEmu,state.budget.affine)
+          if(measured.horizontalClip)cells[cells.length-1]={...compiled,horizontalTextClip:measured.horizontalClip}
+        }else if(compiled.paragraph){
+          const identity=sourceGraphicFramePaintTransform(translationTransform(0,0),state.budget.affine)
+          const body={status:'ok',bounds:{x:0,y:0,cx:bounds.cx,cy:bounds.cy},paragraphs:[compiled.paragraph]} as unknown as RenderTextBodyNode
+          qualifySourceGraphicFrameSpans(qualifiedWorldAffine(cellWorld),[{bounds:await sourceTextBounds(body,state.options.textLayout.glyphExtents),transform:identity}],state.budget.maxCoordinateEmu,state.budget.affine)
+        }
+      }
       x += widths[columnIndex]!
     }
     y += heights[rowIndex]!
@@ -1921,14 +1937,28 @@ async function compileTableCells(element: Extract<NativeElement, { kind: 'table'
 }
 
 async function compileElement(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine, sourceParents:readonly SourceParent[]=[],legacyOrientationUnsupported=false): Promise<RenderNode> {
+  const node=await compileElementContent(element,zIndex,depth,state,parentWorld,sourceParents,legacyOrientationUnsupported)
+  if(element.kind==='chart'&&element.graphicFrameLayout){
+    const layout=sourceGraphicFrameLayout(sourceFrame(element.transform),sourceParents,state.budget.affine)
+    const projection=projectSourceGraphicFrameLayout(layout,state.budget.maxCoordinateEmu,state.budget.affine)
+    const bounds=await sourceGraphicFramePaintBounds(node,state.options.textLayout.glyphExtents,state.budget.affine)
+    const x=projection.hullOutsetXEmu,y=projection.hullOutsetYEmu
+    checkedWorldAffine(parentWorld,node.transform,{x:bounds.x-x,y:bounds.y-y,cx:bounds.cx+2*x,cy:bounds.cy+2*y},`$.elements.${element.id}.physicalPaintHull`,state.budget)
+  }
+  return node
+}
+async function compileElementContent(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine, sourceParents:readonly SourceParent[]=[],legacyOrientationUnsupported=false): Promise<RenderNode> {
   if (depth > state.budget.maxDepth) {
     throw new RenderCompileError('render.depthBudget', `$.elements.${element.id}`, `RenderTree nesting exceeds ${state.budget.maxDepth}`)
   }
-  if((element.kind==='table'||element.kind==='chart')&&(hasSourceOrientation(element)||sourceParents.some(complexSourceParent)))throw new RenderCompileError('render.worldTransform',`$.elements.${element.id}`,'new affine table/chart text orientation is not yet qualified')
+  if((element.kind==='table'||element.kind==='chart')&&!element.graphicFrameLayout&&(hasSourceOrientation(element)||sourceParents.some(complexSourceParent)))throw new RenderCompileError('render.worldTransform',`$.elements.${element.id}`,'new affine table/chart text orientation is not yet qualified')
+  const graphicFrame=(element.kind==='table'||element.kind==='chart')&&element.graphicFrameLayout!==undefined?sourceGraphicFrameLayout(sourceFrame(element.transform),sourceParents,state.budget.affine):undefined
+  const projectedFrame=graphicFrame&&element.kind==='chart'?projectSourceGraphicFrameLayout(graphicFrame,state.budget.maxCoordinateEmu,state.budget.affine):undefined
   const sourceMode=element.provenance==='parsed'||hasSourceOrientation(element)||sourceParents.length>0
   const sourceGroup=sourceMode&&element.kind==='group'&&element.childTransform!==undefined
   let sourceTransform:RenderTransform|undefined
-  if(sourceMode&&!sourceGroup)sourceTransform=sourceRenderTransform(sourceHierarchyAffine(sourceFrame(element.transform),sourceParents,state.budget.affine),state.budget.affine)
+  if(graphicFrame)sourceTransform=sourceRenderTransform(graphicFrame.origin,state.budget.affine)
+  else if(sourceMode&&!sourceGroup)sourceTransform=sourceRenderTransform(sourceHierarchyAffine(sourceFrame(element.transform),sourceParents,state.budget.affine),state.budget.affine)
   copyNativeDiagnostics(state, element.compatibility, element.id)
   if (element.compatibility.status === 'refused') {
     state.diagnostics.push({ severity: 'refusal', code: 'native.refused', message: 'native compatibility refused this element', slideId: state.slide.id, elementId: element.id })
@@ -1948,7 +1978,10 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     ? {...elementBase(element,zIndex,state.budget,false),transform:translationTransform(0,0)}
     : element.kind === 'group' ? exactGroupBase(element,zIndex,state.budget)
     : elementBase(element,zIndex,state.budget,!hasNativeTextBody&&element.kind!=='connector'&&!(element.kind==='shape'&&element.geometry))
-  const base={...ordinaryBase,...(sourceTransform?{transform:sourceTransform}:{})}
+  const intrinsicTotal=(tracks:readonly number[])=>{let total=0;for(const value of tracks){total+=value;checkCoordinate(total,`$.elements.${element.id}.intrinsicTracks`,state.budget,true)}return total}
+  const physicalBounds=projectedFrame?{x:0,y:0,cx:projectedFrame.widthEmu,cy:projectedFrame.heightEmu}:graphicFrame&&element.kind==='table'?{x:0,y:0,cx:intrinsicTotal(element.table.columnWidths),cy:intrinsicTotal(element.table.rowHeights)}:undefined
+  const base={...ordinaryBase,...(sourceTransform?{transform:sourceTransform}:{}),...(physicalBounds?{bounds:physicalBounds,clip:undefined}:{})}
+  if(graphicFrame)state.diagnostics.push({severity:'warning',code:'graphicFrame.sourceAnchoredPreview',message:'Source-anchored physical frame with intrinsic table tracks and unscaled glyph metrics; PowerPoint table importer rewrites are not emulated.'+(projectedFrame?' Chart layout uses nearest-EMU physical dimensions with separately bounded size uncertainty.':''),slideId:state.slide.id,elementId:element.id})
 
   const sourceWorld=sourceTransform?{...IDENTITY_WORLD_AFFINE,precise:composeSourceAffines(qualifiedWorldAffine(parentWorld),qualifiedRenderAffine(sourceTransform,state.budget),state.budget.affine)}:undefined
   const world = sourceWorld?checkedWorldAffine(sourceWorld,translationTransform(0,0),base.bounds,`$.elements.${element.id}`,state.budget):checkedWorldAffine(parentWorld,base.transform,base.bounds,`$.elements.${element.id}`,state.budget)
@@ -2196,7 +2229,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     }
     case 'table':
       if (!hasNativeTextBody) state.diagnostics.push({ severity: 'info', code: 'text.layoutMetadataUnavailable', message: 'legacy native PPTX table cells lack full body/wrap metadata; shaped compatibility preview remains clipped to cell bounds', slideId: state.slide.id, elementId: element.id })
-      return { kind: 'table', ...base, rows: element.table.rows.length, columns: element.table.columnWidths.length, cells: await compileTableCells(element, state) }
+      return { kind: 'table', ...base, rows: element.table.rows.length, columns: element.table.columnWidths.length, cells: await compileTableCells(element, state, graphicFrame?world:undefined) }
     case 'group': {
       const children: RenderNode[] = []
       for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
