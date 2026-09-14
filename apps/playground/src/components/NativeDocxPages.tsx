@@ -1,6 +1,6 @@
 import {decodeTextboxesPageResponse,NativeDocxTextboxOnPage,textboxLayer,type TextboxPlacement} from './NativeDocxTextboxPage'
 import { useEffect, useRef, useState } from 'react'
-import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
+import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1, NativeDocxStrokeTableBorderCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
 import { decodeNativeDocxPagePaintV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
 import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from '@injoffice/docs/native-page-paint-output'
 import {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_WARNING,type NativeDocxFontSubstitutionPreviewV1} from '@injoffice/docs/native-page-paint-output'
@@ -27,6 +27,21 @@ export function nativeDocxImageOrientation(command: NativeDocxPaintInlineImageCo
         : [sx, 0, 0, sy, x + dx, y + dy]
   const [a, b, c, d, e, f] = local as [number, number, number, number, number, number]
   return { width, height, matrix: [a, b, c, d, e - a*x - c*y, f - b*x - d*y].map((value) => value === 0 ? 0 : value) }
+}
+
+/** 1 CSS pixel in millipoints at the 96 DPI used by `maxWidth: width/750`. Hairline
+ * table borders (Word sz=4 → 500 millipoints) otherwise anti-alias across two
+ * gray pixels and dominate the 12-file table Δ16 vs Word/LibreOffice. */
+export const NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS = 750
+
+export function nativeDocxTableBorderRect(command: Pick<NativeDocxStrokeTableBorderCommandV1, 'x1_millipoints' | 'y1_millipoints' | 'x2_millipoints' | 'y2_millipoints' | 'width_millipoints'>) {
+  const px = NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS
+  const snap = (value: number) => Math.round(value / px) * px
+  const stroke = Math.max(command.width_millipoints, px)
+  if (command.y1_millipoints === command.y2_millipoints) {
+    return { x: Math.min(command.x1_millipoints, command.x2_millipoints), y: snap(command.y1_millipoints), width: Math.abs(command.x2_millipoints - command.x1_millipoints), height: stroke }
+  }
+  return { x: snap(command.x1_millipoints), y: Math.min(command.y1_millipoints, command.y2_millipoints), width: stroke, height: Math.abs(command.y2_millipoints - command.y1_millipoints) }
 }
 
 /** Marker admission is not pixel decoding. Check every bounded asset before
@@ -185,7 +200,11 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
             case 'fill_glyph_path': return <path key={command.id} d={nativeDocxSVGPath(command.path)} fill={`#${command.fill_rgb}`} fillRule="nonzero" />
             case 'fill_text_highlight': return <rect key={command.id} data-native-highlight="true" x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'fill_table_cell': return <rect key={command.id} x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
-            case 'stroke_table_border': case 'stroke_note_separator': case 'stroke_text_underline': return <line key={command.id} data-native-underline={command.kind === 'stroke_text_underline' ? 'true' : undefined} x1={command.x1_millipoints} y1={command.y1_millipoints} x2={command.x2_millipoints} y2={command.y2_millipoints} stroke={`#${command.stroke_rgb}`} strokeWidth={command.width_millipoints} />
+            case 'stroke_table_border': {
+              const box = nativeDocxTableBorderRect(command)
+              return <rect key={command.id} data-native-table-border="true" x={box.x} y={box.y} width={box.width} height={box.height} fill={`#${command.stroke_rgb}`} shapeRendering="crispEdges" />
+            }
+            case 'stroke_note_separator': case 'stroke_text_underline': return <line key={command.id} data-native-underline={command.kind === 'stroke_text_underline' ? 'true' : undefined} x1={command.x1_millipoints} y1={command.y1_millipoints} x2={command.x2_millipoints} y2={command.y2_millipoints} stroke={`#${command.stroke_rgb}`} strokeWidth={command.width_millipoints} />
             case 'paint_floating_image':
             case 'paint_inline_image': { const asset = paint.resources.find((asset) => asset.id === command.asset_id); return asset ? <NativeDocxImage key={command.id} command={command} base64={asset.bytes_base64} contentType={asset.content_type} onError={imageFailed} /> : null }
           }
