@@ -34,11 +34,12 @@ function axis(value:unknown,numeric:boolean):value is NativeLiteralBarAxis{
 /** Complete structural and semantic validation until generated schema attachment
  * is available. This never upgrades referenced/cache data to a literal profile. */
 export function validNativeLiteralArea(value:unknown):value is NativeLiteralArea{
- if(!record(value,'profile dataOrigin grouping categories series xAxis yAxis')||value.profile!=='literal-area-v1'||value.dataOrigin!=='literal'||!['standard','stacked','percentStacked'].includes(value.grouping as string))return false
+ if(!record(value,'profile dataOrigin grouping categories series xAxis yAxis','sourceBaseline')||value.profile!=='literal-area-v1'||value.dataOrigin!=='literal'||!['standard','stacked','percentStacked'].includes(value.grouping as string))return false
  if(!Array.isArray(value.categories)||value.categories.length<1||value.categories.length>256||!Array.isArray(value.series)||value.series.length<1||value.series.length>16)return false
  let units=0
  for(const category of value.categories){if(typeof category!=='string')return false;units+=category.length;if(units>32768)return false}
  const x=value.xAxis,y=value.yAxis
+ if(value.sourceBaseline!==undefined&&(!record(value.sourceBaseline,'crossing value')||value.sourceBaseline.crossing!=='min'||!y||typeof y!=='object'||value.sourceBaseline.value!==(y as Record<string,unknown>).min))return false
  if(!axis(x,false)||!axis(y,true)||x.position!=='b'||y.position!=='l'||x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||!validNativeChartAxisLabels(x,y,false)||!validNativeChartAxisLabels(y,x,true))return false
  const indices=new Set<number>(),orders=new Set<number>()
  for(let order=0;order<value.series.length;order++){

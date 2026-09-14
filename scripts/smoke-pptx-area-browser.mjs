@@ -43,7 +43,7 @@ try{
   else if(name==='labels')await assert(`${literal}.textContent.includes('supplied-font')`,'labels require measured font preview')
   else {
    await poll(()=>evaluate(`!!${literal}.querySelector('svg')`),'literal area visible')
-   if(name==='large')await assert(`(${literal}.querySelector('svg path[fill="#123456"]').getAttribute('d').match(/[MLZ]/g)||[]).length===1280`,'large source has full compound path')
+   if(name==='large')await assert(`(${literal}.querySelector('svg path[fill="#123456"]').getAttribute('d').match(/[MLZ]/g)||[]).length===640`,'large source has full compound path')
    if(name==='percent')await assert(`${literal}.textContent.includes('9007199254740993')&&${literal}.textContent.includes('1e-100')`,'exact source lexemes survive WASM')
   }
   await evaluate(`[...${section}.querySelectorAll('label')].find(label=>label.textContent.includes('Preview source literal charts')).querySelector('input').click()`)
@@ -52,10 +52,10 @@ try{
   await assert(`window.__areaPosts[${index}].hash===${JSON.stringify(digest)}&&window.__areaPosts[${index}].url.includes('charts=source-literal')`,'source identity and explicit chart mode')
   const response=await evaluate(`window.__areaResponses[${index}]`);writeFileSync(resolve(artifacts,name+'-preview.json'),JSON.stringify(response,null,2))
   const nodes=[],dataPaths=[];const visit=(list,text=false)=>{for(const n of list){nodes.push(n);if(n.kind==='path'&&!text)dataPaths.push(n);if(n.kind==='group')visit(n.children,text||n.sourceRole==='contentRun'||n.sourceRole==='paragraphBullet')}};visit(response.nodes)
-  const fills=dataPaths.filter(n=>n.fill!=='none'),expected=name==='negative-stack'?0:name==='zero'?0:name==='standard'||name==='stacked'||name==='percent'?2:1
+  const fills=dataPaths.filter(n=>n.fill!=='none'),expected=name==='negative-stack'?0:name==='zero'?1:name==='standard'||name==='stacked'||name==='percent'?2:1
   const areaFills=fills.filter(n=>n.fill==='123456'||n.fill==='CC5500'||n.fill==='ABCDEF')
   if(areaFills.length!==expected)throw new Error(`${name}: expected${expected} area fills, got${areaFills.length}`)
-  if(name==='large'&&(areaFills[0].d.match(/[MLZ]/g)||[]).length!==1280)throw new Error('worker truncated large compound fill')
+  if(name==='large'&&(areaFills[0].d.match(/[MLZ]/g)||[]).length!==640)throw new Error('worker truncated large compound fill')
   if(name==='labels'&&!nodes.some(n=>n.sourceRole==='contentRun'))throw new Error('missing actual glyph outlines')
   if(name==='zero'&&nodes.filter(n=>n.kind==='path'&&n.stroke==='111111').length!==2)throw new Error('zero bands lost independent axes')
   if(name!=='negative-stack'&&!response.diagnostics.some(d=>d.includes('chart.literalAreaPreview')))throw new Error('missing area disclosure')

@@ -700,6 +700,16 @@
         }
       }
     },
+    "areaSourceBaseline": {
+      "x-binding-name": "NativeAreaSourceBaseline",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["crossing", "value"],
+      "properties": {
+        "crossing": { "type": "string", "const": "min" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
     "literalArea": {
       "x-binding-name": "NativeLiteralArea",
       "type": "object",
@@ -745,6 +755,7 @@
         "yAxis": {
           "$ref": "#/$defs/literalBarAxis"
         },
+        "sourceBaseline": { "$ref": "#/$defs/areaSourceBaseline" },
         "grouping": {
           "type": "string",
           "enum": [

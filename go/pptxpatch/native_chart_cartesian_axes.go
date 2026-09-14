@@ -6,17 +6,18 @@ import (
 )
 
 type nativeChartAxis struct {
-	Labels      *NativeChartAxisLabels
-	ID          int64
-	CrossAxisID int64
-	Orientation string
-	Position    string
-	Deleted     bool
-	Color       string
-	Width       int64
-	Min         string
-	Max         string
-	CrossesAt   string
+	Labels           *NativeChartAxisLabels
+	ID               int64
+	CrossAxisID      int64
+	Orientation      string
+	Position         string
+	Deleted          bool
+	Color            string
+	Width            int64
+	Min              string
+	Max              string
+	CrossesAt        string
+	CategoryCrossing string
 }
 
 func nativeChartToken(node *nativeXMLNode, allowed ...string) (string, bool) {
@@ -221,7 +222,7 @@ func extractNativeChartAxisWithCrossBetween(node *nativeXMLNode, d nativeExtract
 			}
 		}
 	} else {
-		if _, ok := nativeChartToken(c.take("crosses"), "min"); !ok {
+		if axis.CategoryCrossing, ok = nativeChartToken(c.take("crosses"), "min"); !ok {
 			return nil, false
 		}
 	}
