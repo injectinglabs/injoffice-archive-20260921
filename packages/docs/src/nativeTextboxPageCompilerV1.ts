@@ -1,3 +1,4 @@
+export {renderNativeDocxTextboxPagesPreviewV2} from './nativeTextboxPagesCompilerV2.js'
 /** Node-only page composition over source-qualified geometry and actual fonts. */
 import {prepareNativeDocxPagePaintV1,type NativeDocxPagePaintPrepareInputV1,type NativeDocxHostFontsV1} from './nativePagePaintCompilerV1.js'
 import {compileNativeDocxPagePaintV1,type NativeDocxGlyphOutlineProviderV1} from './nativePagePaintV1.js'

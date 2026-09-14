@@ -136,4 +136,5 @@ export * from './nativeNestedTextV1.js'
 export * from './nativeTextboxGeometryPreviewV1.js'
 
 export * from './nativeTextboxPagePreviewV1.js'
+export * from './nativeTextboxPagesPreviewV2.js'
 export * from './nativeTextboxPageCompilerV1.js'

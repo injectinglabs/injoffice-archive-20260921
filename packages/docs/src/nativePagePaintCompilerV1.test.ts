@@ -2670,6 +2670,27 @@ describe('source-anchored textbox page composition',()=>{
   const evidence:import('./nativeTextboxGeometryPreviewV1.js').NativeDocxTextboxGeometryEvidenceV1={items:[{owner:{package_sha256:HASH,part_sha256:HASH,paragraph_id:p.id,diagnostic_id:'shape:1',anchor:a,kind:'drawingml',status:'supported',paragraphs:['Page rectangle'],reason:''},geometry:{width_emu:2743200,height_emu:914400,insets_emu:[91440,91440,91440,91440],fill_rgb:'FFF2CC',line_rgb:'204060',line_width_emu:12700,font_family:'DejaVu Sans',font_size_half_points:24,text_rgb:'102030'},page_anchor:{policy:'page-offset-no-wrap-v1',source_anchor:anchor(root,110,1000),horizontal_anchor:anchor(root+'/wp:positionH[1]/wp:posOffset[1]',120,135),vertical_anchor:anchor(root+'/wp:positionV[1]/wp:posOffset[1]',140,155),x_emu:914400,y_emu:1828800}}],omitted_count:0}
   return {input,document,evidence}
  }
+ function multipleTextboxFixture(separatePages=false){
+  const f=textboxFixture(),p=f.document.body.blocks[0]!.paragraph!,second=structuredClone(f.evidence.items[0]!)
+  f.document.body.anchor.end_byte=10000;f.document.sections[0]!.anchor=anchor(f.document.sections[0]!.anchor.path,9500,9600)
+  const shift=separatePages?4000:2000,root=separatePages?p.anchor.path.replace('/w:p[1]','/w:p[2]'):p.anchor.path
+  second.owner.diagnostic_id='shape:2';second.owner.paragraphs=['Second rectangle'];second.geometry!.fill_rgb='DDEEFF'
+  for(const a of [second.owner.anchor,second.page_anchor!.source_anchor,second.page_anchor!.horizontal_anchor,second.page_anchor!.vertical_anchor]){a.path=a.path.replace(p.anchor.path,root);if(!separatePages)a.path=a.path.replace('/w:r[1]','/w:r[2]');a.start_byte+=shift;a.end_byte+=shift}
+  second.page_anchor!.x_emu=3657600;second.page_anchor!.y_emu=2743200
+  if(separatePages){
+   const next=structuredClone(p);next.id='paragraph:second';next.anchor={...next.anchor,path:root,start_byte:p.anchor.start_byte+shift,end_byte:p.anchor.end_byte+shift}
+   next.runs[0]!.id='run:second';next.runs[0]!.anchor={...next.runs[0]!.anchor,path:root+'/w:r[2]',start_byte:1500+shift,end_byte:1800+shift}
+   f.document.body.blocks.push({kind:'paragraph',id:next.id,paragraph:next});second.owner.paragraph_id=next.id
+   f.document.sections[0]!.page.margins.bottom_twips=14000
+   const resolved=f.input.resolved_layout as NativeDocxResolvedLayoutInputV1
+   resolved.paragraphs.push({...structuredClone(resolved.paragraphs[0]!),paragraph_id:next.id,properties:{}})
+   resolved.runs.push({...structuredClone(resolved.runs[0]!),run_id:'run:second',paragraph_id:next.id})
+   rewriteInventory(f.input,i=>{i.references[0]!.scope_ids.push(next.id,'run:second');i.references[0]!.scope_ids.sort()})
+  } else {p.anchor.end_byte=4000;p.runs[0]!.anchor={...p.runs[0]!.anchor,path:p.anchor.path+'/w:r[3]',start_byte:3500,end_byte:3800}}
+  f.document.unsupported.push({...structuredClone(f.document.unsupported[0]!),id:'shape:2',scope_id:second.owner.paragraph_id,anchor:second.owner.anchor})
+  f.evidence.items.push(second)
+  return f
+ }
  const provider={providerId:'injoffice.sfnt-outline',providerRevision:'sfnt-v1',getGlyphOutline(request:import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1){
   const outline=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST}).outline(request.glyph_id)
   return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}
@@ -2724,4 +2745,49 @@ describe('source-anchored textbox page composition',()=>{
   ]
   for(const mutate of mutations){const f=textboxFixture();mutate(f);const before=structuredClone(f);await expect(render(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow();expect(f).toEqual(before)}
  },20000)
+ it('composes every rectangle with its own font and rejects incomplete or reordered paint',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  const {nativeTextboxFontDigestV1:digest}=await import('./nativeTextboxGeometryPreviewV1.js')
+  const f=multipleTextboxFixture(),mono=new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSansMono.ttf')))
+  f.evidence.items[1]!.geometry!.font_family='DejaVu Sans Mono'
+  const before=structuredClone(f),hashes=[FONT_DIGEST,digest(mono)],result=await render(f.input,f.evidence,[FONT_BYTES,mono],provider)
+  expect(result.version).toBe(2);expect(result.textboxes.map(b=>b.paint.diagnostic_id)).toEqual(['shape:1','shape:2'])
+  expect(result.textboxes.map(b=>[b.x_millipoints,b.y_millipoints])).toEqual([[72000,144000],[288000,216000]])
+  expect(result.textboxes.map(b=>b.paint.font_sha256)).toEqual(hashes)
+  expect(result.source_diagnostics).toEqual(f.document.unsupported);expect(f).toEqual(before)
+  expect(decode(f.document,f.evidence,result,hashes)).toEqual(result)
+  for(const mutate of [(v:typeof result)=>{v.textboxes.pop()},(v:typeof result)=>{v.textboxes.reverse()},(v:typeof result)=>{v.textboxes[1]=structuredClone(v.textboxes[0]!)},(v:typeof result)=>{v.textboxes[1]!.x_millipoints++},(v:typeof result)=>{v.source_diagnostics=[]}]){
+   const forged=structuredClone(result);mutate(forged);expect(()=>decode(f.document,f.evidence,forged,hashes)).toThrow()
+  }
+  expect(()=>decode(f.document,f.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+ })
+ it('uses each source anchor page and refuses reordered evidence',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const f=multipleTextboxFixture(true)
+  const result=await render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)
+  expect(result.body_paint.pages).toHaveLength(2)
+  expect(result.textboxes.map(b=>b.page_id)).toEqual(result.body_paint.pages.map(p=>p.id))
+  expect(result.textboxes.map(b=>b.textbox_index)).toEqual([0,1])
+  f.evidence.items.reverse();await expect(render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)).rejects.toThrow()
+ })
+ it('snapshots every textbox and font before asynchronous body outlining',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  const f=multipleTextboxFixture(),before=structuredClone(f),fonts=[FONT_BYTES.slice(),FONT_BYTES.slice()]
+  const result=await render(f.input,f.evidence,fonts,{...provider,getGlyphOutline(request){f.evidence.items[1]!.page_anchor!.x_emu+=127;f.document.body.blocks[0]!.paragraph!.runs[0]!.text='Changed';fonts[1]!.fill(0);return provider.getGlyphOutline(request)}})
+  expect(decode(before.document,before.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toEqual(result)
+  expect(()=>decode(f.document,f.evidence,result,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+ })
+ it('refuses missing fonts, duplicate evidence, unknown drawings and anchors after text atomically',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {renderNativeDocxTextboxPagePreviewV1:legacy}=await import('./nativeTextboxPageCompilerV1.js')
+  for(const mutate of [(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.items[1]=structuredClone(f.evidence.items[0]!)},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.evidence.omitted_count=1},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.body.blocks[0]!.paragraph!.runs[0]!.anchor.start_byte=1500},(f:ReturnType<typeof multipleTextboxFixture>)=>{f.document.unsupported.push({...f.document.unsupported[0]!,id:'other-drawing'})}]){
+   const f=multipleTextboxFixture();mutate(f);const before=structuredClone({document:f.document,evidence:f.evidence});await expect(render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)).rejects.toThrow();expect({document:f.document,evidence:f.evidence}).toEqual(before)
+  }
+  const f=multipleTextboxFixture()
+  await expect(render(f.input,f.evidence,[FONT_BYTES],provider)).rejects.toThrow()
+  await expect(legacy(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow()
+ },15000)
+
 })
