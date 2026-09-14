@@ -39,6 +39,24 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run check:docs-api
+      - name: XLSX read-only source grids in Chrome
+        timeout-minutes: 4
+        env:
+          VITE_INJOFFICE_API_BASE: ''
+        run: |
+          npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+          SHOWCASE_OUTPUT="$GITHUB_WORKSPACE/artifacts/xlsx-rich-source" node scripts/smoke-xlsx-source-style-browser.mjs --rich --skip-build &
+          xlsx_rich_source_pid=$!
+          xlsx_source_status=0
+          wait "$xlsx_rich_source_pid" || xlsx_source_status=1
+          exit "$xlsx_source_status"
+      - name: XLSX rich source grid screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: xlsx-rich-source-browser
+          path: artifacts/xlsx-rich-source
+          if-no-files-found: ignore
       - name: Qualification harness unit tests
         run: |
           test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
@@ -115,7 +133,6 @@ jobs:
           XLSXNATIVE_WASM_REQUIRED: '1'
           XLSXNATIVE_WASM_SKIP_BUILD: '1'
         run: go test -v -count=1 ./cmd/xlsxnativewasm
-
   docx-wasm-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 10

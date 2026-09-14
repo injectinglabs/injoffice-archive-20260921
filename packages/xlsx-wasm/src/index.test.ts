@@ -21,6 +21,7 @@ import {
   XLSX_WASM_NATIVE_MAX_PACKAGE_BYTES,
   adaptWorkbookMutationBatchV1,
   createXlsxWasmClient,
+  createXlsxRichSourcePreviewClient,
   createXlsxSourceStylePreviewClient,
   createXlsxSourceStylePreviewV2Client,
   resolveXlsxWasmAssetUrls,
@@ -305,6 +306,22 @@ it('V2 client uses the dedicated worker and joins an immutable byte snapshot', a
   expect(result.grid.package_sha256).toBe(projection.grid.package_sha256)
   expect(url).toContain('xlsxsource2.worker.js')
   expect(worker.requests.map(request => request.op)).toEqual(['init', 'inspect'])
+  expect(client).not.toHaveProperty('apply'); expect(client).not.toHaveProperty('extract')
+  client.terminate(); expect(worker.terminated).toBe(true)
+})
+
+it('rich source client snapshots bytes and chooses only its read-only module', async () => {
+  const bytes = new Uint8Array([1, 2, 3])
+  const projection = JSON.parse(readFileSync(new URL('../testdata/rich-source-preview.json', import.meta.url), 'utf8'))
+  projection.package_sha256 = 'sha256:' + createHash('sha256').update(bytes).digest('hex')
+  const worker = new FakeWorker('{}', JSON.stringify(projection))
+  let url = ''
+  const client = createXlsxRichSourcePreviewClient({ workerFactory: path => { url = path; return worker } })
+  const pending = client.preview(bytes); bytes[0] = 99
+  expect((await pending).package_sha256).toBe(projection.package_sha256)
+  expect(url).toContain('xlsxrichsource.worker.js')
+  expect(worker.requests.map(request => request.op)).toEqual(['init', 'inspect'])
+  expect(worker.requests[0]).toMatchObject({ assets: { wasmUrl: expect.stringContaining('xlsxrichsource.wasm') } })
   expect(client).not.toHaveProperty('apply'); expect(client).not.toHaveProperty('extract')
   client.terminate(); expect(worker.terminated).toBe(true)
 })

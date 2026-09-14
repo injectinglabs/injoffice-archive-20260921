@@ -26,15 +26,23 @@ echo "building GOOS=js GOARCH=wasm -> $out/xlsxnative.wasm" >&2
   GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$out/xlsxnative.wasm" ./cmd/xlsxnativewasm
 )
 cp "$wasm_exec" "$out/wasm_exec.js"
+rich_out="$root/go/xlsxpatch/cmd/xlsxrichsourcewasm/dist"
+mkdir -p "$rich_out"
+(
+  cd "$root/go/xlsxpatch"
+  GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$rich_out/xlsxrichsource.wasm" ./cmd/xlsxrichsourcewasm
+)
+cp "$wasm_exec" "$rich_out/wasm_exec.js"
 if [[ -n $package_out ]]; then
   if [[ ! -f $package_worker ]]; then
     echo "XLSX WASM package worker not found at $package_worker" >&2
     exit 1
   fi
   mkdir -p "$package_out"
-  cp "$out/xlsxnative.wasm" "$out/wasm_exec.js" "$package_worker" "$package_out/"
+  cp "$out/xlsxnative.wasm" "$rich_out/xlsxrichsource.wasm" "$out/wasm_exec.js" "$package_worker" "$package_out/"
   cat "$root/packages/xlsx-wasm/worker/xlsxsource.worker.js" "$package_worker" > "$package_out/xlsxsource.worker.js"
   cat "$root/packages/xlsx-wasm/worker/xlsxsource2.worker.js" "$package_worker" > "$package_out/xlsxsource2.worker.js"
+  cat "$root/packages/xlsx-wasm/worker/xlsxrichsource.worker.js" "$package_worker" > "$package_out/xlsxrichsource.worker.js"
 fi
 
 size=$(wc -c < "$out/xlsxnative.wasm" | tr -d ' ')

@@ -15920,6 +15920,11 @@
               "signature": "export declare function adaptWorkbookMutationBatchV1(workbook: NativeWorkbookV2, input: WorkbookMutationBatchV1): XlsxNativeMutationTransactionV1"
             },
             {
+              "name": "createXlsxRichSourcePreviewClient",
+              "kind": "function",
+              "signature": "export declare function createXlsxRichSourcePreviewClient(options?: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>): XlsxRichSourcePreviewClient"
+            },
+            {
               "name": "createXlsxSourceStylePreviewClient",
               "kind": "function",
               "signature": "export declare function createXlsxSourceStylePreviewClient(options?: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'>): XlsxSourceStylePreviewClient"
@@ -15933,6 +15938,11 @@
               "name": "createXlsxWasmClient",
               "kind": "function",
               "signature": "export declare function createXlsxWasmClient(options?: XlsxWasmClientOptions): XlsxWasmClient"
+            },
+            {
+              "name": "decodeXlsxRichSourcePreviewV1",
+              "kind": "function",
+              "signature": "export declare function decodeXlsxRichSourcePreviewV1(json: string, packageSHA256: string): XlsxRichSourcePreviewV1"
             },
             {
               "name": "decodeXlsxSourceStylePreviewV1",
@@ -15988,6 +15998,16 @@
               "name": "XlsxNativeStyleMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
+              "name": "XlsxRichSourcePreviewClient",
+              "kind": "interface",
+              "signature": "export interface XlsxRichSourcePreviewClient"
+            },
+            {
+              "name": "XlsxRichSourcePreviewV1",
+              "kind": "type",
+              "signature": "export type XlsxRichSourcePreviewV1 = ReturnType<typeof readRichSource>"
             },
             {
               "name": "XlsxSourceStyleCellV1",
