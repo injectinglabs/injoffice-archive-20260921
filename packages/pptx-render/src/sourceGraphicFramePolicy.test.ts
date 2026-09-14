@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest'
 import {SourceAffineBudget,sourceHierarchyAffine} from './sourceAffine.js'
 import {sourceRenderTransform} from './sourceRenderTransform.js'
-import {sourceGraphicFrameLayout,qualifySourceGraphicFrameSpans,sourceGraphicFramePaintTransform} from './sourceGraphicFramePolicy.js'
+import {projectSourceGraphicFrameLayout,sourceGraphicFrameLayout,qualifySourceGraphicFrameSpans,sourceGraphicFramePaintTransform} from './sourceGraphicFramePolicy.js'
 const frame=(x=0)=>sourceHierarchyAffine({x,y:0,cx:100,cy:100},[],new SourceAffineBudget())
 it('checks outside-frame control hulls under the complete world mapping',()=>{
  const budget=new SourceAffineBudget(),world=frame(800),local=frame()
@@ -64,4 +64,17 @@ it('keeps nested noncommuting center mapping separate from positive physical sca
  expect([value(result.width),value(result.height)]).toEqual([12,2])
  expect(result.origin.values.map(value)).toEqual([1,0,0,1,9,-1])
  expect(result.origin.errors.every(r=>r.numerator===0n)).toBe(true)
+})
+
+it('projects physical dimensions once with exact error and outward hull allowances',()=>{
+ const result=projectSourceGraphicFrameLayout({width:{numerator:5n,denominator:2n},height:{numerator:7n,denominator:3n}},100,new SourceAffineBudget())
+ expect(result).toEqual({policy:'nearest-emu-physical-layout-v1',widthEmu:3,heightEmu:2,widthError:{numerator:1n,denominator:2n},heightError:{numerator:1n,denominator:3n},hullOutsetXEmu:1,hullOutsetYEmu:1})
+ const exact=projectSourceGraphicFrameLayout({width:{numerator:6n,denominator:2n},height:{numerator:2n,denominator:1n}},100,new SourceAffineBudget())
+ expect(exact.hullOutsetXEmu).toBe(0);expect(exact.hullOutsetYEmu).toBe(0)
+})
+it('refuses collapsed or over-budget projected dimensions without inventing a minimum',()=>{
+ const dimension=(n:bigint,d=1n)=>({width:{numerator:n,denominator:d},height:{numerator:1n,denominator:1n}})
+ for(const input of [dimension(1n,3n),dimension(201n,2n),dimension(-1n),dimension(1n,-2n)])expect(()=>projectSourceGraphicFrameLayout(input,100,new SourceAffineBudget())).toThrow()
+ expect(projectSourceGraphicFrameLayout(dimension(199n,2n),100,new SourceAffineBudget()).widthEmu).toBe(100)
+ expect(()=>projectSourceGraphicFrameLayout(dimension(1n<<513n),100,new SourceAffineBudget())).toThrow('precision')
 })
