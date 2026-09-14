@@ -144,8 +144,11 @@ func TestNativeGraphicFrameBrowserFixtures(t *testing.T) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"table-intrinsic", "table-rotated-group", "table-y-overflow", "table-above-slide"} {
+	for _, name := range []string{"table-intrinsic", "table-rotated-group", "table-y-overflow", "table-above-slide", "table-unqualified-x-clip"} {
 		cell := strings.ReplaceAll(nativeExactTableCellXML("fgj ABC ABC ABC ABC ABC", "l", "EEEEEE"), `typeface="Aptos"`, `typeface="DejaVu Sans"`)
+		if name == "table-unqualified-x-clip" {
+			cell = strings.Replace(cell, `horzOverflow="overflow"`, `horzOverflow="clip"`, 1)
+		}
 		width, height := int64(2200000), int64(500000)
 		if name == "table-y-overflow" {
 			height = 20000
@@ -181,8 +184,12 @@ func TestNativeGraphicFrameBrowserFixtures(t *testing.T) {
 			}
 		}
 		check(deck.Slides[0].Elements)
-		if tables != 1 {
-			t.Fatalf("%s: expected one source-profiled table, got %d: %#v", name, tables, deck.Slides[0].Compatibility)
+		expectedTables := 1
+		if name == "table-unqualified-x-clip" {
+			expectedTables = 0
+		}
+		if tables != expectedTables {
+			t.Fatalf("%s: unexpected source-profiled table count %d: %#v", name, tables, deck.Slides[0].Compatibility)
 		}
 		encoded, err := json.MarshalIndent(deck, "", "  ")
 		if err != nil {
