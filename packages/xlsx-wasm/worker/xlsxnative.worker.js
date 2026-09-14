@@ -10,7 +10,7 @@
 const PROTOCOL = 'injoffice.native-wasm-worker'
 const VERSION = 1
 const FORMAT = 'xlsx'
-const SOURCE_STYLE_OPERATION = self.xlsxSourceStylePreviewVersion === 2 ? 'previewSourceStylesV2' : self.xlsxSourceStylePreview === true ? 'previewSourceStyles' : null
+const SOURCE_STYLE_OPERATION = self.xlsxSourceStylePreviewVersion === 3 ? 'previewRichSource' : self.xlsxSourceStylePreviewVersion === 2 ? 'previewSourceStylesV2' : self.xlsxSourceStylePreview === true ? 'previewSourceStyles' : null
 const SOURCE_STYLE_ONLY = SOURCE_STYLE_OPERATION !== null
 const MAX_ERROR_LENGTH = 4096
 

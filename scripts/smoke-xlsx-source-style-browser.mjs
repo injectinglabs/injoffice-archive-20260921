@@ -9,6 +9,9 @@ import { launchChromeForCDP, terminateProcess } from './chrome-cdp-startup.mjs'
 import { startShowcaseServer } from './showcase-smoke-server.mjs'
 const root = resolve(import.meta.dirname, '..')
 const conditional = process.argv.includes('--conditional')
+const rich = process.argv.includes('--rich')
+if (rich && conditional) throw Error('Choose one source profile')
+const requestedCounter = rich ? 'window.__sourceRichRequested' : 'window.__sourceV2Requested'
 const scratch = mkdtempSync(resolve(tmpdir(), 'injoffice-xlsx-source-'))
 const artifacts = process.env.SHOWCASE_OUTPUT ? resolve(process.env.SHOWCASE_OUTPUT) : resolve(scratch, 'screenshots')
 mkdirSync(artifacts, { recursive: true })
@@ -17,7 +20,7 @@ const panel = `document.querySelector('[aria-label="Read-only source-style recov
 const grid = `${panel}?.querySelector('table[aria-label="Approximate read-only source grid"]')`
 let server, chrome, cdp, checks = 0
 try {
-  run('go', ['test', '-count=1', '-run', conditional ? '^TestSourceConditionalPreview$' : '^TestSourceStylePreviewKeepsStrictAuthority$', '.'], resolve(root, 'go/xlsxpatch'), conditional ? { XLSX_SOURCE_CONDITIONAL_EVIDENCE_DIR: scratch } : { XLSX_SOURCE_STYLE_EVIDENCE_DIR: scratch })
+  run('go', ['test', '-count=1', '-run', rich ? '^TestRichSourcePreview$' : conditional ? '^TestSourceConditionalPreview$' : '^TestSourceStylePreviewKeepsStrictAuthority$', '.'], resolve(root, 'go/xlsxpatch'), rich ? { XLSX_RICH_SOURCE_EVIDENCE_DIR: scratch } : conditional ? { XLSX_SOURCE_CONDITIONAL_EVIDENCE_DIR: scratch } : { XLSX_SOURCE_STYLE_EVIDENCE_DIR: scratch })
   if (!process.argv.includes('--skip-build')) run('npm', ['run', 'build:renderer', '-w', 'apps/playground', '--', '--base=/injoffice-smoke/'], root, { VITE_INJOFFICE_API_BASE: '' })
   const source = resolve(scratch, 'source.xlsx'), valid = resolve(root, 'go/xlsxpatch/testdata/excel-authored/happy-tree.xlsx')
   const sourceHash = 'sha256:' + createHash('sha256').update(readFileSync(source)).digest('hex')
@@ -30,14 +33,14 @@ try {
     const originalFetch=window.fetch.bind(window);window.__sourcePosts=0;
     window.fetch=(input,init)=>{if(init?.method==='POST')window.__sourcePosts++;return originalFetch(input,init)};
     const OriginalWorker=window.Worker;
-    window.__sourceV2Requested=0;
+    window.__sourceV2Requested=0;window.__sourceRichRequested=0;
     window.Worker=class extends OriginalWorker {
       listeners=new Map();
-      constructor(...args){super(...args);this.isConditional=String(args[0]).includes('xlsxsource2.worker')}
-      postMessage(message,...args){if(this.isConditional&&message?.op==='inspect')window.__sourceV2Requested++;return super.postMessage(message,...args)}
+      constructor(...args){super(...args);this.isConditional=String(args[0]).includes('xlsxsource2.worker');this.isRich=String(args[0]).includes('xlsxrichsource.worker')}
+      postMessage(message,...args){if(this.isRich&&message?.op==='inspect')window.__sourceRichRequested++;if(this.isRich&&message?.op==='init')window.__richWasmUrl=message.assets?.wasmUrl;if(this.isConditional&&message?.op==='inspect')window.__sourceV2Requested++;return super.postMessage(message,...args)}
       addEventListener(type,listener,options){
         if(type!=='message'||typeof listener!=='function')return super.addEventListener(type,listener,options);
-        const wrapped=event=>{const dispatch=()=>listener.call(this,event);if(window.__delaySourceReplies&&event.data?.op==='inspect'&&(!window.__delayConditionalOnly||this.isConditional))setTimeout(dispatch,1500);else dispatch()};
+        const wrapped=event=>{const dispatch=()=>listener.call(this,event);if(window.__delaySourceReplies&&event.data?.op==='inspect'&&(!window.__delayConditionalOnly||this.isConditional)&&(!window.__delayRichOnly||this.isRich))setTimeout(dispatch,1500);else dispatch()};
         this.listeners.set(listener,wrapped);return super.addEventListener(type,wrapped,options);
       }
       removeEventListener(type,listener,options){return super.removeEventListener(type,this.listeners.get(listener)||listener,options)}
@@ -55,6 +58,15 @@ try {
   await click('Preview source styles')
   await poll(() => evaluate(`Boolean(${grid})`), 'actual source-style WASM result', 45000)
   await assert(`${panel}.textContent.includes(${JSON.stringify(sourceHash)})`, 'exact source package identity')
+  if (rich) {
+    await assert(`window.__sourceRichRequested===1&&window.__sourceV2Requested===1&&window.__richWasmUrl.includes('xlsxrichsource')`, 'actual third fallback and separate WASM module')
+    await assert(`${grid}.querySelector('[data-source-cell="A1"]').textContent==='Year 🧮 3'&&${grid}.querySelectorAll('[data-source-rich-start]').length===2`, 'exact rich source reconstruction')
+    await assert(`(()=>{const run=${grid}.querySelector('[data-source-rich-start="4"]');return run?.dataset.sourceRichEnd==='9'&&getComputedStyle(run).color==='rgb(255, 0, 0)'&&getComputedStyle(run).fontWeight==='400'})()`, 'UTF16 rich run offsets and direct styling')
+    await assert(`${grid}.querySelector('[data-source-cell="B2"]').textContent==='42250557.5799999'&&${grid}.querySelector('[data-source-cell="B1"]').textContent==='Budget '`, 'exact General lexical and source whitespace')
+    await assert(`(()=>{const s=getComputedStyle(${grid}.querySelector('[data-source-cell="A1"]'));return s.fontFamily.includes('Arial')&&s.fontWeight==='700'&&s.whiteSpace==='pre-wrap'&&s.borderLeftColor==='rgb(211, 211, 211)'&&s.borderLeftWidth==='1px'})()`, 'source font, wrap and thin border')
+    await assert(`${panel}.textContent.includes('1 blank row and 1 blank column')&&${panel}.textContent.includes('source width 0.0234375')&&!${grid}.querySelector('[data-source-cell="A3"]')`, 'outside source geometry is disclosed and omitted')
+    await evaluate(`${panel}.querySelector('[data-source-rich-details]').open=true`)
+  } else {
   await assert(`${grid}.querySelector('[data-source-cell="A1"]').colSpan===2&&!${grid}.querySelector('[data-source-cell="B1"]')`, 'one merged source anchor')
   await assert(`getComputedStyle(${grid}.querySelector('[data-source-cell="A1"]')).backgroundColor==='rgb(30, 39, 97)'&&getComputedStyle(${grid}.querySelector('[data-source-cell="A1"]')).color==='rgb(255, 255, 255)'`, 'source fill and foreground colors')
   if (conditional) {
@@ -65,19 +77,20 @@ try {
   await assert(`${grid}.querySelector('[data-source-cell="A2"]').textContent==='3.00 €'&&${panel}.textContent.includes('SUM(1,2)')`, 'source cache and declared currency suffix')
   }
   await assert(`${panel}.textContent.includes('absent applyFill')&&${panel}.textContent.includes('absent applyNumberFormat')&&${panel}.textContent.includes('may be stale')`, 'conflicts and cache warning visible')
+  }
   await assert(`!${panel}.querySelector('input,[contenteditable],a[download]')&&window.__sourcePosts===0`, 'preview is read-only and uploads nothing')
   await evaluate(`${grid}.scrollIntoView({block:'center'})`)
-  const shot=await cdp.send('Page.captureScreenshot',{format:'png'});writeFileSync(resolve(artifacts,conditional?'xlsx-source-conditional.png':'xlsx-source-style.png'),Buffer.from(shot.data,'base64'))
-  await evaluate(conditional ? 'window.__delaySourceReplies=true;window.__delayConditionalOnly=true' : 'window.__delaySourceReplies=true')
-  let requested = await evaluate('window.__sourceV2Requested')
+  const shot=await cdp.send('Page.captureScreenshot',{format:'png'});writeFileSync(resolve(artifacts,rich?'xlsx-rich-source.png':conditional?'xlsx-source-conditional.png':'xlsx-source-style.png'),Buffer.from(shot.data,'base64'))
+  await evaluate(rich ? 'window.__delaySourceReplies=true;window.__delayRichOnly=true' : conditional ? 'window.__delaySourceReplies=true;window.__delayConditionalOnly=true' : 'window.__delaySourceReplies=true')
+  let requested = await evaluate(requestedCounter)
   await click('Preview source styles')
-  if(conditional)await poll(async()=>await evaluate('window.__sourceV2Requested')>requested,'pending V2 cancellation')
+  if(conditional||rich)await poll(async()=>await evaluate(requestedCounter)>requested,'pending final-worker cancellation')
   await click('Cancel preview')
   await new Promise(resolve => setTimeout(resolve,1800))
   await assert(`!${grid}&&${panel}.textContent.includes('cancelled')`, 'late cancelled result cannot remount')
-  requested = await evaluate('window.__sourceV2Requested')
+  requested = await evaluate(requestedCounter)
   await click('Preview source styles')
-  if(conditional)await poll(async()=>await evaluate('window.__sourceV2Requested')>requested,'pending V2 source replacement')
+  if(conditional||rich)await poll(async()=>await evaluate(requestedCounter)>requested,'pending final-worker source replacement')
   await poll(() => evaluate(`${panel}.textContent.includes('Reading source')`), 'pending replacement preview')
   await upload(valid)
   await poll(() => evaluate(`!${panel}&&Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Save to XLSX')`), 'new authoritative source', 45000)
@@ -85,7 +98,7 @@ try {
   await assert(`!${panel}&&window.__sourcePosts===0`, 'late old-source result cannot return after replacement')
   if ('sha256:'+createHash('sha256').update(readFileSync(source)).digest('hex')!==sourceHash) throw Error('Synthetic source bytes changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',checks,sourceHash,uploads:0,profile:conditional?'synthetic conditional source grid':'synthetic read-only grid'},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',checks,sourceHash,uploads:0,profile:rich?'synthetic rich source grid':conditional?'synthetic conditional source grid':'synthetic read-only grid'},null,2))
   console.log(`XLSX source-style browser checks passed: ${checks}`)
 } finally {
   cdp?.close()

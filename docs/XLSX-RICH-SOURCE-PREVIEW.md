@@ -45,10 +45,23 @@ refuse. Empty outline properties and an empty `headerFooter` with
 applied. Browser font matching, shaping, wrapping and width metrics remain
 approximate; the envelope is not an Excel print layout or a full worksheet view.
 
-The initial delivery is a Go API. Browser integration uses a subsequent,
-separately bounded read-only WASM entry point; this API adds no editing-engine
-WASM binding. Synthetic positive/refusal tests verify source bytes, strict
-refusals, exact Unicode run joins, numeric lexicals and outside geometry.
+The browser package exports `createXlsxRichSourcePreviewClient` and
+`decodeXlsxRichSourcePreviewV1`. The client snapshots source bytes and joins the
+package SHA256 before returning a deeply frozen closed envelope. It exposes
+only `preview` and `terminate`. Its self-contained `xlsxrichsource.worker.js`
+loads a separate `xlsxrichsource.wasm` module with only `previewRichSource`; the
+worker refuses extraction and mutation. Both modules retain a 7 MiB size bound.
+The native editing module and V1/V2 bindings remain compatible.
+
+The playground tries V1, then V2, then rich-source recovery after native opening
+fails. Every attempt is terminated, and generation guards cover cancellation,
+replacement and unmount. Rich spans preserve joined source text and direct
+properties with cell-font fallback; General numbers keep their exact lexicals.
+Outside blank geometry and count/source evidence are disclosed in details.
+Synthetic positive/refusal tests verify source bytes, strict refusals, exact
+Unicode run joins, numeric lexicals and outside geometry. Actual WASM contract
+checks cover rejected arguments, bound enforcement, recovery and Go parity;
+synthetic browser checks cover the third-worker fallback and late replies.
 Set `XLSX_RICH_SOURCE_EVIDENCE_DIR` when running `TestRichSourcePreview` to export
 that synthetic workbook and its envelope for browser/decoder tests. Unchanged
 external workbooks and independent reference PDFs remain local-only evidence.
