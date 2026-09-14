@@ -151,7 +151,11 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if after.DocumentID != before.DocumentID {
 		return nil, fmt.Errorf("xlsxpatch: native mutation: post-save document identity changed")
 	}
-	if err := verifyNativeWorkbookMutationResult(before, after, transaction, expectedStyles); err != nil {
+	expectedUnsupported, err := nativeExpectedUnsupportedAfterCells(original, produced, before, transaction)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyNativeWorkbookMutationResultWithInventory(before, after, transaction, expectedStyles, expectedUnsupported); err != nil {
 		return nil, err
 	}
 	if err := verifyNativeStyleClearPostconditions(produced, after, transaction.Styles); err != nil {
@@ -440,6 +444,10 @@ func expectedNativeStyleMutationProjections(original []byte, workbook *NativeWor
 }
 
 func verifyNativeWorkbookMutationResult(before, after *NativeWorkbookV1, transaction NativeWorkbookMutationTransactionV1, expectedStyles nativeExpectedStyleProjections) error {
+	return verifyNativeWorkbookMutationResultWithInventory(before, after, transaction, expectedStyles, before.Unsupported)
+}
+
+func verifyNativeWorkbookMutationResultWithInventory(before, after *NativeWorkbookV1, transaction NativeWorkbookMutationTransactionV1, expectedStyles nativeExpectedStyleProjections, expectedUnsupported []NativeWorkbookUnsupportedV1) error {
 	if err := verifyNativeWorkbookSheetTopologyPreserved(before, after); err != nil {
 		return err
 	}
@@ -450,7 +458,7 @@ func verifyNativeWorkbookMutationResult(before, after *NativeWorkbookV1, transac
 		return err
 	}
 	beforeSheets, afterSheets := indexNativeMutationSheets(before), indexNativeMutationSheets(after)
-	if err := verifyNativeUnsupportedInventoryPreserved(before.Unsupported, after.Unsupported); err != nil {
+	if err := verifyNativeUnsupportedInventoryPreserved(expectedUnsupported, after.Unsupported); err != nil {
 		return err
 	}
 	cellTouched := make(map[string]map[cellKey]bool)
