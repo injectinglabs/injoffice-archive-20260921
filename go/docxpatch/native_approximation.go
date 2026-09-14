@@ -60,8 +60,17 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 			return nil, err
 		}
 		covered := map[string]bool{}
+		diagnosticsByPath := map[string]bool{}
+		for _, diagnostic := range settings.Diagnostics {
+			diagnosticsByPath[diagnostic.Path] = true
+		}
 		for _, child := range root.Children {
 			if fact := nativeApproximateSetting(child, wordNS); fact != nil {
+				if !diagnosticsByPath[child.Path] {
+					// Strict already consumed this extra as attested-neutral
+					// (no diagnostic). Recording a fact would 422 the TS join.
+					continue
+				}
 				result.ApproximatedSettings = append(result.ApproximatedSettings, *fact)
 				covered[child.Path] = true
 				result.Reasons = append(result.Reasons, nativeApproximationSettingReason(*fact))
