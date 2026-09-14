@@ -98,3 +98,15 @@ func extractNativeChartStackedLine(payload []byte, part string, d nativeExtractD
 	}
 	return result
 }
+
+func extractNativeLiteralStackedLine(payload []byte, part string, d nativeExtractDialect) *NativeLiteralStackedLine {
+	source := extractNativeChartStackedLine(payload, part, d)
+	if source == nil {
+		return nil
+	}
+	out := &NativeLiteralStackedLine{Grouping: source.Grouping, NativeLiteralConnected: NativeLiteralConnected{Profile: "literal-stacked-line-v1", DataOrigin: "literal", Categories: source.Categories, Series: []NativeLiteralConnectedSeries{}, XAxis: nativeLiteralChartAxis(source.XAxis, false), YAxis: nativeLiteralChartAxis(source.YAxis, true)}}
+	for _, s := range source.Series {
+		out.Series = append(out.Series, NativeLiteralConnectedSeries{Index: s.Index, Order: s.Order, Title: s.Title, Values: s.Values, Color: s.Color, WidthEMU: s.Width})
+	}
+	return out
+}

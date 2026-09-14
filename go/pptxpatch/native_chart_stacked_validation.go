@@ -2,12 +2,8 @@ package pptxpatch
 
 import "slices"
 
-// Dedicated preparation records do not attach to the public deck until the
-// coordinated schema/compiler handoff. Existing literal validators remain intact.
-type nativeStackedLineRecord struct {
-	NativeLiteralConnected
-	Grouping string `json:"grouping"`
-}
+// Private projections preserve authoritative source order and metadata.
+type nativeStackedLineRecord = NativeLiteralStackedLine
 
 func validNativeStackedBarRecord(c *NativeLiteralBar) bool {
 	if c == nil || c.Profile != "literal-stacked-bar-v1" || (c.Grouping != "stacked" && c.Grouping != "percentStacked") || c.Overlap != 100 {
