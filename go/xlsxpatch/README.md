@@ -405,3 +405,12 @@ style hashes, conflicting IDs, source geometry, merges, and saved formula
 results. It creates no editable workbook or revision and does not repair bytes,
 calculate formulas, or apply print settings. See the
 [bounded profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md).
+
+`PreviewNativeSourceStylesV2` adds a separately qualified conditional evidence
+envelope around the V1 base grid: one uppercase-text equality/DXF rule and/or
+one linked fixed numeric data bar, with disjoint complete source ranges and
+explicit saved-cache/approximation records. It also records one bounded frozen
+row viewport without simulating it. V1, strict extraction and mutation remain
+unchanged. See [the source-style profile](../../docs/XLSX-SOURCE-STYLE-PREVIEW.md)
+for exact bounds and refusals. This slice is the Go API; browser use follows
+separately.

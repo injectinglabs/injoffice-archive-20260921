@@ -72,3 +72,52 @@ the conflicting source, verifies old edit controls disappear, renders through
 the actual dedicated WASM worker, checks merge/color/cache output and no upload,
 and delivers late replies after cancellation/replacement. Screenshot artifacts
 support visual review. External benchmark files are not loaded in CI.
+
+## Conditional source evidence V2 (Go API)
+
+`xlsxpatch.PreviewNativeSourceStylesV2(originalBytes)` returns version 2 of the
+same read-only protocol. `grid` is the V1 base-style envelope; the outer object
+adds source styles/worksheet SHA-256 identities, warnings, nullable `text_rule`,
+`data_bar` and `frozen_view` records. It does not create an editable workbook,
+relax V1, repair the ZIP or evaluate formulas. V2 requires at least one qualified
+conditional rule. Browser integration is a separate follow-on.
+
+The closed initial profile admits at most one rule of each kind:
+
+- `cellIs/equal` with an uppercase ASCII word literal (1–64 letters), DXF 0,
+  explicit bold/RGB font and a background-only patternFill. Each input must be a
+  stored uppercase ASCII string; normal formula caches are marked as cached.
+  Each effect retains its source cell, saved value and exact-match decision.
+  Background-only differential fill selection is a disclosed compatibility
+  approximation; it does not alter the strict base-style resolver.
+- A data bar over literal nonnegative integers inside explicit integer bounds
+  (0–1,000,000,000), with explicit 0–100 min/max lengths and visible values.
+  Legacy and x14 rules must agree on bounds, lengths, range and GUID ownership.
+  Only the qualified gradient/axis-none form is admitted; its inactive negative
+  color must match the bar and its inactive axis color must be black. Formula
+  inputs, dynamic thresholds and competing extension declarations refuse.
+  Each effect retains its literal value and proportional length percentage.
+
+Rule priorities must be unique. Ranges must be disjoint, fully populated, within
+V1's 128-row/32-column/4096-cell bounds and outside every merge. Data-bar cells
+must have no base fill. Unknown metadata, unsupported DXFs, malformed links,
+missing caches, noncanonical numeric inputs and partially qualified rules
+refuse the whole result. No partial overlay is returned.
+
+The proportional data-bar length follows Microsoft's [data-bar contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.databar?view=openxml-3.0.1)
+conceptually: minLength + (value-min)/(max-min) * (maxLength-minLength). The
+[Office 2010 contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.office2010.excel.databar?view=openxml-3.0.1)
+defines linked legacy/x14 declarations. The percentage is not a claim about
+Excel pixel quantization, font metrics, printer scaling or pagination.
+
+One frozen-row viewport form is separately qualified: zero frozen columns,
+1–127 frozen rows, an A-column origin immediately below them, bottomLeft active
+pane, and the two explicitly recorded A1 selections. `frozen_view` retains row
+count, origin and active pane; a warning states that this viewport state is not
+applied to the source grid. Other pane forms remain unsupported.
+
+Tests use a synthetic merged-header workbook with two conditional cells,
+exercise linked-rule/DXF/range/cache/viewport refusals, and assert V1, strict
+extraction and mutation still refuse the conflicting source. Optional
+`XLSX_SOURCE_CONDITIONAL_EVIDENCE_DIR` exports only that synthetic fixture and
+JSON for future worker/browser contract tests. External workbooks stay local.
