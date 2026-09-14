@@ -155,14 +155,14 @@
             "severity": "refusal"
           },
           {
-            "code": "pptx.autoshape-transform-unavailable",
-            "message": "non-quarter-turn shapes require an unmodeled rotation affine",
+            "code": "pptx.source-affine-preview",
+            "message": "DrawingML orientation uses bounded rational affine preview; transformed targets remain read-only",
             "scope": {
               "elementId": "element-9c68cb285f2e2b25bd06e8b1",
               "partName": "relocated/slides/slide-a.xml",
               "slideId": "slide-941fe56d9a028963577039e8"
             },
-            "severity": "refusal"
+            "severity": "warning"
           },
           {
             "code": "pptx.autoshape-geometry-unavailable",
@@ -322,14 +322,14 @@
                 "severity": "refusal"
               },
               {
-                "code": "pptx.autoshape-transform-unavailable",
-                "message": "non-quarter-turn shapes require an unmodeled rotation affine",
+                "code": "pptx.source-affine-preview",
+                "message": "DrawingML orientation uses bounded rational affine preview; transformed targets remain read-only",
                 "scope": {
                   "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                   "partName": "relocated/slides/slide-a.xml",
                   "slideId": "slide-941fe56d9a028963577039e8"
                 },
-                "severity": "refusal"
+                "severity": "warning"
               },
               {
                 "code": "pptx.autoshape-geometry-unavailable",
@@ -437,14 +437,14 @@
                     "severity": "refusal"
                   },
                   {
-                    "code": "pptx.autoshape-transform-unavailable",
-                    "message": "non-quarter-turn shapes require an unmodeled rotation affine",
+                    "code": "pptx.source-affine-preview",
+                    "message": "DrawingML orientation uses bounded rational affine preview; transformed targets remain read-only",
                     "scope": {
                       "elementId": "element-9c68cb285f2e2b25bd06e8b1",
                       "partName": "relocated/slides/slide-a.xml",
                       "slideId": "slide-941fe56d9a028963577039e8"
                     },
-                    "severity": "refusal"
+                    "severity": "warning"
                   },
                   {
                     "code": "pptx.autoshape-geometry-unavailable",
@@ -521,7 +521,8 @@
                 "cx": 300000,
                 "cy": 200000,
                 "x": 100,
-                "y": 200
+                "y": 200,
+                "rotationAngle": 60000
               }
             },
             {

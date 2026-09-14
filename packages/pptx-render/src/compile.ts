@@ -1,3 +1,7 @@
+import {sourceTextBounds} from './sourceTextBounds.js'
+import {sourceHierarchyAffine,SourceAffineBudget,convertSourceAffine,decodeSourceAffine,composeSourceAffines,qualifySourceAffinePoint,type SourceAffineFrame,type QualifiedSourceAffine} from './sourceAffine.js'
+import {sourceRenderTransform} from './sourceRenderTransform.js'
+import type {RenderTransform} from './types.js'
 import {layoutChartAxes,chartAxisTickVectors,CHART_AXIS_LAYOUT_POLICY,type ChartAxisLabelInput} from './chartAxisLayout.js'
 import {measureChartAxisText} from './chartAxisText.js'
 import {createNativeLiteralLinePaths} from './literalLine.js'
@@ -70,6 +74,7 @@ import {
 } from './types.js'
 
 interface Budget {
+  readonly affine: SourceAffineBudget
   nodes: number
   glyphs: number
   clusters: number
@@ -132,6 +137,7 @@ interface ExactRational {
 }
 
 interface WorldAffine {
+  readonly precise?: QualifiedSourceAffine
   readonly a: ExactRational
   readonly b: ExactRational
   readonly c: ExactRational
@@ -774,13 +780,40 @@ function exactGroupBase(element: Extract<NativeElement, { kind: 'group' }>, zInd
   }
 }
 
+function qualifiedRenderAffine(transform:RenderTransform,budget:Budget):QualifiedSourceAffine {
+  if(transform.sourceAffine)return decodeSourceAffine(transform.sourceAffine,budget.affine)
+  const values=[transform.aPpm,transform.bPpm,transform.cPpm,transform.dPpm,transform.txEmu,transform.tyEmu].map((v,i)=>exactRational(BigInt(v),i<4?1000000n:1n))
+  return {values:values as unknown as QualifiedSourceAffine['values'],errors:[RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO],depth:1}
+}
+type SourceParent={frame:SourceAffineFrame;child:Pick<SourceAffineFrame,'x'|'y'|'cx'|'cy'>}
+const sourceFrame=(transform:NativeElement['transform']):SourceAffineFrame=>({...transform,rotation:transform.rotationAngle??(transform.quarterTurns??0)*5400000})
+const qualifiedWorldAffine=(world:WorldAffine):QualifiedSourceAffine=>world.precise??{values:[world.a,world.b,world.c,world.d,world.tx,world.ty],errors:[RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO,RATIONAL_ZERO],depth:0}
+const complexSourceParent=(parent:SourceParent):boolean=>{
+  const {frame,child}=parent
+  if(frame.rotation||frame.flipH||frame.flipV)return true
+  for(const [extent,childExtent,offset] of [[frame.cx,child.cx,child.x],[frame.cy,child.cy,child.y]]){
+    const n=BigInt(extent!),d=BigInt(childExtent!)
+    if(n*1000000n%d!==0n||BigInt(offset!)*n%d!==0n)return true
+  }
+  return false
+}
+const hasSourceOrientation=(element:NativeElement)=>element.transform.rotationAngle!==undefined||element.transform.flipH!==undefined||element.transform.flipV!==undefined
+
 function checkedWorldAffine(
   parent: WorldAffine,
-  local: Readonly<{ aPpm: number; bPpm: number; cPpm: number; dPpm: number; txEmu: number; tyEmu: number }>,
+  local: RenderTransform,
   bounds: Readonly<{ x: number; y: number; cx: number; cy: number }>,
   path: string,
   budget: Budget,
 ): WorldAffine {
+  if(parent.precise || local.sourceAffine) {
+    const localQualified=qualifiedRenderAffine(local,budget)
+    const composed=composeSourceAffines(qualifiedWorldAffine(parent),localQualified,budget.affine)
+    const qualified=convertSourceAffine(composed,budget.affine).qualified
+    for(const x of [bounds.x,bounds.x+bounds.cx])for(const y of [bounds.y,bounds.y+bounds.cy])qualifySourceAffinePoint(qualified,x,y,budget.maxCoordinateEmu,budget.affine)
+    const [a,b,c,d,tx,ty]=qualified.values
+    return {a,b,c,d,tx,ty,precise:qualified}
+  }
   const scale=local.bPpm===0&&local.cPpm===0&&local.aPpm>0&&local.dPpm>0
   const half=local.bPpm===0&&local.cPpm===0&&local.aPpm===-1000000&&local.dPpm===-1000000
   const quarter=local.aPpm===0&&local.dPpm===0&&local.bPpm===-local.cPpm&&Math.abs(local.bPpm)===1000000
@@ -1842,14 +1875,19 @@ async function compileTableCells(element: Extract<NativeElement, { kind: 'table'
   return cells
 }
 
-async function compileElement(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine): Promise<RenderNode> {
+async function compileElement(element: NativeElement, zIndex: number, depth: number, state: CompileState, parentWorld: WorldAffine, sourceParents:readonly SourceParent[]=[]): Promise<RenderNode> {
   if (depth > state.budget.maxDepth) {
     throw new RenderCompileError('render.depthBudget', `$.elements.${element.id}`, `RenderTree nesting exceeds ${state.budget.maxDepth}`)
   }
+  if((element.kind==='table'||element.kind==='chart')&&(hasSourceOrientation(element)||sourceParents.some(complexSourceParent)))throw new RenderCompileError('render.worldTransform',`$.elements.${element.id}`,'new affine table/chart text orientation is not yet qualified')
+  const sourceMode=element.provenance==='parsed'||hasSourceOrientation(element)||sourceParents.length>0
+  const sourceGroup=sourceMode&&element.kind==='group'&&element.childTransform!==undefined
+  let sourceTransform:RenderTransform|undefined
+  if(sourceMode&&!sourceGroup)sourceTransform=sourceRenderTransform(sourceHierarchyAffine(sourceFrame(element.transform),sourceParents,state.budget.affine),state.budget.affine)
   copyNativeDiagnostics(state, element.compatibility, element.id)
   if (element.compatibility.status === 'refused') {
     state.diagnostics.push({ severity: 'refusal', code: 'native.refused', message: 'native compatibility refused this element', slideId: state.slide.id, elementId: element.id })
-    const refused = placeholder(element, zIndex, 'refused', `Unsupported ${element.kind}`, state)
+    const refused = {...placeholder(element, zIndex, 'refused', `Unsupported ${element.kind}`, state),...(sourceTransform?{transform:sourceTransform}:{})}
     checkedWorldAffine(parentWorld, refused.transform, refused.bounds, `$.elements.${element.id}`, state.budget)
     return refused
   }
@@ -1861,15 +1899,36 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     (element.kind === 'table' && element.table.rows.every((row) => row.every((cell) => cell.paragraphs !== undefined && cell.textBody !== undefined)))
   // DrawingML groups own a real child coordinate space. Preserve its affine
   // scale so strokes, shaped text, pictures, and descendants all inherit it.
-  const base = element.kind === 'group'
-    ? exactGroupBase(element, zIndex, state.budget)
-    : elementBase(element, zIndex, state.budget, !hasNativeTextBody && element.kind !== 'connector' && !(element.kind==='shape'&&element.geometry))
-  const world = checkedWorldAffine(parentWorld, base.transform, base.bounds, `$.elements.${element.id}`, state.budget)
+  const ordinaryBase = sourceGroup
+    ? {...elementBase(element,zIndex,state.budget,false),transform:translationTransform(0,0)}
+    : element.kind === 'group' ? exactGroupBase(element,zIndex,state.budget)
+    : elementBase(element,zIndex,state.budget,!hasNativeTextBody&&element.kind!=='connector'&&!(element.kind==='shape'&&element.geometry))
+  const base={...ordinaryBase,...(sourceTransform?{transform:sourceTransform}:{})}
+
+  const sourceWorld=sourceTransform?{...IDENTITY_WORLD_AFFINE,precise:composeSourceAffines(qualifiedWorldAffine(parentWorld),qualifiedRenderAffine(sourceTransform,state.budget),state.budget.affine)}:undefined
+  const world = sourceWorld?checkedWorldAffine(sourceWorld,translationTransform(0,0),base.bounds,`$.elements.${element.id}`,state.budget):checkedWorldAffine(parentWorld,base.transform,base.bounds,`$.elements.${element.id}`,state.budget)
+  const checkLeafBounds=(bounds:RenderRect)=>checkedWorldAffine(world,translationTransform(0,0),bounds,`$.elements.${element.id}`,state.budget)
+
+  const compileSourceText=async(paragraphs:readonly NativeParagraph[],bounds:RenderRect,layout:Extract<NativeElement,{kind:'text'|'shape'}>['textBody']):Promise<RenderTextBodyNode>=>{
+    const body=await compileTextBody(paragraphs,{elementId:element.id,elementKind:element.kind as 'text'|'shape',bounds,layout},state)
+    if(!sourceTransform)return body
+    const frame=sourceFrame(element.transform)
+    const reflected=[frame,...sourceParents.map(parent=>parent.frame)].reduce((value,item)=>value!==((item.flipH??false)!==(item.flipV??false)),false)
+    const orientationTransform=reflected?{aPpm:-1000000,bPpm:0,cPpm:0,dPpm:1000000,txEmu:element.transform.cx,tyEmu:0}:undefined
+    // DrawingML H flips affect the outline. Counter-reflect about the source
+    // frame before the text-only vertical mapping to retain readable glyphs.
+    let textWorld=world
+    if(orientationTransform)textWorld=checkedWorldAffine(textWorld,orientationTransform,localBounds(element.transform.cx,element.transform.cy),`$.elements.${element.id}.textOrientation`,state.budget)
+    if(body.transform)textWorld=checkedWorldAffine(textWorld,body.transform,body.bounds,`$.elements.${element.id}.textBody`,state.budget)
+    const hull=sourceTransform.sourceAffine||reflected?await sourceTextBounds(body,state.options.textLayout.glyphExtents):body.bounds
+    checkedWorldAffine(textWorld,translationTransform(0,0),hull,`$.elements.${element.id}.textHull`,state.budget)
+    return {...body,...(orientationTransform?{orientationTransform}:{})}
+  }
   switch (element.kind) {
     case 'text': {
       if (!element.textBody) state.diagnostics.push({ severity: 'info', code: 'text.layoutMetadataUnavailable', message: 'legacy native PPTX text has no text-body layout; shaped compatibility preview remains clipped to element bounds', slideId: state.slide.id, elementId: element.id })
       const bounds = nativeTextBodyBounds(element, state)
-      return { kind: 'text', ...base, textBody: await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'text', bounds, layout: element.textBody }, state) }
+      return { kind: 'text', ...base, textBody: await compileSourceText(element.paragraphs,bounds,element.textBody) }
     }
     case 'shape':
       if(element.fill && element.geometry?.paths.some(path=>path.fillMode!=='norm'&&path.fillMode!=='none'))state.diagnostics.push({severity:'warning',code:'geometry.deterministicPathTone',message:`DrawingML shaded paths use ${DRAWINGML_PATH_FILL_POLICY}; these relative-tone preview strengths are not qualified PowerPoint colors.`,slideId:state.slide.id,elementId:element.id})
@@ -1877,11 +1936,11 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       if (!element.preset&&!element.geometry) throw new RenderCompileError('native.invalidShapePreset', `$.elements.${element.id}.preset`, 'non-refused shapes require a native preset')
       return {
         kind: 'shape', ...base, ...(element.preset?{preset:element.preset}:{}),
-        ...(element.geometry?{geometryPaths:evaluatedGeometryPaths(element.geometry,(value,path)=>checkCoordinate(value,path,state.budget),`$.elements.${element.id}.geometry`,bounds=>{checkedWorldAffine(parentWorld,base.transform,bounds,`$.elements.${element.id}.geometry`,state.budget)})}:{}),
+        ...(element.geometry?{geometryPaths:evaluatedGeometryPaths(element.geometry,(value,path)=>checkCoordinate(value,path,state.budget),`$.elements.${element.id}.geometry`,bounds=>{checkLeafBounds(bounds)})}:{}),
         path: element.preset?boundedPath(presetPath(element.preset, base.bounds.cx, base.bounds.cy), `$.elements.${element.id}.path`):[],
         fill: element.fill ? { color: element.fill } : undefined,
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
-        textBody: element.paragraphs.length || element.textBody ? await compileTextBody(element.paragraphs, { elementId: element.id, elementKind: 'shape', bounds: nativeTextBodyBounds(element, state), layout: element.textBody }, state) : undefined,
+        textBody: element.paragraphs.length || element.textBody ? await compileSourceText(element.paragraphs,nativeTextBodyBounds(element,state),element.textBody) : undefined,
       }
     case 'connector':
       return {
@@ -2024,7 +2083,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
     case 'group': {
       const children: RenderNode[] = []
       for (let childIndex = 0; childIndex < element.children.length; childIndex++) {
-        children.push(await compileElement(element.children[childIndex]!, childIndex, depth + 1, state, world))
+        children.push(await compileElement(element.children[childIndex]!, childIndex, depth + 1, state, world, sourceGroup?[{frame:sourceFrame(element.transform),child:element.childTransform!},...sourceParents]:sourceParents))
       }
       const group: RenderGroupNode = { kind: 'group', ...base, children }
       return group
@@ -2090,6 +2149,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
 	const collectInherited=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')){if(options.inheritedTextPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','source inherited text requires explicit read-only approximation opt-in');inheritedTextElements.add(element.id)}if(element.kind==='group')collectInherited(element.children)}}
 	collectInherited(nativeSlide.elements)
   const budget: Budget = {
+    affine: new SourceAffineBudget(),
     nodes: 0,
     glyphs: 0,
     clusters: 0,

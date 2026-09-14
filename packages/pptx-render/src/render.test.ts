@@ -390,7 +390,7 @@ describe('native PPTX RenderTree', () => {
     expect(parsedGroup.children[0]).toMatchObject({ sourceElementId: 'el-group-child', zIndex: 0, kind: 'shape' })
     expect(parsedGroup).not.toHaveProperty('clip')
     expect(parsedGroup).toMatchObject({
-      transform: { aPpm: 1_000_000, dPpm: 1_000_000, txEmu: 7_000_000, tyEmu: 1_000_000 },
+      transform: { aPpm: 1_000_000, dPpm: 1_000_000, txEmu: 0, tyEmu: 0 },
       bounds: { x: 0, y: 0, cx: 2_000_000, cy: 2_000_000 },
     })
     expect(findNode(tree, 'shape', 'el-shape').path).toEqual([{ kind: 'roundRect', rect: { x: 0, y: 0, cx: 1_500_000, cy: 800_000 }, radiusEmu: 133_336 }])
@@ -407,8 +407,9 @@ describe('native PPTX RenderTree', () => {
     const canonical = stringifySlideRenderTree(tree)
     expect(stringifySlideRenderTree(await compileNativePptxSlide(parsedFull, 0, { textLayout: textLayout() }))).toBe(canonical)
     // Fixture resolver substitutes Aptos with Fixture Sans: source/selected
-    // evidence and approximate labels are now part of the replay identity.
-    expect(createHash('sha256').update(canonical).digest('hex')).toBe('47a7d012470b11d33e462879915be81635171f1c35964191e6aa591c3d647b78')
+    // evidence and approximate labels are part of the replay identity. Parsed
+    // group placement is carried by global leaf transforms.
+    expect(createHash('sha256').update(canonical).digest('hex')).toBe('f51b342d7135ccd045ba118be8b1f832ff3cf541f974a181ff9e7af28f7eea7b')
   })
 
   it('compiles and paints exact table cells from renderer-neutral native text commands without cell or table clipping', async () => {
