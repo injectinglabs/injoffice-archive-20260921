@@ -5,8 +5,9 @@ records while retaining opaque source ownership. The compiler requires the
 explicit `literalStackedPreview: true` option; the native preview UI and paint
 worker enable it through the existing source-literal chart opt-in. Default
 rendering and existing literal/workbook profiles remain unchanged.
-Workbook-backed stacked charts remain a required subsequent connected profile;
-this literal profile does not authorize reference caches or close that row.
+[Workbook-backed stacked charts](PPTX-WORKBOOK-STACKED-CHARTS.md) use a separate
+source-bound resolution path; this literal profile never authorizes reference
+caches.
 
 The bounded profiles use complete aligned literal categories and decimal values,
 at most 16 series and 256 categories. Bar series retain explicit base/point RGB

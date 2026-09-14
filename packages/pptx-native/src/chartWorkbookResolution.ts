@@ -1,3 +1,4 @@
+import type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStackedTypes.js'
 import type {NativeLiteralBubble} from './chartBubbleTypes.js'
 import {nativeChartDecimal} from './chartDecimalValidation.js'
 import type {NativeLiteralBar,NativeLiteralConnected} from './types.js'
@@ -9,11 +10,14 @@ import {assertChartWorkbookValues} from './chartWorkbookValueAdmission.js'
 export interface NativeWorkbookBarData extends Omit<NativeLiteralBar,'profile'|'dataOrigin'>{profile:'workbook-bar-v1';dataOrigin:'embedded-workbook'}
 export interface NativeWorkbookConnectedData extends Omit<NativeLiteralConnected,'profile'|'dataOrigin'>{profile:'workbook-line-v1'|'workbook-scatter-v1';dataOrigin:'embedded-workbook'}
 export interface NativeWorkbookBubbleData extends Omit<NativeLiteralBubble,'profile'|'dataOrigin'>{profile:'workbook-bubble-v1';dataOrigin:'embedded-workbook'}
+export interface NativeWorkbookStackedBarData extends Omit<NativeLiteralStackedBar,'profile'|'dataOrigin'>{profile:'workbook-stacked-bar-v1';dataOrigin:'embedded-workbook'}
+export interface NativeWorkbookStackedLineData extends Omit<NativeLiteralStackedLine,'profile'|'dataOrigin'>{profile:'workbook-stacked-line-v1';dataOrigin:'embedded-workbook'}
+type WorkbookChartData=NativeWorkbookBarData|NativeWorkbookConnectedData|NativeWorkbookBubbleData|NativeWorkbookStackedBarData|NativeWorkbookStackedLineData
 export interface NativeResolvedWorkbookChart {
  readonly profile:'embedded-workbook-chart-v1'
  readonly packageSHA256:string;readonly sourceRevision:string
  readonly source:NativePptxInspectedWorkbookChart
- readonly data:NativeWorkbookBarData|NativeWorkbookConnectedData|NativeWorkbookBubbleData
+ readonly data:WorkbookChartData
  readonly references:readonly ChartWorkbookResolvedValues[]
 }
 const admitted=new WeakSet<NativeResolvedWorkbookChart>()
@@ -44,7 +48,7 @@ export function createResolvedWorkbookChart(inspection:NativePptxChartWorkbookIn
   return {index:s.index,order:s.order,...(title===undefined?{}:{title}),values:get(s.valueReference),...(s.sizeReference?{sizes:get(s.sizeReference)}:{}),...(s.xReference?{xValues:get(s.xReference)}:{}),...(s.colors?{colors:[...s.colors]}:{}),...(s.color?{color:s.color,widthEmu:s.widthEmu!}:{})}
  })
  if(used.size!==records.size)throw new TypeError('unreferenced workbook values were supplied')
- const data:NativeWorkbookBarData|NativeWorkbookConnectedData|NativeWorkbookBubbleData=spec.family==='bar'?{
+ const data:WorkbookChartData=spec.grouping&&spec.family==='bar'?{profile:'workbook-stacked-bar-v1',dataOrigin:'embedded-workbook',barDirection:spec.barDirection==='col'?'column':'bar',grouping:spec.grouping,gapWidth:spec.gapWidth!,overlap:100,categories:categories!,series:series as NativeWorkbookStackedBarData['series'],categoryAxis:spec.barDirection==='col'?spec.xAxis:spec.yAxis,valueAxis:spec.barDirection==='col'?spec.yAxis:spec.xAxis}:spec.grouping&&spec.family==='line'?{profile:'workbook-stacked-line-v1',dataOrigin:'embedded-workbook',grouping:spec.grouping,categories:categories!,series:series as NativeWorkbookStackedLineData['series'],xAxis:spec.xAxis,yAxis:spec.yAxis}:spec.family==='bar'?{
   profile:'workbook-bar-v1',dataOrigin:'embedded-workbook',barDirection:spec.barDirection==='col'?'column':'bar',grouping:'clustered',gapWidth:spec.gapWidth!,overlap:0,categories:categories!,series:series as NativeWorkbookBarData['series'],categoryAxis:spec.barDirection==='col'?spec.xAxis:spec.yAxis,valueAxis:spec.barDirection==='col'?spec.yAxis:spec.xAxis,
  }:spec.family==='bubble'?{profile:'workbook-bubble-v1',dataOrigin:'embedded-workbook',bubbleScale:spec.bubbleScale!,sizeRepresents:spec.sizeRepresents!,series:series as NativeWorkbookBubbleData['series'],xAxis:spec.xAxis,yAxis:spec.yAxis}:{profile:spec.family==='line'?'workbook-line-v1':'workbook-scatter-v1',dataOrigin:'embedded-workbook',categories:categories??[],series:series as NativeWorkbookConnectedData['series'],xAxis:spec.xAxis,yAxis:spec.yAxis}
  if(data.profile==='workbook-bubble-v1')for(const series of data.series)for(const raw of series.sizes){const size=nativeChartDecimal(raw);if(!size||size.coefficient<0n)throw new TypeError('negative or invalid authoritative workbook bubble size')}

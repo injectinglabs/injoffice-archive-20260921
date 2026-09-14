@@ -100,3 +100,5 @@ export type {NativeWorkbookBubbleData} from './chartWorkbookResolution.js'
 
 export type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStackedTypes.js'
 export {validNativeLiteralStackedBar,validNativeLiteralStackedLine} from './chartStackedValidation.js'
+
+export type {NativeWorkbookStackedBarData,NativeWorkbookStackedLineData} from './chartWorkbookResolution.js'
