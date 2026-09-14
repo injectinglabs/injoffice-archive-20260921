@@ -102,18 +102,22 @@ func TestNativeTextboxPageAnchorRefusals(t *testing.T) {
 
 func TestNativeTextboxRelativePositionEvidence(t *testing.T) {
 	for _, horizontal := range []bool{false, true} {
-		bases := []string{"page", "margin", "paragraph", "line"}
+		bases := []string{"page", "margin", "paragraph", "line", "topMargin", "bottomMargin", "insideMargin", "outsideMargin"}
 		if horizontal {
-			bases = []string{"page", "margin", "column", "character"}
+			bases = []string{"page", "margin", "column", "character", "leftMargin", "rightMargin", "insideMargin", "outsideMargin"}
 		}
 		for _, base := range bases {
-			for _, align := range []bool{false, true} {
+			for _, alignment := range []string{"offset", "edge", "center", "inside", "outside"} {
+				align := alignment != "offset"
 				if align && (base == "paragraph" || base == "line" || base == "character") {
 					continue
 				}
 				axis, old, value := "V", "1828800", "bottom"
 				if horizontal {
 					axis, old, value = "H", "914400", "right"
+				}
+				if alignment != "edge" {
+					value = alignment
 				}
 				position := `<wp:posOffset>-127</wp:posOffset>`
 				if align {

@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes'),positionDir=resolve(scratch,'positioned-textboxes'),stackDir=resolve(scratch,'stacked-textboxes')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR'],[positionDir,'TestNativeRelativeTextboxPagesSource','INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR'],[stackDir,'TestNativeStackedTextboxPagesSource','INJOFFICE_TEXTBOX_STACK_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes'),positionDir=resolve(scratch,'positioned-textboxes'),stackDir=resolve(scratch,'stacked-textboxes'),parityDir=resolve(scratch,'parity-textboxes')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR'],[positionDir,'TestNativeRelativeTextboxPagesSource','INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR'],[stackDir,'TestNativeStackedTextboxPagesSource','INJOFFICE_TEXTBOX_STACK_EVIDENCE_DIR'],[parityDir,'TestNativeParityTextboxPagesSource','INJOFFICE_TEXTBOX_PARITY_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -210,6 +210,26 @@ try {
   await click('Upload to helper and preview page-placed textboxes')
   await poll(()=>evaluate(`${native}?.textContent.includes('Textbox stacking does not match source')&&${native}?.querySelector('svg')===null`),'forged textbox layer refusal',45000)
   await assert(`window.__nativeDocxPosts.length===12&&${docs}?.dataset.demoDirty!=='true'`,'forged stacking refuses all pages and preserves source')
+  await evaluate('window.__corruptStack=false')
+  const parityFixture=resolve(parityDir,'page-textbox.docx'),parityHash=hash(readFileSync(parityFixture))
+  await setFixtureData({parityHash})
+  await upload(parityFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'parity-textbox replacement')
+  await assert('window.__nativeDocxPosts.length===12','parity textbox positions require a fresh explicit upload')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('2 approximate, read-only pages')&&${native}?.querySelector('[data-native-textbox]')!==null`),'parity textbox pages',45000)
+  await assert('window.__nativeDocxPosts.length===13&&window.__nativeDocxPosts[12].hash===window.__nativeDocxFixture.parityHash&&window.__nativeDocxTextbox.preview.version===2','parity positions bind exact source bytes')
+  for(let ordinal=0;ordinal<2;ordinal++){
+    if(ordinal){await click('Next approximate page');await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Approximate document page 2"]')!==null`),'parity textbox page 2')}
+    const x=ordinal?552000:12000,y=ordinal?738000:18000
+    await assert(`(()=>{const preview=window.__nativeDocxTextbox.preview,box=preview.textboxes[${ordinal}],page=preview.body_paint.pages[${ordinal}],mounted=${native}.querySelector('[data-native-textbox]');return box.x_millipoints===${x}&&box.y_millipoints===${y}&&box.page_id===page.id&&mounted.getAttribute('transform')==='translate(${x} ${y})'&&${native}.querySelectorAll('[data-native-textbox]').length===1&&getComputedStyle(${native}.querySelector('svg')).overflow==='hidden'})()`,'inside margin parity coordinates on page '+(ordinal+1))
+    await screenshot('docx-parity-textbox-page-'+(ordinal+1)+'.png')
+  }
+  await evaluate('window.__corruptTextbox=true')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('Textbox placement does not fit')&&${native}?.querySelector('svg')===null`),'forged parity textbox refusal',45000)
+  await assert(`window.__nativeDocxPosts.length===14&&${docs}?.dataset.demoDirty!=='true'`,'parity coordinate forgery rejects the preview and preserves source')
+  if(hash(readFileSync(parityFixture))!==parityHash)throw Error('Parity source changed')
   if(hash(readFileSync(stackFixture))!==stackHash)throw Error('Stacked-textbox source changed')
   if(hash(readFileSync(positionFixture))!==positionHash)throw Error('Relative-textbox source changed')
   if(hash(readFileSync(multiFixture))!==multiHash)throw Error('Multiple-textbox source changed')
@@ -217,7 +237,7 @@ try {
   if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,relativeTextboxPages:2,stackedTextboxes:4,uploads:12},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,relativeTextboxPages:2,stackedTextboxes:4,parityTextboxPages:2,uploads:14},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()

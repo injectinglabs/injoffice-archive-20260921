@@ -12,18 +12,27 @@ export function resolveTextboxPosition(document:NativeDocxDocumentV1,item:Native
  const section=document.sections.find(s=>s.id===line?.section_id)
  if(lines.length!==1||!line||!section||page.width_millipoints!==section.page.width_twips*50||page.height_millipoints!==section.page.height_twips*50)throw new TypeError('Textbox position requires its source section and first line')
  const m=section.page.margins,left=(m.left_twips+m.gutter_twips)*50,top=m.top_twips*50,right=page.width_millipoints-m.right_twips*50,bottom=page.height_millipoints-m.bottom_twips*50
+ const odd=page.ordinal%2===0
+ const horizontal=p.horizontal_relative==='insideMargin'?(odd?'leftMargin':'rightMargin'):p.horizontal_relative==='outsideMargin'?(odd?'rightMargin':'leftMargin'):p.horizontal_relative
+ const vertical=p.vertical_relative==='insideMargin'?(odd?'topMargin':'bottomMargin'):p.vertical_relative==='outsideMargin'?(odd?'bottomMargin':'topMargin'):p.vertical_relative
+ const hAlign=p.horizontal_align==='inside'?(odd?'left':'right'):p.horizontal_align==='outside'?(odd?'right':'left'):p.horizontal_align
+ const vAlign=p.vertical_align==='inside'?(odd?'top':'bottom'):p.vertical_align==='outside'?(odd?'bottom':'top'):p.vertical_align
  const column=page.columns.find(c=>c.id===line.column_id&&c.section_id===section.id)
  let x=0,y=0,width=page.width_millipoints,height=page.height_millipoints
- if(p.horizontal_relative==='margin'){x=left;width=right-left}
- if(p.horizontal_relative==='column'){
+ if(horizontal==='leftMargin'){x=0;width=left}
+ if(horizontal==='rightMargin'){x=right;width=page.width_millipoints-right}
+ if(vertical==='topMargin'){y=0;height=top}
+ if(vertical==='bottomMargin'){y=bottom;height=page.height_millipoints-bottom}
+ if(horizontal==='margin'){x=left;width=right-left}
+ if(horizontal==='column'){
   if(!column)throw new TypeError('Textbox position requires its source column')
   x=column.x_millipoints;width=column.width_millipoints
  }
- if(p.horizontal_relative==='character'){x=line.x_millipoints;width=0}
- if(p.vertical_relative==='margin'){y=top;height=bottom-top}
- if(p.vertical_relative==='paragraph'||p.vertical_relative==='line'){y=line.y_millipoints;height=0}
- x+=p.horizontal_align==='center'?(width-paint.width_millipoints)/2:p.horizontal_align==='right'?width-paint.width_millipoints:p.x_emu*10/127
- y+=p.vertical_align==='center'?(height-paint.height_millipoints)/2:p.vertical_align==='bottom'?height-paint.height_millipoints:p.y_emu*10/127
+ if(horizontal==='character'){x=line.x_millipoints;width=0}
+ if(vertical==='margin'){y=top;height=bottom-top}
+ if(vertical==='paragraph'||vertical==='line'){y=line.y_millipoints;height=0}
+ x+=hAlign==='center'?(width-paint.width_millipoints)/2:hAlign==='right'?width-paint.width_millipoints:p.x_emu*10/127
+ y+=vAlign==='center'?(height-paint.height_millipoints)/2:vAlign==='bottom'?height-paint.height_millipoints:p.y_emu*10/127
  if(!Number.isSafeInteger(x)||!Number.isSafeInteger(y))throw new TypeError('Textbox position exceeds exact coordinate precision')
  return {x,y}
 }

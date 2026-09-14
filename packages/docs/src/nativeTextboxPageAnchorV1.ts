@@ -14,10 +14,10 @@ export interface NativeTextboxPageAnchorV1 {
 export interface NativeTextboxRelativeAnchorV2 extends Omit<NativeTextboxPageAnchorV1,'policy'> {
  policy:'relative-position-no-wrap-v2'
  stacking?:{behind_doc:boolean;relative_height:number}
- horizontal_relative:'page'|'margin'|'column'|'character'
- vertical_relative:'page'|'margin'|'paragraph'|'line'
- horizontal_align?:'left'|'center'|'right'
- vertical_align?:'top'|'center'|'bottom'
+ horizontal_relative:'page'|'margin'|'column'|'character'|'leftMargin'|'rightMargin'|'insideMargin'|'outsideMargin'
+ vertical_relative:'page'|'margin'|'paragraph'|'line'|'topMargin'|'bottomMargin'|'insideMargin'|'outsideMargin'
+ horizontal_align?:'left'|'center'|'right'|'inside'|'outside'
+ vertical_align?:'top'|'center'|'bottom'|'inside'|'outside'
 }
 export type NativeTextboxPositionAnchor=NativeTextboxPageAnchorV1|NativeTextboxRelativeAnchorV2
 function keys(v:unknown,wanted:string[]):asserts v is Record<string,unknown>{
@@ -35,7 +35,7 @@ export function decodeTextboxPageAnchor(value:unknown,owner:NativeDocxTextboxV1)
  const record=value as Record<string,unknown>,relative=record.policy==='relative-position-no-wrap-v2'
  keys(value,['policy','source_anchor','horizontal_anchor','vertical_anchor','x_emu','y_emu',...(relative?['horizontal_relative','vertical_relative',...('stacking' in record?['stacking']:[]),...('horizontal_align' in record?['horizontal_align']:[]),...('vertical_align' in record?['vertical_align']:[])]:[])])
  if((!relative&&value.policy!=='page-offset-no-wrap-v1')||[value.x_emu,value.y_emu].some(v=>!Number.isSafeInteger(v)||Number(v)<(relative?-127000000:0)||Number(v)>127000000||Number(v)%127!==0))throw new TypeError('Invalid textbox page offsets')
- if(relative&&([value.horizontal_relative,value.vertical_relative,...('horizontal_align' in value?[value.horizontal_align]:[]),...('vertical_align' in value?[value.vertical_align]:[])].some(v=>typeof v!=='string')||!['page','margin','column','character'].includes(String(value.horizontal_relative))||!['page','margin','paragraph','line'].includes(String(value.vertical_relative))||('horizontal_align' in value&&(!['left','center','right'].includes(String(value.horizontal_align))||value.horizontal_relative==='character'||value.x_emu!==0))||('vertical_align' in value&&(!['top','center','bottom'].includes(String(value.vertical_align))||!['page','margin'].includes(String(value.vertical_relative))||value.y_emu!==0))))throw new TypeError('Invalid textbox relative position')
+ if(relative&&([value.horizontal_relative,value.vertical_relative,...('horizontal_align' in value?[value.horizontal_align]:[]),...('vertical_align' in value?[value.vertical_align]:[])].some(v=>typeof v!=='string')||!['page','margin','column','character','leftMargin','rightMargin','insideMargin','outsideMargin'].includes(String(value.horizontal_relative))||!['page','margin','paragraph','line','topMargin','bottomMargin','insideMargin','outsideMargin'].includes(String(value.vertical_relative))||('horizontal_align' in value&&(!['left','center','right','inside','outside'].includes(String(value.horizontal_align))||value.horizontal_relative==='character'||value.x_emu!==0))||('vertical_align' in value&&(!['top','center','bottom','inside','outside'].includes(String(value.vertical_align))||!['page','margin','topMargin','bottomMargin','insideMargin','outsideMargin'].includes(String(value.vertical_relative))||value.y_emu!==0))))throw new TypeError('Invalid textbox relative position')
 
  if('stacking' in value){keys(value.stacking,['behind_doc','relative_height']);if(typeof value.stacking.behind_doc!=='boolean'||!Number.isSafeInteger(value.stacking.relative_height)||Number(value.stacking.relative_height)<0||Number(value.stacking.relative_height)>4294967295)throw new TypeError('Invalid textbox stacking')}
 
