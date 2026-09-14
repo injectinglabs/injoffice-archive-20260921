@@ -1,3 +1,4 @@
+import { unicodeScriptItems } from './unicodeScript.js'
 import { resolveUnicodeBidi, type UnicodeBaseDirection } from './unicodeBidi.js'
 /** Source clusters and glyph positions are distinct: neither is a Unicode scalar. */
 export interface UnicodeGlyph {
@@ -33,30 +34,10 @@ export async function prepareUnicodeShaper(bytes: Uint8Array, unitsPerEm: number
     const bidi = resolveUnicodeBidi(value, direction)
     // UAX9 resolves levels first. Each script/direction item is then shaped
     // with the original full source as context and global UTF-16 clusters.
-    const scripts: readonly [RegExp, string][] = [
-      [/^\p{Script=Latin}$/u, 'Latn'], [/^\p{Script=Greek}$/u, 'Grek'], [/^\p{Script=Cyrillic}$/u, 'Cyrl'],
-      [/^\p{Script=Han}$/u, 'Hani'], [/^\p{Script=Hiragana}$/u, 'Hira'], [/^\p{Script=Katakana}$/u, 'Kana'], [/^\p{Script=Hangul}$/u, 'Hang'], [/^\p{Script=Arabic}$/u, 'Arab'], [/^\p{Script=Hebrew}$/u, 'Hebr'],
-    ]
-    const characters = bidi.scalars.map(scalar => {
-      const character = scalar.value
-      const script = scripts.find(([pattern]) => pattern.test(character))?.[1]
-      const neutral = (/^\p{Script=Common}$/u.test(character) && /^[0-9\p{Punctuation}\p{Symbol} ]$/u.test(character))
-        || (/^\p{Script=Inherited}$/u.test(character) && /^\p{Mark}$/u.test(character))
-      const formatting = /^\p{Bidi_Control}$/u.test(character) || character === '\u200C' || character === '\u200D'
-      if ((!script && !neutral && !formatting) || /[\p{Control}\p{Surrogate}]/u.test(character)) throw new Error('embedded appearance requires a supported shaping script')
-      return { character, script, start: scalar.start, end: scalar.end, level: scalar.level }
-    })
-    let activeScript = characters.find(c => c.script)?.script ?? 'Zyyy'
-    const items: { start: number; end: number; script: string; level: number; scalarIndices: number[] }[] = []
-    let offset = 0
-    for (const [scalarIndex, character] of characters.entries()) {
-      if (offset > 0 && /^\p{Mark}$/u.test(character.character) && character.script && character.script !== activeScript) throw new Error('embedded appearance cross-script mark requires grapheme itemization')
-      activeScript = character.script ?? activeScript
-      const previous = items.at(-1)
-      if (previous?.script === activeScript && previous.level === character.level) { previous.end += character.character.length; previous.scalarIndices.push(scalarIndex) }
-      else items.push({ start: offset, end: offset + character.character.length, script: activeScript, level: character.level, scalarIndices: [scalarIndex] })
-      offset += character.character.length
-    }
+    // C0/C1 controls are not single-line appearance content. Bidi format,
+    // joiner and variation controls retain exact source semantics through HB.
+    if (/[\p{Control}\p{Surrogate}]/u.test(value)) throw new Error('embedded appearance requires single-line Unicode text')
+    const items = unicodeScriptItems(value, bidi)
     const visualRanks = new Map(bidi.order.map((scalarIndex, visualIndex) => [scalarIndex, visualIndex]))
     const ranked = items.map(item => ({ item, rank: Math.min(...item.scalarIndices.map(index => visualRanks.get(index)!)) }))
     ranked.sort((a, b) => a.rank - b.rank)
