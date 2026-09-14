@@ -49,10 +49,11 @@ type NativeWorkbookExtractionOptions struct {
 }
 
 type nativeWorkbookPackage struct {
-	index            *opcPackageIndex
-	files            map[string][]byte
-	contentTypesPart string
-	contentTypes     nativeContentTypeRegistry
+	index              *opcPackageIndex
+	files              map[string][]byte
+	contentTypesPart   string
+	contentTypes       nativeContentTypeRegistry
+	omittedOptionalZIP []nativePendingZIPTruncation
 }
 
 type nativeContentTypeRegistry struct {
@@ -198,6 +199,9 @@ func ExtractNativeWorkbookV1WithOptions(data []byte, options NativeWorkbookExtra
 		return nil, fmt.Errorf("xlsxpatch: native extract: workbook exceeds %d modeled cells", NativeXLSXMaxCells)
 	}
 
+	if err := extractor.noteOmittedOptionalZIPParts(); err != nil {
+		return nil, err
+	}
 	passthrough, err := extractor.passthroughParts()
 	if err != nil {
 		return nil, err
@@ -253,6 +257,7 @@ func openNativeWorkbookPackage(data []byte) (*nativeWorkbookPackage, error) {
 	}
 	files := make(map[string][]byte, len(zr.File))
 	var declaredTotal, actualTotal uint64
+	var pendingZIPTruncations []nativePendingZIPTruncation
 	for _, file := range zr.File {
 		if file.FileInfo().IsDir() || strings.HasSuffix(file.Name, "/") {
 			trimmed := strings.TrimSuffix(file.Name, "/")
@@ -290,23 +295,25 @@ func openNativeWorkbookPackage(data []byte) (*nativeWorkbookPackage, error) {
 		}
 		content, readErr := io.ReadAll(io.LimitReader(rc, NativeXLSXMaxPartBytes+1))
 		closeErr := rc.Close()
-		if readErr != nil {
-			return nil, fmt.Errorf("xlsxpatch: native extract: read ZIP entry %q: %w", file.Name, readErr)
-		}
-		if closeErr != nil {
-			return nil, fmt.Errorf("xlsxpatch: native extract: close ZIP entry %q: %w", file.Name, closeErr)
+		if zipErr := nativeWorkbookZIPReadError(file.Name, readErr, closeErr, len(content), file.UncompressedSize64); zipErr != nil {
+			// Defer unexpected EOF / size mismatch until Content Types and relationships prove an optional thumbnail.
+			if nativeZIPTruncationCandidate(readErr, closeErr, len(content), file.UncompressedSize64) {
+				pendingZIPTruncations = append(pendingZIPTruncations, nativePendingZIPTruncation{name: file.Name, err: zipErr})
+				continue
+			}
+			return nil, zipErr
 		}
 		if len(content) > NativeXLSXMaxPartBytes {
 			return nil, fmt.Errorf("xlsxpatch: native extract: ZIP entry %q exceeds %d actual bytes", file.Name, NativeXLSXMaxPartBytes)
-		}
-		if uint64(len(content)) != file.UncompressedSize64 {
-			return nil, fmt.Errorf("xlsxpatch: native extract: ZIP entry %q actual length %d does not match declared uncompressed size %d", file.Name, len(content), file.UncompressedSize64)
 		}
 		actualTotal += uint64(len(content))
 		if actualTotal > NativeXLSXMaxUncompressedBytes {
 			return nil, fmt.Errorf("xlsxpatch: native extract: ZIP exceeds %d actual uncompressed bytes", NativeXLSXMaxUncompressedBytes)
 		}
 		files[file.Name] = content
+	}
+	if err := nativeRefuseRequiredZIPTruncations(pendingZIPTruncations); err != nil {
+		return nil, err
 	}
 	contentTypesPart, _, ok := index.lookupSpelling("[Content_Types].xml")
 	if !ok {
@@ -320,7 +327,11 @@ func openNativeWorkbookPackage(data []byte) (*nativeWorkbookPackage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("xlsxpatch: native extract: %w", err)
 	}
-	pkg := &nativeWorkbookPackage{index: index, files: files, contentTypesPart: contentTypesPart, contentTypes: contentTypes}
+	omittedOptionalZIP, err := nativeOmitProvenOptionalZIPTruncations(pendingZIPTruncations, files, index, contentTypes)
+	if err != nil {
+		return nil, err
+	}
+	pkg := &nativeWorkbookPackage{index: index, files: files, contentTypesPart: contentTypesPart, contentTypes: contentTypes, omittedOptionalZIP: omittedOptionalZIP}
 	overrideKeys := make([]string, 0, len(contentTypes.overrides))
 	for overrideKey := range contentTypes.overrides {
 		overrideKeys = append(overrideKeys, overrideKey)
