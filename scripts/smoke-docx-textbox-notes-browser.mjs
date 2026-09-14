@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -104,9 +104,29 @@ try {
     await screenshot('docx-footnote-page-'+(ordinal+1)+'.png')
   }
   await assert(`${docs}?.dataset.demoDirty!=='true'&&window.__nativeDocxPosts.length===3`,'note navigation preserves original source without more uploads')
+  const lineFixture=resolve(lineDir,'footnote-continuation.docx'),lineHash=hash(readFileSync(lineFixture))
+  const lineSource=JSON.parse(readFileSync(resolve(lineDir,'source.json'),'utf8'))
+  const lineNote=lineSource.document.notes.find(n=>n.note_role==='content'),lineParagraph=lineNote.blocks[0].id
+  const lineLabel=lineNote.blocks[0].paragraph.runs.find(r=>r.reference?.role==='label').id
+  await upload(lineFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'single-paragraph replacement')
+  await assert(`window.__nativeDocxPosts.length===3`,'line continuation needs fresh upload consent')
+  await click('Upload to helper and render native pages')
+  await poll(()=>evaluate(`${native}?.textContent.includes('native pages')&&${native}?.querySelector('svg path')!==null`),'single-paragraph footnote paint',45000)
+  const linePages=await evaluate('window.__nativeDocxPaint.pages.length')
+  await assert(`window.__nativeDocxPaint.pages.length>=3&&window.__nativeDocxPosts.length===4&&window.__nativeDocxPosts[3].hash===${JSON.stringify(lineHash)}`,'one long footnote paragraph spans several pages without changing the package')
+  await assert(`(() => {const slices=window.__nativeDocxPaint.pages.map(p=>p.lines.filter(l=>l.region==='footnote'&&l.paragraph_id===${JSON.stringify(lineParagraph)})),lines=slices.flat();return slices.every(s=>s.length>=2)&&lines.every((l,i)=>l.source_line_ordinal===i)&&new Set(lines.map(l=>l.line_id)).size===lines.length})()`,'line continuation preserves exact source order and widow/orphan pairs')
+  await assert(`window.__nativeDocxPaint.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===${JSON.stringify(lineLabel)}).length===1`,'single-paragraph note label is painted once')
+  for(let ordinal=1;ordinal<linePages;ordinal++){
+    await click('Next native page')
+    await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${ordinal+1}"]')!==null`),'line continuation page '+(ordinal+1))
+  }
+  await assert(`${native}.querySelectorAll('svg').length===1&&${native}.querySelector('svg path')!==null&&${docs}?.dataset.demoDirty!=='true'`,'final split paragraph page remains painted and source stays clean')
+  await screenshot('docx-footnote-line-last.png')
+  if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,uploads:3},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,uploads:4},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()
@@ -179,7 +199,7 @@ async function click(label) {
 }
 async function screenshot(name) {
   await evaluate(`${native}?.querySelector('svg')?.scrollIntoView({ block: 'center' })`)
-  const raster=await evaluate(`(async()=>{const svg=${native}.querySelector('svg').cloneNode(true);svg.removeAttribute('style');svg.setAttribute('width','816');svg.setAttribute('height','1056');const image=new Image();image.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await image.decode();const canvas=document.createElement('canvas');canvas.width=816;canvas.height=1056;canvas.getContext('2d').drawImage(image,0,0,816,1056);return canvas.toDataURL('image/png').split(',')[1]})()`)
+  const raster=await evaluate(`(async()=>{const svg=${native}.querySelector('svg').cloneNode(true);svg.removeAttribute('style');svg.setAttribute('width','816');svg.setAttribute('height','1056');const image=new Image();image.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await image.decode();const canvas=document.createElement('canvas');canvas.width=816;canvas.height=1056;const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,816,1056);context.drawImage(image,0,0,816,1056);return canvas.toDataURL('image/png').split(',')[1]})()`)
   writeFileSync(resolve(artifacts,name.replace('.png','-page.png')),Buffer.from(raster,'base64'))
   const result = await cdp.send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(resolve(artifacts, name), Buffer.from(result.data, 'base64'))

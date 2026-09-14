@@ -1523,7 +1523,7 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
-  it.each(['endnote', 'footnote'])('keeps authored multiline %s paragraphs intact and refuses an unqualified atomic split', (kind) => {
+  it.each(['endnote', 'footnote'])('honors keep-lines and default widow control for two-line %s paragraphs', (kind) => {
     for (const keepLines of [true, false, undefined]) {
       const request = kind === 'endnote' ? continuedEndnoteFixture() : continuedFootnoteFixture()
       const paragraph = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === `paragraph:${kind}:2`)!
@@ -1534,7 +1534,7 @@ describe('native DOCX pagination v1', () => {
       const result = paginateNativeDocxV1(request)
       expect(result.ok).toBe(true)
       if (!result.ok) continue
-      expect(result.value.status).toBe(keepLines ? 'paginated' : 'refused')
+      expect(result.value.status).toBe('paginated')
       if (result.value.status === 'paginated') {
         const pages = result.value.pages.filter((page) => page.note_stories?.some((story) => story.lines.some((line) => line.paragraph_id === paragraph.paragraph_id)))
         expect(pages).toHaveLength(1)
@@ -2065,7 +2065,7 @@ describe('final-body-page footnote continuation',()=>{
   }
  })
  it('requires an exact active continuation separator and honors kept note paragraph boundaries',()=>{
-  for(const mutation of ['missing','unshaped','unsupported','relationship','spacing','keep-next','oversized','multiline-unkept'] as const){
+  for(const mutation of ['missing','unshaped','unsupported','relationship','spacing','keep-next','oversized'] as const){
    const request=continuedFootnoteFixture(),continuation=request.document.notes.at(-1)!
    const paragraph=request.shaped_lines.paragraphs.find(p=>p.paragraph_id==='paragraph:footnote:2')!
    const properties=request.resolved_layout.paragraphs.find(p=>p.paragraph_id===paragraph.paragraph_id)!.properties
@@ -2076,9 +2076,53 @@ describe('final-body-page footnote continuation',()=>{
    if(mutation==='spacing'){paragraph.spacing_after_millipoints=50;paragraph.block_advance_millipoints+=50;properties.spacing_after_twips=1}
    if(mutation==='keep-next')properties.keep_next=true
    if(mutation==='oversized'){paragraph.lines[0]!.line_height_millipoints=40_000;paragraph.block_advance_millipoints=40_000}
-   if(mutation==='multiline-unkept'){paragraph.lines.push({...structuredClone(paragraph.lines[0]!),id:`line:${paragraph.paragraph_id}:1`,ordinal:1});paragraph.block_advance_millipoints*=2;properties.keep_lines=false}
    const result=paginateNativeDocxV1(request);expect(result.ok,`${mutation}: ${JSON.stringify(result)}`).toBe(mutation!=='relationship')
    if(result.ok)expect(result.value).toEqual(expect.objectContaining({status:'refused',pages:[],sections:[]}))
+  }
+ })
+})
+
+
+describe('line-boundary note continuation',()=>{
+ function multiline(kind:'footnote'|'endnote',count=7){
+  const request=kind==='footnote'?continuedFootnoteFixture():continuedEndnoteFixture()
+  const note=request.document.notes.find(n=>n.note_role==='content')!
+  const first=note.blocks[0]!,shape=request.shaped_lines.paragraphs.find(p=>p.paragraph_id===first.id)!
+  const removed=new Set(note.blocks.slice(1).map(b=>b.id));note.blocks=[first]
+  request.resolved_layout.paragraphs=request.resolved_layout.paragraphs.filter(p=>!removed.has(p.paragraph_id))
+  request.shaped_lines.paragraphs=request.shaped_lines.paragraphs.filter(p=>!removed.has(p.paragraph_id))
+  const original=shape.lines[0]!
+  shape.lines=Array.from({length:count},(_,ordinal)=>({...structuredClone(original),id:`line:${shape.paragraph_id}:${ordinal}`,ordinal,logical_to_visual:ordinal===0?original.logical_to_visual:[],fragments:ordinal===0?structuredClone(original.fragments):[]}))
+  shape.block_advance_millipoints=shape.lines.reduce((sum,l)=>sum+l.line_height_millipoints,0)
+  const properties=request.resolved_layout.paragraphs.find(p=>p.paragraph_id===first.id)!.properties
+  properties.keep_lines=false
+  return {request,shape,properties}
+ }
+ it.each(['footnote','endnote'] as const)('splits a single %s paragraph without duplicating source lines or its label',kind=>{
+  const {request,shape}=multiline(kind),before=structuredClone(request),output=paginated(request)
+  const slices=output.pages.flatMap(p=>p.note_stories?.filter(n=>n.note_role==='content')??[])
+  expect(slices.map(s=>s.lines.length)).toEqual([2,3,2])
+  expect(slices.flatMap(s=>s.lines.map(l=>l.source_line_ordinal))).toEqual([0,1,2,3,4,5,6])
+  expect(slices.flatMap(s=>s.lines.map(l=>l.line_id))).toEqual(shape.lines.map(l=>l.id))
+  expect(decodeNativeDocxPaginatedLayoutForRequest(output,request).ok).toBe(true)
+  expect(request).toEqual(before);expect(paginated(request)).toEqual(output)
+  for(const corrupt of [(v:typeof output)=>{v.pages[1]!.note_stories![1]!.lines[0]!.source_line_ordinal=0},(v:typeof output)=>{v.pages[1]!.note_stories![1]!.lines.reverse()},(v:typeof output)=>{v.pages[2]!.note_stories![1]!.lines.pop()}]){
+   const forged=structuredClone(output);corrupt(forged);expect(decodeNativeDocxPaginatedLayoutForRequest(forged,request).ok).toBe(false)
+  }
+ })
+ it('backs up a split to avoid a final orphan and honors explicit disabled widow control',()=>{
+  const guarded=multiline('footnote',6)
+  expect(paginated(guarded.request).pages.map(p=>p.note_stories![1]!.lines.length)).toEqual([2,2,2])
+  const unguarded=multiline('footnote',6);unguarded.properties.widow_control=false
+  expect(paginated(unguarded.request).pages.map(p=>p.note_stories![1]!.lines.length)).toEqual([2,3,1])
+ })
+ it('refuses an oversized kept paragraph and unsatisfiable widow group without partial pages',()=>{
+  for(const count of [3,7]){
+   const {request,properties}=multiline('footnote',count)
+   if(count===7)properties.keep_lines=true
+   const result=paginateNativeDocxV1(request)
+   expect(result.ok).toBe(true)
+   if(result.ok)expect(result.value).toMatchObject({status:'refused',pages:[],sections:[]})
   }
  })
 })
