@@ -10394,7 +10394,7 @@
             {
               "name": "NativeLiteralRadar",
               "kind": "type",
-              "signature": "export interface NativeLiteralRadar"
+              "signature": "export interface NativeLiteralRadar extends NativeRadarData"
             },
             {
               "name": "NativeLiteralRadarSeries",
@@ -10532,6 +10532,11 @@
               "signature": "NativeProvenance"
             },
             {
+              "name": "NativeRadarData",
+              "kind": "type",
+              "signature": "export interface NativeRadarData"
+            },
+            {
               "name": "NativeResolvedWorkbookChart",
               "kind": "type",
               "signature": "NativeResolvedWorkbookChart"
@@ -10662,6 +10667,11 @@
               "signature": "NativeWorkbookConnectedData"
             },
             {
+              "name": "NativeWorkbookRadarData",
+              "kind": "type",
+              "signature": "NativeWorkbookRadarData"
+            },
+            {
               "name": "NativeWorkbookStackedBarData",
               "kind": "type",
               "signature": "NativeWorkbookStackedBarData"
@@ -10775,6 +10785,11 @@
               "name": "validNativeLiteralStackedLine",
               "kind": "function",
               "signature": "export declare function validNativeLiteralStackedLine(value: unknown): value is NativeLiteralStackedLine"
+            },
+            {
+              "name": "validNativeRadarData",
+              "kind": "function",
+              "signature": "export declare function validNativeRadarData(v: unknown): v is NativeRadarData"
             }
           ]
         }
@@ -10871,7 +10886,7 @@
             {
               "name": "createNativeWorkbookChartPaths",
               "kind": "function",
-              "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector | LiteralBubbleVector)[]"
+              "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector | LiteralBubbleVector | RadarSeriesVector)[]"
             },
             {
               "name": "createRecordingPaintSurface",
