@@ -9,6 +9,11 @@ it('qualifies measured horizontal/outer edges and totals divider, without interi
  expect(nativeTableBorderPreview(objects,revision,'xl/worksheets/s.xml',3,1,0,neighbors)?.top).toEqual({style:'double',color:'#156082',widthPoints:3})
  expect(nativeTableBorderPreview(objects,revision,'xl/worksheets/s.xml',2,1,0,neighbors)?.bottom).toEqual({style:'double',color:'#156082',widthPoints:3})
 })
+it('refuses unmeasured table styles even when Medium2 borders are attached',()=>{
+ for(const style of ['TableStyleMedium9','TableStyleMedium1','TableStyleLight1']){
+  expect(nativeTableBorderPreview({...objects,tables:[{...objects.tables[0]!,style}]},revision,'xl/worksheets/s.xml',0,0,0,neighbors)).toBeUndefined()
+ }
+})
 it('never overrides adjacent explicit, unknown or conflicting table borders',()=>{
  expect(nativeTableBorderPreview(objects,revision,'xl/worksheets/s.xml',1,1,0,{...neighbors,right:1,top:undefined,left:null})).toEqual({bottom:{style:'solid',color:'#44B3E1',widthPoints:1}})
  expect(nativeTableBorderPreview(objects,revision,'xl/worksheets/s.xml',1,1,9,neighbors)).toBeUndefined()

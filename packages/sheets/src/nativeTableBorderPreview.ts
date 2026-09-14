@@ -8,7 +8,7 @@ const inside=(r:NonNullable<ReturnType<typeof range>>,row:number,column:number)=
  * the table edge. Null neighbors denote only actual worksheet boundaries. */
 export function nativeTableBorderPreview(objects:NativeWorkbookObjectsV1,revision:string,sheetPart:string,row:number,column:number,styleID:number,neighbors:Record<'top'|'right'|'bottom'|'left',number|null|undefined>):NativeTableBorderEdgesV1|undefined{
  if(objects.package_sha256!==revision||!Number.isSafeInteger(row)||!Number.isSafeInteger(column))return
- const tables=objects.tables.flatMap(table=>{const bounds=range(table.ref);return table.sheet_part===sheetPart&&bounds?[{table,bounds}]:[]})
+ const tables=objects.tables.flatMap(table=>{const bounds=range(table.ref);return table.sheet_part===sheetPart&&table.style==='TableStyleMedium2'&&bounds?[{table,bounds}]:[]})
  const matches=tables.filter(t=>inside(t.bounds,row,column));if(matches.length!==1)return
  const {table,bounds}=matches[0]!,border=table.border_preview;if(!border||!border.style_ids.includes(styleID))return
  const result:NativeTableBorderEdgesV1={}
