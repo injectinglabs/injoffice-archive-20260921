@@ -1,3 +1,4 @@
+import {PNG} from 'pngjs'
 import {spawn,spawnSync} from 'node:child_process'
 import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync,mkdirSync} from 'node:fs'
 import {createHash} from 'node:crypto'
@@ -56,9 +57,27 @@ try{
   }
   writeFileSync(resolve(artifacts,name+'-dom.json'),JSON.stringify(dom,null,2))
   writeFileSync(resolve(artifacts,name+'-preview.json'),JSON.stringify(response,null,2))
-  const shot=await cdp.send('Page.captureScreenshot',{format:'png'});writeFileSync(resolve(artifacts,name+'.png'),Buffer.from(shot.data,'base64'))
+  const matchedSvg=`${section}.querySelector('svg[aria-label="Measured native slide 1"]')`
+  await evaluate(`${matchedSvg}.scrollIntoView({block:'center',inline:'center',behavior:'instant'})`)
+  await poll(()=>evaluate(`(()=>{const r=${matchedSvg}.getBoundingClientRect();return r.width>1&&r.height>1&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()`),'verified native SVG entirely visible in viewport')
+  const clip=await evaluate(`(()=>{const r=${matchedSvg}.getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}})()`)
+  const shot=await cdp.send('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true}),painted=Buffer.from(shot.data,'base64')
+  writeFileSync(resolve(artifacts,name+'.png'),painted)
+  // A same-rectangle control removes only source series paint, retaining axes,
+  // labels and the slide background. Nonempty pixels must come from the chart.
+  let control
+  try{
+   await evaluate(`{window.__seriesPixelControl=[...${matchedSvg}.querySelectorAll('path')].filter(n=>['#1E88E5','#E53935','#43A047','#ABCDEF'].includes(n.getAttribute('fill')==='none'?n.getAttribute('stroke'):n.getAttribute('fill'))).map(n=>[n,n.style.visibility]);for(const [n]of window.__seriesPixelControl)n.style.visibility='hidden'}`)
+   control=Buffer.from((await cdp.send('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true})).data,'base64')
+  }finally{await evaluate(`{for(const [n,value]of window.__seriesPixelControl??[])n.style.visibility=value;delete window.__seriesPixelControl}`)}
+  writeFileSync(resolve(artifacts,name+'-series-hidden-control.png'),control)
+  const pixels=PNG.sync.read(painted),blank=PNG.sync.read(control)
+  if(pixels.width!==blank.width||pixels.height!==blank.height||pixels.width<2||pixels.height<2)throw Error(name+': invalid chart-focused screenshot bounds')
+  let changedPixels=0
+  for(let p=0;p<pixels.data.length;p+=4)if(Math.max(...[0,1,2,3].map(c=>Math.abs(pixels.data[p+c]-blank.data[p+c])))>8)changedPixels++
+  if(changedPixels<10)throw Error(name+': actual chart paint is visually empty against its series-hidden control')
   if(hash(readFileSync(fixture))!==digest)throw Error('source changed')
-  proof.push({name,packageSHA256:digest,sourcePreserved:true,sequence:[2,0,1],runtime:process.execPath,domPathCount:dom.length})
+  proof.push({name,packageSHA256:digest,sourcePreserved:true,sequence:[2,0,1],runtime:process.execPath,domPathCount:dom.length,screenshotClip:clip,paintedSeriesPixels:changedPixels})
  }
  if(errors.length)throw new Error(errors.join('\n'))
  writeFileSync(resolve(artifacts,'proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify({result:'PASS',artifacts,cases:proof},null,2))
