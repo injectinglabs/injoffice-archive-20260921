@@ -795,3 +795,18 @@ selecting its page. Browser decoding requires every source rectangle exactly
 once, its font digest, coordinates and page containment. Caller inputs are
 snapshotted before asynchronous body outlining. The helper uses version 2 for
 multiple rectangles, while retaining version 1 for a single rectangle.
+
+Relative position evidence uses policy `relative-position-no-wrap-v2`, retains
+signed `x_emu`/`y_emu`, and adds `horizontal_relative` / `vertical_relative`.
+Optional `horizontal_align` / `vertical_align` replace the corresponding offset
+(which must be zero) and bind the exact `wp:align` source leaf. Accepted axes are
+page/margin/column/character horizontally and page/margin/paragraph/line
+vertically. Horizontal alignment is left/center/right for page/margin/column;
+vertical alignment is top/center/bottom for page/margin. Other combinations
+refuse. Physical page containment uses the rectangle edges and clips outward
+stroke at page edges; old page-offset evidence retains its full-stroke check.
+Source margins come from the owning section, not a note-reduced body box.
+The first placed owner line resolves character, paragraph and line origins;
+column placement uses that line's section-qualified column. Original drawing
+restrictions and source bytes are preserved. This does not add body wrapping,
+inline placement, later-run anchoring, parity-relative margins or stacking modes.

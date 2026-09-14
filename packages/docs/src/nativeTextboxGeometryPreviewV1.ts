@@ -1,5 +1,5 @@
-import {decodeTextboxPageAnchor,type NativeTextboxPageAnchorV1} from './nativeTextboxPageAnchorV1.js'
-export type {NativeTextboxPageAnchorV1} from './nativeTextboxPageAnchorV1.js'
+import {decodeTextboxPageAnchor,type NativeTextboxPositionAnchor} from './nativeTextboxPageAnchorV1.js'
+export type {NativeTextboxPageAnchorV1,NativeTextboxRelativeAnchorV2,NativeTextboxPositionAnchor} from './nativeTextboxPageAnchorV1.js'
 import {decodeTextboxWrapSource,decodeTextboxWrapPaint,type NativeTextboxWrapLayoutV1,type NativeTextboxWrapPaintV1} from './nativeTextboxWrappingV1.js'
 import {decodeTextboxHardBreaks,decodeTextboxLinePaint,type NativeTextboxHardBreakLayoutV1,type NativeTextboxLinePaintV1} from './nativeTextboxHardBreaksV1.js'
 import {decodeNativeDocxTextboxEvidenceV1,type NativeDocxTextboxV1} from './nativeTextboxInventoryV1.js'
@@ -9,7 +9,7 @@ import {bytesToHex} from '@noble/hashes/utils.js'
 export interface NativeDocxTextboxGeometryV1 {
  width_emu:number;height_emu:number;insets_emu:[number,number,number,number];fill_rgb:string;line_rgb:string;line_width_emu:number;font_family:string;font_size_half_points:number;text_rgb:string;text_wrap?:'square'
 }
-export interface NativeDocxTextboxGeometryItemV1 {owner:NativeDocxTextboxV1;geometry:NativeDocxTextboxGeometryV1|null;hard_break_layout?:NativeTextboxHardBreakLayoutV1;wrap_layout?:NativeTextboxWrapLayoutV1;page_anchor?:NativeTextboxPageAnchorV1}
+export interface NativeDocxTextboxGeometryItemV1 {owner:NativeDocxTextboxV1;geometry:NativeDocxTextboxGeometryV1|null;hard_break_layout?:NativeTextboxHardBreakLayoutV1;wrap_layout?:NativeTextboxWrapLayoutV1;page_anchor?:NativeTextboxPositionAnchor}
 export interface NativeDocxTextboxGeometryEvidenceV1 {items:NativeDocxTextboxGeometryItemV1[];omitted_count:number}
 
 /** Copy only bounded plain own data, without invoking accessors or toJSON. */

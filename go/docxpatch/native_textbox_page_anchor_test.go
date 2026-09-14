@@ -60,14 +60,14 @@ func TestNativeTextboxPageAnchor(t *testing.T) {
 
 func TestNativeTextboxPageAnchorRefusals(t *testing.T) {
 	for _, tc := range []struct{ name, from, to string }{
-		{"margin", `relativeFrom="page"`, `relativeFrom="margin"`},
+		{"unknown origin", `relativeFrom="page"`, `relativeFrom="unknown"`},
 		{"simple position", `simplePos="0"`, `simplePos="1"`},
 		{"behind text", `behindDoc="0"`, `behindDoc="1"`},
 		{"overlap", `allowOverlap="1"`, `allowOverlap="0"`},
 		{"layer", `relativeHeight="0"`, `relativeHeight="1"`},
 		{"distance", `distT="0"`, `distT="127"`},
 		{"wrapping", `<wp:wrapNone/>`, `<wp:wrapSquare wrapText="bothSides"/>`},
-		{"negative", `>914400<`, `>-127<`},
+		{"negative overflow", `>914400<`, `>-127000127<`},
 		{"inexact", `>914400<`, `>914401<`},
 		{"oversized", `>914400<`, `>127000127<`},
 		{"overflow", `>914400<`, `>9999999999999999999999<`},
@@ -75,7 +75,7 @@ func TestNativeTextboxPageAnchorRefusals(t *testing.T) {
 		{"attribute", `<wp:posOffset>`, `<wp:posOffset unknown="1">`},
 		{"spoofed namespace", `<wp:positionH`, `<wp:positionH xmlns:wp="urn:spoof"`},
 		{"duplicate wrap", `<wp:wrapNone/>`, `<wp:wrapNone/><wp:wrapNone/>`},
-		{"alignment", `<wp:posOffset>914400</wp:posOffset>`, `<wp:align>left</wp:align>`},
+		{"alignment", `<wp:posOffset>914400</wp:posOffset>`, `<wp:align>top</wp:align>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			drawing := strings.Replace(nativePageTextboxFixture(), tc.from, tc.to, 1)
@@ -96,5 +96,55 @@ func TestNativeTextboxPageAnchorRefusals(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNativeTextboxRelativePositionEvidence(t *testing.T) {
+	for _, horizontal := range []bool{false, true} {
+		bases := []string{"page", "margin", "paragraph", "line"}
+		if horizontal {
+			bases = []string{"page", "margin", "column", "character"}
+		}
+		for _, base := range bases {
+			for _, align := range []bool{false, true} {
+				if align && (base == "paragraph" || base == "line" || base == "character") {
+					continue
+				}
+				axis, old, value := "V", "1828800", "bottom"
+				if horizontal {
+					axis, old, value = "H", "914400", "right"
+				}
+				position := `<wp:posOffset>-127</wp:posOffset>`
+				if align {
+					position = `<wp:align>` + value + `</wp:align>`
+				}
+				from := `<wp:position` + axis + ` relativeFrom="page"><wp:posOffset>` + old + `</wp:posOffset>`
+				to := `<wp:position` + axis + ` relativeFrom="` + base + `">` + position
+				main := nativeMutationMain(`<w:p><w:r>` + strings.Replace(nativePageTextboxFixture(), from, to, 1) + `</w:r></w:p>`)
+				source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(main)))
+				doc, err := ExtractNativeDocumentV1(source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				evidence, err := inspectNativeTextboxGeometry(source, doc)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if evidence == nil || len(evidence.Items) != 1 || evidence.Items[0].Geometry == nil || evidence.Items[0].PageAnchor == nil {
+					t.Fatalf("missing %s %s align=%v", axis, base, align)
+				}
+				p := evidence.Items[0].PageAnchor
+				if p.Policy != "relative-position-no-wrap-v2" {
+					t.Fatal(p)
+				}
+				got, alignment, offset, a := p.VerticalRelative, p.VerticalAlign, p.YEMU, p.VerticalAnchor
+				if horizontal {
+					got, alignment, offset, a = p.HorizontalRelative, p.HorizontalAlign, p.XEMU, p.HorizontalAnchor
+				}
+				if got != base || (align && (alignment != value || offset != 0)) || (!align && (alignment != "" || offset != -127)) || a.XMLSHA256 != nativeSHA([]byte(main)[*a.StartByte:*a.EndByte]) {
+					t.Fatal(p)
+				}
+			}
+		}
 	}
 }

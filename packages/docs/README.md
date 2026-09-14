@@ -1016,3 +1016,21 @@ and requires a new explicit upload. `scripts/smoke-docx-textbox-notes-browser.mj
 checks this flow, single-paragraph note splitting, and three-note continuation
 alongside later body text with real DOCX fixtures,
 actual font outlines, SVG raster pixels and source-byte preservation in Chrome.
+
+### Relative textbox positions
+
+Version 2 composition also accepts `relative-position-no-wrap-v2` evidence.
+Horizontal offsets may use page, margin, column, or character origins; vertical
+offsets may use page, margin, paragraph, or line origins. Signed offsets must
+remain exact at the existing coordinate precision and leave the rectangle on
+its physical page. Horizontal left/center/right alignment supports page,
+margin, and column bounds; vertical top/center/bottom supports page and margins.
+The source section supplies margin bounds even when notes reserve body space.
+Paragraph, line, and character origins use the owner's first placed line because
+qualified drawing anchors precede every modeled text run. At physical page
+edges, the SVG clips the outward half of the stroke without shifting geometry.
+
+The original version 1 API continues to accept only its page-offset policy.
+The helper routes additional positions to version 2. Other wrapping policies,
+inline shapes, anchors after text, margin-side/parity positioning, and different
+stacking layers remain outside this read-only rectangle preview.
