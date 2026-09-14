@@ -59,7 +59,7 @@ it('wraps complete name-keyed programs with identity CIDs and revalidates as CID
   expect(converted.bytes.subarray(converted.bytes.length - raw.length)).toEqual(raw)
   expect(converted.glyphCids).toEqual(Array.from({ length: parsed.numGlyphs }, (_, gid) => gid))
   expect(converted.registry).toBe('Adobe'); expect(converted.ordering).toBe('Identity')
-  expect(prepareUnicodeCffFont(converted.bytes, parsed.numGlyphs, parsed.unitsPerEm)).toEqual(converted)
+  expect(prepareUnicodeCffFont(converted.bytes, parsed.numGlyphs, parsed.unitsPerEm)).toEqual({ ...converted, sourceGlyphFDs: new Array(parsed.numGlyphs).fill(0) })
   expect(raw).toEqual(copy)
 })
 it('rejects malformed headers, counts and matrix mismatches before resources exist', () => {
@@ -133,8 +133,16 @@ it.each([['NotoSansDevanagari-Regular.otf', 'क़', 'क़', '0958', '0915093C']
   const fonts = ap.dict.lookup(PDFName.of('Resources'), PDFDict).lookup(PDFName.of('Font'), PDFDict), font = fonts.lookup(fonts.keys()[0]!, PDFDict)
   const decoded = (name: string) => Buffer.from(decodePDFRawStream(font.lookup(PDFName.of(name)) as PDFRawStream).decode()).toString()
   const gid = cff.glyphCids[composed.glyphs[0]!.id]!
-  expect(decoded('Encoding')).toContain(`<0001> ${gid}\n<0002> ${gid}`)
-  expect(decoded('ToUnicode')).toContain(`<0001> <${firstHex}>\n<0002> <${secondHex}>`)
+  expect(decoded('Encoding')).toContain(`<0001> ${gid}`)
+  expect(decoded('Encoding')).not.toContain('<0002>')
+  expect(decoded('ToUnicode')).toContain(`<0001> <${firstHex}>`)
+  const secondAp = saved.context.lookup(saved.getForm().getTextField('second').acroField.getWidgets()[0]!.getNormalAppearance()) as PDFRawStream
+  const secondFonts = secondAp.dict.lookup(PDFName.of('Resources'), PDFDict).lookup(PDFName.of('Font'), PDFDict)
+  const aliasName = secondFonts.keys().find(name => name.toString().includes('InjofficeView1'))!
+  const alias = secondFonts.lookup(aliasName, PDFDict)
+  expect(Buffer.from(decodePDFRawStream(alias.lookup(PDFName.of('Encoding')) as PDFRawStream).decode()).toString()).toContain(`<0002> ${gid}`)
+  expect(Buffer.from(decodePDFRawStream(alias.lookup(PDFName.of('ToUnicode')) as PDFRawStream).decode()).toString()).toContain(`<0002> <${secondHex}>`)
+  expect(alias.get(PDFName.of('DescendantFonts'))!.toString()).toBe(font.get(PDFName.of('DescendantFonts'))!.toString())
   saved.getForm().flatten({ updateFieldAppearances: false })
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs'), task = pdfjs.getDocument({ data: await saved.save() })
   try {

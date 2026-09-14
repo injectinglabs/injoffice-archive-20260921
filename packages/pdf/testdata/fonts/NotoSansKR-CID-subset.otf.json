@@ -1,20 +1,20 @@
 {
   "repository": "https://github.com/notofonts/noto-cjk",
   "commit": "523d033d6cb47f4a80c58a35753646f5c3608a78",
-  "path": "Sans/SubsetOTF/JP/NotoSansJP-Regular.otf",
-  "sourceSha256": "dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073",
+  "path": "Sans/SubsetOTF/KR/NotoSansKR-Regular.otf",
+  "sourceSha256": "69975a0ac8472717870aefeab0a4d52739308d90856b9955313b2ad5e0148d68",
   "license": "NotoCJK-OFL.txt",
   "licenseSha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
-  "generator": "node scripts/generate-pdf-cff-fixture.mjs /path/to/pinned/NotoSansJP-Regular.otf",
+  "generator": "node scripts/generate-pdf-cff-fixture.mjs /path/to/pinned/NotoSansKR-Regular.otf --korean",
   "subsetFont": "2.7.0",
   "harfbuzzjs": "0.10.3",
   "subsetWasmSha256": "3a5d246b0e4c0017084775e9f2c7fce96e45d09b1a354fd9e2e440c88fb9890d",
-  "text": "Aé é Ω 日本語かなカナ 侮侮︀ 倦倦󠄀",
+  "text": "한글 한글",
   "options": {
     "targetFormat": "truetype",
     "glyphNames": true
   },
-  "glyphs": 28,
-  "fontDictionaries": 8,
-  "sha256": "e8e6eba96296cffcf14791a2b7cb661a0f68e10c4740fcbe1c46c04c733343ec"
+  "glyphs": 43,
+  "fontDictionaries": 6,
+  "sha256": "6284a602bbcdb793fbcf24119e435c810fa8f2cf3801025a8b26077752147ac8"
 }

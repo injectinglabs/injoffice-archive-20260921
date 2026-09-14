@@ -5,6 +5,7 @@ import { UnicodeFontResource, type EncodedUnicodeRun } from './unicodeFontResour
 import { unicodeTextAppearance } from './unicodeTextAppearance.js'
 import { standaloneUnicodeFontFace } from './unicodeFontFace.js'
 import { prepareUnicodeCffFont } from './unicodeCffFont.js'
+import { normalizeOwnedCffFontkit } from './unicodeCffFontkit.js'
 
 /** Caller-supplied fixed TrueType or CFF1 face, optionally selected from a collection. */
 export interface EmbeddedTextAppearanceFont extends UnicodeShapingOptions {
@@ -18,6 +19,7 @@ const maxBytes = 16 * 1024 * 1024
 export async function prepareEmbeddedTextFont(doc: PDFDocument, options: EmbeddedTextAppearanceFont): Promise<{
   embed(): Promise<PDFFont>
   qualify(value: string): void
+  attachAppearanceResources(field: PDFTextField, font: PDFFont): void
   appearanceProvider: AppearanceProviderFor<PDFTextField>
 }> {
   if (!(options.fontBytes instanceof Uint8Array) || options.fontBytes.length < 12 || options.fontBytes.length > maxBytes) {
@@ -41,11 +43,13 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
     throw new Error('invalid embedded appearance font metrics')
   }
   const cff = cffTable ? prepareUnicodeCffFont(bytes.subarray(cffTable.offset, cffTable.offset + cffTable.length), parsed.numGlyphs, parsed.unitsPerEm) : undefined
+  if (cff) normalizeOwnedCffFontkit(parsed, cff)
   const shape = await prepareUnicodeShaper(bytes, parsed.unitsPerEm, parsed.numGlyphs, options)
   const resource = new UnicodeFontResource(parsed, bytes, doc, cff)
   let qualified: EncodedUnicodeRun | undefined
   return {
     embed: () => resource.embed(),
+    attachAppearanceResources: (field, font) => resource.attachAppearanceResources(field, font),
     appearanceProvider(field, widget, font) {
       if (!qualified) throw new Error('embedded appearance has no qualified text run')
       resource.commit()
