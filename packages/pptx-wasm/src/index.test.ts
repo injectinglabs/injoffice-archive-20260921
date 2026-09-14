@@ -1,3 +1,4 @@
+import {fixture as chartWorkbookFixture} from '../../pptx-native/test/chartWorkbookFixture.js'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -37,7 +38,7 @@ class FakeWorker implements NativeWasmWorker {
     this.requests.push(request)
     if (request.op === 'init') this.respond(success(request))
     else if (request.op === 'extract') this.respond(success(request, { contractJson: this.extractJson }))
-    else if (request.op === 'inspect') this.respond(success(request, { contractJson: this.inspectionJson ?? '{}' }))
+    else if (request.op === 'inspect' || request.op === 'chartWorkbooks') this.respond(success(request, { contractJson: this.inspectionJson ?? '{}' }))
     else this.respond(success(request, { bytes: new Uint8Array([7, 8, 9]).buffer }))
   }
 
@@ -215,4 +216,28 @@ describe('PPTX WASM package client', () => {
     const client = createPptxWasmClient()
     await expect(client.extract(new Uint8Array([1]))).rejects.toMatchObject({ code: 'WORKER_UNAVAILABLE', fatal: true })
   })
+})
+
+describe('browser workbook inspection source ownership',()=>{
+ const bytes=new Uint8Array([1,2,3]),sha=createHash('sha256').update(bytes).digest('hex')
+ function inputs(){const {deck,result}=chartWorkbookFixture();deck.sourceRevision=`rev-${sha}`;result.package_sha256=sha;result.source_revision=deck.sourceRevision;return {deck,result}}
+ it('snapshots bytes before asynchronous hashing and joins both native operations',async()=>{
+  const {deck,result}=inputs(),worker=new FakeWorker(JSON.stringify(deck),JSON.stringify(result)),client=createPptxWasmClient({workerFactory:()=>worker}),source=bytes.slice()
+  const pending=client.inspectChartWorkbooks(source);source.fill(9)
+  const inspection=await pending;expect(inspection).toEqual(result);expect(Object.isFrozen(inspection.charts[0])).toBe(true)
+  expect(worker.requests.map(r=>r.op)).toEqual(['init','extract','chartWorkbooks'])
+  for(const request of worker.requests)if(request.op==='extract'||request.op==='chartWorkbooks')expect([...new Uint8Array(request.bytes)]).toEqual([1,2,3])
+  client.terminate()
+ })
+ it('terminates malformed or mismatched engine responses',async()=>{
+  const {deck,result}=inputs()
+  for(const json of ['{}','invalid',JSON.stringify({...result,package_sha256:'f'.repeat(64)})]){
+   const worker=new FakeWorker(JSON.stringify(deck),json),client=createPptxWasmClient({workerFactory:()=>worker})
+   await expect(client.inspectChartWorkbooks(bytes)).rejects.toThrow();expect(worker.terminated).toBe(true)
+  }
+ })
+ it('refuses cancellation before creating the worker',async()=>{
+  let created=false;const client=createPptxWasmClient({workerFactory:()=>{created=true;return new FakeWorker()}}),abort=new AbortController();abort.abort()
+  await expect(client.inspectChartWorkbooks(bytes,{signal:abort.signal})).rejects.toMatchObject({name:'AbortError'});expect(created).toBe(false)
+ })
 })

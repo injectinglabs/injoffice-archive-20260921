@@ -49,7 +49,7 @@
     }
   },
   "scripts": {
-    "prebuild": "npm run build -w @injoffice/agent-tools -w @injoffice/docs -w @injoffice/pdf -w @injoffice/pptx-native -w @injoffice/sheets -w @injoffice/slides",
+    "prebuild": "npm run build -w @injoffice/agent-tools -w @injoffice/docs -w @injoffice/pdf -w @injoffice/sheets -w @injoffice/pptx-native -w @injoffice/slides",
     "build": "node ../../scripts/build-package.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

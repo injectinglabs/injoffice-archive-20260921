@@ -79,3 +79,15 @@ export type {
   NativeTransitionType,
   NativeTransform,
 } from './types'
+
+export {decodeNativePptxChartWorkbookInspection,assertAdmittedChartWorkbookInspection} from './chartWorkbookInspection.js'
+export {extractChartWorkbookReferences} from './chartWorkbookExtract.js'
+export type {ChartWorkbookExtractor} from './chartWorkbookExtract.js'
+export type {ChartWorkbookBinding,ChartWorkbookReference,ChartWorkbookResolvedValues,ChartWorkbookCellVisibility} from './chartWorkbookTypes.js'
+export type {ChartWorkbookRange} from './chartWorkbookRange.js'
+export type {NativePptxChartWorkbookInspection,NativePptxInspectedWorkbookChart,NativePptxInspectedChartWorkbook,NativePptxWorkbookChartSource,NativePptxWorkbookChartSeries} from './chartWorkbookInspectionTypes.js'
+
+export {createResolvedWorkbookChart,assertResolvedWorkbookChart} from './chartWorkbookResolution.js'
+export type {NativeResolvedWorkbookChart,NativeWorkbookBarData,NativeWorkbookConnectedData} from './chartWorkbookResolution.js'
+export {resolveNativePptxWorkbookCharts} from './chartWorkbookCoordinator.js'
+export type {NativeWorkbookChartResolution,NativeWorkbookChartRefusal} from './chartWorkbookCoordinator.js'

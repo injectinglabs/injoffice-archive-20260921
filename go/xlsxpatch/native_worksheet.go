@@ -134,6 +134,20 @@ func (extractor *nativeWorkbookExtractor) extractWorksheet(route nativeWorkbookS
 				sheet.Rows, sheet.Cells = rows, cells
 				continue
 			}
+			if token.Name == (xml.Name{Space: extractor.namespace, Local: "dimension"}) {
+				qualified, err := consumeNativeChartDataMetadata(decoder, token, extractor.namespace)
+				if err != nil {
+					return sheet, err
+				}
+				code := "UNMODELED_WORKSHEET_FEATURE"
+				if qualified {
+					code = "WORKSHEET_DIMENSION_METADATA"
+				}
+				if err := extractor.addUnsupported(code, "worksheet-features", "sheet:"+route.id, route.part, "", "worksheet feature is preserved exactly outside the v1 native projection"); err != nil {
+					return sheet, err
+				}
+				continue
+			}
 			code, capability := nativeWorksheetFeature(token.Name)
 			if err := extractor.addUnsupported(code, capability, "sheet:"+route.id, route.part, "", "worksheet feature is preserved exactly outside the v1 native projection"); err != nil {
 				return sheet, err

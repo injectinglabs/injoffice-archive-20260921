@@ -68,6 +68,28 @@ const createWorker = (handler?: (worker: FakeWorker, request: NativeWasmWorkerRe
     else worker.respond(success(request, { bytes: new Uint8Array([7, 8, 9]).buffer }))
   }))
 
+it('copies and queues PPTX workbook inspection through the strict read-only envelope',async()=>{
+ const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{"charts":[]}'})))
+ const client=createNativeWasmClient({format:'pptx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ const source=new Uint8Array([1,2,3]),pending=client.chartWorkbooks(source);source[0]=9
+ expect(await pending).toBe('{"charts":[]}')
+ const request=worker.messages[1]!.message;if(request.op!=='chartWorkbooks')throw Error('operation')
+ expect(new Uint8Array(request.bytes)).toEqual(new Uint8Array([1,2,3]));expect(request.bytes).not.toBe(source.buffer)
+ client.terminate()
+})
+it('refuses wrong-engine, aborted and malformed workbook inspections without bypassing lifecycle checks',async()=>{
+ let created=0
+ const client=createNativeWasmClient({format:'xlsx',workerFactory:()=>{created++;return createWorker()},assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ await expect(client.chartWorkbooks(new Uint8Array([1]))).rejects.toThrow(/requires PPTX/);expect(created).toBe(0);client.terminate()
+ const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{}',extra:true})))
+ const pptx=createNativeWasmClient({format:'pptx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})
+ const controller=new AbortController();controller.abort()
+ await expect(pptx.chartWorkbooks(new Uint8Array([1]),{signal:controller.signal})).rejects.toMatchObject({name:'AbortError'})
+ expect(worker.messages).toHaveLength(0)
+ await expect(pptx.chartWorkbooks(new Uint8Array([1]))).rejects.toThrow(/invalid extraction JSON/)
+ expect(worker.terminated).toBe(true);pptx.terminate()
+})
+
 it('queues read-only evaluation with normal lifecycle and request identity checks', async () => {
  const worker=createWorker((w,r)=>w.respond(success(r,r.op==='init'?undefined:{contractJson:'{"paths":[]}'})))
  const client=createNativeWasmClient({format:'pptx',workerFactory:()=>worker,assets:{wasmUrl:'/x',goRuntimeUrl:'/g'}})

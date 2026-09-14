@@ -171,7 +171,7 @@ func nativePrintCountaCertifySheet(workbook *NativeWorkbookV2, sheet *NativeWork
 			}
 		}
 		switch item.Code {
-		case "UNMODELED_WORKBOOK_FEATURE":
+		case "UNMODELED_WORKBOOK_FEATURE", "WORKBOOK_VIEW_METADATA":
 			if item.Capability != "workbook-features" || item.ScopeID != "workbook" || part != workbook.Source.WorkbookPart {
 				return false
 			}

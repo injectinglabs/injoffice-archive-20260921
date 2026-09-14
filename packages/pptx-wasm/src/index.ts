@@ -10,6 +10,8 @@ import {
   assertNativePptx,
   validateNativePptx,
   decodeNativePptxTableInspection,
+  decodeNativePptxChartWorkbookInspection,
+  type NativePptxChartWorkbookInspection,
   type NativePptxTableInspection,
   type NativeElement,
   type NativePptxDeck,
@@ -126,6 +128,8 @@ export interface PptxWasmClient {
   extract(bytes: Uint8Array, options?: PptxWasmOperationOptions): Promise<NativePptxDeck>
   /** Plain source table text and geometry; no authored styling or mutation authority. */
   inspectTables(bytes: Uint8Array, options?: PptxWasmOperationOptions): Promise<NativePptxTableInspection>
+  /** Read-only source reference descriptors and exact local workbook bytes. */
+  inspectChartWorkbooks(bytes: Uint8Array, options?: PptxWasmOperationOptions): Promise<NativePptxChartWorkbookInspection>
   apply(
     original: Uint8Array,
     deck: NativePptxDeck,
@@ -174,6 +178,19 @@ class PptxWasmClientImpl implements PptxWasmClient {
   extract(bytes: Uint8Array, options: PptxWasmOperationOptions = {}): Promise<NativePptxDeck> {
     assertPackageSize(bytes, this.maxPackageBytes)
     return this.extractValidated(bytes, options)
+  }
+
+  async inspectChartWorkbooks(bytes: Uint8Array, options: PptxWasmOperationOptions = {}): Promise<NativePptxChartWorkbookInspection> {
+    assertPackageSize(bytes,this.maxPackageBytes)
+    const aborted=()=>{if(options.signal?.aborted){const error=new Error('PPTX workbook inspection aborted.');error.name='AbortError';throw error}}
+    aborted()
+    const snapshot=new Uint8Array(bytes)
+    const digest=await globalThis.crypto.subtle.digest('SHA-256',snapshot);aborted()
+    const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('')
+    const deck=await this.extractValidated(snapshot,options)
+    const json=await this.native.chartWorkbooks(snapshot,options)
+    try{aborted();const result=await decodeNativePptxChartWorkbookInspection(json,deck,hash);aborted();return result}
+    catch(error){this.native.terminate();throw error}
   }
 
   async inspectTables(bytes: Uint8Array, options: PptxWasmOperationOptions = {}): Promise<NativePptxTableInspection> {
