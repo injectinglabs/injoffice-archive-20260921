@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 func TestNativeTextboxPageSource(t *testing.T)          { testNativeTextboxPageSource(t, 1) }
 func TestNativeMultipleTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2) }
 func TestNativeRelativeTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2, true) }
+func TestNativeStackedTextboxPagesSource(t *testing.T)  { testNativeTextboxPageSource(t, 4) }
 func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
@@ -63,6 +65,27 @@ func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>1828800</wp:posOffset>`, `<wp:positionV relativeFrom="page"><wp:align>center</wp:align>`, 1)
 		main = strings.Replace(main, `<wp:positionH relativeFrom="page"><wp:posOffset>3657600</wp:posOffset>`, `<wp:positionH relativeFrom="column"><wp:posOffset>-457200</wp:posOffset>`, 1)
 		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>2743200</wp:posOffset>`, `<wp:positionV relativeFrom="paragraph"><wp:posOffset>914400</wp:posOffset>`, 1)
+		parts["word/document.xml"] = []byte(main)
+	}
+	if count == 4 {
+		var boxes strings.Builder
+		for i, rank := range []string{"4294967295", "30", "10", "30"} {
+			behind, y, color := "0", "1828800", "DDEEFF"
+			if i == 0 {
+				behind, y, color = "1", "914400", "FFDDEE"
+			}
+			if i == 2 {
+				color = "DDFFDD"
+			}
+			if i == 3 {
+				color = "FFF2CC"
+				y = "2286000"
+			}
+			box := strings.NewReplacer(`id="1"`, `id="`+strconv.Itoa(i+1)+`"`, `relativeHeight="0"`, `relativeHeight="`+rank+`"`, `behindDoc="0"`, `behindDoc="`+behind+`"`, `>1828800<`, `>`+y+`<`, `FFF2CC`, color).Replace(string(drawing))
+			boxes.WriteString(`<w:r>` + box + `</w:r>`)
+		}
+		main := string(parts["word/document.xml"])
+		main = strings.Replace(main, `<w:r>`+string(drawing)+`</w:r>`, boxes.String(), 1)
 		parts["word/document.xml"] = []byte(main)
 	}
 	var archive bytes.Buffer
@@ -121,6 +144,9 @@ func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	}
 	if len(relative) > 0 {
 		env = "INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR"
+	}
+	if count == 4 {
+		env = "INJOFFICE_TEXTBOX_STACK_EVIDENCE_DIR"
 	}
 	if out := os.Getenv(env); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {

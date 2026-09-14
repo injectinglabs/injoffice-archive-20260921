@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes'),positionDir=resolve(scratch,'positioned-textboxes')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR'],[positionDir,'TestNativeRelativeTextboxPagesSource','INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes'),positionDir=resolve(scratch,'positioned-textboxes'),stackDir=resolve(scratch,'stacked-textboxes')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR'],[positionDir,'TestNativeRelativeTextboxPagesSource','INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR'],[stackDir,'TestNativeStackedTextboxPagesSource','INJOFFICE_TEXTBOX_STACK_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -67,6 +67,7 @@ try {
       if(init?.method==='POST'&&String(input).endsWith('/v1/docx/page-preview-textboxes')) {
         const value=await response.clone().json();window.__nativeDocxTextbox=value;
         if(window.__corruptTextbox&&value.preview){const box=value.preview.version===2?value.preview.textboxes.at(-1):value.preview.textbox;box.x_millipoints++;return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
+        if(window.__corruptStack&&value.preview?.textboxes?.[0]?.stacking){value.preview.textboxes[0].stacking.behind_doc=false;return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
         if(window.__dropTextbox&&value.preview?.version===2){value.preview.textboxes.pop();return new Response(JSON.stringify(value),{status:response.status,headers:response.headers});}
       }
       if (init?.method === 'POST' && String(input).endsWith('/v1/docx/page-preview')) window.__nativeDocxPaint = (await response.clone().json()).page_paint_output;
@@ -193,13 +194,30 @@ try {
   await click('Upload to helper and preview page-placed textboxes')
   await poll(()=>evaluate(`${native}?.textContent.includes('Textbox placement does not fit')&&${native}?.querySelector('svg')===null`),'forged relative textbox refusal',45000)
   await assert(`window.__nativeDocxPosts.length===10&&${docs}?.dataset.demoDirty!=='true'`,'relative coordinate forgery rejects the preview and preserves source')
+  await evaluate('window.__corruptTextbox=false')
+  const stackFixture=resolve(stackDir,'page-textbox.docx'),stackHash=hash(readFileSync(stackFixture))
+  await setFixtureData({stackHash})
+  await upload(stackFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'stacked source replacement')
+  await assert('window.__nativeDocxPosts.length===10','stacked preview requires its own upload')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.querySelectorAll('[data-native-textbox]').length===4`),'stacked textbox page',45000)
+  await assert('window.__nativeDocxPosts.length===11&&window.__nativeDocxPosts[10].hash===window.__nativeDocxFixture.stackHash&&window.__nativeDocxTextbox.preview.source_diagnostics.length===4','stacked composition preserves uploaded bytes and all source restrictions')
+  await assert(`(()=>{const svg=${native}.querySelector('svg'),boxes=[...svg.querySelectorAll('[data-native-textbox]')],p=window.__nativeDocxTextbox.preview,ids=p.textboxes.map(t=>t.paint.diagnostic_id),body=svg.querySelector(':scope > path');return JSON.stringify(boxes.map(b=>b.getAttribute('data-native-textbox-id')))===JSON.stringify([ids[0],ids[2],ids[1],ids[3]])&&!!(boxes[0].compareDocumentPosition(body)&4)&&!!(body.compareDocumentPosition(boxes[1])&4)&&svg.querySelectorAll('path').length===p.body_paint.pages[0].commands.filter(c=>c.kind==='fill_glyph_path').length+60})()`,'body lies between source-ranked behind and foreground textboxes, with stable equal-rank order')
+  await assert(`(async()=>{const svg=${native}.querySelector('svg').cloneNode(true);svg.removeAttribute('style');svg.setAttribute('width','612');svg.setAttribute('height','792');const image=new Image();image.src='data:image/svg+xml;base64,'+btoa(new XMLSerializer().serializeToString(svg));await image.decode();const canvas=document.createElement('canvas');canvas.width=612;canvas.height=792;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);return [[280,120,'255,221,238'],[280,160,'221,238,255'],[280,200,'255,242,204']].every(([x,y,rgb])=>Array.from(ctx.getImageData(x,y,1,1).data).slice(0,3).join(',')===rgb)})()`,'raster pixels confirm authored stacking in overlapping rectangles')
+  await screenshot('docx-stacked-textboxes.png')
+  await evaluate('window.__corruptStack=true')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('Textbox stacking does not match source')&&${native}?.querySelector('svg')===null`),'forged textbox layer refusal',45000)
+  await assert(`window.__nativeDocxPosts.length===12&&${docs}?.dataset.demoDirty!=='true'`,'forged stacking refuses all pages and preserves source')
+  if(hash(readFileSync(stackFixture))!==stackHash)throw Error('Stacked-textbox source changed')
   if(hash(readFileSync(positionFixture))!==positionHash)throw Error('Relative-textbox source changed')
   if(hash(readFileSync(multiFixture))!==multiHash)throw Error('Multiple-textbox source changed')
   if(hash(readFileSync(flowFixture))!==flowHash)throw Error('Shared-flow source changed')
   if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,relativeTextboxPages:2,uploads:10},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,relativeTextboxPages:2,stackedTextboxes:4,uploads:12},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()

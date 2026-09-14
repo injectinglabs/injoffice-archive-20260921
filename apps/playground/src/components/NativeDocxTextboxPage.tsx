@@ -23,7 +23,12 @@ export function decodeTextboxPageResponse(value:Record<string,unknown>,packageDi
  return decodeNativeDocxTextboxPagePreviewV1(source,evidence,value.preview,digests[0]!)
 }
 
-type TextboxPages=Pick<NativeDocxTextboxPagePreviewV1,'body_paint'|'source_diagnostics'> & {warning:string;textboxes:NativeDocxTextboxPagePreviewV1['textbox'][]}
+export type TextboxPlacement=NativeDocxTextboxPagePreviewV1['textbox'] & {stacking?:{behind_doc:boolean;relative_height:number}}
+export function textboxLayer(textboxes:readonly TextboxPlacement[]|undefined,behind:boolean){
+ return (textboxes??[]).filter(t=>(t.stacking?.behind_doc??false)===behind).sort((a,b)=>(a.stacking?.relative_height??0)-(b.stacking?.relative_height??0))
+}
+
+type TextboxPages=Pick<NativeDocxTextboxPagePreviewV1,'body_paint'|'source_diagnostics'> & {warning:string;textboxes:TextboxPlacement[]}
 export function decodeTextboxesPageResponse(value:Record<string,unknown>,packageDigest:string):TextboxPages{
  const {source,evidence,digests}=textboxPageSource(value,packageDigest)
  if(value.preview&&typeof value.preview==='object'&&(value.preview as {version?:unknown}).version===2)return decodeNativeDocxTextboxPagesPreviewV2(source,evidence,value.preview,digests)

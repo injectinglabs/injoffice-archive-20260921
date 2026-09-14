@@ -13,6 +13,7 @@ export interface NativeTextboxPageAnchorV1 {
 /** Relative axes retain authored offsets/alignment; pagination resolves origins. */
 export interface NativeTextboxRelativeAnchorV2 extends Omit<NativeTextboxPageAnchorV1,'policy'> {
  policy:'relative-position-no-wrap-v2'
+ stacking?:{behind_doc:boolean;relative_height:number}
  horizontal_relative:'page'|'margin'|'column'|'character'
  vertical_relative:'page'|'margin'|'paragraph'|'line'
  horizontal_align?:'left'|'center'|'right'
@@ -32,9 +33,11 @@ function anchor(v:unknown,part:string):NativeDocxSourceAnchorV1{
 export function decodeTextboxPageAnchor(value:unknown,owner:NativeDocxTextboxV1):NativeTextboxPositionAnchor{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new TypeError('Invalid textbox position')
  const record=value as Record<string,unknown>,relative=record.policy==='relative-position-no-wrap-v2'
- keys(value,['policy','source_anchor','horizontal_anchor','vertical_anchor','x_emu','y_emu',...(relative?['horizontal_relative','vertical_relative',...('horizontal_align' in record?['horizontal_align']:[]),...('vertical_align' in record?['vertical_align']:[])]:[])])
+ keys(value,['policy','source_anchor','horizontal_anchor','vertical_anchor','x_emu','y_emu',...(relative?['horizontal_relative','vertical_relative',...('stacking' in record?['stacking']:[]),...('horizontal_align' in record?['horizontal_align']:[]),...('vertical_align' in record?['vertical_align']:[])]:[])])
  if((!relative&&value.policy!=='page-offset-no-wrap-v1')||[value.x_emu,value.y_emu].some(v=>!Number.isSafeInteger(v)||Number(v)<(relative?-127000000:0)||Number(v)>127000000||Number(v)%127!==0))throw new TypeError('Invalid textbox page offsets')
  if(relative&&([value.horizontal_relative,value.vertical_relative,...('horizontal_align' in value?[value.horizontal_align]:[]),...('vertical_align' in value?[value.vertical_align]:[])].some(v=>typeof v!=='string')||!['page','margin','column','character'].includes(String(value.horizontal_relative))||!['page','margin','paragraph','line'].includes(String(value.vertical_relative))||('horizontal_align' in value&&(!['left','center','right'].includes(String(value.horizontal_align))||value.horizontal_relative==='character'||value.x_emu!==0))||('vertical_align' in value&&(!['top','center','bottom'].includes(String(value.vertical_align))||!['page','margin'].includes(String(value.vertical_relative))||value.y_emu!==0))))throw new TypeError('Invalid textbox relative position')
+
+ if('stacking' in value){keys(value.stacking,['behind_doc','relative_height']);if(typeof value.stacking.behind_doc!=='boolean'||!Number.isSafeInteger(value.stacking.relative_height)||Number(value.stacking.relative_height)<0||Number(value.stacking.relative_height)>4294967295)throw new TypeError('Invalid textbox stacking')}
 
  const o=owner.anchor,s=anchor(value.source_anchor,o.part_name),h=anchor(value.horizontal_anchor,o.part_name),v=anchor(value.vertical_anchor,o.part_name)
  const root=o.path.match(/^(.*\/w:drawing\[[1-9][0-9]*\])/u)?.[1]
