@@ -3,10 +3,13 @@ import { readFontFace } from '../textEdit/fontCmap.js'
 import { prepareUnicodeShaper, type UnicodeShapingOptions } from './unicodeShaping.js'
 import { UnicodeFontResource, type EncodedUnicodeRun } from './unicodeFontResource.js'
 import { unicodeTextAppearance } from './unicodeTextAppearance.js'
+import { standaloneUnicodeFontFace } from './unicodeFontFace.js'
 
-/** Caller-supplied, fixed TrueType face. This profile does not discover fonts. */
+/** Caller-supplied fixed TrueType face, optionally selected from a collection. */
 export interface EmbeddedTextAppearanceFont extends UnicodeShapingOptions {
   fontBytes: Uint8Array
+  /** Zero-based collection face; standalone fonts require zero. Defaults to zero. */
+  faceIndex?: number
 }
 
 const maxBytes = 16 * 1024 * 1024
@@ -19,7 +22,7 @@ export async function prepareEmbeddedTextFont(doc: PDFDocument, options: Embedde
   if (!(options.fontBytes instanceof Uint8Array) || options.fontBytes.length < 12 || options.fontBytes.length > maxBytes) {
     throw new RangeError('embedded appearance font must contain 12..16777216 bytes')
   }
-  const bytes = options.fontBytes.slice()
+  const bytes = standaloneUnicodeFontFace(options.fontBytes, options.faceIndex)
   const face = readFontFace(bytes)
   if (face.offset !== 0 || !face.tables.has('glyf') || ['fvar', 'COLR', 'SVG ', 'sbix', 'CBDT', 'CBLC'].some(tag => face.tables.has(tag))) {
     throw new Error('embedded appearances require a standalone fixed TrueType outline font')

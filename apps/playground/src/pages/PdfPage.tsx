@@ -130,6 +130,11 @@ export default function PdfPage() {
   const [formNotice, setFormNotice] = useState<string | null>(null)
   const [formAppearanceFont, setFormAppearanceFont] = useState<TextAppearanceFont | 'viewer' | 'embedded'>('viewer')
   const [embeddedFormFont, setEmbeddedFormFont] = useState<{ name: string; bytes: Uint8Array } | null>(null)
+  const [embeddedFaceIndex, setEmbeddedFaceIndex] = useState('0')
+  const embeddedFaceNumber = Number(embeddedFaceIndex)
+  const embeddedIsCollection = embeddedFormFont && String.fromCharCode(...embeddedFormFont.bytes.subarray(0, 4)) === 'ttcf'
+  const embeddedFaceCount = embeddedIsCollection && embeddedFormFont.bytes.length >= 12 ? new DataView(embeddedFormFont.bytes.buffer, embeddedFormFont.bytes.byteOffset, embeddedFormFont.bytes.byteLength).getUint32(8) : 1
+  const validEmbeddedFace = embeddedFaceIndex.trim() !== '' && Number.isSafeInteger(embeddedFaceNumber) && embeddedFaceNumber >= 0 && embeddedFaceCount > 0 && embeddedFaceCount <= 64 && embeddedFaceNumber < embeddedFaceCount
   const fontLoadGeneration = useRef(0)
   const [formChoiceAppearanceFont, setFormChoiceAppearanceFont] = useState<TextAppearanceFont | 'viewer'>('viewer')
   const [unsavedFormNames, setUnsavedFormNames] = useState<string[]>([])
@@ -198,7 +203,7 @@ export default function PdfPage() {
 
   const applyFormDrafts = async () => {
     if (!bytes || busy || fieldBytes !== bytes) return
-    if (formAppearanceFont === 'embedded' && !embeddedFormFont) return
+    if (formAppearanceFont === 'embedded' && (!embeddedFormFont || !validEmbeddedFace)) return
     setBusy('editing')
     setError(null)
     setInfo('')
@@ -206,7 +211,7 @@ export default function PdfPage() {
     try {
       const result = await applyPdfFormValues(bytes, fields, {
         ...(formAppearanceFont === 'viewer' ? {} : {
-          textAppearance: formAppearanceFont === 'embedded' ? { fontBytes: embeddedFormFont!.bytes } : { font: formAppearanceFont },
+          textAppearance: formAppearanceFont === 'embedded' ? { fontBytes: embeddedFormFont!.bytes, faceIndex: embeddedFaceNumber } : { font: formAppearanceFont },
         }),
         ...(formChoiceAppearanceFont === 'viewer' ? {} : { choiceAppearance: { font: formChoiceAppearanceFont } }),
       })
@@ -407,6 +412,7 @@ export default function PdfPage() {
       setFormAppearanceFont('viewer')
       fontLoadGeneration.current += 1
       setEmbeddedFormFont(null)
+      setEmbeddedFaceIndex('0')
       setFormChoiceAppearanceFont('viewer')
       setEdited(false)
       setHistory({ past: [], future: [] })
@@ -632,21 +638,26 @@ export default function PdfPage() {
                 </DsSelect>
               </DsField>
               {formAppearanceFont === 'embedded' && <DsField label="TrueType appearance font">
-                <input type="file" accept=".ttf,font/ttf" aria-label="TrueType appearance font" disabled={locked || fieldBytes !== bytes} onChange={event => {
+                <input type="file" accept=".ttf,.ttc,.otc,font/ttf,font/collection" aria-label="TrueType appearance font" disabled={locked || fieldBytes !== bytes} onChange={event => {
                   const file = event.currentTarget.files?.[0]
                   event.currentTarget.value = ''
                   const generation = ++fontLoadGeneration.current
                   setEmbeddedFormFont(null)
+                  setEmbeddedFaceIndex('0')
                   setFormNotice(null)
                   if (!file) return
-                  if (file.size < 12 || file.size > 16 * 1024 * 1024) { setError('Choose a TrueType font no larger than 16 MiB.'); return }
+                  if (file.size < 12 || file.size > 16 * 1024 * 1024) { setError('Choose a TrueType font or collection no larger than 16 MiB.'); return }
                   void file.arrayBuffer().then(buffer => {
                     if (generation === fontLoadGeneration.current) { setEmbeddedFormFont({ name: file.name, bytes: new Uint8Array(buffer) }); setError(null) }
                   }).catch(reason => { if (generation === fontLoadGeneration.current) setError(errorMessage(reason)) })
                 }} />
                 {embeddedFormFont && <span className="ds-muted">Selected: {embeddedFormFont.name}</span>}
               </DsField>}
-              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType font supports Unicode text covered by that font and HarfBuzz, including contextual scripts, combining marks, ligatures and mixed direction. The single font must cover the entire value. The complete font is saved in the PDF; extra cluster glyphs may use exact font outlines. Generic readers may reorder extracted complex text; saved form values retain the exact input. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
+              {formAppearanceFont === 'embedded' && embeddedIsCollection && <DsField label="Collection face index">
+                <DsInput type="number" aria-label="Collection face index" min={0} max={Math.max(0, Math.min(64, embeddedFaceCount) - 1)} step={1} value={embeddedFaceIndex} disabled={locked || fieldBytes !== bytes} onChange={event => { setEmbeddedFaceIndex(event.target.value); setFormNotice(null) }} />
+                <span className="ds-muted">{embeddedFaceCount > 0 && embeddedFaceCount <= 64 ? `${embeddedFaceCount} faces. Zero selects the first face; choose up to ${embeddedFaceCount - 1}. The selected face must have fixed TrueType outlines.` : 'Unsupported collection face count.'}</span>
+              </DsField>}
+              <p className="ds-muted">Choose a font to save fresh appearances for supported single-line text fields. Standard fonts support printable ASCII. An embedded fixed TrueType font supports Unicode text covered by that font and HarfBuzz, including contextual scripts, combining marks, ligatures and mixed direction. The single font must cover the entire value. The selected complete face is saved in the PDF; extra cluster glyphs may use exact font outlines. Generic readers may reorder extracted complex text; saved form values retain the exact input. The selected font replaces the original typography. Long text may clip in a fixed-size field. Other field types may still depend on the PDF viewer.</p>
               <DsField label="Saved choice appearance">
                 <DsSelect aria-label="Saved choice appearance" value={formChoiceAppearanceFont} disabled={locked || fieldBytes !== bytes} onChange={(event) => {
                   setFormChoiceAppearanceFont(event.target.value as TextAppearanceFont | 'viewer')
@@ -666,11 +677,11 @@ export default function PdfPage() {
                   {field.kind === 'checkbox' ? (
                     <input type="checkbox" disabled={locked || fieldBytes !== bytes} checked={Boolean(field.checked)} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, checked: event.target.checked } : item))} />
                   ) : (
-                    <DsInput disabled={locked || fieldBytes !== bytes} value={field.value ?? ''} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
+                    <DsInput aria-label={`Form value: ${field.name}`} disabled={locked || fieldBytes !== bytes} value={field.value ?? ''} onChange={(event) => setFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} />
                   )}
                 </DsField>
               ))}
-              <DsButton variant="outlined" className="workbench-button" disabled={locked || fieldBytes !== bytes || fields.length === 0 || (formAppearanceFont === 'embedded' && !embeddedFormFont)} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
+              <DsButton variant="outlined" className="workbench-button" disabled={locked || fieldBytes !== bytes || fields.length === 0 || (formAppearanceFont === 'embedded' && (!embeddedFormFont || !validEmbeddedFace))} onClick={() => void applyFormDrafts()}>Apply form values</DsButton>
             </div>
           )}
 
