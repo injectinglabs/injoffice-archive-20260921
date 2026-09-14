@@ -36,7 +36,7 @@ export function deriveNativeSquareWrapPlanV1(document:NativeDocxDocumentV1,resol
   if(rect.x>body.x_millipoints&&rect.x+rect.width<body.x_millipoints+body.width_millipoints)throw new Error('Square image creates two text intervals; middle-image wrapping remains unsupported')
   const onPage=images.get(page.id)??[];onPage.push(rect);images.set(page.id,onPage)
  }
- const plan:Record<string,Array<{start_millipoints:number;width_millipoints:number}>>=Object.create(null)
+ const plan:Record<string,Array<{start_millipoints:number;width_millipoints:number;end_millipoints?:number}>>=Object.create(null)
  for(const page of layout.pages)for(const placed of page.lines){
   const paragraph=paragraphs.get(placed.paragraph_id)!,line=paragraph.lines[placed.source_line_ordinal]!,resolvedParagraph=properties.get(placed.paragraph_id)!,p=resolvedParagraph.properties,body=page.body_box
   if(p.bidi||!['left','start'].includes(p.alignment??'start')||resolvedParagraph.numbering)throw new Error('Square wrapping currently requires left-aligned LTR paragraphs without numbering')
@@ -48,13 +48,22 @@ export function deriveNativeSquareWrapPlanV1(document:NativeDocxDocumentV1,resol
    else if(rect.x+rect.width>=right)right=Math.min(right,rect.x)
    else throw new Error('Overlapping square images leave multiple text intervals')
   }
-  if(right<=left)throw new Error('Square image fully blocks a text line; vertical displacement is unsupported')
-  const interval={start_millipoints:left-body.x_millipoints,width_millipoints:right-left}
+  let end_millipoints: number|undefined
+  if(right<=left){
+   // A fully blocked line is moved below the source rectangle on the next
+   // fixed-point pagination pass. Keep the marker attached to the anchored
+   // paragraph so the second pass remains stable after the move.
+   left=body.x_millipoints;right=left+body.width_millipoints
+   const blocking= (images.get(page.id)??[]).find(rect=>placed.y_millipoints<rect.y+rect.height&&placed.y_millipoints+placed.height_millipoints>rect.y&&rect.x<=body.x_millipoints&&rect.x+rect.width>=body.x_millipoints+body.width_millipoints)
+   if(!blocking)throw new Error('Square image fully blocks a text line; vertical displacement is unsupported')
+   end_millipoints=blocking.y+blocking.height-body.y_millipoints
+  }
+  const interval={start_millipoints:left-body.x_millipoints,width_millipoints:right-left,...(end_millipoints===undefined?{}:{end_millipoints})}
   ;(plan[placed.paragraph_id]??=[])[placed.source_line_ordinal]=interval
   if(verify){
    const start=(p.indent_start_twips??p.indent_left_twips??0)*50+(placed.source_line_ordinal===0?(p.first_line_twips??-(p.hanging_twips??0))*50:0),end=(p.indent_end_twips??p.indent_right_twips??0)*50
    const expectedLeft=Math.max(start,interval.start_millipoints),expectedRight=Math.min(body.width_millipoints-end,interval.start_millipoints+interval.width_millipoints)
-   if(expectedRight<=expectedLeft||line.inline_offset_millipoints!==expectedLeft||line.available_width_millipoints!==expectedRight-expectedLeft||line.advance_inline_millipoints>line.available_width_millipoints||placed.x_millipoints!==body.x_millipoints+expectedLeft||line.exclusion_start_millipoints!==(expectedLeft!==start?expectedLeft:undefined))throw new Error('Final square-wrap line does not match the source-derived exclusion interval')
+   if(expectedRight<=expectedLeft||line.inline_offset_millipoints!==expectedLeft||line.available_width_millipoints!==expectedRight-expectedLeft||line.advance_inline_millipoints>line.available_width_millipoints||placed.x_millipoints!==body.x_millipoints+expectedLeft||line.exclusion_start_millipoints!==(expectedLeft!==start?expectedLeft:undefined)||line.exclusion_end_millipoints!==end_millipoints)throw new Error('Final square-wrap line does not match the source-derived exclusion interval')
   }
  }
  return plan
