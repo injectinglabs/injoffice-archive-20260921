@@ -88,6 +88,14 @@ type NativeSourceStyleSheetV1 struct {
 // routes. Only absent applyFill/applyNumberFormat conflicts are tolerated, and
 // each is reported. The strict registry and native resolver remain unchanged.
 func PreviewNativeSourceStylesV1(data []byte) (*NativeSourceStylePreviewV1, error) {
+	return previewNativeSourceStyles(data, func(root *previewXML, _, _ []byte) error {
+		return qualifySourceStyleSheet(root, spreadsheetMLTransitional)
+	})
+}
+
+// The qualifier admits only original worksheet nodes validated by its profile.
+// It never rewrites a source part or changes native extraction authority.
+func previewNativeSourceStyles(data []byte, qualify func(*previewXML, []byte, []byte) error) (*NativeSourceStylePreviewV1, error) {
 	fail := func(reason string) (*NativeSourceStylePreviewV1, error) {
 		return nil, fmt.Errorf("xlsxpatch: source-style preview: %s", reason)
 	}
@@ -209,7 +217,7 @@ func PreviewNativeSourceStylesV1(data []byte) (*NativeSourceStylePreviewV1, erro
 	if err != nil {
 		return nil, err
 	}
-	if err = qualifySourceStyleSheet(raw, spreadsheetMLTransitional); err != nil {
+	if err = qualify(raw, pkg.files[stylesPart], pkg.files[route.part]); err != nil {
 		return nil, err
 	}
 	if len(sheet.Cells) > 4096 || len(sheet.MergedRanges) > 128 {
