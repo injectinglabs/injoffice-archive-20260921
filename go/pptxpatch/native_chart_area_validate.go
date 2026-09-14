@@ -26,6 +26,9 @@ func validNativeLiteralArea(c *NativeLiteralArea) bool {
 		return len(s) == 7 && s[0] == '#' && inspectionRGB.MatchString(s[1:]) && strings.ToUpper(s) == s
 	}
 	x, y := c.XAxis, c.YAxis
+	if c.SourceBaseline != nil && (c.SourceBaseline.Crossing != "min" || y.Min == nil || c.SourceBaseline.Value != *y.Min) {
+		return false
+	}
 	if !validNativeChartAxisLabels(x, y, false) || !validNativeChartAxisLabels(y, x, true) {
 		return false
 	}

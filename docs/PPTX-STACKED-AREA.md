@@ -8,12 +8,20 @@ preview use the same complete-series geometry. Labels additionally require
 `chartAxisLabelsPreview` and the existing supplied-font outline layout. Opaque
 chart ownership and editing permissions remain unchanged.
 
-`standard` area uses an independent zero baseline and admits signed source
-decimals. `stacked` accumulates nonnegative values in XML series
+`standard` area admits signed source decimals and closes each independent series
+to its retained source minimum when `sourceBaseline` is present. Legacy native
+records without that descriptor retain their zero-baseline preview. `stacked` accumulates nonnegative values in XML series
 sequence, separately for each category. `percentStacked` divides cumulative
 boundaries by the exact total for that category, on the unit scale where 1 is
-100%. A zero total yields only zero boundaries and no filled geometry. Explicit
+100%. A zero total yields zero cumulative tops. With a negative source minimum, the
+first band still fills from that minimum to zero; with a zero minimum it is empty. Explicit
 source axes remain independent; no scale is inferred from an empty result.
+
+Source decimal lexemes are retained, including the category `crosses=min` token
+and exact value-axis minimum in a closed `sourceBaseline` descriptor. Its value
+must equal the authored minimum spelling. The same resolved minimum places the
+horizontal axis. Cumulative tops and subsequent stack lower boundaries do not
+move. Source `autoZero`/`max` crossings and negative stacks remain refused.
 
 Source decimal lexemes are retained. The arithmetic uses bounded exact integers
 and rationals; rounding occurs only when clipped coordinates become integer EMU.
@@ -30,7 +38,7 @@ unrecognized or duplicate source clauses. Source bytes are not modified.
 
 For geometry, categories lie at their between-category centers. Each interval
 forms a band between its top and bottom boundaries. A signed standard interval
-crossing zero is split exactly at that crossing to avoid a self-intersecting
+crossing its closure is split exactly at that crossing to avoid a self-intersecting
 polygon. Convex pieces are clipped to the plot rectangle before quantization.
 Opposite shared edges cancel using exact endpoints and original face links;
 point-only contacts remain separate rings. Collinear interval vertices are

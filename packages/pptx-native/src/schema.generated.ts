@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "59d98493a259e4aa68a98e193cab815b9a3804b53c4b5d77b30e45c954d86025" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -39,6 +39,17 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     ],
     "required": [
       "effect"
+    ]
+  },
+  "NativeAreaSourceBaseline": {
+    "schemaName": "areaSourceBaseline",
+    "properties": [
+      "crossing",
+      "value"
+    ],
+    "required": [
+      "crossing",
+      "value"
     ]
   },
   "NativeArrowEnd": {
@@ -290,6 +301,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "grouping",
       "profile",
       "series",
+      "sourceBaseline",
       "xAxis",
       "yAxis"
     ],
@@ -2136,6 +2148,26 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "areaSourceBaseline": {
+      "x-binding-name": "NativeAreaSourceBaseline",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "crossing",
+        "value"
+      ],
+      "properties": {
+        "crossing": {
+          "type": "string",
+          "const": "min"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
     "literalArea": {
       "x-binding-name": "NativeLiteralArea",
       "type": "object",
@@ -2180,6 +2212,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "yAxis": {
           "$ref": "#/$defs/literalBarAxis"
+        },
+        "sourceBaseline": {
+          "$ref": "#/$defs/areaSourceBaseline"
         },
         "grouping": {
           "type": "string",

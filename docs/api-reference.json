@@ -10719,7 +10719,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"59d98493a259e4aa68a98e193cab815b9a3804b53c4b5d77b30e45c954d86025\""
             },
             {
               "name": "provenanceValues",
@@ -10765,6 +10765,11 @@
               "name": "validateNativePptx",
               "kind": "function",
               "signature": "export declare function validateNativePptx(input: unknown): NativeValidationResult"
+            },
+            {
+              "name": "validNativeLiteralArea",
+              "kind": "function",
+              "signature": "export declare function validNativeLiteralArea(value: unknown): value is NativeLiteralArea"
             },
             {
               "name": "validNativeLiteralBubble",

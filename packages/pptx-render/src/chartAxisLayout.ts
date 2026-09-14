@@ -6,7 +6,7 @@ import {chartRational,chartRationalCoordinate,chartRationalDecimal,type ChartRat
 export const CHART_AXIS_LAYOUT_POLICY='supplied-outline-margins-v1' as const
 export const CHART_AXIS_GAP_EMU=12700
 export const CHART_AXIS_TICK_EMU=38100
-export interface ChartAxisLabelInput {axis:NativeLiteralBarAxis;perpendicular:NativeLiteralBarAxis;horizontal:boolean;categories?:readonly string[]}
+export interface ChartAxisLabelInput {axis:NativeLiteralBarAxis;perpendicular:NativeLiteralBarAxis;horizontal:boolean;/** Area source minimum crossing; absent keeps existing axis policy. */crossingAtMinimum?:true;categories?:readonly string[]}
 interface MeasuredLabel {input:ChartAxisLabelInput;text:string;position:ChartRational;body:RenderTextBodyNode;bounds:RenderRect;side:'left'|'right'|'top'|'bottom'}
 export interface PlacedChartAxisLabel {body:RenderTextBodyNode;bounds:RenderRect;x:number;y:number;text:string}
 export interface ChartAxisLayout {plot:RenderRect;labels:readonly PlacedChartAxisLabel[]}
@@ -70,7 +70,7 @@ export function chartAxisTickVectors(inputs:readonly ChartAxisLabelInput[],plot:
  for(const input of inputs){
   const {axis,perpendicular,horizontal,categories}=input,labels=axis.labels
   if(!labels||labels.majorTickMark!=='out')continue
-  const low=perpendicular.min===undefined||chartRationalDecimal(perpendicular.min).numerator===0n
+  const low=input.crossingAtMinimum===true||perpendicular.min===undefined||chartRationalDecimal(perpendicular.min).numerator===0n
   const normal=perpendicular.orientation==='minMax'
   const near=horizontal?low!==normal:low===normal
   const edge=horizontal?(near?plot.y:plot.y+plot.cy):(near?plot.x:plot.x+plot.cx)

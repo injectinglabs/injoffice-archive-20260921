@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "1879ba3f1840251673551ba6391b44082a3804c3627683aa9addcb05b164ad86"
+const NativePPTXSchemaSHA256 = "59d98493a259e4aa68a98e193cab815b9a3804b53c4b5d77b30e45c954d86025"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -37,6 +37,10 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 	"NativeAnimation": {
 		Properties: []string{"delayMs", "direction", "distancePpm", "durationMs", "effect"},
 		Required:   []string{"effect"},
+	},
+	"NativeAreaSourceBaseline": {
+		Properties: []string{"crossing", "value"},
+		Required:   []string{"crossing", "value"},
 	},
 	"NativeArrowEnd": {
 		Properties: []string{"len", "type", "w"},
@@ -95,7 +99,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
 	"NativeLiteralArea": {
-		Properties: []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
+		Properties: []string{"categories", "dataOrigin", "grouping", "profile", "series", "sourceBaseline", "xAxis", "yAxis"},
 		Required:   []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
 	},
 	"NativeLiteralAreaSeries": {
