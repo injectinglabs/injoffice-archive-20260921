@@ -110,6 +110,10 @@ export interface NativeDocxDrawingV1 {
   stacking_order?: number
   vertical_relative_from?: string
   wrap?: 'none' | 'square' | 'tight' | 'through' | 'top-and-bottom'
+  /** Inline DrawingML text box payload extracted from wps:wsp. */
+  textbox_text?: string
+  textbox_fill_rgb?: string
+  textbox_line_rgb?: string
   edit_policy: NativeDocxEditPolicyV1
 }
 
@@ -374,7 +378,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
   RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
@@ -629,6 +633,9 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
   optionalString(entry.content_type, `${path}/content_type`, issues)
   optionalString(entry.name, `${path}/name`, issues)
   optionalString(entry.alt_text, `${path}/alt_text`, issues)
+  optionalString(entry.textbox_text, `${path}/textbox_text`, issues)
+  optionalString(entry.textbox_fill_rgb, `${path}/textbox_fill_rgb`, issues, /^[0-9A-F]{6}$/)
+  optionalString(entry.textbox_line_rgb, `${path}/textbox_line_rgb`, issues, /^[0-9A-F]{6}$/)
   const placement = enumValue(entry.placement, `${path}/placement`, ['inline', 'floating'], issues)
   integer(entry.width_emu, `${path}/width_emu`, issues, 1)
   integer(entry.height_emu, `${path}/height_emu`, issues, 1)

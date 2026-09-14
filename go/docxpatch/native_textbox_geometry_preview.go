@@ -56,6 +56,7 @@ func inspectNativeTextboxGeometry(data []byte, doc *NativeDocumentV1) (*NativeTe
 		nodes[n.Path] = n
 	}
 	units := 0
+	seen := map[string]bool{}
 	for _, block := range doc.Body.Blocks {
 		p := block.Paragraph
 		if p == nil {
@@ -65,12 +66,42 @@ func inspectNativeTextboxGeometry(data []byte, doc *NativeDocumentV1) (*NativeTe
 		if owner == nil || owner.parent == nil {
 			continue
 		}
+		// Qualified inline text boxes are now modeled as drawing runs, so they
+		// no longer have a drawing refusal for the legacy sidecar to discover.
+		// Keep the geometry witness available by joining the extracted run back
+		// to its exact source node and reusing the same strict parser.
+		for _, run := range p.Runs {
+			if run.Kind != "drawing" || run.Drawing == nil || run.Drawing.TextboxText == nil || run.Drawing.Placement != "inline" {
+				continue
+			}
+			n := nodes[run.Anchor.Path]
+			if n == nil || nativeSHA(raw[n.Start:n.End]) != run.Anchor.XMLSHA256 || n.Name != (xml.Name{Space: ns, Local: "drawing"}) || n.parent == nil || n.parent.Name != (xml.Name{Space: ns, Local: "r"}) || n.parent.parent != owner {
+				continue
+			}
+			geometry, text := nativeParseTextboxGeometry(n, ns)
+			if geometry == nil || units+len(text) > 100000 || len(out.Items) >= 64 {
+				if len(out.Items) >= 64 {
+					out.OmittedCount++
+				}
+				continue
+			}
+			item := NativeTextboxGeometryItemV1{Owner: NativePartialTextboxV1{doc.Source.PackageSHA256, nativeSHA(raw), p.ID, run.Drawing.ID, run.Anchor, "drawingml", "supported", []string{text}, ""}, Geometry: geometry}
+			item.HardBreakLayout = nativeTextboxHardBreakEvidence(n, ns, main, raw)
+			item.WrapLayout = nativeTextboxWrapEvidence(n, ns, main, raw)
+			item.PageAnchor = nativeTextboxPageAnchorEvidence(n, ns, main, raw)
+			out.Items = append(out.Items, item)
+			seen[run.Anchor.Path] = true
+			units += len(text)
+		}
 		for _, d := range doc.Unsupported {
 			if d.Anchor == nil || d.Capability != "drawings" || d.ScopeID != p.ID || d.Anchor.PartName != main {
 				continue
 			}
 			n := nodes[d.Anchor.Path]
 			if n == nil || nativeSHA(raw[n.Start:n.End]) != d.Anchor.XMLSHA256 {
+				continue
+			}
+			if seen[d.Anchor.Path] {
 				continue
 			}
 			drawing := n

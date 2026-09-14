@@ -68,6 +68,7 @@ export interface NativeDocxQualifiedInlineImageV1 {
   transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
 }
 
+
 export type NativeDocxInlineImageQualificationV1 =
   | { ok: true; value: NativeDocxQualifiedInlineImageV1 }
   | { ok: false; code: 'unsupported-image' | 'invalid-image' | 'resource-limit'; message: string }

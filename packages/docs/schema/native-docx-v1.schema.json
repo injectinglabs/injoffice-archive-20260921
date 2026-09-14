@@ -147,6 +147,9 @@
         "stacking_order": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "vertical_relative_from": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "wrap": { "enum": ["none", "square", "tight", "through", "top-and-bottom"] },
+        "textbox_text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "textbox_fill_rgb": { "type": "string", "pattern": "^[0-9A-F]{6}$" },
+        "textbox_line_rgb": { "type": "string", "pattern": "^[0-9A-F]{6}$" },
         "edit_policy": { "$ref": "#/$defs/EditPolicyV1" }
       }
     },

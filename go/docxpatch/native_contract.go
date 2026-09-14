@@ -106,6 +106,9 @@ type NativeDrawingV1 struct {
 	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
 	VerticalRelativeFrom   *string              `json:"vertical_relative_from,omitempty"`
 	Wrap                   *string              `json:"wrap,omitempty"`
+	TextboxText            *string              `json:"textbox_text,omitempty"`
+	TextboxFillRGB         *string              `json:"textbox_fill_rgb,omitempty"`
+	TextboxLineRGB         *string              `json:"textbox_line_rgb,omitempty"`
 	FloatingLayer          *string              `json:"floating_layer,omitempty"`
 	StackingOrder          *int64               `json:"stacking_order,omitempty"`
 	EditPolicy             NativeEditPolicyV1   `json:"edit_policy"`
