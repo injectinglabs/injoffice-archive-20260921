@@ -47,6 +47,7 @@ export function nativeTableTotalsTextPreview(
   const { table, bottom } = matches[0]!;
   return (
     row === bottom &&
+    table.style === "TableStyleMedium2" &&
     table.total_rows === 1 &&
     table.fill_preview?.totals_bold === true &&
     table.fill_preview.header_font_style_ids.includes(styleID)

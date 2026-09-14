@@ -88,6 +88,12 @@ it("qualifies only the source-bound totals row and default font IDs", () => {
   expect(
     preview({ ...objects, tables: [{ ...objects.tables[0]!, total_rows: 0 }] }),
   ).toBe(false);
+  expect(
+    preview({
+      ...objects,
+      tables: [{ ...objects.tables[0]!, style: "TableStyleMedium9" }],
+    }),
+  ).toBe(false);
 });
 
 it("validates exact totals qualification without expanding the existing style budget", () => {

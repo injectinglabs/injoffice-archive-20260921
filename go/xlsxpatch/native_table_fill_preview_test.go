@@ -90,3 +90,50 @@ func TestNativeTableFillQualification(t *testing.T) {
 		}
 	}
 }
+
+func medium2OriginalRegionsFixture() map[string]string {
+	parts := nativeWorkbookFixture(false)
+	parts["Charts/chart1.xml"] = previewChartFixture()
+	parts["Tables/table.xml"] = `<table xmlns="` + spreadsheetMLTransitional + `" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision" xr:uid="{6EFFB9D5-FED2-4683-8AFD-0791856E154E}" displayName="Table2" ref="A1:C10" totalsRowCount="1"><autoFilter ref="A1:C9"/><tableColumns count="3"><tableColumn id="1" name="A" totalsRowLabel="Total"/><tableColumn id="2" name="B" totalsRowFunction="custom"><totalsRowFormula>COUNTIF(Table2[B],"&gt;5")</totalsRowFormula></tableColumn><tableColumn id="3" name="C" totalsRowFunction="average" totalsRowDxfId="0"/></tableColumns><tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`
+	parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/Tables/table.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/><Override PartName="/theme/theme1.xml" ContentType="`+themePartContentType+`"/></Types>`, 1)
+	parts["Sheets/s1.xml"] = `<worksheet xmlns="` + spreadsheetMLTransitional + `" xmlns:r="` + officeRelNamespaceTransitional + `"><sheetData/><tableParts count="1"><tablePart r:id="table1"/></tableParts></worksheet>`
+	parts["Sheets/_rels/s1.xml.rels"] = strings.Replace(parts["Sheets/_rels/s1.xml.rels"], `</Relationships>`, `<Relationship Id="table1" Type="`+officeRelNamespaceTransitional+`/table" Target="../Tables/table.xml"/></Relationships>`, 1)
+	parts["Book/_rels/Workbook.xml.rels"] = strings.Replace(parts["Book/_rels/Workbook.xml.rels"], `</Relationships>`, `<Relationship Id="theme" Type="`+relTypeThemeTransitional+`" Target="../theme/theme1.xml"/></Relationships>`, 1)
+	parts["theme/theme1.xml"] = `<a:theme xmlns:a="` + drawingMLNamespace + `"><a:themeElements><a:clrScheme><a:accent1><a:srgbClr val="156082"/></a:accent1></a:clrScheme></a:themeElements></a:theme>`
+	parts["Meta/Styles.style"] = strings.Replace(parts["Meta/Styles.style"], `<border/>`, `<border><left/><right/><top/><bottom/><diagonal/></border>`, 1)
+	parts["Meta/Styles.style"] = strings.Replace(parts["Meta/Styles.style"], `</styleSheet>`, `<dxfs count="1"><dxf><numFmt numFmtId="164" formatCode="0.00&amp;quot; X&amp;quot;"/></dxf></dxfs><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>`, 1)
+	parts["Meta/Styles.style"] = strings.ReplaceAll(parts["Meta/Styles.style"], "&amp;quot;", "&quot;")
+	return parts
+}
+
+func TestNativeTableMedium2OriginalRegionsQualify(t *testing.T) {
+	got, err := InspectNativeWorkbookObjectsV1(buildZip(t, medium2OriginalRegionsFixture()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := got.Tables[0]
+	palette := table.FillPreview
+	if palette == nil || palette.Header != "#156082" || palette.Stripe != "#C0E6F5" || palette.Body != "#FFFFFF" || !palette.TotalsBold {
+		t.Fatalf("original Medium2 header/stripe/body/totals not qualified: %+v", palette)
+	}
+	if table.BorderPreview == nil || table.BorderPreview.Color != "#44B3E1" || table.BorderPreview.TotalsColor != "#156082" || table.BorderPreview.WidthPoints != 1 || table.BorderPreview.TotalsWidthPoints != 3 {
+		t.Fatalf("original Medium2 borders not qualified: %+v", table.BorderPreview)
+	}
+	if len(table.NumberFormats) != 1 || table.NumberFormats[0].Ref != "C10:C10" {
+		t.Fatalf("original totals number format lost: %+v", table.NumberFormats)
+	}
+}
+
+func TestNativeTableFillRefusesUnmeasuredStyles(t *testing.T) {
+	for _, style := range []string{"TableStyleMedium9", "TableStyleMedium1", "TableStyleLight1", "TableStyleDark1", "CustomStyle"} {
+		parts := medium2OriginalRegionsFixture()
+		parts["Tables/table.xml"] = strings.Replace(parts["Tables/table.xml"], `name="TableStyleMedium2"`, `name="`+style+`"`, 1)
+		got, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
+		if err != nil {
+			t.Fatalf("%s: %v", style, err)
+		}
+		if got.Tables[0].FillPreview != nil || got.Tables[0].BorderPreview != nil {
+			t.Fatalf("%s falsely qualified: %+v", style, got.Tables[0])
+		}
+	}
+}

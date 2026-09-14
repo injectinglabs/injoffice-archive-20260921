@@ -71,8 +71,9 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 			}
 		}
 	}
-	// Header/data differential formatting can override the builtin. Totals are
-	// never painted by this subset, including their differential number formats.
+	// Header/data differential formatting can override the builtin. Totals DXF
+	// number formats are inspected separately; totals fill uses the measured
+	// body color only when remaining DXF records stay numFmt-only.
 	var hasOverrides func(*previewXML) bool
 	hasOverrides = func(n *previewXML) bool {
 		for _, a := range n.attrs {
@@ -177,7 +178,7 @@ func qualifyNativeTableFillPreview(pkg *nativeWorkbookPackage, tableXML *preview
 	// Reuse the default-font authority list; explicit cell font choices still win.
 	if table.TotalRows == 1 && table.BorderPreview != nil {
 		table.FillPreview.TotalsBold = true
-		table.Warnings = append(table.Warnings, "Medium2 totals use bold text only for source-qualified default-font cells; explicit fonts remain unchanged.")
+		table.Warnings = append(table.Warnings, "Medium2 totals use the measured body fill and bold text only for source-qualified default-font cells; explicit fonts remain unchanged.")
 	}
 }
 

@@ -8,7 +8,7 @@ export function nativeTableFillPreview(objects:NativeWorkbookObjectsV1,revision:
  // a supported no-fill record. Other records and absent provenance stay intact.
  if(!fill||fill.color!==undefined||!(fill.origin==='implicit-default'||fill.origin==='styles-record'&&fill.fill_id===0))return undefined
  const matches=objects.tables.flatMap(table=>{
-  if(table.sheet_part!==sheetPart)return []
+  if(table.sheet_part!==sheetPart||table.style!=='TableStyleMedium2')return []
   const range=/^([A-Z]{1,3})([1-9][0-9]{0,6}):([A-Z]{1,3})([1-9][0-9]{0,6})$/.exec(table.ref);if(!range)return []
   const col=(s:string)=>[...s].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1
   const left=col(range[1]!),right=col(range[3]!),top=Number(range[2])-1,bottom=Number(range[4])-1
@@ -17,8 +17,11 @@ export function nativeTableFillPreview(objects:NativeWorkbookObjectsV1,revision:
  })
  if(matches.length!==1)return undefined
  const {table,top,bottom}=matches[0]!,palette=table.fill_preview
- if(!palette||!palette.fill_style_ids.includes(styleID)||row>bottom-table.total_rows)return undefined
+ if(!palette||!palette.fill_style_ids.includes(styleID))return undefined
  if(table.header_rows&&row===top)return palette.header
+ // Builtin Medium2 totalRow has no fill. Paint the measured body color only when
+ // source DXF/border records stayed numFmt-only (totals_bold is that gate).
+ if(table.total_rows===1&&row===bottom)return palette.totals_bold===true?palette.body:undefined
  return table.row_stripes&&(row-top-table.header_rows)%2===0?palette.stripe:palette.body
 }
 
