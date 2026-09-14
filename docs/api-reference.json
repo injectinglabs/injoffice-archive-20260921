@@ -10342,6 +10342,16 @@
               "signature": "export interface NativeLiteralBarSeries"
             },
             {
+              "name": "NativeLiteralBubble",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBubble"
+            },
+            {
+              "name": "NativeLiteralBubbleSeries",
+              "kind": "type",
+              "signature": "export interface NativeLiteralBubbleSeries"
+            },
+            {
               "name": "NativeLiteralConnected",
               "kind": "type",
               "signature": "export interface NativeLiteralConnected"
@@ -10592,6 +10602,11 @@
               "signature": "NativeWorkbookBarData"
             },
             {
+              "name": "NativeWorkbookBubbleData",
+              "kind": "type",
+              "signature": "NativeWorkbookBubbleData"
+            },
+            {
               "name": "NativeWorkbookChartRefusal",
               "kind": "type",
               "signature": "NativeWorkbookChartRefusal"
@@ -10644,7 +10659,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"a1c98fe855b1ee2561ba979e5fa1a912bb37abea4d7a2d21d79836fe71de731b\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c\""
             },
             {
               "name": "provenanceValues",
@@ -10690,6 +10705,11 @@
               "name": "validateNativePptx",
               "kind": "function",
               "signature": "export declare function validateNativePptx(input: unknown): NativeValidationResult"
+            },
+            {
+              "name": "validNativeLiteralBubble",
+              "kind": "function",
+              "signature": "export declare function validNativeLiteralBubble(value: unknown): value is NativeLiteralBubble"
             }
           ]
         }
@@ -10703,6 +10723,16 @@
           "subpath": ".",
           "file": "index.d.ts",
           "symbols": [
+            {
+              "name": "BUBBLE_PREVIEW_DISCLOSURE",
+              "kind": "const",
+              "signature": "export declare const BUBBLE_PREVIEW_DISCLOSURE = \"Source bubble sizes use plot-minor-radius-v1: the global maximum radius is one tenth of the smaller host plot extent at scale 100; area/width and source scale are retained. Circles paint in series order then point index and clip to the whole plot. This is host sizing, not PowerPoint plot layout.\""
+            },
+            {
+              "name": "BUBBLE_PREVIEW_POLICY",
+              "kind": "const",
+              "signature": "export declare const BUBBLE_PREVIEW_POLICY = \"plot-minor-radius-v1\""
+            },
             {
               "name": "Canvas2DCommandAdapter",
               "kind": "type",
@@ -10734,6 +10764,11 @@
               "signature": "export declare function createNativeLiteralBarPaths(chart: LiteralBarRecord, cx: number, cy: number): readonly LiteralBarVector[]"
             },
             {
+              "name": "createNativeLiteralBubblePaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralBubblePaths(chart: NativeLiteralBubble, cx: number, cy: number): readonly LiteralBubbleVector[]"
+            },
+            {
               "name": "createNativeLiteralDoughnutPaths",
               "kind": "function",
               "signature": "export declare function createNativeLiteralDoughnutPaths(chart: NativeLiteralDoughnut, cx: number, cy: number): readonly"
@@ -10756,7 +10791,7 @@
             {
               "name": "createNativeWorkbookChartPaths",
               "kind": "function",
-              "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector)[]"
+              "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector | LiteralBubbleVector)[]"
             },
             {
               "name": "createRecordingPaintSurface",
@@ -10772,6 +10807,11 @@
               "name": "LiteralBarVector",
               "kind": "type",
               "signature": "LiteralBarVector"
+            },
+            {
+              "name": "LiteralBubbleVector",
+              "kind": "type",
+              "signature": "LiteralBubbleVector"
             },
             {
               "name": "LiteralConnectedVector",
