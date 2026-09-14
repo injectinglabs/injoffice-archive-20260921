@@ -62,3 +62,11 @@ existing table glyphs would also preserve an earlier parsed-group discrepancy.
 These distinct anchor, relayout and source-normalization behaviors remain a
 required integration task. Offset-child references discriminate ancestor center
 mapping independently from the centered fixtures.
+
+## Physical anchor preparation
+
+The internal `office-graphic-frame-anchor-v1` helper now keeps physical width and height as bounded rationals and emits a translation-only origin. It maps the source center conventionally through nearest-first ancestors. Positive ancestor scale products size the physical anchor; the leaf's raw rotation selects swapped scale axes in the half-open intervals [45°,135°) and [225°,315°). Direct orientation does not rotate or reflect the painted surface. This is an explicitly named implementation policy, not a replacement for standard DrawingML semantics.
+
+The retained 32-case Office 16.112.4 reference matrix includes direct rotation/reflections, offset children, group rotation/reflection/nonuniform scaling, and 44°/45°/134°/135° discriminators. Sixteen table vector bounds agree with the independently calculated anchor plus intrinsic tracks within 23.4375 EMU, consistent with the PDF export's vector quantization. That observation is separate from, and does not loosen, the renderer's 0.125 EMU conversion allowance. Office normalizes grouped table transforms on save; original and normalized source transforms are retained separately.
+
+This remains preparation: callers must qualify the final complete paint hulls and preserve source authority. Tables use intrinsic row/column dimensions at the resulting origin. Charts require physical layout, not scaling already laid-out glyphs. Fractional physical chart dimensions still need an exact layout adapter or an explicitly reviewed host quantization policy before admission. Arbitrarily nested noncommuting groups require additional discriminating reference coverage before this profile is connected broadly.

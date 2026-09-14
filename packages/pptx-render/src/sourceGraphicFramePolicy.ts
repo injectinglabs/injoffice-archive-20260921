@@ -1,4 +1,4 @@
-import {composeSourceAffines,convertSourceAffine,decodeSourceAffine,qualifySourceAffinePoint,sourceAffineRational,SourceAffineBudget,type QualifiedSourceAffine} from './sourceAffine.js'
+import {sourceAffine,addSourceAffineRationals,subtractSourceAffineRationals,type AffineRational,type SourceAffineFrame,composeSourceAffines,convertSourceAffine,decodeSourceAffine,qualifySourceAffinePoint,sourceAffineRational,SourceAffineBudget,type QualifiedSourceAffine} from './sourceAffine.js'
 import {renderTransformMatrix} from './sourceRenderTransform.js'
 import type {RenderRect,RenderTransform} from './types.js'
 
@@ -36,4 +36,41 @@ export function qualifySourceGraphicFrameSpans(world:QualifiedSourceAffine,spans
   const painted=composeSourceAffines(convertSourceAffine(world,budget).qualified,convertSourceAffine(span.transform,budget).qualified,budget)
   for(const [px,py] of [[x,y],[x+cx,y],[x+cx,y+cy],[x,y+cy]] as const)qualifySourceAffinePoint(painted,px,py,maxCoordinateEmu,budget)
  }
+}
+
+
+export interface SourceGraphicFrameLayout {
+ readonly policy:'office-graphic-frame-anchor-v1'
+ readonly width:AffineRational
+ readonly height:AffineRational
+ /** Translation only: glyph metrics and intrinsic table tracks are not scaled. */
+ readonly origin:QualifiedSourceAffine
+}
+
+/** Named implementation policy, qualified against the retained Office matrix.
+ * Direct graphic-frame orientation is not painted. Ancestors map its center;
+ * the leaf's raw rotation quadrant chooses the physical anchor's scale axes.
+ * Width/height remain rational: callers must not round these layout thresholds.
+ * This helper alone does not admit source or authorize mutations. */
+export function sourceGraphicFrameLayout(leaf:SourceAffineFrame,parents:readonly {frame:SourceAffineFrame;child:Pick<SourceAffineFrame,'x'|'y'|'cx'|'cy'>}[],budget:SourceAffineBudget):SourceGraphicFrameLayout {
+ if(!Array.isArray(parents)||parents.length>=64)throw new RangeError('Graphic-frame hierarchy depth exceeded')
+ sourceAffine(leaf,undefined,budget) // Reuse complete frame/angle/boolean validation.
+ const zero=sourceAffineRational(0n),one=sourceAffineRational(1n)
+ const integer=(n:number)=>sourceAffineRational(BigInt(n))
+ const half=(n:AffineRational)=>sourceAffineRational(n.numerator,n.denominator*2n)
+ const multiply=(a:AffineRational,b:AffineRational)=>{budget.charge(16);return sourceAffineRational(a.numerator*b.numerator,a.denominator*b.denominator)}
+ let center:QualifiedSourceAffine={values:[one,zero,zero,one,addSourceAffineRationals(integer(leaf.x),sourceAffineRational(BigInt(leaf.cx),2n)),addSourceAffineRationals(integer(leaf.y),sourceAffineRational(BigInt(leaf.cy),2n))],errors:[zero,zero,zero,zero,zero,zero],depth:1}
+ let sx=one,sy=one
+ for(let i=0;i<parents.length;i++){
+  const parent=parents[i]
+  if(!parent)throw new RangeError('Missing graphic-frame ancestor')
+  center=composeSourceAffines(sourceAffine(parent.frame,parent.child,budget),center,budget)
+  sx=multiply(sx,sourceAffineRational(BigInt(parent.frame.cx),BigInt(parent.child.cx)))
+  sy=multiply(sy,sourceAffineRational(BigInt(parent.frame.cy),BigInt(parent.child.cy)))
+ }
+ const angle=leaf.rotation??0,swap=angle>=2700000&&angle<8100000||angle>=13500000&&angle<18900000
+ const width=multiply(integer(leaf.cx),swap?sy:sx),height=multiply(integer(leaf.cy),swap?sx:sy)
+ budget.charge(32)
+ const origin:QualifiedSourceAffine={values:[one,zero,zero,one,subtractSourceAffineRationals(center.values[4],half(width)),subtractSourceAffineRationals(center.values[5],half(height))],errors:[zero,zero,zero,zero,center.errors[4],center.errors[5]],depth:center.depth}
+ return {policy:'office-graphic-frame-anchor-v1',width,height,origin}
 }
