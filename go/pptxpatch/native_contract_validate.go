@@ -942,6 +942,12 @@ func (v *nativeValidator) chart(chart NativeOpaqueChart, p string) {
 		}
 	}
 
+	if chart.LiteralArea != nil && !validNativeLiteralArea(chart.LiteralArea) {
+		v.add(p+".literalArea", "native.chartValues", "invalid literal area profile")
+	}
+	if chart.LiteralArea != nil && (chart.LiteralConnected != nil || chart.LiteralBar != nil || chart.LiteralPie != nil || chart.LiteralDoughnut != nil) {
+		v.add(p, "native.chartProfiles", "chart cannot carry multiple literal families")
+	}
 	if chart.LiteralConnected != nil && !validNativeLiteralConnected(chart.LiteralConnected) {
 		v.add(p+".literalConnected", "native.chartValues", "invalid literal connected profile")
 	}

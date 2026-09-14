@@ -435,6 +435,102 @@
         "colors": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#[0-9A-F]{6}$" } }
       }
     },
+    "literalAreaSeries": {
+      "x-binding-name": "NativeLiteralAreaSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "color"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        }
+      }
+    },
+    "literalArea": {
+      "x-binding-name": "NativeLiteralArea",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "categories",
+        "series",
+        "xAxis",
+        "yAxis",
+        "grouping"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-area-v1"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalAreaSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "grouping": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "stacked",
+            "percentStacked"
+          ]
+        }
+      }
+    },
     "literalConnectedSeries": {
       "x-binding-name": "NativeLiteralConnectedSeries",
       "type": "object",
@@ -954,7 +1050,8 @@
         "literalPie": { "$ref": "#/$defs/literalPie" },
         "literalDoughnut": { "$ref": "#/$defs/literalDoughnut" },
         "literalBar": { "$ref": "#/$defs/literalBar" },
-        "literalConnected": { "$ref": "#/$defs/literalConnected" }
+        "literalConnected": { "$ref": "#/$defs/literalConnected" },
+        "literalArea": { "$ref": "#/$defs/literalArea" }
       }
     },
     "textElement": {

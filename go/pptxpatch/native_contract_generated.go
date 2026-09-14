@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb"
+const NativePPTXSchemaSHA256 = "59e93ffa50686c82b4ec9bb0d57fcd99ff583f253e82b538e93086fa29c0fc75"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -94,6 +94,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
+	"NativeLiteralArea": {
+		Properties: []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
+		Required:   []string{"categories", "dataOrigin", "grouping", "profile", "series", "xAxis", "yAxis"},
+	},
+	"NativeLiteralAreaSeries": {
+		Properties: []string{"color", "index", "order", "title", "values"},
+		Required:   []string{"color", "index", "order", "values"},
+	},
 	"NativeLiteralBar": {
 		Properties: []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
 		Required:   []string{"barDirection", "categories", "categoryAxis", "dataOrigin", "gapWidth", "grouping", "overlap", "profile", "series", "valueAxis"},
@@ -123,7 +131,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"colors", "firstSliceAngle", "profile", "values"},
 	},
 	"NativeOpaqueChart": {
-		Properties: []string{"chartPart", "literalBar", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
+		Properties: []string{"chartPart", "literalArea", "literalBar", "literalConnected", "literalDoughnut", "literalPie", "opaqueRef", "previewAssetId", "relationshipId"},
 		Required:   []string{"chartPart", "opaqueRef", "relationshipId"},
 	},
 	"NativeParagraph": {
