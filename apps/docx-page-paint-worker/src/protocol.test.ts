@@ -7,6 +7,13 @@ import {
 } from './protocol.js'
 
 describe('native DOCX page-paint worker protocol', () => {
+  it('refuses textbox font overrides and unqualified source without partial results',async()=>{
+    for(const input of [{},{prepare:{},evidence:{}},{prepare:{},evidence:{},font_base64:'AA=='},{prepare:{},evidence:{},font_size_policy:{kind:'host-default-size-v1',half_points:22}},{prepare:{},evidence:{},host_font_manifest_path:'/caller/font.json'}]){
+      const response=await dispatchNativeDocxPagePaintWorkerRequestV1({protocol:DOCX_PAGE_PAINT_WORKER_PROTOCOL,version:1,id:'textbox:refusal',op:'render-textbox-pages',input})
+      expect(response).toMatchObject({ok:false,error:{code:'COMPILATION_REFUSED'}});expect(response).not.toHaveProperty('result')
+    }
+  })
+
   it('refuses undeclared or malformed host-size policy objects', async () => {
     for (const font_size_policy of [{ kind: 'word-default', half_points: 22 }, { kind: 'host-default-size-v1', half_points: 24 }, { kind: 'host-default-size-v1', half_points: 22, extra: true }]) {
       const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'size:malformed', op: 'render-approximate', input: { prepare: {}, eligibility: {}, font_size_policy } })

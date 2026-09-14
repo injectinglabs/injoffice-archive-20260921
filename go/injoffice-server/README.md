@@ -155,3 +155,14 @@ SHA-256 checks. No part name is used as a filesystem path or external URL.
 The bridge permits at most 256 PNG/JPEG assets, 32 nesting levels and 8 MiB of
 cumulative uncompressed image bytes. Worker raster validation and browser
 decode/pixel budgets apply in addition; original package bytes stay unchanged.
+
+`POST /v1/docx/page-preview-textboxes` is a separate, read-only approximate
+preview of one source-qualified page-relative rectangle. It uses the same
+8 MiB package limit, shared preview gate, bounded worker and explicit upload
+flow. The server extracts geometry from the uploaded bytes; callers cannot
+supply geometry, positioning policies, fonts or query overrides. The textbox
+requires one exact regular font embedded in that package. Its anchor must
+precede the paragraph's modeled text, and the whole stroked rectangle must fit
+its body-paginated physical page. The response retains source diagnostics and
+font inventory for browser validation. Other source/layout refusals remain
+atomic; the normal strict endpoint is unchanged.
