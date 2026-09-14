@@ -26,8 +26,8 @@ const previousServer = process.env.INJOFFICE_SERVER
 try {
   const worker = resolve(root, 'apps/docx-page-paint-worker/dist/worker.js')
   if (!existsSync(worker)) throw new Error('Build the workspace packages and DOCX page-paint worker before running this smoke.')
-  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes')
-  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR']]){
+  const textboxDir=resolve(scratch,'textbox'),footnoteDir=resolve(scratch,'footnote'),lineDir=resolve(scratch,'footnote-lines'),flowDir=resolve(scratch,'footnote-flow'),multiDir=resolve(scratch,'multiple-textboxes'),positionDir=resolve(scratch,'positioned-textboxes')
+  for(const [dir,test,env] of [[textboxDir,'TestNativeTextboxPageSource','INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR'],[footnoteDir,'TestNativeFootnoteContinuationSource','INJOFFICE_FOOTNOTE_EVIDENCE_DIR'],[lineDir,'TestNativeFootnoteLineContinuationSource','INJOFFICE_FOOTNOTE_LINE_EVIDENCE_DIR'],[flowDir,'TestNativeFootnoteSharedFlowSource','INJOFFICE_FOOTNOTE_FLOW_EVIDENCE_DIR'],[multiDir,'TestNativeMultipleTextboxPagesSource','INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR'],[positionDir,'TestNativeRelativeTextboxPagesSource','INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR']]){
     const result=spawnSync('go',['test','-count=1','-run','^'+test+'$','./cmd/nativepreviewfixture'],{cwd:resolve(root,'go/docxpatch'),env:{...process.env,[env]:dir},encoding:'utf8',timeout:120000})
     if(result.status!==0)throw new Error('Source fixture export failed: '+result.stderr+' '+result.stdout)
   }
@@ -175,12 +175,31 @@ try {
   await assert('window.__nativeDocxPosts.length===8','an omitted textbox cannot produce a partial preview')
   await evaluate('window.__dropTextbox=false')
   await assert(`${docs}?.dataset.demoDirty!=='true'`,'multiple-textbox rendering and refusals preserve source')
+  const positionFixture=resolve(positionDir,'page-textbox.docx'),positionHash=hash(readFileSync(positionFixture))
+  await setFixtureData({positionHash})
+  await upload(positionFixture)
+  await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'positioned-textbox replacement')
+  await assert('window.__nativeDocxPosts.length===8','relative textbox positions require a fresh explicit upload')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('2 approximate, read-only pages')&&${native}?.querySelector('[data-native-textbox]')!==null`),'relative textbox pages',45000)
+  await assert('window.__nativeDocxPosts.length===9&&window.__nativeDocxPosts[8].hash===window.__nativeDocxFixture.positionHash&&window.__nativeDocxTextbox.preview.version===2','relative positions bind exact source bytes')
+  for(let ordinal=0;ordinal<2;ordinal++){
+    if(ordinal){await click('Next approximate page');await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Approximate document page 2"]')!==null`),'relative textbox page 2')}
+    const x=ordinal?36000:198000,y=ordinal?144000:360000
+    await assert(`(()=>{const preview=window.__nativeDocxTextbox.preview,box=preview.textboxes[${ordinal}],page=preview.body_paint.pages[${ordinal}],mounted=${native}.querySelector('[data-native-textbox]');return box.x_millipoints===${x}&&box.y_millipoints===${y}&&box.page_id===page.id&&mounted.getAttribute('transform')==='translate(${x} ${y})'&&${native}.querySelectorAll('[data-native-textbox]').length===1&&getComputedStyle(${native}.querySelector('svg')).overflow==='hidden'})()`,'source alignment and signed offsets on page '+(ordinal+1))
+    await screenshot('docx-relative-textbox-page-'+(ordinal+1)+'.png')
+  }
+  await evaluate('window.__corruptTextbox=true')
+  await click('Upload to helper and preview page-placed textboxes')
+  await poll(()=>evaluate(`${native}?.textContent.includes('Textbox placement does not fit')&&${native}?.querySelector('svg')===null`),'forged relative textbox refusal',45000)
+  await assert(`window.__nativeDocxPosts.length===10&&${docs}?.dataset.demoDirty!=='true'`,'relative coordinate forgery rejects the preview and preserves source')
+  if(hash(readFileSync(positionFixture))!==positionHash)throw Error('Relative-textbox source changed')
   if(hash(readFileSync(multiFixture))!==multiHash)throw Error('Multiple-textbox source changed')
   if(hash(readFileSync(flowFixture))!==flowHash)throw Error('Shared-flow source changed')
   if(hash(readFileSync(lineFixture))!==lineHash)throw Error('Line continuation source changed')
   if(hash(readFileSync(textboxFixture))!==textboxHash||hash(readFileSync(footnoteFixture))!==footnoteHash)throw Error('Source fixture changed')
   if(errors.length)throw Error(errors.join('\n'))
-  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,uploads:8},null,2))
+  writeFileSync(resolve(artifacts,'summary.json'),JSON.stringify({status:'passed',cases:checks,textboxPages:1,footnotePages:4,lineContinuationPages:linePages,sharedFlowPages:flowPages,multipleTextboxPages:multiPages,relativeTextboxPages:2,uploads:10},null,2))
   console.log(`DOCX textbox and footnote browser checks passed: ${checks} cases`)
 } finally {
   cdp?.close()

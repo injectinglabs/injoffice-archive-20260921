@@ -175,7 +175,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
           if(!asset)throw new TypeError('Textbox font bytes do not match the source inventory')
           return asset.bytes
         })
-        const preview=evidence.items.length===1
+        const preview=evidence.items.length===1&&evidence.items[0]!.page_anchor?.policy==='page-offset-no-wrap-v1'
           ? await renderNativeDocxTextboxPagePreviewV1(input,evidence,textboxFonts[0]!,outlineProvider,{fonts})
           : await renderNativeDocxTextboxPagesPreviewV2(input,evidence,textboxFonts,outlineProvider,{fonts})
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}

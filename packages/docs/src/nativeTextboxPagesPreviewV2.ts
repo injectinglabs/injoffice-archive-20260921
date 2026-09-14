@@ -1,4 +1,5 @@
 /** Browser-safe composition of every source-qualified page textbox. */
+import {resolveTextboxPosition} from './nativeTextboxPositionV2.js'
 import {decodeNativeDocxDocument} from './nativeContract.js'
 import {decodeNativeDocxPagePaintV1} from './nativePagePaintWireV1.js'
 import type {NativeDocxPagePaintSuccessV1} from './nativePagePaintV1.js'
@@ -16,7 +17,7 @@ export function projectNativeDocxTextboxPagesV2(source:unknown,evidence:unknown)
  const diagnostics=new Map(document.unsupported.map(d=>[d.id,d])),selected=new Set<string>()
  const items=geometry.items.map((item,index)=>{
   const position=item.page_anchor,p=paragraphs.get(item.owner.paragraph_id),diagnostic=diagnostics.get(item.owner.diagnostic_id)
-  if(!position||position.policy!=='page-offset-no-wrap-v1'||!item.geometry||!p||diagnostic?.code!=='PICTURE_GRAPHIC_REQUIRED'||selected.has(diagnostic.id))throw new TypeError('Unsupported textbox page source')
+  if(!position||!item.geometry||!p||!(diagnostic?.code==='PICTURE_GRAPHIC_REQUIRED'||(position.policy==='relative-position-no-wrap-v2'&&diagnostic?.code==='FLOATING_DRAWING_SEMANTICS_PRESERVED'))||selected.has(diagnostic.id))throw new TypeError('Unsupported textbox page source')
   const path=position.source_anchor.path.slice(p.anchor.path.length)
   if(!position.source_anchor.path.startsWith(p.anchor.path)||!/^\/w:r\[[1-9][0-9]*\]\/w:drawing\[[1-9][0-9]*\]\//u.test(path)||p.runs.some(r=>r.anchor.start_byte<=position.source_anchor.end_byte))throw new TypeError('Textboxes must precede all text in their anchor paragraph')
   selected.add(diagnostic.id)
@@ -57,7 +58,8 @@ export function decodeNativeDocxTextboxPagesPreviewV2(source:unknown,evidence:un
   const {item,index}=projection.items[ordinal]!
   const pages=body.pages.filter(p=>p.lines.some(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0)),page=pages[0]
   const paint=decodeNativeDocxTextboxShapePaintV1(source,projection.geometry,index,textbox.paint,expectedFontSHA256s[index]!)
-  const position=item.page_anchor!,x=position.x_emu*10/127,y=position.y_emu*10/127,half=paint.line_width_millipoints/2
+  if(!page)throw new TypeError('Textbox placement has no page')
+  const {x,y}=resolveTextboxPosition(document,item,page,paint),half=item.page_anchor!.policy==='page-offset-no-wrap-v1'?paint.line_width_millipoints/2:0
   if(textbox.textbox_index!==index||pages.length!==1||!page||page.kind!=='content'||textbox.page_id!==page.id||textbox.x_millipoints!==x||textbox.y_millipoints!==y||paint.status!=='supported'||x<half||y<half||x+paint.width_millipoints+half>page.width_millipoints||y+paint.height_millipoints+half>page.height_millipoints)throw new TypeError('Textbox placement does not fit its anchor page')
   return {...textbox,paint}
  })
