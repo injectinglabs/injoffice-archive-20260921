@@ -510,7 +510,7 @@ func TestExtractNativePaginationSettingsV1StructurallyRefusesAcceptedElementSmug
 			return `<w:settings xmlns:w="` + ns + `"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15" bogus="1"/></w:compat></w:settings>`
 		}, "INVALID_SETTINGS_STRUCTURE"},
 		{"unsafe theme setting", func(ns string) string {
-			return `<w:settings xmlns:w="` + ns + `"><w:themeFontLang w:val="en-US"/></w:settings>`
+			return `<w:settings xmlns:w="` + ns + `"><w:themeFontLang w:val="ja-JP"/></w:settings>`
 		}, "PAGINATION_SETTING_UNSUPPORTED"},
 		{"unsafe shape defaults", func(ns string) string { return `<w:settings xmlns:w="` + ns + `"><w:shapeDefaults/></w:settings>` }, "PAGINATION_SETTING_UNSUPPORTED"},
 		{"unsafe template", func(ns string) string {
