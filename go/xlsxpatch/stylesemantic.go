@@ -135,6 +135,10 @@ func readStyleRegistryRecords(data []byte) (*styleRegistry, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodeStyleRegistryRecords(data, index)
+}
+
+func decodeStyleRegistryRecords(data []byte, index styleTableIndex) (*styleRegistry, error) {
 	registry := &styleRegistry{
 		data: data, index: index,
 		numFmtByID: make(map[int]string), numFmtByCode: make(map[string]int), usedNumFmtID: make(map[int]bool),
