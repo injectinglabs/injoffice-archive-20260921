@@ -7,8 +7,8 @@ export interface NativeLiteralAreaSeries {
  readonly values:readonly string[]
  readonly color:string
 }
-/** Dedicated preparation record; public chart attachment requires the shared
- * schema/runtime handoff. No workbook cache is a literal source value. */
+/** Read-only source literal area profile. Values retain their source decimal
+ * spellings; workbook caches are not admitted as literal values. */
 export interface NativeLiteralArea {
  readonly profile:'literal-area-v1'
  readonly dataOrigin:'literal'

@@ -59,8 +59,7 @@ func extractNativeChartAreaSeries(node *nativeXMLNode, d nativeExtractDialect) (
 	return series, categories, true
 }
 
-// Private source core; an additive public contract and actual rendering hook
-// must be connected after the workbook-chart integration handoff.
+// Strict literal source admission; opaque chart ownership remains unchanged.
 func extractNativeChartArea(payload []byte, part string, d nativeExtractDialect) *nativeChartArea {
 	node, err := parseNativeXML(payload, part)
 	if err != nil || node.Name != (xml.Name{Space: d.chart, Local: "chartSpace"}) {
@@ -102,12 +101,21 @@ func extractNativeChartArea(payload []byte, part string, d nativeExtractDialect)
 		return nil
 	}
 	sort.Slice(result.Series, func(i, j int) bool { return result.Series[i].Order < result.Series[j].Order })
-	stack := make([]nativeChartStackSeries, len(result.Series))
+	// The source record retains lexemes; exact cumulative geometry belongs to
+	// the renderer. Admission needs only already-bounded decimal signs/order,
+	// not allocating every rational band during read-only extraction.
 	for i, series := range result.Series {
-		stack[i] = nativeChartStackSeries{series.Index, series.Order, series.Values}
-	}
-	if _, err := nativeChartStackBands(stack, grouping); err != nil {
-		return nil
+		if series.Order != int64(i) {
+			return nil
+		}
+		if grouping != "standard" {
+			for _, raw := range series.Values {
+				value, err := parseNativeChartDecimal(raw)
+				if err != nil || value.coefficient.Sign() < 0 {
+					return nil
+				}
+			}
+		}
 	}
 	xID, ok := nativeChartInteger(area.take("axId"), 0, 4294967295)
 	if !ok {

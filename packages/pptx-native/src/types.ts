@@ -1,3 +1,4 @@
+import type {NativeLiteralArea} from './chartAreaTypes.js'
 import type {
   NativeAnimationEffect,
   NativeCompatibilityStatus,
@@ -236,6 +237,7 @@ export interface NativeLiteralConnected {
  yAxis:NativeLiteralBarAxis
 }
 export interface NativeOpaqueChart {
+ literalArea?:NativeLiteralArea
  literalConnected?:NativeLiteralConnected
  literalBar?:NativeLiteralBar
   literalDoughnut?: NativeLiteralDoughnut

@@ -1,3 +1,4 @@
+import {createNativeLiteralAreaPaths} from './literalArea.js'
 import {bindWorkbookCharts} from './workbookChartBindings.js'
 import {createNativeWorkbookChartPaths} from './workbookChartPaths.js'
 import {sourceTextBounds} from './sourceTextBounds.js'
@@ -684,6 +685,19 @@ function boundedPath(path: readonly RenderPathCommand[], sourcePath: string) {
     throw new RenderCompileError('render.pathBudget', sourcePath, `path exceeds ${PPTX_RENDER_LIMITS.maxPathCommands} commands`)
   }
   return path
+}
+
+// Only called for paths generated from the closed, validated area profile.
+// Arbitrary source custom geometry continues through the generic 512 cap.
+function boundedAreaPath(path:readonly RenderPathCommand[],sourcePath:string,budget:Budget){
+ if(path.length>1536)throw new RenderCompileError('render.pathBudget',sourcePath,'generated area path exceeds 1536 commands')
+ let pen=false
+ for(const command of path){
+  if(command.kind==='moveTo')pen=true
+  else if(!pen||command.kind!=='lineTo'&&command.kind!=='close')throw new RenderCompileError('render.invalidContract',sourcePath,'invalid generated area path')
+  if(command.kind==='moveTo'||command.kind==='lineTo'){checkCoordinate(command.x,sourcePath,budget);checkCoordinate(command.y,sourcePath,budget)}
+ }
+ return path
 }
 
 function elementBase(element: NativeElement, zIndex: number, budget: Budget, clipToElement = true) {
@@ -1993,17 +2007,22 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
       }
 
       const workbook=state.workbookCharts.get(element.id)
+      const area=workbook?undefined:element.chart.literalArea
+      const areaEnabled=state.options.literalAreaPreview===true
       const connected=workbook&&workbook.data.profile!=='workbook-bar-v1'?workbook.data:element.chart.literalConnected
       const labeledBar=workbook?.data.profile==='workbook-bar-v1'?workbook.data:element.chart.literalBar
       const connectedEnabled=workbook!==undefined||state.options.literalConnectedPreview===true
       const barEnabled=workbook!==undefined||state.options.literalBarPreview===true
-      const vectorsFor=(cx:number,cy:number)=>workbook?createNativeWorkbookChartPaths(workbook,cx,cy):element.chart.literalConnected?(element.chart.literalConnected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(element.chart.literalConnected,cx,cy):createNativeLiteralBarPaths(element.chart.literalBar!,cx,cy)
+      const vectorsFor=(cx:number,cy:number)=>workbook?createNativeWorkbookChartPaths(workbook,cx,cy):area?createNativeLiteralAreaPaths(area,cx,cy):element.chart.literalConnected?(element.chart.literalConnected.profile==='literal-line-v1'?createNativeLiteralLinePaths:createNativeLiteralScatterPaths)(element.chart.literalConnected,cx,cy):createNativeLiteralBarPaths(element.chart.literalBar!,cx,cy)
       if(workbook)state.diagnostics.push({severity:'warning',code:'chart.workbookDataPreview',message:'Authoritative saved embedded-workbook cells with source-bound ranges and diagnostics; chart caches are ignored. Host plot fitting, exact decimal geometry and integer rounding apply; source ownership remains read-only.',slideId:state.slide.id,elementId:element.id})
-      const hasAxisLabels=Boolean(connected?.xAxis.labels||connected?.yAxis.labels||labeledBar?.categoryAxis.labels||labeledBar?.valueAxis.labels)
-      if(hasAxisLabels && state.options.chartAxisLabelsPreview===true && (connected&&connectedEnabled||labeledBar&&barEnabled)){
+      const hasAxisLabels=Boolean(area?.xAxis.labels||area?.yAxis.labels||connected?.xAxis.labels||connected?.yAxis.labels||labeledBar?.categoryAxis.labels||labeledBar?.valueAxis.labels)
+      if(hasAxisLabels && state.options.chartAxisLabelsPreview===true && (area&&areaEnabled||connected&&connectedEnabled||labeledBar&&barEnabled)){
         try {
           if(depth+2>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}`,'Axis plot and labels exceed nesting budget')
-          const inputs:ChartAxisLabelInput[]=connected?[
+          const inputs:ChartAxisLabelInput[]=area?[
+            {axis:area.xAxis,perpendicular:area.yAxis,horizontal:true,categories:area.categories},
+            {axis:area.yAxis,perpendicular:area.xAxis,horizontal:false},
+          ]:connected?[
             {axis:connected.xAxis,perpendicular:connected.yAxis,horizontal:true,...((connected.profile==='literal-line-v1'||connected.profile==='workbook-line-v1')?{categories:connected.categories}:{})},
             {axis:connected.yAxis,perpendicular:connected.xAxis,horizontal:false},
           ]:[
@@ -2026,7 +2045,7 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
           const vectors=vectorsFor(plot.cx,plot.cy)
           const data=vectors.filter(v=>v.path.length>0).map((vector,index)=>{
             const path=`$.elements.${element.id}.axisPlot.${index}`;takeNode(state,path)
-            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},preset:'rect' as const,path:boundedPath(vector.path,path),...('color' in vector&&vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
+            return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},preset:'rect' as const,path:area?boundedAreaPath(vector.path,path,state.budget):boundedPath(vector.path,path),...('color' in vector&&vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
           })
           takeNode(state,`$.elements.${element.id}.axisPlot`)
           const children:RenderNode[]=[{kind:'group',...base,zIndex:0,transform:translationTransform(plot.x,plot.y),bounds:{x:0,y:0,cx:plot.cx,cy:plot.cy},clip:{kind:'rect',rect:{x:0,y:0,cx:plot.cx,cy:plot.cy}},children:data}]
@@ -2039,12 +2058,23 @@ async function compileElement(element: NativeElement, zIndex: number, depth: num
             checkedWorldAffine(world,translationTransform(0,0),label.bounds,`$.elements.${element.id}.axisLabels.${index}`,state.budget)
             children.push({kind:'text',...base,clip:undefined,zIndex:children.length,transform:translationTransform(label.x,label.y),bounds:{x:label.bounds.x-label.x,y:label.bounds.y-label.y,cx:label.bounds.cx,cy:label.bounds.cy},textBody:label.body})
           }
+          if(area)state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and compound fills. Standard series paint in authored order as a host preview policy; Office overlap order and plot layout are not reproduced.',slideId:state.slide.id,elementId:element.id})
           state.diagnostics.push({severity:'warning',code:'chart.axisLabelsPreview',message:`Source labels use exact supplied fonts and ${CHART_AXIS_LAYOUT_POLICY}: conservative outline hulls, one-point label gap, three-point outside ticks and fixed-decimal half-away rounding. Plot margins are measured host layout, not PowerPoint layout reproduction.`,slideId:state.slide.id,elementId:element.id})
           return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
         }catch(error){
           if(!(error instanceof RangeError))throw error
           state.diagnostics.push({severity:'refusal',code:'chart.axisLabelsUnavailable',message:error.message,slideId:state.slide.id,elementId:element.id})
         }
+      }
+
+      if(area && !hasAxisLabels && areaEnabled){
+        if(depth+1>state.budget.maxDepth)throw new RenderCompileError('render.depthBudget',`$.elements.${element.id}.literalArea`,'Area vectors exceed nesting budget')
+        const children=createNativeLiteralAreaPaths(area,base.bounds.cx,base.bounds.cy).map((vector,index)=>{
+          const path=`$.elements.${element.id}.literalArea.${index}`;takeNode(state,path)
+          return {kind:'shape' as const,...base,zIndex:index,transform:translationTransform(0,0),preset:'rect' as const,path:boundedAreaPath(vector.path,path,state.budget),...(vector.color?{fill:{color:vector.color}}:{}),...(vector.stroke?{stroke:boundedStroke(vector.stroke,path+'.stroke',state.budget)}:{})}
+        })
+        state.diagnostics.push({severity:'warning',code:'chart.literalAreaPreview',message:'Source literal area bands use exact clipping and one compound fill per series. Standard series paint in authored order as a host preview policy; Office overlap order and plot layout are not reproduced. Zero bands paint no fill.',slideId:state.slide.id,elementId:element.id})
+        return {kind:'group',...base,clip:{kind:'rect',rect:base.bounds},children}
       }
 
       if(connected && !hasAxisLabels && connectedEnabled){
@@ -2118,6 +2148,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
   if (options.sourceFrameAutoFitPreview !== undefined && typeof options.sourceFrameAutoFitPreview !== 'boolean') throw new RenderCompileError('render.invalidContract', '$.options.sourceFrameAutoFitPreview', 'source-frame autofit opt-in must be boolean')
   if(options.literalPiePreview!==undefined&&typeof options.literalPiePreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalPiePreview','literal pie opt-in must be boolean')
   if(options.chartAxisLabelsPreview!==undefined&&typeof options.chartAxisLabelsPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.chartAxisLabelsPreview','axis labels opt-in must be boolean')
+  if(options.literalAreaPreview!==undefined&&typeof options.literalAreaPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalAreaPreview','literal area opt-in must be boolean')
   if(options.literalConnectedPreview!==undefined&&typeof options.literalConnectedPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalConnectedPreview','literal connected opt-in must be boolean')
   if(options.literalBarPreview!==undefined&&typeof options.literalBarPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalBarPreview','literal bar opt-in must be boolean')
   if(options.literalDoughnutPreview!==undefined&&typeof options.literalDoughnutPreview!=='boolean')throw new RenderCompileError('render.invalidContract','$.options.literalDoughnutPreview','literal doughnut opt-in must be boolean')
