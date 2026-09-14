@@ -1,0 +1,17 @@
+# Source-bound 2D bubble charts — implementation in progress
+
+The dedicated source and geometry modules prepare positive/zero-size 2D bubble charts from explicit literal arrays or embedded-workbook references. They are not yet attached to the public extractor/compiler. Existing charts and source ownership are unchanged.
+
+The first source profile requires explicit RGB/no-line paint, non-inverted colors, no 3D, no negative bubbles, explicit size representation and bubble scale, paired explicit numeric axes, transparent chart/plot, and plotVisOnly=false. Arrays are dense, indexed and bounded to 256 points per series and 16 series. Series sort by authored order; points retain index order. References retain their formula and cache-presence provenance; caches never populate values. A workbook value must pass the existing actual-XLSX decoder/resolver before rendering. Missing/error/formula/numeric-text values remain refused.
+
+## Sizing and numerical policy
+
+`plot-minor-radius-v1` deliberately defines the host's default radius: at source bubbleScale100%, the largest size across all admitted nonnegative series has radius one tenth of the smaller plot dimension. The source percentage multiplies radius. In area mode, radius is proportional to the square root of size/globalMaximum; in width mode, it is proportional to size/globalMaximum. This preserves relative source area or width semantics, but does not claim PowerPoint's default-radius algorithm.
+
+The ISO-derived [bubbleScale remarks](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.charts.bubblescale?view=openxml-2.11.2) define percentage of a default size without specifying that default radius. The [size representation enum](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.charts.sizerepresentsvalues?view=openxml-3.0.1) distinguishes area and width. A pinned independent implementation audit (ONLYOFFICE sdkjs72b0421, ChartsDrawer.js15542–15795) found an axis-tick-based, per-series area-only calculation in that function; it is not used as a parity oracle or copied into this implementation. Strict percentage syntax reuses the qualified existing chart percentage parser; Transitional also accepts its integer spelling.
+
+Existing 4096-bit exact rational arithmetic maps XY centers and size ratios. Integer square root plus an exact midpoint comparison rounds an area-mode radius directly to nearest EMU, with at most0.5EMU error. Width radius and signed centers quantize once. Exact conservative envelope comparisons remove wholly off-plot points before any Number conversion, so huge source coordinates cannot overflow output. A positive radius below the EMU threshold may disappear; no minimum visible size is invented. Scale0 and all-zero size datasets emit no bubbles.
+
+Each bubble uses one closed path with two semicircular arc commands, four commands total. Maximum4096 bubbles imply16384 generated commands, without expanding the generic512-command per-path budget. Rendering must clip entire bubble paths to the plot rectangle: a center outside the plot can still have visible ink. Ascending series order then point index is an explicit host painter-order policy, not a universal Office overlap claim.
+
+Required later coverage remains negative-bubble rendering, 3D, labels, source inherited/theme/default styles, mixed data origins, blank/formula behavior and any further host layout qualification. This preparation does not close those rows or constitute a separately shipped helper-only milestone.
