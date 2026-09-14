@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "212fb54c2fc4121a89b338a07f6f2a00686b7fd5b405f8471509bf698b9a68cb" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "59e93ffa50686c82b4ec9bb0d57fcd99ff583f253e82b538e93086fa29c0fc75" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -281,6 +281,43 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "transform"
     ]
   },
+  "NativeLiteralArea": {
+    "schemaName": "literalArea",
+    "properties": [
+      "categories",
+      "dataOrigin",
+      "grouping",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ],
+    "required": [
+      "categories",
+      "dataOrigin",
+      "grouping",
+      "profile",
+      "series",
+      "xAxis",
+      "yAxis"
+    ]
+  },
+  "NativeLiteralAreaSeries": {
+    "schemaName": "literalAreaSeries",
+    "properties": [
+      "color",
+      "index",
+      "order",
+      "title",
+      "values"
+    ],
+    "required": [
+      "color",
+      "index",
+      "order",
+      "values"
+    ]
+  },
   "NativeLiteralBar": {
     "schemaName": "literalBar",
     "properties": [
@@ -421,6 +458,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "schemaName": "opaqueChart",
     "properties": [
       "chartPart",
+      "literalArea",
       "literalBar",
       "literalConnected",
       "literalDoughnut",
@@ -1690,6 +1728,102 @@ export const PPTX_NATIVE_SCHEMA = {
         }
       }
     },
+    "literalAreaSeries": {
+      "x-binding-name": "NativeLiteralAreaSeries",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "order",
+        "values",
+        "color"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{6}$"
+        }
+      }
+    },
+    "literalArea": {
+      "x-binding-name": "NativeLiteralArea",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "dataOrigin",
+        "categories",
+        "series",
+        "xAxis",
+        "yAxis",
+        "grouping"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "const": "literal-area-v1"
+        },
+        "dataOrigin": {
+          "const": "literal",
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/literalAreaSeries"
+          }
+        },
+        "xAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "yAxis": {
+          "$ref": "#/$defs/literalBarAxis"
+        },
+        "grouping": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "stacked",
+            "percentStacked"
+          ]
+        }
+      }
+    },
     "literalConnectedSeries": {
       "x-binding-name": "NativeLiteralConnectedSeries",
       "type": "object",
@@ -2229,6 +2363,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "literalConnected": {
           "$ref": "#/$defs/literalConnected"
+        },
+        "literalArea": {
+          "$ref": "#/$defs/literalArea"
         }
       }
     },

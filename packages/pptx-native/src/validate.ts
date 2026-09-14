@@ -1,3 +1,4 @@
+import {validNativeLiteralArea} from './chartAreaValidation.js'
 import {validNativeLiteralConnected} from './literalConnectedValidation'
 import {validNativeLiteralBar} from './literalBarValidation'
 import { validateEvaluatedGeometry } from './geometryValidation'
@@ -378,9 +379,10 @@ function validateElement(
     if (element.compatibility.status !== 'preserveOnly') add(issues, `${path}.compatibility.status`, 'native.opaqueChart', 'opaque charts must be preserveOnly')
     if (element.chart.literalPie && element.chart.literalPie.values.length !== element.chart.literalPie.colors.length) add(issues, `${path}.chart.literalPie`, 'native.chartValues', 'point colors must match literal values')
     if (element.chart.literalDoughnut && element.chart.literalDoughnut.values.length !== element.chart.literalDoughnut.colors.length) add(issues, `${path}.chart.literalDoughnut`, 'native.chartValues', 'point colors must match literal values')
+    if (element.chart.literalArea && !validNativeLiteralArea(element.chart.literalArea)) add(issues, `${path}.chart.literalArea`, 'native.chartValues', 'invalid literal area profile')
     if (element.chart.literalConnected && !validNativeLiteralConnected(element.chart.literalConnected)) add(issues, `${path}.chart.literalConnected`, 'native.chartValues', 'invalid literal connected profile')
     if (element.chart.literalBar && !validNativeLiteralBar(element.chart.literalBar)) add(issues, `${path}.chart.literalBar`, 'native.chartValues', 'invalid literal bar profile')
-    if ([element.chart.literalPie, element.chart.literalDoughnut, element.chart.literalBar, element.chart.literalConnected].filter(Boolean).length > 1) add(issues, `${path}.chart`, 'native.chartProfiles', 'chart cannot carry multiple literal families')
+    if ([element.chart.literalPie, element.chart.literalDoughnut, element.chart.literalBar, element.chart.literalConnected, element.chart.literalArea].filter(Boolean).length > 1) add(issues, `${path}.chart`, 'native.chartProfiles', 'chart cannot carry multiple literal families')
     if (element.chart.previewAssetId && !assets.has(element.chart.previewAssetId)) add(issues, `${path}.chart.previewAssetId`, 'native.assetReference', 'references an unknown asset id')
     else if (element.chart.previewAssetId && !assets.get(element.chart.previewAssetId)?.contentType.startsWith('image/')) add(issues, `${path}.chart.previewAssetId`, 'native.assetType', 'chart previews must reference an image asset')
     if (element.chart.opaqueRef.ownerPart !== element.chart.chartPart) add(issues, `${path}.chart.opaqueRef.ownerPart`, 'native.chartReference', 'must equal chartPart')
