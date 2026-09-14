@@ -93,7 +93,7 @@ func TestNativeSourceAffineGraphicFrameGroupRefusesAtomically(t *testing.T) {
 			if chart {
 				frame = nativeChartGraphicFrameXML(false, 4, "Chart", "")
 			}
-			group := `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Frame Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm` + attrs + `><a:off x="0" y="0"/><a:ext cx="6000000" cy="4000000"/><a:chOff x="0" y="0"/><a:chExt cx="6000000" cy="4000000"/></a:xfrm></p:grpSpPr>` + frame + `</p:grpSp>`
+			group := `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Frame Group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm` + attrs + `><a:off x="0" y="0"/><a:ext cx="6000000" cy="4000000"/><a:chOff x="0" y="0"/><a:chExt cx="6000000" cy="4000000"/></a:xfrm></p:grpSpPr>` + frame + nativeAutoShapeXML(5, "Unsupported late child", "rect", `<a:gradFill/>`, nativeAutoShapeNoLine("flat", `<a:round/>`), "") + `</p:grpSp>`
 			if attrs == "" {
 				group = strings.Replace(group, `<a:chExt cx="6000000"`, `<a:chExt cx="6000001"`, 1)
 			}
@@ -109,7 +109,7 @@ func TestNativeSourceAffineGraphicFrameGroupRefusesAtomically(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(deck.Slides[0].Elements) != 1 || len(deck.Assets) != 0 || !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-affine-graphic-frame-unavailable") {
+			if len(deck.Slides[0].Elements) != 1 || len(deck.Assets) != 0 || !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-child-refused-unavailable") {
 				t.Fatalf("complex graphic frame leaked partial content: %#v", deck.Slides[0].Compatibility)
 			}
 		}

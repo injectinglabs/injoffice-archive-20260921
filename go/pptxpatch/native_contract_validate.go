@@ -384,6 +384,11 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 	}
 
+	if element.GraphicFrameLayout != nil {
+		if *element.GraphicFrameLayout != nativeSourceAnchoredGraphicFrame || (element.Kind != NativeElementKindTable && element.Kind != NativeElementKindChart) || element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+			v.add(p+".graphicFrameLayout", "native.graphicFrameAuthority", "requires a parsed source-anchored table/chart with source identity and preserve-only status")
+		}
+	}
 	switch element.Kind {
 	case NativeElementKindText:
 		commonForbidden(true, false, true, false, false, false, false, false, false, false)
@@ -485,7 +490,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if element.Table != nil {
 			for _, row := range element.Table.Rows {
 				for _, cell := range row {
-					if cell.TextBody != nil && cell.TextBody.HorizontalOverflow == "clip" && (depth != 1 || element.Transform.QuarterTurns != nil || nativeHasSourceAffine(element.Transform)) {
+					if cell.TextBody != nil && cell.TextBody.HorizontalOverflow == "clip" && element.GraphicFrameLayout == nil && (depth != 1 || element.Transform.QuarterTurns != nil || nativeHasSourceAffine(element.Transform)) {
 						v.add(p+".table", "native.horizontalClip", "horizontal clipping requires a top-level unrotated table")
 					}
 				}
@@ -495,7 +500,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if element.Table == nil {
 			v.add(p+".table", "schema.required", "is required")
 		} else {
-			v.table(*element.Table, element.Transform, p+".table")
+			v.table(*element.Table, element.Transform, element.GraphicFrameLayout != nil, p+".table")
 		}
 	case NativeElementKindChart:
 		commonForbidden(false, false, false, false, false, false, false, true, false, false)
@@ -776,7 +781,7 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 	}
 }
 
-func (v *nativeValidator) table(table NativeTable, transform NativeTransform, p string) {
+func (v *nativeValidator) table(table NativeTable, transform NativeTransform, sourceFrame bool, p string) {
 	if len(table.ColumnWidths) == 0 {
 		v.add(p+".columnWidths", "schema.minItems", "must contain at least one width")
 	}
@@ -876,10 +881,10 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, p 
 		}
 		columnTotal, columnOK := nativeExactTableTrackTotal(table.ColumnWidths)
 		rowTotal, rowOK := nativeExactTableTrackTotal(table.RowHeights)
-		if transform.Cx == nil || !columnOK || columnTotal != *transform.Cx {
+		if transform.Cx == nil || !columnOK || (!sourceFrame && columnTotal != *transform.Cx) {
 			v.add(p+".columnWidths", "native.tableGeometry", "authoritative column tracks must sum exactly to the table frame width")
 		}
-		if transform.Cy == nil || !rowOK || rowTotal != *transform.Cy {
+		if transform.Cy == nil || !rowOK || (!sourceFrame && rowTotal != *transform.Cy) {
 			v.add(p+".rowHeights", "native.tableGeometry", "authoritative row tracks must sum exactly to the table frame height")
 		}
 	}

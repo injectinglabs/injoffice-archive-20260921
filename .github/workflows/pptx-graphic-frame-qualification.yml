@@ -1,0 +1,53 @@
+name: PPTX graphic frame qualification
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pptx-graphic-frame-qualification.yml'
+      - 'scripts/smoke-pptx-graphic-frames-browser.mjs'
+      - 'scripts/chrome-cdp-startup.mjs'
+      - 'go/pptxpatch/**'
+      - 'packages/pptx-*/**'
+      - 'packages/font-metrics/**'
+      - 'apps/pptx-page-paint-worker/**'
+      - 'apps/playground/src/**'
+      - 'schemas/pptx-native-v1.schema.json'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-graphic-frame-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - name: Actual source, font worker and native/legacy Chrome surfaces
+        timeout-minutes: 4
+        env:
+          SHOWCASE_OUTPUT: artifacts/pptx-graphic-frames
+        run: node scripts/smoke-pptx-graphic-frames-browser.mjs
+      - name: Preserve source hashes, worker outputs and screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pptx-graphic-frame-browser
+          path: artifacts/pptx-graphic-frames
+          if-no-files-found: ignore

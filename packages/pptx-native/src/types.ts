@@ -321,11 +321,15 @@ export interface NativePictureElement extends NativeElementBase {
 }
 
 export interface NativeTableElement extends NativeElementBase {
+  /** Parsed read-only physical anchor with intrinsic grid; no importer rewrite. */
+  graphicFrameLayout?: 'source-anchored-v1'
   kind: 'table'
   table: NativeTable
 }
 
 export interface NativeChartElement extends NativeElementBase {
+  /** Parsed read-only physical frame; integer chart layout uses named projection. */
+  graphicFrameLayout?: 'source-anchored-v1'
   kind: 'chart'
   chart: NativeOpaqueChart
   source: NativeSourceAnchor

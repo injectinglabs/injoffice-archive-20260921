@@ -264,6 +264,8 @@ function validateElement(
     return 'refused'
   }
   registerId(element.id, `${path}.id`, ids, issues)
+  const graphicFrameLayout='graphicFrameLayout' in element?element.graphicFrameLayout:undefined
+  if(graphicFrameLayout!==undefined&&(graphicFrameLayout!=='source-anchored-v1'||(element.kind!=='table'&&element.kind!=='chart')||element.provenance!=='parsed'||!element.source||element.compatibility.status!=='preserveOnly'))add(issues,`${path}.graphicFrameLayout`,'native.graphicFrameAuthority','requires a parsed source-anchored table/chart with source identity and preserve-only status')
   const sourceAffine = (t: NativeElement['transform']) => t.rotationAngle!==undefined || t.flipH!==undefined || t.flipV!==undefined
   if(sourceAffine(element.transform)) {
     if(element.transform.quarterTurns!==undefined)add(issues,`${path}.transform`,'native.rotation','source affine fields and legacy quarter turns are mutually exclusive')
@@ -339,7 +341,7 @@ function validateElement(
         const hasTextBody = cell.textBody !== undefined
         if (hasParagraphs !== hasTextBody) add(issues, cellPath, 'native.tableTextAuthority', 'paragraphs and textBody must be supplied together')
         if (cell.paragraphs && cell.textBody) {
-          if(cell.textBody.horizontalOverflow==='clip'&&(depth!==1||element.transform.quarterTurns!==undefined||sourceAffine(element.transform)))add(issues,`${cellPath}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping requires a top-level unrotated table')
+          if(cell.textBody.horizontalOverflow==='clip'&&!graphicFrameLayout&&(depth!==1||element.transform.quarterTurns!==undefined||sourceAffine(element.transform)))add(issues,`${cellPath}.textBody.horizontalOverflow`,'native.horizontalClip','horizontal clipping requires a top-level unrotated table')
           authoritativeCells++
           validateParagraphMarkers(cell.paragraphs, `${path}.table.rows[${rowIndex}][${columnIndex}].paragraphs`, issues)
           for (const paragraph of cell.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
@@ -365,10 +367,10 @@ function validateElement(
       }
       const columnTotal = exactSafeTrackTotal(element.table.columnWidths)
       const rowTotal = exactSafeTrackTotal(element.table.rowHeights)
-      if (columnTotal === undefined || columnTotal !== element.transform.cx) {
+      if (columnTotal === undefined || (!graphicFrameLayout&&columnTotal !== element.transform.cx)) {
         add(issues, `${path}.table.columnWidths`, 'native.tableGeometry', 'authoritative column tracks must sum exactly to the table frame width')
       }
-      if (rowTotal === undefined || rowTotal !== element.transform.cy) {
+      if (rowTotal === undefined || (!graphicFrameLayout&&rowTotal !== element.transform.cy)) {
         add(issues, `${path}.table.rowHeights`, 'native.tableGeometry', 'authoritative row tracks must sum exactly to the table frame height')
       }
     }

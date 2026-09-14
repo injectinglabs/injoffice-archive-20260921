@@ -258,6 +258,8 @@ interface RenderTableCellNodeBase {
   readonly sourceElementId: string
   readonly rowIndex: number
   readonly columnIndex: number
+  /** Qualified finite cell-local x-strip; text only, source vertical overflow retained. */
+  readonly horizontalTextClip?: RenderRect
   readonly bounds: RenderRect
   readonly fill?: RenderPaint
   readonly border?: RenderStroke
