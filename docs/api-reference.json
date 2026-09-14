@@ -12510,6 +12510,11 @@
               "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
+              "name": "compileNativeSheetPrintPagePreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeSheetPrintPagePreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, options?: NativeSheetPrintPagePreviewOptionsV1): NativeSheetPrintPagePreviewV1"
+            },
+            {
               "name": "compileNativeStoredRowSheetGeometryV1",
               "kind": "export",
               "signature": "compileNativeStoredRowSheetGeometryV1"
@@ -12783,6 +12788,16 @@
               "name": "NATIVE_SHEET_GEOMETRY_VERSION",
               "kind": "const",
               "signature": "export declare const NATIVE_SHEET_GEOMETRY_VERSION: 1"
+            },
+            {
+              "name": "NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI: 96"
+            },
+            {
+              "name": "NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL: 'injoffice.xlsx.print-page-preview'"
             },
             {
               "name": "NATIVE_SHEET_RENDER_MODEL_PROTOCOL",
@@ -13353,6 +13368,36 @@
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
+              "name": "NativeSheetPrintPageCssRectV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageCssRectV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePaintV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePaintV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePreviewOptionsV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePreviewOptionsV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePreviewV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePreviewV1"
+            },
+            {
+              "name": "NativeSheetPrintPageRasterPageV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageRasterPageV1"
+            },
+            {
+              "name": "NativeSheetPrintPageRegionV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageRegionV1"
             },
             {
               "name": "NativeSheetPrintTitleRangeV1",
@@ -14076,6 +14121,11 @@
               "signature": "export declare function compileNativeSheetPrintAreaSetPreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, hostPolicy?: NativeSheetHostPagePolicyV1, options?: Pick<NativeSheetPagePreviewOptionsV1, 'repeat_print_titles'>): NativeSheetPrintAreaSetPreviewV1"
             },
             {
+              "name": "compileNativeSheetPrintPagePreviewV1",
+              "kind": "function",
+              "signature": "export declare function compileNativeSheetPrintPagePreviewV1(geometries: readonly NativeSheetGeometryV2[], objects: NativeWorkbookObjectsV1, options?: NativeSheetPrintPagePreviewOptionsV1): NativeSheetPrintPagePreviewV1"
+            },
+            {
               "name": "compileNativeStoredRowSheetGeometryV1",
               "kind": "function",
               "signature": "export declare function compileNativeStoredRowSheetGeometryV1(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2, objects: NativeWorkbookObjectsV1): NativeStoredRowSheetGeometryV1"
@@ -14149,6 +14199,16 @@
               "name": "layoutNativeDrawingObjectsV1",
               "kind": "function",
               "signature": "export declare function layoutNativeDrawingObjectsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedDrawingV1[]"
+            },
+            {
+              "name": "NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI: 96"
+            },
+            {
+              "name": "NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL: 'injoffice.xlsx.print-page-preview'"
             },
             {
               "name": "NativeCachedChartMarkV1",
@@ -14279,6 +14339,36 @@
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
+              "name": "NativeSheetPrintPageCssRectV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageCssRectV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePaintV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePaintV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePreviewOptionsV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePreviewOptionsV1"
+            },
+            {
+              "name": "NativeSheetPrintPagePreviewV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPagePreviewV1"
+            },
+            {
+              "name": "NativeSheetPrintPageRasterPageV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageRasterPageV1"
+            },
+            {
+              "name": "NativeSheetPrintPageRegionV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageRegionV1"
             },
             {
               "name": "NativeSheetPrintTitleRangeV1",

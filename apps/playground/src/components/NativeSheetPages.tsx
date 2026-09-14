@@ -5,6 +5,7 @@ import {
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
+  compileNativeSheetPrintPagePreviewV1, type NativeSheetPrintPagePreviewV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
   selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1,
   selectNativeRichTextPreviewV1, type NativeRichTextPreviewV1,
@@ -21,7 +22,7 @@ import './native-sheet-pages.css'
 const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -53,6 +54,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   let rich: NativeRichTextPreviewV1 | undefined, richError = ''
   if (richRuns) { try { rich = selectNativeRichTextPreviewV1(workbook, sheet.id, objects) } catch (error) { richError = error instanceof Error ? error.message : 'Rich source unavailable.' } }
   const [usePrintArea, setUsePrintArea] = useState(false)
+  const [printPagePreview, setPrintPagePreview] = useState(false)
   const [repeatHeadings, setRepeatHeadings] = useState(false)
   const [rangeRows, setRangeRows] = useState(String(rows))
   const [rangeColumns, setRangeColumns] = useState(String(columns))
@@ -81,12 +83,13 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       const model = projectNativeWorkbookV2(workbook)
       const authority = createNativeMaximumDigitWidthAuthorityV2(model, bytes)
-      const viewports = usePrintArea ? selectNativeSheetPrintAreaSetV1(model, sheet.id, objects) : [{
+      const sourcePrintPage = printPagePreview
+      const viewports = usePrintArea || sourcePrintPage ? selectNativeSheetPrintAreaSetV1(model, sheet.id, objects) : [{
         row: 0, column: 0, end_row: Number(rangeRows) - 1, end_column: Number(rangeColumns) - 1,
       }]
       const geometries = viewports.map((viewport, index) => {
       const selectedRows = viewport.end_row - viewport.row + 1, selectedColumns = viewport.end_column - viewport.column + 1
-      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error(usePrintArea
+      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > 32 || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > 26) throw new Error(usePrintArea || sourcePrintPage
         ? `The saved print area${viewports.length > 1 ? ` ${index + 1}` : ''} exceeds this demo’s 32-row or 26-column limit. No areas were previewed. Choose a range from A1 instead; saved areas are not changed.`
         : 'Choose 1–32 rows and 1–26 columns for this bounded preview.')
       const geometryViewport = repeatHeadings ? selectNativeSheetPrintTitleViewportV1(model, sheet.id, viewport, objects) : viewport
@@ -95,17 +98,25 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, geometryViewport, authority, objects)
         : compileNativeSheetGeometryV2(model, sheet.id, geometryViewport, authority)
       })
-      if (!useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
-      const host: NativeSheetHostPagePolicyV1 | undefined = useSource ? undefined : {
+      if (!sourcePrintPage && !useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
+      const host: NativeSheetHostPagePolicyV1 | undefined = useSource || sourcePrintPage ? undefined : {
         kind: 'explicit-host-page-policy-v1', paper, orientation, scale: scaling === 'fit' ? 100 : Number(scale),
         ...(scaling === 'fit' ? { fit_to_page: nativeSheetPageFitChoice(fitWidth, fitHeight) } : {}),
         page_order: pageOrder,
         left_inches: Number(margins.left), right_inches: Number(margins.right), top_inches: Number(margins.top), bottom_inches: Number(margins.bottom),
       }
       const options = repeatHeadings ? { repeat_print_titles: true as const } : undefined
-      const plans = usePrintArea
-        ? compileNativeSheetPrintAreaSetPreviewV1(geometries, objects, host, options).areas.map(area => area.plan)
-        : [compileNativeSheetPagePreviewV1(geometries[0]!, objects, host, options ? { ...options, body_viewport: viewports[0]! } : undefined)]
+      let printPage: NativeSheetPrintPagePreviewV1 | undefined
+      const plans = (() => {
+        if (sourcePrintPage) {
+          printPage = compileNativeSheetPrintPagePreviewV1(geometries, objects, options)
+          if (printPage.status !== 'available') throw new Error(printPage.reason)
+          return printPage.source_plan.areas.map(area => area.plan)
+        }
+        return usePrintArea
+          ? compileNativeSheetPrintAreaSetPreviewV1(geometries, objects, host, options).areas.map(area => area.plan)
+          : [compileNativeSheetPagePreviewV1(geometries[0]!, objects, host, options ? { ...options, body_viewport: viewports[0]! } : undefined)]
+      })()
       const layouts = geometries.map((geometry, index) => {
         const plan = plans[index]!, drawings = layoutNativeDrawingObjectsV1(geometry, objects)
         if (repeatHeadings) assertNativeSheetHeadingDrawings(plan, drawings)
@@ -119,8 +130,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, richRuns, rangeOrigin: usePrintArea ? 'source-print-area' : 'explicit-host', ...(usePrintArea ? { areaIndex: index } : {}) })))
-      setMessage(`${plans.reduce((total, plan) => total + plan.pages.length, 0)} preview pages. Read-only; the workbook is unchanged.`)
+      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, richRuns, rangeOrigin: usePrintArea || sourcePrintPage ? 'source-print-area' : 'explicit-host', ...(usePrintArea || sourcePrintPage ? { areaIndex: index } : {}), ...(printPage ? { printPage } : {}) })))
+      setMessage(`${plans.reduce((total, plan) => total + plan.pages.length, 0)} preview pages${sourcePrintPage ? ' at 96 DPI' : ''}. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
     } finally {
@@ -130,9 +141,11 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   return <section className="ds-panel native-sheet-pages" aria-label="Spreadsheet page preview">
     <h3>Page preview</h3>
     <p className="ds-muted">Preview an A1 range or supported saved print areas on paper. Saved areas keep their source order and start on separate pages. Column widths use the exact Normal font; text and cached charts use approximate browser layout. This is not Excel print fidelity.</p>
+    <label><input type="checkbox" checked={printPagePreview} onChange={event => { invalidate(); setPrintPagePreview(event.target.checked); if (event.target.checked) { setUsePrintArea(true); setUseSource(true) } }}/> Source print-page preview (96 DPI)</label>
+    <p className="ds-muted">Opt-in source print-page preview uses saved print areas and authored page setup only. Printer-dependent DPI, missing paper/margins/scale, and fit-to-page are refused with an explicit reason; defaults are not invented. This is not Excel printer calibration or LibreOffice PDF parity. The grid preview stays available.</p>
     <div className="native-sheet-page-controls">
-      <label>Preview range<DsSelect aria-label="Preview range" value={usePrintArea ? 'saved' : 'a1'} onChange={event => { invalidate(); setUsePrintArea(event.target.value === 'saved') }}><option value="a1">Choose a range from A1</option><option value="saved">Use saved print area</option></DsSelect></label>
-      {usePrintArea ? <p className="ds-muted">{savedRanges.length
+      <label>Preview range<DsSelect aria-label="Preview range" value={usePrintArea || printPagePreview ? 'saved' : 'a1'} onChange={event => { invalidate(); setUsePrintArea(event.target.value === 'saved') }}><option value="a1">Choose a range from A1</option><option value="saved">Use saved print area</option></DsSelect></label>
+      {usePrintArea || printPagePreview ? <p className="ds-muted">{savedRanges.length
         ? `Saved print area${savedRanges.length > 1 ? 's' : ''}: ${savedRanges.map(area => `${cellAddress(area.row, area.column)}:${cellAddress(area.end_row, area.end_column)}`).join(', ')}. Each area supports at most 32 rows and 26 columns; none are cropped automatically. Fit limits apply separately to each area, with at most 100 pages in total.`
         : `No supported saved print area is available. ${(savedSet ?? savedArea)?.warnings.join(' ') ?? ''} Choose a range from A1 to continue.`}</p> : <>
         <label>Rows<DsInput type="number" min={1} max={32} step={1} value={rangeRows} onChange={event => { invalidate(); setRangeRows(event.target.value) }}/></label>
@@ -147,7 +160,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
       <label><input type="checkbox" checked={repeatHeadings} onChange={event => { invalidate(); setRepeatHeadings(event.target.checked) }}/> Repeat saved print headings</label>
       <p className="ds-muted">{repeatHeadings ? 'Saved heading rows and columns may lie inside or outside the selected range. The combined geometry must fit 32 rows and 26 columns. Only the selected body and heading bands are printed; intervening cells are omitted. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.' : 'Saved print headings are not repeated unless you select this option.'}</p>
-      {!useSource && <>
+      {!useSource && !printPagePreview && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
         <label>Scaling<DsSelect aria-label="Scaling" value={scaling} onChange={event => { invalidate(); setScaling(event.target.value as 'percent' | 'fit') }}><option value="percent">Scale percentage</option><option value="fit">Fit to page limits</option></DsSelect></label>
@@ -163,7 +176,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
-    {usePrintArea && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
+    {(usePrintArea || printPagePreview) && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
     <label><input type="checkbox" checked={richRuns} onChange={event => { invalidate(); setRichRuns(event.target.checked) }}/> Preview supported rich-text runs</label>
     {richRuns && <>
       {richError && <p role="alert">{richError} Run styling omitted; plain source text retained.</p>}
@@ -172,7 +185,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     <p role="status">{message}</p>
     {results?.map((result, index) => <div key={index} data-print-area={result.areaIndex}>
       {result.areaIndex !== undefined && <h4>Saved print area {result.areaIndex + 1}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}</h4>}
-      <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scaling' : 'Your paper, margins and scaling'} · approximate selected-range preview</p>
+      <p>{result.plan.settings_origin === 'source' ? 'Saved paper, margins and scaling' : 'Your paper, margins and scaling'} · {result.printPage ? 'source print-page preview at 96 DPI' : 'approximate selected-range preview'}</p>
+      {result.printPage?.status === 'available' && <p>Isolated capture rectangles: {result.printPage.pages.map(page => `${page.width_css_px}×${page.height_css_px}`).join(', ')} CSS pixels at 96 DPI. Fractional A4 sizes are not rounded.</p>}
       {result.plan.settings.fit_to_page && <p>Fit limits: {result.plan.settings.fit_to_page.width || 'unlimited'} wide × {result.plan.settings.fit_to_page.height || 'unlimited'} tall. Effective preview scale: {result.plan.pages.length ? `${Math.round(result.plan.pages[0]!.scale * 100)}%` : 'no visible cells'}.</p>}
       <p>{result.rangeOrigin === 'source-print-area' ? 'Saved print area' : 'Your preview range'}: {cellAddress((result.selectedViewport ?? result.geometry.viewport).row, (result.selectedViewport ?? result.geometry.viewport).column)}:{cellAddress((result.selectedViewport ?? result.geometry.viewport).end_row, (result.selectedViewport ?? result.geometry.viewport).end_column)}. Range selection is separate from paper settings.</p>
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
@@ -193,7 +207,7 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   let conditional: NativeConditionalFillPreviewV1 | undefined
@@ -239,7 +253,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     {plan.pages.map(page => {
     return <figure key={page.number}>
       <figcaption>Page {page.number} · {page.regions ? 'body ' : ''}rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
-      <svg role="img" aria-label={`Approximate spreadsheet page ${page.number}`} viewBox={`0 0 ${page.width_emu / EMU_PER_PIXEL} ${page.height_emu / EMU_PER_PIXEL}`}>
+      <svg role="img" aria-label={`Approximate spreadsheet page ${page.number}`} viewBox={`0 0 ${page.width_emu / EMU_PER_PIXEL} ${page.height_emu / EMU_PER_PIXEL}`} {...(printPage?.status === 'available' ? { width: page.width_emu / EMU_PER_PIXEL, height: page.height_emu / EMU_PER_PIXEL, 'data-capture-dpi': 96 } : {})}>
         <rect width="100%" height="100%" fill="#FFFFFF"/>
         {(page.regions ?? [{ ...page, kind: 'body' as const }]).map(region => {
         const clip = `${uid}-page-${page.number}${page.regions ? `-${region.kind}` : ''}`
