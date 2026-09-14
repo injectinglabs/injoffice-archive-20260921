@@ -46,7 +46,7 @@ func TestNativeGeometryEquivalentExpressionsKeepExactZero(t *testing.T) {
 }
 
 func TestNativeGeometryAccumulatesArcConstructionUncertainty(t *testing.T) {
-	arc := `<a:arcTo wR="10000000000" hR="10000000000" stAng="0" swAng="21600000"/>`
+	arc := `<a:arcTo wR="10000000000" hR="10000000000" stAng="1" swAng="21600000"/>`
 	evaluate := func(count int) error {
 		xml := `<a:custGeom xmlns:a="` + nativeGeometryTestNS + `"><a:pathLst><a:path><a:moveTo><a:pt x="20000000000" y="10000000000"/></a:moveTo>` + strings.Repeat(arc, count) + `</a:path></a:pathLst></a:custGeom>`
 		node, err := parseNativeXML([]byte(xml), "uncertainty.xml")

@@ -1,0 +1,572 @@
+{
+  "provenance": "Independent Fraction cardinal endpoints and 90-digit Decimal text rectangle oracle; pinned catalog SHA256 4a762444d8d85876881c02a5b1dedf6f73006fcd8acb7b4e393435615b37c780",
+  "cases": [
+    {
+      "name": "can",
+      "paths": [
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 50000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 100000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 50000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "lineTo",
+            "x": 4000000,
+            "y": 350000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 400000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 350000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 50000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 0,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 50000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 100000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 50000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 4000000,
+            "y": 50000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 100000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 50000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 0,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 50000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 4000000,
+            "y": 350000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 400000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 350000,
+            "rx": 2000000,
+            "ry": 50000,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 0,
+            "y": 50000
+          }
+        ]
+      ],
+      "textRect": {
+        "x": 0,
+        "y": 100000,
+        "cx": 4000000,
+        "cy": 250000
+      }
+    },
+    {
+      "name": "leftBrace",
+      "paths": [
+        [
+          {
+            "kind": "moveTo",
+            "x": 4000000,
+            "y": 400000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 366668,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 233332
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 200000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 166668,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 33332
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 0,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 4000000,
+            "y": 400000
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 366668,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 233332
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 200000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 166668,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 33332
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 0,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          }
+        ]
+      ],
+      "textRect": {
+        "x": 2585786,
+        "y": 9763,
+        "cx": 1414214,
+        "cy": 380474
+      }
+    },
+    {
+      "name": "rightBrace",
+      "paths": [
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 33332,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 166668
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 200000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 233332,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 366668
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 400000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 33332,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 166668
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 200000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "arcTo",
+            "x": 2000000,
+            "y": 233332,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": false
+          },
+          {
+            "kind": "lineTo",
+            "x": 2000000,
+            "y": 366668
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 400000,
+            "rx": 2000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          }
+        ]
+      ],
+      "textRect": {
+        "x": 0,
+        "y": 9763,
+        "cx": 1414214,
+        "cy": 380474
+      }
+    },
+    {
+      "name": "leftBracket",
+      "paths": [
+        [
+          {
+            "kind": "moveTo",
+            "x": 4000000,
+            "y": 400000
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 366668,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 0,
+            "y": 33332
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 0,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 4000000,
+            "y": 400000
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 366668,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 0,
+            "y": 33332
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 0,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          }
+        ]
+      ],
+      "textRect": {
+        "x": 1171573,
+        "y": 9763,
+        "cx": 2828427,
+        "cy": 380474
+      }
+    },
+    {
+      "name": "rightBracket",
+      "paths": [
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 33332,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 4000000,
+            "y": 366668
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 400000,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "close"
+          }
+        ],
+        [
+          {
+            "kind": "moveTo",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "kind": "arcTo",
+            "x": 4000000,
+            "y": 33332,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          },
+          {
+            "kind": "lineTo",
+            "x": 4000000,
+            "y": 366668
+          },
+          {
+            "kind": "arcTo",
+            "x": 0,
+            "y": 400000,
+            "rx": 4000000,
+            "ry": 33332,
+            "largeArc": false,
+            "clockwise": true
+          }
+        ]
+      ],
+      "textRect": {
+        "x": 0,
+        "y": 9763,
+        "cx": 2828427,
+        "cy": 380474
+      }
+    }
+  ]
+}
