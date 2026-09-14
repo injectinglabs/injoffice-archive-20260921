@@ -47,18 +47,21 @@ function axis(value:unknown,numeric:boolean):NativeLiteralBarAxis{
  return a as unknown as NativeLiteralBarAxis
 }
 function source(value:unknown):NativePptxWorkbookChartSource{
- const s=object(value,'family xAxis yAxis series plotVisibleOnly','barDirection gapWidth dispBlanksAs bubbleScale sizeRepresents')
+ const s=object(value,'family xAxis yAxis series plotVisibleOnly','barDirection gapWidth dispBlanksAs bubbleScale sizeRepresents grouping overlap')
  if(!['bar','line','scatter','bubble'].includes(s.family as string)||s.plotVisibleOnly!==false||s.dispBlanksAs!==undefined&&!['gap','zero','span'].includes(s.dispBlanksAs as string))return fail()
+ const stacked=s.grouping!==undefined
+ if(stacked&&(!['bar','line'].includes(s.family as string)||!['stacked','percentStacked'].includes(s.grouping as string)))return fail()
+ if(stacked&&s.family==='bar'?s.overlap!==100:s.overlap!==undefined)return fail()
  const bar=s.family==='bar',bubble=s.family==='bubble',scatter=s.family==='scatter'||bubble,horizontal=bar&&s.barDirection==='bar'
  if(bar){if(!['col','bar'].includes(s.barDirection as string))return fail();integer(s.gapWidth,0,500)}else if(s.barDirection!==undefined||s.gapWidth!==undefined)return fail()
  if(bubble){integer(s.bubbleScale,0,300);if(!['area','w'].includes(s.sizeRepresents as string))return fail()}else if(s.bubbleScale!==undefined||s.sizeRepresents!==undefined)return fail()
  const x=axis(s.xAxis,scatter||horizontal),y=axis(s.yAxis,!horizontal)
  if(x.position!=='b'||y.position!=='l'||x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||!validNativeChartAxisLabels(x,y,scatter||horizontal)||!validNativeChartAxisLabels(y,x,!horizontal))return fail()
- const series=array(s.series,16),ids=new Set<number>();let count:number|undefined,totalText=0,refs=0
+ const series=array(s.series,16),ids=new Set<number>(),orders=new Set<number>();let count:number|undefined,totalText=0,refs=0
  if(series.length<1)return fail()
  series.forEach((value,i)=>{
   const item=object(value,'index order valueReference','title titleReference categoryReference xReference sizeReference colors color widthEmu')
-  const index=integer(item.index,0,4294967295);if(ids.has(index)||integer(item.order,0,15)!==i)return fail();ids.add(index)
+  const index=integer(item.index,0,4294967295);const order=integer(item.order,0,15);if(ids.has(index)||orders.has(order)||order>=series.length||!stacked&&order!==i)return fail();ids.add(index);orders.add(order)
   if(item.title!==undefined){if(typeof item.title!=='string'||item.title.length>1024||item.titleReference!==undefined)return fail();totalText+=item.title.length}
   if(item.titleReference!==undefined){if(reference(item.titleReference,'strRef').range.count!==1)return fail();refs++}
   const values=reference(item.valueReference,'numRef');refs++
