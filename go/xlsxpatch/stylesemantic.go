@@ -109,7 +109,28 @@ type styleRegistry struct {
 	appendedCellXfs [][]byte
 }
 
+// newStyleRegistry remains the strict entry point for extraction and mutation.
 func newStyleRegistry(data []byte) (*styleRegistry, error) {
+	registry, err := readStyleRegistryRecords(data)
+	if err != nil {
+		return nil, err
+	}
+	for position := range registry.styleXfs {
+		if err := registry.validateXFReferences(registry.styleXfs[position], false); err != nil {
+			return nil, fmt.Errorf("cellStyleXf %d: %w", position, err)
+		}
+	}
+	for position := range registry.cellXfs {
+		if err := registry.validateXFReferences(registry.cellXfs[position], true); err != nil {
+			return nil, fmt.Errorf("cellXf %d: %w", position, err)
+		}
+	}
+	return registry, nil
+}
+
+// readStyleRegistryRecords parses source records; callers must validate every reference
+// and choose their own authority boundary before consuming the result.
+func readStyleRegistryRecords(data []byte) (*styleRegistry, error) {
 	index, err := parseStyleTable(data)
 	if err != nil {
 		return nil, err
@@ -197,16 +218,6 @@ func newStyleRegistry(data []byte) (*styleRegistry, error) {
 		}
 		registry.cellXfs = append(registry.cellXfs, xf)
 		registry.xfByRaw[string(xf.raw)] = position
-	}
-	for position := range registry.styleXfs {
-		if err := registry.validateXFReferences(registry.styleXfs[position], false); err != nil {
-			return nil, fmt.Errorf("cellStyleXf %d: %w", position, err)
-		}
-	}
-	for position := range registry.cellXfs {
-		if err := registry.validateXFReferences(registry.cellXfs[position], true); err != nil {
-			return nil, fmt.Errorf("cellXf %d: %w", position, err)
-		}
 	}
 	return registry, nil
 }
@@ -897,7 +908,7 @@ func styleFontChildRank(local string) int {
 	return 100
 }
 
-func (registry *styleRegistry) validateXFReferences(xf styleXF, cellXF bool) error {
+func (registry *styleRegistry) validateXFReferenceIDs(xf styleXF, cellXF bool) error {
 	if xf.fontID < 0 || xf.fontID >= len(registry.fonts) {
 		return fmt.Errorf("fontId %d is outside the fonts table", xf.fontID)
 	}
@@ -914,6 +925,13 @@ func (registry *styleRegistry) validateXFReferences(xf styleXF, cellXF bool) err
 	}
 	if cellXF && (xf.xfID < 0 || xf.xfID >= len(registry.styleXfs)) {
 		return fmt.Errorf("xfId %d is outside cellStyleXfs", xf.xfID)
+	}
+	return nil
+}
+
+func (registry *styleRegistry) validateXFReferences(xf styleXF, cellXF bool) error {
+	if err := registry.validateXFReferenceIDs(xf, cellXF); err != nil {
+		return err
 	}
 	if cellXF {
 		base := effectiveCellStyleXF(registry.styleXfs[xf.xfID])
