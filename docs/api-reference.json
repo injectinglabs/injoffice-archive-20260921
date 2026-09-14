@@ -10652,6 +10652,16 @@
               "signature": "NativeWorkbookConnectedData"
             },
             {
+              "name": "NativeWorkbookStackedBarData",
+              "kind": "type",
+              "signature": "NativeWorkbookStackedBarData"
+            },
+            {
+              "name": "NativeWorkbookStackedLineData",
+              "kind": "type",
+              "signature": "NativeWorkbookStackedLineData"
+            },
+            {
               "name": "originValues",
               "kind": "const",
               "signature": "export declare const originValues: readonly [\"authored\", \"parsed\"]"
