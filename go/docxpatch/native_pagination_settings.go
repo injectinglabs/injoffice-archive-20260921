@@ -268,7 +268,7 @@ func nativeSettingsNeutralWordElement(result *NativePaginationSettingsV1, node *
 		}
 		return true
 	default:
-		return false
+		return nativeSettingsAttestedNeutralWordElement(result, node, wordNS)
 	}
 }
 
@@ -291,7 +291,7 @@ func nativeSettingsNeutralForeignElement(result *NativePaginationSettingsV1, nod
 		}
 		return true
 	default:
-		return false
+		return nativeSettingsAttestedNeutralForeignElement(result, node)
 	}
 }
 
@@ -514,7 +514,8 @@ func rejectNativeSettingsNamespaceSpoofing(root *nativeXMLNode, wordNS string) e
 	known := map[string]bool{
 		"settings": true, "defaultTabStop": true, "mirrorMargins": true, "gutterAtTop": true,
 		"evenAndOddHeaders": true, "compat": true, "compatSetting": true, "noColumnBalance": true,
-		"characterSpacingControl": true,
+		"characterSpacingControl": true, "decimalSymbol": true, "listSeparator": true,
+		"themeFontLang": true, "shapeDefaults": true,
 	}
 	return rejectNativeKnownLocalSpoofing(root, wordNS, known)
 }
