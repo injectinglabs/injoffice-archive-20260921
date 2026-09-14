@@ -1,0 +1,64 @@
+name: PPTX literal radar qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/pptx-literal-radar-qualification.yml'
+      - 'scripts/smoke-pptx-literal-radar-browser.mjs'
+      - 'scripts/chrome-cdp-startup.mjs'
+      - 'scripts/showcase-smoke-dev-server.mjs'
+      - 'go/pptxpatch/native_chart_*.go'
+      - 'go/pptxpatch/native_extract*.go'
+      - 'schemas/pptx-native-v1.schema.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/pptx-native/src/chart*.ts'
+      - 'packages/pptx-native/src/literal*.ts'
+      - 'packages/pptx-render/src/*chart*.ts'
+      - 'packages/pptx-render/src/*Chart*.ts'
+      - 'packages/pptx-render/src/chartRadar*.ts'
+      - 'packages/pptx-render/src/cartesian*.ts'
+      - 'packages/pptx-render/src/literal*.ts'
+      - 'packages/pptx-render/src/compile.ts'
+      - 'apps/pptx-page-paint-worker/src/**'
+      - 'apps/playground/src/components/NativePptxSlides.tsx'
+      - 'apps/playground/src/components/nativePptxSvgUnits.ts'
+      - 'go/injoffice-server/internal/officehttp/pptx*.go'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-literal-radar-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - name: Actual source packages through helper, worker and production component
+        timeout-minutes: 6
+        env:
+          SHOWCASE_OUTPUT: artifacts/pptx-literal-radar
+        run: node scripts/smoke-pptx-literal-radar-browser.mjs
+      - name: Preserve source packages, DOM identities, screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pptx-literal-radar-browser
+          path: artifacts/pptx-literal-radar
+          if-no-files-found: warn
+          retention-days: 14
