@@ -46,13 +46,16 @@ No resource host or CDN is selected by the library. Supply trusted URLs subject
 to your application's origin/CSP policy, not paths from document content.
 Omitting options preserves PDF.js defaults, including its environment-dependent
 system-font substitution policy. Supplying resources improves availability but
-does not establish exact rendering. Missing Type3 `/space` glyphs advance only
-when the font dictionary proves a width (`Widths` for character 32, or
-`MissingWidth`, together with an encoding of 32 as `/space`). That program is
-width-only and does not invent an outline. Type3 fonts without a proven space
-width keep omitting the glyph. Inherited Type3 fill versus stroke colors are
-not claimed as Poppler or Acrobat parity. The playground emits matching assets
-under its deployment base and disables system font substitution for its viewer.
+does not establish exact rendering. When a Type3 font proves `/space` at
+character 32 (a named Latin encoding, a `BaseEncoding` in that set, or an
+explicit Differences assignment) and a numeric width (`Widths` for 32 or
+`MissingWidth`), the viewer inserts a width-only `d0` CharProc. That insertion
+does not invent an outline and does not itself create pdf.js word spacing.
+Missing `BaseEncoding` does not imply StandardEncoding; a Type3 built-in
+encoding is empty. Fonts without a proven space encoding or width keep omitting
+the glyph. Inherited Type3 fill versus stroke colors are not claimed as Poppler
+or Acrobat parity. The playground emits matching assets under its deployment
+base and disables system font substitution for its viewer.
 
 `renderPageToCanvas(viewer, page, canvas, zoom, pixelRatio, { signal, maxPixels })`
 accepts an `AbortSignal` to cancel obsolete PDF.js render tasks. By default the

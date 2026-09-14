@@ -1,4 +1,4 @@
-import { decodePDFRawStream, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
+import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFNumber, PDFString } from 'pdf-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PdfViewerDocument } from './viewer.js';
 import { decideType3SpaceAdvance, ensureType3SpaceAdvances, type3SpaceCharProc } from './type3SpaceAdvance.js';
@@ -12,10 +12,13 @@ async function type3Pdf(options: {
   widths: number[];
   differences?: Array<number | string>;
   encodingName?: 'WinAnsiEncoding' | 'StandardEncoding';
+  baseEncoding?: 'WinAnsiEncoding' | 'StandardEncoding';
   charProcs: Record<string, string>;
   missingWidth?: number;
   text: string;
   wordSpacing?: number;
+  tweak?: (doc: PDFDocument, font: PDFDict) => void;
+  useObjectStreams?: boolean;
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([300, 80]);
@@ -23,12 +26,19 @@ async function type3Pdf(options: {
   for (const [name, program] of Object.entries(options.charProcs)) {
     charProcs.set(PDFName.of(name), doc.context.register(doc.context.stream(program)));
   }
-  const encoding = options.encodingName
-    ? PDFName.of(options.encodingName)
-    : doc.context.obj({
-        Type: 'Encoding',
-        Differences: (options.differences ?? []).map((item) => (typeof item === 'number' ? item : PDFName.of(item))),
-      });
+  let encoding;
+  if (options.encodingName) {
+    encoding = PDFName.of(options.encodingName);
+  } else {
+    encoding = doc.context.obj({ Type: 'Encoding' });
+    if (options.baseEncoding) encoding.set(PDFName.of('BaseEncoding'), PDFName.of(options.baseEncoding));
+    if (options.differences) {
+      encoding.set(
+        PDFName.of('Differences'),
+        doc.context.obj(options.differences.map((item) => (typeof item === 'number' ? item : PDFName.of(item)))),
+      );
+    }
+  }
   const font = doc.context.obj({
     Type: 'Font',
     Subtype: 'Type3',
@@ -52,20 +62,21 @@ async function type3Pdf(options: {
       MissingWidth: options.missingWidth,
     })));
   }
+  options.tweak?.(doc, font);
   const fontRef = doc.context.register(font);
   page.node.set(PDFName.of('Resources'), doc.context.obj({ Font: { F1: fontRef } }));
   const tw = options.wordSpacing ?? 0;
   page.node.set(PDFName.of('Contents'), doc.context.register(doc.context.stream(
     `BT /F1 10 Tf 10 40 Td ${tw} Tw (${options.text}) Tj ET\n`,
   )));
-  return doc.save();
+  return doc.save({ useObjectStreams: options.useObjectStreams === true });
 }
 
 function type3Font(doc: PDFDocument): PDFDict {
   for (const [, object] of doc.context.enumerateIndirectObjects()) {
-    if (object instanceof PDFDict && object.lookupMaybe(PDFName.of('Subtype'), PDFName)?.asString() === '/Type3') {
-      return object;
-    }
+    if (!(object instanceof PDFDict)) continue;
+    const subtype = object.get(PDFName.of('Subtype'));
+    if (subtype instanceof PDFName && subtype.asString() === '/Type3') return object;
   }
   throw new Error('missing Type3 font');
 }
@@ -81,15 +92,8 @@ afterEach(async () => {
   handles.length = 0;
 });
 
-async function textWidth(bytes: Uint8Array): Promise<number> {
-  const doc = await PdfViewerDocument.load(bytes);
-  handles.push(doc);
-  const content = await (await doc.getPage(1)).getTextContent();
-  return content.items.reduce((sum, item) => sum + ('width' in item ? item.width : 0), 0);
-}
-
 describe('Type3 space advance', () => {
-  it('injects a width-only /space CharProc when Widths proves character 32', async () => {
+  it('injects a width-only /space CharProc when Widths and explicit /space encoding are proven', async () => {
     const source = await type3Pdf({
       firstChar: 32,
       lastChar: 65,
@@ -109,17 +113,9 @@ describe('Type3 space advance', () => {
     const program = decoded(type3SpaceCharProc(loaded, type3Font(loaded)));
     expect(program).toBe('500 0 d0\n');
     expect(program).not.toMatch(/[fFS]|re|m |l /);
-    expect(await textWidth(rewritten)).toBeGreaterThan(await textWidth(await type3Pdf({
-      firstChar: 65,
-      lastChar: 65,
-      widths: [1000],
-      differences: [65, 'A'],
-      charProcs: { A: A_GLYPH },
-      text: 'AA',
-    })));
   });
 
-  it('uses MissingWidth when encoding maps 32 to /space outside FirstChar', async () => {
+  it('uses MissingWidth when a named encoding maps 32 to /space outside FirstChar', async () => {
     const source = await type3Pdf({
       firstChar: 65,
       lastChar: 65,
@@ -136,12 +132,29 @@ describe('Type3 space advance', () => {
     expect(decoded(type3SpaceCharProc(loaded, type3Font(loaded)))).toBe('400 0 d0\n');
   });
 
-  it('omits space when no Widths or MissingWidth proves a width', async () => {
+  it('uses BaseEncoding in the named set even when Differences start after 32', async () => {
     const source = await type3Pdf({
       firstChar: 65,
       lastChar: 65,
       widths: [1000],
+      baseEncoding: 'WinAnsiEncoding',
       differences: [65, 'A'],
+      charProcs: { A: A_GLYPH },
+      missingWidth: 400,
+      text: 'A A',
+    });
+    expect(decideType3SpaceAdvance(type3Font(await PDFDocument.load(source)))).toEqual({
+      action: 'advance', width: 400, glyphName: 'space',
+    });
+    expect(await ensureType3SpaceAdvances(source)).not.toBe(source);
+  });
+
+  it('omits space when encoding is proven but no Widths or MissingWidth exists', async () => {
+    const source = await type3Pdf({
+      firstChar: 65,
+      lastChar: 65,
+      widths: [1000],
+      differences: [32, 'space', 65, 'A'],
       charProcs: { A: A_GLYPH },
       text: 'A A',
     });
@@ -149,9 +162,24 @@ describe('Type3 space advance', () => {
       action: 'omit', reason: 'no Widths or MissingWidth for space',
     });
     expect(await ensureType3SpaceAdvances(source)).toBe(source);
-    const loaded = await PDFDocument.load(source);
-    expect(type3SpaceCharProc(loaded, type3Font(loaded))).toBeUndefined();
-    await expect(textWidth(source)).resolves.toBeGreaterThan(0);
+  });
+
+  it('does not treat a missing BaseEncoding as StandardEncoding', async () => {
+    for (const differences of [[65, 'A'] as Array<number | string>, [97, 'square', 'triangle']]) {
+      const source = await type3Pdf({
+        firstChar: 32,
+        lastChar: 65,
+        widths: Array.from({ length: 34 }, (_, i) => (i === 0 ? 500 : i === 33 ? 1000 : 0)),
+        differences,
+        charProcs: { A: A_GLYPH },
+        missingWidth: 400,
+        text: 'A A',
+      });
+      expect(decideType3SpaceAdvance(type3Font(await PDFDocument.load(source)))).toEqual({
+        action: 'omit', reason: 'encoding does not map character 32 to /space',
+      });
+      expect(await ensureType3SpaceAdvances(source)).toBe(source);
+    }
   });
 
   it('does not replace an existing /space CharProc or invent an outline', async () => {
@@ -179,6 +207,45 @@ describe('Type3 space advance', () => {
     });
     expect(decideType3SpaceAdvance(type3Font(await PDFDocument.load(source)))).toMatchObject({ action: 'omit' });
     expect(await ensureType3SpaceAdvances(source)).toBe(source);
+  });
+
+  it('returns original bytes when Subtype is not a name or Differences is the wrong type', async () => {
+    const badSubtype = await type3Pdf({
+      firstChar: 32,
+      lastChar: 65,
+      widths: Array.from({ length: 34 }, (_, i) => (i === 0 ? 500 : i === 33 ? 1000 : 0)),
+      differences: [32, 'space', 65, 'A'],
+      charProcs: { A: A_GLYPH },
+      text: 'A A',
+      useObjectStreams: true,
+      tweak(_doc, font) {
+        font.set(PDFName.of('Subtype'), PDFString.of('Type3'));
+      },
+    });
+    expect(await ensureType3SpaceAdvances(badSubtype)).toBe(badSubtype);
+    const doc = await PdfViewerDocument.load(badSubtype);
+    handles.push(doc);
+    expect(doc.pageCount).toBe(1);
+
+    const badDifferences = await type3Pdf({
+      firstChar: 32,
+      lastChar: 65,
+      widths: Array.from({ length: 34 }, (_, i) => (i === 0 ? 500 : i === 33 ? 1000 : 0)),
+      differences: [32, 'space', 65, 'A'],
+      charProcs: { A: A_GLYPH },
+      text: 'A A',
+      tweak(_doc, font) {
+        const encoding = font.get(PDFName.of('Encoding'));
+        if (encoding instanceof PDFDict) encoding.set(PDFName.of('Differences'), PDFNumber.of(32));
+      },
+    });
+    expect(decideType3SpaceAdvance(type3Font(await PDFDocument.load(badDifferences)))).toEqual({
+      action: 'omit', reason: 'encoding does not map character 32 to /space',
+    });
+    expect(await ensureType3SpaceAdvances(badDifferences)).toBe(badDifferences);
+    const loaded = await PdfViewerDocument.load(badDifferences);
+    handles.push(loaded);
+    expect(loaded.pageCount).toBe(1);
   });
 
   it('leaves invalid bytes unchanged and does not crash the viewer', async () => {

@@ -37,6 +37,14 @@ function containsAscii(bytes: Uint8Array, ascii: string): boolean {
   return false;
 }
 
+function deref(context: { lookup(ref: PDFRef): unknown }, value: unknown): unknown {
+  return value instanceof PDFRef ? context.lookup(value) : value;
+}
+
+function read(dict: PDFDict, key: string): unknown {
+  return deref(dict.context, dict.get(PDFName.of(key)));
+}
+
 function glyphNameAt32(encoding: unknown): string | undefined {
   if (encoding instanceof PDFName) {
     const named = nameOf(encoding);
@@ -44,13 +52,13 @@ function glyphNameAt32(encoding: unknown): string | undefined {
   }
   if (!(encoding instanceof PDFDict)) return undefined;
   const table = new Array<string | undefined>(256);
-  const base = nameOf(encoding.lookupMaybe(PDFName.of('BaseEncoding'), PDFName));
-  if (!base || NAMED_ENCODINGS_WITH_SPACE.has(base)) table[SPACE] = SPACE_NAME;
-  const differences = encoding.lookupMaybe(PDFName.of('Differences'), PDFArray);
-  if (!differences) return table[SPACE];
+  const base = nameOf(read(encoding, 'BaseEncoding'));
+  if (base && NAMED_ENCODINGS_WITH_SPACE.has(base)) table[SPACE] = SPACE_NAME;
+  const differences = read(encoding, 'Differences');
+  if (!(differences instanceof PDFArray)) return table[SPACE];
   let code = 0;
   for (let i = 0; i < differences.size(); i++) {
-    const item = differences.lookup(i);
+    const item = deref(encoding.context, differences.get(i));
     if (item instanceof PDFNumber) {
       const next = item.asNumber();
       if (!Number.isInteger(next) || next < 0 || next > 255) return undefined;
@@ -66,11 +74,11 @@ function glyphNameAt32(encoding: unknown): string | undefined {
 }
 
 function widthFor32(font: PDFDict): number | undefined {
-  const firstChar = numberOf(font.lookup(PDFName.of('FirstChar')));
-  const lastChar = numberOf(font.lookup(PDFName.of('LastChar')));
-  const widths = font.lookupMaybe(PDFName.of('Widths'), PDFArray);
+  const firstChar = numberOf(read(font, 'FirstChar'));
+  const lastChar = numberOf(read(font, 'LastChar'));
+  const widths = read(font, 'Widths');
   if (
-    widths &&
+    widths instanceof PDFArray &&
     firstChar !== undefined &&
     lastChar !== undefined &&
     Number.isInteger(firstChar) &&
@@ -80,21 +88,21 @@ function widthFor32(font: PDFDict): number | undefined {
   ) {
     const index = SPACE - firstChar;
     if (index < widths.size()) {
-      const width = numberOf(widths.lookup(index));
+      const width = numberOf(deref(font.context, widths.get(index)));
       if (width !== undefined) return width;
     }
   }
-  const descriptor = font.lookup(PDFName.of('FontDescriptor'));
+  const descriptor = read(font, 'FontDescriptor');
   if (!(descriptor instanceof PDFDict)) return undefined;
-  return numberOf(descriptor.lookup(PDFName.of('MissingWidth')));
+  return numberOf(read(descriptor, 'MissingWidth'));
 }
 
 export function decideType3SpaceAdvance(font: PDFDict): Type3SpaceDecision {
-  const subtype = nameOf(font.lookupMaybe(PDFName.of('Subtype'), PDFName));
+  const subtype = nameOf(read(font, 'Subtype'));
   if (subtype !== 'Type3') return { action: 'omit', reason: 'not a Type3 font' };
-  const type = nameOf(font.lookupMaybe(PDFName.of('Type'), PDFName));
+  const type = nameOf(read(font, 'Type'));
   if (type !== undefined && type !== 'Font') return { action: 'omit', reason: 'not a font dictionary' };
-  if (glyphNameAt32(font.lookup(PDFName.of('Encoding'))) !== SPACE_NAME) {
+  if (glyphNameAt32(read(font, 'Encoding')) !== SPACE_NAME) {
     return { action: 'omit', reason: 'encoding does not map character 32 to /space' };
   }
   const width = widthFor32(font);
@@ -103,7 +111,7 @@ export function decideType3SpaceAdvance(font: PDFDict): Type3SpaceDecision {
 }
 
 function charProcsOf(font: PDFDict): PDFDict | undefined {
-  const charProcs = font.lookup(PDFName.of('CharProcs'));
+  const charProcs = read(font, 'CharProcs');
   return charProcs instanceof PDFDict ? charProcs : undefined;
 }
 
@@ -115,14 +123,10 @@ function injectAdvanceOnlySpace(doc: PDFDocument, font: PDFDict, width: number):
   return true;
 }
 
-function shouldInspect(bytes: Uint8Array): boolean {
-  return containsAscii(bytes, 'Type3') || containsAscii(bytes, 'ObjStm');
-}
-
-/** Inserts a width-only Type3 /space CharProc when the font proves that width.
- * Existing CharProcs and fonts without a proven space width are left unchanged. */
+/** Inserts a width-only Type3 /space CharProc when encoding and width are proven.
+ * Existing CharProcs and fonts without a proven space stay unchanged. */
 export async function ensureType3SpaceAdvances(bytes: Uint8Array): Promise<Uint8Array> {
-  if (bytes.byteLength === 0 || !shouldInspect(bytes)) return bytes;
+  if (bytes.byteLength === 0 || !containsAscii(bytes, 'Type3')) return bytes;
   let doc: PDFDocument;
   try {
     doc = await PDFDocument.load(bytes, { updateMetadata: false });
@@ -133,11 +137,20 @@ export async function ensureType3SpaceAdvances(bytes: Uint8Array): Promise<Uint8
   let changed = false;
   for (const [, object] of doc.context.enumerateIndirectObjects()) {
     if (!(object instanceof PDFDict)) continue;
-    const decision = decideType3SpaceAdvance(object);
-    if (decision.action !== 'advance') continue;
-    if (injectAdvanceOnlySpace(doc, object, decision.width)) changed = true;
+    try {
+      const decision = decideType3SpaceAdvance(object);
+      if (decision.action !== 'advance') continue;
+      if (injectAdvanceOnlySpace(doc, object, decision.width)) changed = true;
+    } catch {
+      continue;
+    }
   }
-  return changed ? new Uint8Array(await doc.save({ updateFieldAppearances: false })) : bytes;
+  if (!changed) return bytes;
+  try {
+    return new Uint8Array(await doc.save({ updateFieldAppearances: false }));
+  } catch {
+    return bytes;
+  }
 }
 
 export function type3SpaceCharProc(doc: PDFDocument, font: PDFDict): PDFStream | undefined {
