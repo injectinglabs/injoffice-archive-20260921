@@ -26,7 +26,7 @@ const pending = new Map()
 const errors = []
 const postRequests = []
 const panel = '[data-demo-surface="pdf"] #pdf-operation-panel'
-const textInput = `${panel} input:not([type="file"])`
+const textInput = `${panel} [aria-label="Form value: Unicode sample"]`
 const appearanceSelect = `${panel} [aria-label="Saved text appearance"]`
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 function send(method, params = {}) {
@@ -210,13 +210,50 @@ try {
     const scriptDoc = await PDFDocument.load(readFileSync(resolve(scriptOutput, scriptDownload)))
     assert.equal(scriptDoc.getForm().getTextField('Unicode sample').getText(), value, 'script export retains exact logical form value')
   }
+  const collectionPath = resolve(import.meta.dirname, '../packages/pdf/testdata/fonts/NotoSans-Devanagari-Bengali.ttc')
+  const originalCollection = readFileSync(collectionPath)
+  await upload('[aria-label="TrueType appearance font"]', collectionPath)
+  const faceInput = '[aria-label="Collection face index"]'
+  await until(`document.querySelector(${JSON.stringify(faceInput)})?.value === '0'`, 'collection face selection defaults to zero')
+  await setValue(faceInput, '2')
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(`${panel} button`)})).find(button => button.textContent.trim() === 'Apply form values').disabled`), true, 'out-of-range collection face cannot apply')
+  await setValue(faceInput, '1')
+  const collectionValue = 'ক্ষি বাংলা'
+  await setValue(textInput, collectionValue)
+  await apply()
+  await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser embeds selected second collection face')
+  await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(collectionValue)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'collection document finishes reloading')
+  const collectionOutput = mkdtempSync(resolve(output, 'collection-'))
+  await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: collectionOutput })
+  await evaluate(`Array.from(document.querySelectorAll('[data-demo-surface="pdf"] button')).find(button => button.textContent.trim() === 'Download edited PDF').click()`)
+  let collectionDownload
+  for (let attempt = 0; attempt < 300; attempt++) {
+    collectionDownload = readdirSync(collectionOutput).find(name => name.endsWith('.pdf'))
+    if (collectionDownload) break
+    await pause(100)
+  }
+  assert.ok(collectionDownload, 'UI downloads selected collection face')
+  const collectionDoc = await PDFDocument.load(readFileSync(resolve(collectionOutput, collectionDownload)))
+  const collectionField = collectionDoc.getForm().getTextField('Unicode sample')
+  assert.equal(collectionField.getText(), collectionValue)
+  const collectionAp = collectionDoc.context.lookup(collectionField.acroField.getWidgets()[0].getNormalAppearance())
+  const collectionFonts = collectionAp.dict.lookup(PDFName.of('Resources')).lookup(PDFName.of('Font'))
+  const collectionFont = collectionFonts.lookup(collectionFonts.keys()[0])
+  const collectionCid = collectionFont.lookup(PDFName.of('DescendantFonts')).lookup(0)
+  const collectionProgram = decodePDFRawStream(collectionCid.lookup(PDFName.of('FontDescriptor')).lookup(PDFName.of('FontFile2'))).decode()
+  assert.equal(new DataView(collectionProgram.buffer, collectionProgram.byteOffset, collectionProgram.byteLength).getUint32(0), 0x10000, 'PDF embeds standalone TrueType, not a TTC wrapper')
+  assert.deepEqual(readFileSync(collectionPath), originalCollection)
+  await upload('[aria-label="TrueType appearance font"]', fontPath)
+  await until(`!document.querySelector(${JSON.stringify(faceInput)}) && document.querySelector(${JSON.stringify(panel)}).textContent.includes('Selected: DejaVuSans.ttf')`, 'standalone font resets collection selection')
+  await upload('[aria-label="TrueType appearance font"]', collectionPath)
+  await until(`document.querySelector(${JSON.stringify(faceInput)})?.value === '0'`, 'new font upload resets face index')
   await setValue(textInput, '\u{10FFFF}')
   await apply()
   await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'missing glyph is refused')
   assert.deepEqual(readFileSync(sourcePath), Buffer.from(source), 'source bytes stay unchanged')
   assert.deepEqual(errors, [])
   assert.deepEqual(postRequests, [])
-  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL/multiscript, missing-glyph refusal)')
+  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL/multiscript, selected TTC face/reset, missing-glyph refusal)')
 } finally {
   socket?.close()
   for (const task of pending.values()) clearTimeout(task.timer)

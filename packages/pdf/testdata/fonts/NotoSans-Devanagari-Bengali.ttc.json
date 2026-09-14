@@ -1,0 +1,11 @@
+{
+  "generator": "scripts/generate-pdf-font-collection.mjs",
+  "format": "TTC 1.0",
+  "faces": [
+    "NotoSansDevanagari-Regular.ttf",
+    "NotoSansBengali-Regular.ttf"
+  ],
+  "sourceCommit": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+  "license": "SIL Open Font License 1.1",
+  "sha256": "8a2053956d05bdb1380ded0be966354bab75534add7ac35fcccc4b284af8e25f"
+}
