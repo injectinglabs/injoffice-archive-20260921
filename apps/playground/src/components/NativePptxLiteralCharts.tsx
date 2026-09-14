@@ -1,6 +1,6 @@
 import {useId,useState} from 'react'
 import type {NativeElement,NativePptxDeck} from '@injoffice/pptx-native'
-import {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_DISCLOSURE,createNativeLiteralAreaPaths,createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
+import {createNativeLiteralRadarPaths,RADAR_PREVIEW_DISCLOSURE,createNativeLiteralBubblePaths,BUBBLE_PREVIEW_DISCLOSURE,createNativeLiteralAreaPaths,createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
 
 export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
  const [enabled,setEnabled]=useState(false)
@@ -17,6 +17,18 @@ export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
    const area=chart.chart.literalArea
    const connected=chart.chart.literalConnected
    if(bubble?.xAxis.labels||bubble?.yAxis.labels||area?.xAxis.labels||area?.yAxis.labels||connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
+   const radar=chart.chart.literalRadar
+   if(radar){
+    if(chart.transform.cx>100000000||chart.transform.cy>100000000)return <p key={chart.id}>{chart.name??chart.id}: radar frame exceeds the qualified angular budget; original preserved.</p>
+    const vectors=createNativeLiteralRadarPaths(radar,chart.transform.cx,chart.transform.cy)
+    return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal {radar.style} radar · preserved, read-only</figcaption>
+     <svg role="img" aria-label={`${chart.name??'Radar chart'}: ${radar.series.length} series. Source values are listed below.`} viewBox={`0 0 ${chart.transform.cx} ${chart.transform.cy}`} style={{width:400,maxWidth:'100%',height:260,overflow:'hidden'}}>
+      <defs><clipPath id={`${clipPrefix}-${chartIndex}`}><rect x={0} y={0} width={chart.transform.cx} height={chart.transform.cy}/></clipPath></defs>
+      <g clipPath={`url(#${clipPrefix}-${chartIndex})`}>{vectors.map((vector,i)=><path key={i} fill={vector.color??'none'} stroke={vector.stroke.color} strokeWidth={vector.stroke.widthEmu} strokeLinecap="butt" strokeLinejoin="round" d={vector.path.map(p=>p.kind==='moveTo'?`M ${p.x} ${p.y}`:p.kind==='lineTo'?`L ${p.x} ${p.y}`:p.kind==='close'?'Z':'').join(' ')}/>)}</g>
+     </svg><p>{RADAR_PREVIEW_DISCLOSURE}</p>
+     <table><caption>Source data (host table, separate from radial labels)</caption><thead><tr><th>Category</th>{radar.series.map(series=><th key={series.index}>{series.title??`Series ${series.index}`}</th>)}</tr></thead><tbody>{radar.categories.map((category,i)=><tr key={i}><th>{category}</th>{radar.series.map(series=><td key={series.index}>{series.values[i]}</td>)}</tr>)}</tbody></table>
+    </figure>
+   }
    if(bubble){
     const vectors=createNativeLiteralBubblePaths(bubble,chart.transform.cx,chart.transform.cy)
     return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal bubble · preserved, read-only</figcaption>

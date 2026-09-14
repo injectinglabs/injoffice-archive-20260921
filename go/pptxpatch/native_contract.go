@@ -306,7 +306,26 @@ type NativeLiteralStackedLine struct {
 	Grouping string `json:"grouping"`
 }
 
+type NativeLiteralRadarSeries struct {
+	Index    int64    `json:"index"`
+	Order    int64    `json:"order"`
+	Title    *string  `json:"title,omitempty"`
+	Values   []string `json:"values"`
+	Color    string   `json:"color"`
+	WidthEMU int64    `json:"widthEmu"`
+	Fill     *string  `json:"fill,omitempty"`
+}
+type NativeLiteralRadar struct {
+	Profile      string                     `json:"profile"`
+	DataOrigin   string                     `json:"dataOrigin"`
+	Style        string                     `json:"style"`
+	Categories   []string                   `json:"categories"`
+	Series       []NativeLiteralRadarSeries `json:"series"`
+	CategoryAxis NativeLiteralBarAxis       `json:"categoryAxis"`
+	ValueAxis    NativeLiteralBarAxis       `json:"valueAxis"`
+}
 type NativeOpaqueChart struct {
+	LiteralRadar       *NativeLiteralRadar       `json:"literalRadar,omitempty"`
 	LiteralStackedBar  *NativeLiteralStackedBar  `json:"literalStackedBar,omitempty"`
 	LiteralStackedLine *NativeLiteralStackedLine `json:"literalStackedLine,omitempty"`
 	LiteralBubble      *NativeLiteralBubble      `json:"literalBubble,omitempty"`
