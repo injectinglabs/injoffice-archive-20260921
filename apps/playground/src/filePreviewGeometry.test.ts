@@ -69,7 +69,7 @@ it('paints all source table backgrounds before overflowing browser text and keep
  const table=deck.slides[0]!.elements.find(e=>e.kind==='table')!
  if(table.kind!=='table')throw Error('table')
  table.graphicFrameLayout='source-anchored-v1';table.compatibility=compatibility
- table.transform={x:127000,y:254000,cx:2000000,cy:2000000,rotationAngle:1800000}
+ table.transform={x:127000,y:254000,cx:2000000,cy:2000000,rotationAngle:0}
  table.table={columnWidths:[2000000],rowHeights:[1000000,1000000],rows:['Overflowing first row','Second row'].map(text=>[{text,fill:'EEEEEE',paragraphs:[{runs:[{text}]}],textBody:{...body,horizontalOverflow:'clip'}}])}
  deck.slides=[deck.slides[0]!];deck.slides[0]!.elements=[table];deck.assets=[]
  const before=JSON.stringify(deck),geometry=await compileFilePreviewGeometry(deck,0),html=renderToStaticMarkup(createElement(PptxFilePreviewVector,{deck,geometry}))
