@@ -9,7 +9,7 @@ export interface NativeWorkbookChartRefusal {readonly slideId:string;readonly ob
 export interface NativeWorkbookChartResolution {readonly charts:readonly NativeResolvedWorkbookChart[];readonly refusals:readonly NativeWorkbookChartRefusal[]}
 function chartReferences(chart:NativePptxInspectedWorkbookChart):readonly ChartWorkbookReference[]{
  const unique=new Map<string,ChartWorkbookReference>()
- for(const series of chart.source.series)for(const ref of [series.titleReference,series.categoryReference,series.xReference,series.valueReference])if(ref)unique.set(`${ref.kind}\0${ref.formula}\0${ref.cachePresent}`,ref)
+ for(const series of chart.source.series)for(const ref of [series.titleReference,series.categoryReference,series.xReference,series.valueReference,series.sizeReference])if(ref)unique.set(`${ref.kind}\0${ref.formula}\0${ref.cachePresent}`,ref)
  return [...unique.values()]
 }
 /** Explicit trusted XLSX injection. Each embedded resource is extracted once;

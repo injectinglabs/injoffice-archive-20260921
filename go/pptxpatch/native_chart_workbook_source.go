@@ -6,19 +6,28 @@ import (
 )
 
 type nativeChartWorkbookSource struct {
-	Family       string
-	Direction    string
-	GapWidth     int64
-	XAxis, YAxis nativeChartAxis
-	Series       []nativeChartWorkbookSeries
-	ExternalData *nativeXMLNode
-	DispBlanksAs *string
+	Family         string
+	Direction      string
+	GapWidth       int64
+	BubbleScale    *int64
+	SizeRepresents string
+	XAxis, YAxis   nativeChartAxis
+	Series         []nativeChartWorkbookSeries
+	ExternalData   *nativeXMLNode
+	DispBlanksAs   *string
 }
 
 // This parallel source descriptor path never edits XML or substitutes literal
 // values into the existing literal-only parser. Rendering awaits an explicit
 // embedded-workbook resolver; all existing literal profiles stay unchanged.
 func extractNativeChartWorkbookSource(payload []byte, part string, d nativeExtractDialect) *nativeChartWorkbookSource {
+	if bubble := extractNativeChartBubbleSource(payload, part, d, true); bubble != nil {
+		out := &nativeChartWorkbookSource{Family: "bubbleChart", BubbleScale: &bubble.BubbleScale, SizeRepresents: bubble.SizeRepresents, XAxis: bubble.XAxis, YAxis: bubble.YAxis, ExternalData: bubble.ExternalData, DispBlanksAs: bubble.DispBlanksAs, Series: []nativeChartWorkbookSeries{}}
+		for _, s := range bubble.Series {
+			out.Series = append(out.Series, nativeChartWorkbookSeries{Index: s.Index, Order: s.Order, Title: s.Title, TitleReference: s.TitleReference, XReference: s.XReference, ValueReference: s.ValueReference, SizeReference: s.SizeReference, Colors: s.Colors})
+		}
+		return out
+	}
 	node, e := parseNativeXML(payload, part)
 	if e != nil || node.Name != (xml.Name{Space: d.chart, Local: "chartSpace"}) {
 		return nil
