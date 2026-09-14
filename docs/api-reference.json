@@ -3049,6 +3049,11 @@
               "name": "renderNativeDocxTextboxPagePreviewV1",
               "kind": "function",
               "signature": "export declare function renderNativeDocxTextboxPagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, evidence: unknown, fontBytes: Uint8Array, outlineProvider: NativeDocxGlyphOutlineProviderV1, runtime?: { fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxTextboxPagePreviewV1>"
+            },
+            {
+              "name": "renderNativeDocxTextboxPagesPreviewV2",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxTextboxPagesPreviewV2(input: NativeDocxPagePaintPrepareInputV1, evidence: unknown, fontBytes: readonly Uint8Array[], outlineProvider: NativeDocxGlyphOutlineProviderV1, runtime?: { fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxTextboxPagesPreviewV2>"
             }
           ]
         },
@@ -3429,6 +3434,11 @@
               "signature": "export declare function decodeNativeDocxTextboxPagePreviewV1(source: unknown, evidence: unknown, input: unknown, expectedFontSHA256: string): NativeDocxTextboxPagePreviewV1"
             },
             {
+              "name": "decodeNativeDocxTextboxPagesPreviewV2",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxPagesPreviewV2(source: unknown, evidence: unknown, input: unknown, expectedFontSHA256s: readonly string[]): NativeDocxTextboxPagesPreviewV2"
+            },
+            {
               "name": "decodeNativeDocxTextboxShapePaintV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxTextboxShapePaintV1(source: unknown, evidence: unknown, index: number, input: unknown, expectedFontSHA256: string): NativeDocxTextboxShapePaintV1"
@@ -3732,6 +3742,16 @@
               "name": "DOCX_TEXTBOX_PAGE_PREVIEW_WARNING",
               "kind": "const",
               "signature": "export declare const DOCX_TEXTBOX_PAGE_PREVIEW_WARNING = \"Read-only approximate textbox composition: one page-relative rectangle anchored before its paragraph text; original drawing restrictions remain.\""
+            },
+            {
+              "name": "DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL: 'injoffice.docx.textbox-page-preview'"
+            },
+            {
+              "name": "DOCX_TEXTBOX_PAGES_PREVIEW_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_TEXTBOX_PAGES_PREVIEW_WARNING: 'Read-only approximate textbox composition in source order; original drawing restrictions remain.'"
             },
             {
               "name": "DOCX_TRANSACTION_ADAPTER_LIMITS",
@@ -4759,6 +4779,11 @@
               "signature": "export interface NativeDocxTextboxPagePreviewV1"
             },
             {
+              "name": "NativeDocxTextboxPagesPreviewV2",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxPagesPreviewV2"
+            },
+            {
               "name": "NativeDocxTextboxShapePaintV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTextboxShapePaintV1"
@@ -4924,6 +4949,11 @@
               "signature": "export declare function prepareNativeRasterResourceV1(partName: string, contentType: 'image/png' | 'image/jpeg', bytes: Uint8Array): NativeDocxPagePaintMediaAssetV1"
             },
             {
+              "name": "projectNativeDocxTextboxPagesV2",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxTextboxPagesV2(source: unknown, evidence: unknown):"
+            },
+            {
               "name": "projectNativeDocxTextboxPageV1",
               "kind": "function",
               "signature": "export declare function projectNativeDocxTextboxPageV1(source: unknown, evidence: unknown):"
@@ -4972,6 +5002,11 @@
               "name": "renderNativeDocxTextboxPagePreviewV1",
               "kind": "function",
               "signature": "export declare function renderNativeDocxTextboxPagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, evidence: unknown, fontBytes: Uint8Array, outlineProvider: NativeDocxGlyphOutlineProviderV1, runtime?: { fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxTextboxPagePreviewV1>"
+            },
+            {
+              "name": "renderNativeDocxTextboxPagesPreviewV2",
+              "kind": "function",
+              "signature": "export declare function renderNativeDocxTextboxPagesPreviewV2(input: NativeDocxPagePaintPrepareInputV1, evidence: unknown, fontBytes: readonly Uint8Array[], outlineProvider: NativeDocxGlyphOutlineProviderV1, runtime?: { fonts?: NativeDocxHostFontsV1; }): Promise<NativeDocxTextboxPagesPreviewV2>"
             },
             {
               "name": "ShapeNativeDocxLinesResult",
@@ -5125,6 +5160,11 @@
               "signature": "export declare function decodeNativeDocxTextboxPagePreviewV1(source: unknown, evidence: unknown, input: unknown, expectedFontSHA256: string): NativeDocxTextboxPagePreviewV1"
             },
             {
+              "name": "decodeNativeDocxTextboxPagesPreviewV2",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxTextboxPagesPreviewV2(source: unknown, evidence: unknown, input: unknown, expectedFontSHA256s: readonly string[]): NativeDocxTextboxPagesPreviewV2"
+            },
+            {
               "name": "decodeNativeDocxTextboxShapePaintV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxTextboxShapePaintV1(source: unknown, evidence: unknown, index: number, input: unknown, expectedFontSHA256: string): NativeDocxTextboxShapePaintV1"
@@ -5193,6 +5233,16 @@
               "name": "DOCX_TEXTBOX_PAGE_PREVIEW_WARNING",
               "kind": "const",
               "signature": "export declare const DOCX_TEXTBOX_PAGE_PREVIEW_WARNING = \"Read-only approximate textbox composition: one page-relative rectangle anchored before its paragraph text; original drawing restrictions remain.\""
+            },
+            {
+              "name": "DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL: 'injoffice.docx.textbox-page-preview'"
+            },
+            {
+              "name": "DOCX_TEXTBOX_PAGES_PREVIEW_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_TEXTBOX_PAGES_PREVIEW_WARNING: 'Read-only approximate textbox composition in source order; original drawing restrictions remain.'"
             },
             {
               "name": "DOCX_TRANSACTION_ADAPTER_LIMITS",
@@ -5535,6 +5585,11 @@
               "signature": "export interface NativeDocxTextboxPagePreviewV1"
             },
             {
+              "name": "NativeDocxTextboxPagesPreviewV2",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextboxPagesPreviewV2"
+            },
+            {
               "name": "NativeDocxTextboxShapePaintV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTextboxShapePaintV1"
@@ -5608,6 +5663,11 @@
               "name": "OFFICE_MUTATION_VERSION",
               "kind": "const",
               "signature": "export declare const OFFICE_MUTATION_VERSION: 1"
+            },
+            {
+              "name": "projectNativeDocxTextboxPagesV2",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxTextboxPagesV2(source: unknown, evidence: unknown):"
             },
             {
               "name": "projectNativeDocxTextboxPageV1",

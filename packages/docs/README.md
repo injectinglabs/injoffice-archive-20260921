@@ -995,14 +995,22 @@ The separate `injoffice.docx.textbox-page-preview` output is approximate and
 read-only, retains all original source diagnostics, and binds the original
 source and geometry. `decodeNativeDocxTextboxPagePreviewV1` is browser-safe and
 checks those joins, font digest, anchor page and page containment. Body, shape,
-font or placement refusal returns no partial composition. Multiple rectangles,
-inline placement, anchors after paragraph text, other wrapping/positioning
+font or placement refusal returns no partial composition. Inline placement,
+anchors after paragraph text, other wrapping/positioning
 policies and unsupported body content remain refused. This does not grant
 mutation capabilities or alter the original strict page-paint contract.
 
+`renderNativeDocxTextboxPagesPreviewV2` on the same Node subpath composes up to
+64 rectangles atomically, with exact font bytes supplied in geometry item order.
+Multiple drawing runs may precede all modeled text in one paragraph, and owners
+may span body pages. Version 2 returns a `textboxes` array in source order;
+`decodeNativeDocxTextboxPagesPreviewV2` validates every placement and font digest.
+Missing, duplicated, reordered or refused rectangles reject the whole preview.
+The version 1 single-rectangle API remains available.
+
 The playground's **Upload to helper and preview page-placed textboxes** action
 uses `/v1/docx/page-preview-textboxes`. It validates the current package and
-embedded-font inventory before mounting the rectangle above the body paint.
+embedded-font inventory before mounting all page rectangles above the body paint in source order.
 Navigation mounts one page at a time; replacing the source clears old pages
 and requires a new explicit upload. `scripts/smoke-docx-textbox-notes-browser.mjs`
 checks this flow, single-paragraph note splitting, and three-note continuation

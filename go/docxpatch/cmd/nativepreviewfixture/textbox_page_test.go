@@ -7,12 +7,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/injectinglabs/injoffice/go/docxpatch"
 )
 
-func TestNativeTextboxPageSource(t *testing.T) {
+func TestNativeTextboxPageSource(t *testing.T)          { testNativeTextboxPageSource(t, 1) }
+func TestNativeMultipleTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2) }
+func testNativeTextboxPageSource(t *testing.T, count int) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
 		t.Skip("optional installed DejaVu font unavailable")
@@ -47,6 +50,12 @@ func TestNativeTextboxPageSource(t *testing.T) {
 	}
 	parts["word/styles.xml"] = []byte(`<w:styles xmlns:w="` + wns + `"/>`)
 	parts["word/document.xml"] = []byte(`<w:document xmlns:w="` + wns + `"><w:body><w:p><w:r>` + string(drawing) + `</w:r><w:r><w:rPr><w:rFonts w:ascii="DejaVu Sans" w:hAnsi="DejaVu Sans"/><w:sz w:val="24"/></w:rPr><w:t>Body text with a page-placed rectangle.</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`)
+	if count == 2 {
+		second := strings.NewReplacer(`id="1"`, `id="2"`, `name="Rectangle"`, `name="Second rectangle"`, `>914400<`, `>3657600<`, `>1828800<`, `>2743200<`, `FFF2CC`, `DDEEFF`, `Rectangle source`, `Second rectangle`).Replace(string(drawing))
+		paragraph := `<w:p><w:r>` + second + `</w:r><w:r><w:rPr><w:rFonts w:ascii="DejaVu Sans" w:hAnsi="DejaVu Sans"/><w:sz w:val="24"/></w:rPr><w:t>Body text on the second textbox page.</w:t></w:r></w:p>`
+		main := strings.Replace(string(parts["word/document.xml"]), `<w:sectPr>`, paragraph+`<w:sectPr>`, 1)
+		parts["word/document.xml"] = []byte(strings.Replace(main, `w:bottom="1440"`, `w:bottom="14000"`, 1))
+	}
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for name, data := range parts {
@@ -77,8 +86,13 @@ func TestNativeTextboxPageSource(t *testing.T) {
 	if err := json.Unmarshal(inspection, &inspected); err != nil {
 		t.Fatal(err)
 	}
-	if len(inspected.Geometry.Items) != 1 || inspected.Geometry.Items[0].PageAnchor == nil || inspected.Geometry.Items[0].Geometry == nil {
+	if len(inspected.Geometry.Items) != count || inspected.Geometry.OmittedCount != 0 {
 		t.Fatalf("missing page geometry: %s", inspection)
+	}
+	for _, item := range inspected.Geometry.Items {
+		if item.PageAnchor == nil || item.Geometry == nil || item.Owner.Status != "supported" {
+			t.Fatal("incomplete textbox source")
+		}
 	}
 	settings, err := docxpatch.ExtractNativePaginationSettingsV1(source)
 	if err != nil {
@@ -92,7 +106,11 @@ func TestNativeTextboxPageSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out := os.Getenv("INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR"); out != "" {
+	env := "INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR"
+	if count == 2 {
+		env = "INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR"
+	}
+	if out := os.Getenv(env); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {
 			t.Fatal(err)
 		}

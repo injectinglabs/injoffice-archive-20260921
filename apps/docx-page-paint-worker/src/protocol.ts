@@ -1,4 +1,4 @@
-import {renderNativeDocxTextboxPagePreviewV1} from '@injoffice/docs/native-textbox-page-compiler'
+import {renderNativeDocxTextboxPagePreviewV1,renderNativeDocxTextboxPagesPreviewV2} from '@injoffice/docs/native-textbox-page-compiler'
 import {decodeNativeDocxTextboxGeometryV1} from '@injoffice/docs/native-docx'
 import {
   DOCX_INLINE_IMAGE_LIMITS,
@@ -167,13 +167,17 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       }
       if(textbox){
         const evidence=decodeNativeDocxTextboxGeometryV1(input.document,value.input.evidence)
-        const family=evidence.items.length===1?evidence.items[0]?.geometry?.font_family:undefined
         const inventory=decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
-        const faces=inventory.families.flatMap(f=>f.faces).filter(f=>f.family===family&&f.weight===400&&f.style==='normal'&&(f.stretch??100)===100&&f.source.face_slot==='embedRegular')
-        if(faces.length!==1)throw new TypeError('Textbox page preview requires one exact embedded regular font')
-        const face=faces[0]!,asset=input.font_assets.find(a=>a.face_id===face.face_id&&a.content_digest===face.source.content_sha256&&a.resource_id===face.source.resource_id)
-        if(!asset)throw new TypeError('Textbox font bytes do not match the source inventory')
-        const preview=await renderNativeDocxTextboxPagePreviewV1(input,evidence,asset.bytes,outlineProvider,{fonts})
+        const textboxFonts=evidence.items.map(item=>{
+          const faces=inventory.families.flatMap(f=>f.faces).filter(f=>f.family===item.geometry?.font_family&&f.weight===400&&f.style==='normal'&&(f.stretch??100)===100&&f.source.face_slot==='embedRegular')
+          if(faces.length!==1)throw new TypeError('Each textbox requires one exact embedded regular font')
+          const face=faces[0]!,asset=input.font_assets.find(a=>a.face_id===face.face_id&&a.content_digest===face.source.content_sha256&&a.resource_id===face.source.resource_id)
+          if(!asset)throw new TypeError('Textbox font bytes do not match the source inventory')
+          return asset.bytes
+        })
+        const preview=evidence.items.length===1
+          ? await renderNativeDocxTextboxPagePreviewV1(input,evidence,textboxFonts[0]!,outlineProvider,{fonts})
+          : await renderNativeDocxTextboxPagesPreviewV2(input,evidence,textboxFonts,outlineProvider,{fonts})
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
       const runtime = { createShaper: workerShaper, fonts, fontSizePolicy }

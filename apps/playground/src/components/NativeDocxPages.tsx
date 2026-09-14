@@ -1,4 +1,4 @@
-import {decodeTextboxPageResponse,NativeDocxTextboxOnPage} from './NativeDocxTextboxPage'
+import {decodeTextboxesPageResponse,NativeDocxTextboxOnPage} from './NativeDocxTextboxPage'
 import type {NativeDocxTextboxPagePreviewV1} from '@injoffice/docs/native-docx'
 import { useEffect, useRef, useState } from 'react'
 import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
@@ -106,7 +106,7 @@ export function nativeDocxFontSubstitutionSummary(value:NativeDocxFontSubstituti
 }
 
 export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint8Array; packageDigest: string; apiBase: string }) {
-  const [paint, setPaint] = useState<(Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources'> & { approximate: boolean; reasons: readonly string[]; textbox?:NativeDocxTextboxPagePreviewV1['textbox']; fontDetails?:readonly string[] }) | null>(null)
+  const [paint, setPaint] = useState<(Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources'> & { approximate: boolean; reasons: readonly string[]; textboxes?:NativeDocxTextboxPagePreviewV1['textbox'][]; fontDetails?:readonly string[] }) | null>(null)
   const consent = `Native pages require uploading this document to ${apiBase}. Nothing is uploaded until you choose the button below.`
   const [message, setMessage] = useState(consent)
   const [pageIndex, setPageIndex] = useState(0)
@@ -130,8 +130,8 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
       if (!response.ok) throw new Error(typeof value.error === 'string' ? value.error : 'Native preview was refused by the helper.')
       let next: NonNullable<typeof paint>
       if(textboxes){
-        const decoded=decodeTextboxPageResponse(value,packageDigest)
-        next={...decoded.body_paint,approximate:true,reasons:[decoded.warning,...decoded.source_diagnostics.map(d=>d.message)],textbox:decoded.textbox}
+        const decoded=decodeTextboxesPageResponse(value,packageDigest)
+        next={...decoded.body_paint,approximate:true,reasons:[decoded.warning,...decoded.source_diagnostics.map(d=>d.message)],textboxes:decoded.textboxes}
       } else if (fontSubstitution) {
         const decoded=decodeNativeDocxFontSubstitutionPreviewV1(value)
         if(decoded.source.package_sha256!==packageDigest)throw new Error('Font substitution pages do not match the currently opened document.')
@@ -172,7 +172,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
     <DsButton disabled={busy} onClick={() => void render(true)}>Upload to helper and try approximate pages</DsButton>
     <DsButton disabled={busy} onClick={() => void render(false,true)}>Upload to helper and allow operator font substitution</DsButton>
     <DsButton disabled={busy} onClick={() => void render(false,false,true)}>Upload to helper and preview page-placed textboxes</DsButton>
-    <p>Textbox pages preview one page-relative rectangle using its exact embedded regular font. The rectangle appears above body content at its authored position. Other textbox layouts remain unavailable. The preview is approximate and read-only.</p>
+    <p>Textbox pages preview page-relative rectangles using each exact embedded regular font. Rectangles appear above body content at their authored positions, in document order. Other textbox layouts remain unavailable. The preview is approximate and read-only.</p>
     <p>Font substitution is a separate, read-only preview using explicit helper-operator mappings and supplied fonts. Missing Latin fonts may change layout. Eligible older Word settings, automatic table borders, missing font sizes and header/footer page numbers can be combined when their original source is verified. Each applied policy is disclosed below. No fonts or source names are changed in the document.</p>
     <p>Approximate pages may use current layout rules for eligible older Word settings, an explicit 11 pt host default where the source has no font size, and black automatic table borders on a source-qualified white background. This does not reproduce older Word pagination. Each applied policy is disclosed below. Other unsupported features remain refused; the original file is unchanged.</p>
     {paint?.approximate && <aside aria-label="Approximate page limitations"><strong>Approximate · read-only · not Word-validated</strong><ul>{paint.reasons.slice(0, 20).map((reason, index) => <li key={index}>{reason}</li>)}</ul>{paint.reasons.length > 20 && <p>{paint.reasons.length - 20} additional limitations.</p>}</aside>}
@@ -190,7 +190,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
             case 'paint_inline_image': { const asset = paint.resources.find((asset) => asset.id === command.asset_id); return asset ? <NativeDocxImage key={command.id} command={command} base64={asset.bytes_base64} contentType={asset.content_type} onError={imageFailed} /> : null }
           }
         })}
-        {paint.textbox&&<NativeDocxTextboxOnPage textbox={paint.textbox} pageID={page.id}/>}
+        {paint.textboxes?.map(textbox=><NativeDocxTextboxOnPage key={textbox.paint.diagnostic_id} textbox={textbox} pageID={page.id}/>)}
       </svg><figcaption>{paint.approximate ? 'Approximate, read-only · ' : ''}Page {page.ordinal + 1}</figcaption>
     </figure>)}
   </section>

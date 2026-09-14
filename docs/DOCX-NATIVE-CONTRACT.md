@@ -784,3 +784,14 @@ The distinct read-only approximate output retains original diagnostics and a
 canonical source digest. Browser decoding joins body provenance, geometry,
 font digest and placement back to the current inspected source. The local
 rectangle evidence alone still grants no page layout or mutation capability.
+
+The plural `renderNativeDocxTextboxPagesPreviewV2` API uses the same source and
+page-offset policy for 1–64 rectangles. It requires complete geometry and one
+exact font per evidence item. Multiple drawings may precede all modeled text
+in an owner paragraph. Every selected drawing restriction is removed only from
+the internal body copy; any unselected drawing prevents composition. Version 2
+contains a source-ordered `textboxes` array, with each owner’s first body line
+selecting its page. Browser decoding requires every source rectangle exactly
+once, its font digest, coordinates and page containment. Caller inputs are
+snapshotted before asynchronous body outlining. The helper uses version 2 for
+multiple rectangles, while retaining version 1 for a single rectangle.
