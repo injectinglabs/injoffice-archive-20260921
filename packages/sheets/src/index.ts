@@ -339,6 +339,19 @@ export {decodeNativeSheetPrintTitlesV1,type NativeSheetPrintTitlesV1,type Native
 export {selectNativeSheetPrintAreaV1} from './nativeSheetPrintAreaSelectionV1.js'
 export {decodeNativeSheetPrintAreaSetsV1,type NativeSheetPrintAreaSetV1} from './nativeSheetPrintAreaSetsV1.js'
 export {selectNativeSheetPrintAreaSetV1,compileNativeSheetPrintAreaSetPreviewV1,type NativeSheetPrintAreaSetPreviewV1} from './nativeSheetPrintAreaSetPreviewV1.js'
+export {
+  compileNativeSheetPrintPagePreviewV1,
+  NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI,
+  NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL,
+} from './nativeSheetPrintPagePreviewV1.js'
+export type {
+  NativeSheetPrintPageCssRectV1,
+  NativeSheetPrintPagePaintV1,
+  NativeSheetPrintPagePreviewOptionsV1,
+  NativeSheetPrintPagePreviewV1,
+  NativeSheetPrintPageRasterPageV1,
+  NativeSheetPrintPageRegionV1,
+} from './nativeSheetPrintPagePreviewV1.js'
 export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'
