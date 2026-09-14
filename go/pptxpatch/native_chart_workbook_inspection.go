@@ -41,6 +41,8 @@ type NativePPTXInspectedWorkbookChart struct {
 	Workbook            NativePPTXChartWorkbookBinding `json:"workbook"`
 }
 type NativePPTXWorkbookChartSource struct {
+	Grouping        string                          `json:"grouping,omitempty"`
+	Overlap         *int64                          `json:"overlap,omitempty"`
 	BubbleScale     *int64                          `json:"bubbleScale,omitempty"`
 	SizeRepresents  string                          `json:"sizeRepresents,omitempty"`
 	Family          string                          `json:"family"`
@@ -97,6 +99,10 @@ func nativeWorkbookPublicReference(ref *nativeChartReference) *NativePPTXChartWo
 func nativeWorkbookPublicSource(source *nativeChartWorkbookSource) NativePPTXWorkbookChartSource {
 	family := map[string]string{"barChart": "bar", "lineChart": "line", "scatterChart": "scatter", "bubbleChart": "bubble"}[source.Family]
 	result := NativePPTXWorkbookChartSource{Family: family, BubbleScale: source.BubbleScale, SizeRepresents: source.SizeRepresents, Series: []NativePPTXWorkbookChartSeries{}, DispBlanksAs: source.DispBlanksAs}
+	if source.Grouping == "stacked" || source.Grouping == "percentStacked" {
+		result.Grouping = source.Grouping
+		result.Overlap = source.Overlap
+	}
 	result.XAxis = nativeLiteralChartAxis(source.XAxis, source.XAxis.Min != "")
 	result.YAxis = nativeLiteralChartAxis(source.YAxis, source.YAxis.Min != "")
 	if family == "bar" {
