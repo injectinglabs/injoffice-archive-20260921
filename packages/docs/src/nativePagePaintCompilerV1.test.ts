@@ -2449,11 +2449,24 @@ describe('native DOCX page-paint compiler v1', () => {
     ;(requiresContinuation.document as NativeDocxDocumentV1).sections[0]!.page.orientation = 'landscape'
     const contentRun = (requiresContinuation.document as NativeDocxDocumentV1).notes.find((story) => story.note_role === 'content')!.blocks[0]!.paragraph!.runs.find((run) => run.kind === 'text')!
     contentRun.text = 'continued note content '.repeat(20)
-    const refused = await prepareNativeDocxPagePaintV1(requiresContinuation)
-    expect(refused.page_paint_request.paginated_layout).toEqual(expect.objectContaining({ status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'note-overflow-unsupported' })]) }))
+    const continued = await prepareNativeDocxPagePaintV1(requiresContinuation)
+    const layout = continued.page_paint_request.paginated_layout
+    expect(layout.status).toBe('paginated')
+    if(layout.status!=='paginated')return
+    expect(layout.pages.length).toBeGreaterThan(1)
+    const originalLines=continued.page_paint_request.pagination_request.shaped_lines.paragraphs.find(p=>p.paragraph_id==='paragraph:footnote-1')!.lines
+    expect(layout.pages.flatMap(p=>p.note_stories!.filter(n=>n.note_role==='content').flatMap(n=>n.lines.map(l=>l.line_id)))).toEqual(originalLines.map(l=>l.id))
+    const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const completed = await completeNativeDocxPagePaintV1({prepared:continued,outline_results:continued.outline_requests.map(request=>{
+      const outline=provider.outline(request.glyph_id)
+      return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}
+    })})
+    expect(completed.page_paint_output.status).toBe('painted')
+    expect(completed.page_paint_output.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id==='run:footnote-label-1')).toHaveLength(1)
+    ;(requiresContinuation.document as NativeDocxDocumentV1).unsupported.push(structuredClone(document.unsupported.at(-1)!))
+    const refused=await prepareNativeDocxPagePaintV1(requiresContinuation)
+    expect(refused.page_paint_request.paginated_layout).toMatchObject({status:'refused',pages:[]})
     expect(refused.outline_requests).toEqual([])
-    const completed = await completeNativeDocxPagePaintV1({ prepared: refused, outline_results: [] })
-    expect(completed.page_paint_output).toEqual(expect.objectContaining({ status: 'refused', pages: [] }))
   })
 })
 

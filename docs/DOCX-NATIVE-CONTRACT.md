@@ -576,8 +576,8 @@ selected header or footer is diagnosed and refuses the complete paint result;
 it is never omitted while body pages are published. Story-scoped asset
 selection and relationship closure require a later contract version.
 
-Notes requiring body reflow or continuation outside the bounded profiles below,
-or any within-paragraph note splitting, refuse atomically. So do custom
+Notes requiring body reflow or continuation outside the profiles below
+refuse atomically. So do custom
 numbering/restarts/positions, ambiguous/duplicate/missing references, unpaired
 labels, duplicate IDs or relationship drift, cycles, nested tables, drawings,
 fields, and unknown note markup. Exact Word `w:separator` and
@@ -591,25 +591,27 @@ the compiler performs one bounded shaping retry only after pagination emits
 Endnote continuation admits exactly one content endnote in one single-column
 section with no footnotes. Every note paragraph must have zero before/after
 spacing, no `keep_next`, no `page_break_before`, and no fields. Multiline
-paragraphs require resolved `keep_lines=true`; single-line paragraphs are
-already indivisible. The paginator greedily places complete paragraphs, adding
-a page when the next paragraph plus the separator cannot fit. It refuses a
-paragraph that cannot fit on an empty page. The first slice uses the ordinary
+paragraphs with resolved `keep_lines=true` remain indivisible. Other paragraphs
+may split at exact shaped-line boundaries. Default/enabled widow control
+requires at least two lines on each side of an internal split; explicit false
+permits one-line slices. The paginator greedily fills the available area and
+backs up to a legal boundary, adding a page when the next line group plus its
+separator cannot fit. An unsatisfiable keep/widow group refuses atomically. The first slice uses the ordinary
 separator even when moved to a fresh page; only later slices of the same note
 use the source-bound continuation sentinel. Custom continuation notices remain
 unsupported source semantics.
 
 Footnote continuation also admits one content footnote in one single-column
 section, with paragraph-only body content and its reference on the final body
-page. It uses the same complete-paragraph constraints as endnote continuation.
-The first paragraph and ordinary separator must fit below the existing body
-on the reference page. Complete note paragraphs fill the available note area;
-remaining paragraphs continue onto note-only pages with the authored
+page. It uses the same source line and keep/widow constraints as endnotes.
+The first legal line group and ordinary separator must fit below the existing
+body on the reference page. Note lines fill the available note area;
+remaining lines continue onto note-only pages with the authored
 continuation separator. Every footnote slice is aligned to the page body bottom.
 The source label appears only in its original paragraph. Missing or unsupported
-activated separators, an oversized paragraph, and any failed replay discard
-all pages. Carried footnotes competing with later body pages, multiple continued
-notes, and within-paragraph splits remain outside this profile.
+activated separators, an unsatisfiable line group, and any failed replay discard
+all pages. Carried footnotes competing with later body pages and multiple
+continued notes remain outside this profile.
 
 Slices retain the existing page/story placement IDs and full source line
 identities. Content lines and the original label occur exactly once across
