@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse,nativeDocxFontSubstitutionSummary } from './NativeDocxPages'
+import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse,nativeDocxFontSubstitutionSummary, nativeDocxTableBorderRect, NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS } from './NativeDocxPages'
 
 describe('native document page viewer', () => {
   it('keeps the persistent font warning and deduplicated selections separate from technical evidence',()=>{
@@ -53,6 +53,14 @@ describe('native document page viewer', () => {
       expect(markup).toContain('does not reproduce older Word pagination')
       expect(fetch).not.toHaveBeenCalled()
     } finally { vi.unstubAllGlobals() }
+  })
+  it('paints hairline table borders as 1 CSS-pixel axis-aligned rects', () => {
+    const hairline = nativeDocxTableBorderRect({ x1_millipoints: 70500, y1_millipoints: 70500, x2_millipoints: 70500 + 1510 * 50, y2_millipoints: 70500, width_millipoints: 500 })
+    expect(hairline).toEqual({ x: 70500, y: 70500, width: 1510 * 50, height: NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS })
+    const vertical = nativeDocxTableBorderRect({ x1_millipoints: 65250, y1_millipoints: 70500, x2_millipoints: 65250, y2_millipoints: 70500 + 18000, width_millipoints: 500 })
+    expect(vertical).toEqual({ x: 65250, y: 70500, width: NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS, height: 18000 })
+    const thick = nativeDocxTableBorderRect({ x1_millipoints: 0, y1_millipoints: 0, x2_millipoints: 7500, y2_millipoints: 0, width_millipoints: 1500 })
+    expect(thick.height).toBe(1500)
   })
   it('replays numeric native path coordinates without HTML injection', () => {
     expect(nativeDocxSVGPath([{ kind: 'move_to', x_millipoints: 5, y_millipoints: 6 }, { kind: 'quadratic_to', control_x_millipoints: 1, control_y_millipoints: 2, x_millipoints: 3, y_millipoints: 4 }, { kind: 'close_path' }])).toBe('M5 6 Q1 2 3 4 Z')
