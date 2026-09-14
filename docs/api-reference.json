@@ -4849,6 +4849,16 @@
               "signature": "export interface NativeTextboxPageAnchorV1"
             },
             {
+              "name": "NativeTextboxPositionAnchor",
+              "kind": "type",
+              "signature": "export type NativeTextboxPositionAnchor = NativeTextboxPageAnchorV1 | NativeTextboxRelativeAnchorV2"
+            },
+            {
+              "name": "NativeTextboxRelativeAnchorV2",
+              "kind": "type",
+              "signature": "export interface NativeTextboxRelativeAnchorV2 extends Omit<NativeTextboxPageAnchorV1, 'policy'>"
+            },
+            {
               "name": "newCommentEntry",
               "kind": "function",
               "signature": "export declare function newCommentEntry(author: string, text: string, parentId?: string): CommentEntry"
@@ -5653,6 +5663,16 @@
               "name": "NativeTextboxPageAnchorV1",
               "kind": "type",
               "signature": "export interface NativeTextboxPageAnchorV1"
+            },
+            {
+              "name": "NativeTextboxPositionAnchor",
+              "kind": "type",
+              "signature": "export type NativeTextboxPositionAnchor = NativeTextboxPageAnchorV1 | NativeTextboxRelativeAnchorV2"
+            },
+            {
+              "name": "NativeTextboxRelativeAnchorV2",
+              "kind": "type",
+              "signature": "export interface NativeTextboxRelativeAnchorV2 extends Omit<NativeTextboxPageAnchorV1, 'policy'>"
             },
             {
               "name": "OFFICE_MUTATION_PROTOCOL",

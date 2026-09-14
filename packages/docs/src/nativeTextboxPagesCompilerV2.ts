@@ -1,3 +1,4 @@
+import {resolveTextboxPosition} from './nativeTextboxPositionV2.js'
 /** Node-only atomic composition of source-qualified page textboxes. */
 import {prepareNativeDocxPagePaintV1,type NativeDocxPagePaintPrepareInputV1,type NativeDocxHostFontsV1} from './nativePagePaintCompilerV1.js'
 import {compileNativeDocxPagePaintV1,type NativeDocxGlyphOutlineProviderV1} from './nativePagePaintV1.js'
@@ -23,7 +24,8 @@ export async function renderNativeDocxTextboxPagesPreviewV2(input:NativeDocxPage
  const textboxes=boxes.map(({item,index,paint})=>{
   const page=body.pages.find(p=>p.lines.some(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0))
   if(!page)throw new TypeError('Textbox anchor paragraph has no page')
-  return {textbox_index:index,page_id:page.id,x_millipoints:item.page_anchor!.x_emu*10/127,y_millipoints:item.page_anchor!.y_emu*10/127,paint}
+  const {x,y}=resolveTextboxPosition(projection.document,item,page,paint)
+  return {textbox_index:index,page_id:page.id,x_millipoints:x,y_millipoints:y,paint}
  })
  return decodeNativeDocxTextboxPagesPreviewV2(source,projection.geometry,{protocol:DOCX_TEXTBOX_PAGES_PREVIEW_PROTOCOL,version:2,fidelity:'approximate',read_only:true,warning:DOCX_TEXTBOX_PAGES_PREVIEW_WARNING,source_sha256:nativeTextboxGeometryDigestV1(source),source_diagnostics:projection.source_diagnostics,body_paint:body,textboxes},digests)
 }

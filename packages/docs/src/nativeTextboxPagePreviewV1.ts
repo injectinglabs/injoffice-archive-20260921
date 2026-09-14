@@ -14,7 +14,7 @@ export function projectNativeDocxTextboxPageV1(source:unknown,evidence:unknown){
  if(joined.items.length!==1||joined.omitted_count!==0)throw new TypeError('Textbox pages require one complete rectangle')
  const item=joined.items[0]!,position=item.page_anchor,p=document.body.blocks.find(b=>b.id===item.owner.paragraph_id)?.paragraph
  const diagnostic=document.unsupported.find(d=>d.id===item.owner.diagnostic_id)
- if(!position||!item.geometry||!p||diagnostic?.code!=='PICTURE_GRAPHIC_REQUIRED'||document.unsupported.some(d=>d.capability==='drawings'&&d.id!==diagnostic.id))throw new TypeError('Unsupported textbox page source')
+ if(!position||position.policy!=='page-offset-no-wrap-v1'||!item.geometry||!p||diagnostic?.code!=='PICTURE_GRAPHIC_REQUIRED'||document.unsupported.some(d=>d.capability==='drawings'&&d.id!==diagnostic.id))throw new TypeError('Unsupported textbox page source')
  if(!position.source_anchor.path.startsWith(p.anchor.path+'/w:r[1]/w:drawing[1]/')||p.runs.some(r=>r.anchor.start_byte<=position.source_anchor.end_byte))throw new TypeError('Textbox must precede all text in its anchor paragraph')
  const source_diagnostics=structuredClone(document.unsupported)
  document.unsupported=document.unsupported.filter(d=>d.id!==diagnostic.id)

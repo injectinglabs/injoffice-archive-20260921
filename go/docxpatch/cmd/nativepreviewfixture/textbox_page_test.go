@@ -15,7 +15,8 @@ import (
 
 func TestNativeTextboxPageSource(t *testing.T)          { testNativeTextboxPageSource(t, 1) }
 func TestNativeMultipleTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2) }
-func testNativeTextboxPageSource(t *testing.T, count int) {
+func TestNativeRelativeTextboxPagesSource(t *testing.T) { testNativeTextboxPageSource(t, 2, true) }
+func testNativeTextboxPageSource(t *testing.T, count int, relative ...bool) {
 	font, err := os.ReadFile("../../../../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
 	if os.IsNotExist(err) {
 		t.Skip("optional installed DejaVu font unavailable")
@@ -55,6 +56,14 @@ func testNativeTextboxPageSource(t *testing.T, count int) {
 		paragraph := `<w:p><w:r>` + second + `</w:r><w:r><w:rPr><w:rFonts w:ascii="DejaVu Sans" w:hAnsi="DejaVu Sans"/><w:sz w:val="24"/></w:rPr><w:t>Body text on the second textbox page.</w:t></w:r></w:p>`
 		main := strings.Replace(string(parts["word/document.xml"]), `<w:sectPr>`, paragraph+`<w:sectPr>`, 1)
 		parts["word/document.xml"] = []byte(strings.Replace(main, `w:bottom="1440"`, `w:bottom="14000"`, 1))
+	}
+	if len(relative) > 0 {
+		main := string(parts["word/document.xml"])
+		main = strings.Replace(main, `<wp:positionH relativeFrom="page"><wp:posOffset>914400</wp:posOffset>`, `<wp:positionH relativeFrom="margin"><wp:align>center</wp:align>`, 1)
+		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>1828800</wp:posOffset>`, `<wp:positionV relativeFrom="page"><wp:align>center</wp:align>`, 1)
+		main = strings.Replace(main, `<wp:positionH relativeFrom="page"><wp:posOffset>3657600</wp:posOffset>`, `<wp:positionH relativeFrom="column"><wp:posOffset>-457200</wp:posOffset>`, 1)
+		main = strings.Replace(main, `<wp:positionV relativeFrom="page"><wp:posOffset>2743200</wp:posOffset>`, `<wp:positionV relativeFrom="paragraph"><wp:posOffset>914400</wp:posOffset>`, 1)
+		parts["word/document.xml"] = []byte(main)
 	}
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
@@ -109,6 +118,9 @@ func testNativeTextboxPageSource(t *testing.T, count int) {
 	env := "INJOFFICE_TEXTBOX_PAGE_EVIDENCE_DIR"
 	if count == 2 {
 		env = "INJOFFICE_TEXTBOX_PAGES_EVIDENCE_DIR"
+	}
+	if len(relative) > 0 {
+		env = "INJOFFICE_TEXTBOX_POSITION_EVIDENCE_DIR"
 	}
 	if out := os.Getenv(env); out != "" {
 		if err := os.MkdirAll(out, 0755); err != nil {

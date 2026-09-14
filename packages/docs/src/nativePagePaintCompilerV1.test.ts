@@ -2790,4 +2790,42 @@ describe('source-anchored textbox page composition',()=>{
   await expect(legacy(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow()
  },15000)
 
+ it('resolves source margins, columns, paragraphs, lines and character offsets',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {decodeNativeDocxTextboxPagesPreviewV2:decode}=await import('./nativeTextboxPagesPreviewV2.js')
+  for(const [h,v] of [['margin','margin'],['column','paragraph'],['character','line']] as const){
+   const f=multipleTextboxFixture(true)
+   for(const d of f.document.unsupported)d.code='FLOATING_DRAWING_SEMANTICS_PRESERVED'
+   for(const item of f.evidence.items)item.page_anchor={...item.page_anchor!,policy:'relative-position-no-wrap-v2',horizontal_relative:h,vertical_relative:v,x_emu:-457200,y_emu:914400}
+   const output=await render(f.input,f.evidence,[FONT_BYTES,FONT_BYTES],provider)
+   for(const [i,box] of output.textboxes.entries()){
+    const page=output.body_paint.pages[i]!,line=page.lines.find(l=>l.region==='body')!
+    expect(box.x_millipoints).toBe((h==='character'?line.x_millipoints:72000)-36000)
+    expect(box.y_millipoints).toBe((v==='margin'?72000:line.y_millipoints)+72000)
+   }
+   expect(decode(f.document,f.evidence,output,[FONT_DIGEST,FONT_DIGEST])).toEqual(output)
+   const bad=structuredClone(output);bad.textboxes[1]!.y_millipoints+=72000
+   expect(()=>decode(f.document,f.evidence,bad,[FONT_DIGEST,FONT_DIGEST])).toThrow()
+  }
+ },20000)
+ it('aligns against source page and margins and clips page-edge strokes without shifting geometry',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  const {renderNativeDocxTextboxPagePreviewV1:legacy}=await import('./nativeTextboxPageCompilerV1.js')
+  for(const [base,h,v,x,y] of [['page','left','top',0,0],['page','right','bottom',396000,720000],['margin','center','center',198000,360000]] as const){
+   const f=textboxFixture(),p=f.evidence.items[0]!.page_anchor!
+   f.evidence.items[0]!.page_anchor={...p,policy:'relative-position-no-wrap-v2',horizontal_relative:base,vertical_relative:base,horizontal_align:h,vertical_align:v,x_emu:0,y_emu:0,horizontal_anchor:{...p.horizontal_anchor,path:p.horizontal_anchor.path.replace('posOffset','align')},vertical_anchor:{...p.vertical_anchor,path:p.vertical_anchor.path.replace('posOffset','align')}}
+   const output=await render(f.input,f.evidence,[FONT_BYTES],provider)
+   expect(output.textboxes[0]).toMatchObject({x_millipoints:x,y_millipoints:y})
+   await expect(legacy(f.input,f.evidence,FONT_BYTES,provider)).rejects.toThrow()
+  }
+ },20000)
+ it('refuses invalid relative axes, ambiguous alignments and off-page signed offsets',async()=>{
+  const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
+  for(const change of [{horizontal_relative:['page']},{vertical_align:['top']},{horizontal_relative:'paragraph'},{vertical_relative:'column'},{horizontal_align:'center'},{x_emu:-914527},{y_emu:-1828800},{horizontal_relative:'character',horizontal_align:'right',x_emu:0}]){
+   const f=textboxFixture(),p={...f.evidence.items[0]!.page_anchor!,policy:'relative-position-no-wrap-v2',horizontal_relative:'margin',vertical_relative:'paragraph',...change}
+   f.evidence.items[0]!.page_anchor=p as import('./nativeTextboxPageAnchorV1.js').NativeTextboxPositionAnchor
+   await expect(render(f.input,f.evidence,[FONT_BYTES],provider)).rejects.toThrow()
+  }
+ },20000)
+
 })
