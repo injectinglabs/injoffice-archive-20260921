@@ -185,3 +185,84 @@ export function decodeXlsxSourceStylePreviewV2(json: string, packageSHA256: stri
   }
   return Object.freeze({ ...preview, grid })
 }
+
+function optionalShape<R extends Record<string, Read<unknown>>, O extends Record<string, Read<unknown>>>(required: R, optional: O): Read<{ readonly [K in keyof R]: ReturnType<R[K]> } & { readonly [K in keyof O]?: ReturnType<O[K]> }> {
+  return value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return fail()
+    const record = value as Record<string, unknown>, output: Record<string, unknown> = {}
+    for (const key of Object.keys(record)) if (!Object.hasOwn(required, key) && !Object.hasOwn(optional, key)) return fail()
+    for (const [key, read] of Object.entries(required)) output[key] = read(record[key])
+    for (const [key, read] of Object.entries(optional)) if (Object.hasOwn(record, key)) output[key] = read(record[key])
+    return Object.freeze(output) as ReturnType<ReturnType<typeof optionalShape<R, O>>>
+  }
+}
+const readRichRunStyle = optionalShape({ text: string(2048), properties: oneOf('direct', 'cell-inherited'), omitted: array(oneOf('font-family-hint', 'baseline', 'strike-false'), 3) }, {
+  font_name: string(128, /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/), font_size_points: number(1, 409, false), font_color: rgb,
+  bold: boolean, italic: boolean, underline: literal('none'), underline_origin: literal('explicit-val'),
+})
+const readRichSource = shape({
+  protocol: literal('injoffice.xlsx.rich-source-preview'), version: literal(1), read_only: literal(true), fidelity: literal('approximate'),
+  package_sha256: hash, workbook_part: string(1024), styles_part: string(1024), styles_sha256: hash, worksheet_sha256: hash, strict_error: string(4096),
+  parent_count: shape({ table: literal('cellStyleXfs'), declaration: literal('absent'), observed: number(1, 128) }),
+  styles: array(readStyle, 128, 1), unused_style_ids: array(id, 128, 1), sheet: readSheet,
+  rich_cells: array(shape({ ref: sourceRef, style_id: id, text: string(2048), runs: array(shape({ start: number(0, 2048), end: number(1, 2048), style: readRichRunStyle }), 64, 1) }), 256, 1),
+  omitted_rows: array(shape({ index: number(0, 127), size: number(Number.MIN_VALUE, 409, false) }), 128),
+  omitted_columns: array(shape({ index: number(0, 31), size: number(Number.MIN_VALUE, 255, false) }), 32), warnings,
+})
+export type XlsxRichSourcePreviewV1 = ReturnType<typeof readRichSource>
+export type XlsxRichSourceRunV1 = ReturnType<typeof readRichRunStyle>
+
+/** Decode only trusted read-only worker output. The source hashes are joins,
+ * not signatures for arbitrary JSON. No native model or edit authority exists. */
+export function decodeXlsxRichSourcePreviewV1(json: string, packageSHA256: string): XlsxRichSourcePreviewV1 {
+  if (typeof json !== 'string' || json.length > 4 * 1024 * 1024) return fail()
+  hash(packageSHA256)
+  const p = readRichSource(JSON.parse(json) as unknown), sheet = p.sheet
+  if (p.package_sha256 !== packageSHA256 || !p.workbook_part || !p.styles_part || !p.strict_error || !sheet.id || !sheet.name || !sheet.part || p.warnings.length < 4 || p.warnings.some(w => !w) || sheet.merges.length) return fail()
+  const styles = new Map(p.styles.map(s => [s.id, s]))
+  let last = -1
+  for (const s of p.styles) {
+    if (s.id <= last || s.id === 0 || s.parent_id >= p.parent_count.observed || s.number_format !== 'General' || s.warnings.length) return fail()
+    last = s.id
+  }
+  last = -1
+  for (const unused of p.unused_style_ids) { if (unused <= last || styles.has(unused)) return fail(); last = unused }
+  const ids = [...styles.keys(), ...p.unused_style_ids].sort((a, b) => a - b)
+  if (ids.length > 128 || ids.some((id, i) => id !== i)) return fail()
+  const cells = new Map<string, XlsxSourceStyleCellV1>(), used = new Set<number>()
+  const columns = sheet.column_widths.length
+  if (sheet.cells.length !== sheet.row_heights.length * columns) return fail()
+  let total = 0
+  for (let i = 0; i < sheet.cells.length; i++) {
+    const c = sheet.cells[i]!
+    const column = c.column < 26 ? String.fromCharCode(65 + c.column) : 'A' + String.fromCharCode(65 + c.column - 26)
+    if (c.row !== Math.floor(i / columns) || c.column !== i % columns || c.ref !== `${column}${c.row + 1}` || !styles.has(c.style_id) || c.formula || c.cached || c.kind !== 'string' && c.kind !== 'number') return fail()
+    if (c.kind === 'string' ? c.lexical !== '' : c.text !== '' || !/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?$/.test(c.lexical) || !Number.isFinite(Number(c.lexical))) return fail()
+    total += c.text.length + c.lexical.length
+    if (new TextEncoder().encode(c.text).byteLength > 4096 || total > 65536) return fail()
+    used.add(c.style_id); cells.set(c.ref, c)
+  }
+  if (used.size !== styles.size) return fail()
+  let runCount = 0
+  const richRefs = new Set<string>()
+  for (const rich of p.rich_cells) {
+    const c = cells.get(rich.ref)
+    if (!c || c.kind !== 'string' || c.style_id !== rich.style_id || c.text !== rich.text || richRefs.has(rich.ref)) return fail()
+    richRefs.add(rich.ref)
+    let offset = 0, joined = ''
+    for (const run of rich.runs) {
+      const s = run.style
+      if (!s.text || /[\u0000-\u001f\u007f\u2028\u2029]/.test(s.text) || run.start !== offset || run.end !== offset + s.text.length || new Set(s.omitted).size !== s.omitted.length) return fail()
+      if (s.properties === 'cell-inherited' && (Object.keys(s).length !== 3 || s.omitted.length)) return fail()
+      if ((s.underline === undefined) !== (s.underline_origin === undefined)) return fail()
+      joined += s.text; offset = run.end; runCount++
+      if (runCount > 1024) return fail()
+    }
+    if (joined !== rich.text || offset > 2048) return fail()
+  }
+  for (const [bands, inside] of [[p.omitted_rows, sheet.row_heights.length], [p.omitted_columns, columns]] as const) {
+    let prior = inside - 1
+    for (const band of bands) { if (band.index <= prior) return fail(); prior = band.index }
+  }
+  return p
+}

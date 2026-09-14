@@ -156,3 +156,14 @@ base grid and carries qualified text-rule, data-bar and optional frozen-viewport
 records. `decodeXlsxSourceStylePreviewV2` checks each effect against its source
 cell, range, cache state, style and bounds before returning it. Hashes identify
 trusted native-worker output; they are not signatures for arbitrary JSON.
+
+### Read-only rich source content
+
+`createXlsxRichSourcePreviewClient()` uses a separate `xlsxrichsource.wasm` and
+self-contained `xlsxrichsource.worker.js`. Its only methods are `preview(bytes)`
+and `terminate()`. The closed `decodeXlsxRichSourcePreviewV1(json, packageSHA256)`
+returns a frozen source-bound content rectangle with qualified inline rich runs,
+exact General numeric text and explicit outside geometry/count evidence. It
+accepts only the missing-parent-count profile described in
+[the rich-source contract](../../docs/XLSX-RICH-SOURCE-PREVIEW.md). This is an
+approximate read-only view, with no native editing or Excel print authority.

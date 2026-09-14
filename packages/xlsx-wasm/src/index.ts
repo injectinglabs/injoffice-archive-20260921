@@ -1,5 +1,5 @@
-import { decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1 } from './sourceStyles.js'
-export { decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1, type XlsxSourceStyleV1, type XlsxSourceStyleCellV1 } from './sourceStyles.js'
+import { decodeXlsxRichSourcePreviewV1, type XlsxRichSourcePreviewV1, decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1 } from './sourceStyles.js'
+export { decodeXlsxRichSourcePreviewV1, type XlsxRichSourcePreviewV1, decodeXlsxSourceStylePreviewV1, decodeXlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV2, type XlsxSourceStylePreviewV1, type XlsxSourceStyleV1, type XlsxSourceStyleCellV1 } from './sourceStyles.js'
 import {
   NativeWasmError,
   createNativeWasmClient,
@@ -342,4 +342,13 @@ function createSourcePreviewClient<T>(options: Omit<XlsxWasmClientOptions, 'maxM
     },
     terminate: () => native.terminate(),
   }
+}
+
+export interface XlsxRichSourcePreviewClient {
+  preview(bytes: Uint8Array, options?: XlsxWasmOperationOptions): Promise<XlsxRichSourcePreviewV1>
+  terminate(): void
+}
+/** Separate read-only module, loaded only when this client previews a source. */
+export function createXlsxRichSourcePreviewClient(options: Omit<XlsxWasmClientOptions, 'maxMutationPayloadBytes'> = {}): XlsxRichSourcePreviewClient {
+  return createSourcePreviewClient({ ...options, wasmUrl: options.wasmUrl ?? new URL('./xlsxrichsource.wasm', import.meta.url) }, new URL('./xlsxrichsource.worker.js', import.meta.url), decodeXlsxRichSourcePreviewV1)
 }

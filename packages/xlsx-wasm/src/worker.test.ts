@@ -8,6 +8,7 @@ type Binding = {
   extract(bytes: Uint8Array): unknown
   previewSourceStyles?(bytes: Uint8Array): unknown
   previewSourceStylesV2?(bytes: Uint8Array): unknown
+  previewRichSource?(bytes: Uint8Array): unknown
   inspect?(bytes: Uint8Array): unknown
   apply(original: Uint8Array, payload: string | Uint8Array, expectedRevision: string): unknown
 }
@@ -19,12 +20,12 @@ type WorkerMessage = {
   result?: { contractJson?: string }
 }
 
-function createWorkerHarness(binding: Binding, sourceStyleOnly: boolean | 2 = false) {
+function createWorkerHarness(binding: Binding, sourceStyleOnly: boolean | 2 | 3 = false) {
   const messages: WorkerMessage[] = []
   let closed = false
   const globals: Record<string, unknown> = {
     xlsxSourceStylePreview: sourceStyleOnly === true,
-    xlsxSourceStylePreviewVersion: sourceStyleOnly === 2 ? 2 : undefined,
+    xlsxSourceStylePreviewVersion: typeof sourceStyleOnly === 'number' ? sourceStyleOnly : undefined,
     ArrayBuffer,
     Error,
     Promise,
@@ -137,6 +138,15 @@ it('V2 source worker selects only its conditional binding and refuses editing', 
   const worker = createWorkerHarness({ extract: forbidden, apply: forbidden, previewSourceStyles: forbidden, previewSourceStylesV2: () => ({ ok: true, value: '{"version":2}' }) }, 2)
   expect(await worker.init()).toMatchObject({ ok: true })
   expect(await worker.inspect('preview')).toMatchObject({ ok: true, result: { contractJson: '{"version":2}' } })
+  expect(await worker.extract('extract')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
+  expect(await worker.apply('apply')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
+})
+
+it('rich source worker selects its separate binding and refuses editing', async () => {
+  const forbidden = () => { throw new Error('unexpected editing binding') }
+  const worker = createWorkerHarness({ extract: forbidden, apply: forbidden, previewSourceStyles: forbidden, previewSourceStylesV2: forbidden, previewRichSource: () => ({ ok: true, value: '{"read_only":true}' }) }, 3)
+  expect(await worker.init()).toMatchObject({ ok: true })
+  expect(await worker.inspect('rich')).toMatchObject({ ok: true, result: { contractJson: '{"read_only":true}' } })
   expect(await worker.extract('extract')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
   expect(await worker.apply('apply')).toMatchObject({ ok: false, error: { code: 'READ_ONLY_PROFILE' } })
 })

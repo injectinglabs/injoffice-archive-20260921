@@ -17,8 +17,10 @@ const packageDirs = readdirSync(packageRoot, { withFileTypes: true })
 const failures = []
 const npmCache = mkdtempSync(join(tmpdir(), 'injoffice-npm-cache-'))
 const mebibyte = 1024 * 1024
-const maxPackedBytes = 3 * mebibyte
-const maxUnpackedBytes = 10 * mebibyte
+// XLSX ships a separate, lazily loaded read-only rich-source WASM module.
+const packageBudgets = {
+  "@injoffice/xlsx-wasm": { packed: 3.5 * mebibyte, unpacked: 12 * mebibyte },
+}
 const maxTotalPackedBytes = 15 * mebibyte
 let totalPackedBytes = 0
 let totalUnpackedBytes = 0
@@ -29,6 +31,7 @@ const requireValue = (condition, message) => {
 for (const directory of packageDirs) {
   const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'))
   const label = manifest.name ?? directory
+  const { packed: maxPackedBytes, unpacked: maxUnpackedBytes } = packageBudgets[label] ?? { packed: 3 * mebibyte, unpacked: 10 * mebibyte }
   requireValue(/^@injoffice\/[a-z0-9-]+$/.test(manifest.name), `${label}: package name must use the @injoffice scope`)
   requireValue(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version), `${label}: version must be valid SemVer`)
   requireValue(typeof manifest.description === 'string' && manifest.description.trim().length >= 20, `${label}: description is missing or too short`)
