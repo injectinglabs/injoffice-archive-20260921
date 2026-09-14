@@ -1,3 +1,4 @@
+import {createCartesianSignedAreaPaths} from './cartesianSignedAreaPaths.js'
 import {validNativeLiteralArea,type NativeLiteralBarAxis,type NativeLiteralArea} from '@injoffice/pptx-native'
 import type {RenderPathCommand,RenderStroke} from './types.js'
 import {createCartesianAreaPaths} from './cartesianAreaPaths.js'
@@ -27,7 +28,9 @@ export function createNativeLiteralAreaPaths(chart:LiteralAreaInput,cx:number,cy
  axis(x);axis(y)
  if(x.id===y.id||x.crossAxisId!==y.id||y.crossAxisId!==x.id||x.position!=='b'||y.position!=='l'||x.min!==undefined||x.max!==undefined||x.crossesAt!==undefined||typeof y.min!=='string'||typeof y.max!=='string'||typeof y.crossesAt!=='string'||decimal(y.crossesAt).numerator!==0n)throw new RangeError('invalid area axis pairing')
  for(const s of chart.series)if(!s||!Array.isArray(s.values)||s.values.length!==chart.categories.length||typeof s.color!=='string'||rgb.exec(s.color)?.[0]!==s.color||(s.title!==undefined&&(typeof s.title!=='string'||s.title.length>1024)))throw new RangeError('invalid area series style/alignment')
- const data=createCartesianAreaPaths(chart.series,chart.grouping,{min:y.min,max:y.max,...(chart.sourceBaseline?{baseline:chart.sourceBaseline.value}:{}),reverseX:x.orientation==='maxMin',reverseY:y.orientation==='maxMin'},cx,cy)
+ const signed=chart.grouping!=='standard'&&chart.series.some(s=>s.values.some((v:string)=>decimal(v).numerator<0n))
+ if(signed&&!chart.sourceBaseline)throw new RangeError('signed area requires source minimum baseline')
+ const data=signed?createCartesianSignedAreaPaths(chart.series,chart.grouping,{min:y.min,max:y.max,crossing:'min',reverseX:x.orientation==='maxMin',reverseY:y.orientation==='maxMin'},cx,cy):createCartesianAreaPaths(chart.series,chart.grouping,{min:y.min,max:y.max,...(chart.sourceBaseline?{baseline:chart.sourceBaseline.value}:{}),reverseX:x.orientation==='maxMin',reverseY:y.orientation==='maxMin'},cx,cy)
  const vectors:LiteralAreaVector[]=[]
  data.forEach((geometry,index)=>{
   const path=geometry.rings.flat()

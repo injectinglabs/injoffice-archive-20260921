@@ -37,8 +37,6 @@ func TestNativeChartAreaSourceRefusals(t *testing.T) {
 	d, _ := nativeDialectForPresentation(xmlNamePresentation(false))
 	original := nativeAreaXML(false, "standard")
 	for name, pair := range map[string][2]string{
-		"negative stack":     {`grouping val="standard"`, `grouping val="stacked"`},
-		"negative percent":   {`grouping val="standard"`, `grouping val="percentStacked"`},
 		"duplicate grouping": {`<c:grouping val="standard"/>`, `<c:grouping val="standard"/><c:grouping val="standard"/>`},
 		"point formatting":   {"</c:ser>", "<c:dPt/></c:ser>"},
 		"error bars":         {"</c:ser>", "<c:errBars/></c:ser>"},

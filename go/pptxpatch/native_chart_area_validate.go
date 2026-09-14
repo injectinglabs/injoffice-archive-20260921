@@ -83,7 +83,7 @@ func validNativeLiteralArea(c *NativeLiteralArea) bool {
 			return false
 		}
 		for _, v := range s.Values {
-			if value, e := parseNativeChartDecimal(v); e != nil || c.Grouping != "standard" && value.coefficient.Sign() < 0 {
+			if value, e := parseNativeChartDecimal(v); e != nil || c.Grouping != "standard" && value.coefficient.Sign() < 0 && c.SourceBaseline == nil {
 				return false
 			}
 		}

@@ -91,7 +91,7 @@ func TestNativeAreaBrowserFixtures(t *testing.T) {
 				t.Fatal(err)
 			}
 			chart := nativeFixtureChart(t, deck.Slides[0])
-			if (chart.Chart.LiteralArea != nil) != (name != "negative-stack") {
+			if chart.Chart.LiteralArea == nil {
 				t.Fatal("fixture qualification changed")
 			}
 			if output := os.Getenv("INJOFFICE_PPTX_AREA_FIXTURES"); output != "" {

@@ -79,7 +79,7 @@ func TestNativeAreaMinimumBaselineFixtures(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"autoZero", "max", "negative-stacked", "negative-percent", "duplicate"} {
+	for _, name := range []string{"autoZero", "max", "duplicate"} {
 		source := nativeAreaXML(false, "standard")
 		switch name {
 		case "autoZero", "max":

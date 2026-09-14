@@ -10,7 +10,7 @@ const root=resolve(import.meta.dirname,'../../..'),scratch=mkdtempSync(resolve(t
 afterAll(()=>rmSync(scratch,{recursive:true,force:true}))
 const hash=(b:Uint8Array)=>createHash('sha256').update(b).digest('hex')
 const flatten=(nodes:any[]):any[]=>nodes.flatMap(n=>n.sourceRole==='contentRun'||n.sourceRole==='paragraphBullet'?[]:[n,...(n.children?flatten(n.children):[])])
-const positiveNames=[false,true].flatMap(strict=>['standard','stacked','percent','zero','zero-min','reversed','labels','ticks','grouped','large'].map(mode=>`area-min-${strict}-${mode}`)),names=[...positiveNames,...['autoZero','max','negative-stacked','negative-percent','duplicate'].map(n=>'area-min-negative-'+n)]
+const positiveNames=[false,true].flatMap(strict=>['standard','stacked','percent','zero','zero-min','reversed','labels','ticks','grouped','large'].map(mode=>`area-min-${strict}-${mode}`)),names=[...positiveNames,...['autoZero','max','duplicate'].map(n=>'area-min-negative-'+n)]
 it('retains source minimum area baseline through actual source WASM and production worker',async()=>{
  execFileSync('go',['test','-run','^TestNativeAreaMinimumBaselineFixtures$','-count=1','.'],{cwd:resolve(root,'go/pptxpatch'),env:{...process.env,INJOFFICE_PPTX_AREA_MIN_FIXTURES:scratch}})
  const run=resolve(scratch,'extract.mjs')
