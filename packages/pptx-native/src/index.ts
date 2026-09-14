@@ -102,3 +102,6 @@ export type {NativeLiteralStackedBar,NativeLiteralStackedLine} from './chartStac
 export {validNativeLiteralStackedBar,validNativeLiteralStackedLine} from './chartStackedValidation.js'
 
 export type {NativeWorkbookStackedBarData,NativeWorkbookStackedLineData} from './chartWorkbookResolution.js'
+
+export type {NativeLiteralRadar,NativeLiteralRadarSeries} from './chartRadarTypes.js'
+export {validNativeLiteralRadar} from './chartRadarValidation.js'
