@@ -10372,6 +10372,16 @@
               "signature": "export interface NativeLiteralPie"
             },
             {
+              "name": "NativeLiteralStackedBar",
+              "kind": "type",
+              "signature": "export interface NativeLiteralStackedBar extends Omit<NativeLiteralBar, 'profile' | 'grouping' | 'overlap'>"
+            },
+            {
+              "name": "NativeLiteralStackedLine",
+              "kind": "type",
+              "signature": "export interface NativeLiteralStackedLine extends Omit<NativeLiteralConnected, 'profile'>"
+            },
+            {
               "name": "NativeOpaqueChart",
               "kind": "type",
               "signature": "export interface NativeOpaqueChart"
@@ -10659,7 +10669,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"8e012e0c2285262801d3c719ac4508595f23ffdb316e83c85b7593e03a62fd6c\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"9236b308738a589a35d9e53e2cdc784b2dafa4ba99472b6ebae58a511df47f81\""
             },
             {
               "name": "provenanceValues",
@@ -10710,6 +10720,16 @@
               "name": "validNativeLiteralBubble",
               "kind": "function",
               "signature": "export declare function validNativeLiteralBubble(value: unknown): value is NativeLiteralBubble"
+            },
+            {
+              "name": "validNativeLiteralStackedBar",
+              "kind": "function",
+              "signature": "export declare function validNativeLiteralStackedBar(value: unknown): value is NativeLiteralStackedBar"
+            },
+            {
+              "name": "validNativeLiteralStackedLine",
+              "kind": "function",
+              "signature": "export declare function validNativeLiteralStackedLine(value: unknown): value is NativeLiteralStackedLine"
             }
           ]
         }
@@ -10789,6 +10809,16 @@
               "signature": "export declare function createNativeLiteralScatterPaths(chart: NativeLiteralConnected, cx: number, cy: number): readonly LiteralConnectedVector[]"
             },
             {
+              "name": "createNativeLiteralStackedBarPaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralStackedBarPaths(chart: LiteralStackedBarInput, cx: number, cy: number): readonly import(\"./cartesianBarPaths.js\").CartesianBarVector[]"
+            },
+            {
+              "name": "createNativeLiteralStackedLinePaths",
+              "kind": "function",
+              "signature": "export declare function createNativeLiteralStackedLinePaths(chart: LiteralStackedLineInput, cx: number, cy: number): readonly import(\"./cartesianConnectedPaths.js\").CartesianConnectedVector[]"
+            },
+            {
               "name": "createNativeWorkbookChartPaths",
               "kind": "function",
               "signature": "export declare function createNativeWorkbookChartPaths(chart: NativeResolvedWorkbookChart, cx: number, cy: number): readonly (CartesianBarVector | CartesianConnectedVector | LiteralBubbleVector)[]"
@@ -10817,6 +10847,16 @@
               "name": "LiteralConnectedVector",
               "kind": "type",
               "signature": "LiteralConnectedVector"
+            },
+            {
+              "name": "LiteralStackedBarVector",
+              "kind": "type",
+              "signature": "LiteralStackedBarVector"
+            },
+            {
+              "name": "LiteralStackedLineVector",
+              "kind": "type",
+              "signature": "LiteralStackedLineVector"
             },
             {
               "name": "NativePptxGlyphExtents",
