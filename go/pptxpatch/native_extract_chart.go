@@ -93,6 +93,7 @@ func (extractor *nativeExtractor) extractNativeChartGraphicFrame(node *nativeXML
 	}
 	relID := relationshipID
 	chart := NativeOpaqueChart{
+		LiteralArea:      extractNativeLiteralArea(chartPayload, chartRel.Part, dialect),
 		LiteralConnected: extractNativeLiteralConnected(chartPayload, chartRel.Part, dialect),
 		LiteralBar:       extractNativeLiteralBar(chartPayload, chartRel.Part, dialect),
 		LiteralDoughnut:  extractNativeLiteralDoughnut(chartPayload, chartRel.Part, dialect),

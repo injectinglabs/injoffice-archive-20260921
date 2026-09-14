@@ -264,7 +264,24 @@ type NativeLiteralConnected struct {
 	XAxis      NativeLiteralBarAxis           `json:"xAxis"`
 	YAxis      NativeLiteralBarAxis           `json:"yAxis"`
 }
+type NativeLiteralAreaSeries struct {
+	Index  int64    `json:"index"`
+	Order  int64    `json:"order"`
+	Title  *string  `json:"title,omitempty"`
+	Values []string `json:"values"`
+	Color  string   `json:"color"`
+}
+type NativeLiteralArea struct {
+	Profile    string                    `json:"profile"`
+	DataOrigin string                    `json:"dataOrigin"`
+	Grouping   string                    `json:"grouping"`
+	Categories []string                  `json:"categories"`
+	Series     []NativeLiteralAreaSeries `json:"series"`
+	XAxis      NativeLiteralBarAxis      `json:"xAxis"`
+	YAxis      NativeLiteralBarAxis      `json:"yAxis"`
+}
 type NativeOpaqueChart struct {
+	LiteralArea      *NativeLiteralArea      `json:"literalArea,omitempty"`
 	LiteralConnected *NativeLiteralConnected `json:"literalConnected,omitempty"`
 	LiteralBar       *NativeLiteralBar       `json:"literalBar,omitempty"`
 	LiteralDoughnut  *NativeLiteralDoughnut  `json:"literalDoughnut,omitempty"`
