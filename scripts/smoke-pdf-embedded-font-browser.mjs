@@ -16,7 +16,8 @@ const sourcePath = resolve(output, 'source.pdf')
 const doc = await PDFDocument.create()
 const field = doc.getForm().createTextField('Unicode sample')
 field.setText('BEFORE')
-field.addToPage(doc.addPage([400, 300]), { x: 20, y: 200, width: 350, height: 30 })
+field.addToPage(doc.addPage([400, 300]), { x: 20, y: 180, width: 350, height: 80 })
+field.setFontSize(24)
 const source = await doc.save()
 writeFileSync(sourcePath, source)
 
@@ -182,13 +183,40 @@ try {
   assert.equal(rtlField.getText(), rtlValue, 'browser export retains exact logical RTL form value')
   const rtlAp = rtlDoc.context.lookup(rtlField.acroField.getWidgets()[0].getNormalAppearance())
   assert.match(Buffer.from(decodePDFRawStream(rtlAp).decode()).toString('latin1'), /ActualText/, 'RTL appearance carries standard logical replacement text')
-  await setValue(textInput, 'अ')
+  const scriptCases = [
+    ['NotoSansDevanagari', 'क्षि नमस्ते'], ['NotoSansBengali', 'ক্ষি বাংলা'],
+    ['NotoSansThai', 'น้ำ ภาษาไทย'], ['NotoSansKhmer', 'ខ្មែរ'],
+    ['NotoSansMyanmar', 'မြန်မာ'], ['NotoSansSyriac', 'ܫܠܡܐ'],
+    ['NotoSansArabic', '\u0600بب'],
+  ]
+  for (const [fontName, value] of scriptCases) {
+    const fixtureFont = resolve(import.meta.dirname, `../packages/pdf/testdata/fonts/${fontName}-Regular.ttf`)
+    await upload('[aria-label="TrueType appearance font"]', fixtureFont)
+    await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes(${JSON.stringify(`Selected: ${fontName}-Regular.ttf`)})`, 'local script font read')
+    await setValue(textInput, value)
+    await apply()
+    await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('Generated 1 widget appearance')`, 'browser creates contextual script appearance')
+    await until(`document.querySelector(${JSON.stringify(textInput)})?.value === ${JSON.stringify(value)} && !document.querySelector(${JSON.stringify(appearanceSelect)})?.disabled`, 'script document finishes reloading')
+    const scriptOutput = mkdtempSync(resolve(output, `${fontName}-`))
+    await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: scriptOutput })
+    await evaluate(`Array.from(document.querySelectorAll('[data-demo-surface="pdf"] button')).find(button => button.textContent.trim() === 'Download edited PDF').click()`)
+    let scriptDownload
+    for (let attempt = 0; attempt < 300; attempt++) {
+      scriptDownload = readdirSync(scriptOutput).find(name => name.endsWith('.pdf'))
+      if (scriptDownload) break
+      await pause(100)
+    }
+    assert.ok(scriptDownload, `UI downloads ${fontName} appearance`)
+    const scriptDoc = await PDFDocument.load(readFileSync(resolve(scriptOutput, scriptDownload)))
+    assert.equal(scriptDoc.getForm().getTextField('Unicode sample').getText(), value, 'script export retains exact logical form value')
+  }
+  await setValue(textInput, '\u{10FFFF}')
   await apply()
-  await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'unsupported shaping is refused')
+  await until(`document.querySelector(${JSON.stringify(panel)}).textContent.includes('No form values applied.')`, 'missing glyph is refused')
   assert.deepEqual(readFileSync(sourcePath), Buffer.from(source), 'source bytes stay unchanged')
   assert.deepEqual(errors, [])
   assert.deepEqual(postRequests, [])
-  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL, unsupported-script refusal)')
+  console.log('PDF embedded font browser smoke: PASS (UI upload/apply/download, Type0 fixed font, exact clusters/ligatures, continuation outlines, contextual RTL/multiscript, missing-glyph refusal)')
 } finally {
   socket?.close()
   for (const task of pending.values()) clearTimeout(task.timer)
