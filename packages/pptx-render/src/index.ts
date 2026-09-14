@@ -1,3 +1,5 @@
+export {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_POLICY,BUBBLE_PREVIEW_DISCLOSURE} from './literalBubble.js'
+export type {LiteralBubbleVector} from './literalBubble.js'
 export {createNativeLiteralAreaPaths} from './literalArea.js'
 export type {LiteralAreaVector} from './literalArea.js'
 export {createNativeLiteralLinePaths} from './literalLine.js'

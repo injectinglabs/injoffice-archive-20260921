@@ -1,6 +1,6 @@
 import {useId,useState} from 'react'
 import type {NativeElement,NativePptxDeck} from '@injoffice/pptx-native'
-import {createNativeLiteralAreaPaths,createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
+import {createNativeLiteralBubblePaths,BUBBLE_PREVIEW_DISCLOSURE,createNativeLiteralAreaPaths,createNativeLiteralPiePaths,createNativeLiteralDoughnutPaths,createNativeLiteralBarPaths,createNativeLiteralLinePaths,createNativeLiteralScatterPaths} from '@injoffice/pptx-render'
 
 export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
  const [enabled,setEnabled]=useState(false)
@@ -13,9 +13,20 @@ export function NativePptxLiteralCharts({deck}:{deck:NativePptxDeck}){
   <label><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)}/> Preview supported source literal charts</label>
   <p>Read-only vectors from explicit source values and colors. Each chart is shown separately with host frame fitting. Circular charts use polygon arcs; Cartesian charts use explicit linear scales and clipped data geometry. This preview does not reproduce PowerPoint plot layout. Formula caches, source labels and legends are unsupported.</p>
   {enabled&&charts.map((chart,chartIndex)=>{
+   const bubble=chart.chart.literalBubble
    const area=chart.chart.literalArea
    const connected=chart.chart.literalConnected
-   if(area?.xAxis.labels||area?.yAxis.labels||connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
+   if(bubble?.xAxis.labels||bubble?.yAxis.labels||area?.xAxis.labels||area?.yAxis.labels||connected?.xAxis.labels||connected?.yAxis.labels||chart.chart.literalBar?.categoryAxis.labels||chart.chart.literalBar?.valueAxis.labels)return <p key={chart.id}>{chart.name??chart.id}: source axis labels require the supplied-font slide preview. Original chart preserved.</p>
+   if(bubble){
+    const vectors=createNativeLiteralBubblePaths(bubble,chart.transform.cx,chart.transform.cy)
+    return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal bubble · preserved, read-only</figcaption>
+     <svg role="img" aria-label={`${chart.name??'Bubble chart'}: ${bubble.series.length} series. Source X, Y and sizes are listed below.`} viewBox={`0 0 ${chart.transform.cx} ${chart.transform.cy}`} style={{width:400,maxWidth:'100%',height:260,overflow:'hidden'}}>
+      <defs><clipPath id={`${clipPrefix}-${chartIndex}`}><rect x={0} y={0} width={chart.transform.cx} height={chart.transform.cy}/></clipPath></defs>
+      <g clipPath={`url(#${clipPrefix}-${chartIndex})`}>{vectors.map((vector,i)=><path key={i} fill={vector.color??'none'} stroke={vector.stroke?.color} strokeWidth={vector.stroke?.widthEmu} strokeLinecap="butt" d={vector.path.map(p=>p.kind==='moveTo'?`M ${p.x} ${p.y}`:p.kind==='lineTo'?`L ${p.x} ${p.y}`:p.kind==='arcTo'?`A ${p.rx} ${p.ry} 0 ${p.largeArc?1:0} ${p.clockwise?1:0} ${p.x} ${p.y}`:p.kind==='close'?'Z':'').join(' ')}/>)}</g>
+     </svg><p>{BUBBLE_PREVIEW_DISCLOSURE} Scale: {bubble.bubbleScale}%. Size represents: {bubble.sizeRepresents==='w'?'width':'area'}.</p>
+     <table><caption>Source data (host table, separate from slide labels)</caption><thead><tr><th>Series</th><th>Point</th><th>X</th><th>Y</th><th>Size</th></tr></thead><tbody>{bubble.series.flatMap(series=>series.values.map((value,i)=><tr key={`${series.index}:${i}`}><th>{series.title??`Series ${series.index}`}</th><td>{i}</td><td>{series.xValues[i]}</td><td>{value}</td><td>{series.sizes[i]}</td></tr>))}</tbody></table>
+    </figure>
+   }
    if(area){
     const vectors=createNativeLiteralAreaPaths(area,chart.transform.cx,chart.transform.cy)
     return <figure key={chart.id}><figcaption>{chart.name??chart.id} · source literal {area.grouping} area · preserved, read-only</figcaption>
