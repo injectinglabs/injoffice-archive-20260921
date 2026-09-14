@@ -75,12 +75,13 @@ try {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
   await cdp.send('Page.navigate', { url: `${server.url}#/docs?feature=editor` })
   await poll(() => evaluate(`Boolean(document.querySelector('[aria-label="Open a DOCX file"]'))`), 'DOCX workbench')
+  await setFixtureData({textboxHash,footnoteHash,label})
   await upload(textboxFixture)
   await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')`),'textbox consent')
   await assert(`window.__nativeDocxPosts.length===0`,'opening textbox document uploads nothing')
   await click('Upload to helper and preview page-placed textboxes')
   await poll(()=>evaluate(`${native}?.querySelector('[data-native-textbox]')!==null&&${native}?.textContent.includes('1 approximate, read-only pages')`),'source rectangle page',45000)
-  await assert(`window.__nativeDocxPosts.length===1&&window.__nativeDocxPosts[0].hash===${JSON.stringify(textboxHash)}`,'textbox upload preserves exact original bytes')
+  await assert(`window.__nativeDocxPosts.length===1&&window.__nativeDocxPosts[0].hash===window.__nativeDocxFixture.textboxHash`,'textbox upload preserves exact original bytes')
   await assert(`(() => {const box=${native}.querySelector('[data-native-textbox]'),rect=box.querySelector('rect');return box.getAttribute('transform')==='translate(72000 144000)'&&rect.getAttribute('width')==='216000'&&rect.getAttribute('height')==='72000'&&rect.getAttribute('stroke-width')==='1000'&&rect.getAttribute('fill')==='#FFF2CC'&&rect.getAttribute('stroke')==='#204060'})()`,'page offsets, bounds, colors and stroke match source')
   await assert(`${native}.querySelectorAll('svg').length===1&&${native}.querySelectorAll('svg path').length===window.__nativeDocxTextbox.preview.body_paint.pages[0].commands.filter(c=>c.kind==='fill_glyph_path').length+window.__nativeDocxTextbox.preview.textbox.paint.paths.length`,'all body and textbox glyph outlines share one mounted page')
   await assert(`${native}.textContent.includes(window.__nativeDocxTextbox.preview.source_diagnostics[0].message)&&${docs}?.dataset.demoDirty!=='true'`,'source drawing warning remains visible and source stays clean')
@@ -96,8 +97,8 @@ try {
   await assert(`window.__nativeDocxPosts.length===2`,'replacement does not reuse upload consent')
   await click('Upload to helper and render native pages')
   await poll(()=>evaluate(`${native}?.textContent.includes('4 native pages')&&${native}?.querySelector('svg path')!==null`),'footnote continuation pages',45000)
-  await assert(`window.__nativeDocxPosts.length===3&&window.__nativeDocxPosts[2].hash===${JSON.stringify(footnoteHash)}`,'footnote upload preserves exact original bytes')
-  await assert(`window.__nativeDocxPaint.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===${JSON.stringify(label)}).length===1`,'continued footnote emits its source label exactly once')
+  await assert(`window.__nativeDocxPosts.length===3&&window.__nativeDocxPosts[2].hash===window.__nativeDocxFixture.footnoteHash`,'footnote upload preserves exact original bytes')
+  await assert(`window.__nativeDocxPaint.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===window.__nativeDocxFixture.label).length===1`,'continued footnote emits its source label exactly once')
   for(let ordinal=0;ordinal<4;ordinal++){
     if(ordinal){await click('Next native page');await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${ordinal+1}"]')!==null`),'footnote page '+(ordinal+1))}
     await assert(`(() => {const page=window.__nativeDocxPaint.pages[${ordinal}],rule=page.commands.find(c=>c.kind==='stroke_note_separator'),line=${native}.querySelector('svg line');return !!rule&&!!line&&rule.x2_millipoints-rule.x1_millipoints===${ordinal?468000:144000}&&Number(line.getAttribute('x2'))-Number(line.getAttribute('x1'))===${ordinal?468000:144000}&&${native}.querySelectorAll('svg').length===1&&page.lines.some(l=>l.region==='footnote')&&${ordinal?'page.lines.every(l=>l.region!=="body")':'page.lines.some(l=>l.region==="body")'}})()`,'source separator and note content on page '+(ordinal+1))
@@ -108,15 +109,16 @@ try {
   const lineSource=JSON.parse(readFileSync(resolve(lineDir,'source.json'),'utf8'))
   const lineNote=lineSource.document.notes.find(n=>n.note_role==='content'),lineParagraph=lineNote.blocks[0].id
   const lineLabel=lineNote.blocks[0].paragraph.runs.find(r=>r.reference?.role==='label').id
+  await setFixtureData({lineHash,lineParagraph,lineLabel})
   await upload(lineFixture)
   await poll(()=>evaluate(`${native}?.textContent.includes('Nothing is uploaded')&&${native}?.querySelector('svg')===null`),'single-paragraph replacement')
   await assert(`window.__nativeDocxPosts.length===3`,'line continuation needs fresh upload consent')
   await click('Upload to helper and render native pages')
   await poll(()=>evaluate(`${native}?.textContent.includes('native pages')&&${native}?.querySelector('svg path')!==null`),'single-paragraph footnote paint',45000)
   const linePages=await evaluate('window.__nativeDocxPaint.pages.length')
-  await assert(`window.__nativeDocxPaint.pages.length>=3&&window.__nativeDocxPosts.length===4&&window.__nativeDocxPosts[3].hash===${JSON.stringify(lineHash)}`,'one long footnote paragraph spans several pages without changing the package')
-  await assert(`(() => {const slices=window.__nativeDocxPaint.pages.map(p=>p.lines.filter(l=>l.region==='footnote'&&l.paragraph_id===${JSON.stringify(lineParagraph)})),lines=slices.flat();return slices.every(s=>s.length>=2)&&lines.every((l,i)=>l.source_line_ordinal===i)&&new Set(lines.map(l=>l.line_id)).size===lines.length})()`,'line continuation preserves exact source order and widow/orphan pairs')
-  await assert(`window.__nativeDocxPaint.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===${JSON.stringify(lineLabel)}).length===1`,'single-paragraph note label is painted once')
+  await assert(`window.__nativeDocxPaint.pages.length>=3&&window.__nativeDocxPosts.length===4&&window.__nativeDocxPosts[3].hash===window.__nativeDocxFixture.lineHash`,'one long footnote paragraph spans several pages without changing the package')
+  await assert(`(() => {const slices=window.__nativeDocxPaint.pages.map(p=>p.lines.filter(l=>l.region==='footnote'&&l.paragraph_id===window.__nativeDocxFixture.lineParagraph)),lines=slices.flat();return slices.every(s=>s.length>=2)&&lines.every((l,i)=>l.source_line_ordinal===i)&&new Set(lines.map(l=>l.line_id)).size===lines.length})()`,'line continuation preserves exact source order and widow/orphan pairs')
+  await assert(`window.__nativeDocxPaint.pages.flatMap(p=>p.commands).filter(c=>c.kind==='fill_glyph_path'&&c.source_id===window.__nativeDocxFixture.lineLabel).length===1`,'single-paragraph note label is painted once')
   for(let ordinal=1;ordinal<linePages;ordinal++){
     await click('Next native page')
     await poll(()=>evaluate(`${native}?.querySelector('svg[aria-label="Native document page ${ordinal+1}"]')!==null`),'line continuation page '+(ordinal+1))
@@ -164,6 +166,18 @@ async function upload(path) {
   const node = await cdp.send('DOM.describeNode', { objectId: handle.result.objectId })
   await cdp.send('DOM.setFileInputFiles', { backendNodeId: node.node.backendNodeId, files: [path] })
   await cdp.send('Runtime.releaseObject', { objectId: handle.result.objectId })
+}
+// Fixture identifiers travel as CDP data, never as generated JavaScript source.
+async function setFixtureData(data) {
+  const handle=await cdp.send('Runtime.evaluate',{expression:'globalThis'})
+  try {
+    const result=await cdp.send('Runtime.callFunctionOn',{
+      objectId:handle.result.objectId,
+      functionDeclaration:'function (data) { window.__nativeDocxFixture = {...window.__nativeDocxFixture, ...data}; }',
+      arguments:[{value:data}],returnByValue:true,
+    })
+    if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description??result.exceptionDetails.text)
+  } finally { await cdp.send('Runtime.releaseObject',{objectId:handle.result.objectId}) }
 }
 async function evaluate(expression) {
   const value = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
