@@ -21,7 +21,7 @@ import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
 import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import {deriveNativeSquareWrapPlanV1, hasNativeSquareWrapV1} from './nativeSquareWrapV1.js'
 import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
-import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
@@ -956,9 +956,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
   }
   if (headerFooter.status === 'refused') return { ok: true, value: refusal(provenance, 'unsupported-source', headerFooter.diagnostics[0]?.scope_id ?? documentID, headerFooter.diagnostics[0]?.message ?? 'Native header/footer layout refused') }
   const allowedFontPagination=(entry:typeof layout.diagnostics[number])=>fontSubstitutions!==undefined&&entry.code==='source-diagnostic'&&entry.severity==='deferred'&&fontSubstitutions.some(r=>{const d=nativeDocxFontSubstitutionDiagnosticV1(r);return entry.scope_id===d.scope_id&&entry.source_code===d.code&&entry.source_message===d.message&&entry.message===`Shaping diagnostic retained by pagination: ${d.code}: ${d.message}`})
-  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !allowedFontPagination(entry)&&!(approximateLegacySettings && entry.code === 'settings-attestation-unsupported' && entry.severity === 'deferred') && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
-  const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => !(fontSubstitutions!==undefined&&isQualifiedNativeDocxFontDiagnosticV1(entry,fontSubstitutions))&&(entry.code !== 'page-control-deferred' || entry.source_id !== undefined))
-  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout))
+  const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !allowedFontPagination(entry)&&!(approximateLegacySettings && entry.severity === 'deferred' && (entry.code === 'settings-attestation-unsupported' || entry.code === 'source-diagnostic')) && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
+  const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => !approximateLegacySettings&&!(fontSubstitutions!==undefined&&isQualifiedNativeDocxFontDiagnosticV1(entry,fontSubstitutions))&&(entry.code !== 'page-control-deferred' || entry.source_id !== undefined))
+  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout)&&!(approximateLegacySettings&&DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)))
   if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]
     return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires no blocking shaping/resolution diagnostics and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }

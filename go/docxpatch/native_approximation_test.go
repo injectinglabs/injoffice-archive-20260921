@@ -11,6 +11,10 @@ func TestNativeApproximationEligibilityRejectsAmbiguousLegacySettings(t *testing
 	mode := func(value string) string {
 		return `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="` + value + `"/>`
 	}
+	flag := func(name string) string {
+		return `<w:compatSetting w:name="` + name + `" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>`
+	}
+	extraFlags := flag("overrideTableStyleFontSizeAndJustification") + flag("enableOpenTypeFeatures") + flag("doNotFlipMirrorIndents") + flag("differentiateMultirowTableHeaders")
 	for _, strict := range []bool{false, true} {
 		for _, test := range []struct {
 			name, markup string
@@ -20,6 +24,8 @@ func TestNativeApproximationEligibilityRejectsAmbiguousLegacySettings(t *testing
 			{"omitted", "", true, 12}, {"empty compat", "<w:compat/>", true, 12},
 			{"mode12", "<w:compat>" + mode("12") + "</w:compat>", true, 12}, {"mode14", "<w:compat>" + mode("14") + "</w:compat>", true, 14},
 			{"modern", "<w:compat>" + mode("15") + "</w:compat>", false, 0},
+			{"mode15 extras", "<w:compat>" + mode("15") + extraFlags + "</w:compat>", true, 15},
+			{"mode14 four flags", "<w:compat>" + mode("14") + extraFlags + "</w:compat>", true, 14},
 			{"duplicate mode", "<w:compat>" + mode("12") + mode("12") + "</w:compat>", false, 0},
 			{"duplicate compat", "<w:compat/><w:compat/>", false, 0},
 			{"invalid number", "<w:compat>" + mode("oops") + "</w:compat>", false, 0},
@@ -60,6 +66,14 @@ func TestNativeApproximationEligibilityRejectsAmbiguousLegacySettings(t *testing
 				}
 				if test.eligible && (eligibility.LegacyCompatibilityMode == nil || *eligibility.LegacyCompatibilityMode != test.mode || settings.Profile != "unsupported") {
 					t.Fatalf("lost original refusal or exact mode: %#v %#v", settings, eligibility)
+				}
+				if test.name == "mode15 extras" && (settings.CompatibilityMode == nil || *settings.CompatibilityMode != 15) {
+					t.Fatalf("mode 15 extras must keep attested strict mode 15: %#v", settings)
+				}
+				if strings.Contains(test.name, "four flags") || test.name == "mode15 extras" {
+					if len(eligibility.ApproximatedSettings) != 3 {
+						t.Fatalf("typed extra flags must be facts; differentiateMultirowTableHeaders is uncovered: %#v", eligibility.ApproximatedSettings)
+					}
 				}
 				after, err := ExtractNativePaginationSettingsV1(data)
 				if err != nil {

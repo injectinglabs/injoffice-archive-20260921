@@ -8,6 +8,24 @@ import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentFontSizesV1, validN
 
 export const DOCX_APPROXIMATE_PREVIEW_PROTOCOL = 'injoffice.docx.approximate-page-preview' as const
 export const DOCX_APPROXIMATE_PREVIEW_POLICY = 'current-layout-approximate-v1' as const
+/** Source/resolution codes approximate preview omits while painting remaining glyphs. */
+export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
+  'UNMODELED_RUN_CONTENT',
+  'UNMODELED_PARAGRAPH_CONTENT',
+  'UNMODELED_BODY_BLOCK',
+  'UNMODELED_FONT_METADATA',
+  'UNMODELED_PARAGRAPH_PROPERTY',
+  'UNMODELED_SECTION_PROPERTY',
+  'PARTIAL_PARAGRAPH_PROPERTIES',
+  'PARTIAL_RUN_PROPERTIES',
+  'PICTURE_GRAPHIC_REQUIRED',
+  'UNMODELED_DRAWING',
+  'UNRESOLVED_COMMENT_RANGE',
+  'UNRESOLVED_COMMENT_REFERENCE',
+  'FIELD_SEMANTICS',
+  'WRAPPED_RUN_MARKUP',
+  'NUMBERING_STYLE_PRESERVED',
+])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of expanded line boxes, leaving extra leading below the text; compressed line boxes remain unsupported.' as const
 export interface NativeDocxApproximationEligibilityV1 {
@@ -18,7 +36,7 @@ export interface NativeDocxApproximationEligibilityV1 {
   package_sha256: string
   settings_sha256: string | null
   status: 'eligible' | 'ineligible'
-  legacy_compatibility_mode: 12 | 14 | null
+  legacy_compatibility_mode: 12 | 14 | 15 | null
   reasons: string[]
   approximated_settings?: NativeDocxApproximatedSettingV1[]
   absent_font_sizes?: NativeDocxAbsentFontSizeV1[]
@@ -55,14 +73,14 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   const input = structuredClone(value) as NativeDocxApproximationEligibilityV1
   if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings' && key !== 'absent_font_sizes' && key !== 'legacy_table_origins').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
     || input.protocol !== 'injoffice.docx.approximation-eligibility' || input.version !== 1
-    || !['eligible', 'ineligible'].includes(input.status) || ![null, 12, 14].includes(input.legacy_compatibility_mode)
+    || !['eligible', 'ineligible'].includes(input.status) || ![null, 12, 14, 15].includes(input.legacy_compatibility_mode)
     || !Array.isArray(input.reasons) || input.reasons.length > 256 || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)
     || input.document_id !== settings.document_id || input.revision !== settings.revision || input.package_sha256 !== settings.package_sha256 || input.settings_sha256 !== (settings.settings_sha256 ?? null)) throw new TypeError('approximation eligibility does not exact-join original settings')
   const facts = input.approximated_settings ?? []
   if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,input.package_sha256)||input.legacy_compatibility_mode!==12||input.status!=='eligible'))throw new TypeError('Invalid legacy table origin evidence')
   if (input.absent_font_sizes !== undefined && !validNativeDocxAbsentFontSizesV1(input.absent_font_sizes, input.package_sha256)) throw new TypeError('Invalid source-absent font-size evidence')
   if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
-  if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || settings.compatibility_mode !== undefined || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
+  if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || (input.legacy_compatibility_mode === 15) !== (settings.compatibility_mode === 15) || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
   return input
 }
 
@@ -115,7 +133,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
 
 function coveredSettingsDiagnostics(settings: NativeDocxPaginationSettingsV1, facts: NativeDocxApproximatedSettingV1[]): boolean {
   return settings.diagnostics.every(reason => {
-    if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && ['/w:settings[1]', '/w:settings[1]/w:compat[1]', '/w:settings[1]/w:compat[1]/w:compatSetting[1]'].includes(reason.path)) return true
+    if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && (['/w:settings[1]', '/w:settings[1]/w:compat[1]', '/w:settings[1]/w:compat[1]/w:compatSetting[1]'].includes(reason.path) || /^\/w:settings\[1\]\/w:compat\[1\]\/w:compatSetting\[[5-9]\]$/.test(reason.path))) return true
     if (reason.code === 'PAGINATION_SETTING_UNSUPPORTED' || reason.code === 'UNKNOWN_SETTINGS_ELEMENT') return true
     return facts.some(fact => fact.path === reason.path && reason.code === (fact.kind === 'mathPr' ? 'UNKNOWN_SETTINGS_ELEMENT' : fact.path.includes('/w:compat[1]/') ? 'COMPATIBILITY_SETTING_UNSUPPORTED' : 'PAGINATION_SETTING_UNSUPPORTED'))
   }) && facts.every(fact => settings.diagnostics.some(reason => reason.path === fact.path))

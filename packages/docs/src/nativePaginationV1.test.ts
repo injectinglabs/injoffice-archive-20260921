@@ -46,6 +46,7 @@ import {
   DOCX_PAGINATION_REQUEST_VERSION,
   decodeNativeDocxPaginationRequestV1,
   paginateNativeDocxV1,
+  paginateNativeDocxApproximateLegacyV1,
   type NativeDocxPaginationRequestV1,
 } from './nativePaginationV1.js'
 import { asciiLowerNative, asciiUpperNative, compareNativeCodeUnits } from './nativeDeterminism.js'
@@ -1105,6 +1106,53 @@ describe('native DOCX pagination v1', () => {
     expect(result.value.status).toBe('refused')
     expect(result.value.pages).toEqual([])
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code })]))
+  })
+
+  it('omits an unshaped comment/drawing paragraph in approximate layout and keeps the sibling paragraph', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    const dropped = request.document.body.blocks[0]!.paragraph!
+    dropped.runs = [{
+      kind: 'reference', id: 'run:comment-start',
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:commentRangeStart[1]', 110, 120),
+      reference: { kind: 'comment-range-start', target_id: 'comment:1' },
+    }, {
+      kind: 'drawing', id: 'run:comment-drawing',
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 121, 180),
+      drawing: {
+        id: 'drawing:1',
+        anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 130, 170),
+        placement: 'inline', width_emu: 914_400, height_emu: 914_400,
+        edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'DRAWING_EFFECTS_UNSUPPORTED', message: 'Preserve the original drawing.', preservation: 'refuse-mutation' } },
+      },
+    }]
+    const commentAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]', start_byte: 10, end_byte: 400, xml_sha256: HASH }
+    const storyAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]/w:p[1]', start_byte: 20, end_byte: 300, xml_sha256: HASH }
+    const commentBody = paragraph('paragraph:comment-body', 9)
+    commentBody.anchor = storyAnchor
+    commentBody.runs[0]!.anchor = { ...storyAnchor, path: `${storyAnchor.path}/w:r[1]`, start_byte: 30, end_byte: 80 }
+    request.document.comment_stories = [{
+      id: 'story:comment:1', kind: 'comment', part_name: 'word/comments.xml', native_story_id: '1',
+      anchor: storyAnchor, blocks: [{ kind: 'paragraph', id: commentBody.id, paragraph: commentBody }],
+    }]
+    request.document.comments = [{ id: 'comment:1', native_comment_id: '1', author: 't', anchor: commentAnchor, body_story_id: 'story:comment:1' }]
+    request.resolved_layout.paragraphs.push({ paragraph_id: commentBody.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+    request.resolved_layout.runs = request.resolved_layout.runs.filter(run => run.run_id !== `run:${dropped.id}`)
+    request.resolved_layout.runs.push(
+      { run_id: 'run:comment-start', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: 'run:comment-drawing', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: commentBody.runs[0]!.id, paragraph_id: commentBody.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+    )
+    request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(request)
+    expect(strict, JSON.stringify(strict)).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('paginated')
+    expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:2'])
   })
 
   it('refuses body tables, drawings, and note references from source authority even when shaped output omits them', () => {
