@@ -18,6 +18,7 @@ import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nat
 import { validNativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
+import { fitNativeDocxApproximateTableGridV1, type NativeDocxApproximateTableGridPolicyV1 } from './nativeApproximateTableGridV1.js'
 
 export const DOCX_TABLE_PAGE_PAINT_LIMITS = {
   maxTables: 1_000,
@@ -47,7 +48,7 @@ export interface NativeDocxQualifiedTableRowV1 {
 export interface NativeDocxQualifiedTableV1 {
   origin_policy?: {name:'legacy-content-aligned-origin-v1';source:import('./nativeLegacyTableOriginV1.js').NativeDocxLegacyTableOriginV1;delta_millipoints:number}
   border_reservation_policy?: {name:'collapsed-horizontal-border-reservation-v1';above_content_millipoints:number}
-  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1
+  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1 | NativeDocxApproximateTableGridPolicyV1
   table: NativeDocxTableV1
   width_millipoints: number
   x_millipoints: number
@@ -305,6 +306,15 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     if ((sourceTable.table_style_id || resolvedTable.style_id) && !bordersValid(paintBorders)) return fail(sourceTable.id, 'Simple table style did not project exact table-level border commands')
     let table = paintBorders === sourceTable.borders ? sourceTable : { ...sourceTable, borders: paintBorders }
     let widthPolicy: NativeDocxQualifiedTableV1['width_policy']
+    if (approximate && table.layout === 'autofit') {
+      // Approximate preview only: consistent authored tcW/tblGrid preferences
+      // that exceed the text column keep their grid (Word's grid includes the
+      // cell margins) or scale to that extent instead of collapsing to the
+      // shaped content width. Strict paint never takes this branch.
+      const container = tableContainers.get(table.id)
+      const fitted = container ? fitNativeDocxApproximateTableGridV1(table, container.width, container.sectionID) : undefined
+      if (fitted) { table = fitted.table; widthPolicy = fitted.policy }
+    }
     if (table.layout === 'autofit') {
       const container = tableContainers.get(table.id)
       const projected = container ? resolveNativeDocxTableAutofitV1(table, container.width, container.sectionID, resolved, shaped, autofitIndexes) : undefined

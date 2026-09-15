@@ -73,6 +73,79 @@ function appendRow(request: NativeDocxPaginationRequestV1, ordinal: number): voi
 }
 
 describe('bounded native DOCX table page-paint geometry', () => {
+  /** Mirrors 2_table_doc.docx: TableGrid style, tblW auto, tblGrid 4428+4428 with
+   * matching tcW, Letter page with 1800-twip side margins (8640-twip column). */
+  function autoGridFixture(grid: number[]): NativeDocxPaginationRequestV1 {
+    const request = fixture()
+    const table = request.document.body.blocks[0]!.table!
+    delete table.layout; delete table.alignment; delete table.indent_twips; delete table.width_twips; delete table.cell_margins
+    table.table_style_id = 'TableGrid'
+    table.grid_widths_twips = [...grid]
+    for (const row of table.rows) {
+      const first = row.cells[0]!
+      row.cells = grid.map((width, index) => {
+        if (index === 0) return { ...first, width_twips: width }
+        const paragraphID = `${first.paragraphs[0]!.id}:${index}`
+        request.resolved_layout.paragraphs.push({ ...structuredClone(request.resolved_layout.paragraphs[0]!), paragraph_id: paragraphID })
+        const shaped = structuredClone(request.shaped_lines.paragraphs[0]!)
+        shaped.paragraph_id = paragraphID; shaped.lines[0]!.id = `line:${paragraphID}:0`
+        request.shaped_lines.paragraphs.push(shaped)
+        return { ...structuredClone(first), id: `${first.id}:${index}`, width_twips: width, paragraphs: [{ ...structuredClone(first.paragraphs[0]!), id: paragraphID }] }
+      })
+    }
+    const page = request.document.sections[0]!.page
+    page.width_twips = 12_240; page.height_twips = 15_840; page.orientation = 'portrait'
+    page.margins = { ...page.margins, left_twips: 1_800, right_twips: 1_800, top_twips: 1_440, bottom_twips: 1_440 }
+    request.resolved_layout.tables = [{ table_id: table.id, style_id: 'TableGrid', geometry: { layout: 'autofit', alignment: 'left', indent_twips: 0, width_type: 'auto', width_value: 0, cell_margins: { top_twips: 0, right_twips: 108, bottom_twips: 0, left_twips: 108 } } }]
+    return request
+  }
+
+  it('approximate preview keeps an authored auto-table grid that spans the column plus its cell margins', () => {
+    const request = autoGridFixture([4428, 4428])
+    const original = structuredClone(request.document)
+    // Strict paint keeps content autofit: the preferences exceed the column, so
+    // today's policy collapses to shaped content width. Only approximate changes.
+    const strict = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(strict.status === 'qualified' ? strict.tables[0]!.width_policy?.name : strict.status).toBe('shaped-content-minmax-v1')
+    if (strict.status === 'qualified') expect(strict.tables[0]!.width_millipoints).toBeLessThan(8640 * 50)
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    const [entry] = approximate.tables
+    expect(entry!.width_policy).toEqual({ name: 'approximate-authored-grid-fitted-v1', section_id: 'section:1', container_width_twips: 8640, extent_twips: 8856, source_grid_widths_twips: [4428, 4428], source_cell_widths_twips: [[4428, 4428], [4428, 4428]], fitted_grid_widths_twips: [4428, 4428], scaled: false })
+    expect(entry!.grid_widths_millipoints).toEqual([4428 * 50, 4428 * 50])
+    expect(entry!.width_millipoints).toBe((8640 + 108 + 108) * 50)
+    expect(entry!.rows[0]!.cells.reduce((sum, cell) => sum + cell.width_millipoints, 0)).toBe((8640 + 108 + 108) * 50)
+    expect(entry!.table.layout).toBe('fixed')
+    expect(request.document).toEqual(original)
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines, false)).toEqual(strict)
+  })
+
+  it('approximate preview scales an authored grid that exceeds the column plus cell margins', () => {
+    const request = autoGridFixture([6000, 3000])
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    const [entry] = approximate.tables
+    expect(entry!.width_policy).toMatchObject({ name: 'approximate-authored-grid-fitted-v1', extent_twips: 8856, source_grid_widths_twips: [6000, 3000], fitted_grid_widths_twips: [5904, 2952], scaled: true })
+    expect(entry!.grid_widths_millipoints).toEqual([5904 * 50, 2952 * 50])
+    expect(entry!.width_millipoints).toBe(8856 * 50)
+    expect(entry!.rows[1]!.cells.map((cell) => cell.width_millipoints)).toEqual([5904 * 50, 2952 * 50])
+  })
+
+  it('approximate preview without a tblGrid or with a fitting grid keeps the existing behavior', () => {
+    const missing = autoGridFixture([4428, 4428])
+    delete missing.document.body.blocks[0]!.table!.grid_widths_twips
+    expect(qualifyApproximateLegacyTables(missing.document, missing.resolved_layout, missing.shaped_lines, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+    const fitting = autoGridFixture([4000, 4000])
+    const approximate = qualifyApproximateLegacyTables(fitting.document, fitting.resolved_layout, fitting.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.width_policy?.name).toBe('source-preferred-nonconflicting-v1')
+    expect(approximate.tables[0]!.width_millipoints).toBe(8000 * 50)
+    const conflicting = autoGridFixture([4428, 4428])
+    conflicting.document.body.blocks[0]!.table!.rows[0]!.cells[1]!.width_twips = 4000
+    const fallback = qualifyApproximateLegacyTables(conflicting.document, conflicting.resolved_layout, conflicting.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(fallback.status === 'qualified' ? fallback.tables[0]!.width_policy?.name : fallback.status).not.toBe('approximate-authored-grid-fitted-v1')
+  })
+
   it('uses authored tblGrid as approximate fixed width when source layout is auto', () => {
     const request = fixture()
     const table = request.document.body.blocks[0]!.table!

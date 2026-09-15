@@ -652,6 +652,16 @@ conflicting cell preferences, and content requiring wrapping at those preference
 continue through the existing content policy and its refusal boundaries. This
 bounded case does not establish general Word autofit fidelity. Its named policy
 and source preferences enter the same independently re-derived table hash.
+The read-only approximate preview adds one more declared policy,
+`approximate-authored-grid-fitted-v1`, for the same omitted/auto width when the
+consistent authored `tblGrid`/`tcW` preferences exceed the owning text column.
+Word's grid widths include the horizontal cell margins, so a table authored to
+span the body has a grid wider than the column by exactly those margins; the
+approximate preview keeps such a grid as authored and only scales a grid wider
+than column plus margins proportionally to that extent (largest-remainder integer
+twips). The policy records the container, extent, source grid, source cell
+widths and fitted grid, and enters the table hash. Strict page paint never takes
+this branch; it continues with the content autofit policies above.
 Authored grid/cell widths remain source preferences recorded in the policy;
 they are not immutable column widths. Final wrapped glyph clusters independently
 rederive the same allocation during source-bound pagination and paint validation.
