@@ -481,7 +481,9 @@ origin (`source`, `resolution`, `shaping` or `pagination`), a display category
 (`drawing`, `equation`, `field`, `table`, `comment`, `content-control`,
 `revision`, `reference`, `text`, `block`, `other`), scope id, source part and
 path, and the original message. Formatting-only approximations (theme colors,
-spacing, font metadata) stay in the original diagnostics and do not appear here.
+spacing, font metadata) and non-visual markers (bookmarks, proofing and
+permission ranges) stay in the original diagnostics and do not appear here; a
+dropped paragraph is listed once, under the diagnostic that explains it.
 `unpainted_pages` lists exactly the painted pages without any paint command;
 the decoder rejects an envelope whose `content_status` disagrees with these
 lists, so a blank painted page can never decode as complete. `status: 'painted'`

@@ -29,13 +29,16 @@ describe('approximate omitted-content disclosure', () => {
     expect(result.content_status).toBe('partial')
     expect(result.unpainted_pages).toEqual(['page:1'])
     expect(result.omitted_content.filter((entry) => entry.code === 'UNMODELED_DRAWING')).toEqual([{ code: 'UNMODELED_DRAWING', origin: 'source', category: 'drawing', scope_id: 'run:d', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', message: 'Drawing/object markup and related media are preserved verbatim', count: 1 }])
-    expect(result.omitted_content.map((entry) => entry.code)).toEqual(['UNMODELED_DRAWING', 'PARAGRAPH_NOT_SHAPED'])
-    expect(result.omitted_content_total).toBe(2)
-    expect(nativeDocxOmittedContentSummaryV1(result)).toBe('2 items not rendered: drawings (1), text runs (1); 1 page painted nothing')
+    expect(result.omitted_content.map((entry) => entry.code)).toEqual(['UNMODELED_DRAWING'])
+    expect(result.omitted_content_total).toBe(1)
+    expect(nativeDocxOmittedContentSummaryV1(result)).toBe('1 item not rendered: drawings (1); 1 page painted nothing')
+    const unexplained = collectNativeDocxApproximateOmissionsV1(source({ runs: [drawing], shapedParagraphs: [] }), { status: 'painted', pages: [page('page:1', 0)] })
+    expect(unexplained.omitted_content).toEqual([expect.objectContaining({ code: 'PARAGRAPH_NOT_SHAPED', origin: 'pagination', category: 'drawing', scope_id: 'paragraph:1', count: 1 })])
+    expect(nativeDocxOmittedContentSummaryV1(unexplained)).toBe('1 item not rendered: drawings (1); 1 page painted nothing')
     expect(validNativeDocxApproximateOmissionsV1(result, { status: 'painted', pages: [page('page:1', 0)] })).toBe(true)
     expect(validNativeDocxApproximateOmissionsV1({ ...result, content_status: 'complete' }, { status: 'painted', pages: [page('page:1', 0)] })).toBe(false)
     expect(validNativeDocxApproximateOmissionsV1({ ...result, unpainted_pages: ['page:2'] }, { status: 'painted', pages: [page('page:1', 0)] })).toBe(false)
-    expect(validNativeDocxApproximateOmissionsV1({ ...result, omitted_content_total: 1 }, { status: 'painted', pages: [page('page:1', 0)] })).toBe(false)
+    expect(validNativeDocxApproximateOmissionsV1({ ...result, omitted_content_total: 0 }, { status: 'painted', pages: [page('page:1', 0)] })).toBe(false)
   })
   it('keeps formatting-only approximations out of the omitted list and merges duplicates', () => {
     const resolution = [
@@ -67,6 +70,16 @@ describe('approximate omitted-content disclosure', () => {
     expect(validNativeDocxApproximateOmissionsV1({ ...empty, unpainted_pages: [] }, { status: 'painted', pages: [page('page:1', 0), page('page:2', 1)] })).toBe(false)
     expect(validNativeDocxApproximateOmissionsV1({ ...empty, unpainted_pages: [], content_status: 'complete' }, { status: 'painted', pages: [page('page:1', 0), page('page:2', 1)] })).toBe(false)
   })
+  it('does not count non-visual markers as omitted content', () => {
+    const unsupported = [
+      { id: 'u:1', code: 'UNMODELED_PARAGRAPH_CONTENT', capability: 'paragraphs', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:bookmarkStart[1]'), preservation: 'preserve-verbatim', message: 'bookmark' },
+      { id: 'u:2', code: 'UNMODELED_PARAGRAPH_CONTENT', capability: 'paragraphs', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:bookmarkEnd[1]'), preservation: 'preserve-verbatim', message: 'bookmark' },
+      { id: 'u:3', code: 'UNMODELED_PARAGRAPH_CONTENT', capability: 'paragraphs', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:proofErr[1]'), preservation: 'preserve-verbatim', message: 'proofing' },
+    ]
+    const resolution = [{ code: 'UNMODELED_PARAGRAPH_CONTENT', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:permStart[1]', preservation: 'preserve-verbatim', message: 'permission' }]
+    const result = collectNativeDocxApproximateOmissionsV1(source({ unsupported, resolution }), { status: 'painted', pages: [page('page:1', 2)] })
+    expect(result).toEqual({ content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [] })
+  })
   it('treats refusals as a fixed partial record', () => {
     const refusal = nativeDocxApproximateRefusalOmissionsV1()
     expect(validNativeDocxApproximateOmissionsV1(refusal, { status: 'refused', pages: [] })).toBe(true)
@@ -84,8 +97,8 @@ describe('approximate omitted-content disclosure', () => {
     expect(nativeDocxOmittedContentCategoryV1('SOMETHING_ELSE', undefined)).toBe('other')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_RUN_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/ns4d2aa588:AlternateContent[1]')).toBe('drawing')
     expect(nativeDocxOmittedContentCategoryV1('PICTURE_GRAPHIC_REQUIRED', '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]/ns4a8a39ac:inline[1]')).toBe('drawing')
-    expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/w:bookmarkStart[1]')).toBe('other')
-    expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/w:proofErr[1]')).toBe('other')
+    expect(nativeDocxOmittedContentCategoryV1('table-layout-unsupported', undefined)).toBe('table')
+    expect(nativeDocxOmittedContentCategoryV1('unsupported-numbering-text', undefined)).toBe('text')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/ns1234abcd:oMathPara[1]')).toBe('equation')
   })
 })

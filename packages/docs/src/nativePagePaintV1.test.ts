@@ -452,8 +452,8 @@ describe('native DOCX page-paint v1', () => {
     expect(approximate.pages[0]!.commands).toEqual([])
     expect(approximate.unpainted_pages).toEqual([approximate.pages[0]!.id])
     expect(approximate.omitted_content.filter(entry => entry.code === 'UNMODELED_DRAWING')).toEqual([{ code: 'UNMODELED_DRAWING', origin: 'source', category: 'drawing', scope_id: 'run:shape', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', message: 'Drawing/object markup and related media are preserved verbatim', count: 1 }])
-    expect(approximate.omitted_content.map(entry => entry.code)).toEqual(['UNMODELED_DRAWING', 'drawing-layout-unsupported', 'PARAGRAPH_NOT_SHAPED'])
-    expect(approximate.omitted_content_total).toBe(3)
+    expect(approximate.omitted_content.map(entry => entry.code)).toEqual(['UNMODELED_DRAWING', 'drawing-layout-unsupported'])
+    expect(approximate.omitted_content_total).toBe(2)
     expect(approximate.reasons).toContain(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
     expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
     expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [], reasons: approximate.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING) }).ok).toBe(false)
@@ -526,7 +526,6 @@ describe('native DOCX page-paint v1', () => {
     expect(approximate.content_status).toBe('partial')
     expect(approximate.omitted_content.map(entry => [entry.code, entry.category, entry.scope_id])).toEqual([
       ['reference-layout-unsupported', 'comment', 'run:comment-start'],
-      ['PARAGRAPH_NOT_SHAPED', 'text', 'paragraph:comment'],
     ])
     expect(approximate.unpainted_pages).toEqual([])
     expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })

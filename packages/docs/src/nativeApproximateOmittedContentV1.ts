@@ -76,22 +76,23 @@ const CONTENT_CONTROL = local('sdt|sdtContent')
 const REVISION = local('ins|del|moveFrom|moveTo')
 const COMMENT = local('commentRangeStart|commentRangeEnd|commentReference')
 const TABLE = local('tbl')
-/** Non-visual markers: Word paints nothing for them either. */
+/** Non-visual markers: Word paints nothing for them either, so their
+ * preservation is not omitted content. They stay in the original diagnostics. */
 const MARKER = local('bookmarkStart|bookmarkEnd|proofErr|permStart|permEnd')
+export function nativeDocxNonVisualMarkerPathV1(path: string | undefined): boolean { return MARKER.test(path ?? '') }
 
 export function nativeDocxOmittedContentCategoryV1(code: string, path: string | undefined): NativeDocxOmittedContentCategoryV1 {
   const at = path ?? ''
   if (EQUATION.test(at)) return 'equation'
-  if (MARKER.test(at)) return 'other'
   if (DRAWING.test(at) || code === 'UNMODELED_DRAWING' || code === 'PICTURE_GRAPHIC_REQUIRED' || code === 'drawing-layout-unsupported') return 'drawing'
   if (FIELD.test(at) || code === 'FIELD_SEMANTICS') return 'field'
   if (CONTENT_CONTROL.test(at)) return 'content-control'
   if (REVISION.test(at) || code === 'WRAPPED_RUN_MARKUP') return 'revision'
   if (COMMENT.test(at) || code === 'UNRESOLVED_COMMENT_RANGE' || code === 'UNRESOLVED_COMMENT_REFERENCE') return 'comment'
-  if (TABLE.test(at) || code === 'NESTED_TABLE_OR_CELL_MARKUP') return 'table'
+  if (TABLE.test(at) || code === 'NESTED_TABLE_OR_CELL_MARKUP' || code === 'table-layout-unsupported') return 'table'
   if (code === 'reference-layout-unsupported') return 'reference'
   if (code === 'UNMODELED_BODY_BLOCK') return 'block'
-  if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
+  if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
   return 'other'
 }
 
@@ -118,11 +119,11 @@ export function collectNativeDocxApproximateOmissionsV1(source: NativeDocxApprox
     else merged.set(key, { ...entry, count: 1 })
   }
   for (const entry of source.document.unsupported) {
-    if (!DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(entry.code)) continue
+    if (!DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(entry.code) || nativeDocxNonVisualMarkerPathV1(entry.anchor?.path)) continue
     record({ code: entry.code, origin: 'source', category: nativeDocxOmittedContentCategoryV1(entry.code, entry.anchor?.path), scope_id: entry.scope_id, ...(entry.anchor ? { part_name: entry.anchor.part_name, path: entry.anchor.path } : {}), message: entry.message })
   }
   for (const entry of source.resolved_layout.diagnostics) {
-    if (!DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(entry.code) || isRenderNeutralLayoutDiagnostic(entry, source.resolved_layout)) continue
+    if (!DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(entry.code) || isRenderNeutralLayoutDiagnostic(entry, source.resolved_layout) || nativeDocxNonVisualMarkerPathV1(entry.path)) continue
     record({ code: entry.code, origin: 'resolution', category: nativeDocxOmittedContentCategoryV1(entry.code, entry.path), scope_id: entry.scope_id, ...(entry.part_name !== undefined ? { part_name: entry.part_name } : {}), ...(entry.path !== undefined ? { path: entry.path } : {}), message: entry.message })
   }
   const anchors = new Map<string, { part_name: string; path: string }>()
@@ -135,10 +136,16 @@ export function collectNativeDocxApproximateOmissionsV1(source: NativeDocxApprox
     const anchor = anchors.get(entry.source_id ?? '') ?? anchors.get(entry.scope_id)
     record({ code: entry.code, origin: 'shaping', category: nativeDocxOmittedContentCategoryV1(entry.code, anchor?.path), scope_id: entry.source_id ?? entry.scope_id, ...(anchor ?? {}), message: entry.message })
   }
+  // Backstop only: a dropped paragraph whose paragraph or run scope already has
+  // an entry above is that entry, not a second item.
+  const disclosed = new Set([...merged.values()].map((entry) => entry.scope_id))
   const shaped = new Set(source.shaped_lines.paragraphs.map((paragraph) => paragraph.paragraph_id))
   for (const paragraph of bodyParagraphs(source.document)) {
-    if (shaped.has(paragraph.id) || !paragraph.runs.some((run) => (run.kind === 'text' && (run.text ?? '') !== '') || run.kind === 'drawing' || run.kind === 'reference')) continue
-    record({ code: DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE, origin: 'pagination', category: 'text', scope_id: paragraph.id, part_name: paragraph.anchor.part_name, path: paragraph.anchor.path, message: 'Body paragraph with source content has no shaped lines and was not painted' })
+    if (shaped.has(paragraph.id) || disclosed.has(paragraph.id) || paragraph.runs.some((run) => disclosed.has(run.id))) continue
+    const content = paragraph.runs.filter((run) => (run.kind === 'text' && (run.text ?? '') !== '') || run.kind === 'drawing' || run.kind === 'reference')
+    if (content.length === 0) continue
+    const category: NativeDocxOmittedContentCategoryV1 = content.some((run) => run.kind === 'drawing') ? 'drawing' : content.some((run) => run.kind === 'text') ? 'text' : 'reference'
+    record({ code: DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE, origin: 'pagination', category, scope_id: paragraph.id, part_name: paragraph.anchor.part_name, path: paragraph.anchor.path, message: `Body paragraph with ${category} content has no shaped lines and was not painted, and no other diagnostic explains it` })
   }
   const omitted = [...merged.values()].sort((left, right) => compare(left, right)).slice(0, DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT)
   const unpainted = paint.pages.filter((page) => page.commands.length === 0).map((page) => page.id)
