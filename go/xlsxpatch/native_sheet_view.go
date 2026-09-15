@@ -221,7 +221,7 @@ func parseNativeSheetViewPane(element xml.StartElement) (*NativeWorkbookSheetVie
 	} {
 		if frozen {
 			value, _, err := optionalNativeUintAttribute(element, axis.local, axis.maximum)
-			if err != nil {
+			if err != nil || value > axis.maximum {
 				return nil, false
 			}
 			*axis.count = int(value)
