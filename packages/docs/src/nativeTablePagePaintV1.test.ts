@@ -100,7 +100,7 @@ describe('bounded native DOCX table page-paint geometry', () => {
     return request
   }
 
-  it('approximate preview keeps an authored auto-table grid that spans the column plus its cell margins', () => {
+  it('approximate preview fits an authored auto-table grid that exceeds the column to the body width', () => {
     const request = autoGridFixture([4428, 4428])
     const original = structuredClone(request.document)
     // Strict paint keeps content autofit: the preferences exceed the column, so
@@ -111,24 +111,33 @@ describe('bounded native DOCX table page-paint geometry', () => {
     const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
     expect(approximate.status).toBe('qualified')
     const [entry] = approximate.tables
-    expect(entry!.width_policy).toEqual({ name: 'approximate-authored-grid-fitted-v1', section_id: 'section:1', container_width_twips: 8640, extent_twips: 8856, source_grid_widths_twips: [4428, 4428], source_cell_widths_twips: [[4428, 4428], [4428, 4428]], fitted_grid_widths_twips: [4428, 4428], scaled: false })
-    expect(entry!.grid_widths_millipoints).toEqual([4428 * 50, 4428 * 50])
-    expect(entry!.width_millipoints).toBe((8640 + 108 + 108) * 50)
-    expect(entry!.rows[0]!.cells.reduce((sum, cell) => sum + cell.width_millipoints, 0)).toBe((8640 + 108 + 108) * 50)
+    expect(entry!.width_policy).toEqual({ name: 'approximate-authored-grid-fitted-v1', section_id: 'section:1', container_width_twips: 8640, available_width_twips: 8640, source_grid_widths_twips: [4428, 4428], source_cell_widths_twips: [[4428, 4428], [4428, 4428]], fitted_grid_widths_twips: [4320, 4320] })
+    expect(entry!.grid_widths_millipoints).toEqual([4320 * 50, 4320 * 50])
+    expect(entry!.width_millipoints).toBe(8640 * 50)
+    expect(entry!.rows[0]!.cells.reduce((sum, cell) => sum + cell.width_millipoints, 0)).toBe(8640 * 50)
+    expect(entry!.rows[0]!.cells.map((cell) => cell.content_width_millipoints)).toEqual([(4320 - 216) * 50, (4320 - 216) * 50])
     expect(entry!.table.layout).toBe('fixed')
     expect(request.document).toEqual(original)
     expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines, false)).toEqual(strict)
+    // Without declared eligibility the wrapper reproduces the strict projection.
+    expect(qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines)).toEqual(strict)
   })
 
-  it('approximate preview scales an authored grid that exceeds the column plus cell margins', () => {
+  it('approximate preview scales an uneven authored grid to the column with largest-remainder twips', () => {
     const request = autoGridFixture([6000, 3000])
     const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
     expect(approximate.status).toBe('qualified')
     const [entry] = approximate.tables
-    expect(entry!.width_policy).toMatchObject({ name: 'approximate-authored-grid-fitted-v1', extent_twips: 8856, source_grid_widths_twips: [6000, 3000], fitted_grid_widths_twips: [5904, 2952], scaled: true })
-    expect(entry!.grid_widths_millipoints).toEqual([5904 * 50, 2952 * 50])
-    expect(entry!.width_millipoints).toBe(8856 * 50)
-    expect(entry!.rows[1]!.cells.map((cell) => cell.width_millipoints)).toEqual([5904 * 50, 2952 * 50])
+    expect(entry!.width_policy).toMatchObject({ name: 'approximate-authored-grid-fitted-v1', available_width_twips: 8640, source_grid_widths_twips: [6000, 3000], fitted_grid_widths_twips: [5760, 2880] })
+    expect(entry!.grid_widths_millipoints).toEqual([5760 * 50, 2880 * 50])
+    expect(entry!.width_millipoints).toBe(8640 * 50)
+    expect(entry!.rows[1]!.cells.map((cell) => cell.width_millipoints)).toEqual([5760 * 50, 2880 * 50])
+    const uneven = autoGridFixture([5000, 5000, 5000])
+    const scaled = qualifyApproximateLegacyTables(uneven.document, uneven.resolved_layout, uneven.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(scaled.status === 'qualified' ? scaled.tables[0]!.width_policy : scaled.status).toMatchObject({ fitted_grid_widths_twips: [2880, 2880, 2880] })
+    const remainder = autoGridFixture([5000, 5000, 4000])
+    const split = qualifyApproximateLegacyTables(remainder.document, remainder.resolved_layout, remainder.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(split.status === 'qualified' ? split.tables[0]!.width_policy : split.status).toMatchObject({ fitted_grid_widths_twips: [3086, 3086, 2468] })
   })
 
   it('approximate preview without a tblGrid or with a fitting grid keeps the existing behavior', () => {

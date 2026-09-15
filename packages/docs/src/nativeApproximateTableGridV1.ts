@@ -9,14 +9,11 @@ export interface NativeDocxApproximateTableGridPolicyV1 {
   name: typeof DOCX_APPROXIMATE_TABLE_GRID_POLICY
   section_id: string
   container_width_twips: number
-  /** Container minus indent plus both horizontal cell margins: Word's gridCol
-   * widths include the cell margins, so a body-wide table authored by Word has
-   * a grid that exceeds the text column by exactly those margins. */
-  extent_twips: number
+  /** Container minus the table indent: the column width the fitted grid sums to. */
+  available_width_twips: number
   source_grid_widths_twips: number[]
   source_cell_widths_twips: number[][]
   fitted_grid_widths_twips: number[]
-  scaled: boolean
 }
 
 const LIMIT = 20_000_000
@@ -27,10 +24,12 @@ const bounded = (n: unknown): n is number => typeof n === 'number' && Number.isS
  * whose consistent authored preferences do not fit the text column: layout is
  * autofit (explicit or cascade default), preferred width is auto, every cell
  * repeats its grid slice, and the grid sum exceeds the available column width.
- * The grid is kept as authored when it fits the Word extent (column plus cell
- * margins); beyond that it is scaled proportionally to that extent with
- * deterministic largest-remainder integer twips. Anything else returns
- * undefined so the existing policies and refusals decide.
+ * Word's gridCol widths include the cell margins, so a body-wide table authored
+ * by Word carries a grid wider than the column by exactly those margins; the
+ * preview scales the grid proportionally to the column with deterministic
+ * largest-remainder integer twips because pagination refuses any table edge
+ * past the column. Anything else returns undefined so the existing policies
+ * and refusals decide.
  */
 export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, containerWidth: number, sectionID: string): { table: NativeDocxTableV1; policy: NativeDocxApproximateTableGridPolicyV1 } | undefined {
   const grid = table.grid_widths_twips, margins = table.cell_margins
@@ -39,8 +38,7 @@ export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, co
   if (table.rows.length === 0 || table.rows.length > 10_000) return undefined
   const gridSum = grid.reduce((a, b) => a + b, 0)
   const available = containerWidth - table.indent_twips
-  const extent = available + margins.left_twips + margins.right_twips
-  if (!bounded(gridSum) || !bounded(extent) || available <= 0 || gridSum <= available) return undefined
+  if (!bounded(gridSum) || available <= 0 || gridSum <= available) return undefined
   let cells = 0
   for (const row of table.rows) {
     let column = 0
@@ -52,25 +50,22 @@ export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, co
     }
     if (column !== grid.length) return undefined
   }
-  let fitted = [...grid], scaled = false
-  if (gridSum > extent) {
-    scaled = true
-    const remainders = grid.map((width, index) => { const numerator = BigInt(width) * BigInt(extent); return { index, whole: Number(numerator / BigInt(gridSum)), remainder: numerator % BigInt(gridSum) } })
-    fitted = remainders.map((entry) => entry.whole)
-    remainders.sort((a, b) => a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1)
-    const left = extent - fitted.reduce((a, b) => a + b, 0)
-    for (let i = 0; i < left; i += 1) fitted[remainders[i]!.index]! += 1
-    if (fitted.some((n) => n <= 0)) return undefined
-  }
+  const remainders = grid.map((width, index) => { const numerator = BigInt(width) * BigInt(available); return { index, whole: Number(numerator / BigInt(gridSum)), remainder: numerator % BigInt(gridSum) } })
+  const fitted = remainders.map((entry) => entry.whole)
+  remainders.sort((a, b) => a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1)
+  const left = available - fitted.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < left; i += 1) fitted[remainders[i]!.index]! += 1
+  if (fitted.some((n) => n <= 0)) return undefined
   const width = fitted.reduce((a, b) => a + b, 0)
+  if (width !== available) return undefined
   const rows = table.rows.map((row) => {
     let column = 0
     return { ...row, cells: row.cells.map((cell) => { const end = column + cell.grid_span; const projected = { ...cell, width_twips: fitted.slice(column, end).reduce((a, b) => a + b, 0) }; column = end; return projected }) }
   })
   const policy: NativeDocxApproximateTableGridPolicyV1 = {
-    name: DOCX_APPROXIMATE_TABLE_GRID_POLICY, section_id: sectionID, container_width_twips: containerWidth, extent_twips: extent,
+    name: DOCX_APPROXIMATE_TABLE_GRID_POLICY, section_id: sectionID, container_width_twips: containerWidth, available_width_twips: available,
     source_grid_widths_twips: [...grid], source_cell_widths_twips: table.rows.map((row) => row.cells.map((cell) => cell.width_twips!)),
-    fitted_grid_widths_twips: [...fitted], scaled,
+    fitted_grid_widths_twips: [...fitted],
   }
   return { policy, table: { ...table, layout: 'fixed', width_twips: width, grid_widths_twips: fitted, rows } }
 }

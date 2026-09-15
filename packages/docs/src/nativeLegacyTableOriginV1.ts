@@ -32,7 +32,9 @@ export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,res
    if(entry)entry.properties={...entry.properties,spacing_before_twips:0}
   }
  }
- const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped,true),facts=eligibility?.legacy_table_origins??[]
+ // Approximate table relaxations apply only with declared approximate eligibility; strict
+ // request verification passes none and must reproduce the strict compiler's projection.
+ const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped,eligibility!==undefined),facts=eligibility?.legacy_table_origins??[]
  if(result.status!=='qualified'||eligibility?.legacy_compatibility_mode!==12&&!facts.length)return result
  if(eligibility?.legacy_compatibility_mode!==12||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
  const tables=structuredClone(result.tables),sections=new Map(document.sections.map(s=>[s.starts_at_block_id,s]))
