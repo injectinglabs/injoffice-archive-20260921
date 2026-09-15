@@ -2,7 +2,10 @@ name: PPTX area minimum baseline qualification
 
 on:
   workflow_dispatch:
-  pull_request:
+  # Not a merge gate: runs after merge to main (and on demand) so PR runners
+  # stay free for the required "CI required" aggregate in test.yml.
+  push:
+    branches: [main]
     paths:
       - '.github/workflows/pptx-area-min-baseline-qualification.yml'
       - 'scripts/smoke-pptx-area-min-baseline-browser.mjs'
