@@ -333,6 +333,12 @@ describe('native DOCX page-paint v1', () => {
     const duplicateSettings = structuredClone(settings)
     duplicateSettings.diagnostics = [{ code: 'DUPLICATE_SETTINGS_PROPERTY', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:activeWritingStyle[2]', preservation: 'preserve-verbatim', message: 'Duplicate settings property is ambiguous' }]
     expect(decodeNativeDocxApproximationEligibilityV1({ ...eligibility, approximated_settings: [], reasons: ['Legacy mode'] }, duplicateSettings).status).toBe('eligible')
+    const breakingSettings = structuredClone(settings)
+    breakingSettings.diagnostics = [
+      { code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]/w:applyBreakingRules[1]', preservation: 'preserve-verbatim', message: 'Legacy compatibility markup changes Word layout and is not resolved' },
+      { code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]/w:compatSetting[1]', preservation: 'preserve-verbatim', message: 'Only one modern Word compatibilityMode=15 attestation is supported' },
+    ]
+    expect(decodeNativeDocxApproximationEligibilityV1({ ...eligibility, approximated_settings: [], reasons: ['Legacy mode'] }, breakingSettings).status).toBe('eligible')
   })
   it('admits attested mode 15 extras as current-layout approximation without painting strict', async () => {
     const request = fixture()
