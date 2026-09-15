@@ -123,7 +123,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		fit = &NativeSheetFitToPageV1{Width: width, Height: height}
 		setupFields = append(setupFields, "fitToWidth", "fitToHeight")
 	}
-	if fit == nil || setup.attr("scale") != "" {
+	if setup.attr("scale") != "" {
 		setupFields = append(setupFields, "scale")
 	}
 	order := setup.attr("pageOrder")
@@ -133,13 +133,13 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		}
 		setupFields = append(setupFields, "pageOrder")
 	}
-	if !exactLeaf(setup, setupFields...) || !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
+	if !pageSetupLayoutAttrs(setup, setupFields) || !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
 		return result
 	}
 	paper := map[string]string{"1": "Letter", "9": "A4"}[setup.attr("paperSize")]
 	orientation := setup.attr("orientation")
 	scaleText := setup.attr("scale")
-	if fit != nil && scaleText == "" {
+	if scaleText == "" {
 		scaleText = "100"
 	}
 	scale, err := strconv.Atoi(scaleText)
@@ -160,5 +160,52 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	if fit != nil {
 		result.Warnings = append(result.Warnings, "Explicit fit-to-page dimensions apply to the selected preview range. A zero dimension is unconstrained. Percentage scale is ignored in fit mode; absent source scale is represented as 100 for compatibility.")
 	}
+	if setup.attr("horizontalDpi") != "" || setup.attr("verticalDpi") != "" {
+		result.Warnings = append(result.Warnings, "Excel sentinel printer DPI values are ignored; 96 CSS px/in is the preview raster, not a source printer.")
+	}
 	return result
+}
+
+func excelSentinelPrintDPI(raw string) bool {
+	switch raw {
+	case "0", "4294967292", "4294967293", "4294967294", "4294967295":
+		return true
+	default:
+		return false
+	}
+}
+
+func pageSetupLayoutAttrs(setup *previewXML, required []string) bool {
+	allowed := map[string]bool{"horizontalDpi": true, "verticalDpi": true}
+	for _, name := range required {
+		allowed[name] = true
+	}
+	seen := map[string]int{}
+	for _, a := range setup.attrs {
+		if isPreviewNamespaceDeclaration(a) {
+			continue
+		}
+		if a.Name.Space != "" {
+			if a.Name.Local == "id" && (a.Name.Space == "http://schemas.openxmlformats.org/officeDocument/2006/relationships" || a.Name.Space == "http://purl.oclc.org/ooxml/officeDocument/relationships") {
+				continue
+			}
+			return false
+		}
+		if !allowed[a.Name.Local] {
+			return false
+		}
+		seen[a.Name.Local]++
+		if seen[a.Name.Local] != 1 {
+			return false
+		}
+		if (a.Name.Local == "horizontalDpi" || a.Name.Local == "verticalDpi") && !excelSentinelPrintDPI(a.Value) {
+			return false
+		}
+	}
+	for _, name := range required {
+		if seen[name] != 1 {
+			return false
+		}
+	}
+	return true
 }
