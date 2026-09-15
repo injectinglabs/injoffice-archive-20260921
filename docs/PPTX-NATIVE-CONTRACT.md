@@ -191,6 +191,28 @@ preserve-only shape content is contract-invalid. Element-scoped refusals aggrega
 to the slide/deck while remaining element placeholders; an independent slide-level
 refusal still blocks the whole slide.
 
+Connectors keep their exact editable projection only for an unrotated `line` /
+`straightConnector1` with an empty adjustment list and explicit outline paint.
+Any other member of the DrawingML connector preset family (`bentConnector2`–`5`,
+`curvedConnector2`–`5`, or a straight connector with rotation) is routed through
+the fingerprinted preset catalog with its literal `avLst` adjustments and emitted
+as an additive read-only `geometry` on the connector element under the declared
+policy `pptx.connector-preset-preview`. Orientation travels as the source affine
+(`rotationAngle`/`flipH`/`flipV`, never quarter turns); the legacy anti-diagonal
+`flipH` flag is contract-invalid next to evaluated geometry, and an editable
+connector may not carry geometry. The evaluated result must be exactly one open
+stroked `fill="none"` path (moveTo followed by line/curve commands); presets outside
+the connector family, custom geometry, unknown or non-literal adjustments, and any
+closed or fillable result refuse. Connector outline paint may come from an explicit
+`<a:ln>` or from the theme line style matrix through `p:style/a:lnRef` (indices
+1–3, `phClr` bound to the reference color); a local `<a:ln>` inherits the selected
+matrix entry per ECMA-376 §20.1.4.2.19 and its own attributes and choice-group
+children override it, for AutoShapes as well as connectors. `stCxn`/`endCxn`
+attachments and connector locks are informational: geometry is fully defined by the
+transform, preset, and adjustments, so they are preserved but never resolved. Arrow
+insets and arrowheads follow the terminal tangents of the evaluated path under the
+existing arrow-v1 policy; none of this claims Office connector routing.
+
 The XML boundary accepts a deliberately canonical v1 declaration only at the
 start of a part: XML 1.0, followed optionally by `encoding="UTF-8"` and then
 optionally by `standalone="yes"` or `standalone="no"`. Duplicate, unknown,

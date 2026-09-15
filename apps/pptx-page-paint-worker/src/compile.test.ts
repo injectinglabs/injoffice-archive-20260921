@@ -109,6 +109,12 @@ describe('actual source-font native PPTX worker',()=>{
   const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8')),connector=source.slides[0].elements.find((e:{kind:string})=>e.kind==='connector');request.deck.slides[0].elements=[connector];connector.tailArrow=true
   const legacy=await compilePptxPreview(request);expect(JSON.stringify(legacy.nodes)).toContain('Arrowhead unavailable');expect(JSON.stringify(legacy.nodes)).not.toContain('connectorArrow')
   connector.tailEnd={type:'diamond',w:'lg',len:'sm'};const typed=await compilePptxPreview(request);expect(JSON.stringify(typed.nodes)).toContain('connectorArrow');expect(typed.diagnostics.join(' ')).toContain('arrow.deterministicGeometry')
+ connector.geometry={profile:'drawingml-paths-v1',textRect:{x:0,y:0,cx:connector.transform.cx,cy:connector.transform.cy},paths:[{fillMode:'none',stroke:true,commands:[{kind:'moveTo',x:0,y:0},{kind:'lineTo',x:connector.transform.cx,y:0},{kind:'lineTo',x:connector.transform.cx,y:connector.transform.cy}]}]}
+ connector.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.connector-preset-preview',message:'catalog preview'}]};connector.transform={...connector.transform,rotationAngle:5400000};delete connector.flipH
+ const bent=await compilePptxPreview(request),bentText=JSON.stringify(bent.nodes)
+ expect(bentText).toContain('connectorArrow');expect(bentText).toMatch(/"d":"M0 0 L\d+ 0 L\d+ \d+(\.\d+)?"/);expect(bent.diagnostics.join(' ')).toContain('connector.presetShaftPreview')
+ connector.geometry.paths[0].commands.push({kind:'close'})
+ await expect(compilePptxPreview(request)).rejects.toThrow()
  })
  it('converts source miter thousandths-percent to SVG ratio without silently clamping',()=>{expect(previewStroke({color:'123456',widthEmu:12700,cap:'flat',join:'miter',miterLimit:800000})).toEqual({stroke:'123456',strokeWidth:12700,strokeLinecap:'butt',strokeLinejoin:'miter',strokeMiterlimit:8});expect(()=>previewStroke({color:'123456',widthEmu:12700,join:'miter',miterLimit:0})).toThrow('outside SVG replay range')})
  it('validates owned raster bytes and joins cropped nodes only to admitted resources',async()=>{
