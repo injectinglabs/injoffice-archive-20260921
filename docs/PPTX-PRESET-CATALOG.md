@@ -42,7 +42,7 @@ ECMA's [standard download](https://ecma-international.org/publications-and-stand
 
 ## Picture clip outlines
 
-`<p:pic>` shape properties reuse the catalog. The exact `rect` and default `roundRect` picture contract is unchanged; every other preset, and any authored adjustment, is evaluated at the picture frame extent by `evaluateNativePresetSource` and carried as the additive picture `geometry` field under the `pptx.picture-geometry-preview` policy. Pictures with evaluated outlines stay preserve-only and non-mutable, exactly like catalog AutoShapes. The renderer clips the image to the fillable subpaths (`clipPath` paint command, worker `clip.d`, SVG `<clipPath><path>`); evaluation failures keep the `pptx.picture-geometry-unavailable` placeholder. This is a source-evaluated outline preview, not a claim of PowerPoint picture-fill equivalence.
+`<p:pic>` shape properties reuse the catalog. The exact `rect` and default `roundRect` picture contract is unchanged; every other preset, and any authored adjustment, is evaluated at the picture frame extent by `evaluateNativePresetSource` and carried as the additive picture `geometry` field under the `pptx.picture-geometry-preview` policy. Pictures with evaluated outlines stay preserve-only and non-mutable, exactly like catalog AutoShapes. The renderer clips the image to the fillable subpaths (`clipPath` paint command, worker `clip.d`, SVG `<clipPath><path>`); evaluation failures, and rotated or flipped pictures, keep the `pptx.picture-geometry-unavailable` placeholder; an omitted `avLst` evaluates as default adjustments. This is a source-evaluated outline preview, not a claim of PowerPoint picture-fill equivalence.
 
 ## Deterministic path shading policy
 

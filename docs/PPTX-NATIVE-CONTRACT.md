@@ -136,10 +136,13 @@ picture remains `preserveOnly` with a passthrough capability, `clip` and
 and mutation refuses every element that carries evaluated geometry. The
 renderer clips the image (after its exact source crop) to the fillable
 subpaths of that outline; stroke-only decoration paths never widen the clip.
-When catalog evaluation refuses (unknown preset, undeclared or non-literal
-adjustment, foreign markup, unstable numerics), the picture keeps the legacy
-`pptx.picture-geometry-unavailable` gap and paints as a placeholder rather than
-an invented outline.
+An omitted `avLst` means default adjustments, exactly like an empty list
+(ECMA-376 `CT_PresetGeometry2D`, `minOccurs=0`). When catalog evaluation
+refuses (unknown preset, undeclared or non-literal adjustment, foreign markup,
+unstable numerics), or when the picture carries rotation or flips (which v1
+emits as an unrotated transform plus `pptx.picture-transform-unavailable`), the
+picture keeps the legacy `pptx.picture-geometry-unavailable` gap and paints as
+a placeholder rather than an unrotated or invented outline.
 
 The exact text-body slice materializes DrawingML defaults and direct equivalents
 into `textBody`: left/right insets `91440` EMU, top/bottom insets `45720` EMU,

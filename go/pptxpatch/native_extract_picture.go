@@ -28,6 +28,8 @@ type nativePicturePartInspection struct {
 	byteLength int64
 }
 
+func (gaps *nativePictureGapSet) has(code string) bool { return gaps.seen[code] }
+
 func (gaps *nativePictureGapSet) add(code, message string) {
 	if gaps.seen == nil {
 		gaps.seen = map[string]bool{}
@@ -320,7 +322,10 @@ func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExt
 		gaps.add("pptx.picture-geometry-unavailable", "picture rectangle geometry is not explicit in native PPTX v1")
 		return transform, nil
 	}
-	if err := validateNativePictureGeometry(geometry, dialect, *transform.Cx, *transform.Cy, gaps, clip, evaluated); err != nil {
+	// Rotation and flips are emitted as an unrotated transform with a gap; an
+	// evaluated outline must not paint such a picture unrotated and silently.
+	transformExact := !gaps.has("pptx.picture-transform-unavailable")
+	if err := validateNativePictureGeometry(geometry, dialect, *transform.Cx, *transform.Cy, transformExact, gaps, clip, evaluated); err != nil {
 		return NativeTransform{}, err
 	}
 	return transform, nil

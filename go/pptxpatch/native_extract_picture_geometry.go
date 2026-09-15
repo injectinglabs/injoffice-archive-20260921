@@ -21,8 +21,11 @@ const nativePictureGeometryDiagnosticBound = 512
 // adjustments, through the same bounded catalog evaluator as AutoShapes.
 // Evaluation failure retains the legacy preserve-only gap so the renderer
 // still refuses the picture instead of guessing an outline.
-func validateNativePictureGeometry(geometry *nativeXMLNode, dialect nativeExtractDialect, width, height int64, gaps *nativePictureGapSet, clip **string, evaluated **NativeEvaluatedGeometry) error {
-	adjustments, err := nativeSingleton(geometry, dialect.drawing, "avLst", true)
+//
+// ECMA-376 CT_PresetGeometry2D declares avLst with minOccurs=0; an omitted list
+// means default adjustments exactly like an empty one.
+func validateNativePictureGeometry(geometry *nativeXMLNode, dialect nativeExtractDialect, width, height int64, transformExact bool, gaps *nativePictureGapSet, clip **string, evaluated **NativeEvaluatedGeometry) error {
+	adjustments, err := nativeSingleton(geometry, dialect.drawing, "avLst", false)
 	if err != nil {
 		return err
 	}
@@ -30,7 +33,7 @@ func validateNativePictureGeometry(geometry *nativeXMLNode, dialect nativeExtrac
 	exactMarkup := presetOK &&
 		requireOnlyNativeAttrs(geometry, xml.Name{Local: "prst"}) == nil &&
 		requireOnlyNativeChildren(geometry, xml.Name{Space: dialect.drawing, Local: "avLst"}) == nil &&
-		requireEmptyNativeElement(adjustments) == nil
+		(adjustments == nil || requireEmptyNativeElement(adjustments) == nil)
 	switch {
 	case exactMarkup && preset == "rect":
 		return nil
@@ -38,6 +41,10 @@ func validateNativePictureGeometry(geometry *nativeXMLNode, dialect nativeExtrac
 		// ECMA presetShapeDefinitions: default adj=16667; x1=ss*adj/100000.
 		// Keep the source preset, not a generic approximate corner radius.
 		*clip = stringPointer("roundRect")
+		return nil
+	}
+	if !transformExact {
+		gaps.add("pptx.picture-geometry-unavailable", "non-rectangle picture geometry with rotation or flips is preserved but not evaluated in native PPTX v1")
 		return nil
 	}
 	result, evalErr := evaluateNativePresetSource(geometry, dialect.drawing, width, height)

@@ -170,3 +170,68 @@ func TestNativePictureGeometryContractStaysReadOnlyAndExclusive(t *testing.T) {
 		t.Fatal("text elements must still reject evaluated geometry")
 	}
 }
+
+func TestNativePictureRotatedOrFlippedPresetStaysPlaceholder(t *testing.T) {
+	for _, attrs := range []string{` rot="5400000"`, ` flipH="1"`, ` rot="5400000" flipH="1" flipV="1"`} {
+		data := nativePictureFixture(t, nativePictureFixtureOptions{xfrmAttrs: attrs, pictureGeometry: `<a:prstGeom prst="triangle"><a:avLst/></a:prstGeom>`})
+		before := bytes.Clone(data)
+		deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("%s: %v", attrs, err)
+		}
+		picture := nativeFixturePicture(t, deck.Slides[0])
+		if picture.Geometry != nil || picture.Clip != nil {
+			t.Fatalf("%s: rotated or flipped pictures must not carry an evaluated outline: %#v", attrs, picture.Geometry)
+		}
+		codes := nativePictureDiagnosticCodes(picture)
+		if !codes["pptx.picture-transform-unavailable"] || !codes["pptx.picture-geometry-unavailable"] || codes[nativePictureGeometryPreviewCode] || picture.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+			t.Fatalf("%s: unexpected diagnostics %v status %s", attrs, codes, picture.Compatibility.Status)
+		}
+		if !bytes.Equal(data, before) {
+			t.Fatal("source changed")
+		}
+	}
+	// Exact rect / roundRect keep their pre-existing rotated behavior: transform gap only.
+	data := nativePictureFixture(t, nativePictureFixtureOptions{xfrmAttrs: ` rot="5400000"`, pictureGeometry: `<a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>`})
+	deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	picture := nativeFixturePicture(t, deck.Slides[0])
+	codes := nativePictureDiagnosticCodes(picture)
+	if picture.Clip == nil || codes["pptx.picture-geometry-unavailable"] || !codes["pptx.picture-transform-unavailable"] {
+		t.Fatalf("rotated roundRect contract changed: clip=%v codes=%v", picture.Clip, codes)
+	}
+}
+
+func TestNativePictureGeometryTreatsOmittedAdjustmentListAsDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		geometry string
+		clip     bool
+		outline  bool
+	}{
+		{`<a:prstGeom prst="rect"/>`, false, false},
+		{`<a:prstGeom prst="roundRect"/>`, true, false},
+		{`<a:prstGeom prst="ellipse"/>`, false, true},
+	} {
+		data := nativePictureFixture(t, nativePictureFixtureOptions{pictureGeometry: tc.geometry})
+		deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("%s: %v", tc.geometry, err)
+		}
+		picture := nativeFixturePicture(t, deck.Slides[0])
+		codes := nativePictureDiagnosticCodes(picture)
+		if (picture.Clip != nil) != tc.clip || (picture.Geometry != nil) != tc.outline || codes["pptx.picture-geometry-unavailable"] || codes[nativePictureGeometryPreviewCode] != tc.outline {
+			t.Fatalf("%s: clip=%v geometry=%v codes=%v", tc.geometry, picture.Clip, picture.Geometry != nil, codes)
+		}
+		if tc.outline {
+			withList, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{pictureGeometry: `<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>`}), nativeTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(nativeFixturePicture(t, withList.Slides[0]).Geometry.Paths[0].Commands) != len(picture.Geometry.Paths[0].Commands) {
+				t.Fatal("omitted avLst must evaluate exactly like an empty one")
+			}
+		}
+	}
+}
