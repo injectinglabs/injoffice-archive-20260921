@@ -13,7 +13,7 @@ import '../design-system/live-create-edit.css'
 import './docs-workspace.css'
 import { extractDocxPreviewImages } from '../docxPreviewImages'
 import { NativeDocxPages } from '../components/NativeDocxPages'
-import { digestNativeDocxPackage, nativeDocxHelperOffer, nativeDocxHelperPackageDigest } from '../docxNativeHelperOffer'
+import { digestNativeDocxPackage, nativeDocxAdoptOpenedPackage, nativeDocxHelperOffer, nativeDocxHelperPackageDigest } from '../docxNativeHelperOffer'
 import {NativeDocxPartialCoverage} from '../components/NativeDocxPartialCoverage'
 import {NativeDocxPartialText} from '../components/NativeDocxPartialText'
 import {
@@ -305,8 +305,9 @@ export default function DocsPage() {
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer())
       const packageDigest = await digestNativeDocxPackage(bytes)
-      setAuthoritativeBytes(bytes)
-      setOpenedDigest(packageDigest)
+      const opened = nativeDocxAdoptOpenedPackage(bytes, packageDigest)
+      setAuthoritativeBytes(opened.bytes)
+      setOpenedDigest(opened.openedDigest)
       setSourceName(name)
       setDocument(null)
       setArtifactId('')
@@ -383,8 +384,9 @@ export default function DocsPage() {
     try {
       const extracted = await runtimeFor(mode).extract(bytes)
       adoptDocument(extracted.document, target)
-      setAuthoritativeBytes(bytes)
-      setOpenedDigest(extracted.document.source.package_sha256)
+      const opened = nativeDocxAdoptOpenedPackage(bytes, extracted.document.source.package_sha256)
+      setAuthoritativeBytes(opened.bytes)
+      setOpenedDigest(opened.openedDigest)
       setArtifactId(extracted.artifactId)
       setOutput(new Blob([copyArrayBuffer(bytes)], { type: DOCX_MEDIA_TYPE }))
       setProof(null)
@@ -431,8 +433,9 @@ export default function DocsPage() {
         artifactId, applied.artifactId, mode === 'browser',
       )
 
-      setAuthoritativeBytes(mutatedBytes)
-      setOpenedDigest(next.source.package_sha256)
+      const opened = nativeDocxAdoptOpenedPackage(mutatedBytes, next.source.package_sha256)
+      setAuthoritativeBytes(opened.bytes)
+      setOpenedDigest(opened.openedDigest)
       setUndoBytes((history) => [...history.slice(-9), authoritativeBytes])
       setChanged(true)
       setArtifactId(extracted.artifactId)

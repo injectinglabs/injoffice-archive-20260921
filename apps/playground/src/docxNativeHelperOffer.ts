@@ -13,6 +13,12 @@ export function nativeDocxHelperPackageDigest(documentDigest: string | undefined
   return documentDigest && PACKAGE_DIGEST.test(documentDigest) ? documentDigest : openedDigest
 }
 
+/** Replace helper bytes only together with the digest of those bytes. */
+export function nativeDocxAdoptOpenedPackage(bytes: Uint8Array, packageDigest: string): { bytes: Uint8Array; openedDigest: string } {
+  if (bytes.byteLength < 1 || !PACKAGE_DIGEST.test(packageDigest)) throw new TypeError('Opened DOCX package identity is incomplete.')
+  return { bytes, openedDigest: packageDigest }
+}
+
 /** Native page controls bind to opened package bytes, not a successful extract. */
 export function nativeDocxHelperOffer(input: {
   apiBase: string
