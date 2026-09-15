@@ -80,6 +80,30 @@ describe('actual source-font native PPTX worker',()=>{
   expect(serialized).toContain('"radius":333340');expect(serialized).toContain('"left":10000');expect(result.resources).toHaveLength(1)
   for(const radius of [-1,Infinity,1000001,'1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'group',transform:[1,0,0,1,0,0],clip:{x:0,y:0,cx:3000000,cy:2000000,radius},children:[]}]})).toThrow()
  })
+ it('carries a source-evaluated picture outline as a validated path clip and rejects ambiguous clips',async()=>{
+  const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))
+  const picture=source.slides[0].elements.find((e:{kind:string})=>e.kind==='picture')
+  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64')
+  const assetHash=createHash('sha256').update(bytes).digest('hex')
+  request.deck.assets=[{id:picture.assetId,provenance:'parsed',contentType:'image/png',sha256:assetHash,byteLength:bytes.length,dataBase64:bytes.toString('base64'),source:{partName:'ppt/media/image.png',objectId:'asset',fingerprintSha256:assetHash},passthrough:[]}]
+  const arc=(x:number,y:number)=>({kind:'arcTo',x,y,rx:1500000,ry:1000000,largeArc:false,clockwise:true})
+  picture.transform.cx=3000000;picture.transform.cy=2000000
+  picture.geometry={profile:'drawingml-paths-v1',textRect:{x:439340,y:292893,cx:2121320,cy:1414214},paths:[{fillMode:'norm',stroke:true,commands:[{kind:'moveTo',x:0,y:1000000},arc(1500000,0),arc(3000000,1000000),arc(1500000,2000000),arc(0,1000000),{kind:'close'}]}]}
+  picture.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.picture-geometry-preview',message:'catalog outline evaluated from source'}]}
+  request.deck.slides[0].elements=[picture]
+  const result=await compilePptxPreview(request)
+  const clips:NonNullable<Extract<PreviewNode,{kind:'group'}>['clip']>[]=[]
+  const visit=(node:PreviewNode)=>{if(node.kind!=='group')return;if(node.clip?.d!==undefined)clips.push(node.clip);node.children.forEach(visit)}
+  result.nodes.forEach(visit)
+  expect(clips).toHaveLength(1)
+  expect(clips[0]).toEqual({x:0,y:0,cx:3000000,cy:2000000,d:'M0 1000000 A1500000 1000000 0 0 1 1500000 0 A1500000 1000000 0 0 1 3000000 1000000 A1500000 1000000 0 0 1 1500000 2000000 A1500000 1000000 0 0 1 0 1000000 Z'})
+  expect(result.diagnostics.join(' ')).toContain('picture.presetCatalogClipPreview')
+  expect(JSON.stringify(result.nodes)).toContain('"resourceId"')
+  expect(()=>decodePptxPreview(result)).not.toThrow()
+  const clipNode=(clip:Record<string,unknown>)=>({...result,nodes:[{kind:'group',transform:[1,0,0,1,0,0],clip,children:[]}]})
+  for(const clip of [{x:0,y:0,cx:1,cy:1,d:'M0 0 L1 1 Z',radius:0},{x:0,y:0,cx:1,cy:1,d:''},{x:0,y:0,cx:1,cy:1,d:'L1 1'},{x:0,y:0,cx:1,cy:1,d:'M0 0 <script>'},{x:0,y:0,cx:1,cy:1,d:1},{x:0,y:0,cx:1,cy:1,d:'M0 0 A1 1 0 1 1 1 1'}])expect(()=>decodePptxPreview(clipNode(clip)),JSON.stringify(clip)).toThrow()
+  expect(()=>decodePptxPreview(clipNode({x:0,y:0,cx:1,cy:1,d:'M0 0 L1 1 Z'}))).not.toThrow()
+ })
  it('shapes authored markers in the exact supplied family and rejects a missing marker face',async()=>{
   const request=input(),p=request.deck.slides[0].elements[0].paragraphs[0]
   Object.assign(p,{bullet:true,bulletCharacter:'q',bulletFontFamily:'DejaVu Sans',marginLeftEmu:300000,indentEmu:-100000})

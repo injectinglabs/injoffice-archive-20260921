@@ -96,6 +96,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    case 'transform':{current.transform=[...renderTransformMatrix(command.transform,affineBudget)];break}
    case 'clipRect':current.clip=command.rect;break
    case 'clipRoundRect':current.clip={...command.rect,radius:command.radiusEmu};break
+   case 'clipPath':current.clip={...command.rect,d:command.path.map(pathPart).join(' ')};break
    case 'path':{
     if(command.headArrow&&!command.headEnd||command.tailArrow&&!command.tailEnd){diagnostics.push('Boolean-only arrowheads lack source type/dimensions and remain unqualified');current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Arrowhead unavailable'});break}
     const stroke=command.stroke

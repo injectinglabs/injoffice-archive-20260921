@@ -63,7 +63,7 @@ export function PptxFilePreviewVector({deck,geometry}:{deck:NativePptxDeck;geome
    })}</>
   }else content=placeholder('Table preview unavailable')
   return <g key={key} data-file-preview-object={original.id} transform={matrix(node.transform)}><title>{`${original.name||original.kind}${issue?`: ${issue}`:''}`}</title>
-   {clip&&<defs><clipPath id={id} clipPathUnits="userSpaceOnUse"><rect {...rectProps(clip.rect)} rx={clip.kind==='roundRect'?n(clip.radiusEmu):undefined}/></clipPath></defs>}
+   {clip&&<defs><clipPath id={id} clipPathUnits="userSpaceOnUse">{clip.kind==='path'?<path d={filePreviewPath(clip.path)}/>:<rect {...rectProps(clip.rect)} rx={clip.kind==='roundRect'?n(clip.radiusEmu):undefined}/>}</clipPath></defs>}
    <g clipPath={clip?`url(#${id})`:undefined}>{content}</g>
   </g>
  }

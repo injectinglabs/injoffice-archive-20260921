@@ -12,4 +12,12 @@ describe('native rounded picture clip SVG',()=>{
   for(const id of ids)expect(markup).toContain(`url(#${id})`)
   expect(markup).toContain('clipPathUnits="userSpaceOnUse"');expect(markup).toContain(`rx="${33.334/12700}" ry="${33.334/12700}"`);expect(markup).toContain(`matrix(2 0 0 3 ${100/12700} ${200/12700})`)
  })
+ it('clips to a validated source-evaluated outline path instead of a rectangle',()=>{
+  const preview=decodePptxPreview({version:1,package_sha256:'a'.repeat(64),slide_index:0,slide_count:1,width:1000,height:1000,background:'FFFFFF',policy:'max-run-natural-v1',diagnostics:[],font_digests:[],resources:[],nodes:[{kind:'group',transform:[1,0,0,1,0,0],clip:{x:0,y:0,cx:25400,cy:12700,d:'M0 6350 A12700 6350 0 0 1 12700 0 A12700 6350 0 0 1 25400 6350 Z'},children:[{kind:'rect',rect:{x:0,y:0,cx:25400,cy:12700},radius:0,fill:'00FF00'}]}]})
+  const markup=renderToStaticMarkup(<NativePptxVector preview={preview}/>)
+  const clip=markup.match(/<clipPath id="([^"]+)" clipPathUnits="userSpaceOnUse"><path d="([^"]+)"><\/path><\/clipPath>/)
+  expect(clip).not.toBeNull()
+  expect(clip![2]).toBe('M 0 0.5 A 1 0.5 0 0 1 1 0 A 1 0.5 0 0 1 2 0.5 Z')
+  expect(markup).toContain(`url(#${clip![1]})`);expect(markup).not.toContain('<rect x="0" y="0" width="2" height="1" rx=')
+ })
 })
