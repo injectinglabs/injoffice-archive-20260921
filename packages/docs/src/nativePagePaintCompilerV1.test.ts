@@ -778,7 +778,10 @@ describe('native DOCX page-paint compiler v1', () => {
     const input = fixture()
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
-    resolved.diagnostics.push({ code: 'PARTIAL_RUN_PROPERTIES', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]', preservation: 'preserve-verbatim', message: 'Only the conservative v1 run-property subset is exposed' })
+    resolved.diagnostics.push(
+      { code: 'PARTIAL_RUN_PROPERTIES', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]', preservation: 'preserve-verbatim', message: 'Only the conservative v1 run-property subset is exposed' },
+      { code: 'FONT_MATCHING_METADATA_PRESERVED', severity: 'unsupported', scope_id: resolved.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[1]/w:embedRegular[1]', preservation: 'preserve-verbatim', message: 'Validated font matching metadata is preserved' },
+    )
     settings.profile = 'unsupported'
     delete settings.compatibility_mode
     settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy layout' }]

@@ -395,6 +395,8 @@ describe('native DOCX page-paint v1', () => {
       code: 'INVALID_KERNING_THRESHOLD', severity: 'unsupported', scope_id: 'run:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/w:kern[1]', preservation: 'preserve-verbatim', message: 'Kerning requires one exact bounded half-point threshold; unqualified values remain preserved',
     }, {
       code: 'AUTO_PARAGRAPH_SPACING_PRESERVED', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:pPr[1]/w:spacing[1]', preservation: 'preserve-verbatim', message: 'Automatic paragraph spacing is preserved and not guessed',
+    }, {
+      code: 'FONT_MATCHING_METADATA_PRESERVED', severity: 'unsupported', scope_id: settings.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[1]/w:family[1]', preservation: 'preserve-verbatim', message: 'Validated font matching metadata is preserved',
     })
     request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(request.pagination_request.shaped_lines)
     const refused = paginateNativeDocxV1(request.pagination_request)

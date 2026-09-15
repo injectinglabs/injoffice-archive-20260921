@@ -1159,6 +1159,8 @@ describe('native DOCX pagination v1', () => {
     for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PARTIAL_RUN_PROPERTIES'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const dropped = request.document.body.blocks[0]!.paragraph!
+      dropped.runs = []
+      request.resolved_layout.runs = request.resolved_layout.runs.filter(run => run.paragraph_id !== dropped.id)
       request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'drawings', scope_id: dropped.id, preservation: 'refuse-mutation', message: code })
       request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
       request.pagination_settings.profile = 'unsupported'
@@ -1195,6 +1197,39 @@ describe('native DOCX pagination v1', () => {
   it('still refuses an unshaped text-only paragraph in approximate layout', () => {
     const request = fixture({ lineCounts: [1, 1] })
     const dropped = request.document.body.blocks[0]!.paragraph!
+    request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('refused')
+    expect(approximate.layout.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+  })
+
+  it('still refuses an unshaped paragraph that keeps remaining text beside comment markers', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    const dropped = request.document.body.blocks[0]!.paragraph!
+    dropped.runs = [{
+      kind: 'reference', id: 'run:comment-start',
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:commentRangeStart[1]', 110, 120),
+      reference: { kind: 'comment-range-start', target_id: 'comment:1' },
+    }, dropped.runs[0]!]
+    const commentAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]', start_byte: 10, end_byte: 400, xml_sha256: HASH }
+    const storyAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]/w:p[1]', start_byte: 20, end_byte: 300, xml_sha256: HASH }
+    const commentBody = paragraph('paragraph:comment-body', 9)
+    commentBody.anchor = storyAnchor
+    commentBody.runs[0]!.anchor = { ...storyAnchor, path: `${storyAnchor.path}/w:r[1]`, start_byte: 30, end_byte: 80 }
+    request.document.comment_stories = [{
+      id: 'story:comment:1', kind: 'comment', part_name: 'word/comments.xml', native_story_id: '1',
+      anchor: storyAnchor, blocks: [{ kind: 'paragraph', id: commentBody.id, paragraph: commentBody }],
+    }]
+    request.document.comments = [{ id: 'comment:1', native_comment_id: '1', author: 't', anchor: commentAnchor, body_story_id: 'story:comment:1' }]
+    request.resolved_layout.paragraphs.push({ paragraph_id: commentBody.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+    request.resolved_layout.runs.push(
+      { run_id: 'run:comment-start', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: commentBody.runs[0]!.id, paragraph_id: commentBody.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+    )
     request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
     request.pagination_settings.profile = 'unsupported'
     delete request.pagination_settings.compatibility_mode
