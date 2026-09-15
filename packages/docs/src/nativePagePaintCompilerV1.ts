@@ -165,7 +165,7 @@ export interface NativeDocxPagePaintCompleteInputV1 {
 export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximatePagePreviewV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
-import { projectNativeDocxAbsentFontSizesV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+import { projectNativeDocxAbsentFontSizesV1, validNativeDocxHostDefaultSizePolicyV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1, stripNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
@@ -179,7 +179,12 @@ export interface NativeDocxApproximateRuntimeV1 {
   equations?: unknown
   /** Server-supplied `InspectNativeApproximateDrawingChartsV1` sidecar for the same bytes; validated against the document before use. */
   drawingCharts?: unknown
+  /** Server-supplied `InspectNativeApproximateNestedTablesV1` sidecar for the same bytes; validated against the document before use. */
+  nestedTables?: unknown
 }
+import { prepareNativeDocxApproximateNestedTableStageV1, completeNativeDocxApproximateNestedTableStageV1, DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED, type NativeDocxApproximateNestedTableStageV1 } from './nativeApproximateNestedTablesV1.js'
+export { decodeNativeDocxApproximateNestedTablesV1, prepareNativeDocxApproximateNestedTableStageV1, paintNativeDocxApproximateNestedTablesV1, completeNativeDocxApproximateNestedTableStageV1, DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL, DOCX_APPROXIMATE_NESTED_TABLE_POLICY, DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY, DOCX_APPROXIMATE_NESTED_TABLE_CODE, DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE, DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE, DOCX_APPROXIMATE_NESTED_TABLE_WARNING, DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED, DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID } from './nativeApproximateNestedTablesV1.js'
+export type { NativeDocxApproximateNestedTablesV1, NativeDocxApproximateNestedTableV1, NativeDocxApproximateNestedTableRuntimeV1, NativeDocxApproximateNestedTableStageV1, NativeDocxApproximateNestedTablePreparedV1, NativeDocxApproximateNestedTablePaintResultV1, NativeDocxApproximateNestedTableFontSubstitutionV1 } from './nativeApproximateNestedTablesV1.js'
 import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
 import { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, type NativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
 import type { NativeDocxUnsupportedCapabilityV1 as NativeDocxRestoredRefusalV1 } from './nativeContract.js'
@@ -259,6 +264,32 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const shaper = runtime.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
     equationStage = await prepareNativeDocxApproximateEquationStageV1(runtime.equations, sourceDocument.value, sourceResolved.value, { manifest, resolver, shaper, outlineProvider }, inventory.main_sha256)
     input = { ...input, document: equationStage.projection.document, resolved_layout: equationStage.projection.resolved }
+  }
+  // Approximate nested tables: validate the same-bytes sidecar against the
+  // source document, lay each inner table out inside its containing cell and
+  // reserve the extent as neighbouring paragraph spacing in the internal body
+  // copy. Evidence that does not exact-join is dropped as a whole and disclosed;
+  // the body preview itself never depends on it.
+  let nestedStage: NativeDocxApproximateNestedTableStageV1 | undefined
+  let nestedSidecarRefused = false
+  if (runtime?.nestedTables !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Approximate nested tables require independently eligible approximate settings')
+    const sourceDocument = decodeNativeDocxDocument(input.document)
+    const sourceResolved = decodeNativeDocxResolvedLayout(input.resolved_layout)
+    if (!sourceDocument.ok) failIssues('native document is invalid', sourceDocument.issues)
+    if (!sourceResolved.ok) failIssues('resolved layout is invalid', sourceResolved.issues)
+    const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
+    const manifest = runtime.fonts?.manifest ?? inventory.native_text_manifest
+    if (!manifest) throw new TypeError('Approximate nested tables require host fonts or an embedded font manifest')
+    const resolver = runtime.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+    const shaper = runtime.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
+    const hostSize = runtime.fontSizePolicy !== undefined && validNativeDocxHostDefaultSizePolicyV1(runtime.fontSizePolicy) ? runtime.fontSizePolicy.half_points : undefined
+    try {
+      nestedStage = await prepareNativeDocxApproximateNestedTableStageV1(runtime.nestedTables, sourceDocument.value, sourceResolved.value, { manifest, resolver, shaper, settings: settings.value, ...(hostSize !== undefined ? { fontSizeHalfPoints: hostSize } : {}) }, inventory.main_sha256)
+      input = { ...input, document: nestedStage.projection.document, resolved_layout: nestedStage.projection.resolved }
+    } catch {
+      nestedStage = undefined; nestedSidecarRefused = true
+    }
   }
   let applied: NativeDocxApproximatedFontSizeV1[] = []
   if (runtime?.fontSizePolicy !== undefined) {
@@ -380,9 +411,19 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   }
   // Equation paint attaches to the reserved atoms after body pagination and
   // re-derives the omitted-content disclosure for the pages it touched.
-  // The equation stage recomputes omissions last: hand it every refusal restored by
-  // the shape and chart painters, not only the shapes'.
-  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, restoredDiagnostics)
+  // The equation stage hands back what it dropped; the nested-table stage then
+  // recomputes omissions last with every refusal restored by the shape, chart
+  // and equation painters.
+  let equationRestored: NativeDocxDocumentV1['unsupported'] = []
+  if (equationStage && result.status === 'painted') {
+    const paintedEquations = completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, restoredDiagnostics)
+    equationRestored = paintedEquations.omitted.flatMap(entry => equationStage!.projection.removedDiagnostics.get(entry.id) ?? [])
+  }
+  if (nestedSidecarRefused && !result.reasons.includes(DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED)) result.reasons.push(DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED)
+  // Nested-table paint attaches to the reserved neighbouring paragraph spacing
+  // after body pagination and re-derives the omitted-content disclosure last,
+  // keeping every other stage's restored refusals disclosed.
+  if (nestedStage && result.status === 'painted') await completeNativeDocxApproximateNestedTableStageV1(result, nestedStage, prepared.page_paint_request.pagination_request, { manifest: prepared.page_paint_request.font_manifest, outlineProvider }, [...restoredDiagnostics, ...equationRestored])
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
   if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes || charts ? ` or approximate ${shapes ? 'shape' : 'chart'} paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value
