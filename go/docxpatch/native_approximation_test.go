@@ -157,7 +157,7 @@ func TestNativeApproximationRecordsActiveHyphenationAsNotPerformed(t *testing.T)
 		t.Fatalf("active hyphenation with attested mode 15 must be approximately eligible: %#v", approx)
 	}
 	fact := nativeApproximationFact(approx.ApproximatedSettings, "autoHyphenation")
-	if fact == nil || fact.Path != "/w:settings[1]/w:autoHyphenation[1]" || !reflect.DeepEqual(fact.Values, map[string]string{"val": "true", "hyphenationZone": "360", "consecutiveHyphenLimit": "2"}) {
+	if fact == nil || fact.Path != "/w:settings[1]/w:autoHyphenation[1]" || !reflect.DeepEqual(fact.Values, map[string]string{"val": "true", "hyphenationZone": "360", "consecutiveHyphenLimit": "2", "doNotHyphenateCaps": "true"}) {
 		t.Fatalf("hyphenation fact must retain the switch and its active options: %#v", approx.ApproximatedSettings)
 	}
 	if !strings.Contains(nativeApproximationSettingReason(*fact), "automatic hyphenation is not performed") {
@@ -298,5 +298,59 @@ func TestNativeApproximationKeepsGenuinelyUnsupportedSettingsRefused(t *testing.
 		if approx.Status != "ineligible" {
 			t.Fatalf("%s must stay ineligible: %#v", name, approx)
 		}
+	}
+}
+
+// A duplicated known extra (themeFontLang, decimalSymbol, ...) is disclosed only
+// through the duplicate group. The TS mirror requires index [1] for those kinds,
+// so a fact at [2] would turn a disclosed refusal into a decode error.
+func TestNativeApproximationDuplicatedKnownExtrasNeverBecomeIndexedFacts(t *testing.T) {
+	compat := `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`
+	markup := `<w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="64" w:dllVersion="1" w:checkStyle="1"/><w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="8" w:dllVersion="1" w:checkStyle="1"/>` +
+		`<w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>` + compat
+	_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, markup))
+	if approx.Status != "eligible" {
+		t.Fatalf("agreeing duplicates of known extras must stay eligible: %#v", approx)
+	}
+	for _, fact := range approx.ApproximatedSettings {
+		if fact.Kind != "authoringSettings" && fact.Kind != "duplicateSettings" && !strings.HasSuffix(fact.Path, "[1]") {
+			t.Fatalf("known extra emitted at a duplicate index: %#v", fact)
+		}
+	}
+	if fact := nativeApproximationFact(approx.ApproximatedSettings, "themeFontLang"); fact == nil || fact.Path != "/w:settings[1]/w:themeFontLang[1]" {
+		t.Fatalf("the diagnosed first themeFontLang stays a [1] fact: %#v", approx.ApproximatedSettings)
+	}
+	if nativeApproximationFact(approx.ApproximatedSettings, "decimalSymbol") != nil {
+		t.Fatalf("a strict-neutral first decimalSymbol has no diagnostic and no fact: %#v", approx.ApproximatedSettings)
+	}
+	group := nativeApproximationFact(approx.ApproximatedSettings, "duplicateSettings")
+	if group == nil || len(group.Values) != 3 {
+		t.Fatalf("all three duplicates belong to the duplicate group: %#v", approx.ApproximatedSettings)
+	}
+	for _, path := range []string{"/w:settings[1]/w:activeWritingStyle[2]", "/w:settings[1]/w:themeFontLang[2]", "/w:settings[1]/w:decimalSymbol[2]"} {
+		if _, present := group.Values[path]; !present {
+			t.Fatalf("duplicate %s missing from the group: %#v", path, group.Values)
+		}
+	}
+	// Refusal drops every accumulated fact and its reason.
+	refused, err := ExtractNativeDocxApproximationEligibilityV1(nativeApproximationTestDOCX(t, `<w:themeFontLang w:val="en-CA"/><w:themeFontLang w:val="fr-CA"/>`+compat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refused.Status != "ineligible" || len(refused.ApproximatedSettings) != 0 {
+		t.Fatalf("disagreeing known-extra duplicates must refuse without partial facts: %#v", refused)
+	}
+	for _, reason := range refused.Reasons {
+		if strings.HasPrefix(reason, "Current-layout approximation") {
+			t.Fatalf("refused attestation must not disclose dropped facts: %q", reason)
+		}
+	}
+}
+
+func TestNativeApproximationBareHyphenationLeavesRecordTrue(t *testing.T) {
+	_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, `<w:autoHyphenation/><w:doNotHyphenateCaps/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`))
+	fact := nativeApproximationFact(approx.ApproximatedSettings, "autoHyphenation")
+	if approx.Status != "eligible" || fact == nil || !reflect.DeepEqual(fact.Values, map[string]string{"val": "true", "doNotHyphenateCaps": "true"}) {
+		t.Fatalf("omitted w:val must be recorded as the schema default true: %#v", approx.ApproximatedSettings)
 	}
 }

@@ -37,8 +37,10 @@ func nativeApproximationSettingReason(fact NativeDocxApproximatedSettingV1) stri
 		return "Current-layout approximation records autoHyphenation at " + fact.Path + " as not applied; automatic hyphenation is not performed and Word line breaks may differ"
 	case fact.Kind == "compatibilityMode":
 		return "Current-layout approximation records the repeated or non-leading compatibilityMode attestation at " + fact.Path + "; its agreeing value is the disclosed legacy mode and Word layout may differ"
+	case fact.Kind == "themeFontLang":
+		return "Current-layout approximation records themeFontLang at " + fact.Path + " as not applied; language-driven theme font selection is not performed and Word font choice may differ"
 	case fact.Kind == "authoringSettings":
-		return "Current-layout approximation records " + strconv.Itoa(len(fact.Values)) + " authoring-only settings anchored at " + fact.Path + " as not applied; they are editor state that current layout does not consume"
+		return "Current-layout approximation records " + strconv.Itoa(len(fact.Values)) + " authoring-only settings anchored at " + fact.Path + " as not applied; current layout does not consume them, so Word editing, proofing, grid, template, and display behavior may differ"
 	case fact.Kind == "duplicateSettings":
 		return "Current-layout approximation records " + strconv.Itoa(len(fact.Values)) + " duplicate settings anchored at " + fact.Path + " as not applied; each repeats its first occurrence or is authoring-only, and the first occurrence is used"
 	case nativeApproximateLegacyCompatFlags[fact.Kind]:

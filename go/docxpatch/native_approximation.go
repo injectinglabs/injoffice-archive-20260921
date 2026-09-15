@@ -116,8 +116,21 @@ func newNativeApproximationBuilder(result *NativeDocxApproximationEligibilityV1,
 	return builder
 }
 
+// refuse discloses the cause and drops every accumulated fact and its reason:
+// an ineligible attestation must not carry partial typed facts.
 func (b *nativeApproximationBuilder) refuse(detail string) bool {
-	b.result.Reasons = append(b.result.Reasons, "Approximate eligibility refused: "+detail)
+	dropped := map[string]bool{}
+	for _, fact := range b.result.ApproximatedSettings {
+		dropped[nativeApproximationSettingReason(fact)] = true
+	}
+	kept := make([]string, 0, len(b.result.Reasons))
+	for _, reason := range b.result.Reasons {
+		if !dropped[reason] {
+			kept = append(kept, reason)
+		}
+	}
+	b.result.Reasons = append(kept, "Approximate eligibility refused: "+detail)
+	b.result.ApproximatedSettings = nil
 	return false
 }
 
@@ -148,16 +161,19 @@ func (b *nativeApproximationBuilder) topLevel(root *nativeXMLNode) bool {
 	authoring := NativeDocxApproximatedSettingV1{Kind: "authoringSettings", Values: map[string]string{}}
 	for _, child := range root.Children {
 		codes := b.diagnosed[child.Path]
+		// No diagnostic: strict consumed the child as attested-neutral. A
+		// duplicate occurrence (index >= 2) is resolved only by duplicates(), so a
+		// known extra such as w:themeFontLang[2] never becomes its own fact.
+		if codes == nil || codes["DUPLICATE_SETTINGS_PROPERTY"] {
+			continue
+		}
 		if fact := nativeApproximateSetting(child, b.wordNS); fact != nil {
-			if codes == nil {
-				continue
-			}
 			if !b.add(*fact) {
 				return false
 			}
 			continue
 		}
-		if child.Name.Space != b.wordNS || codes == nil || codes["DUPLICATE_SETTINGS_PROPERTY"] {
+		if child.Name.Space != b.wordNS {
 			continue
 		}
 		switch {
@@ -194,12 +210,14 @@ func (b *nativeApproximationBuilder) hyphenationFact(root, node *nativeXMLNode) 
 	if !nativeExactLeaf(node, b.val()) {
 		return fact, false
 	}
-	if value, present := nativeAttr(node, b.wordNS, "val"); present {
-		if _, valid := nativeLexicalOnOff(value); !valid {
-			return fact, false
-		}
-		fact.Values["val"] = value
+	// An omitted w:val on an on/off leaf means "true" (ECMA-376 17.17.4).
+	value, present := nativeAttr(node, b.wordNS, "val")
+	if !present {
+		value = "true"
+	} else if _, valid := nativeLexicalOnOff(value); !valid {
+		return fact, false
 	}
+	fact.Values["val"] = value
 	for _, name := range []string{"hyphenationZone", "consecutiveHyphenLimit", "doNotHyphenateCaps"} {
 		options := directNativeChildren(root, b.wordNS, name)
 		if len(options) == 0 {
@@ -208,7 +226,11 @@ func (b *nativeApproximationBuilder) hyphenationFact(root, node *nativeXMLNode) 
 		if !nativeExactLeaf(options[0], b.val()) {
 			return fact, false
 		}
-		if value, present := nativeAttr(options[0], b.wordNS, "val"); present {
+		value, present := nativeAttr(options[0], b.wordNS, "val")
+		if !present && name == "doNotHyphenateCaps" {
+			value = "true"
+		}
+		if present || name == "doNotHyphenateCaps" {
 			fact.Values[name] = value
 		}
 	}

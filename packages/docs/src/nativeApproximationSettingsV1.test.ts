@@ -52,7 +52,7 @@ describe('bounded current-layout settings facts', () => {
     expect(DOCX_APPROXIMATE_AUTHORING_SETTINGS).toContain('attachedTemplate')
     const authoring = { kind: 'authoringSettings' as const, path: '/w:settings[1]/w:removePersonalInformation[1]', values: { '/w:settings[1]/w:removePersonalInformation[1]': '', '/w:settings[1]/w:attachedTemplate[1]': 'r:id="rId1"', '/w:settings[1]/w:activeWritingStyle[1]': 'w:appName="MSWord" w:lang="en-US"' } }
     expect(validNativeDocxApproximatedSettingV1(authoring)).toBe(true)
-    expect(nativeApproximationSettingReason(authoring)).toBe('Current-layout approximation records 3 authoring-only settings anchored at /w:settings[1]/w:removePersonalInformation[1] as not applied; they are editor state that current layout does not consume')
+    expect(nativeApproximationSettingReason(authoring)).toBe('Current-layout approximation records 3 authoring-only settings anchored at /w:settings[1]/w:removePersonalInformation[1] as not applied; current layout does not consume them, so Word editing, proofing, grid, template, and display behavior may differ')
     expect(validNativeDocxApproximatedSettingV1({ ...authoring, path: '/w:settings[1]/w:linkStyles[1]' })).toBe(false)
     expect(validNativeDocxApproximatedSettingV1({ ...authoring, values: { ...authoring.values, '/w:settings[1]/w:mirrorMargins[1]': '' } })).toBe(false)
     expect(validNativeDocxApproximatedSettingV1({ ...authoring, values: { ...authoring.values, '/w:settings[1]/w:compat[1]/w:useFELayout[1]': '' } })).toBe(false)
@@ -63,5 +63,12 @@ describe('bounded current-layout settings facts', () => {
     expect(nativeApproximationSettingReason(duplicates)).toContain('records 2 duplicate settings anchored at /w:settings[1]/w:activeWritingStyle[2]')
     expect(validNativeDocxApproximatedSettingV1({ ...duplicates, values: { '/w:settings[1]/w:activeWritingStyle[1]': '' }, path: '/w:settings[1]/w:activeWritingStyle[1]' })).toBe(false)
     expect(validNativeDocxApproximatedSettingV1({ ...duplicates, values: { '/w:settings[1]/w:compat[2]': '' }, path: '/w:settings[1]/w:compat[2]' })).toBe(false)
+    // A duplicated known extra is disclosed only through the duplicate group; it
+    // is never its own fact at index [2].
+    const knownExtraDuplicates = { kind: 'duplicateSettings' as const, path: '/w:settings[1]/w:themeFontLang[2]', values: { '/w:settings[1]/w:themeFontLang[2]': 'w:val="en-US"', '/w:settings[1]/w:decimalSymbol[2]': 'w:val="."' } }
+    expect(validNativeDocxApproximatedSettingV1(knownExtraDuplicates)).toBe(true)
+    expect(validNativeDocxApproximatedSettingV1({ kind: 'themeFontLang', path: '/w:settings[1]/w:themeFontLang[2]', values: { val: 'en-US' } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ kind: 'decimalSymbol', path: '/w:settings[1]/w:decimalSymbol[2]', values: { val: '.' } })).toBe(false)
+    expect(nativeApproximationSettingReason({ kind: 'themeFontLang', path: '/w:settings[1]/w:themeFontLang[1]', values: { val: 'en-CA' } })).toContain('theme font selection is not performed')
   })
 })

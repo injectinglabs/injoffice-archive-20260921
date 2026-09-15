@@ -62,8 +62,10 @@ export function nativeApproximationSettingReason(fact: NativeDocxApproximatedSet
       return `Current-layout approximation records autoHyphenation at ${fact.path} as not applied; automatic hyphenation is not performed and Word line breaks may differ`
     case fact.kind === 'compatibilityMode':
       return `Current-layout approximation records the repeated or non-leading compatibilityMode attestation at ${fact.path}; its agreeing value is the disclosed legacy mode and Word layout may differ`
+    case fact.kind === 'themeFontLang':
+      return `Current-layout approximation records themeFontLang at ${fact.path} as not applied; language-driven theme font selection is not performed and Word font choice may differ`
     case fact.kind === 'authoringSettings':
-      return `Current-layout approximation records ${members} authoring-only settings anchored at ${fact.path} as not applied; they are editor state that current layout does not consume`
+      return `Current-layout approximation records ${members} authoring-only settings anchored at ${fact.path} as not applied; current layout does not consume them, so Word editing, proofing, grid, template, and display behavior may differ`
     case fact.kind === 'duplicateSettings':
       return `Current-layout approximation records ${members} duplicate settings anchored at ${fact.path} as not applied; each repeats its first occurrence or is authoring-only, and the first occurrence is used`
     case LEGACY_COMPAT_OPTIONS.has(fact.kind):
