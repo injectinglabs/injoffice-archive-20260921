@@ -87,16 +87,26 @@ func resolveNativeShapeStyle(properties, style, themeRoot *nativeXMLNode, dialec
 		if len(paintGaps.values) != 0 {
 			return nil, fmt.Errorf("unmodeled selected style matrix paint")
 		}
-		found := false
+		var found *nativeXMLNode
 		for _, name := range item.names {
 			child, err := nativeSingleton(properties, dialect.drawing, name, false)
 			if err != nil {
 				return nil, err
 			}
-			found = found || child != nil
+			if child != nil {
+				found = child
+			}
 		}
-		if !found {
+		if found == nil {
 			result.Children = append(result.Children, paint)
+		} else if item.ref == "lnRef" {
+			// A local <a:ln> inherits the selected matrix outline; its own
+			// attributes and choice-group children override (ECMA-376 §20.1.4.2.19).
+			for index, child := range result.Children {
+				if child == found {
+					result.Children[index] = mergeNativeInheritedLine(paint, found, dialect.drawing)
+				}
+			}
 		}
 	}
 	return &result, nil

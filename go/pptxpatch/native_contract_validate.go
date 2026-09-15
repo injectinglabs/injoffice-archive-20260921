@@ -435,7 +435,19 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 			v.textBody(*element.TextBody, element.Transform, p+".textBody")
 		}
 	case NativeElementKindConnector:
-		commonForbidden(false, false, false, true, true, false, false, false, false, false)
+		commonForbidden(false, true, false, true, true, false, false, false, false, false)
+		if element.Preset != nil {
+			v.add(p+".preset", "native.elementUnion", "is not allowed for this element kind")
+		}
+		if element.Geometry != nil {
+			v.geometry(*element.Geometry, p+".geometry")
+			if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+				v.add(p+".geometry", "native.geometryAuthority", "evaluated geometry must remain read-only")
+			}
+			if element.FlipH != nil {
+				v.add(p+".flipH", "native.connectorGeometry", "legacy anti-diagonal flag is not allowed with evaluated geometry")
+			}
+		}
 		for _, end := range []struct {
 			name  string
 			value *NativeArrowEnd

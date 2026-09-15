@@ -38,12 +38,15 @@ func (gaps nativeConnectorGapSet) refused() bool {
 	return false
 }
 
-// extractConnector projects only a straight, unrotated DrawingML connector
-// whose line paint is explicit. Named endpoint arrows are currently presence
-// flags plus additive typed source descriptors. A renderer must not treat a true flag
+// extractConnector projects a straight, unrotated DrawingML connector whose
+// line paint is explicit as exact editable content. Connector-family presets
+// (bent/curved/adjusted/oriented) are evaluated from the fingerprinted catalog
+// as a declared read-only preview (pptx.connector-preset-preview) with the same
+// explicit or style-matrix line paint. Named endpoint arrows are presence flags
+// plus additive typed source descriptors. A renderer must not treat a true flag
 // as an exact triangle or infer an Office arrow size. Unknown named types,
-// sizes, transformed/theme-unresolved paint, non-solid dash,
-// custom/bent geometry, and unknown rendering markup remain an exact
+// sizes, theme-unresolved paint, non-solid dash, custom geometry, presets
+// outside the connector family, and unknown rendering markup remain an exact
 // capability-backed refusal rather than a nearby line approximation.
 func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePart, slideID string, dialect nativeExtractDialect) (NativeElement, error) {
 	if node == nil || node.Name != (xml.Name{Space: dialect.presentation, Local: "cxnSp"}) {
@@ -80,12 +83,25 @@ func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePar
 	if err != nil {
 		return NativeElement{}, err
 	}
-	transform, antiDiagonal, stroke, headArrow, tailArrow, err := validateNativeConnectorProperties(shapeProperties, dialect, extractor.theme, &gaps)
+	paintProperties := shapeProperties
+	var styleErr error
+	if style != nil {
+		var resolved *nativeXMLNode
+		resolved, styleErr = resolveNativeConnectorStyle(shapeProperties, style, extractor.slideDependencies.themeRoot, dialect, extractor.theme)
+		if styleErr == nil {
+			paintProperties = resolved
+		}
+	}
+	transform, antiDiagonal, geometry, stroke, headArrow, tailArrow, err := validateNativeConnectorProperties(paintProperties, dialect, extractor.theme, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
 	if style != nil {
-		gaps.add("pptx.connector-theme-style-unavailable", "connector theme and style-matrix references are preserved but not resolved", true)
+		if styleErr != nil {
+			gaps.add("pptx.connector-theme-style-unavailable", "connector theme and style-matrix references are preserved but not resolved", true)
+		} else {
+			gaps.add("pptx.connector-theme-style-preview", "solid theme outline references are resolved from the source matrix; style-bound connectors remain read-only", false)
+		}
 	}
 
 	raw, err := rawNativeNode(extractor.pkg.parts[slidePart], node)
@@ -109,6 +125,9 @@ func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePar
 	if antiDiagonal {
 		element.FlipH = boolPointer(true)
 	}
+	if geometry != nil && !gaps.refused() {
+		element.Geometry = geometry
+	}
 	if headArrow {
 		element.HeadArrow = boolPointer(true)
 	}
@@ -116,7 +135,7 @@ func (extractor *nativeExtractor) extractConnector(node *nativeXMLNode, slidePar
 		element.TailArrow = boolPointer(true)
 	}
 	if !gaps.refused() {
-		line, _ := nativeSingleton(shapeProperties, dialect.drawing, "ln", false)
+		line, _ := nativeSingleton(paintProperties, dialect.drawing, "ln", false)
 		if line != nil {
 			head, _ := nativeSingleton(line, dialect.drawing, "headEnd", false)
 			tail, _ := nativeSingleton(line, dialect.drawing, "tailEnd", false)
@@ -179,8 +198,10 @@ func validateNativeConnectorNonVisual(node *nativeXMLNode, dialect nativeExtract
 	if err != nil {
 		return "", "", err
 	}
-	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil || len(cNvPr.Children) != 0 || !onlyNativeXMLSpace(cNvPr.Text) {
-		gaps.add("pptx.connector-nonvisual-unavailable", "connector visibility, hyperlink, or extension metadata is not modeled", true)
+	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil || !onlyNativeXMLSpace(cNvPr.Text) {
+		gaps.add("pptx.connector-nonvisual-unavailable", "connector visibility or nonvisual attributes are not modeled", true)
+	} else if len(cNvPr.Children) != 0 {
+		gaps.add("pptx.connector-nonvisual-unavailable", "connector accessibility, hyperlink, or extension metadata is preserved but not editable", false)
 	}
 	nativeID, err := canonicalNativeUnsignedID(cNvPr, "", "id", 1)
 	if err != nil {
@@ -199,7 +220,7 @@ func validateNativeConnectorNonVisual(node *nativeXMLNode, dialect nativeExtract
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeConnectorGapSet) (NativeTransform, bool, *NativeStroke, bool, bool, error) {
+func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeConnectorGapSet) (NativeTransform, bool, *NativeEvaluatedGeometry, *NativeStroke, bool, bool, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.connector-properties-unavailable", "connector shape properties contain unmodeled attributes", true)
 	}
@@ -219,22 +240,35 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 	}
 	for _, name := range allowed {
 		if _, err := nativeSingleton(node, name.Space, name.Local, false); err != nil {
-			return NativeTransform{}, false, nil, false, false, err
+			return NativeTransform{}, false, nil, nil, false, false, err
 		}
 	}
 	xfrm, err := nativeSingleton(node, dialect.drawing, "xfrm", true)
 	if err != nil {
-		return NativeTransform{}, false, nil, false, false, err
+		return NativeTransform{}, false, nil, nil, false, false, err
 	}
-	transform, antiDiagonal, err := validateNativeConnectorTransform(xfrm, dialect, gaps)
-	if err != nil {
-		return NativeTransform{}, false, nil, false, false, err
+	var transform NativeTransform
+	var antiDiagonal bool
+	var geometry *NativeEvaluatedGeometry
+	presetGeometry := nativeChild(node, dialect.drawing, "prstGeom")
+	customGeometry := nativeChild(node, dialect.drawing, "custGeom")
+	if nativeConnectorUsesExactStraightPath(xfrm, presetGeometry, customGeometry, dialect) {
+		transform, antiDiagonal, err = validateNativeConnectorTransform(xfrm, dialect, gaps)
+		if err != nil {
+			return NativeTransform{}, false, nil, nil, false, false, err
+		}
+		validateNativeConnectorGeometry(node, dialect, gaps)
+	} else {
+		transform, err = validateNativeConnectorPresetTransform(xfrm, dialect, gaps)
+		if err != nil {
+			return NativeTransform{}, false, nil, nil, false, false, err
+		}
+		geometry = evaluateNativeConnectorPreset(presetGeometry, dialect, *transform.Cx, *transform.Cy, gaps)
 	}
-	validateNativeConnectorGeometry(node, dialect, gaps)
 	lineGaps := nativeShapeGapSet{}
 	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, true, &lineGaps)
 	if err != nil {
-		return NativeTransform{}, false, nil, false, false, err
+		return NativeTransform{}, false, nil, nil, false, false, err
 	}
 	for _, gap := range lineGaps.values {
 		code := "pptx.connector-line-unavailable"
@@ -247,7 +281,7 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 	if line, _ := nativeSingleton(node, dialect.drawing, "ln", false); line != nil {
 		head, tail, arrowErr := validateNativeConnectorLineEnds(line, dialect, gaps)
 		if arrowErr != nil {
-			return NativeTransform{}, false, nil, false, false, arrowErr
+			return NativeTransform{}, false, nil, nil, false, false, arrowErr
 		}
 		headArrow, tailArrow = head, tail
 	}
@@ -256,7 +290,7 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 			gaps.add("pptx.connector-effects-unavailable", "connector effects, 3D, or extension markup is preserved but not approximated", true)
 		}
 	}
-	return transform, antiDiagonal, stroke, headArrow, tailArrow, nil
+	return transform, antiDiagonal, geometry, stroke, headArrow, tailArrow, nil
 }
 
 func validateNativeConnectorLineEnds(line *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeConnectorGapSet) (bool, bool, error) {
@@ -338,38 +372,7 @@ func validateNativeConnectorTransform(node *nativeXMLNode, dialect nativeExtract
 	if err := requireOnlyNativeAttrs(node, xml.Name{Local: "rot"}, xml.Name{Local: "flipH"}, xml.Name{Local: "flipV"}); err != nil {
 		gaps.add("pptx.connector-transform-unavailable", "connector transform contains unmodeled attributes", true)
 	}
-	if err := requireOnlyNativeChildren(node,
-		xml.Name{Space: dialect.drawing, Local: "off"},
-		xml.Name{Space: dialect.drawing, Local: "ext"}); err != nil {
-		return NativeTransform{}, false, fmt.Errorf("pptxpatch: native extract: invalid connector transform children: %w", err)
-	}
-	off, err := nativeSingleton(node, dialect.drawing, "off", true)
-	if err != nil {
-		return NativeTransform{}, false, err
-	}
-	ext, err := nativeSingleton(node, dialect.drawing, "ext", true)
-	if err != nil {
-		return NativeTransform{}, false, err
-	}
-	if err := requireOnlyNativeAttrs(off, xml.Name{Local: "x"}, xml.Name{Local: "y"}); err != nil || requireOnlyNativeChildren(off) != nil {
-		return NativeTransform{}, false, fmt.Errorf("pptxpatch: native extract: invalid connector offset")
-	}
-	if err := requireOnlyNativeAttrs(ext, xml.Name{Local: "cx"}, xml.Name{Local: "cy"}); err != nil || requireOnlyNativeChildren(ext) != nil {
-		return NativeTransform{}, false, fmt.Errorf("pptxpatch: native extract: invalid connector extent")
-	}
-	x, err := requiredCanonicalNativeConnectorInt(off, "x", -nativeMaxSafeInteger, nativeMaxSafeInteger)
-	if err != nil {
-		return NativeTransform{}, false, err
-	}
-	y, err := requiredCanonicalNativeConnectorInt(off, "y", -nativeMaxSafeInteger, nativeMaxSafeInteger)
-	if err != nil {
-		return NativeTransform{}, false, err
-	}
-	cx, err := requiredCanonicalNativeConnectorInt(ext, "cx", 1, nativeMaxSafeInteger)
-	if err != nil {
-		return NativeTransform{}, false, err
-	}
-	cy, err := requiredCanonicalNativeConnectorInt(ext, "cy", 1, nativeMaxSafeInteger)
+	x, y, cx, cy, err := parseNativeConnectorFrame(node, dialect)
 	if err != nil {
 		return NativeTransform{}, false, err
 	}
@@ -396,6 +399,47 @@ func validateNativeConnectorTransform(node *nativeXMLNode, dialect nativeExtract
 		}
 	}
 	return NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}, flipH != flipV, nil
+}
+
+// parseNativeConnectorFrame validates the exact <a:off>/<a:ext> children of a
+// connector transform and returns the canonical integer frame.
+func parseNativeConnectorFrame(node *nativeXMLNode, dialect nativeExtractDialect) (int64, int64, int64, int64, error) {
+	if err := requireOnlyNativeChildren(node,
+		xml.Name{Space: dialect.drawing, Local: "off"},
+		xml.Name{Space: dialect.drawing, Local: "ext"}); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("pptxpatch: native extract: invalid connector transform children: %w", err)
+	}
+	off, err := nativeSingleton(node, dialect.drawing, "off", true)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	ext, err := nativeSingleton(node, dialect.drawing, "ext", true)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if err := requireOnlyNativeAttrs(off, xml.Name{Local: "x"}, xml.Name{Local: "y"}); err != nil || requireOnlyNativeChildren(off) != nil {
+		return 0, 0, 0, 0, fmt.Errorf("pptxpatch: native extract: invalid connector offset")
+	}
+	if err := requireOnlyNativeAttrs(ext, xml.Name{Local: "cx"}, xml.Name{Local: "cy"}); err != nil || requireOnlyNativeChildren(ext) != nil {
+		return 0, 0, 0, 0, fmt.Errorf("pptxpatch: native extract: invalid connector extent")
+	}
+	x, err := requiredCanonicalNativeConnectorInt(off, "x", -nativeMaxSafeInteger, nativeMaxSafeInteger)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	y, err := requiredCanonicalNativeConnectorInt(off, "y", -nativeMaxSafeInteger, nativeMaxSafeInteger)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	cx, err := requiredCanonicalNativeConnectorInt(ext, "cx", 1, nativeMaxSafeInteger)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	cy, err := requiredCanonicalNativeConnectorInt(ext, "cy", 1, nativeMaxSafeInteger)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return x, y, cx, cy, nil
 }
 
 func requiredCanonicalNativeConnectorInt(node *nativeXMLNode, local string, minimum, maximum int64) (int64, error) {
