@@ -403,7 +403,9 @@ func TestExtractNativePPTXTableStyleWithUntypedLeftoverStillEmitsSlide(t *testin
 	table := nativeExactTableGraphicFrameXML(3, "Styled table", []int64{500000, 500000}, []int64{500000}, [][]string{{
 		nativeExactTableCellXML("One", "l", "FFFFFF"), nativeExactTableCellXML("Two", "r", "EEEEEE"),
 	}}, "")
-	table = strings.Replace(table, `<a:tblPr/>`, `<a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}</a:tableStyleId></a:tblPr>`, 1)
+	// {5940675A-...} "No Style, Table Grid" is outside the bounded built-in
+	// style catalog, so the styled table stays an opaque refusal.
+	table = strings.Replace(table, `<a:tblPr/>`, `<a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>{5940675A-B579-460E-94D1-54222C63F5DA}</a:tableStyleId></a:tblPr>`, 1)
 	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{
 		extraParts: []nativeExtractZipPart{{name: "relocated/slides/.slide1.xml.swp", data: "b0VIM leftover"}},
 		mutate: func(parts map[string]string) {

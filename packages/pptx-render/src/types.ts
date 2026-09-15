@@ -270,8 +270,10 @@ interface RenderTableCellNodeBase {
 }
 
 export type RenderTableCellNode = RenderTableCellNodeBase & (
-  | { readonly paragraph: RenderParagraphNode; readonly textBody?: never }
-  | { readonly paragraph?: never; readonly textBody: RenderTextBodyNode }
+  | { readonly paragraph: RenderParagraphNode; readonly textBody?: never; readonly textFree?: never }
+  | { readonly paragraph?: never; readonly textBody: RenderTextBodyNode; readonly textFree?: never }
+  /** Legacy cell whose source text is empty: paint-only, no run is shaped. */
+  | { readonly paragraph?: never; readonly textBody?: never; readonly textFree: true }
 )
 
 export interface RenderTableNode extends RenderNodeBase {

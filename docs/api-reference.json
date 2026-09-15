@@ -10952,6 +10952,16 @@
               "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"ee1243e0cfd3a5a561ba636a3b19d6edee79b6c7bbfff78e0b1968de9b135627\""
             },
             {
+              "name": "PPTX_TABLE_BUILTIN_STYLE_POLICY",
+              "kind": "const",
+              "signature": "export declare const PPTX_TABLE_BUILTIN_STYLE_POLICY = \"builtin-table-style-catalog-linear-srgb-tint-v1\""
+            },
+            {
+              "name": "PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE",
+              "kind": "const",
+              "signature": "export declare const PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE = \"pptx.table-builtin-style-preview\""
+            },
+            {
               "name": "provenanceValues",
               "kind": "const",
               "signature": "export declare const provenanceValues: readonly [\"authored\", \"parsed\"]"

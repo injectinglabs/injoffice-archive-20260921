@@ -581,6 +581,8 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 			switch diagnostic.Code {
 			case "pptx.end-paragraph-metadata-preserved", "pptx.autofit-source-frame-approximate", "pptx.shape-font-reference-preview", "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
 				return nil, fmt.Errorf("%s: projected shape styles or omitted text are preview-only", prefix)
+			case nativeBuiltinTableStylePreviewCode:
+				return nil, fmt.Errorf("%s: built-in table style paint is preview-only", prefix)
 			}
 		}
 		// These flags are omitted from native paragraphs. Equal compatibility
