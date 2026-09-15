@@ -941,10 +941,11 @@ export async function prepareNativeDocxApproximateEquationStageV1(sidecar: unkno
 
 /** Compiler entry after body pagination: paint the laid-out equations at their
  * reserved atoms, append the declared reasons and re-derive omitted content. */
-export function completeNativeDocxApproximateEquationStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[] }, stage: NativeDocxApproximateEquationStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1 }): NativeDocxApproximateEquationPaintResultV1 {
+export function completeNativeDocxApproximateEquationStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[] }, stage: NativeDocxApproximateEquationStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1 }, alsoRestored: NativeDocxDocumentV1['unsupported'] = []): NativeDocxApproximateEquationPaintResultV1 {
   const painted = paintNativeDocxApproximateEquationsV1(result, stage.equations, stage.layouts, stage.projection)
   for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
-  const restored = painted.omitted.flatMap(entry => stage.projection.removedDiagnostics.get(entry.id) ?? [])
+  // Other approximate stages (drawing shapes) may already have restored refusals of their own dropped items; keep them disclosed too.
+  const restored = [...alsoRestored, ...painted.omitted.flatMap(entry => stage.projection.removedDiagnostics.get(entry.id) ?? [])]
   discloseNativeDocxApproximateEquationOmissionsV1(result, source, restored)
   return painted
 }

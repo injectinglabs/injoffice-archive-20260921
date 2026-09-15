@@ -314,7 +314,7 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   }
   // Equation paint attaches to the reserved atoms after body pagination and
   // re-derives the omitted-content disclosure for the pages it touched.
-  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request)
+  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, shapeRestored)
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
   if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes ? ` or approximate shape paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value
