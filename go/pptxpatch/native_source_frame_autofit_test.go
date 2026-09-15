@@ -56,7 +56,10 @@ func TestNativeSourceFrameAutoFitIsExplicitReadOnly(t *testing.T) {
 }
 
 func TestNativeSourceFrameAutoFitDoesNotHideOtherLayoutGaps(t *testing.T) {
-	for _, body := range []string{`<a:bodyPr><a:spAutoFit/><a:noAutofit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit/><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit bad="1"/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit>text</a:spAutoFit></a:bodyPr>`, `<a:bodyPr vert="vert270"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:normAutofit/></a:bodyPr>`, `<a:bodyPr numCol="2"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr vertOverflow="clip"><a:spAutoFit/></a:bodyPr>`} {
+	// normAutofit and numCol/spcCol are now declared, disclosed approximations
+	// behind the same opt-in (see native_autofit_authored_test.go); malformed
+	// or non-canonical values for them must still refuse.
+	for _, body := range []string{`<a:bodyPr><a:spAutoFit/><a:noAutofit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit/><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit bad="1"/></a:bodyPr>`, `<a:bodyPr><a:spAutoFit>text</a:spAutoFit></a:bodyPr>`, `<a:bodyPr vert="vert270"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr><a:normAutofit/><a:noAutofit/></a:bodyPr>`, `<a:bodyPr><a:normAutofit fontScale="62.5%"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit fontScale="0"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit fontScale="100001"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit lnSpcReduction="100000"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit lnSpcReduction="-1"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit bad="1"/></a:bodyPr>`, `<a:bodyPr><a:normAutofit>text</a:normAutofit></a:bodyPr>`, `<a:bodyPr numCol="0"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr numCol="17"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr spcCol="-1"><a:spAutoFit/></a:bodyPr>`, `<a:bodyPr vertOverflow="clip"><a:spAutoFit/></a:bodyPr>`} {
 		options := nativeMutationExtractOptions()
 		options.AllowSourceFrameAutoFitPreview = true
 		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, body), options)

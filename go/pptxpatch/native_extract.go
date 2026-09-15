@@ -1718,6 +1718,19 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 
 func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, slideID, fingerprint string, zIndex int, dialect nativeExtractDialect) (NativeElement, error) {
 	resolved, inheritedPlaceholder, inheritanceErr := extractor.resolveNativePlaceholder(node, dialect)
+	var placeholderPreview *nativePlaceholderPreview
+	if inheritanceErr != nil && extractor.options.AllowInheritedTextPreview {
+		// The exact title/body chain did not qualify; try the declared
+		// read-only placeholder preview before giving up on the shape.
+		previewNode, preview, previewErr := extractor.resolveNativePlaceholderPreview(node, dialect)
+		if previewErr != nil {
+			return NativeElement{}, previewErr
+		}
+		if preview != nil {
+			resolved, placeholderPreview, inheritanceErr = previewNode, preview, nil
+			inheritedPlaceholder = &preview.kind
+		}
+	}
 	if inheritanceErr != nil {
 		return NativeElement{}, inheritanceErr
 	}
@@ -1850,7 +1863,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err := extractor.reserveNativeTextOutput(txBody, dialect); err != nil {
 		return NativeElement{}, err
 	}
-	textBody, textLayoutErr := extractNativeTextBodyLayoutPolicy(txBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
+	textBody, authoredFit, textLayoutErr := extractNativeTextBodyLayoutAuthored(txBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
 	textLayoutMessage := ""
 	if textLayoutErr != nil {
 		if !isNativeTextLayoutUnsupported(textLayoutErr) {
@@ -1858,14 +1871,23 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		}
 		textLayoutMessage = textLayoutErr.Error()
 		textBody = nil
+		authoredFit = nil
 	}
 	paintText := txBody
 	var paragraphErr error
-	if extractor.options.AllowInheritedTextPreview && inheritedPlaceholder == nil {
-		paintText, paragraphErr = extractor.inheritedTextPreview(txBody, nil, false, dialect)
+	var inheritedOmissions *nativeInheritedTextOmissions
+	inheritedPreview := extractor.options.AllowInheritedTextPreview && (inheritedPlaceholder == nil || placeholderPreview != nil)
+	if inheritedPreview {
+		if placeholderPreview != nil {
+			paintText, inheritedOmissions, paragraphErr = extractor.inheritedTextPreviewLayers(txBody, placeholderPreview.layers, dialect)
+		} else {
+			paintText, inheritedOmissions, paragraphErr = extractor.inheritedTextPreview(txBody, nil, false, dialect)
+		}
 	}
 	var paragraphs []NativeParagraph
-	if paragraphErr == nil {
+	if placeholderPreview != nil && !placeholderPreview.hasTextBody {
+		paragraphs, paragraphErr = []NativeParagraph{}, nil
+	} else if paragraphErr == nil {
 		paragraphs, paragraphErr = extractor.extractNativeParagraphs(paintText, dialect)
 	}
 	textContentMessage := ""
@@ -1875,6 +1897,9 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		}
 		textContentMessage = paragraphErr.Error()
 		paragraphs = []NativeParagraph{}
+	}
+	if textLayoutMessage == "" && textContentMessage == "" {
+		nativeApplyAuthoredFontScale(paragraphs, authoredFit)
 	}
 	paragraphPointer := &paragraphs
 	raw, err := rawNativeNode(extractor.pkg.parts[part], node)
@@ -1918,18 +1943,23 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.source-affine-preview", Message: "source text-box orientation uses bounded rational affine preview; transformed targets remain read-only"})
 	}
-	if inheritedPlaceholder != nil {
+	if inheritedPlaceholder != nil && placeholderPreview == nil {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.inherited-placeholder-preview", Message: "title/body placeholder geometry and styles resolve through the exact layout/master relationship chain; inherited targets remain preserve-only", Scope: &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &part}})
 	}
+	nativeMarkPlaceholderPreview(&element, placeholderPreview, slideID, elementID, part)
 	if name != "" {
 		element.Name = stringPointer(name)
 	}
 	// The retained source-frame layout is approximate even when an independent
 	// content refusal prevents painting text. Keep that provenance in both paths.
 	nativeMarkSourceFrameAutoFit(&element)
-	if extractor.options.AllowInheritedTextPreview && inheritedPlaceholder == nil {
+	if textLayoutMessage == "" && textContentMessage == "" {
+		nativeMarkAuthoredAutoFit(&element, authoredFit)
+	}
+	if inheritedPreview {
 		nativeMarkInheritedTextPreview(&element)
+		nativeMarkInheritedTextOmissions(&element, inheritedOmissions)
 	}
 	if textLayoutMessage == "" && textContentMessage == "" {
 		nativeMarkVerticalTextPreview(&element)

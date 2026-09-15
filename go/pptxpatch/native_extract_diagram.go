@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // SmartArt (DrawingML diagram) graphic frames reference four diagram parts
@@ -857,13 +858,18 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingText(txBody, style 
 	}
 	paintText := body
 	if extractor.options.AllowInheritedTextPreview {
-		resolved, previewErr := extractor.inheritedTextPreview(body, style, true, dialect)
+		resolved, omissions, previewErr := extractor.inheritedTextPreview(body, style, true, dialect)
 		if previewErr != nil {
 			var duplicate nativeDuplicateSingletonError
 			if isNativeDuplicateSingleton(previewErr, &duplicate) {
 				return nil, nil, "", false, previewErr
 			}
 			return nil, nil, "diagram shape inherited text preview is unavailable: " + previewErr.Error(), false, nil
+		}
+		// The diagram fallback has no per-shape omission disclosure yet, so
+		// validated-but-unmodeled properties keep it fail-closed here.
+		if omitted := omissions.names(); len(omitted) != 0 {
+			return nil, nil, "diagram shape inherited text omits unmodeled properties: " + strings.Join(omitted, ", "), false, nil
 		}
 		paintText = resolved
 		inherited = true

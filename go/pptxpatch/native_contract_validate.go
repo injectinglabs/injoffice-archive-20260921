@@ -305,11 +305,14 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	v.provenance(origin, element.Provenance, element.Source, element.Passthrough, p)
 	v.sourceState(element.Source, element.Passthrough, p)
 	for _, diagnostic := range element.Compatibility.Diagnostics {
-		if diagnostic.Code == nativeInheritedTextPreviewCode && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+		if (diagnostic.Code == nativeInheritedTextPreviewCode || diagnostic.Code == nativeInheritedTextOmissionsCode || diagnostic.Code == nativePlaceholderPreviewCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.inheritedTextApproximation", "inherited text approximation requires parsed source and explicit read-only warning")
 		}
 		if diagnostic.Code == nativeBuiltinTableStylePreviewCode && (element.Kind != NativeElementKindTable || element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.tableStylePreview", "built-in table style preview requires a parsed source table with read-only status and explicit warning")
+		}
+		if (diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsOmittedCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+			v.add(p+".compatibility", "native.autofitApproximation", "authored autofit approximation requires parsed source and explicit read-only warning")
 		}
 	}
 	if element.TextBody != nil && element.TextBody.AutoFit == "shape-source-frame" {

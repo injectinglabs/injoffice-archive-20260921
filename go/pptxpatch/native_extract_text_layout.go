@@ -50,15 +50,36 @@ func extractNativeTextBodyLayout(txBody *nativeXMLNode, dialect nativeExtractDia
 }
 
 func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtractDialect, allowSourceFrame bool) (*NativeTextBodyLayout, error) {
+	layout, _, err := extractNativeTextBodyLayoutAuthored(txBody, dialect, allowSourceFrame)
+	return layout, err
+}
+
+// extractNativeTextBodyLayoutAuthored additionally reports the authored
+// frame-layout values (normAutofit scale, text columns) that the opt-in
+// approximation honors or discloses. The returned fit is nil unless
+// allowSourceFrame admitted such markup; the contract layout stays unchanged.
+func extractNativeTextBodyLayoutAuthored(txBody *nativeXMLNode, dialect nativeExtractDialect, allowSourceFrame bool) (*NativeTextBodyLayout, *nativeAuthoredAutoFit, error) {
+	layout, fit, err := extractNativeTextBodyLayoutAuthoredValues(txBody, dialect, allowSourceFrame)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !fit.approximate() {
+		return layout, nil, nil
+	}
+	return layout, fit, nil
+}
+
+func extractNativeTextBodyLayoutAuthoredValues(txBody *nativeXMLNode, dialect nativeExtractDialect, allowSourceFrame bool) (*NativeTextBodyLayout, *nativeAuthoredAutoFit, error) {
+	fit := &nativeAuthoredAutoFit{fontScale: nativeAuthoredAutoFitFullSize, columns: 1}
 	if txBody == nil {
-		return nil, fmt.Errorf("pptxpatch: native extract: missing text body")
+		return nil, nil, fmt.Errorf("pptxpatch: native extract: missing text body")
 	}
 	bodyPr, err := nativeSingleton(txBody, dialect.drawing, "bodyPr", true)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !onlyNativeXMLSpace(bodyPr.Text) {
-		return nil, unsupportedNativeTextLayout("a:bodyPr contains text content")
+		return nil, nil, unsupportedNativeTextLayout("a:bodyPr contains text content")
 	}
 	if err := requireOnlyNativeAttrs(bodyPr,
 		xml.Name{Local: "rot"}, xml.Name{Local: "spcFirstLastPara"},
@@ -68,7 +89,7 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		xml.Name{Local: "numCol"}, xml.Name{Local: "spcCol"}, xml.Name{Local: "rtlCol"},
 		xml.Name{Local: "fromWordArt"}, xml.Name{Local: "anchor"}, xml.Name{Local: "anchorCtr"},
 		xml.Name{Local: "forceAA"}, xml.Name{Local: "upright"}, xml.Name{Local: "compatLnSpc"}); err != nil {
-		return nil, unsupportedNativeTextLayout("a:bodyPr contains an unsupported attribute")
+		return nil, nil, unsupportedNativeTextLayout("a:bodyPr contains an unsupported attribute")
 	}
 	allowedChildren := []xml.Name{
 		{Space: dialect.drawing, Local: "prstTxWarp"},
@@ -81,24 +102,24 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		{Space: dialect.drawing, Local: "extLst"},
 	}
 	if err := requireOnlyNativeChildren(bodyPr, allowedChildren...); err != nil {
-		return nil, unsupportedNativeTextLayout("a:bodyPr contains an unsupported child")
+		return nil, nil, unsupportedNativeTextLayout("a:bodyPr contains an unsupported child")
 	}
 	for _, name := range allowedChildren {
 		if _, err := nativeSingleton(bodyPr, name.Space, name.Local, false); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	noAutofit, err := nativeSingleton(bodyPr, dialect.drawing, "noAutofit", false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	normalAutofit, err := nativeSingleton(bodyPr, dialect.drawing, "normAutofit", false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	shapeAutofit, err := nativeSingleton(bodyPr, dialect.drawing, "spAutoFit", false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	autofitCount := 0
 	for _, child := range []*nativeXMLNode{noAutofit, normalAutofit, shapeAutofit} {
@@ -107,47 +128,52 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		}
 	}
 	if autofitCount > 1 {
-		return nil, fmt.Errorf("pptxpatch: native extract: conflicting text autofit children")
+		return nil, nil, fmt.Errorf("pptxpatch: native extract: conflicting text autofit children")
 	}
 	if normalAutofit != nil {
-		return nil, unsupportedNativeTextLayout("a:normAutofit requires font scaling and line-spacing reduction")
+		if !allowSourceFrame {
+			return nil, nil, unsupportedNativeTextLayout("a:normAutofit requires font scaling and line-spacing reduction")
+		}
+		if err := parseNativeAuthoredNormAutofit(normalAutofit, fit); err != nil {
+			return nil, nil, err
+		}
 	}
 	autoFit := "none"
 	if shapeAutofit != nil {
 		if !allowSourceFrame {
-			return nil, unsupportedNativeTextLayout("a:spAutoFit requires content-dependent shape sizing")
+			return nil, nil, unsupportedNativeTextLayout("a:spAutoFit requires content-dependent shape sizing")
 		}
 		if err := requireEmptyNativeElement(shapeAutofit); err != nil {
-			return nil, unsupportedNativeTextLayout("a:spAutoFit contains unsupported markup")
+			return nil, nil, unsupportedNativeTextLayout("a:spAutoFit contains unsupported markup")
 		}
 		autoFit = "shape-source-frame"
 	}
 	if noAutofit != nil {
 		if err := requireEmptyNativeElement(noAutofit); err != nil {
-			return nil, unsupportedNativeTextLayout("a:noAutofit contains unsupported markup")
+			return nil, nil, unsupportedNativeTextLayout("a:noAutofit contains unsupported markup")
 		}
 	}
 	for _, name := range []string{"prstTxWarp", "scene3d", "sp3d", "flatTx", "extLst"} {
 		if child, _ := nativeSingleton(bodyPr, dialect.drawing, name, false); child != nil {
-			return nil, unsupportedNativeTextLayout("%s is not representable", name)
+			return nil, nil, unsupportedNativeTextLayout("%s is not representable", name)
 		}
 	}
 
 	left, err := optionalNativeTextInset(bodyPr, "lIns", nativeDefaultTextInsetHorizontalEMU)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	right, err := optionalNativeTextInset(bodyPr, "rIns", nativeDefaultTextInsetHorizontalEMU)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	top, err := optionalNativeTextInset(bodyPr, "tIns", nativeDefaultTextInsetVerticalEMU)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	bottom, err := optionalNativeTextInset(bodyPr, "bIns", nativeDefaultTextInsetVerticalEMU)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	wrap := NativeTextWrapSquare
@@ -157,7 +183,7 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		case "none":
 			wrap = NativeTextWrapNone
 		default:
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid text wrap")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid text wrap")
 		}
 	}
 	anchor := NativeTextVerticalAnchorTop
@@ -169,22 +195,22 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		case "b":
 			anchor = NativeTextVerticalAnchorBottom
 		case "just", "dist":
-			return nil, unsupportedNativeTextLayout("distributed or justified vertical anchoring is not representable")
+			return nil, nil, unsupportedNativeTextLayout("distributed or justified vertical anchoring is not representable")
 		default:
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid text anchor")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid text anchor")
 		}
 	}
 	if value, ok := exactNativeAttr(bodyPr, "", "horzOverflow"); ok && value != "overflow" {
 		if value != "clip" {
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid horizontal text overflow")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid horizontal text overflow")
 		}
-		return nil, unsupportedNativeTextLayout("clipped horizontal overflow is not representable")
+		return nil, nil, unsupportedNativeTextLayout("clipped horizontal overflow is not representable")
 	}
 	if value, ok := exactNativeAttr(bodyPr, "", "vertOverflow"); ok && value != "overflow" {
 		if value != "clip" && value != "ellipsis" {
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid vertical text overflow")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid vertical text overflow")
 		}
-		return nil, unsupportedNativeTextLayout("clipped or ellipsis vertical overflow is not representable")
+		return nil, nil, unsupportedNativeTextLayout("clipped or ellipsis vertical overflow is not representable")
 	}
 	var writingMode *string
 	if value, ok := exactNativeAttr(bodyPr, "", "vert"); ok && value != "horz" {
@@ -192,14 +218,14 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		case "vert":
 			writingMode = stringPointer("vertical-clockwise")
 		case "vert270", "wordArtVert", "eaVert", "mongolianVert", "wordArtVertRtl":
-			return nil, unsupportedNativeTextLayout("non-horizontal text flow is not representable")
+			return nil, nil, unsupportedNativeTextLayout("non-horizontal text flow is not representable")
 		default:
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid text flow")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid text flow")
 		}
 	}
 	orientation, orientationErr := parseNativeTextOrientation(bodyPr)
 	if orientationErr != nil {
-		return nil, orientationErr
+		return nil, nil, orientationErr
 	}
 	var bodyRotation *int64
 	var upright *bool
@@ -212,23 +238,28 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 	if value, ok := exactNativeAttr(bodyPr, "", "numCol"); ok {
 		columns, parseErr := parseCanonicalNativeInt(value, 1, 2147483647)
 		if parseErr != nil {
-			return nil, fmt.Errorf("pptxpatch: native extract: invalid text column count")
+			return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid text column count")
 		}
-		if columns != 1 {
-			return nil, unsupportedNativeTextLayout("multiple text columns are not representable")
+		if columns != 1 && !allowSourceFrame {
+			return nil, nil, unsupportedNativeTextLayout("multiple text columns are not representable")
 		}
 	}
-	if _, ok := exactNativeAttr(bodyPr, "", "spcCol"); ok {
-		return nil, unsupportedNativeTextLayout("column spacing is not representable")
+	if _, ok := exactNativeAttr(bodyPr, "", "spcCol"); ok && !allowSourceFrame {
+		return nil, nil, unsupportedNativeTextLayout("column spacing is not representable")
+	}
+	if allowSourceFrame {
+		if err := parseNativeAuthoredTextColumns(bodyPr, fit); err != nil {
+			return nil, nil, err
+		}
 	}
 	for _, name := range []string{"rtlCol", "fromWordArt", "anchorCtr", "forceAA", "compatLnSpc", "spcFirstLastPara"} {
 		if value, ok := exactNativeAttr(bodyPr, "", name); ok {
 			enabled, boolErr := nativeBool(value)
 			if boolErr != nil {
-				return nil, fmt.Errorf("pptxpatch: native extract: invalid boolean for text-body %s", name)
+				return nil, nil, fmt.Errorf("pptxpatch: native extract: invalid boolean for text-body %s", name)
 			}
 			if enabled {
-				return nil, unsupportedNativeTextLayout("%s is not representable", name)
+				return nil, nil, unsupportedNativeTextLayout("%s is not representable", name)
 			}
 		}
 	}
@@ -239,7 +270,7 @@ func extractNativeTextBodyLayoutPolicy(txBody *nativeXMLNode, dialect nativeExtr
 		HorizontalOverflow: "overflow", VerticalOverflow: "overflow",
 		WritingMode:        writingMode,
 		RotationAngle60000: bodyRotation, Upright: upright,
-	}, nil
+	}, fit, nil
 }
 
 func nativeMarkSourceFrameAutoFit(element *NativeElement) {

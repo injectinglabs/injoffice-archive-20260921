@@ -575,8 +575,11 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 			return nil, fmt.Errorf("%s: separate body rotation and upright text are preview-only", prefix)
 		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
-			if diagnostic.Code == nativeInheritedTextPreviewCode {
+			if diagnostic.Code == nativeInheritedTextPreviewCode || diagnostic.Code == nativeInheritedTextOmissionsCode || diagnostic.Code == nativePlaceholderPreviewCode {
 				return nil, fmt.Errorf("%s: inherited text approximation is preview-only", prefix)
+			}
+			if diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsOmittedCode {
+				return nil, fmt.Errorf("%s: authored autofit and column approximations are preview-only", prefix)
 			}
 			switch diagnostic.Code {
 			case "pptx.end-paragraph-metadata-preserved", "pptx.autofit-source-frame-approximate", "pptx.shape-font-reference-preview", "pptx.autoshape-theme-style-preview", "pptx.autoshape-preset-preview", "pptx.autoshape-text-layout-unavailable", "pptx.autoshape-text-unavailable":
