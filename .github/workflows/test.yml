@@ -175,7 +175,7 @@ jobs:
           max_bytes=$(cat go/pptxpatch/cmd/pptxnativewasm/max-bytes.txt)
           echo "pptxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
           if (( actual_bytes > max_bytes )); then
-            echo "pptxnative.wasm exceeds the 7.25 MiB size ceiling" >&2
+            echo "pptxnative.wasm ${actual_bytes} bytes exceeds the ${max_bytes} byte size ceiling from go/pptxpatch/cmd/pptxnativewasm/max-bytes.txt" >&2
             exit 1
           fi
       - name: Run mandatory PPTX WASM contract

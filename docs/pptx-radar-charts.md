@@ -81,3 +81,20 @@ now 7.75 MiB (8,126,464 bytes), providing 253,031 bytes of measured margin.
 This is only the WASM distribution build gate; package/input, node/path, rational,
 font and source-affine budgets and worker admission remain unchanged. Fresh
 consumer/WASM checks and CI are still required; sizes can vary by toolchain.
+
+### Ceiling raised to 8.25 MiB + 8 KiB
+
+The 7.75 MiB ceiling (8,126,464 bytes) was consumed by three merged PPTX
+features: connector presets (#214), picture clipping (#216) and the SmartArt
+drawing fallback (#218). `main` at 3d8b9e32 measured 8,083,787 bytes on Go
+1.23.0 darwin/arm64, leaving 42,677 bytes of margin, while the pending
+table-style work (#220, rebased on that `main`) measured 8,150,024 bytes locally
+and 8,155,244 bytes in CI, so it failed the gate. Pending autofit/placeholder
+work (#221) adds another 184,747 bytes over its base (7,935,816 -> 8,120,563
+bytes at c7b7bece), and a diagram-layout lane is in progress. The shared ceiling
+in `go/pptxpatch/cmd/pptxnativewasm/max-bytes.txt` is therefore raised one
+quarter-MiB step to 8.25 MiB + 8 KiB (8,658,944 bytes), matching the XLSX
+convention. Projected `main` plus #220 plus #221 is about 8,334,771 bytes,
+leaving roughly 324,000 bytes of measured margin for the diagram-layout lane;
+`main` alone has 575,157 bytes of margin. The build script and CI gate now print
+the ceiling read from that file instead of a hand-maintained figure.
