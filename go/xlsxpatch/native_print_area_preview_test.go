@@ -156,3 +156,13 @@ func TestNativePrintAreaRoutedPackageReadOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeDimensionPrintArea(t *testing.T) {
+	got := previewNativeDimensionPrintArea([]byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:C10"/><sheetData/></worksheet>`))
+	if len(got) != 1 || got[0].Row != 0 || got[0].Column != 0 || got[0].EndRow != 9 || got[0].EndColumn != 2 {
+		t.Fatalf("%+v", got)
+	}
+	if previewNativeDimensionPrintArea([]byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:C10:D4"/></worksheet>`)) != nil {
+		t.Fatal("malformed dimension")
+	}
+}

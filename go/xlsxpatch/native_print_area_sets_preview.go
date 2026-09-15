@@ -1,5 +1,7 @@
 package xlsxpatch
 
+import "strings"
+
 // NativeSheetPrintAreaSetV1 is an ordered, read-only saved print-area projection.
 // It grants no mutation authority. Rectangles are inclusive and zero-based.
 type NativeSheetPrintAreaSetV1 struct {
@@ -10,10 +12,10 @@ type NativeSheetPrintAreaSetV1 struct {
 	Areas     []NativePrintAreaRectV1 `json:"areas,omitempty"`
 }
 
-func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2, countaSources ...*nativePrintCountaSourceContext) []NativeSheetPrintAreaSetV1 {
+func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2, extras ...*nativePrintCountaSourceContext) []NativeSheetPrintAreaSetV1 {
 	var countaSource *nativePrintCountaSourceContext
-	if len(countaSources) == 1 {
-		countaSource = countaSources[0]
+	if len(extras) == 1 {
+		countaSource = extras[0]
 	}
 	count := len(sheets)
 	if count > 64 {
@@ -75,6 +77,31 @@ func previewNativePrintAreaSets(raw []byte, sheets []NativeWorkbookSheetV2, coun
 		}
 	}
 	return result
+}
+
+func previewNativeDimensionPrintArea(sheetRaw []byte) []NativePrintAreaRectV1 {
+	root, err := parsePreviewXML(sheetRaw)
+	if err != nil || root.name.Local != "worksheet" || !isSpreadsheetMLNamespace(root.name.Space) {
+		return nil
+	}
+	dimension := root.child("dimension")
+	if dimension == nil || len(dimension.children) != 0 || strings.TrimSpace(dimension.text) != "" {
+		return nil
+	}
+	ref := dimension.attr("ref")
+	start, end, ok := strings.Cut(ref, ":")
+	if !ok {
+		end = start
+	}
+	row, column, err := parseCellReference(start)
+	endRow, endColumn, endErr := parseCellReference(end)
+	if err != nil || endErr != nil || row > endRow || column > endColumn || row < 0 || column < 0 {
+		return nil
+	}
+	if cellReference(row, column) != start || cellReference(endRow, endColumn) != end {
+		return nil
+	}
+	return []NativePrintAreaRectV1{{Row: row, Column: column, EndRow: endRow, EndColumn: endColumn}}
 }
 
 func parseNativePrintAreaSet(text, sheetName string) []NativePrintAreaRectV1 {

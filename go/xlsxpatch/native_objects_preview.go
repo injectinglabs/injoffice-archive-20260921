@@ -194,7 +194,22 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		return nil, err
 	}
 	result.PrintAreas = previewNativePrintAreas(pkg.files[workbookPart.part], workbook.Sheets)
-	result.PrintAreaSets = previewNativePrintAreaSets(pkg.files[workbookPart.part], workbook.Sheets, newNativePrintCountaSourceContext(workbook, pkg.files[workbookPart.part], result.PackageSHA256))
+	workbookXML := pkg.files[workbookPart.part]
+	result.PrintAreaSets = previewNativePrintAreaSets(workbookXML, workbook.Sheets, newNativePrintCountaSourceContext(workbook, workbookXML, result.PackageSHA256))
+	printNames, _, namesOK := collectNativePrintNames(workbookXML, workbook.Sheets)
+	for i := range result.PrintAreaSets {
+		if result.PrintAreaSets[i].Status == "available" || i >= len(workbook.Sheets) {
+			continue
+		}
+		if !namesOK || len(printNames[workbook.Sheets[i].Order]) > 0 {
+			continue
+		}
+		if areas := previewNativeDimensionPrintArea(pkg.files[workbook.Sheets[i].PartName]); len(areas) == 1 {
+			result.PrintAreaSets[i].Status = "available"
+			result.PrintAreaSets[i].Areas = areas
+			result.PrintAreaSets[i].Warnings = []string{"Read-only print area from the worksheet dimension element. ECMA-376 prints the used range when _xlnm.Print_Area is absent. Not Excel printer calibration."}
+		}
+	}
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
 	result.ConditionalFills = previewNativeConditionalFills(pkg, workbook.Sheets)
 	owners := map[string]string{}
