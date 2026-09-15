@@ -15,7 +15,7 @@ import {
   type NativeDocxPagePaintPrepareInputV1,
 } from '@injoffice/docs/native-page-paint-compiler'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, type HarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
-import {loadHostFonts} from './hostFonts.js'
+import {discloseApproximateHostFontSubstitutions,loadHostFonts} from './hostFonts.js'
 
 export const DOCX_PAGE_PAINT_WORKER_PROTOCOL = 'injoffice.docx.page-paint-worker'
 export const DOCX_PAGE_PAINT_WORKER_VERSION = 1 as const
@@ -146,7 +146,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       if (fontSizePolicy !== undefined && !validNativeDocxHostDefaultSizePolicyV1(fontSizePolicy)) throw new TypeError('Host default size policy is invalid')
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
-      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath,fontOnly) : undefined
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false) : undefined
       if(fontOnly&&!fonts)throw new TypeError('Font preview requires explicit operator fonts')
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const outlineProvider: Parameters<typeof renderNativeDocxAutomaticBorderPreviewV1>[1] = {
@@ -186,7 +186,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)
-      return { ...base, ok: true, result }
+      return { ...base, ok: true, result: discloseApproximateHostFontSubstitutions(result, fonts) }
     }
     if (value.op === 'prepare') {
       const input = prepareInput(value.input)
