@@ -97,6 +97,8 @@ export type RenderDiagnosticCode =
   | 'text.deterministicLayout'
   | 'text.metricsUnavailable'
   | 'text.wrapUnavailable'
+  | 'text.sourceFrameAutoFitApproximate'
+  | 'text.emergencyBreakApproximate'
   | 'text.paragraphSemanticsUnavailable'
   | 'text.inheritanceUnavailable'
   | 'text.providerBudget'

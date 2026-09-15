@@ -24,11 +24,18 @@ func resolveNativeShapeStyle(properties, style, themeRoot *nativeXMLNode, dialec
 		if requireOnlyNativeAttrs(ref, xml.Name{Local: "idx"}) != nil {
 			return nil, fmt.Errorf("unmodeled style reference attributes")
 		}
+		refs[name] = ref
+		index, _ := exactNativeAttr(ref, "", "idx")
+		// idx="0" selects no matrix entry (ECMA-376 20.1.4.2.19/20.1.4.2.10),
+		// so its placeholder color is never consumed and stays unparsed. A font
+		// reference may omit its color; text color then comes from the cascade.
+		if index == "0" || (name == "fontRef" && len(ref.Children) == 0 && onlyNativeXMLSpace(ref.Text)) {
+			continue
+		}
 		color, err := exactNativeSolidColor(&nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "solidFill"}, Children: ref.Children, Text: ref.Text}, dialect, theme)
 		if err != nil {
 			return nil, err
 		}
-		refs[name] = ref
 		colors[name] = color
 	}
 	fontIndex, _ := exactNativeAttr(refs["fontRef"], "", "idx")
@@ -54,6 +61,25 @@ func resolveNativeShapeStyle(properties, style, themeRoot *nativeXMLNode, dialec
 		names     []string
 	}{{"fillRef", "fillStyleLst", []string{"solidFill", "noFill", "gradFill", "pattFill", "blipFill", "grpFill"}}, {"lnRef", "lnStyleLst", []string{"ln"}}} {
 		value, _ := exactNativeAttr(refs[item.ref], "", "idx")
+		if value == "0" {
+			// No fill / no line from the style matrix: exact, nothing to resolve.
+			found := false
+			for _, name := range item.names {
+				child, err := nativeSingleton(properties, dialect.drawing, name, false)
+				if err != nil {
+					return nil, err
+				}
+				found = found || child != nil
+			}
+			if !found {
+				if item.ref == "fillRef" {
+					result.Children = append(result.Children, &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "noFill"}})
+				} else {
+					result.Children = append(result.Children, &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "ln"}, Children: []*nativeXMLNode{{Name: xml.Name{Space: dialect.drawing, Local: "noFill"}}}})
+				}
+			}
+			continue
+		}
 		index, err := parseCanonicalNativeInt(value, 1, 3)
 		if err != nil {
 			return nil, fmt.Errorf("style matrix index outside bounded first three entries")
@@ -69,7 +95,11 @@ func resolveNativeShapeStyle(properties, style, themeRoot *nativeXMLNode, dialec
 		if selected.Name.Space != dialect.drawing || item.ref == "fillRef" && (selected.Name.Local != "solidFill" && selected.Name.Local != "noFill") || item.ref == "lnRef" && selected.Name.Local != "ln" {
 			return nil, fmt.Errorf("only exact solid fill and line matrix entries are supported")
 		}
-		paint, err := nativeStylePlaceholderColor(selected, dialect, colors[item.ref])
+		color, hasColor := colors[item.ref]
+		if !hasColor {
+			return nil, fmt.Errorf("style matrix reference lacks its placeholder color")
+		}
+		paint, err := nativeStylePlaceholderColor(selected, dialect, color)
 		if err != nil {
 			return nil, err
 		}

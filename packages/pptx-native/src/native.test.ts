@@ -31,6 +31,17 @@ describe('native PPTX contract', () => {
     element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
     element.compatibility.status='preserveOnly';element.compatibility.diagnostics=[];expect(validateNativePptx(deck).ok).toBe(false)
   })
+  it('requires parsed read-only source evidence for authored autofit, column and placeholder approximations', () => {
+    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-single-column-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate']){
+      const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+      const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+      if(element.kind!=='text')throw new Error('text missing')
+      element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code,message:'Declared read-only approximation'}]}
+      expect(validateNativePptx(deck).ok).toBe(true)
+      element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+      element.compatibility.status='preserveOnly';element.compatibility.diagnostics[0]!.severity='info';expect(validateNativePptx(deck).ok).toBe(false)
+    }
+  })
   it('retains bounded authored language tags and refuses malformed tags', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
