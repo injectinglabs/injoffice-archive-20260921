@@ -31,8 +31,12 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 		{"malformed shape id", strings.Replace(shape, `spidmax="1026"`, `spidmax="01026"`, 1), true},
 		{"shape content", strings.Replace(shape, `data="1"/>`, `data="1"><o:unknown/></o:idmap>`, 1), false},
 		{"unknown flag value", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="oops"/></w:compat>`, false},
-		{"flag first without mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, false},
-		{"flag before mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`, false},
+		{"flag first without mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, true},
+		{"flag before mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`, true},
+		{"empty script slots", `<w:themeFontLang w:val="en-CA" w:eastAsia="" w:bidi=""/>`, true},
+		{"east asian theme language", `<w:themeFontLang w:val="en-US" w:eastAsia="ja-JP"/>`, true},
+		{"word 2013 flags", `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/><w:compatSetting w:name="useWord2013TrackBottomHyphenation" w:uri="http://schemas.microsoft.com/office/word" w:val="0"/><w:compatSetting w:name="allowHyphenationAtTrackBottom" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="allowTextAfterFloatingTableBreak" w:uri="http://schemas.microsoft.com/office/word" w:val="0"/></w:compat>`, true},
+		{"unknown compat setting", `<w:compat><w:compatSetting w:name="notAKnownFlag" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`">`+test.markup+`</w:settings>`)))
