@@ -241,8 +241,15 @@ func TestExtractNativeWorkbookV1BorderInheritanceAndAmbiguity(t *testing.T) {
 	t.Run("applyBorder mismatch", func(t *testing.T) {
 		entries := nativeWorkbookFixture(false)
 		entries["Meta/Styles.style"] = strings.Replace(entries["Meta/Styles.style"], ` applyBorder="1"`, ``, 1)
-		if workbook, err := ExtractNativeWorkbookV1(buildZip(t, entries)); err == nil || workbook != nil || !strings.Contains(err.Error(), "border id differs") {
-			t.Fatalf("border override without applyBorder was accepted: workbook=%#v err=%v", workbook, err)
+		workbook, err := ExtractNativeWorkbookV1(buildZip(t, entries))
+		if err != nil {
+			t.Fatalf("border override without applyBorder refused read-only extraction: %v", err)
+		}
+		if !hasNativeWorkbookUnsupported(workbook, "STYLE_PARENT_APPLY_MISMATCH") || !strings.Contains(nativeUnsupportedMessage(workbook, "STYLE_PARENT_APPLY_MISMATCH"), "cellXf 1 border id 1 differs from cellStyleXf id 0 without applyBorder") {
+			t.Fatalf("border override without applyBorder was not inventoried: %#v", workbook.Unsupported)
+		}
+		if effective := workbook.Styles[1].Effective; effective.Border == nil || effective.Border.Left == nil || effective.Border.Left.Style != "thin" {
+			t.Fatalf("cellXf border record was not displayed: %#v", effective.Border)
 		}
 	})
 }

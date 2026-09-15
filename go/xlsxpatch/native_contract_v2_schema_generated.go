@@ -4,7 +4,7 @@
 package xlsxpatch
 
 const NativeXLSXV2SchemaID = "https://schemas.injoffice.dev/xlsx/native-v2.schema.json"
-const NativeXLSXV2SchemaSHA256 = "sha256:1ebf8027a17b482beb4cbc484180b8854b880a60e21998e4e3e360adc7b0c4c7"
+const NativeXLSXV2SchemaSHA256 = "sha256:75a781bf3f7da26dfab6500c9e122ce35cbe771af4f25c23193912a9ea0b3fc8"
 const nativeXLSXV2SchemaProtocol = "injoffice.xlsx.native"
 const nativeXLSXV2SchemaVersion = 2
 const NativeXLSXV2MediaType = "application/vnd.injoffice.xlsx-native.v2+json"
@@ -43,7 +43,8 @@ var nativeXLSXV2BindingShapes = map[string]nativeXLSXV2BindingShape{
 	"NativeWorkbookRichRunV2":         {Properties: []string{"bold", "font_color", "font_name", "font_size_points", "italic", "text"}, Required: []string{"text"}, Types: map[string]string{"bold": "boolean", "font_color": "string", "font_name": "string", "font_size_points": "number", "italic": "boolean", "text": "string"}},
 	"NativeWorkbookRowDimensionV2":    {Properties: []string{"custom_height", "height_points", "hidden", "row", "style_id"}, Required: []string{"custom_height", "hidden", "row"}, Types: map[string]string{"custom_height": "boolean", "height_points": "number", "hidden": "boolean", "row": "integer", "style_id": "integer"}},
 	"NativeWorkbookSheetFormatV2":     {Properties: []string{"base_column_width", "custom_height", "default_column_width", "default_row_height_points", "zero_height"}, Required: []string{"custom_height", "default_row_height_points", "zero_height"}, Types: map[string]string{"base_column_width": "integer", "custom_height": "boolean", "default_column_width": "number", "default_row_height_points": "number", "zero_height": "boolean"}},
-	"NativeWorkbookSheetV2":           {Properties: []string{"cells", "columns", "editable", "id", "merged_ranges", "name", "order", "part_name", "refusal_code", "rows", "sheet_format", "state"}, Required: []string{"cells", "columns", "editable", "id", "merged_ranges", "name", "order", "part_name", "rows", "state"}, Types: map[string]string{"cells": "[]NativeWorkbookCellV2", "columns": "[]NativeWorkbookColumnDimensionV2", "editable": "boolean", "id": "string", "merged_ranges": "[]NativeWorkbookMergedRangeV2", "name": "string", "order": "integer", "part_name": "string", "refusal_code": "string", "rows": "[]NativeWorkbookRowDimensionV2", "sheet_format": "NativeWorkbookSheetFormatV2", "state": "string"}},
+	"NativeWorkbookSheetV2":           {Properties: []string{"cells", "columns", "editable", "id", "merged_ranges", "name", "order", "part_name", "refusal_code", "rows", "sheet_format", "sheet_view", "state"}, Required: []string{"cells", "columns", "editable", "id", "merged_ranges", "name", "order", "part_name", "rows", "state"}, Types: map[string]string{"cells": "[]NativeWorkbookCellV2", "columns": "[]NativeWorkbookColumnDimensionV2", "editable": "boolean", "id": "string", "merged_ranges": "[]NativeWorkbookMergedRangeV2", "name": "string", "order": "integer", "part_name": "string", "refusal_code": "string", "rows": "[]NativeWorkbookRowDimensionV2", "sheet_format": "NativeWorkbookSheetFormatV2", "sheet_view": "NativeWorkbookSheetViewV2", "state": "string"}},
+	"NativeWorkbookSheetViewV2":       {Properties: []string{"active_pane", "frozen_columns", "frozen_rows", "pane_state", "split_x_twips", "split_y_twips", "top_left_cell"}, Required: []string{"frozen_columns", "frozen_rows", "pane_state"}, Types: map[string]string{"active_pane": "string", "frozen_columns": "integer", "frozen_rows": "integer", "pane_state": "string", "split_x_twips": "number", "split_y_twips": "number", "top_left_cell": "string"}},
 	"NativeWorkbookSourceV2":          {Properties: []string{"authority", "dialect", "package_sha256", "workbook_part"}, Required: []string{"authority", "dialect", "package_sha256", "workbook_part"}, Types: map[string]string{"authority": "string", "dialect": "string", "package_sha256": "string", "workbook_part": "string"}},
 	"NativeWorkbookStyleV2":           {Properties: []string{"effective", "id", "raw_projection_sha256"}, Required: []string{"effective", "id", "raw_projection_sha256"}, Types: map[string]string{"effective": "NativeWorkbookEffectiveStyleV2", "id": "integer", "raw_projection_sha256": "string"}},
 	"NativeWorkbookUnsupportedV2":     {Properties: []string{"capability", "cell_ref", "code", "id", "message", "part_name", "preservation", "range_ref", "scope_id"}, Required: []string{"capability", "code", "id", "message", "preservation", "scope_id"}, Types: map[string]string{"capability": "string", "cell_ref": "string", "code": "string", "id": "string", "message": "string", "part_name": "string", "preservation": "string", "range_ref": "string", "scope_id": "string"}},
@@ -71,6 +72,7 @@ var nativeXLSXV2SchemaUnsupportedClassifications = map[string]nativeUnsupportedC
 	"COLS_ATTRIBUTES":                    {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"SHEET_FORMAT_EXTRAS":                {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"SHEET_VIEW_GEOMETRY":                {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
+	"SHEET_VIEW_PANE":                    {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"COLUMN_DIMENSION_EXTRAS":            {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"ROW_DIMENSION_EXTRAS":               {capability: "dimensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
 	"ROW_EXTENSIONS":                     {capability: "extensions", scope: "sheet", impact: nativeUnsupportedNoImpact},
@@ -105,6 +107,7 @@ var nativeXLSXV2SchemaUnsupportedClassifications = map[string]nativeUnsupportedC
 	"STYLE_HORIZONTAL_ALIGNMENT":         {capability: "styles", scope: "style", impact: nativeUnsupportedNoImpact},
 	"STYLE_VERTICAL_ALIGNMENT":           {capability: "styles", scope: "style", impact: nativeUnsupportedNoImpact},
 	"STYLE_ALIGNMENT_EXTENDED":           {capability: "styles", scope: "style", impact: nativeUnsupportedNoImpact},
+	"STYLE_PARENT_APPLY_MISMATCH":        {capability: "styles", scope: "workbook", impact: nativeUnsupportedNoImpact},
 	"CHART_CONTENT":                      {capability: "charts", scope: "workbook", impact: nativeUnsupportedNoImpact},
 	"PIVOT_OR_SLICER_CONTENT":            {capability: "pivots", scope: "workbook", impact: nativeUnsupportedNoImpact},
 	"DRAWING_OR_MEDIA_CONTENT":           {capability: "drawings", scope: "workbook", impact: nativeUnsupportedNoImpact},

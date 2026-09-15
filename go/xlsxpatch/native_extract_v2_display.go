@@ -86,7 +86,7 @@ func enrichNativeWorkbookV2Display(data []byte, workbook *NativeWorkbookV2) erro
 		return err
 	}
 	if stylesPart != "" {
-		registry, registryErr := newStyleRegistry(pkg.files[stylesPart])
+		registry, _, registryErr := newStyleRegistryForExtraction(pkg.files[stylesPart])
 		if registryErr != nil {
 			return fmt.Errorf("xlsxpatch: native v2 display: styles %q: %w", stylesPart, registryErr)
 		}

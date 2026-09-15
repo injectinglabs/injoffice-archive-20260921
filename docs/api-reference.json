@@ -12875,6 +12875,16 @@
               "signature": "export declare const NATIVE_XLSX_MDW_PROVIDER_REVISION: string"
             },
             {
+              "name": "NativeActivePane",
+              "kind": "type",
+              "signature": "NativeActivePane"
+            },
+            {
+              "name": "NativeActivePaneV2",
+              "kind": "type",
+              "signature": "NativeActivePaneV2"
+            },
+            {
               "name": "NativeBorderEdgeV1",
               "kind": "type",
               "signature": "NativeBorderEdgeV1"
@@ -12998,6 +13008,16 @@
               "name": "NativeOOXMLCellTypeV2",
               "kind": "type",
               "signature": "NativeOOXMLCellTypeV2"
+            },
+            {
+              "name": "NativePaneState",
+              "kind": "type",
+              "signature": "NativePaneState"
+            },
+            {
+              "name": "NativePaneStateV2",
+              "kind": "type",
+              "signature": "NativePaneStateV2"
             },
             {
               "name": "NativePositionedDrawingV1",
@@ -13790,6 +13810,16 @@
               "signature": "NativeWorkbookSheetV2"
             },
             {
+              "name": "NativeWorkbookSheetViewV1",
+              "kind": "type",
+              "signature": "NativeWorkbookSheetViewV1"
+            },
+            {
+              "name": "NativeWorkbookSheetViewV2",
+              "kind": "type",
+              "signature": "NativeWorkbookSheetViewV2"
+            },
+            {
               "name": "NativeWorkbookSourceV1",
               "kind": "type",
               "signature": "NativeWorkbookSourceV1"
@@ -14082,7 +14112,7 @@
             {
               "name": "XLSX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"987cea5431a49990432bdf4b101a05054d7ac262d9cfc2411cb18639657d371e\""
+              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"470fe4bd0fd533f6a6fcdcd1e9c232057fe5cb4cf111503a17e6a405edbf2736\""
             },
             {
               "name": "XLSX_NATIVE_V2_MEDIA_TYPE",
@@ -14117,7 +14147,7 @@
             {
               "name": "XLSX_NATIVE_V2_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:1ebf8027a17b482beb4cbc484180b8854b880a60e21998e4e3e360adc7b0c4c7\""
+              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:75a781bf3f7da26dfab6500c9e122ce35cbe771af4f25c23193912a9ea0b3fc8\""
             },
             {
               "name": "XLSX_NATIVE_V2_VERSION",

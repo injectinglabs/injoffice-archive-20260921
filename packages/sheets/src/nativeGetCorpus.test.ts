@@ -42,6 +42,44 @@ describe('native GET corpus cell-paint', () => {
     expect(paint.cells.length).toBeGreaterThan(0)
   })
 
+  it('previews the frozen-pane package and records the pane as a typed read-only fact', () => {
+    const workbook = loadWorkbook('refuse-freeze-pane')
+    expect(workbook.unsupported.some((item) => item.code === 'SHEET_VIEW_GEOMETRY')).toBe(false)
+    const pane = workbook.unsupported.find((item) => item.code === 'SHEET_VIEW_PANE')
+    expect(pane?.scope_id).toBe(`sheet:${workbook.sheets[0]!.id}`)
+    expect(pane?.message).toContain('1 frozen rows, 1 frozen columns')
+    expect(workbook.sheets[0]!.sheet_view).toEqual({ pane_state: 'frozen', frozen_rows: 1, frozen_columns: 1, top_left_cell: 'B2', active_pane: 'bottomRight' })
+    const model = projectNativeWorkbookV2(workbook)
+    expect(model.sheets[0]!.sheet_view).toEqual(workbook.sheets[0]!.sheet_view)
+    const geometry = compileNativeSheetGeometryV2(
+      model,
+      workbook.sheets[0]!.id,
+      { row: 0, column: 0, end_row: 4, end_column: 2 },
+      createNativeMaximumDigitWidthAuthorityV2(model, FONT_BYTES),
+    )
+    const paint = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
+    expect(paint.cells.length).toBeGreaterThan(0)
+  })
+
+  it('paints cellXf records that differ from their cellStyleXf parent without apply flags', () => {
+    const workbook = loadWorkbook('refuse-apply-flags')
+    const mismatch = workbook.unsupported.find((item) => item.code === 'STYLE_PARENT_APPLY_MISMATCH')
+    expect(mismatch?.scope_id).toBe('workbook')
+    expect(mismatch?.message).toContain('cellXf 1 fill id 1 differs from cellStyleXf id 0 without applyFill')
+    expect(workbook.styles[1]!.effective.fill_color).toBe('#1F4E78')
+    expect(workbook.styles[1]!.effective.bold).toBe(true)
+    expect(workbook.styles[3]!.effective.number_format).toBe('$#,##0')
+    const model = projectNativeWorkbookV2(workbook)
+    const geometry = compileNativeSheetGeometryV2(
+      model,
+      workbook.sheets[0]!.id,
+      { row: 0, column: 0, end_row: 4, end_column: 2 },
+      createNativeMaximumDigitWidthAuthorityV2(model, FONT_BYTES),
+    )
+    const paint = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
+    expect(paint.cells.length).toBeGreaterThan(0)
+  })
+
   it('refuses showGridLines=0 as sheet view geometry', () => {
     const workbook = loadWorkbook('refuse-gridlines-off')
     const model = projectNativeWorkbookV2(workbook)
