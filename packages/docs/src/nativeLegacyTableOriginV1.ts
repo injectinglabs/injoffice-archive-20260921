@@ -19,6 +19,7 @@ export function validLegacyTableOrigins(value:unknown,hash:string):value is Nati
 /** Internal explicit approximation. The public strict qualifier remains unchanged. */
 export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,resolved:NativeDocxResolvedLayoutInputV1,shaped:NativeDocxShapedLinesV1|undefined,eligibility?:{legacy_compatibility_mode:number|null;legacy_table_origins?:NativeDocxLegacyTableOriginV1[]}){
  const resolvedForQualify=structuredClone(resolved)
+ resolvedForQualify.diagnostics=resolvedForQualify.diagnostics.filter(diagnostic=>diagnostic.code!=='TABLE_STYLE_EFFECTS_PRESERVED'&&diagnostic.code!=='CONDITIONAL_TABLE_STYLE_PRESERVED')
  for(const [blockIndex,block] of document.body.blocks.entries()){
   if(!block.table)continue
   const previous=document.body.blocks[blockIndex-1]?.paragraph,next=document.body.blocks[blockIndex+1]?.paragraph
