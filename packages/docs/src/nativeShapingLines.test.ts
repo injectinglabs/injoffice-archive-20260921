@@ -15,6 +15,7 @@ import { type NativeDocxDocumentV1, type NativeDocxRunV1 } from './nativeContrac
 import {
   DOCX_SHAPING_REQUEST_PROTOCOL,
   shapeNativeDocxLinesV1,
+  shapeNativeDocxLinesWithParagraphWidthsV1,
   type NativeDocxShapingRequestV1,
 } from './nativeShapingLines.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
@@ -1333,6 +1334,18 @@ describe('shapeNativeDocxLinesV1', () => {
     if (!result.ok) return
     expect(calls.length).toBeGreaterThan(0)
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'paint-diagnostic-preserved', source_diagnostic_code: 'THEME_COLOR_PRESERVED' })]))
+  })
+
+  it('shapes remaining text when approximate omits paragraph-scoped run diagnostics', async () => {
+    const document = nativeDocument()
+    makeTextOnly(document, 'remaining')
+    const resolved = resolvedLayout(document)
+    const paragraphID = document.body.blocks[0]!.paragraph!.id
+    resolved.diagnostics.push({ code: 'PARTIAL_RUN_PROPERTIES', severity: 'unsupported', scope_id: paragraphID, preservation: 'preserve-verbatim', message: 'partial run properties' })
+    const strict = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders([]))
+    expect(strict.ok && strict.value.paragraphs).toEqual([])
+    const approximate = await shapeNativeDocxLinesWithParagraphWidthsV1(request(document, resolved), fakeProviders([]), new Map([[paragraphID, 5_000]]), undefined, new Set(['PARTIAL_RUN_PROPERTIES']))
+    expect(approximate.ok && approximate.value.paragraphs.length).toBeGreaterThan(0)
   })
 
   it('allows exact latent style behavior metadata only at its bound document scope', async () => {

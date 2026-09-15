@@ -299,6 +299,7 @@ interface NativeShapingContext {
   qualifiedFontDescriptors?:boolean
   fontSubstitutions: import('./nativeFontSubstitutionEvidenceV1.js').NativeDocxFontSubstitutionV1[]
   lineIntervals?: NativeDocxLineIntervalPlanV1
+  nonblockingResolution?: ReadonlySet<string>
   request: NativeDocxShapingRequestV1
   providers: NativeProviderSnapshot
   fontManifest: NativeFontManifest
@@ -647,7 +648,8 @@ function canonicalOPCPartKey(value: string): string {
 }
 
 function addDiagnostic(context: NativeShapingContext, diagnostic: NativeDocxShapingDiagnosticV1): void {
-  if (context.activeParagraphID !== undefined && diagnostic.severity === 'unsupported') context.activeParagraphFailed = true
+  const skipParagraphFailure = context.nonblockingResolution !== undefined && (diagnostic.code === 'drawing-layout-unsupported' || diagnostic.code === 'reference-layout-unsupported')
+  if (context.activeParagraphID !== undefined && diagnostic.severity === 'unsupported' && !skipParagraphFailure) context.activeParagraphFailed = true
   const key = `${diagnostic.code}\u0000${diagnostic.scope_id}\u0000${diagnostic.source_id ?? ''}\u0000${diagnostic.message}`
   if (context.diagnosticKeys.has(key)) return
   context.diagnosticKeys.add(key)
@@ -1968,10 +1970,11 @@ async function shapeParagraph(context: NativeShapingContext, story: NativeDocxSt
   return output
 }
 
-function blockingDiagnostics(resolved: NativeDocxResolvedLayoutInputV1, paragraphIDs: Set<string>, runIDs: Set<string>, tableIDs: Set<string>): Map<string, NativeDocxResolvedLayoutInputV1['diagnostics']> {
+function blockingDiagnostics(resolved: NativeDocxResolvedLayoutInputV1, paragraphIDs: Set<string>, runIDs: Set<string>, tableIDs: Set<string>, nonblockingResolution?: ReadonlySet<string>): Map<string, NativeDocxResolvedLayoutInputV1['diagnostics']> {
   const result = new Map<string, NativeDocxResolvedLayoutInputV1['diagnostics']>()
   for (const diagnostic of resolved.diagnostics) {
     if (isRenderNeutralLayoutDiagnostic(diagnostic, resolved)) continue
+    if (nonblockingResolution?.has(diagnostic.code)) continue
     if ((PAINT_ONLY_RESOLUTION_DIAGNOSTICS.has(diagnostic.code) && (paragraphIDs.has(diagnostic.scope_id) || runIDs.has(diagnostic.scope_id))) || (TABLE_ONLY_RESOLUTION_DIAGNOSTICS.has(diagnostic.code) && tableIDs.has(diagnostic.scope_id))) continue
     const diagnostics = result.get(diagnostic.scope_id) ?? []
     diagnostics.push(diagnostic)
@@ -2022,7 +2025,7 @@ function tableDiagnosticScopes(table: NativeDocxTableV1): Set<string> {
  * Validate both Go wire projections, verify every durable-id join, and shape
  * source-ordered paragraphs with injected native font providers.
  */
-async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1,descriptors?:{eligibility:unknown;inventoryJSON:string}): Promise<ShapeNativeDocxLinesResult> {
+async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths?: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1,descriptors?:{eligibility:unknown;inventoryJSON:string}, nonblockingResolution?: ReadonlySet<string>): Promise<ShapeNativeDocxLinesResult> {
   const ownedIntervals = lineIntervals ? deepFreezeWire(structuredClone(lineIntervals)) : undefined
   let intervalCount = 0
   for (const intervals of Object.values(ownedIntervals ?? {})) {
@@ -2059,7 +2062,8 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
     runs: new Map(request.resolved_layout.runs.map((run) => [run.run_id, run])),
     noteNumbers: qualifiedNotes.numbers,
     fontAliases: resolvedFontAliases(request.resolved_layout),
-    blockingDiagnostics: blockingDiagnostics(request.resolved_layout, new Set(inventory.paragraphs.keys()), new Set(inventory.runs.keys()), new Set(inventory.tables.keys())),
+    blockingDiagnostics: blockingDiagnostics(request.resolved_layout, new Set(inventory.paragraphs.keys()), new Set(inventory.runs.keys()), new Set(inventory.tables.keys()), nonblockingResolution),
+    nonblockingResolution,
     diagnostics: [],
     diagnosticKeys: new Set(),
     lineCount: 0,
@@ -2172,8 +2176,8 @@ export async function shapeNativeDocxLinesV1(value: unknown, providers: NativeDo
 }
 
 /** Internal canonical page-paint seam: reuses one provider/cache/budget context while shaping qualified cell widths. */
-export async function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult> {
-  return shapeNativeDocxLinesCoreV1(value, providers, paragraphWidths, lineIntervals)
+export async function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1, nonblockingResolution?: ReadonlySet<string>): Promise<ShapeNativeDocxLinesResult> {
+  return shapeNativeDocxLinesCoreV1(value, providers, paragraphWidths, lineIntervals, undefined, nonblockingResolution)
 }
 
 /** Read-only preview seam: source descriptor and policy evidence are validated

@@ -164,7 +164,7 @@ export interface NativeDocxPagePaintCompleteInputV1 {
 
 export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
-import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximatePagePreviewV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 import { projectNativeDocxAbsentFontSizesV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
@@ -240,16 +240,8 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
 }
 
 async function renderNativeDocxApproximatePagePreviewInternalV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
-  const document = decodeNativeDocxDocument(input.document)
-  if (!document.ok) failIssues('native document is invalid', document.issues)
-  const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
-  const probe = bodyFields.length ? nativeDocxBodyPageFieldDocumentV1(document.value, Object.fromEntries(bodyFields.map(run => [run.id, '1']))) : document.value
-  if (bodyFields.length || hasNativeSquareWrapV1(document.value) || hasNativeDocxPageFieldsV1(probe)) {
-    const prepared = await prepareNativeDocxPagePaintInternalV1(input, runtime, eligibility)
-    return compileNativeDocxApproximateComputedPagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
-  }
-  const prepared = await prepareNativeDocxPagePaintV1(input, runtime)
-  return compileNativeDocxApproximatePagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
+  const prepared = await prepareNativeDocxPagePaintInternalV1(input, runtime, eligibility)
+  return compileNativeDocxApproximateComputedPagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
 }
 
 export interface NativeDocxPagePaintCompletedV1 {
@@ -623,7 +615,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   if (!isCanonicalHarfBuzzTextShaperV1(shaper, input.source_revision)) throw new TypeError('HarfBuzz shaper provenance does not attest the exact pinned runtime and requested engine source revision')
   if(descriptors)qualifyNativeDocxFontDescriptorPreviewV1(descriptors.eligibility,document.value,resolved.value,descriptors.inventoryJSON)
   await attestResolvedFontReferencesBeforeBidi(resolver, manifest.value, references, fontPolicy===undefined||!descriptors&&resolved.value.diagnostics.some((entry) => entry.code === 'FONT_MATCHING_METADATA_PRESERVED'))
-  const shapeLines:typeof shapeNativeDocxLinesWithParagraphWidthsV1=(value,providers,widths,intervals)=>fontPolicy?shapeNativeDocxFontPreviewLinesV1(value,providers,widths,fontPolicy,descriptors):shapeNativeDocxLinesWithParagraphWidthsV1(value,providers,widths,intervals)
+  const shapeLines:typeof shapeNativeDocxLinesWithParagraphWidthsV1=(value,providers,widths,intervals)=>fontPolicy?shapeNativeDocxFontPreviewLinesV1(value,providers,widths,fontPolicy,descriptors):shapeNativeDocxLinesWithParagraphWidthsV1(value,providers,widths,intervals,approximateEligibility===undefined?undefined:DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED)
   const columnProfile = fontPolicy || approximateEligibility !== undefined ? undefined : qualifyNativeDocxColumnParagraphProfileV1(document.value, resolved.value, settings.value)
   const dimensions = columnProfile ? { width: columnProfile.geometry.columns[0]!.width_millipoints, tab: settings.value.default_tab_stop_twips * 50 } : shapingDimensions(document.value, settings.value)
   const bodyFields = nativeDocxBodyPageFieldRunsV1(document.value)
