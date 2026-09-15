@@ -389,10 +389,18 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingShape(node *nativeX
 	if err != nil {
 		return NativeElement{}, err
 	}
+	// The style matrix supplies fill/outline only where dsp:spPr omits them.
+	// When it cannot be resolved exactly, the shape may still paint from its
+	// own explicit fill AND outline; otherwise the frame is refused rather
+	// than painting an outline-less or fill-less shape (mirrors AutoShape
+	// pptx.autoshape-theme-style-unavailable).
 	paint := spPr
 	if style := singletons["style"]; style != nil {
-		if resolved, styleErr := resolveNativeShapeStyle(spPr, style, extractor.slideDependencies.themeRoot, dialect, extractor.theme); styleErr == nil {
+		resolved, styleErr := resolveNativeShapeStyle(spPr, style, extractor.slideDependencies.themeRoot, dialect, extractor.theme)
+		if styleErr == nil {
 			paint = resolved
+		} else if !nativeDiagramDrawingHasExplicitPaint(spPr, dialect) {
+			return NativeElement{}, refuseNativeDiagram("pptx.diagram-drawing-style-unavailable", "diagram drawing shape inherits fill or outline from an unresolvable style matrix reference")
 		}
 	}
 	fill, err := nativeDiagramDrawingFill(paint, dialect, extractor.theme)
@@ -409,16 +417,20 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingShape(node *nativeX
 	textOmitted := ""
 	inheritedText := false
 	if txBody := singletons["txBody"]; txBody != nil {
-		parsed, parsedLayout, omitted, inherited, textErr := extractor.extractNativeDiagramDrawingText(txBody, singletons["style"], transform, dialect)
-		if textErr != nil {
-			return NativeElement{}, textErr
-		}
-		if omitted != "" {
-			textOmitted = omitted
+		if reason := nativeDiagramDrawingTextFrameMismatch(singletons["txXfrm"], transform, geometry, dialect); reason != "" {
+			textOmitted = reason
 		} else {
-			paragraphs = parsed
-			layout = parsedLayout
-			inheritedText = inherited
+			parsed, parsedLayout, omitted, inherited, textErr := extractor.extractNativeDiagramDrawingText(txBody, singletons["style"], transform, dialect)
+			if textErr != nil {
+				return NativeElement{}, textErr
+			}
+			if omitted != "" {
+				textOmitted = omitted
+			} else {
+				paragraphs = parsed
+				layout = parsedLayout
+				inheritedText = inherited
+			}
 		}
 	}
 
@@ -448,6 +460,14 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingShape(node *nativeX
 			Scope:   &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &partName},
 		}}},
 	}
+	// Rotated or flipped dsp:sp carry the same affine preview declaration
+	// every other native producer emits (quarter-turn or bounded affine).
+	for _, gap := range transformGaps.values {
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+			Severity: NativeDiagnosticSeverityWarning, Code: gap.code, Message: gap.message,
+			Scope: &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &partName},
+		})
+	}
 	if textOmitted != "" {
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning, Code: nativeDiagramDrawingTextOmittedCode,
@@ -462,6 +482,64 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingShape(node *nativeX
 		element.Name = stringPointer(name)
 	}
 	return element, nil
+}
+
+// nativeDiagramDrawingHasExplicitPaint reports whether dsp:spPr declares both
+// its own fill and its own outline, so an unresolvable style matrix cannot
+// change what is painted.
+func nativeDiagramDrawingHasExplicitPaint(spPr *nativeXMLNode, dialect nativeExtractDialect) bool {
+	fill := false
+	for _, local := range []string{"noFill", "solidFill", "gradFill", "pattFill", "blipFill", "grpFill"} {
+		fill = fill || nativeChild(spPr, dialect.drawing, local) != nil
+	}
+	return fill && nativeChild(spPr, dialect.drawing, "ln") != nil
+}
+
+// nativeDiagramDrawingTextFrameMismatchToleranceEMU absorbs PowerPoint's own
+// integer rounding of the preset text rectangle it writes into dsp:txXfrm.
+const nativeDiagramDrawingTextFrameMismatchToleranceEMU = int64(2)
+
+// nativeDiagramDrawingTextFrameMismatch returns a non-empty reason when
+// dsp:txXfrm places the text somewhere other than the evaluated preset text
+// rectangle of the shape (which is where the shape's text body is laid out).
+// Without a separate text-frame model the text is omitted instead of being
+// silently laid out in the wrong rectangle.
+func nativeDiagramDrawingTextFrameMismatch(txXfrm *nativeXMLNode, transform NativeTransform, geometry *NativeEvaluatedGeometry, dialect nativeExtractDialect) string {
+	if txXfrm == nil {
+		return ""
+	}
+	if geometry == nil || requireOnlyNativeAttrs(txXfrm) != nil || requireOnlyNativeChildren(txXfrm, xml.Name{Space: dialect.drawing, Local: "off"}, xml.Name{Space: dialect.drawing, Local: "ext"}) != nil {
+		return "diagram text frame (dsp:txXfrm) is rotated, flipped, or outside the exact subset"
+	}
+	off, offErr := nativeSingleton(txXfrm, dialect.drawing, "off", true)
+	ext, extErr := nativeSingleton(txXfrm, dialect.drawing, "ext", true)
+	if offErr != nil || extErr != nil || requireOnlyNativeAttrs(off, xml.Name{Local: "x"}, xml.Name{Local: "y"}) != nil || requireOnlyNativeAttrs(ext, xml.Name{Local: "cx"}, xml.Name{Local: "cy"}) != nil {
+		return "diagram text frame (dsp:txXfrm) is malformed"
+	}
+	values := map[string]int64{}
+	for _, field := range []struct {
+		node  *nativeXMLNode
+		local string
+		min   int64
+	}{{off, "x", -nativeMaxSafeInteger}, {off, "y", -nativeMaxSafeInteger}, {ext, "cx", 0}, {ext, "cy", 0}} {
+		raw, ok := exactNativeAttr(field.node, "", field.local)
+		parsed, parseErr := parseCanonicalNativeInt(raw, field.min, nativeMaxSafeInteger)
+		if !ok || parseErr != nil {
+			return "diagram text frame (dsp:txXfrm) is non-canonical"
+		}
+		values[field.local] = parsed
+	}
+	expected := map[string]int64{
+		"x": *transform.X + geometry.TextRect.X, "y": *transform.Y + geometry.TextRect.Y,
+		"cx": geometry.TextRect.CX, "cy": geometry.TextRect.CY,
+	}
+	for key, want := range expected {
+		delta := values[key] - want
+		if delta < -nativeDiagramDrawingTextFrameMismatchToleranceEMU || delta > nativeDiagramDrawingTextFrameMismatchToleranceEMU {
+			return "diagram text frame (dsp:txXfrm) differs from the preset text rectangle; a separate text frame is not modeled"
+		}
+	}
+	return ""
 }
 
 func nativeDiagramDrawingGeometry(spPr *nativeXMLNode, transform NativeTransform, dialect nativeExtractDialect) (*NativeEvaluatedGeometry, error) {
@@ -673,7 +751,7 @@ func nativeDiagramDrawingLine(paint *nativeXMLNode, dialect nativeExtractDialect
 }
 
 // nativeDiagramDrawingTextBody copies a dsp:txBody, dropping only non-visual
-// run metadata (kerning threshold, proofing flags) and provably no-op spacing
+// run metadata (proofing flags, disabled kerning) and provably no-op spacing
 // (0 before/after, 100% line spacing) so the shared exact text extractor can
 // qualify the remainder. Anything else stays and is refused there.
 func nativeDiagramDrawingTextBody(txBody *nativeXMLNode, dialect nativeExtractDialect) *nativeXMLNode {
@@ -685,7 +763,11 @@ func nativeDiagramDrawingTextBody(txBody *nativeXMLNode, dialect nativeExtractDi
 			if node.Name.Space == dialect.drawing && attr.Name.Space == "" {
 				switch node.Name.Local {
 				case "rPr", "endParaRPr":
-					if attr.Name.Local == "kern" || attr.Name.Local == "dirty" || attr.Name.Local == "smtClean" || attr.Name.Local == "err" || attr.Name.Local == "noProof" || attr.Name.Local == "altLang" {
+					// Editor/proofing state has no paint. A kerning threshold does
+					// (PowerPoint kerns pairs at or above it), so only the disabled
+					// value kern="0" is a no-op; other thresholds stay and route the
+					// text to the omitted path exactly like AutoShape runs.
+					if attr.Name.Local == "dirty" || attr.Name.Local == "smtClean" || attr.Name.Local == "err" || attr.Name.Local == "noProof" || (attr.Name.Local == "kern" && attr.Value == "0") {
 						continue
 					}
 				case "pPr":

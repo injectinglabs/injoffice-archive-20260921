@@ -226,6 +226,135 @@ func TestExtractNativePPTXDiagramDrawingInheritedTextUsesDeclaredPreviewOnly(t *
 	}
 }
 
+func TestExtractNativePPTXDiagramDrawingStyleMatrixIsExactOrRefused(t *testing.T) {
+	t.Parallel()
+	base := nativeDiagramShapeXML(0, "Manager", "")
+	lineXML := `<a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="lt1"><a:hueOff val="0"/><a:satOff val="0"/><a:lumOff val="0"/><a:alphaOff val="0"/></a:schemeClr></a:solidFill><a:prstDash val="solid"/></a:ln>`
+	if !strings.Contains(base, lineXML) || !strings.Contains(base, `<a:lnRef idx="2">`) {
+		t.Fatal("fixture drifted")
+	}
+	// lnRef idx="2" has no entry in the one-line fixture theme: the style cannot
+	// be resolved, and without an explicit a:ln the frame must be refused rather
+	// than painting an outline-less shape.
+	inherited := strings.Replace(base, lineXML, "", 1)
+	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, inherited)}, "pptx.diagram-drawing-style-unavailable")
+
+	// A resolvable exact matrix entry supplies the outline the shape omits.
+	resolvable := strings.Replace(inherited, `<a:lnRef idx="2">`, `<a:lnRef idx="1">`, 1)
+	exactTheme := strings.Replace(nativeExactThemeXML(nsDrawingTransitional),
+		`<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>`,
+		`<a:lnStyleLst><a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/><a:miter lim="800000"/></a:ln></a:lnStyleLst>`, 1)
+	if !strings.Contains(exactTheme, `<a:miter lim="800000"/>`) {
+		t.Fatal("theme fixture drifted")
+	}
+	// The fixture theme's bare matrix line is itself outside the exact subset,
+	// so it must refuse the frame too.
+	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, resolvable)}, "pptx.diagram-drawing-style-unavailable")
+	deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, resolvable), themeXML: exactTheme}), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract style-resolved diagram: %v", err)
+	}
+	child := nativeFixtureDiagramGroup(t, deck.Slides[0]).Children[0]
+	if child.Stroke == nil || child.Stroke.Color != "FFFFFF" || child.Stroke.WidthEMU == nil || *child.Stroke.WidthEMU != 6350 || child.Stroke.Join == nil || *child.Stroke.Join != NativeStrokeJoinMiter || child.Fill == nil || *child.Fill != "2F6FED" {
+		t.Fatalf("style matrix outline was not resolved from the theme: %#v", child.Stroke)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid diagram deck: %#v", issues)
+	}
+}
+
+func TestExtractNativePPTXDiagramDrawingKerningThresholdFollowsAutoShapeTiers(t *testing.T) {
+	t.Parallel()
+	kerned := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), ` kern="0"`, ` kern="1200"`, 1)
+	if !strings.Contains(kerned, `kern="1200"`) {
+		t.Fatal("fixture drifted")
+	}
+	drawing := nativeDiagramDrawingXML(nsDrawingTransitional, kerned)
+	exact, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: drawing}), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract exact diagram: %v", err)
+	}
+	exactChild := nativeFixtureDiagramGroup(t, exact.Slides[0]).Children[0]
+	if len(*exactChild.Paragraphs) != 0 || len(exactChild.Compatibility.Diagnostics) != 2 || exactChild.Compatibility.Diagnostics[1].Code != nativeDiagramDrawingTextOmittedCode {
+		t.Fatalf("exact tier must omit kerned diagram text like AutoShape runs: %#v", exactChild.Compatibility.Diagnostics)
+	}
+	options := nativeTestExtractOptions()
+	options.AllowInheritedTextPreview = true
+	approximate, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: drawing}), options)
+	if err != nil {
+		t.Fatalf("extract approximate diagram: %v", err)
+	}
+	child := nativeFixtureDiagramGroup(t, approximate.Slides[0]).Children[0]
+	if len(*child.Paragraphs) != 1 || *(*child.Paragraphs)[0].Runs[0].Text != "Manager" {
+		t.Fatalf("inherited preview did not paint kerned diagram text: %#v", child.Paragraphs)
+	}
+	codes := []string{}
+	for _, diagnostic := range child.Compatibility.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+	if strings.Join(codes, ",") != nativeDiagramDrawingPreviewCode+","+nativeInheritedTextPreviewCode {
+		t.Fatalf("kerned diagram text was not labeled with the inherited policy: %v", codes)
+	}
+}
+
+func TestExtractNativePPTXDiagramDrawingRotationDeclaresAffinePreview(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		rotation string
+		code     string
+	}{{"5400000", "pptx.quarter-turn-preview"}, {"1200000", "pptx.source-affine-preview"}} {
+		rotated := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<a:xfrm>`, `<a:xfrm rot="`+tc.rotation+`">`, 1)
+		deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, rotated)}), nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("extract rotated diagram (%s): %v", tc.rotation, err)
+		}
+		child := nativeFixtureDiagramGroup(t, deck.Slides[0]).Children[0]
+		codes := []string{}
+		for _, diagnostic := range child.Compatibility.Diagnostics {
+			codes = append(codes, diagnostic.Code)
+		}
+		if !strings.Contains(strings.Join(codes, ","), tc.code) {
+			t.Fatalf("rotation %s did not declare %s: %v", tc.rotation, tc.code, codes)
+		}
+		if tc.rotation == "5400000" && (child.Transform.QuarterTurns == nil || *child.Transform.QuarterTurns != 1 || child.Transform.RotationAngle != nil) {
+			t.Fatalf("quarter turn was not retained exactly: %#v", child.Transform)
+		}
+		if tc.rotation == "1200000" && (child.Transform.RotationAngle == nil || *child.Transform.RotationAngle != 1_200_000 || child.Transform.QuarterTurns != nil) {
+			t.Fatalf("source rotation was not retained exactly: %#v", child.Transform)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+			t.Fatalf("invalid rotated diagram deck (%s): %#v", tc.rotation, issues)
+		}
+	}
+}
+
+func TestExtractNativePPTXDiagramDrawingTextFrameOverrideOmitsText(t *testing.T) {
+	t.Parallel()
+	base := nativeDiagramShapeXML(0, "Manager", "")
+	start := strings.Index(base, "<dsp:txXfrm>")
+	if start < 0 {
+		t.Fatal("fixture lacks dsp:txXfrm")
+	}
+	moved := base[:start] + `<dsp:txXfrm><a:off x="2133600" y="0"/><a:ext cx="1828800" cy="914400"/></dsp:txXfrm></dsp:sp>`
+	deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, moved)}), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract diagram with text frame override: %v", err)
+	}
+	child := nativeFixtureDiagramGroup(t, deck.Slides[0]).Children[0]
+	if len(*child.Paragraphs) != 0 || child.TextBody != nil || len(child.Compatibility.Diagnostics) != 2 || child.Compatibility.Diagnostics[1].Code != nativeDiagramDrawingTextOmittedCode || !strings.Contains(child.Compatibility.Diagnostics[1].Message, "dsp:txXfrm") {
+		t.Fatalf("text frame override must omit text with a declared reason: %#v", child.Compatibility.Diagnostics)
+	}
+	// Without dsp:txXfrm the preset text rectangle is authoritative.
+	plain := base[:start] + `</dsp:sp>`
+	deck, err = ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, plain)}), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract diagram without text frame: %v", err)
+	}
+	if child := nativeFixtureDiagramGroup(t, deck.Slides[0]).Children[0]; len(*child.Paragraphs) != 1 {
+		t.Fatalf("text without dsp:txXfrm was not projected: %#v", child.Compatibility.Diagnostics)
+	}
+}
+
 func TestExtractNativePPTXDiagramDrawingShapeBudgetIsBounded(t *testing.T) {
 	t.Parallel()
 	var shapes strings.Builder
@@ -304,6 +433,7 @@ type nativeDiagramFixtureOptions struct {
 	omitDataModelExt          bool
 	secondDrawingRelationship bool
 	frameXML                  string
+	themeXML                  string
 }
 
 func nativeDiagramDrawingXML(drawingNS, shapes string) string {
@@ -323,14 +453,20 @@ func nativeDiagramShapeXML(index int, text, extra string) string {
 		x = 0
 	}
 	y := int64(index/3) * 1_371_600
+	// PowerPoint writes the preset text rectangle into dsp:txXfrm.
+	geometry, err := EvaluateNativePPTXPresetGeometry("roundRect", 1_828_800, 914_400, nil)
+	if err != nil {
+		panic(err)
+	}
+	textRect := geometry.TextRect
 	return fmt.Sprintf(`<dsp:sp modelId="{%08X-0000-0000-0000-000000000000}"><dsp:nvSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvSpPr/></dsp:nvSpPr>`+
 		`<dsp:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="1828800" cy="914400"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>`+
 		`<a:solidFill><a:schemeClr val="accent1"><a:hueOff val="0"/><a:satOff val="0"/><a:lumOff val="0"/><a:alphaOff val="0"/></a:schemeClr></a:solidFill>`+
 		`<a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="lt1"><a:hueOff val="0"/><a:satOff val="0"/><a:lumOff val="0"/><a:alphaOff val="0"/></a:schemeClr></a:solidFill><a:prstDash val="solid"/></a:ln><a:effectLst/>%s</dsp:spPr>`+
 		`<dsp:style><a:lnRef idx="2"><a:schemeClr val="lt1"/></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></dsp:style>`+
 		`<dsp:txBody><a:bodyPr spcFirstLastPara="0" vert="horz" wrap="square" lIns="36195" tIns="36195" rIns="36195" bIns="36195" numCol="1" spcCol="1270" anchor="ctr" anchorCtr="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>`+
-		`<a:p><a:pPr lvl="0" algn="ctr" defTabSz="889000"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc><a:spcBef><a:spcPct val="0"/></a:spcBef><a:spcAft><a:spcPct val="0"/></a:spcAft><a:buNone/></a:pPr><a:r><a:rPr lang="en-US" sz="2000" b="0" i="0" kern="1200" dirty="0"/><a:t>%s</a:t></a:r></a:p></dsp:txBody>`+
-		`<dsp:txXfrm><a:off x="%d" y="%d"/><a:ext cx="1739472" cy="825072"/></dsp:txXfrm></dsp:sp>`, index+1, x, y, extra, text, x+44664, y+44664)
+		`<a:p><a:pPr lvl="0" algn="ctr" defTabSz="889000"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc><a:spcBef><a:spcPct val="0"/></a:spcBef><a:spcAft><a:spcPct val="0"/></a:spcAft><a:buNone/></a:pPr><a:r><a:rPr lang="en-US" sz="2000" b="0" i="0" kern="0" dirty="0"/><a:t>%s</a:t></a:r></a:p></dsp:txBody>`+
+		`<dsp:txXfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></dsp:txXfrm></dsp:sp>`, index+1, x, y, extra, text, x+textRect.X, y+textRect.Y, textRect.CX, textRect.CY)
 }
 
 func nativeDiagramFixture(t *testing.T, options nativeDiagramFixtureOptions) []byte {
@@ -390,6 +526,9 @@ func nativeDiagramFixture(t *testing.T, options nativeDiagramFixtureOptions) []b
 			parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `</Relationships>`, slideRels+`</Relationships>`, 1)
 			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, frame+`</p:spTree>`, 1)
 			parts["relocated/themes/theme.xml"] = nativeExactThemeXML(drawingNS)
+			if options.themeXML != "" {
+				parts["relocated/themes/theme.xml"] = options.themeXML
+			}
 		},
 	})
 }
