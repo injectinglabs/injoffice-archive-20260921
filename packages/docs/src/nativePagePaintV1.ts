@@ -413,7 +413,7 @@ export function nativeDocxPagePaintOutputSha256V1(value: unknown): string {
   return canonicalWireSha256(decoded.value)
 }
 
-function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDocxFontVariantPolicyV1): NativeDocxHeaderFooterLayoutV1 {
+function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDocxFontVariantPolicyV1,approximate?:boolean): NativeDocxHeaderFooterLayoutV1 {
   const input={
     document: request.pagination_request.document,
     resolved_layout: request.pagination_request.resolved_layout,
@@ -422,6 +422,7 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDo
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
+    ...(approximate ? { omit_unmodeled_section_geometry: true } : {}),
   }
   return font?layoutNativeDocxFontHeadersFootersV1(input,font):layoutNativeDocxHeadersFootersV1(input)
 }
@@ -936,7 +937,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     const expectedProvenance = requestProvenance(request, request.outline_provider.provider_id, request.outline_provider.provider_revision)
     return { ok: true, value: refusal(expectedProvenance, 'provider-mismatch', request.pagination_request.document.document_id, 'Injected outline provider id and revision do not match the page-paint request') }
   }
-  const headerFooter = headerFooterLayout(request,font)
+  const headerFooter = headerFooterLayout(request,font,Boolean(approximateLegacySettings))
   const provenance = requestProvenance(request, provider.id, provider.revision, headerFooter)
   const pagination = request.pagination_request
   const layout = request.paginated_layout

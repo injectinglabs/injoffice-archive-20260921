@@ -614,6 +614,9 @@ func parseNativeRelationships(partName, owner string, data []byte) ([]nativeRela
 			}
 		}
 		if external && !nativeSafeExternalTarget(target) {
+			if typeURI == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" || typeURI == "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate" {
+				continue
+			}
 			return nil, fmt.Errorf("docxpatch: native extract: relationship %q has unsafe external target", id)
 		}
 		rels = append(rels, nativeRelationship{ID: id, Type: typeURI, Target: target, External: external})
