@@ -963,6 +963,45 @@ describe('native PPTX RenderTree', () => {
     expect(tree.diagnostics.filter((diagnostic) => diagnostic.code === 'text.wrapUnavailable').map((diagnostic) => diagnostic.elementId).sort()).toEqual(['native-mixed', 'rtl-square'])
   })
 
+  it('breaks an unbreakable overfull run at cluster boundaries only for elements carrying approximation evidence and labels it', async () => {
+    const text = 'A'.repeat(48)
+    const frame = { x: 0, y: 0, cx: 60_000, cy: 400_000 }
+    const plain = nativeTextElement('overfull-run', text, nativeTextBody(), frame)
+    // The deck-wide opt-in alone never loosens an exact element.
+    for (const options of [{ textLayout: textLayout() }, { textLayout: textLayout(), sourceFrameAutoFitPreview: true }, { textLayout: textLayout(), sourceFrameAutoFitPreview: true, inheritedTextPreview: true }]) {
+      const tree = await compileNativePptxSlide(authoredDeck([plain]), 0, options)
+      expect(findNode(tree, 'text', plain.id).textBody).toMatchObject({ status: 'refused', paragraphs: [], fidelity: 'nativeUnavailable' })
+      expect(tree.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'text.wrapUnavailable', severity: 'refusal', elementId: plain.id })]))
+      expect(tree.diagnostics.some((diagnostic) => diagnostic.code === 'text.emergencyBreakApproximate')).toBe(false)
+    }
+    const marked = (code: string) => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, nativeTextBody(), frame)
+      // Exact fixture face so the fidelity label reflects the break, not font substitution.
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      element.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code, message: 'Declared read-only approximation' }] }
+      deck.slides[0]!.elements = [element]
+      return { deck, id: element.id }
+    }
+    for (const [code, option, fidelity] of [
+      ['pptx.autofit-authored-scale-approximate', 'sourceFrameAutoFitPreview', 'approximateSourceFrame'],
+      ['pptx.text-columns-single-column-approximate', 'sourceFrameAutoFitPreview', 'approximateSourceFrame'],
+      ['pptx.source-inherited-text-approximate', 'inheritedTextPreview', 'approximateInheritedText'],
+    ] as const) {
+      const { deck, id } = marked(code)
+      await expect(compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1' })).rejects.toThrow('opt-in')
+      const approximate = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', [option]: true })
+      const body = findNode(approximate, 'text', id).textBody
+      expect(body.status).toBe('laidOut')
+      expect(body.fidelity).toBe(fidelity)
+      expect(body.paragraphs.length).toBeGreaterThan(1)
+      expect(body.paragraphs.reduce((sum, line) => sum + line.runs.reduce((inner, run) => inner + run.clusters.length, 0), 0)).toBe(text.length)
+      expect(approximate.diagnostics.filter((diagnostic) => diagnostic.code === 'text.emergencyBreakApproximate' && diagnostic.severity === 'warning' && diagnostic.elementId === id)).toHaveLength(1)
+    }
+  })
+
   it('refuses an overfull unbreakable shaped cluster visibly instead of splitting or approximating it', async () => {
     const base = fixtureShaper()
     const ligatureShaper: NativeTextShaper = {
@@ -980,6 +1019,15 @@ describe('native PPTX RenderTree', () => {
     const element = nativeTextElement('overfull-cluster', 'AB', nativeTextBody(), { x: 0, y: 0, cx: 20_000, cy: 200_000 })
     const tree = await compileNativePptxSlide(authoredDeck([element]), 0, { textLayout: textLayout(ligatureShaper) })
     expect(findNode(tree, 'text', element.id).textBody).toMatchObject({ status: 'refused', paragraphs: [], refusalLabel: 'Exact text layout unavailable' })
+    // Approximate previews may break between clusters, never inside one.
+    const markedDeck = structuredClone(parsedFull), marked = markedDeck.slides[0]!.elements.find((item) => item.kind === 'text')!
+    if (marked.kind !== 'text') throw new Error('text missing')
+    marked.paragraphs = element.paragraphs; marked.textBody = element.textBody; marked.transform = element.transform
+    marked.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.autofit-authored-scale-approximate', message: 'Declared read-only approximation' }] }
+    markedDeck.slides[0]!.elements = [marked]
+    const approximate = await compileNativePptxSlide(markedDeck, 0, { textLayout: textLayout(ligatureShaper), sourceFrameAutoFitPreview: true })
+    expect(findNode(approximate, 'text', marked.id).textBody).toMatchObject({ status: 'refused', paragraphs: [] })
+    expect(approximate.diagnostics.some((diagnostic) => diagnostic.code === 'text.emergencyBreakApproximate')).toBe(false)
     expect(tree.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'text.wrapUnavailable', severity: 'refusal', elementId: element.id })]))
     const recording = createRecordingPaintSurface()
     paintSlideRenderTree(tree, recording)

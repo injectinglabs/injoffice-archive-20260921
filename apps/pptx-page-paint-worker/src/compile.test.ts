@@ -25,6 +25,18 @@ it('requires explicit source-frame opt-in and retains real glyph paint with a bo
  for(const count of [-1,1.5,20001,'1',NaN])expect(()=>decodePptxPreview({...result,source_frame_autofit_count:count})).toThrow()
  await expect(compilePptxPreview({...request,source_frame_autofit_preview:'true'})).rejects.toThrow('boolean')
 })
+it('gates Go-side authored autofit scale and single-column disclosures behind the same autofit opt-in',async()=>{
+ for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-single-column-approximate']){
+  const request=input(),element=request.deck.slides[0].elements[0]
+  element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code,message:'Authored frame layout approximation'}]}
+  await expect(compilePptxPreview(request)).rejects.toThrow('Authored autofit scale requires explicit preview opt-in')
+  const result=await compilePptxPreview({...request,source_frame_autofit_preview:true})
+  expect(result.source_frame_autofit_count).toBeUndefined()
+  // Worker diagnostics carry the compatibility message; the source code stays in the render tree.
+  expect(result.diagnostics.join(' ')).toContain('native.compatibility: Authored frame layout approximation')
+  expect(JSON.stringify(result.nodes)).toContain('contentRun')
+ }
+})
 function input(){
  const deck=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))
  deck.assets=[];deck.slides=[deck.slides[0]];const element=deck.slides[0].elements[0];deck.slides[0].elements=[element]

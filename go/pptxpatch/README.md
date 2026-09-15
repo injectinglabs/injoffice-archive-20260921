@@ -15,14 +15,45 @@ checking metadata from layout. Font metrics, wrapping and terminal metrics can
 differ. Unknown or active unsupported source still refuses; source bytes and
 mutation safety remain unchanged. Shape autofit requires its separate opt-in.
 
+Within that policy, properties that PowerPoint lays out but native v1 paint does
+not model are validated, dropped from the projection, and disclosed per element
+by `pptx.inherited-text-properties-omitted` (a sorted list such as `a:lnSpc`,
+`a:spcBef`, `a:spcAft`, `a:buClr`, `a:buSzPct`, `a:tabLst`, `a:rPr@spc`,
+`a:rPr@strike=noStrike`, `a:buFont@panose`, `a:endParaRPr`). Authored `a:br`
+continues in a bullet-free paragraph at the same left margin, a paragraph
+without runs becomes one blank space run carrying its end-mark metrics, and an
+`a:t` with undeclared edge whitespace is projected as preserved; all three are
+listed in the same disclosure. `a:buFontTx`/`a:buSzTx`/`a:buClrTx` cancel a
+lower layer's bullet font/size/color before leaving the projection. Paint-active
+properties (strikethrough,
+underline, baseline shifts, highlights, automatic numbering, picture bullets)
+still refuse. A shape `fontRef` without an authored color contributes only its
+typeface. The `source-latin-inheritance-approximate-v1` identity names the
+declared layer order and Latin-only profile, which are unchanged; the widened
+property handling is disclosed per element by the omissions code rather than by
+a new policy identity, because hosts and the preview server re-validate the v1
+string as the inherited-text contract.
+
 `NativePPTXExtractOptions.AllowSourceFrameAutoFitPreview` explicitly permits a
 read-only preview of otherwise supported `spAutoFit` text in its saved source
 frame. Its native `textBody.autoFit` is `shape-source-frame`, with a persistent
 approximation diagnostic and non-editable status. No content-dependent resizing
 is performed; frame size, text layout, and overflow or clipping may differ from
 PowerPoint. Normal extraction and mutation remain strict. Malformed autofit,
-font scaling, unsupported vertical modes, unsupported fonts and other independent gaps remain
+unsupported vertical modes, unsupported fonts and other independent gaps remain
 refusals.
+
+The same option admits `a:normAutofit` as a read-only approximation of the
+values PowerPoint itself authored: canonical `fontScale` (1%–100%, default 100%)
+scales every resolved run size, rounded half up to whole hundredths of a point,
+and canonical `lnSpcReduction` (0%–99%, default 0%) is validated but not applied
+because paragraph line spacing is outside the native v1 layout contract. The
+frame is never resized, `textBody.autoFit` stays `none`, the element becomes
+preserve-only, and `pptx.autofit-authored-scale-approximate` names both values.
+Percent-string forms and out-of-range values refuse. `numCol`/`spcCol` (1–16
+columns, nonnegative spacing) are validated and painted as one column with the
+`pptx.text-columns-single-column-approximate` disclosure; column flow is not
+modeled. Strict extraction keeps refusing `a:normAutofit` and multiple columns.
 
 ```bash
 go get github.com/injectinglabs/injoffice/go/pptxpatch
@@ -164,3 +195,20 @@ source is guessed. Local slide paragraph/run overrides still win, including
 explicit nested list levels. Competing placeholder matches, grouped placeholders,
 and unmodeled master artwork remain outside this subset. This is not whole-master
 or PowerPoint fidelity.
+
+When that exact chain does not qualify and `AllowInheritedTextPreview` is set,
+`title`, `ctrTitle`, `subTitle`, `body`, `obj` and untyped placeholders resolve
+through a declared approximation instead: layout match by `idx` (falling back to
+an exact `type` match), master match by title/body family, and the cascade
+presentation `defaultTextStyle` → master `titleStyle`/`bodyStyle` → master placeholder `lstStyle` → layout
+placeholder `lstStyle` → slide `lstStyle` → local properties, fed through the
+inherited text preview above. Master/layout/slide `bodyPr` merge with the
+autofit child as one replaceable slot; the merged result is validated by the
+text-body layout policy. Ancestor prompt paragraphs, fill, outline, effects and
+shape styles are never painted; the element carries
+`pptx.placeholder-inheritance-approximate` listing what was not painted, plus the
+inherited-text disclosures. A slide placeholder without a text body keeps its
+inherited frame and paints nothing (PowerPoint shows no prompt). Slide-level
+fill, outline paint, shape styles and `hidden` placeholders refuse, as do date,
+footer, slide-number, picture, chart, table, media and diagram placeholders.
+`element.placeholder` reports the family (`obj` and untyped report `body`).

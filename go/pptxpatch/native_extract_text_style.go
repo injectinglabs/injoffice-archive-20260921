@@ -308,7 +308,7 @@ func mergeNativeStyleNodes(base, override *nativeXMLNode, dialect nativeExtractD
 	for _, child := range override.Children {
 		found := false
 		for i, previous := range merged.Children {
-			bulletReplacement := child.Name.Space == dialect.drawing && previous.Name.Space == dialect.drawing && (child.Name.Local == "buNone" || child.Name.Local == "buChar") && (previous.Name.Local == "buNone" || previous.Name.Local == "buChar")
+			bulletReplacement := child.Name.Space == dialect.drawing && previous.Name.Space == dialect.drawing && nativeBulletSlot(child.Name.Local) != "" && nativeBulletSlot(child.Name.Local) == nativeBulletSlot(previous.Name.Local)
 			if previous.Name == child.Name || bulletReplacement {
 				if child.Name == (xml.Name{Space: dialect.drawing, Local: "defRPr"}) {
 					nested := mergeNativeStyleNodes(previous, child, dialect)
@@ -326,4 +326,21 @@ func mergeNativeStyleNodes(base, override *nativeXMLNode, dialect nativeExtractD
 		}
 	}
 	return merged
+}
+
+// nativeBulletSlot groups the DrawingML bullet choice elements that replace
+// one another in a cascade: marker kind, bullet font, bullet size and bullet
+// color, each with its "follow text" marker.
+func nativeBulletSlot(local string) string {
+	switch local {
+	case "buNone", "buChar", "buAutoNum", "buBlip":
+		return "marker"
+	case "buFont", "buFontTx":
+		return "font"
+	case "buSzPct", "buSzPts", "buSzTx":
+		return "size"
+	case "buClr", "buClrTx":
+		return "color"
+	}
+	return ""
 }
