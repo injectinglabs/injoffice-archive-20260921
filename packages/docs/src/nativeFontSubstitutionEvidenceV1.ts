@@ -4,6 +4,15 @@ import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 import type {NativeDocxDocumentV1,NativeDocxParagraphV1} from './nativeContract.js'
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,type NativeFontManifest,type TextRunInput} from '@injoffice/font-metrics/layout'
 import {qualifyNativeDocxFontDescriptorPreviewV1} from './nativeFontDescriptorPreviewV1.js'
+export {
+  DOCX_HOST_FONT_APPROXIMATE_SUBSTITUTION_REASON,
+  DOCX_HOST_FONT_APPROXIMATE_SUBSTITUTION_WARNING,
+  discloseNativeDocxHostFontApproximateSubstitutionReasonsV1,
+  nativeDocxHostFontApproximateSubstitutionReasonV1,
+  nativeDocxHostFontApproximateSubstitutionV1,
+  selectLoadedHostManifestSubstituteV1,
+} from './nativeHostFontApproximateSubstitutionV1.js'
+export type {NativeDocxHostFontApproximateSubstitutionV1} from './nativeHostFontApproximateSubstitutionV1.js'
 
 export interface NativeDocxFontSubstitutionV1 {
  source_id:string
