@@ -1,9 +1,21 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse,nativeDocxFontSubstitutionSummary, nativeDocxTableBorderRect, NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS } from './NativeDocxPages'
+import { NativeDocxPages, NativeDocxImage, nativeDocxImageOrientation, decodeNativeDocxImages, nativeDocxImagesWithinBudget, nativeDocxSVGPath, readNativePreviewResponse,nativeDocxFontSubstitutionSummary, nativeDocxTableBorderRect, NATIVE_DOCX_CSS_PIXEL_MILLIPOINTS, nativeDocxOmittedContentDisclosure } from './NativeDocxPages'
 
 describe('native document page viewer', () => {
+  it('turns machine-readable partiality into a visible not-rendered list and per-page blank markers', () => {
+    const drawing = { code: 'UNMODELED_DRAWING', origin: 'source', category: 'drawing', scope_id: 'run:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', message: 'Drawing/object markup and related media are preserved verbatim', count: 2 } as const
+    const equation = { code: 'UNMODELED_PARAGRAPH_CONTENT', origin: 'resolution', category: 'equation', scope_id: 'paragraph:2', message: 'Paragraph content outside the v1 run subset is preserved verbatim', count: 1 } as const
+    const partial = nativeDocxOmittedContentDisclosure({ content_status: 'partial', omitted_content: [drawing, equation], omitted_content_total: 3, unpainted_pages: ['page:1'] })
+    expect(partial.partial).toBe(true)
+    expect(partial.summary).toBe('3 items not rendered: drawings (2), equations (1); 1 page painted nothing')
+    expect(partial.items).toEqual(['drawing: Drawing/object markup and related media are preserved verbatim (×2) — /w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 'equation: Paragraph content outside the v1 run subset is preserved verbatim'])
+    expect(partial.unpainted.has('page:1')).toBe(true)
+    const complete = nativeDocxOmittedContentDisclosure({ content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [] })
+    expect(complete).toMatchObject({ partial: false, summary: null, items: [] })
+    expect(complete.unpainted.size).toBe(0)
+  })
   it('keeps the persistent font warning and deduplicated selections separate from technical evidence',()=>{
     const record={source_family:'Missing',selected_family:'Selected',weight:400,style:'normal'}
     const summary=nativeDocxFontSubstitutionSummary({substitutions:[record,record]} as any)

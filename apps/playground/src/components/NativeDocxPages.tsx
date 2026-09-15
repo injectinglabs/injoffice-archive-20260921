@@ -2,7 +2,7 @@ import {decodeTextboxesPageResponse,NativeDocxTextboxOnPage,textboxLayer,type Te
 import { useEffect, useRef, useState } from 'react'
 import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1, NativeDocxStrokeTableBorderCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
 import { decodeNativeDocxPagePaintV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
-import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from '@injoffice/docs/native-page-paint-output'
+import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, nativeDocxOmittedContentSummaryV1, type NativeDocxApproximateOmissionsV1 } from '@injoffice/docs/native-page-paint-output'
 import {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_WARNING,type NativeDocxFontSubstitutionPreviewV1} from '@injoffice/docs/native-page-paint-output'
 import { DsButton } from '../design-system/primitives'
 
@@ -119,8 +119,16 @@ export function nativeDocxFontSubstitutionSummary(value:NativeDocxFontSubstituti
   return [DOCX_FONT_SUBSTITUTION_WARNING,...(selections.length?selections:['No font substitutions were applied.'])]
 }
 
+/** Machine-readable partiality → operator-visible disclosure. A painted
+ * envelope that dropped content or left a page blank is never presented as a
+ * complete rendering. */
+export function nativeDocxOmittedContentDisclosure(value: NativeDocxApproximateOmissionsV1): { summary: string | null; items: string[]; unpainted: ReadonlySet<string>; partial: boolean } {
+  const items = value.omitted_content.map((entry) => `${entry.category}: ${entry.message}${entry.count > 1 ? ` (×${entry.count})` : ''}${entry.path ? ` — ${entry.path}` : ''}`)
+  return { summary: nativeDocxOmittedContentSummaryV1(value), items, unpainted: new Set(value.unpainted_pages), partial: value.content_status === 'partial' }
+}
+
 export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview = true }: { bytes: Uint8Array; packageDigest: string; apiBase: string; contentPreview?: boolean }) {
-  const [paint, setPaint] = useState<(Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources'> & { approximate: boolean; reasons: readonly string[]; textboxes?:TextboxPlacement[]; fontDetails?:readonly string[] }) | null>(null)
+  const [paint, setPaint] = useState<(Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources'> & { approximate: boolean; reasons: readonly string[]; textboxes?:TextboxPlacement[]; fontDetails?:readonly string[]; omissions?: ReturnType<typeof nativeDocxOmittedContentDisclosure> }) | null>(null)
   const leftover = contentPreview ? 'The approximate content preview remains available; the original file is unchanged.' : 'The original file is unchanged.'
   const consent = `Native pages require uploading this document to ${apiBase}. Nothing is uploaded until you choose the button below.`
   const [message, setMessage] = useState(consent)
@@ -155,7 +163,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
         const decoded = value.protocol === DOCX_AUTO_BORDER_PREVIEW_PROTOCOL ? decodeNativeDocxAutomaticBorderPreviewV1(value) : decodeNativeDocxApproximatePagePreviewV1(value)
         if (!decoded.ok) throw new Error('Approximate preview failed schema validation.')
         if (decoded.value.source.package_sha256 !== packageDigest) throw new Error('Approximate pages do not match the currently opened document.')
-        next = { ...decoded.value, approximate: true }
+        next = { ...decoded.value, approximate: true, ...('content_status' in decoded.value ? { omissions: nativeDocxOmittedContentDisclosure(decoded.value) } : {}) }
       } else {
         const decoded = decodeNativeDocxPagePaintV1(value.page_paint_output)
         if (!decoded.ok || value.canonical_output_validated !== true) throw new Error('Native preview failed schema validation.')
@@ -168,7 +176,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
       await decodeNativeDocxImages(next.resources, controller.signal)
       if (token !== generation.current) return
       setPaint(next); setPageIndex(0)
-      setMessage(next.status === 'painted' ? (next.approximate ? `${next.pages.length} approximate, read-only pages. Pagination may differ from Word; the original file is unchanged.` : `${next.pages.length} native page${next.pages.length === 1 ? '' : 's'}. Read-only native page geometry.${contentPreview ? ' Supported text edits, when available, are offered in the content preview below.' : ''}`) : `Page rendering refused this document. ${leftover}`)
+      setMessage(next.status === 'painted' ? (next.approximate ? `${next.pages.length} approximate, read-only pages${next.omissions?.partial ? ' with content not rendered' : ''}. Pagination may differ from Word; the original file is unchanged.` : `${next.pages.length} native page${next.pages.length === 1 ? '' : 's'}. Read-only native page geometry.${contentPreview ? ' Supported text edits, when available, are offered in the content preview below.' : ''}`) : `Page rendering refused this document. ${leftover}`)
     } catch (error) {
       if (token !== generation.current || controller.signal.aborted) return
       setMessage(`${error instanceof Error ? error.message : 'Native preview failed.'} ${leftover}`)
@@ -190,6 +198,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
     <p>Textbox pages preview positioned rectangles using each exact embedded regular font. Rectangles use their authored positions and stacking order, in front of or behind body content. Other textbox layouts remain unavailable. The preview is approximate and read-only.</p>
     <p>Font substitution is a separate, read-only preview using explicit helper-operator mappings and supplied fonts. Missing Latin fonts may change layout. Eligible older Word settings, automatic table borders, missing font sizes and header/footer page numbers can be combined when their original source is verified. Each applied policy is disclosed below. No fonts or source names are changed in the document.</p>
     <p>Approximate pages may use current layout rules for eligible older Word settings, an explicit 11 pt host default where the source has no font size, and black automatic table borders on a source-qualified white background. This does not reproduce older Word pagination. Each applied policy is disclosed below. Other unsupported features remain refused; the original file is unchanged.</p>
+    {paint?.approximate && paint.status === 'painted' && paint.omissions && <aside aria-label="Approximate content coverage" data-content-status={paint.omissions.partial ? 'partial' : 'complete'}><strong>{paint.omissions.partial ? `Partial preview — ${paint.omissions.summary ?? 'content not rendered'}` : 'All modeled source content was painted.'}</strong>{paint.omissions.items.length > 0 && <ul>{paint.omissions.items.slice(0, 20).map((item, index) => <li key={index}>{item}</li>)}</ul>}{paint.omissions.items.length > 20 && <p>{paint.omissions.items.length - 20} additional omitted items are retained in the response.</p>}</aside>}
     {paint?.approximate && <aside aria-label="Approximate page limitations"><strong>Approximate · read-only · not Word-validated</strong><ul>{paint.reasons.slice(0, 20).map((reason, index) => <li key={index}>{reason}</li>)}</ul>{paint.reasons.length > 20 && <p>{paint.reasons.length - 20} additional limitations.</p>}</aside>}
     {!!paint?.fontDetails?.length&&<details><summary>Font substitution evidence ({paint.fontDetails.length})</summary><ul>{paint.fontDetails.slice(0,20).map((reason,index)=><li key={index}>{reason}</li>)}</ul>{paint.fontDetails.length>20&&<p>{paint.fontDetails.length-20} additional evidence records are retained in the response.</p>}</details>}
     {paint?.status === 'painted' && <nav aria-label={`${paint.approximate ? 'Approximate' : 'Native'} document page navigation`}><DsButton disabled={pageIndex === 0} onClick={() => setPageIndex((index) => index - 1)}>Previous {paint.approximate ? 'approximate' : 'native'} page</DsButton><span>Page {pageIndex + 1} of {paint.pages.length}</span><DsButton disabled={pageIndex >= paint.pages.length - 1} onClick={() => setPageIndex((index) => index + 1)}>Next {paint.approximate ? 'approximate' : 'native'} page</DsButton></nav>}
@@ -211,7 +220,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
           }
         })}
         {textboxLayer(paint.textboxes,false).map(textbox=><NativeDocxTextboxOnPage key={textbox.paint.diagnostic_id} textbox={textbox} pageID={page.id}/>)}
-      </svg><figcaption>{paint.approximate ? 'Approximate, read-only · ' : ''}Page {page.ordinal + 1}</figcaption>
+      </svg><figcaption>{paint.approximate ? 'Approximate, read-only · ' : ''}Page {page.ordinal + 1}{paint.omissions?.unpainted.has(page.id) && <mark data-unpainted-page="true"> · Nothing rendered on this page: its source content is not painted by the approximate preview</mark>}</figcaption>
     </figure>)}
   </section>
 }
