@@ -119,8 +119,9 @@ export function nativeDocxFontSubstitutionSummary(value:NativeDocxFontSubstituti
   return [DOCX_FONT_SUBSTITUTION_WARNING,...(selections.length?selections:['No font substitutions were applied.'])]
 }
 
-export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint8Array; packageDigest: string; apiBase: string }) {
+export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview = true }: { bytes: Uint8Array; packageDigest: string; apiBase: string; contentPreview?: boolean }) {
   const [paint, setPaint] = useState<(Pick<NativeDocxPagePaintV1, 'status' | 'pages' | 'resources'> & { approximate: boolean; reasons: readonly string[]; textboxes?:TextboxPlacement[]; fontDetails?:readonly string[] }) | null>(null)
+  const leftover = contentPreview ? 'The approximate content preview remains available; the original file is unchanged.' : 'The original file is unchanged.'
   const consent = `Native pages require uploading this document to ${apiBase}. Nothing is uploaded until you choose the button below.`
   const [message, setMessage] = useState(consent)
   const [pageIndex, setPageIndex] = useState(0)
@@ -167,17 +168,17 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase }: { bytes: Uint
       await decodeNativeDocxImages(next.resources, controller.signal)
       if (token !== generation.current) return
       setPaint(next); setPageIndex(0)
-      setMessage(next.status === 'painted' ? (next.approximate ? `${next.pages.length} approximate, read-only pages. Pagination may differ from Word; the original file is unchanged.` : `${next.pages.length} native page${next.pages.length === 1 ? '' : 's'}. Read-only native page geometry. Supported text edits, when available, are offered in the content preview below.`) : 'Page rendering refused this document. The approximate content preview below remains available; the original file is unchanged.')
+      setMessage(next.status === 'painted' ? (next.approximate ? `${next.pages.length} approximate, read-only pages. Pagination may differ from Word; the original file is unchanged.` : `${next.pages.length} native page${next.pages.length === 1 ? '' : 's'}. Read-only native page geometry.${contentPreview ? ' Supported text edits, when available, are offered in the content preview below.' : ''}`) : `Page rendering refused this document. ${leftover}`)
     } catch (error) {
       if (token !== generation.current || controller.signal.aborted) return
-      setMessage(`${error instanceof Error ? error.message : 'Native preview failed.'} The approximate content preview remains available; the original file is unchanged.`)
+      setMessage(`${error instanceof Error ? error.message : 'Native preview failed.'} ${leftover}`)
     } finally { if (token === generation.current) setBusy(false) }
   }
   const displayedGeneration = generation.current
   const imageFailed = () => {
     if (displayedGeneration !== generation.current) return
     setPaint(null)
-    setMessage('Native image could not be displayed. Native pages were cleared. The approximate content preview remains available; the original file is unchanged.')
+    setMessage(`Native image could not be displayed. Native pages were cleared. ${leftover}`)
   }
   return <section className="docx-native-pages" aria-label="Native document pages">
     <h3>Native page preview</h3>
