@@ -15,24 +15,29 @@ import (
 // every GUID outside the catalog still refuse.
 //
 // Sources for the catalog:
-//   - ECMA-376 Part 1 (5th ed.) §20.1.4.2.27 tblStyleLst names
-//     {5C22544A-7EE6-4342-B048-85BDC9FD1C3A} "Medium Style 2 - Accent 1" as the
-//     default table style. §20.1.4.2.1 band1H (accent1 tint 40%), §20.1.4.2.11
-//     firstCol, §20.1.4.2.12 firstRow, §20.1.4.2.16 lastCol and §20.1.4.2.17
-//     lastRow (solid accent1 fills) and §20.1.4.2.6/.14/.15/.18/.22 (single
-//     12700 EMU cell borders) document the region definitions of this family.
-//   - The whole-table fill (accent tint 20%, reused by band2H/band2V) and the
-//     lt1 border color follow the serialization PowerPoint writes for this
-//     style into ppt/tableStyles.xml; the no-accent variant
+//   - The ECMA-376 Part 1 (5th ed.) §20.1.4.2.27 tblStyleLst example lists
+//     {5C22544A-7EE6-4342-B048-85BDC9FD1C3A} "Medium Style 2 - Accent 1" as its
+//     def= entry; the specification defines no normative built-in styles. The
+//     [Example] fragments in §20.1.4.2.1 band1H (accent1 tint 40%),
+//     §20.1.4.2.11/.12/.16/.17 (solid accent1 first/last row/column) and
+//     §20.1.4.2.6/.14/.15/.18/.22 (single 12700 EMU cell borders, colored
+//     accent1 there) are illustrative parts consistent with this family, not
+//     its definition.
+//   - The actual region set follows the serialization PowerPoint writes for
+//     this style into ppt/tableStyles.xml: whole-table fill accent tint 20%
+//     (reused by band2H/band2V), band1H/band1V accent tint 40%, solid accent
+//     first/last row/column, lt1 12700 EMU borders; the no-accent variant
 //     {073A0DAA-6AF3-43AB-8588-CEC1D06C72B9} "Medium Style 2" substitutes dk1
 //     for accent1.
 //   - ECMA-376 Part 1 §21.1.3.15 tblPr defines the firstRow/firstCol/lastRow/
 //     lastCol/bandRow/bandCol switches (default false) and §20.1.4.2.34 wholeTbl
 //     as the formatting used when no switch applies.
 //   - ECMA-376 Part 1 §20.1.2.3.34 defines tint as a mix with white but not the
-//     color space. This preview mixes in linear sRGB with standard sRGB
-//     encoding (the same policy as linear-srgb-path-tone-20-40-v1) and declares
-//     it through nativeBuiltinTableStylePolicy.
+//     color space; its example (00FF00 with a 50% tint yields BCFFBC) is
+//     reproduced exactly by mixing in linear sRGB with standard sRGB encoding.
+//     This preview uses that mix (the same policy as
+//     linear-srgb-path-tone-20-40-v1) and declares it through
+//     nativeBuiltinTableStylePolicy.
 //
 // No table style definitions were copied from other implementations.
 
@@ -260,10 +265,13 @@ func (resolved *nativeResolvedBuiltinTableStyle) resolveFill(fill nativeBuiltinT
 }
 
 // regionFill selects the ECMA-376 §20.1.4.2 table part for one cell. Whole
-// table first, then horizontal and vertical bands over body cells, then the
-// first/last column and finally the first/last row, matching PowerPoint's
-// row-over-column precedence. Corner parts (nwCell etc.) are not defined by
-// this family, so no corner override exists.
+// table first, then horizontal bands, then vertical bands over body cells,
+// then the first/last column and finally the first/last row. This ordering is
+// preview policy: the specification gives no precedence between band1V/band2V
+// and band1H/band2H or between row and column parts, and it is unobservable
+// in this family because every first/last part carries the same solid fill.
+// Corner parts (nwCell etc.) are not defined by this family, so no corner
+// override exists.
 func (resolved *nativeResolvedBuiltinTableStyle) regionFill(row, column, rows, columns int) nativeBuiltinTableStyleFill {
 	style, flags := resolved.style, resolved.flags
 	fill := style.wholeTbl
