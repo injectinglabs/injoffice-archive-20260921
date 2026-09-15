@@ -434,6 +434,11 @@ type nativeDiagramFixtureOptions struct {
 	secondDrawingRelationship bool
 	frameXML                  string
 	themeXML                  string
+	// Optional overrides of the four diagram parts (native_diagram_layout_test.go).
+	dataXML   string
+	layoutXML string
+	styleXML  string
+	colorsXML string
 }
 
 func nativeDiagramDrawingXML(drawingNS, shapes string) string {
@@ -498,11 +503,27 @@ func nativeDiagramFixture(t *testing.T, options nativeDiagramFixtureOptions) []b
 	stylePart := "relocated/diagrams/quickStyle1.xml"
 	colorsPart := "relocated/diagrams/colors1.xml"
 	drawingPart := "relocated/diagrams/drawing1.xml"
+	dataXML := `<dgm:dataModel xmlns:dgm="` + diagramNS + `" xmlns:a="` + drawingNS + `"><dgm:ptLst/><dgm:cxnLst/><dgm:bg/><dgm:whole/>` + modelExt + `</dgm:dataModel>`
+	if options.dataXML != "" {
+		dataXML = options.dataXML
+	}
+	layoutXML := `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/layout"/>`
+	if options.layoutXML != "" {
+		layoutXML = options.layoutXML
+	}
+	styleXML := `<dgm:styleDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/style"/>`
+	if options.styleXML != "" {
+		styleXML = options.styleXML
+	}
+	colorsXML := `<dgm:colorsDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/colors"/>`
+	if options.colorsXML != "" {
+		colorsXML = options.colorsXML
+	}
 	extra := []nativeExtractZipPart{
-		{name: dataPart, data: `<dgm:dataModel xmlns:dgm="` + diagramNS + `" xmlns:a="` + drawingNS + `"><dgm:ptLst/><dgm:cxnLst/><dgm:bg/><dgm:whole/>` + modelExt + `</dgm:dataModel>`},
-		{name: layoutPart, data: `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/layout"/>`},
-		{name: stylePart, data: `<dgm:styleDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/style"/>`},
-		{name: colorsPart, data: `<dgm:colorsDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/colors"/>`},
+		{name: dataPart, data: dataXML},
+		{name: layoutPart, data: layoutXML},
+		{name: stylePart, data: styleXML},
+		{name: colorsPart, data: colorsXML},
 		{name: drawingPart, data: drawing},
 	}
 	slideRels := fmt.Sprintf(`<Relationship Id="rIdDm" Type="%s/diagramData" Target="../diagrams/data1.xml"/><Relationship Id="rIdLo" Type="%s/diagramLayout" Target="../diagrams/layout1.xml"/><Relationship Id="rIdQs" Type="%s/diagramQuickStyle" Target="../diagrams/quickStyle1.xml"/><Relationship Id="rIdCs" Type="%s/diagramColors" Target="../diagrams/colors1.xml"/>`, relsNS, relsNS, relsNS, relsNS)
