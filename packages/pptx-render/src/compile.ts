@@ -24,6 +24,7 @@ import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
 import {createNativeLiteralBarPaths} from './literalBar.js'
 import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
 import { CONNECTOR_PRESET_GEOMETRY_POLICY, connectorGeometryPath } from './connectorGeometry.js'
+import { PICTURE_GEOMETRY_CLIP_POLICY, pictureGeometryClip } from './pictureGeometryClip.js'
 import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
@@ -2062,11 +2063,13 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
         return { kind: 'placeholder', ...base, reason: 'preserveOnly', label: 'Unsupported picture crop preserved' }
       }
       const asset = referenceAsset(element.assetId, element.id, state)
+      const geometryClip = element.geometry ? pictureGeometryClip(element, base.bounds, (value, path) => checkCoordinate(value, path, state.budget), (bounds) => { checkLeafBounds(bounds) }) : undefined
+      if (geometryClip) state.diagnostics.push({ severity: 'warning', code: 'picture.presetCatalogClipPreview', message: `Picture clipped to its DrawingML preset outline evaluated from source (${PICTURE_GEOMETRY_CLIP_POLICY}); read-only preview, not qualified PowerPoint picture geometry.`, slideId: state.slide.id, elementId: element.id })
       const image: RenderImageNode = {
         kind: 'image', ...base, role: 'picture', assetId: asset.id, contentType: asset.contentType, sha256: asset.sha256,
         byteLength: asset.byteLength, resolutionSource: asset.dataBase64 === undefined ? 'host' : 'sourceDeck',
         ...(element.crop ? { crop: { ...element.crop } } : {}),
-        ...(element.clip === 'roundRect' ? { clip: { kind: 'roundRect' as const, rect: base.bounds, radiusEmu: Math.round(Math.min(base.bounds.cx, base.bounds.cy) * 16667 / 100000) } } : {}),
+        ...(element.clip === 'roundRect' ? { clip: { kind: 'roundRect' as const, rect: base.bounds, radiusEmu: Math.round(Math.min(base.bounds.cx, base.bounds.cy) * 16667 / 100000) } } : geometryClip ? { clip: geometryClip } : {}),
       }
       return image
     }
