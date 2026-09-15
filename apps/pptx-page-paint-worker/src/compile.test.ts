@@ -154,3 +154,16 @@ it('paints centered and bottom table labels with real supplied font outlines and
  expect(results[2]).toBeGreaterThan(results[1]!)
  expect(Math.abs((results[2]!-results[0]!)-2*(results[1]!-results[0]!))).toBeLessThanOrEqual(1)
 })
+it('still emits a slide raster when remaining content is an explicit source refusal',async()=>{
+ const request=input()
+ request.deck.slides[0].elements=[]
+ request.deck.slides[0].compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.unsupported-shape',message:'placeholder inheritance remains unqualified'}]}
+ request.deck.slides[0].passthrough=[{token:'pass-unqualified',ownerPart:'ppt/slides/slide1.xml',fingerprintSha256:'4'.repeat(64),disposition:'preserve'}]
+ const result=await compilePptxPreview(request)
+ expect(result.slide_count).toBe(1)
+ expect(result.width).toBe(12192000)
+ expect(result.height).toBe(6858000)
+ expect(result.background).toBe('FFFFFF')
+ expect(result.diagnostics.join(' ')).toContain('placeholder inheritance remains unqualified')
+ expect(result.diagnostics.join(' ')).toContain('render.preserveOnly')
+})
