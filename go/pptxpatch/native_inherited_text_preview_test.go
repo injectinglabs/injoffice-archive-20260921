@@ -59,12 +59,12 @@ func TestNativeInheritedTextPreviewSourceAndSafety(t *testing.T) {
 func TestNativeInheritedTextPreviewDroppedMetadataSafety(t *testing.T) {
 	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
 	duplicateEnd := &nativeXMLNode{Children: []*nativeXMLNode{{Name: xml.Name{Space: d.drawing, Local: "lstStyle"}}, {Name: xml.Name{Space: d.drawing, Local: "p"}, Children: []*nativeXMLNode{{Name: xml.Name{Space: d.drawing, Local: "endParaRPr"}}, {Name: xml.Name{Space: d.drawing, Local: "endParaRPr"}}}}}}
-	if _, err := (&nativeExtractor{}).inheritedTextPreview(duplicateEnd, nil, false, d); err == nil {
+	if _, _, err := (&nativeExtractor{}).inheritedTextPreview(duplicateEnd, nil, false, d); err == nil {
 		t.Fatal("duplicate terminal elements hidden")
 	}
 	for _, field := range []string{"kern", "defTabSz", "rtl", "eaLnBrk", "latinLnBrk", "hangingPunct"} {
 		node := &nativeXMLNode{Attrs: []xml.Attr{{Name: xml.Name{Local: field}, Value: "0"}, {Name: xml.Name{Local: field}, Value: "0"}}}
-		if _, err := sanitizeNativeInheritedPreviewProperties(node, d, field != "kern", nativeResolvedTheme{}); err == nil {
+		if _, err := sanitizeNativeInheritedPreviewProperties(node, d, field != "kern", nativeResolvedTheme{}, nil); err == nil {
 			t.Fatalf("duplicate %s hidden", field)
 		}
 	}
@@ -74,14 +74,19 @@ func TestNativeInheritedTextPreviewDroppedMetadataSafety(t *testing.T) {
 			if value == "" {
 				node.Children = append(node.Children, node.Children[0])
 			}
-			if _, err := sanitizeNativeInheritedPreviewProperties(node, d, false, nativeResolvedTheme{}); err == nil {
+			if _, err := sanitizeNativeInheritedPreviewProperties(node, d, false, nativeResolvedTheme{}, nil); err == nil {
 				t.Fatalf("unsafe %s hidden", name)
 			}
 		}
 	}
-	for _, node := range []*nativeXMLNode{{Text: "active"}, {Attrs: []xml.Attr{{Name: xml.Name{Local: "lang"}, Value: "bad_tag"}}}, {Attrs: []xml.Attr{{Name: xml.Name{Local: "sz"}, Value: "1200"}}}} {
-		if err := validateNativeInheritedPreviewEnd(node, d); err == nil {
+	for _, node := range []*nativeXMLNode{{Text: "active"}, {Attrs: []xml.Attr{{Name: xml.Name{Local: "lang"}, Value: "bad_tag"}}}, {Attrs: []xml.Attr{{Name: xml.Name{Local: "u"}, Value: "sng"}}}, {Attrs: []xml.Attr{{Name: xml.Name{Local: "strike"}, Value: "sngStrike"}}}} {
+		if _, err := sanitizeNativeInheritedPreviewEnd(node, d, nativeResolvedTheme{}, &nativeInheritedTextOmissions{}); err == nil {
 			t.Fatal("unsafe terminal metadata hidden")
 		}
+	}
+	// Terminal metrics are validated and disclosed, never laid out.
+	omit := &nativeInheritedTextOmissions{}
+	if _, err := sanitizeNativeInheritedPreviewEnd(&nativeXMLNode{Attrs: []xml.Attr{{Name: xml.Name{Local: "sz"}, Value: "1200"}}}, d, nativeResolvedTheme{}, omit); err != nil || len(omit.names()) != 1 || omit.names()[0] != "a:endParaRPr" {
+		t.Fatalf("terminal metrics were not disclosed: %v %v", err, omit.names())
 	}
 }

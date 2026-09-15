@@ -127,12 +127,14 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 
 	paragraphs := []NativeParagraph{}
 	var textBodyLayout *NativeTextBodyLayout
+	var authoredFit *nativeAuthoredAutoFit
+	var inheritedOmissions *nativeInheritedTextOmissions
 	textOmitted := false
 	if textBody != nil {
 		if err := extractor.reserveNativeTextOutput(textBody, dialect); err != nil {
 			return NativeElement{}, err
 		}
-		layout, layoutErr := extractNativeTextBodyLayoutPolicy(textBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
+		layout, fit, layoutErr := extractNativeTextBodyLayoutAuthored(textBody, dialect, extractor.options.AllowSourceFrameAutoFitPreview)
 		if layoutErr != nil {
 			var duplicate nativeDuplicateSingletonError
 			if isNativeDuplicateSingleton(layoutErr, &duplicate) || !isNativeTextLayoutUnsupported(layoutErr) {
@@ -148,6 +150,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			textOmitted = true
 		} else {
 			textBodyLayout = layout
+			authoredFit = fit
 		}
 		paintText := textBody
 		fontReferenceUsed := false
@@ -161,7 +164,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			} else if styleErr != nil {
 				parseErr = styleErr
 			} else {
-				paintText, parseErr = extractor.inheritedTextPreview(textBody, style, true, dialect)
+				paintText, inheritedOmissions, parseErr = extractor.inheritedTextPreview(textBody, style, true, dialect)
 			}
 		} else if style != nil && styleErr == nil {
 			placeholder, placeholderErr := nativeTextPlaceholder(node, dialect)
@@ -183,7 +186,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			if isNativeDuplicateSingleton(parseErr, &duplicate) {
 				return NativeElement{}, parseErr
 			}
-			gaps.add("pptx.autoshape-text-unavailable", "shape geometry retained; text omitted because its content or inherited formatting is unsupported", false)
+			gaps.add("pptx.autoshape-text-unavailable", "shape geometry retained; text omitted because its content or inherited formatting is unsupported: "+parseErr.Error(), false)
 			textOmitted = true
 		} else {
 			paragraphs = parsed
@@ -194,6 +197,10 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		if textOmitted {
 			paragraphs = []NativeParagraph{}
 			textBodyLayout = nil
+			authoredFit = nil
+			inheritedOmissions = nil
+		} else {
+			nativeApplyAuthoredFontScale(paragraphs, authoredFit)
 		}
 	}
 
@@ -215,6 +222,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	}
 	if extractor.options.AllowInheritedTextPreview && textBody != nil {
 		nativeMarkInheritedTextPreview(&element)
+		nativeMarkInheritedTextOmissions(&element, inheritedOmissions)
 	}
 	if name != "" {
 		element.Name = stringPointer(name)
@@ -222,6 +230,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	if len(gaps.values) == 0 {
 		nativeMarkVerticalTextPreview(&element)
 		nativeMarkSourceFrameAutoFit(&element)
+		nativeMarkAuthoredAutoFit(&element, authoredFit)
 		nativePreserveTextCheckingMetadata(&element, node, dialect)
 		return element, nil
 	}
@@ -253,6 +262,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		})
 	}
 	nativeMarkSourceFrameAutoFit(&element)
+	nativeMarkAuthoredAutoFit(&element, authoredFit)
 	nativeMarkVerticalTextPreview(&element)
 	return element, nil
 }
@@ -624,6 +634,9 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	}
 	widthValue, widthOK := exactNativeAttr(line, "", "w")
 	width, parseErr := parseCanonicalNativeInt(widthValue, 0, nativeMaxLineWidthEmu)
+	if unpainted, err := nativeUnpaintedAutoShapeLine(line, dialect, widthOK, parseErr, gaps); unpainted || err != nil {
+		return nil, err
+	}
 	if !widthOK || parseErr != nil {
 		gaps.add("pptx.autoshape-line-unavailable", "outline width is missing or non-canonical and is preserved without approximation", true)
 		return nil, nil
@@ -715,4 +728,56 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	}
 	dash := NativeStrokeDashSolid
 	return &NativeStroke{Color: color, WidthEMU: int64Pointer(width), Cap: &cap, Join: &join, Dash: &dash, MiterLimit: miterLimit}, nil
+}
+
+// nativeUnpaintedAutoShapeLine recognizes an outline whose fill is explicitly
+// a:noFill. Such an outline paints nothing regardless of width, cap, compound,
+// alignment, dash or join, so those attributes are only required to be
+// canonical when present. Any other structure keeps the strict validation.
+func nativeUnpaintedAutoShapeLine(line *nativeXMLNode, dialect nativeExtractDialect, widthOK bool, widthErr error, gaps *nativeShapeGapSet) (bool, error) {
+	noFill, _ := nativeSingleton(line, dialect.drawing, "noFill", false)
+	solidFill, _ := nativeSingleton(line, dialect.drawing, "solidFill", false)
+	if noFill == nil || solidFill != nil {
+		return false, nil
+	}
+	if requireEmptyNativeElement(noFill) != nil {
+		gaps.add("pptx.autoshape-line-unavailable", "outline no-fill markup is malformed", true)
+		return true, nil
+	}
+	if widthOK && widthErr != nil {
+		gaps.add("pptx.autoshape-line-unavailable", "outline width is non-canonical and is preserved without approximation", true)
+		return true, nil
+	}
+	for _, check := range []struct {
+		name   string
+		values []string
+	}{{"cap", []string{"flat", "rnd", "sq"}}, {"cmpd", []string{"sng", "dbl", "thickThin", "thinThick", "tri"}}, {"algn", []string{"ctr", "in"}}} {
+		value, ok := exactNativeAttr(line, "", check.name)
+		if !ok {
+			continue
+		}
+		valid := false
+		for _, candidate := range check.values {
+			valid = valid || candidate == value
+		}
+		if !valid {
+			gaps.add("pptx.autoshape-line-unavailable", "outline "+check.name+" is outside the DrawingML enumeration", true)
+			return true, nil
+		}
+	}
+	joins := 0
+	for _, name := range []string{"round", "bevel", "miter"} {
+		if child, _ := nativeSingleton(line, dialect.drawing, name, false); child != nil {
+			joins++
+		}
+	}
+	if joins > 1 {
+		gaps.add("pptx.autoshape-line-unavailable", "outline declares conflicting joins", true)
+		return true, nil
+	}
+	if dash, _ := nativeSingleton(line, dialect.drawing, "prstDash", false); dash != nil && (requireOnlyNativeAttrs(dash, xml.Name{Local: "val"}) != nil || requireOnlyNativeChildren(dash) != nil) {
+		gaps.add("pptx.autoshape-line-unavailable", "outline dash markup is malformed", true)
+		return true, nil
+	}
+	return true, nil
 }

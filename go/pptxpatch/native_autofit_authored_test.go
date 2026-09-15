@@ -1,0 +1,435 @@
+package pptxpatch
+
+import (
+	"bytes"
+	"encoding/xml"
+	"strings"
+	"testing"
+)
+
+func nativeDiagnosticCodes(element NativeElement) map[string]int {
+	codes := map[string]int{}
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		codes[diagnostic.Code]++
+	}
+	return codes
+}
+
+func TestNativeAuthoredNormAutofitStrictStillRefuses(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, `<a:bodyPr><a:normAutofit fontScale="62500" lnSpcReduction="20000"/></a:bodyPr>`), nativeMutationExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.Compatibility.Status != NativeCompatibilityStatusRefused || element.TextBody != nil {
+			t.Fatalf("strict extraction painted normAutofit text: %+v", element)
+		}
+		for _, run := range (*element.Paragraphs)[0].Runs {
+			if run.FontSizeHundredthPt != nil && *run.FontSizeHundredthPt != 3200 {
+				t.Fatal("strict extraction scaled run sizes")
+			}
+		}
+		if nativeDiagnosticCodes(element)[nativeAuthoredAutoFitCode] != 0 {
+			t.Fatal("strict extraction emitted the approximation code")
+		}
+	}
+}
+
+func TestNativeAuthoredNormAutofitScalesRunsReadOnly(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		original := nativeSourceFrameFixture(t, strict, `<a:bodyPr><a:normAutofit fontScale="62500" lnSpcReduction="20000"/></a:bodyPr>`)
+		before := bytes.Clone(original)
+		options := nativeMutationExtractOptions()
+		options.AllowSourceFrameAutoFitPreview = true
+		deck, err := ExtractNativePPTX(original, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || element.TextBody == nil || element.TextBody.AutoFit != "none" || element.Paragraphs == nil || len(*element.Paragraphs) != 1 {
+			t.Fatalf("authored autofit preview missing: %+v", element)
+		}
+		for _, run := range (*element.Paragraphs)[0].Runs {
+			// The fixture authors sz="3200"; 3200 × 62.5% = 2000.
+			if run.FontSizeHundredthPt == nil || *run.FontSizeHundredthPt != 2000 {
+				t.Fatalf("run size was not scaled by the authored fontScale: %+v", run)
+			}
+		}
+		codes := nativeDiagnosticCodes(element)
+		if codes[nativeAuthoredAutoFitCode] != 1 || codes[nativeTextColumnsOmittedCode] != 0 {
+			t.Fatalf("expected one authored autofit disclosure: %+v", element.Compatibility.Diagnostics)
+		}
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeAuthoredAutoFitCode && (!strings.Contains(diagnostic.Message, "fontScale=62.5%") || !strings.Contains(diagnostic.Message, "lnSpcReduction=20%")) {
+				t.Fatalf("disclosure lacks the authored values: %s", diagnostic.Message)
+			}
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("invalid approximate contract: %+v", issues)
+		}
+		if !bytes.Equal(original, before) {
+			t.Fatal("preview changed source bytes")
+		}
+		paragraphs := nativeMutationParagraphs("No mutation authority")
+		if _, err := ApplyNativePPTXMutations(original, NativePPTXMutationRequest{ExpectedSourceRevision: *deck.SourceRevision, Operations: []NativePPTXMutation{{OperationID: "replace", Kind: NativePPTXReplaceText, ElementID: element.ID, ExpectedFingerprintSHA256: element.Source.FingerprintSHA256, Paragraphs: &paragraphs}}}); err == nil {
+			t.Fatal("authored autofit approximation granted editing permission")
+		}
+		deck.Slides[0].Elements[0].Compatibility.Status = NativeCompatibilityStatusEditable
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatal("approximation validated as editable")
+		}
+	}
+}
+
+func TestNativeAuthoredNormAutofitWithoutValuesIsFullSize(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr><a:normAutofit/></a:bodyPr>`), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.Paragraphs == nil || len(*element.Paragraphs) != 1 || *(*element.Paragraphs)[0].Runs[0].FontSizeHundredthPt != 3200 {
+		t.Fatalf("absent fontScale must mean 100%%: %+v", element.Paragraphs)
+	}
+	if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || nativeDiagnosticCodes(element)[nativeAuthoredAutoFitCode] != 1 {
+		t.Fatalf("normAutofit without values must still be a disclosed read-only preview: %+v", element.Compatibility)
+	}
+}
+
+func TestNativeAuthoredTextColumnsPaintSingleColumnWithDisclosure(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="3" spcCol="108000"/>`), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || element.Paragraphs == nil || len(*element.Paragraphs) != 1 {
+		t.Fatalf("columns were not painted as a disclosed single column: %+v", element)
+	}
+	codes := nativeDiagnosticCodes(element)
+	if codes[nativeTextColumnsOmittedCode] != 1 || codes[nativeAuthoredAutoFitCode] != 0 {
+		t.Fatalf("expected one column disclosure: %+v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("invalid approximate contract: %+v", issues)
+	}
+	strictDeck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="3" spcCol="108000"/>`), nativeMutationExtractOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strictDeck.Slides[0].Elements[0].Compatibility.Status != NativeCompatibilityStatusRefused {
+		t.Fatal("strict extraction painted multi-column text")
+	}
+}
+
+func TestNativeApplyAuthoredFontScaleRounding(t *testing.T) {
+	paragraphs := []NativeParagraph{{Runs: []NativeTextRun{{FontSizeHundredthPt: int64Pointer(3200)}, {FontSizeHundredthPt: int64Pointer(1)}, {}}}}
+	nativeApplyAuthoredFontScale(paragraphs, &nativeAuthoredAutoFit{normAutofit: true, fontScale: 85000})
+	if *paragraphs[0].Runs[0].FontSizeHundredthPt != 2720 || *paragraphs[0].Runs[1].FontSizeHundredthPt != 1 || paragraphs[0].Runs[2].FontSizeHundredthPt != nil {
+		t.Fatalf("unexpected scaling: %+v", paragraphs[0].Runs)
+	}
+	nativeApplyAuthoredFontScale(paragraphs, nil)
+	nativeApplyAuthoredFontScale(paragraphs, &nativeAuthoredAutoFit{normAutofit: true, fontScale: nativeAuthoredAutoFitFullSize})
+	if *paragraphs[0].Runs[0].FontSizeHundredthPt != 2720 {
+		t.Fatal("full-size or absent autofit must not change sizes")
+	}
+}
+
+func nativePlaceholderPreviewFixture(t *testing.T, strict bool, slidePlaceholder, layoutPlaceholder string, removeSlideText bool) []byte {
+	return nativePlaceholderFixture(t, strict, func(parts map[string]string) {
+		slide := parts["relocated/slides/slide-a.xml"]
+		slide = strings.Replace(slide, `<p:ph idx="7"/>`, slidePlaceholder, 1)
+		if removeSlideText {
+			start, end := strings.Index(slide, "<p:txBody>"), strings.Index(slide, "</p:txBody>")+len("</p:txBody>")
+			slide = slide[:start] + slide[end:]
+		}
+		parts["relocated/slides/slide-a.xml"] = slide
+		parts["relocated/layouts/layout.xml"] = strings.Replace(parts["relocated/layouts/layout.xml"], `<p:ph type="body" idx="7"/>`, layoutPlaceholder, 1)
+	})
+}
+
+func TestNativeSubTitlePlaceholderInheritsOnlyInPreview(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		input := nativePlaceholderPreviewFixture(t, strict, `<p:ph type="subTitle" idx="7"/>`, `<p:ph type="subTitle" idx="7"/>`, false)
+		before := bytes.Clone(input)
+		strictDeck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, element := range strictDeck.Slides[0].Elements {
+			if element.Compatibility.Status != NativeCompatibilityStatusRefused {
+				t.Fatalf("strict extraction projected a subTitle placeholder: %+v", element)
+			}
+		}
+		options := nativeTestExtractOptions()
+		options.AllowInheritedTextPreview = true
+		deck, err := ExtractNativePPTX(input, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deck.Slides[0].Elements) != 1 {
+			t.Fatalf("placeholder preview missing: %+v", deck.Slides[0].Compatibility)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.Kind != NativeElementKindText || element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || element.Placeholder == nil || *element.Placeholder != NativePlaceholderTypeSubTitle || element.Paragraphs == nil || len(*element.Paragraphs) == 0 {
+			t.Fatalf("subTitle preview failed: %+v", element)
+		}
+		paragraph := (*element.Paragraphs)[0]
+		if *element.Transform.X != 914400 || *element.Transform.Y != 457200 || paragraph.MarginLeftEmu == nil || *paragraph.MarginLeftEmu != 400000 || paragraph.Runs[0].FontFamily == nil || *paragraph.Runs[0].FontFamily != "Calibri" || paragraph.Runs[0].FontSizeHundredthPt == nil || *paragraph.Runs[0].FontSizeHundredthPt != 2400 {
+			t.Fatalf("layout list style / master geometry cascade failed: %+v %+v", element.Transform, paragraph)
+		}
+		codes := nativeDiagnosticCodes(element)
+		if codes[nativePlaceholderPreviewCode] != 1 || codes[nativeInheritedTextPreviewCode] != 1 || codes["pptx.inherited-placeholder-preview"] != 0 {
+			t.Fatalf("placeholder preview must be disclosed as approximate inherited text: %+v", element.Compatibility.Diagnostics)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("invalid native: %+v", issues)
+		}
+		if !bytes.Equal(input, before) {
+			t.Fatal("source mutated")
+		}
+		replacement := nativeMutationParagraphs("changed")
+		if _, err := resolveNativePPTXMutations(deck, []NativePPTXMutation{{OperationID: "edit", Kind: NativePPTXReplaceText, ElementID: element.ID, ExpectedFingerprintSHA256: element.Source.FingerprintSHA256, Paragraphs: &replacement}}); err == nil {
+			t.Fatal("placeholder preview authorized mutation")
+		}
+	}
+}
+
+func TestNativeEmptyContentPlaceholderPaintsNoPromptText(t *testing.T) {
+	input := nativePlaceholderPreviewFixture(t, false, `<p:ph type="obj" sz="quarter" idx="7"/>`, `<p:ph type="obj" sz="quarter" idx="7"/>`, true)
+	options := nativeTestExtractOptions()
+	options.AllowInheritedTextPreview = true
+	deck, err := ExtractNativePPTX(input, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("empty content placeholder was refused: %+v", deck.Slides[0].Compatibility)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.Kind != NativeElementKindText || element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || element.Paragraphs == nil || len(*element.Paragraphs) != 0 || element.TextBody == nil || element.Placeholder == nil || *element.Placeholder != NativePlaceholderTypeBody {
+		t.Fatalf("empty placeholder projection invented content or lost its frame: %+v", element)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("invalid native: %+v", issues)
+	}
+	found := false
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		found = found || (diagnostic.Code == nativePlaceholderPreviewCode && strings.Contains(diagnostic.Message, "no text body"))
+	}
+	if !found {
+		t.Fatalf("missing empty-placeholder disclosure: %+v", element.Compatibility.Diagnostics)
+	}
+}
+
+func TestNativePlaceholderPreviewDisclosesAncestorPaintAndRefusesOtherKinds(t *testing.T) {
+	input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
+		layout := parts["relocated/layouts/layout.xml"]
+		layout = strings.Replace(layout, `<p:ph type="body" idx="7"/></p:nvPr></p:nvSpPr><p:spPr>`, `<p:ph type="body" idx="7"/></p:nvPr></p:nvSpPr><p:spPr><a:solidFill><a:srgbClr val="FBE4D5"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="C55A11"/></a:solidFill></a:ln>`, 1)
+		layout = strings.Replace(layout, `<a:p/>`, `<a:p><a:r><a:rPr lang="en-US"/><a:t>Layout prompt</a:t></a:r></a:p>`, 1)
+		parts["relocated/layouts/layout.xml"] = layout
+		parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<p:ph idx="7"/>`, `<p:ph type="obj" idx="7"/>`, 1)
+	})
+	options := nativeTestExtractOptions()
+	options.AllowInheritedTextPreview = true
+	deck, err := ExtractNativePPTX(input, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("obj placeholder with painted layout ancestor was refused: %+v", deck.Slides[0].Compatibility)
+	}
+	element := deck.Slides[0].Elements[0]
+	disclosed := false
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		if diagnostic.Code == nativePlaceholderPreviewCode {
+			disclosed = strings.Contains(diagnostic.Message, "ancestor a:solidFill") && strings.Contains(diagnostic.Message, "ancestor a:ln") && strings.Contains(diagnostic.Message, "ancestor prompt paragraphs")
+		}
+	}
+	if !disclosed {
+		t.Fatalf("ancestor paint omission was not disclosed: %+v", element.Compatibility.Diagnostics)
+	}
+	for _, p := range *element.Paragraphs {
+		for _, r := range p.Runs {
+			if r.Text != nil && strings.Contains(*r.Text, "Layout prompt") {
+				t.Fatal("ancestor prompt leaked into slide content")
+			}
+		}
+	}
+	for _, kind := range []string{"dt", "ftr", "sldNum", "pic", "chart", "tbl", "media", "dgm", "clipArt", "sldImg", "hdr"} {
+		input := nativePlaceholderPreviewFixture(t, false, `<p:ph type="`+kind+`" idx="7"/>`, `<p:ph type="`+kind+`" idx="7"/>`, false)
+		deck, err := ExtractNativePPTX(input, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, element := range deck.Slides[0].Elements {
+			if element.Compatibility.Status != NativeCompatibilityStatusRefused {
+				t.Fatalf("%s placeholder was projected as inherited text: %+v", kind, element)
+			}
+		}
+	}
+	hidden := nativePlaceholderPreviewFixture(t, false, `<p:ph type="subTitle" idx="7"/>`, `<p:ph type="subTitle" idx="7"/>`, false)
+	hidden = bytes.Replace(hidden, []byte(`<p:cNvPr id="2" name="Title"/>`), []byte(`<p:cNvPr id="2" name="Title" hidden="1"/>`), 1)
+	if !bytes.Contains(hidden, []byte(`hidden="1"`)) {
+		t.Fatal("fixture shape identity changed; hidden test is inert")
+	}
+	deck, err = ExtractNativePPTX(hidden, options)
+	if err == nil {
+		for _, element := range deck.Slides[0].Elements {
+			if element.Compatibility.Status != NativeCompatibilityStatusRefused {
+				t.Fatalf("hidden placeholder was painted: %+v", element)
+			}
+		}
+	}
+}
+
+func TestNativeInheritedPreviewOmissionsAreDisclosedAndBounded(t *testing.T) {
+	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
+	a := func(local, value string) xml.Attr { return xml.Attr{Name: xml.Name{Local: local}, Value: value} }
+	el := func(local string, attrs []xml.Attr, children ...*nativeXMLNode) *nativeXMLNode {
+		return &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: local}, Attrs: attrs, Children: children}
+	}
+	omit := &nativeInheritedTextOmissions{}
+	paragraph := &nativeXMLNode{Attrs: []xml.Attr{a("fontAlgn", "base")}, Children: []*nativeXMLNode{
+		el("lnSpc", nil, el("spcPct", []xml.Attr{a("val", "90000")})),
+		el("spcBef", nil, el("spcPts", []xml.Attr{a("val", "1000")})),
+		el("buClr", nil, el("srgbClr", []xml.Attr{a("val", "000000")})),
+		el("buSzPct", []xml.Attr{a("val", "100000")}),
+		el("buFont", []xml.Attr{a("typeface", "Arial"), a("panose", "020B0604020202020204")}),
+		el("buChar", []xml.Attr{a("char", "•")}),
+		el("tabLst", nil, el("tab", []xml.Attr{a("pos", "914400"), a("algn", "l")})),
+	}}
+	clean, err := sanitizeNativeInheritedPreviewProperties(paragraph, d, true, nativeResolvedTheme{}, omit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(clean.Attrs) != 0 || len(clean.Children) != 2 {
+		t.Fatalf("unexpected paragraph projection: %+v", clean)
+	}
+	run := &nativeXMLNode{Attrs: []xml.Attr{a("sz", "3200"), a("strike", "noStrike"), a("spc", "-1"), a("noProof", "1"), a("altLang", "en-US"), a("kern", "1200")}}
+	if _, err := sanitizeNativeInheritedPreviewProperties(run, d, false, nativeResolvedTheme{}, omit); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(omit.names(), ","); got != "a:buClr,a:buFont@panose,a:buSzPct,a:lnSpc,a:pPr@fontAlgn,a:rPr@spc,a:rPr@strike=noStrike,a:spcBef,a:tabLst" {
+		t.Fatalf("unexpected omission disclosure: %s", got)
+	}
+	// Paint-active properties and malformed spacing still refuse.
+	for _, node := range []*nativeXMLNode{
+		{Attrs: []xml.Attr{a("strike", "sngStrike")}},
+		{Attrs: []xml.Attr{a("u", "sng")}},
+		{Attrs: []xml.Attr{a("baseline", "30000")}},
+		{Attrs: []xml.Attr{a("spc", "abc")}},
+		{Children: []*nativeXMLNode{el("highlight", nil, el("srgbClr", []xml.Attr{a("val", "FFFF00")}))}},
+	} {
+		if _, err := sanitizeNativeInheritedPreviewProperties(node, d, false, nativeResolvedTheme{}, &nativeInheritedTextOmissions{}); err == nil {
+			t.Fatalf("paint-active run property hidden: %+v", node)
+		}
+	}
+	for _, node := range []*nativeXMLNode{
+		{Children: []*nativeXMLNode{el("lnSpc", nil, el("spcPct", []xml.Attr{a("val", "abc")}))}},
+		{Children: []*nativeXMLNode{el("lnSpc", nil, el("spcPct", []xml.Attr{a("val", "1")}), el("spcPts", []xml.Attr{a("val", "1")}))}},
+		{Children: []*nativeXMLNode{el("buAutoNum", []xml.Attr{a("type", "arabicPeriod")})}},
+		{Children: []*nativeXMLNode{el("buClr", nil, el("prstClr", []xml.Attr{a("val", "black")}))}},
+		{Children: []*nativeXMLNode{el("buFont", []xml.Attr{a("typeface", "Arial"), a("panose", "zz")})}},
+		{Attrs: []xml.Attr{a("fontAlgn", "weird")}},
+	} {
+		if _, err := sanitizeNativeInheritedPreviewProperties(node, d, true, nativeResolvedTheme{}, &nativeInheritedTextOmissions{}); err == nil {
+			t.Fatalf("malformed or paint-active paragraph property hidden: %+v", node)
+		}
+	}
+	bounded := &nativeInheritedTextOmissions{}
+	for i := 0; i < nativeMaxInheritedOmissionNames+10; i++ {
+		bounded.add(strings.Repeat("x", i+1))
+	}
+	if len(bounded.names()) != nativeMaxInheritedOmissionNames+1 {
+		t.Fatalf("omission names are unbounded: %d", len(bounded.names()))
+	}
+}
+
+func TestNativeInheritedPreviewProjectsBreaksAndEmptyParagraphs(t *testing.T) {
+	for _, strict := range []bool{false, true} {
+		data := nativeShapeReferenceFixture(t, strict, nativeShapeStyleRefs, `lang="en-US" dirty="0">`, "", "Hi", nativeShapeReferenceFonts, func(parts map[string]string) {
+			ns := nsDrawingTransitional
+			if strict {
+				ns = nsDrawingStrict
+			}
+			parts["relocated/deck.xml"] = strings.Replace(parts["relocated/deck.xml"], `</p:presentation>`, `<p:defaultTextStyle xmlns:a="`+ns+`"><a:defPPr><a:defRPr lang="en-US"/></a:defPPr><a:lvl1pPr algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/><a:solidFill><a:srgbClr val="112233"/></a:solidFill></a:defRPr></a:lvl1pPr></p:defaultTextStyle></p:presentation>`, 1)
+			part := "relocated/slides/slide-a.xml"
+			slide := parts[part]
+			start := strings.LastIndex(slide, "</a:p>") + len("</a:p>")
+			slide = slide[:start] + `<a:p><a:pPr marL="342900" indent="-342900"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc><a:buChar char="-"/></a:pPr><a:r><a:rPr lang="en-US" sz="1800" strike="noStrike" spc="-1"/><a:t>First</a:t></a:r><a:br><a:rPr lang="en-US"/></a:br><a:r><a:rPr lang="en-US" sz="1800"/><a:t> </a:t></a:r></a:p><a:p><a:endParaRPr lang="en-US" sz="1800"/></a:p>` + slide[start:]
+			parts[part] = slide
+		})
+		options := nativeMutationExtractOptions()
+		options.AllowInheritedTextPreview = true
+		deck, err := ExtractNativePPTX(data, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := nativeFixtureAutoShapes(deck.Slides[0])[0]
+		if e.Paragraphs == nil || len(*e.Paragraphs) != 4 {
+			t.Fatalf("expected original, split, continuation and blank paragraphs: %+v %+v", e.Paragraphs, e.Compatibility.Diagnostics)
+		}
+		first, continuation, blank := (*e.Paragraphs)[1], (*e.Paragraphs)[2], (*e.Paragraphs)[3]
+		if first.Bullet == nil || !*first.Bullet || *first.Runs[0].Text != "First" || *first.Runs[0].FontSizeHundredthPt != 1800 {
+			t.Fatalf("bulleted first line lost: %+v", first)
+		}
+		if continuation.Bullet == nil || *continuation.Bullet || *continuation.IndentEmu != 0 || *continuation.MarginLeftEmu != 342900 || *continuation.Runs[0].Text != " " {
+			t.Fatalf("break continuation not projected at the paragraph margin: %+v", continuation)
+		}
+		if len(blank.Runs) != 1 || *blank.Runs[0].Text != " " || *blank.Runs[0].FontSizeHundredthPt != 1800 {
+			t.Fatalf("empty paragraph blank line lost its end-mark metrics: %+v", blank)
+		}
+		codes := nativeDiagnosticCodes(e)
+		if codes[nativeInheritedTextOmissionsCode] != 1 {
+			t.Fatalf("omissions were not disclosed: %+v", e.Compatibility.Diagnostics)
+		}
+		for _, diagnostic := range e.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeInheritedTextOmissionsCode {
+				for _, name := range []string{"a:br→continuation-paragraph", "empty-paragraph→blank-line", "a:lnSpc", "a:rPr@spc", "a:rPr@strike=noStrike", "a:t@xml:space=preserve-assumed", "a:endParaRPr"} {
+					if !strings.Contains(diagnostic.Message, name) {
+						t.Fatalf("disclosure lacks %s: %s", name, diagnostic.Message)
+					}
+				}
+			}
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("invalid approximate contract: %+v", issues)
+		}
+		strictDeck, err := ExtractNativePPTX(data, nativeMutationExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p := nativeFixtureAutoShapes(strictDeck.Slides[0])[0].Paragraphs; p != nil && len(*p) > 0 {
+			t.Fatal("strict extraction painted break/empty paragraph projections")
+		}
+	}
+}
+
+func TestNativeShapeStyleZeroIndexAndUnpaintedOutlineAreExact(t *testing.T) {
+	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
+	for _, line := range []string{`<a:ln><a:noFill/></a:ln>`, `<a:ln w="12700"><a:noFill/></a:ln>`, `<a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:noFill/><a:prstDash val="dash"/><a:round/></a:ln>`} {
+		node, err := parseNativeXML([]byte(`<a:spPr xmlns:a="`+d.drawing+`">`+line+`</a:spPr>`), "test.xml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gaps := nativeShapeGapSet{}
+		stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, &gaps)
+		if err != nil || stroke != nil || len(gaps.values) != 0 {
+			t.Fatalf("no-fill outline must be exact without a width: %s %v %+v", line, err, gaps.values)
+		}
+	}
+	for _, line := range []string{`<a:ln w="abc"><a:noFill/></a:ln>`, `<a:ln cap="bad"><a:noFill/></a:ln>`, `<a:ln><a:noFill/><a:round/><a:bevel/></a:ln>`, `<a:ln><a:noFill>x</a:noFill></a:ln>`, `<a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`} {
+		node, err := parseNativeXML([]byte(`<a:spPr xmlns:a="`+d.drawing+`">`+line+`</a:spPr>`), "test.xml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gaps := nativeShapeGapSet{}
+		if stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, &gaps); err == nil && stroke == nil && len(gaps.values) == 0 {
+			t.Fatalf("malformed or painted outline accepted as unpainted: %s", line)
+		}
+	}
+}
