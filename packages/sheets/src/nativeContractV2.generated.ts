@@ -2,7 +2,7 @@
 // Source: schemas/xlsx-native-v2.schema.json
 
 export const XLSX_NATIVE_V2_SCHEMA_ID = "https://schemas.injoffice.dev/xlsx/native-v2.schema.json" as const
-export const XLSX_NATIVE_V2_SCHEMA_SHA256 = "sha256:1ebf8027a17b482beb4cbc484180b8854b880a60e21998e4e3e360adc7b0c4c7" as const
+export const XLSX_NATIVE_V2_SCHEMA_SHA256 = "sha256:75a781bf3f7da26dfab6500c9e122ce35cbe771af4f25c23193912a9ea0b3fc8" as const
 export const XLSX_NATIVE_V2_PROTOCOL = "injoffice.xlsx.native" as const
 export const XLSX_NATIVE_V2_VERSION = 2 as const
 export const XLSX_NATIVE_V2_MEDIA_TYPE = "application/vnd.injoffice.xlsx-native.v2+json" as const
@@ -117,6 +117,11 @@ export const XLSX_NATIVE_V2_UNSUPPORTED_CLASSIFICATIONS = {
     "impact": "none"
   },
   "SHEET_VIEW_GEOMETRY": {
+    "capability": "dimensions",
+    "scope": "sheet",
+    "impact": "none"
+  },
+  "SHEET_VIEW_PANE": {
     "capability": "dimensions",
     "scope": "sheet",
     "impact": "none"
@@ -289,6 +294,11 @@ export const XLSX_NATIVE_V2_UNSUPPORTED_CLASSIFICATIONS = {
   "STYLE_ALIGNMENT_EXTENDED": {
     "capability": "styles",
     "scope": "style",
+    "impact": "none"
+  },
+  "STYLE_PARENT_APPLY_MISMATCH": {
+    "capability": "styles",
+    "scope": "workbook",
     "impact": "none"
   },
   "CHART_CONTENT": {
@@ -690,6 +700,7 @@ export const XLSX_NATIVE_V2_OBJECT_BINDINGS = {
       "refusal_code",
       "rows",
       "sheet_format",
+      "sheet_view",
       "state"
     ],
     "required": [
@@ -716,7 +727,34 @@ export const XLSX_NATIVE_V2_OBJECT_BINDINGS = {
       "refusal_code": "string",
       "rows": "[]NativeWorkbookRowDimensionV2",
       "sheet_format": "NativeWorkbookSheetFormatV2",
+      "sheet_view": "NativeWorkbookSheetViewV2",
       "state": "string"
+    }
+  },
+  "NativeWorkbookSheetViewV2": {
+    "schemaName": "sheetView",
+    "properties": [
+      "active_pane",
+      "frozen_columns",
+      "frozen_rows",
+      "pane_state",
+      "split_x_twips",
+      "split_y_twips",
+      "top_left_cell"
+    ],
+    "required": [
+      "frozen_columns",
+      "frozen_rows",
+      "pane_state"
+    ],
+    "types": {
+      "active_pane": "string",
+      "frozen_columns": "integer",
+      "frozen_rows": "integer",
+      "pane_state": "string",
+      "split_x_twips": "number",
+      "split_y_twips": "number",
+      "top_left_cell": "string"
     }
   },
   "NativeWorkbookSourceV2": {
@@ -985,6 +1023,11 @@ export const XLSX_NATIVE_V2_SCHEMA = {
       "scope": "sheet",
       "impact": "none"
     },
+    "SHEET_VIEW_PANE": {
+      "capability": "dimensions",
+      "scope": "sheet",
+      "impact": "none"
+    },
     "COLUMN_DIMENSION_EXTRAS": {
       "capability": "dimensions",
       "scope": "sheet",
@@ -1155,6 +1198,11 @@ export const XLSX_NATIVE_V2_SCHEMA = {
       "scope": "style",
       "impact": "none"
     },
+    "STYLE_PARENT_APPLY_MISMATCH": {
+      "capability": "styles",
+      "scope": "workbook",
+      "impact": "none"
+    },
     "CHART_CONTENT": {
       "capability": "charts",
       "scope": "workbook",
@@ -1296,6 +1344,25 @@ export const XLSX_NATIVE_V2_SCHEMA = {
         "veryHidden"
       ],
       "x-binding-name": "NativeSheetState"
+    },
+    "paneState": {
+      "type": "string",
+      "enum": [
+        "frozen",
+        "frozenSplit",
+        "split"
+      ],
+      "x-binding-name": "NativePaneState"
+    },
+    "activePane": {
+      "type": "string",
+      "enum": [
+        "topLeft",
+        "topRight",
+        "bottomLeft",
+        "bottomRight"
+      ],
+      "x-binding-name": "NativeActivePane"
     },
     "valueKind": {
       "type": "string",
@@ -1787,6 +1854,51 @@ export const XLSX_NATIVE_V2_SCHEMA = {
         }
       }
     },
+    "sheetView": {
+      "type": "object",
+      "x-binding-name": "NativeWorkbookSheetViewV2",
+      "additionalProperties": false,
+      "description": "Read-only sheetView pane fact as authored (frozen counts, split twips, top-left cell). It is preview metadata, never a mutation target.",
+      "required": [
+        "pane_state",
+        "frozen_rows",
+        "frozen_columns"
+      ],
+      "properties": {
+        "pane_state": {
+          "$ref": "#/$defs/paneState"
+        },
+        "frozen_rows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "frozen_columns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        },
+        "split_x_twips": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "split_y_twips": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "top_left_cell": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 10,
+          "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$"
+        },
+        "active_pane": {
+          "$ref": "#/$defs/activePane"
+        }
+      }
+    },
     "normalStyle": {
       "type": "object",
       "x-binding-name": "NativeWorkbookNormalStyleV2",
@@ -2136,6 +2248,9 @@ export const XLSX_NATIVE_V2_SCHEMA = {
         "sheet_format": {
           "$ref": "#/$defs/sheetFormat"
         },
+        "sheet_view": {
+          "$ref": "#/$defs/sheetView"
+        },
         "rows": {
           "type": "array",
           "maxItems": 1048576,
@@ -2197,6 +2312,10 @@ export interface NativeWorkbookV2 {
 export type NativeWorkbookDialect = "transitional" | "strict"
 
 export type NativeSheetState = "visible" | "hidden" | "veryHidden"
+
+export type NativePaneState = "frozen" | "frozenSplit" | "split"
+
+export type NativeActivePane = "topLeft" | "topRight" | "bottomLeft" | "bottomRight"
 
 export type NativeValueKind = "number" | "boolean" | "error" | "date" | "string"
 
@@ -2305,6 +2424,16 @@ export interface NativeWorkbookSheetFormatV2 {
   readonly zero_height: boolean
 }
 
+export interface NativeWorkbookSheetViewV2 {
+  readonly pane_state: NativePaneState
+  readonly frozen_rows: number
+  readonly frozen_columns: number
+  readonly split_x_twips?: number
+  readonly split_y_twips?: number
+  readonly top_left_cell?: string
+  readonly active_pane?: NativeActivePane
+}
+
 export interface NativeWorkbookNormalStyleV2 {
   readonly style_xf_id: number
   readonly font_id: number
@@ -2387,6 +2516,7 @@ export interface NativeWorkbookSheetV2 {
   readonly state: NativeSheetState
   readonly part_name: string
   readonly sheet_format?: NativeWorkbookSheetFormatV2
+  readonly sheet_view?: NativeWorkbookSheetViewV2
   readonly rows: ReadonlyArray<NativeWorkbookRowDimensionV2>
   readonly columns: ReadonlyArray<NativeWorkbookColumnDimensionV2>
   readonly cells: ReadonlyArray<NativeWorkbookCellV2>

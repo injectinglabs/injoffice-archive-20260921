@@ -193,6 +193,7 @@ func TestNativeXLSXSchemaBindingsMatchGoWireTypes(t *testing.T) {
 		"NativeWorkbookMergedRangeV1":     reflect.TypeOf(NativeWorkbookMergedRangeV1{}),
 		"NativeWorkbookRowDimensionV1":    reflect.TypeOf(NativeWorkbookRowDimensionV1{}),
 		"NativeWorkbookSheetFormatV1":     reflect.TypeOf(NativeWorkbookSheetFormatV1{}),
+		"NativeWorkbookSheetViewV1":       reflect.TypeOf(NativeWorkbookSheetViewV1{}),
 		"NativeWorkbookNormalStyleV1":     reflect.TypeOf(NativeWorkbookNormalStyleV1{}),
 		"NativeWorkbookColumnDimensionV1": reflect.TypeOf(NativeWorkbookColumnDimensionV1{}),
 		"NativeWorkbookStyleV1":           reflect.TypeOf(NativeWorkbookStyleV1{}),
