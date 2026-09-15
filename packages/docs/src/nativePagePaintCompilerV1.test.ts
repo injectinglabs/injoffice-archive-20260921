@@ -17,6 +17,7 @@ import { DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION, ty
 import {
   DOCX_PAGE_PAINT_COMPILER_PROTOCOL,
   DOCX_PAGE_PAINT_COMPILER_VERSION,
+  decodeNativeDocxApproximateDrawingShapesV1,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
@@ -2969,4 +2970,189 @@ describe('source-anchored textbox page composition',()=>{
   }
  },15000)
 
+})
+
+describe('approximate DrawingML shapes', () => {
+  const RUN_ANCHOR_START = 181, RUN_ANCHOR_END = 189
+  function legacyEligibility(input: NativeDocxPagePaintPrepareInputV1) {
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile = 'unsupported'; delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy mode' }]
+    return { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy mode'] }
+  }
+  function outlineProvider(input: NativeDocxPagePaintPrepareInputV1) {
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    return { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+  }
+  /** One refused wps run after the fixture text run, with its retained source diagnostic. */
+  function shapeInput(shape: Record<string, unknown>) {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const paragraph = document.body.blocks[0]!.paragraph!
+    document.unsupported = [{ id: 'unsupported:shape', code: 'UNMODELED_RUN_CONTENT', capability: 'runs', scope_id: paragraph.id, anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]', RUN_ANCHOR_START + 1, RUN_ANCHOR_END - 1), preservation: 'refuse-mutation', message: 'Run content outside text, controls, and native references is preserved verbatim' }]
+    const eligibility = legacyEligibility(input)
+    const item = {
+      id: 'approximate-drawing-shape:test:1', paragraph_id: paragraph.id, diagnostic_ids: ['unsupported:shape'],
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]', RUN_ANCHOR_START + 2, RUN_ANCHOR_END - 2), run_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', RUN_ANCHOR_START, RUN_ANCHOR_END),
+      status: 'supported', width_emu: 914400, height_emu: 457200, rotation_degrees: 0, flip_horizontal: false, flip_vertical: false, ...shape,
+    }
+    const shapes = { protocol: 'injoffice.docx.approximate-drawing-shapes', version: 1, policy: 'docx.approximate-drawing-shape-preview-v1', package_sha256: HASH, part_sha256: HASH, items: [item], omitted_count: 0 }
+    return { input, eligibility, shapes, item, paragraph }
+  }
+  const pageAnchor = (overrides: Record<string, unknown> = {}) => ({ policy: 'relative-position-no-wrap-v2', source_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]', RUN_ANCHOR_START + 3, RUN_ANCHOR_END - 3), horizontal_anchor: anchor('/h', RUN_ANCHOR_START + 3, RUN_ANCHOR_START + 4), vertical_anchor: anchor('/v', RUN_ANCHOR_START + 4, RUN_ANCHOR_START + 5), x_emu: 914400, y_emu: 1828800, horizontal_relative: 'page', vertical_relative: 'page', stacking: { behind_doc: false, relative_height: 7 }, ...overrides })
+
+  it('paints an anchored filled rectangle with its outline behind or in front of body text and discloses the policy', async () => {
+    for (const behind of [false, true]) {
+      const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', line: { rgb: '243F60', width_emu: 25400, dash: 'solid' }, page_anchor: pageAnchor({ stacking: { behind_doc: behind, relative_height: 3 } }), wrap: 'none', notes: ['fill resolved from theme fill style'] })
+      const before = structuredClone(input)
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+      expect(paint.status).toBe('painted')
+      expect(input).toEqual(before)
+      const commands = paint.pages[0]!.commands
+      const fill = commands.find(c => c.kind === 'fill_table_cell')
+      expect(fill).toMatchObject({ table_id: 'docx.approximate-drawing-shape-preview-v1', row_id: 'approximate-drawing-shape:test:1', x_millipoints: 72_000, y_millipoints: 144_000, width_millipoints: 72_000, height_millipoints: 36_000, fill_rgb: '4F81BD' })
+      const strokes = commands.filter(c => c.kind === 'stroke_table_border')
+      expect(strokes.map(c => c.kind === 'stroke_table_border' && c.edge)).toEqual(['top', 'right', 'bottom', 'left'])
+      expect(strokes.every(c => c.kind === 'stroke_table_border' && c.width_millipoints === 2000 && c.stroke_rgb === '243F60')).toBe(true)
+      const glyphIndex = commands.findIndex(c => c.kind === 'fill_glyph_path'), fillIndex = commands.indexOf(fill!)
+      expect(glyphIndex).toBeGreaterThanOrEqual(0)
+      expect(behind ? fillIndex < glyphIndex : fillIndex > glyphIndex).toBe(true)
+      expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('painted 1 of 1') && r.includes('theme fill style'))).toBe(true)
+      expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+    }
+  }, 20000)
+
+  it('reserves inline rectangles in the line, paints a line preset as one stroke, and keeps omitted shapes disclosed', async () => {
+    const { input, eligibility, shapes, item } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D' })
+    const { fill_rgb: _fill, ...unfilled } = item as typeof item & { fill_rgb?: string }
+    shapes.items.push({ ...unfilled, id: 'approximate-drawing-shape:test:2', placement: 'anchored', preset: 'line', line: { rgb: 'FF0000', width_emu: 12700, dash: 'solid' }, page_anchor: pageAnchor({ x_emu: 0, y_emu: 0 }), flip_horizontal: true } as never, { ...item, id: 'approximate-drawing-shape:test:3', status: 'omitted', reason: 'unsupported-preset:ellipse' } as never)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const commands = paint.pages[0]!.commands
+    expect(commands.filter(c => c.kind === 'fill_text_highlight')).toHaveLength(0)
+    const fill = commands.find(c => c.kind === 'fill_table_cell')
+    if (!fill || fill.kind !== 'fill_table_cell') throw new Error('inline fill missing')
+    const line = paint.pages[0]!.lines[0]!
+    // The atom follows the text run 'A' on the first line and sits on its baseline.
+    expect(fill.width_millipoints).toBe(72_000); expect(fill.height_millipoints).toBe(36_000)
+    expect(fill.x_millipoints).toBeGreaterThan(line.x_millipoints); expect(fill.y_millipoints + fill.height_millipoints).toBe(line.baseline_y_millipoints)
+    expect(line.width_millipoints).toBeGreaterThan(72_000)
+    const stroke = commands.find(c => c.kind === 'stroke_table_border')
+    expect(stroke).toMatchObject({ row_id: 'approximate-drawing-shape:test:2', x1_millipoints: 72_000, y1_millipoints: 0, x2_millipoints: 0, y2_millipoints: 36_000, width_millipoints: 1000, stroke_rgb: 'FF0000' })
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('approximate-drawing-shape:test:3 (unsupported-preset:ellipse)'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('shapes text box paragraphs into the box, attaches glyphs to the anchor line and discloses font substitution', async () => {
+    const paragraphs = [0, 1].map(index => ({
+      id: `approximate-drawing-shape:test:1:p${index}`, anchor: anchor(`/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:txbx[1]/w:txbxContent[1]/w:p[${index + 1}]`, RUN_ANCHOR_START + 3 + index, RUN_ANCHOR_START + 4 + index),
+      edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'APPROXIMATE_TEXTBOX_PREVIEW', message: 'read-only', preservation: 'refuse-mutation' as const } }, properties: {},
+      runs: [{ kind: 'text' as const, id: `approximate-drawing-shape:test:1:p${index}:r0`, anchor: anchor(`/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:txbx[1]/w:txbxContent[1]/w:p[${index + 1}]/w:r[1]`, RUN_ANCHOR_START + 3 + index, RUN_ANCHOR_START + 4 + index), text: index === 0 ? 'Box heading' : 'Second line of box text' }],
+    }))
+    const textbox = {
+      link_seq: 0, insets_emu: [91440, 45720, 91440, 45720], vertical_anchor: 't', wrap: 'square', paragraphs,
+      resolved_paragraphs: paragraphs.map(p => ({ paragraph_id: p.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'DejaVu Sans', font_size_half_points: 20 } })),
+      resolved_runs: paragraphs.map((p, index) => ({ run_id: p.runs[0]!.id, paragraph_id: p.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: index === 0 ? 'DejaVu Sans' : 'Candara', font_size_half_points: 20, color: '1F497D', ...(index === 0 ? { underline: 'single' } : {}) } })),
+      omitted_runs: 0, omitted_blocks: 0,
+    }
+    const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', page_anchor: pageAnchor(), wrap: 'none', textbox, width_emu: 2743200, height_emu: 914400 })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const page = paint.pages[0]!
+    const boxGlyphs = page.commands.flatMap(c => c.kind === 'fill_glyph_path' && c.source_id.startsWith('approximate-drawing-shape:test:1:p') ? [c] : [])
+    expect(boxGlyphs.length).toBeGreaterThan(20)
+    const line = page.lines[0]!
+    for (const glyph of boxGlyphs) { expect(glyph.line_id).toBe(line.line_id); expect(line.command_ids).toContain(glyph.id) }
+    const xs = boxGlyphs.flatMap(g => g.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
+    const ys = boxGlyphs.flatMap(g => g.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(72_000 + 7_200 - 1_000); expect(Math.max(...xs)).toBeLessThanOrEqual(72_000 + 216_000)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(144_000); expect(Math.max(...ys)).toBeLessThanOrEqual(144_000 + 72_000)
+    expect(page.commands.some(c => c.kind === 'stroke_text_underline' && c.source_id === 'approximate-drawing-shape:test:1:p0:r0')).toBe(true)
+    // Candara is not in the manifest: the loaded DejaVu face substitutes and the substitution is disclosed.
+    expect(page.commands.some(c => c.kind === 'fill_glyph_path' && c.source_id === 'approximate-drawing-shape:test:1:p1:r0')).toBe(true)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-textbox-substituted-font: Candara / 400 / normal -> DejaVu Sans / 400 / normal'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('keeps painting the body when the sidecar does not exact-join, discloses the refusal, and omits nothing else', async () => {
+    // A supported shape claiming a run that also carries modeled text (the Go sidecar omits these as shared-run).
+    const { input, eligibility, shapes, item } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
+    item.run_anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 105, 185); item.anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 111, 179)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_glyph_path')).toBe(true)
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell' || c.kind === 'stroke_table_border')).toBe(false)
+    expect(paint.reasons).toContain('docx.approximate-drawing-shape-omitted: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted')
+    expect(paint.omitted_content.some(entry => entry.code === 'UNMODELED_RUN_CONTENT')).toBe(true)
+    expect(paint.content_status).toBe('partial')
+  }, 20000)
+
+  it('centers odd-width shapes without dropping them on coordinate parity', async () => {
+    for (const cx of [2990000, 2995000, 2998800]) {
+      const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', width_emu: cx, page_anchor: pageAnchor({ x_emu: 0, horizontal_align: 'center' }) })
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+      const fill = paint.pages[0]!.commands.find(c => c.kind === 'fill_table_cell')
+      if (!fill || fill.kind !== 'fill_table_cell') throw new Error(`centered shape ${cx} was dropped: ${paint.reasons.filter(r => r.includes('omitted')).join(' | ')}`)
+      const width = Math.round(cx / 12.7)
+      expect(fill.width_millipoints).toBe(width)
+      expect(Math.abs(fill.x_millipoints - (612_000 - width) / 2)).toBeLessThanOrEqual(1)
+      expect(paint.content_status).toBe('complete')
+    }
+  }, 30000)
+
+  it('discloses shapes the painter drops as omitted content', async () => {
+    const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor({ x_emu: 120_000_000, y_emu: 120_000_000 }) })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell')).toBe(false)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('outside-page')), paint.reasons.filter(r => r.includes('approximate-drawing')).join(' / ')).toBe(true)
+    expect(paint.content_status).toBe('partial')
+    expect(paint.omitted_content.some(entry => entry.code === 'UNMODELED_RUN_CONTENT' && entry.scope_id === 'paragraph:1')).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('refuses sidecars that do not exact-join the source document', async () => {
+    const cases: Array<[string, (shapes: any, item: any) => void]> = [
+      ['package', (shapes) => { shapes.package_sha256 = `sha256:${'b'.repeat(64)}` }],
+      ['paragraph', (_s, item) => { item.paragraph_id = 'paragraph:missing' }],
+      ['diagnostic', (_s, item) => { item.diagnostic_ids = ['unsupported:other'] }],
+      ['overlap', (_s, item) => { item.run_anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 105, 185); item.anchor = anchor('/x', 110, 180) }],
+      ['unknown field', (shapes) => { shapes.extra = true }],
+      ['fill', (_s, item) => { item.fill_rgb = 'red' }],
+      ['anchor', (_s, item) => { item.page_anchor = { ...item.page_anchor, policy: 'page-offset-no-wrap-v1' } }],
+      ['textbox keys', (_s, item) => { item.textbox = { paragraphs: [] } }],
+    ]
+    for (const [name, mutate] of cases) {
+      const { input, eligibility, shapes, item } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
+      mutate(shapes, item)
+      expect(() => decodeNativeDocxApproximateDrawingShapesV1(shapes, input.document as NativeDocxDocumentV1), name).toThrow()
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+      expect(paint.status, name).toBe('painted')
+      expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell'), name).toBe(false)
+      expect(paint.reasons.some(r => r.includes('did not exact-join')), name).toBe(true)
+    }
+    const ineligible = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
+    await expect(renderNativeDocxApproximatePagePreviewV1(ineligible.input, { ...ineligible.eligibility, status: 'ineligible' }, outlineProvider(ineligible.input), { drawingShapes: ineligible.shapes })).rejects.toThrow()
+  }, 20000)
+
+  it('shapes an exactly qualified strict inline text box as a 10/127 EMU atom that the shaped-lines contract accepts', async () => {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const paragraph = document.body.blocks[0]!.paragraph!
+    paragraph.runs.push({ kind: 'drawing', id: 'run:textbox', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', 181, 189), drawing: { id: 'drawing:textbox', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]', 182, 188), placement: 'inline', width_emu: 914400, height_emu: 457200, textbox_text: 'Box', textbox_fill_rgb: 'FFF2CC', textbox_line_rgb: '204060', edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'EXTRACT_ONLY', message: 'fixture', preservation: 'refuse-mutation' } } } })
+    resolved.runs.push({ run_id: 'run:textbox', paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: {} })
+    // Strict preparation now decodes the shaper's textbox atom instead of failing the pagination request.
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const shaped = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!
+    expect(shaped.fragments.find(f => f.source_kind === 'textbox')).toMatchObject({ source_id: 'run:textbox', text: '', glyphs: [], advance_inline_millipoints: 72_000, ascent_millipoints: 36_000 })
+    expect(decodeNativeDocxShapedLines(prepared.page_paint_request.pagination_request.shaped_lines).ok).toBe(true)
+    const forged = structuredClone(prepared.page_paint_request.pagination_request.shaped_lines)
+    const atom = forged.paragraphs[0]!.lines[0]!.fragments.find(f => f.source_kind === 'textbox')!
+    atom.text = 'x'
+    expect(decodeNativeDocxShapedLines(forged).ok).toBe(false)
+    // Strict pagination keeps refusing drawing runs outside the exact inline-image slice; that policy is unchanged here.
+    const layout = prepared.page_paint_request.paginated_layout
+    expect(layout.status).toBe('refused')
+    expect(layout.diagnostics.some(d => d.code === 'body-structure-unsupported' && d.scope_id === 'run:textbox')).toBe(true)
+  }, 20000)
 })

@@ -820,3 +820,41 @@ behind/foreground shapes around body paint and sorts each partition by relative
 height with stable source-order ties. Changing, omitting or adding a stacking
 record invalidates the entire composition. See [the remaining delivery
 plan](DOCX-TEXTBOX-LAYOUT-PLAN.md).
+
+### Approximate DrawingML shapes in the approximate page preview
+
+Strict extraction keeps refusing `wps:wsp` shapes (`UNMODELED_RUN_CONTENT`,
+`UNMODELED_DRAWING` and the picture refusals). The read-only
+`InspectNativeApproximateDrawingShapesV1` sidecar (protocol
+`injoffice.docx.approximate-drawing-shapes`, policy
+`docx.approximate-drawing-shape-preview-v1`) joins those retained refusals back
+to their source nodes and describes only the bounded subset the explicitly
+labeled approximate preview can paint: `prstGeom` `rect` or `line` with no
+adjust values, solid or theme-referenced fills, solid outlines, `wp:inline` or
+`wp:anchor` placement (offset or aligned axes, stacking), and
+`wps:txbx` / `wps:linkedTxbx` content resolved through the ordinary paragraph
+extractor and style resolver. Scheme colors resolve through the package theme;
+shade, tint and luminance transforms are approximated in sRGB and disclosed.
+Groups, other presets, custom geometry, gradient/picture fills, charts and
+VML-only fallbacks stay omitted with a declared reason. At most 64 shapes and
+100 000 UTF-16 units of text box content are described.
+
+The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
+`drawing_shapes` to the `render-approximate` worker operation only. The
+approximate compiler validates every shape against the same-bytes document
+(package digest, owning body paragraph, retained diagnostic ids anchored inside
+the shape's run, no overlap with modeled runs), reserves inline shapes as
+glyphless textbox atoms in its internal body copy (clamped to the column width),
+and after pagination appends paint: fills and strokes reuse the
+`fill_table_cell` / `stroke_table_border` primitives tagged with
+`table_id = docx.approximate-drawing-shape-preview-v1`, ordered behind or in
+front of body content per `behindDoc` and relative height; text box glyphs are
+shaped with the current InjOffice layout at the box width, flow through the
+linked chain in `seq` order, and attach to the anchor paragraph's line. Missing
+text box fonts fall back to an already loaded manifest face (host faces first)
+and are disclosed as `docx.approximate-textbox-substituted-font`. Overflowing
+lines, glyphs beyond the 16 MiB viewer budget and unsupported box content are
+counted under `docx.approximate-drawing-shape-omitted`. Body text is not
+wrapped around the shapes. Strict paint, source bytes and original drawing
+diagnostics are unchanged; the envelope `reasons` carry
+`docx.approximate-drawing-shape-preview` with every applied approximation.
