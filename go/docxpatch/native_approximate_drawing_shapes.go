@@ -370,11 +370,12 @@ func (context *nativeApproximateShapeContext) pageAnchor(container *nativeXMLNod
 		return nil, "", "unsupported-vertical-position"
 	}
 	relativeHeight, _ := nativeNonnegativeInt64Attr(container, "", "relativeHeight")
-	if relativeHeight > 0xffffffff {
-		relativeHeight = 0xffffffff
+	stacking := uint32(math.MaxUint32)
+	if relativeHeight >= 0 && relativeHeight <= math.MaxUint32 {
+		stacking = uint32(relativeHeight)
 	}
 	anchor := &NativeTextboxPageAnchorV1{
-		Stacking:         &NativeTextboxStackingV1{BehindDoc: nativeApproximateFlag(container, "behindDoc"), RelativeHeight: uint32(relativeHeight)},
+		Stacking:         &NativeTextboxStackingV1{BehindDoc: nativeApproximateFlag(container, "behindDoc"), RelativeHeight: stacking},
 		Policy:           "relative-position-no-wrap-v2",
 		SourceAnchor:     context.anchor(container),
 		HorizontalAnchor: context.anchor(positionH), VerticalAnchor: context.anchor(positionV),
@@ -454,10 +455,10 @@ func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNo
 		return nil, nil, false
 	}
 	notes = append(notes, colorNotes...)
-	if context.theme == nil || int(index) > len(context.theme.fills) {
+	if context.theme == nil || index < 1 || index > int64(len(context.theme.fills)) {
 		return nil, append(notes, "theme fill style unavailable; fill omitted"), true
 	}
-	fillStyle := context.theme.fills[index-1]
+	fillStyle := context.theme.fills[int(index)-1]
 	if fillStyle.Name != (xml.Name{Space: context.theme.ns, Local: "solidFill"}) {
 		return nil, append(notes, "theme "+fillStyle.Name.Local+" is not approximated; fill omitted"), true
 	}
@@ -477,14 +478,14 @@ func (context *nativeApproximateShapeContext) shapeLine(spPr, style *nativeXMLNo
 	if style != nil {
 		if reference := firstDirectNativeChild(style, a, "lnRef"); reference != nil {
 			index, _ := nativeNonnegativeInt64Attr(reference, "", "idx")
-			if index > 0 && context.theme != nil && int(index) <= len(context.theme.lines) {
+			if index >= 1 && context.theme != nil && index <= int64(len(context.theme.lines)) {
 				color, colorNotes, ok := context.referenceColor(reference)
 				if !ok {
 					return nil, nil, false
 				}
 				phClr = color
 				notes = append(notes, colorNotes...)
-				themeLine = context.theme.lines[index-1]
+				themeLine = context.theme.lines[int(index)-1]
 			}
 		}
 	}

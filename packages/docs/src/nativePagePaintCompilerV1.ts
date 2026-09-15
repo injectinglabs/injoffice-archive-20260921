@@ -176,6 +176,7 @@ export interface NativeDocxApproximateRuntimeV1 {
   drawingShapes?: unknown
 }
 import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
+import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
 export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
 export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, type NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
@@ -257,6 +258,13 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
     const painted = await paintNativeDocxApproximateDrawingShapesV1(result, shapes, shapeProjection, { request: prepared.page_paint_request, document: shapeProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider })
     for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
+    // Shape paint changes which pages carry commands; re-derive the omitted-content
+    // disclosure from the same inputs so content_status stays consistent.
+    const omissions = collectNativeDocxApproximateOmissionsV1(prepared.page_paint_request.pagination_request, result)
+    Object.assign(result, omissions)
+    const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
+    result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    if (disclose) result.reasons.push(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
   }
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
