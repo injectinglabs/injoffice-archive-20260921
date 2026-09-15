@@ -240,6 +240,26 @@ describe('approximate nested tables', () => {
     expect(paint.content_status).toBe('complete')
   }, 30000)
 
+  it('projects the containing table indent and margins from the sidecar when strict geometry resolution refused', async () => {
+    const { input, eligibility } = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const outer = document.body.blocks[0]!.table!
+    // Word-authored auto table whose style look refused strict geometry: no direct indent/margins/layout, no resolved geometry.
+    delete outer.indent_twips; delete outer.cell_margins; delete outer.layout; delete outer.width_twips
+    // The authored grid plus the projected indent must still fit the 9360 twip text column.
+    outer.grid_widths_twips = [9_000]; outer.rows[0]!.cells[0]!.width_twips = 9_000
+    const withOuter = sidecar({ outer_geometry: { layout: 'autofit', alignment: 'left', indent_twips: 360, width_type: 'auto', width_value: 0, cell_margins: { top_twips: 0, right_twips: 0, bottom_twips: 0, left_twips: 0 } } })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { nestedTables: withOuter })
+    expect(paint.status).toBe('painted')
+    const outerStrokes = paint.pages[0]!.commands.filter((c): c is NativeDocxStrokeTableBorderCommandV1 => c.kind === 'stroke_table_border' && c.table_id === 'table:1')
+    const nestedStrokes = paint.pages[0]!.commands.filter((c): c is NativeDocxStrokeTableBorderCommandV1 => c.kind === 'stroke_table_border' && c.table_id === DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID)
+    // Body left 1440 twips + projected outer indent 360 twips; inner indent 360 twips inside a zero-margin cell.
+    expect(Math.min(...outerStrokes.map(c => c.x1_millipoints))).toBe((1_440 + 360) * 50)
+    expect(Math.min(...nestedStrokes.map(c => c.x1_millipoints))).toBe((1_440 + 360 + 360) * 50)
+    expect(paint.reasons.some(r => r.includes('containing table indent and cell margins approximated'))).toBe(true)
+    expect(paint.content_status).toBe('complete')
+  }, 30000)
+
   it('keeps depth-two nesting omitted with disclosure and drops evidence that does not join the source', async () => {
     const { input, eligibility } = fixture()
     const deep = sidecar({ status: 'omitted', reason: 'nested-depth-limit', table: undefined, geometry: undefined, style_borders: undefined, first_row_cell_shading_rgb: undefined, notes: undefined })

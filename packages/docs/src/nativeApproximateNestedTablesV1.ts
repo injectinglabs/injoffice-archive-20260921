@@ -336,10 +336,17 @@ export async function prepareNativeDocxApproximateNestedTableStageV1(sidecarValu
     try {
       // Containing cell content box from the outer table's authored geometry.
       // When strict resolution refused the outer style cascade (active look),
-      // the sidecar's approximate outer geometry is projected into the body
-      // copy so the outer table and this content box agree.
+      // the sidecar's approximate outer indent and cell margins are projected
+      // as direct properties of the internal table copy so the outer table and
+      // this content box agree. Layout and width are left alone: the approximate
+      // qualifier already sizes such tables from their authored grid, and an
+      // autofit projection would re-enter the strict measurement probe.
       const outerResolved = projectedResolved.tables.find(entry => entry.table_id === owner.table.id)
-      if (outerResolved && !outerResolved.geometry && item.outer_geometry) { outerResolved.geometry = structuredClone(item.outer_geometry); notes.add('containing table geometry (indent, cell margins, layout) approximated from its table style cascade') }
+      if (item.outer_geometry && !outerResolved?.geometry && (owner.table.indent_twips === undefined || owner.table.cell_margins === undefined)) {
+        if (owner.table.indent_twips === undefined) owner.table.indent_twips = item.outer_geometry.indent_twips
+        if (owner.table.cell_margins === undefined) owner.table.cell_margins = { ...item.outer_geometry.cell_margins }
+        notes.add('containing table indent and cell margins approximated from its table style cascade')
+      }
       const outer = nativeDocxTableGeometryV1(owner.table, projectedResolved)
       const outerMargins = outer.cell_margins ?? { top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 }
       const cellWidth = outerCellWidthTwips(outer, owner.cell)
