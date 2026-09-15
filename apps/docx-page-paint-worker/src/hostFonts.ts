@@ -26,6 +26,8 @@ function file(path:string,max:number):Uint8Array {
 }
 
 export type HostFontLoadMode=boolean|'approximate'
+/** Additional exact face identity a same-bytes sidecar asks the host to load (never a substitution). */
+export interface HostFontReference {family:string;weight:400|700;style:'normal'|'italic'}
 export type NativeDocxLoadedHostFontsV1=NativeDocxHostFontsV1 & {resources:Map<string,FontResource>;approximateSubstitutions?:NativeDocxHostFontApproximateSubstitutionV1[]}
 
 function admitConfiguredFace(index:number,f:{family:string,weight:number,style:'normal'|'italic',sha256:`sha256:${string}`,path:string},faces:NativeFontManifest['faces'][number][],resources:Map<string,FontResource>,occupied:Set<string>,total:number):number{
@@ -40,7 +42,7 @@ function admitConfiguredFace(index:number,f:{family:string,weight:number,style:'
 }
 
 /** Only called with a server-operator CLI path, never a document/request path. */
-export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path:string,allowSubstitution:HostFontLoadMode=false):Promise<NativeDocxLoadedHostFontsV1> {
+export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path:string,allowSubstitution:HostFontLoadMode=false,extraReferences:readonly HostFontReference[]=[]):Promise<NativeDocxLoadedHostFontsV1> {
  const inventory=decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
  const config=JSON.parse(Buffer.from(file(path,65536)).toString('utf8'))
  if(!config||Object.keys(config).filter(k=>k!=='substitutions').sort().join(',')!=='faces,version'||config.version!==1||!Array.isArray(config.faces)||config.faces.length>32)throw new Error('Invalid host font manifest')
@@ -63,6 +65,10 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
   }
  }
  const needed=new Set(inventory.references.map(r=>key(r.family,r.weight,r.style)))
+ // Sidecar requests only widen which configured faces are admitted; they never
+ // count as document references, so an unavailable one is not a failure.
+ if(extraReferences.length>32)throw new Error('Host font sidecar requests exceed their bound')
+ for(const r of extraReferences)needed.add(key(r.family,r.weight,r.style))
  for(const mapping of policy?.mappings??[])if(needed.has(key(mapping.sourceFamily,mapping.weight,mapping.style)))needed.add(key(mapping.targetFamily,mapping.weight,mapping.style))
  const seen=new Set<string>();let total=[...resources.values()].reduce((n,r)=>n+r.bytes.length,0)
  if(total>64*1024*1024)throw new Error('Host font cumulative byte budget failed')

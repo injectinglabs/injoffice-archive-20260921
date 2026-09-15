@@ -293,6 +293,15 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 			if shapes != nil {
 				workerInput["drawing_shapes"] = shapes
 			}
+			// Same-bytes read-only OMML sidecar; the compiler re-validates its joins.
+			equations, equationsErr := docxpatch.InspectNativeApproximateEquationsV1(data)
+			if equationsErr != nil {
+				xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, equationsErr)
+				return
+			}
+			if equations != nil {
+				workerInput["equations"] = equations
+			}
 		}
 		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", operation, workerInput, 192*1024*1024, 64*1024*1024, args...)
 	} else {

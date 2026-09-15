@@ -174,11 +174,16 @@ export interface NativeDocxApproximateRuntimeV1 {
   fontSizePolicy?: NativeDocxHostDefaultSizePolicyV1
   /** Server-supplied `InspectNativeApproximateDrawingShapesV1` sidecar for the same bytes; validated against the document before use. */
   drawingShapes?: unknown
+  /** Server-supplied `InspectNativeApproximateEquationsV1` sidecar for the same bytes; validated against the document before use. */
+  equations?: unknown
 }
 import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
 export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
 export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
+import { prepareNativeDocxApproximateEquationStageV1, completeNativeDocxApproximateEquationStageV1, type NativeDocxApproximateEquationStageV1 } from './nativeApproximateEquationLayoutV1.js'
+export { decodeNativeDocxApproximateEquationsV1, selectNativeDocxApproximateMathFaceV1, layoutNativeDocxApproximateEquationsV1, projectNativeDocxApproximateEquationsV1, paintNativeDocxApproximateEquationsV1, prepareNativeDocxApproximateEquationStageV1, completeNativeDocxApproximateEquationStageV1, DOCX_APPROXIMATE_EQUATIONS_PROTOCOL, DOCX_APPROXIMATE_EQUATION_POLICY, DOCX_APPROXIMATE_EQUATION_CODE, DOCX_APPROXIMATE_EQUATION_OMITTED_CODE, DOCX_APPROXIMATE_EQUATION_FONT_CODE, DOCX_APPROXIMATE_EQUATION_WARNING, DOCX_APPROXIMATE_EQUATION_TABLE_ID, DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES } from './nativeApproximateEquationLayoutV1.js'
+export type { NativeDocxApproximateEquationsV1, NativeDocxApproximateEquationV1, NativeDocxApproximateMathNodeV1, NativeDocxApproximateMathRunV1, NativeDocxApproximateMathKindV1, NativeDocxApproximateEquationFontV1, NativeDocxApproximateMathFacePolicyV1, NativeDocxApproximateMathFaceChoiceV1, NativeDocxApproximateEquationRuntimeV1, NativeDocxApproximateEquationLayoutV1, NativeDocxApproximateEquationLayoutsV1, NativeDocxApproximateEquationProjectionV1, NativeDocxApproximateEquationPaintResultV1, NativeDocxApproximateEquationStageV1 } from './nativeApproximateEquationLayoutV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, type NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from './nativeAutomaticBorderPreviewV1.js'
@@ -228,6 +233,26 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   const settings = decodeNativeDocxPaginationSettings(input.pagination_settings)
   if (!settings.ok) failIssues('Approximate settings are invalid', settings.issues)
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings.value)
+  // Approximate OMML equations: validate the same-bytes sidecar against the
+  // source document, lay the equations out with the declared math face policy,
+  // and reserve their extents as glyphless inline atoms in the internal body
+  // copy before any other approximate projection runs. Anything malformed
+  // refuses the whole sidecar; the body preview itself never depends on it.
+  let equationStage: NativeDocxApproximateEquationStageV1 | undefined
+  if (runtime?.equations !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Approximate equations require independently eligible approximate settings')
+    const sourceDocument = decodeNativeDocxDocument(input.document)
+    const sourceResolved = decodeNativeDocxResolvedLayout(input.resolved_layout)
+    if (!sourceDocument.ok) failIssues('native document is invalid', sourceDocument.issues)
+    if (!sourceResolved.ok) failIssues('resolved layout is invalid', sourceResolved.issues)
+    const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
+    const manifest = runtime.fonts?.manifest ?? inventory.native_text_manifest
+    if (!manifest) throw new TypeError('Approximate equations require host fonts or an embedded font manifest')
+    const resolver = runtime.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+    const shaper = runtime.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
+    equationStage = await prepareNativeDocxApproximateEquationStageV1(runtime.equations, sourceDocument.value, sourceResolved.value, { manifest, resolver, shaper, outlineProvider })
+    input = { ...input, document: equationStage.projection.document, resolved_layout: equationStage.projection.resolved }
+  }
   let applied: NativeDocxApproximatedFontSizeV1[] = []
   if (runtime?.fontSizePolicy !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Host size policy requires independently eligible approximate settings')
@@ -242,6 +267,7 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   let shapes: NativeDocxApproximateDrawingShapesV1 | undefined
   let shapeProjection: ReturnType<typeof projectNativeDocxApproximateInlineShapesV1> | undefined
   let sidecarRefused = false
+  let shapeRestored: NativeDocxDocumentV1['unsupported'] = []
   if (runtime?.drawingShapes !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Approximate drawing shapes require independently eligible approximate settings')
     const sourceDocument = decodeNativeDocxDocument(input.document)
@@ -274,7 +300,8 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const omittedIDs = new Set(painted.omitted.map(entry => entry.id))
     const restored = new Set(shapes.items.filter(shape => omittedIDs.has(shape.id)).flatMap(shape => shape.diagnostic_ids))
     const pagination = prepared.page_paint_request.pagination_request
-    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...shapeProjection.removedDiagnostics.filter(entry => restored.has(entry.id))] } }
+    shapeRestored = shapeProjection.removedDiagnostics.filter(entry => restored.has(entry.id))
+    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...shapeRestored] } }
     const omissions = collectNativeDocxApproximateOmissionsV1(omissionSource, result)
     Object.assign(result, omissions)
     const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
@@ -285,6 +312,9 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
   }
+  // Equation paint attaches to the reserved atoms after body pagination and
+  // re-derives the omitted-content disclosure for the pages it touched.
+  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request)
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
   if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes ? ` or approximate shape paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value

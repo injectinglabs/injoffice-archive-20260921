@@ -15,7 +15,7 @@ import {
   type NativeDocxPagePaintPrepareInputV1,
 } from '@injoffice/docs/native-page-paint-compiler'
 import { createHarfBuzzTextShaperV1, createHarfBuzzOutlineProviderV1, type HarfBuzzTextShaperV1 } from '@injoffice/font-metrics/harfbuzz'
-import {discloseApproximateHostFontSubstitutions,loadHostFonts} from './hostFonts.js'
+import {discloseApproximateHostFontSubstitutions,loadHostFonts,type HostFontReference} from './hostFonts.js'
 
 export const DOCX_PAGE_PAINT_WORKER_PROTOCOL = 'injoffice.docx.page-paint-worker'
 export const DOCX_PAGE_PAINT_WORKER_VERSION = 1 as const
@@ -120,6 +120,14 @@ function prepareInput(value: unknown): NativeDocxPagePaintPrepareInputV1 {
   }
 }
 
+/** Bounded face identities the equation sidecar asks the host to load in
+ * addition to the document's own references; the compiler re-validates the
+ * sidecar itself and applies the declared math face policy. */
+function equationFontRequests(equations: unknown): HostFontReference[] {
+  if (!record(equations) || !Array.isArray(equations.font_requests)) return []
+  return equations.font_requests.slice(0, 32).flatMap((request): HostFontReference[] => record(request) && typeof request.family === 'string' && request.family.length > 0 && request.family.length <= 128 && (request.weight === 400 || request.weight === 700) && (request.style === 'normal' || request.style === 'italic') ? [{ family: request.family, weight: request.weight, style: request.style }] : [])
+}
+
 function workerShaper(sourceRevision: string): HarfBuzzTextShaperV1 {
   if (runtimeSourceRevision !== undefined && runtimeSourceRevision !== sourceRevision) throw new TypeError('worker source revision is immutable for one process generation')
   runtimeSourceRevision ??= sourceRevision
@@ -144,13 +152,17 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       // current-layout approximate operation accepts it.
       const drawingShapes = value.op === 'render-approximate' && 'drawing_shapes' in value.input ? value.input.drawing_shapes : undefined
       if (drawingShapes !== undefined) fields.push('drawing_shapes')
+      // Server-inspected OMML equation sidecar for the same bytes; only the
+      // current-layout approximate operation accepts it.
+      const equations = value.op === 'render-approximate' && 'equations' in value.input ? value.input.equations : undefined
+      if (equations !== undefined) fields.push('equations')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
       if((fontOnly||textbox)&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
       if (fontSizePolicy !== undefined && !validNativeDocxHostDefaultSizePolicyV1(fontSizePolicy)) throw new TypeError('Host default size policy is invalid')
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
-      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false) : undefined
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false, equationFontRequests(equations)) : undefined
       if(fontOnly&&!fonts)throw new TypeError('Font preview requires explicit operator fonts')
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const outlineProvider: Parameters<typeof renderNativeDocxAutomaticBorderPreviewV1>[1] = {
@@ -187,6 +199,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
       const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}) }
+      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(equations !== undefined ? { equations } : {}) }
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)
