@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
-import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING} from './nativeLegacyTableOriginV1.js'
+import {qualifyApproximateLegacyTables,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING} from './nativeLegacyTableOriginV1.js'
 import type { NativeFontManifest, NativeFontResolver, ResolvedFontFace } from '@injoffice/font-metrics/layout'
 import {selectExplicitFontV1} from '@injoffice/font-metrics/layout'
 import {renderNativeDocxFontSubstitutionPreviewV1,decodeNativeDocxFontSubstitutionPreviewV1} from './nativePagePaintCompilerV1.js'
@@ -26,7 +26,7 @@ import {
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { paginateNativeDocxV1, paginateNativeDocxApproximateLegacyV1 } from './nativePaginationV1.js'
-import { qualifyNativeDocxTablesV1,layoutNativeDocxTableRowsV1 } from './nativeTablePagePaintV1.js'
+import { qualifyNativeDocxTablesV1,layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1 } from './nativeTablePagePaintV1.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1, decodeNativeDocxApproximateComputedPagePaintV1, nativeDocxPagePaintPaginatedLayoutSha256V1 } from './nativePagePaintV1.js'
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
@@ -436,6 +436,10 @@ describe('native DOCX page-paint compiler v1', () => {
     const before=structuredClone(input),paint=await renderNativeDocxApproximatePagePreviewV1(input,eligibility,provider),baseline=await renderNativeDocxApproximatePagePreviewV1(input,{...eligibility,legacy_compatibility_mode:14},provider)
     expect(paint.status).toBe('painted');expect(baseline.status).toBe('painted')
     expect(paint.reasons).toContain(DOCX_TABLE_BORDER_RESERVATION_WARNING)
+    expect(paint.reasons).toContain(DOCX_TABLE_GRID_FIT_WARNING)
+    expect(paint.table_width_policy).toBe('approximate-authored-grid-fitted-v1')
+    expect(decodeNativeDocxApproximatePagePreviewV1({...paint,reasons:paint.reasons.filter(r=>r!==DOCX_TABLE_GRID_FIT_WARNING)}).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({...paint,table_width_policy:'unknown'}).ok).toBe(false)
     const topBorder=(value:typeof paint)=>value.pages[0]!.commands.find(c=>c.kind==='stroke_table_border'&&c.edge==='top')
     expect(topBorder(paint)).toEqual(topBorder(baseline))
     const fill=(value:typeof paint)=>{const command=value.pages[0]!.commands.find(c=>c.kind==='fill_table_cell');if(!command||command.kind!=='fill_table_cell')throw new Error('Expected table fill');return command}
@@ -627,7 +631,10 @@ describe('native DOCX page-paint compiler v1', () => {
     const decode=automatic?decodeNativeDocxAutomaticBorderPreviewV1:decodeNativeDocxApproximatePagePreviewV1
     expect(decode(shifted).ok).toBe(true)
     expect(decode({...shifted,table_border_layout_policy:'unknown'}).ok).toBe(false)
-    const oldEnvelope=structuredClone(shifted);delete oldEnvelope.table_border_layout_policy;oldEnvelope.reasons=oldEnvelope.reasons.filter(r=>r!==DOCX_TABLE_BORDER_RESERVATION_WARNING)
+    expect(shifted.table_width_policy).toBe('approximate-authored-grid-fitted-v1')
+    expect(decode({...shifted,table_width_policy:'unknown'}).ok).toBe(false)
+    expect(decode({...shifted,reasons:shifted.reasons.filter(r=>r!==DOCX_TABLE_GRID_FIT_WARNING)}).ok).toBe(false)
+    const oldEnvelope=structuredClone(shifted);delete oldEnvelope.table_border_layout_policy;delete oldEnvelope.table_width_policy;oldEnvelope.reasons=oldEnvelope.reasons.filter(r=>r!==DOCX_TABLE_BORDER_RESERVATION_WARNING&&r!==DOCX_TABLE_GRID_FIT_WARNING)
     expect(decode(oldEnvelope).ok).toBe(true)
     // 256 bounded source reasons plus all optional host-policy warnings fit.
     const maximumReasons=[...Array.from({length:255},(_,i)=>`Source reason ${i}`),...shifted.reasons,'Optional host font-size policy warning']
@@ -1833,6 +1840,21 @@ describe('native DOCX page-paint compiler v1', () => {
     if (completed.page_paint_output.status !== 'painted') return
     expect(completed.page_paint_output.pages[0]!.commands.map((command) => command.kind)).toEqual(['fill_table_cell', 'fill_glyph_path', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border'])
     expect(completed.page_paint_output.provenance.table_projection.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+  it('strict requests attest the strict table projection for approximate-only-qualifiable tables', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1
+    const table = document.body.blocks[0]!.table!
+    delete table.layout; delete table.alignment; delete table.indent_twips; delete table.width_twips; delete table.cell_margins
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const strict = qualifyNativeDocxTablesV1(document, resolved)
+    expect(strict.status).toBe('refused')
+    expect(qualifyApproximateLegacyTables(document, resolved, undefined, { legacy_compatibility_mode: 14 }).status).toBe('qualified')
+    expect(qualifyApproximateLegacyTables(document, resolved, undefined)).toEqual(strict)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    expect(prepared.page_paint_request.paginated_layout.status).toBe('refused')
+    expect(prepared.page_paint_request.paginated_layout.diagnostics.some(diagnostic => diagnostic.code === 'body-table-unsupported')).toBe(true)
+    expect(prepared.page_paint_request.integrity.table_projection_sha256).toBe(nativeDocxTableProjectionSha256V1([]))
+    expect(decodeNativeDocxPagePaintRequestV1(prepared.page_paint_request).ok).toBe(true)
   })
   it.each([false, true])('autofits unequal text columns with resolved geometry %s and replays the width policy', async (inherited) => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
