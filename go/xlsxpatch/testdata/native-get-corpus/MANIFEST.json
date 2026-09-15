@@ -85,16 +85,20 @@
     {
       "id": "refuse-apply-flags",
       "file": "refuse-apply-flags.xlsx",
-      "title": "cellXf ids differ without apply flags",
-      "extract": "error",
-      "extract_error": "apply flag is false or absent",
-      "required_unsupported": null,
-      "forbidden_unsupported": null,
+      "title": "cellXf ids differ without apply flags (cellXf record previews; STYLE_PARENT_APPLY_MISMATCH)",
+      "extract": "ok",
+      "required_unsupported": [
+        "STYLE_PARENT_APPLY_MISMATCH"
+      ],
+      "forbidden_unsupported": [
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
+      ],
       "drawing_coverage": "none",
-      "get_status": 422,
-      "get_refusal": "xlsx.native.unsupported",
+      "get_status": 200,
       "charts": 0,
-      "demo": "refuse"
+      "demo": "pass"
     },
     {
       "id": "refuse-gridlines-off",
@@ -115,18 +119,20 @@
     {
       "id": "refuse-freeze-pane",
       "file": "refuse-freeze-pane.xlsx",
-      "title": "Frozen pane remains view geometry",
+      "title": "Frozen pane is recorded read-only (SHEET_VIEW_PANE)",
       "extract": "ok",
       "required_unsupported": [
-        "SHEET_VIEW_GEOMETRY"
+        "SHEET_VIEW_PANE"
       ],
       "forbidden_unsupported": [
-        "STYLE_RECORD_ATTRIBUTES"
+        "SHEET_VIEW_GEOMETRY",
+        "STYLE_RECORD_ATTRIBUTES",
+        "DRAWING_REFERENCE"
       ],
       "drawing_coverage": "none",
-      "get_status": 503,
+      "get_status": 200,
       "charts": 0,
-      "demo": "refuse"
+      "demo": "pass"
     },
     {
       "id": "refuse-quote-prefix",

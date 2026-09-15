@@ -8,6 +8,7 @@ import type {
   NativeWorkbookPassthroughPartV1,
   NativeWorkbookRowDimensionV1,
   NativeWorkbookSheetFormatV1,
+  NativeWorkbookSheetViewV1,
   NativeWorkbookSourceV1,
   NativeWorkbookUnsupportedV1,
   NativeWorkbookV1,
@@ -90,6 +91,8 @@ export interface NativeSheetRenderModelV1 {
   readonly order: number
   readonly state: NativeSheetState
   readonly sheet_format?: NativeWorkbookSheetFormatV1
+  /** Read-only pane fact recorded from the source sheetView; previews ignore view state. */
+  readonly sheet_view?: NativeWorkbookSheetViewV1
   readonly rows: ReadonlyArray<NativeWorkbookRowDimensionV1>
   readonly columns: ReadonlyArray<NativeWorkbookColumnDimensionV1>
   readonly cells: ReadonlyArray<NativeRenderCellV1>
@@ -147,6 +150,7 @@ export function projectNativeWorkbookV1(input: unknown): NativeWorkbookRenderMod
       order: sheet.order,
       state: sheet.state,
       ...(sheet.sheet_format === undefined ? {} : { sheet_format: { ...sheet.sheet_format } }),
+      ...(sheet.sheet_view === undefined ? {} : { sheet_view: { ...sheet.sheet_view } }),
       rows: sheet.rows.map((row) => ({ ...row })),
       columns: sheet.columns.map((column) => ({ ...column })),
       cells: sheet.cells.map((cell) => ({

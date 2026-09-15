@@ -42,8 +42,8 @@ func TestSourceConditionalPreview(t *testing.T) {
 	if got, err := PreviewNativeSourceStylesV1(data); got != nil || err == nil {
 		t.Fatal("V1 authority expanded")
 	}
-	if _, err := ExtractNativeWorkbookV2(data); err == nil {
-		t.Fatal("strict extraction authority expanded")
+	if extracted, err := ExtractNativeWorkbookV2(data); err != nil || !nativeGetCorpusHasCode(extracted.Unsupported, "STYLE_PARENT_APPLY_MISMATCH") {
+		t.Fatalf("read-only extraction must record the apply-flag mismatch: err=%v", err)
 	}
 	tx := NativeWorkbookMutationTransactionV1{ExpectedRevision: "rev:" + strings.TrimPrefix(nativeWorkbookDigest(data), "sha256:"), Cells: []CellMutation{{OperationID: "x", SheetID: "7", Kind: CellSetValue, Cell: CellRef{Row: 1, Column: 1}, Value: "7"}}}
 	if _, err := ApplyNativeWorkbookMutationTransactionV1(data, tx); err == nil {

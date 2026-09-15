@@ -113,6 +113,9 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if err := preflightNativeWorkbookMutationTargets(before, transaction); err != nil {
 		return nil, err
 	}
+	if err := refuseNativeMutationForStyleParentApplyMismatch(before); err != nil {
+		return nil, err
+	}
 	expectedStyles, err := expectedNativeStyleMutationProjections(original, before, transaction.Styles)
 	if err != nil {
 		return nil, fmt.Errorf("xlsxpatch: native mutation: style readback plan: %w", err)

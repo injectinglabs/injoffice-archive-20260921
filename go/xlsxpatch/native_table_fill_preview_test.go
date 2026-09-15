@@ -61,8 +61,11 @@ func TestNativeTableFillQualification(t *testing.T) {
 		}
 		got, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
 		if blocked == "ignored-direct-fill" {
-			if err == nil || !strings.Contains(err.Error(), "apply flag is false or absent") {
-				t.Fatalf("existing mismatched apply-flag refusal changed: %v", err)
+			if err != nil {
+				t.Fatalf("read-only objects inspection refused an apply-flag mismatch: %v", err)
+			}
+			if got.Tables[0].FillPreview != nil {
+				t.Fatalf("table fill preview projected over a strict-authority style conflict: %+v", got.Tables[0].FillPreview)
 			}
 			continue
 		}
