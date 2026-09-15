@@ -88,7 +88,7 @@ func styleParentApplyMismatchMessage(mismatches []styleParentApplyMismatch) stri
 	}
 	sorted := make([]styleParentApplyMismatch, len(mismatches))
 	copy(sorted, mismatches)
-	sort.SliceStable(sorted, func(i, j int) bool {
+	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].cellXF != sorted[j].cellXF {
 			return sorted[i].cellXF < sorted[j].cellXF
 		}
