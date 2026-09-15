@@ -1,0 +1,51 @@
+{
+  "$comment": "Workspace test shards for the ts-tests matrix in .github/workflows/test.yml. Every workspace with a test script must appear in exactly one shard (node scripts/run-ci-test-shard.mjs --check). `build` lists the workspaces to build before testing; omit it to run the full root build. `scripts` lists extra root package.json scripts to run after the workspace tests. Balanced by measured local wall-clock (packages/docs alone is ~60% of the total because of nativePagePaintCompilerV1.test.ts).",
+  "shards": {
+    "docs": {
+      "build": ["packages/docs"],
+      "workspaces": ["packages/docs"]
+    },
+    "pdf-workers": {
+      "workspaces": [
+        "packages/pdf",
+        "apps/pptx-page-paint-worker",
+        "packages/slides",
+        "packages/print",
+        "apps/docx-page-paint-worker"
+      ]
+    },
+    "office": {
+      "workspaces": [
+        "packages/pptx-render",
+        "packages/sheets",
+        "packages/font-metrics",
+        "packages/univer-sheets",
+        "apps/playground",
+        "packages/formulas",
+        "packages/xlsx-exchange",
+        "packages/docx-wasm",
+        "packages/pptx-native",
+        "packages/pptx-authored",
+        "packages/pptx-wasm",
+        "packages/xlsx-wasm",
+        "packages/native-runtime"
+      ]
+    },
+    "core": {
+      "workspaces": [
+        "packages/charts",
+        "packages/pivots",
+        "packages/shapes",
+        "packages/history",
+        "packages/outlines",
+        "packages/connectors",
+        "packages/sparklines",
+        "packages/agent-office",
+        "packages/agent-tools",
+        "packages/collab",
+        "apps/docs"
+      ],
+      "scripts": ["test:native-office-completion"]
+    }
+  }
+}
