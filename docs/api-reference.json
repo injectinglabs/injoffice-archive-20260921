@@ -5031,7 +5031,7 @@
             {
               "name": "shapeNativeDocxLinesWithParagraphWidthsV1",
               "kind": "function",
-              "signature": "export declare function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1): Promise<ShapeNativeDocxLinesResult>"
+              "signature": "export declare function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1, nonblockingResolution?: ReadonlySet<string>): Promise<ShapeNativeDocxLinesResult>"
             },
             {
               "name": "twipsToMilliPoints",
