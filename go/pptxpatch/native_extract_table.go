@@ -2,6 +2,7 @@ package pptxpatch
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -29,6 +30,10 @@ type nativeExactTable struct {
 	table         NativeTable
 	outputNodes   int
 	textCodeUnits int64
+	// legacyCells marks text-free cells projected without authoritative
+	// paragraphs; styleDiagnostic carries the read-only built-in style preview.
+	legacyCells     bool
+	styleDiagnostic *NativeDiagnostic
 }
 
 type nativeTableExtractionBudget struct {
@@ -108,13 +113,21 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 
 	sourceTable, sourceTypography := extractor.exactSourceNoBorderTable(node, slidePart, dialect)
 	objectID, name, err := validateNativeTableNonVisual(nonVisual, dialect)
+	// The exact projection refuses locks and modification identifiers. The
+	// read-only inspection grammar accepts exactly the no-group lock and the
+	// PowerPoint modId extension; only the built-in style preview (below) may
+	// keep a table whose nonvisual metadata passes that grammar.
+	nonVisualRefusal := err
 	if err != nil {
 		if !sourceTypography {
-			return NativeElement{}, err
+			var refusal nativeGraphicFrameProjectionRefusal
+			if !errors.As(err, &refusal) {
+				return NativeElement{}, err
+			}
 		}
 		objectID, err = inspectTableNonVisual(nonVisual, dialect)
 		if err != nil {
-			return NativeElement{}, err
+			return NativeElement{}, nonVisualRefusal
 		}
 		name, _ = exactNativeAttr(nativeChild(nonVisual, dialect.presentation, "cNvPr"), "", "name")
 	}
@@ -128,6 +141,8 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	})
 	if sourceTypography {
 		exact = sourceTable
+	} else if nonVisualRefusal != nil && (err != nil || exact.styleDiagnostic == nil) {
+		return NativeElement{}, nonVisualRefusal
 	} else if err != nil {
 		return NativeElement{}, err
 	}
@@ -155,6 +170,10 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	}
 	if sourceTypography {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+	}
+	if exact.styleDiagnostic != nil {
+		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, *exact.styleDiagnostic)
 	}
 	if nativeHasSourceAffine(transform) || !nativeTableFrameMatches(element) {
 		if err := nativeMarkGraphicFrameLayout(&element); err != nil {
@@ -330,8 +349,15 @@ func (extractor *nativeExtractor) extractNativeTableNode(node *nativeXMLNode, tr
 	if len(node.Children) < 2 || node.Children[0] != tableProperties || node.Children[1] != grid {
 		return nativeExactTable{}, fmt.Errorf("pptxpatch: native extract: malformed table child order")
 	}
+	// A non-empty tblPr is either one bounded built-in style reference that
+	// resolves to a read-only paint preview or a refusal; nothing in between.
+	var styled *nativeResolvedBuiltinTableStyle
 	if requireEmptyNativeElement(tableProperties) != nil {
-		return nativeExactTable{}, refuseNativeGraphicFrame("pptx.table-style-unavailable", "table styles, banding, inheritance, fills, and effects are preserved but not resolved")
+		resolved, styleErr := extractor.resolveNativeBuiltinTableStyle(tableProperties, dialect)
+		if styleErr != nil {
+			return nativeExactTable{}, styleErr
+		}
+		styled = resolved
 	}
 	columns, _, err := extractNativeTableGrid(grid, dialect)
 	if err != nil {
@@ -353,6 +379,9 @@ func (extractor *nativeExtractor) extractNativeTableNode(node *nativeXMLNode, tr
 	}
 	if usage.outputNodes > budget.outputNodes || usage.tableCells > budget.tableCells || usage.textCodeUnits > budget.textCodeUnits {
 		return nativeExactTable{}, fmt.Errorf("pptxpatch: native extract: cumulative table output budget exceeded")
+	}
+	if styled != nil {
+		return extractor.extractNativeBuiltinStyledTable(rows, columns, styled, usage, dialect)
 	}
 	table := NativeTable{ColumnWidths: columns, RowHeights: make([]int64, 0, len(rows)), Rows: make([][]NativeTableCell, 0, len(rows))}
 	var rowTotal int64
@@ -765,6 +794,9 @@ func (extractor *nativeExtractor) reserveNativeTableOutput(exact nativeExactTabl
 	for _, row := range exact.table.Rows {
 		for _, cell := range row {
 			if cell.Paragraphs == nil {
+				if exact.legacyCells && cell.Text != nil && *cell.Text == "" {
+					continue
+				}
 				return fmt.Errorf("pptxpatch: native extract: authoritative table text is incomplete")
 			}
 			for _, paragraph := range *cell.Paragraphs {
