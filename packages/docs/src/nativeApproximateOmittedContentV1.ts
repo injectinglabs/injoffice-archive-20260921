@@ -66,15 +66,29 @@ export type NativeDocxApproximateOmissionSourceV1 = { document: NativeDocxDocume
 const MAX_STRING = 8192
 const ID = /^[^\u0000\r\n]{1,512}$/
 
+/** Source paths carry parser-owned namespace prefixes (unknown namespaces are
+ * hashed, e.g. `ns4d2aa588:AlternateContent`), so local names decide. */
+const local = (names: string) => new RegExp(`/(?:[A-Za-z0-9_.-]+:)?(?:${names})\\[`)
+const EQUATION = local('oMath|oMathPara')
+const DRAWING = local('drawing|pict|object|anchor|inline|shape|group|txbxContent|AlternateContent|graphic|graphicData')
+const FIELD = local('fldSimple|fldChar|instrText')
+const CONTENT_CONTROL = local('sdt|sdtContent')
+const REVISION = local('ins|del|moveFrom|moveTo')
+const COMMENT = local('commentRangeStart|commentRangeEnd|commentReference')
+const TABLE = local('tbl')
+/** Non-visual markers: Word paints nothing for them either. */
+const MARKER = local('bookmarkStart|bookmarkEnd|proofErr|permStart|permEnd')
+
 export function nativeDocxOmittedContentCategoryV1(code: string, path: string | undefined): NativeDocxOmittedContentCategoryV1 {
   const at = path ?? ''
-  if (/\/m:oMath(Para)?\[/.test(at)) return 'equation'
-  if (/\/(?:w:drawing|w:pict|w:object|wp:anchor|wp:inline|v:shape|v:group|w:txbxContent)\[/.test(at) || code === 'UNMODELED_DRAWING' || code === 'PICTURE_GRAPHIC_REQUIRED' || code === 'drawing-layout-unsupported') return 'drawing'
-  if (/\/(?:w:fldSimple|w:fldChar|w:instrText)\[/.test(at) || code === 'FIELD_SEMANTICS') return 'field'
-  if (/\/w:sdt(?:Content)?\[/.test(at)) return 'content-control'
-  if (/\/(?:w:ins|w:del|w:moveFrom|w:moveTo)\[/.test(at) || code === 'WRAPPED_RUN_MARKUP') return 'revision'
-  if (/\/(?:w:commentRangeStart|w:commentRangeEnd|w:commentReference)\[/.test(at) || code === 'UNRESOLVED_COMMENT_RANGE' || code === 'UNRESOLVED_COMMENT_REFERENCE') return 'comment'
-  if (/\/w:tbl\[/.test(at) || code === 'NESTED_TABLE_OR_CELL_MARKUP') return 'table'
+  if (EQUATION.test(at)) return 'equation'
+  if (MARKER.test(at)) return 'other'
+  if (DRAWING.test(at) || code === 'UNMODELED_DRAWING' || code === 'PICTURE_GRAPHIC_REQUIRED' || code === 'drawing-layout-unsupported') return 'drawing'
+  if (FIELD.test(at) || code === 'FIELD_SEMANTICS') return 'field'
+  if (CONTENT_CONTROL.test(at)) return 'content-control'
+  if (REVISION.test(at) || code === 'WRAPPED_RUN_MARKUP') return 'revision'
+  if (COMMENT.test(at) || code === 'UNRESOLVED_COMMENT_RANGE' || code === 'UNRESOLVED_COMMENT_REFERENCE') return 'comment'
+  if (TABLE.test(at) || code === 'NESTED_TABLE_OR_CELL_MARKUP') return 'table'
   if (code === 'reference-layout-unsupported') return 'reference'
   if (code === 'UNMODELED_BODY_BLOCK') return 'block'
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
