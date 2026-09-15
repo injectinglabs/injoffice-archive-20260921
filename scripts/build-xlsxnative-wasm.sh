@@ -47,6 +47,11 @@ fi
 
 size=$(wc -c < "$out/xlsxnative.wasm" | tr -d ' ')
 echo "xlsxnative.wasm ${size} bytes" >&2
+max_bytes=$(cat "$src/max-bytes.txt")
+if (( size > max_bytes )); then
+  echo "xlsxnative.wasm exceeds the 7.25 MiB + 8 KiB size ceiling (${max_bytes} bytes)" >&2
+  exit 1
+fi
 echo "copied wasm_exec.js from $wasm_exec" >&2
 if [[ -n $package_out ]]; then
   echo "npm package artifacts: $package_out" >&2
