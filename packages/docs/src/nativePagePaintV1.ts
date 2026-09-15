@@ -880,8 +880,11 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   const settings = request.pagination_request.pagination_settings
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
   const provenance = requestProvenance(request, request.outline_provider.provider_id, request.outline_provider.provider_revision)
-  if (eligibility.status !== 'eligible' || request.body_field_source || hasNativeDocxPageFieldsV1(request.pagination_request.document) || hasNativeSquareWrapV1(request.pagination_request.document)) {
-    return approximatePagePreviewEnvelope(settings, eligibility, refusal(provenance, 'unsupported-source', settings.document_id, 'Approximate legacy preview requires eligible settings and currently excludes page-field or square-wrap fixed-point layout'))
+  if (eligibility.status !== 'eligible') {
+    return approximatePagePreviewEnvelope(settings, eligibility, refusal(provenance, 'unsupported-source', settings.document_id, 'Approximate legacy preview requires eligible settings'))
+  }
+  if (request.body_field_source) {
+    return approximatePagePreviewEnvelope(settings, eligibility, refusal(provenance, 'unsupported-source', settings.document_id, 'Approximate legacy preview currently excludes body-field source variants'))
   }
   const approximate = paginateNativeDocxApproximateLegacyV1(request.pagination_request, eligibility)
   request.paginated_layout = approximate.layout

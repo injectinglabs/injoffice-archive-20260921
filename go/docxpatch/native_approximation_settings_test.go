@@ -18,15 +18,15 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 		{"math", math, true}, {"shape", shape, true},
 		{"combined", math + shape + `<w:themeFontLang w:val="fr-FR"/><w:decimalSymbol w:val="."/><w:listSeparator w:val=","/>`, true},
 		{"compatibility flags", `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, true},
-		{"malformed language", `<w:themeFontLang w:val="en_US"/>`, false},
-		{"unknown language", `<w:themeFontLang w:val="ar-SA"/>`, false},
+		{"malformed language", `<w:themeFontLang w:val="en_US"/>`, true},
+		{"unknown language", `<w:themeFontLang w:val="ar-SA"/>`, true},
 		{"duplicate locale", `<w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>`, false},
 		{"unknown decimal", `<w:decimalSymbol w:val="unknown"/>`, false},
 		{"nested locale", `<w:decimalSymbol w:val="."><w:foo/></w:decimalSymbol>`, false},
-		{"unknown math", strings.Replace(math, `m:val="1440"`, `m:val="999"`, 1), false},
-		{"duplicate math", strings.Replace(math, `</m:mathPr>`, `<m:intLim m:val="subSup"/></m:mathPr>`, 1), false},
+		{"unknown math", strings.Replace(math, `m:val="1440"`, `m:val="999"`, 1), true},
+		{"duplicate math", strings.Replace(math, `</m:mathPr>`, `<m:intLim m:val="subSup"/></m:mathPr>`, 1), true},
 		{"unknown math attribute", strings.Replace(math, `<m:mathPr `, `<m:mathPr foo="1" `, 1), false},
-		{"malformed shape id", strings.Replace(shape, `spidmax="1026"`, `spidmax="01026"`, 1), false},
+		{"malformed shape id", strings.Replace(shape, `spidmax="1026"`, `spidmax="01026"`, 1), true},
 		{"shape content", strings.Replace(shape, `data="1"/>`, `data="1"><o:unknown/></o:idmap>`, 1), false},
 		{"unknown flag value", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="oops"/></w:compat>`, false},
 		{"flag first without mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, false},
@@ -68,6 +68,17 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 				t.Fatal("strict settings changed")
 			}
 		})
+	}
+}
+
+func TestNativeApproximationAllowsUncoveredPaginationExtras(t *testing.T) {
+	data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`"><w:autoHyphenation/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat></w:settings>`)))
+	approx, err := ExtractNativeDocxApproximationEligibilityV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approx.Status != "eligible" || approx.LegacyCompatibilityMode == nil || *approx.LegacyCompatibilityMode != 14 {
+		t.Fatalf("autoHyphenation plus mode 14 must stay approximately eligible: %#v", approx)
 	}
 }
 

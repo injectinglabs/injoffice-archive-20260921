@@ -77,7 +77,7 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 			}
 		}
 		for _, diagnostic := range settings.Diagnostics {
-			if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && !covered[diagnostic.Path] {
+			if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" && diagnostic.Code != "UNKNOWN_SETTINGS_ELEMENT" && !covered[diagnostic.Path] {
 				return result, nil
 			}
 		}

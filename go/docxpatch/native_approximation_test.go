@@ -26,7 +26,7 @@ func TestNativeApproximationEligibilityRejectsAmbiguousLegacySettings(t *testing
 			{"noncanonical number", "<w:compat>" + mode("012") + "</w:compat>", false, 0},
 			{"unknown flag", "<w:compat><w:useWord2002TableStyleRules/></w:compat>", false, 0},
 			{"foreign mode", `<w:compat><x:compatSetting xmlns:x="urn:foreign" w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="12"/></w:compat>`, false, 0},
-			{"enabled hyphenation", "<w:autoHyphenation/>", false, 0},
+			{"enabled hyphenation", "<w:autoHyphenation/>", true, 12},
 			{"unknown attribute", `<w:compat w:unknown="1"/>`, false, 0},
 		} {
 			t.Run(test.name+map[bool]string{false: " transitional", true: " strict"}[strict], func(t *testing.T) {
