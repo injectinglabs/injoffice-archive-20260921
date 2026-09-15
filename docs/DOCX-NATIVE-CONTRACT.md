@@ -943,7 +943,9 @@ cached values (zero-anchored, 1/2/5 major units) and disclosed; missing chart
 fonts fall back to an already loaded manifest face and are disclosed as
 `docx.approximate-chart-substituted-font`. The envelope `reasons` carry
 `docx.approximate-drawing-chart-preview` with every applied approximation and
-`docx.approximate-drawing-chart-omitted` for every refused chart. Strict paint,
+`docx.approximate-drawing-chart-omitted` for every refused chart; evidence that
+does not exact-join the source is dropped as a whole, disclosed with the same
+code, and the refused drawings stay omitted content. Strict paint,
 source bytes and original drawing diagnostics are unchanged. The PPTX literal
 chart primitives are not reused because they are scoped to `overlap = 0`,
 authored axis bounds and PPTX text bodies; the sidecar model mirrors

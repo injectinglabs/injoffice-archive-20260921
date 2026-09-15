@@ -36,7 +36,7 @@ import { renderNativeDocxAutomaticBorderPreviewV1 } from './nativePagePaintCompi
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } from './nativeAbsentFontSizeV1.js'
-import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING } from './nativeApproximateDrawingChartsV1.js'
+import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, decodeNativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -3285,6 +3285,17 @@ describe('approximate DrawingML charts', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
 
+  it('discloses charts the painter drops as omitted content', async () => {
+    const { input, eligibility, charts } = chartInput({ placement: 'anchored', wrap: 'none', page_anchor: { ...pageAnchor(), x_emu: 120_000_000, y_emu: 120_000_000 } })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell')).toBe(false)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-omitted:') && r.includes('outside-page')), paint.reasons.filter(r => r.includes('approximate-drawing-chart')).join(' / ')).toBe(true)
+    expect(paint.content_status).toBe('partial')
+    expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED' && entry.scope_id === 'paragraph:1')).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
   it('refuses sidecars that do not exact-join the source document or carry invalid models, and stays opt-in', async () => {
     const cases: Array<[string, (charts: any, chart: any) => void]> = [
       ['package', (charts) => { charts.package_sha256 = `sha256:${'b'.repeat(64)}` }],
@@ -3302,7 +3313,13 @@ describe('approximate DrawingML charts', () => {
     for (const [name, mutate] of cases) {
       const { input, eligibility, charts, chart } = chartInput({})
       mutate(charts, chart)
-      await expect(renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) }), name).rejects.toThrow()
+      expect(() => decodeNativeDocxApproximateDrawingChartsV1(wire(charts), input.document as NativeDocxDocumentV1), name).toThrow()
+      // The body preview never depends on the sidecar: the evidence is dropped as a whole and disclosed.
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) })
+      expect(paint.status, name).toBe('painted')
+      expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell'), name).toBe(false)
+      expect(paint.reasons, name).toContain(DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED)
+      expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED'), name).toBe(true)
     }
     const ineligible = chartInput({})
     await expect(renderNativeDocxApproximatePagePreviewV1(ineligible.input, { ...ineligible.eligibility, status: 'ineligible' }, outlineProvider(ineligible.input), { drawingCharts: wire(ineligible.charts) })).rejects.toThrow()

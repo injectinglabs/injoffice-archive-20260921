@@ -262,6 +262,15 @@ func TestApproximateDrawingChartsOmissions(t *testing.T) {
 			t.Fatalf("scheme colours without a theme must refuse: %#v", out)
 		}
 	})
+	t.Run("shared run is omitted", func(t *testing.T) {
+		out, err := InspectNativeApproximateDrawingChartsV1(nativeApproximateChartSource(t, `<w:p><w:r><w:t>text</w:t>`+nativeApproximateChartInline+`</w:r></w:p>`, base, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != "shared-run" {
+			t.Fatalf("a run that also carries text must be omitted: %#v", out)
+		}
+	})
 	t.Run("shapes and text are not described", func(t *testing.T) {
 		shape := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `"><wp:inline><wp:extent cx="914400" cy="914400"/><wp:docPr id="4" name="Rectangle 4"/><a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing>`
 		for _, paragraph := range []string{`<w:p><w:r>` + shape + `</w:r></w:p>`, `<w:p><w:r><w:t>plain</w:t></w:r></w:p>`} {

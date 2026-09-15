@@ -257,6 +257,14 @@ func (context *nativeApproximateChartContext) describe(paragraphID string, diagn
 		item.Chart = nil
 		return item
 	}
+	// Only the drawing may share its w:r with w:rPr; a run that also carries
+	// text would leave modeled runs nested inside the chart's run anchor.
+	for _, sibling := range run.Children {
+		if sibling.Name == (xml.Name{Space: shapes.ns, Local: "rPr"}) || sibling == drawing || (sibling.Name == (xml.Name{Space: nativeMarkupCompatibilityNS, Local: "AlternateContent"}) && shapes.drawingNode(sibling) == drawing) {
+			continue
+		}
+		return omit("shared-run")
+	}
 	wp, a := shapes.wp, shapes.a
 	var container *nativeXMLNode
 	for _, c := range drawing.Children {

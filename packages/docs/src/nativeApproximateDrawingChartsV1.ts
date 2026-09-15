@@ -23,7 +23,7 @@
  * sidecar model mirrors `NativeLiteralBar` field-for-field where they overlap. */
 import type { FontResource, NativeFontManifest, NativeFontResolver, NativeTextShaper, ResolvedFontFace, ShapedSegment, TextRunInput } from '@injoffice/font-metrics/layout'
 import { unicode13Script } from '@injoffice/font-metrics/unicode13'
-import type { NativeDocxDocumentV1, NativeDocxRunV1, NativeDocxSourceAnchorV1 } from './nativeContract.js'
+import type { NativeDocxDocumentV1, NativeDocxRunV1, NativeDocxSourceAnchorV1, NativeDocxUnsupportedCapabilityV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
 import { ID, RGB, preflightWire, paintCommandID } from './nativePagePaintWireV1.js'
@@ -41,6 +41,7 @@ export const DOCX_APPROXIMATE_DRAWING_CHART_CODE = 'docx.approximate-drawing-cha
 export const DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE = 'docx.approximate-drawing-chart-omitted' as const
 export const DOCX_APPROXIMATE_CHART_FONT_CODE = 'docx.approximate-chart-substituted-font' as const
 export const DOCX_APPROXIMATE_DRAWING_CHART_WARNING = `${DOCX_APPROXIMATE_DRAWING_CHART_CODE}: DrawingML clustered bar/column charts are painted approximately from the values cached in the chart part with a host layout: plot margins, legend and title placement, dash segmentation and any unauthored value-axis scale are InjOffice approximations, not Office chart layout. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE}: drawing-chart evidence did not exact-join the source document and was not used; refused charts stay omitted` as const
 /** Table paint primitives carry this id so consumers can tell chart paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID = DOCX_APPROXIMATE_DRAWING_CHART_POLICY
 
@@ -191,7 +192,6 @@ export function decodeNativeDocxApproximateDrawingChartsV1(value: unknown, docum
     const paragraph = paragraphs.get(item.paragraph_id)
     if (!paragraph || !anchorValid(item.anchor, main) || !anchorValid(item.run_anchor, main) || !within(item.run_anchor, paragraph.anchor) || !within(item.anchor, item.run_anchor)) throw new TypeError('Approximate drawing chart does not exact-join its body paragraph')
     if (!Array.isArray(item.diagnostic_ids) || item.diagnostic_ids.length === 0 || item.diagnostic_ids.length > 64 || item.diagnostic_ids.some(id => { const d = typeof id === 'string' ? diagnostics.get(id) : undefined; return !d || d.scope_id !== item.paragraph_id || !d.anchor || !within(d.anchor, item.run_anchor) })) throw new TypeError('Approximate drawing chart must join retained source drawing diagnostics')
-    if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing chart overlaps modeled text')
     if (item.status !== 'supported' && item.status !== 'omitted') throw new TypeError('Approximate drawing chart status is invalid')
     if (!safeNonnegative(item.width_emu) || !safeNonnegative(item.height_emu)) throw new TypeError('Approximate drawing chart extent is out of bounds')
     if (item.notes !== undefined && (!Array.isArray(item.notes) || item.notes.length > 32 || item.notes.some(note => !boundedText(note, 512)))) throw new TypeError('Approximate drawing chart notes are unbounded')
@@ -199,6 +199,9 @@ export function decodeNativeDocxApproximateDrawingChartsV1(value: unknown, docum
     if (item.chart_part !== undefined && !boundedText(item.chart_part, 512)) throw new TypeError('Approximate drawing chart part name is unbounded')
     if (item.chart_part_sha256 !== undefined && (typeof item.chart_part_sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(item.chart_part_sha256))) throw new TypeError('Approximate drawing chart part digest is invalid')
     if (item.status === 'omitted') { if (item.chart !== undefined) throw new TypeError('Omitted approximate drawing charts cannot carry a model'); continue }
+    // A painted chart must own its run: a w:r that also carries modeled text is
+    // omitted by the sidecar (shared-run); a supported item claiming one is forged.
+    if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing chart overlaps modeled text')
     if (item.width_emu <= 0 || item.height_emu <= 0 || (item.placement !== 'inline' && item.placement !== 'anchored') || !item.chart_part || !item.chart_part_sha256) throw new TypeError('Supported approximate drawing chart requires positive extent, placement and chart part')
     if (!modelValid(item.chart)) throw new TypeError('Approximate drawing chart model is invalid')
     if (item.placement === 'anchored') {
@@ -214,6 +217,8 @@ export interface NativeDocxApproximateInlineChartProjectionV1 {
   resolved: NativeDocxResolvedLayoutInputV1
   /** Chart id to the synthetic glyphless drawing run id reserved in the body copy. */
   inlineRuns: Map<string, string>
+  /** Source refusals removed from the body copy for supported charts; restored for charts the painter drops. */
+  removedDiagnostics: NativeDocxUnsupportedCapabilityV1[]
 }
 
 /** Reserve supported inline charts as glyphless textbox atoms so surrounding
@@ -251,8 +256,9 @@ export function projectNativeDocxApproximateInlineChartsV1(document: NativeDocxD
     projectedResolved.runs.push({ run_id: runID, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: {} })
     inlineRuns.set(chart.id, runID)
   }
+  const removedDiagnostics = projected.unsupported.filter(entry => removed.has(entry.id))
   projected.unsupported = projected.unsupported.filter(entry => !removed.has(entry.id))
-  return { document: projected, resolved: projectedResolved, inlineRuns }
+  return { document: projected, resolved: projectedResolved, inlineRuns, removedDiagnostics }
 }
 
 /** Equal-width column extent of the section owning a body block, in EMU. */
@@ -326,13 +332,8 @@ export async function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<Nati
       if (!first) { omit(chart, 'anchor-paragraph-not-placed'); continue }
       context = { page: first.page, line: first.line, character_x: first.line.x_millipoints, paragraph_y: first.line.y_millipoints }
     }
-    let position: { x: number; y: number }
-    try {
-      position = resolveTextboxPosition(runtime.document, item, context.page, { width_millipoints: width, height_millipoints: height } as never, context)
-    } catch (error) {
-      omit(chart, `anchor-unresolved: ${error instanceof Error ? error.message : 'unknown'}`)
-      continue
-    }
+    const position = resolveChartPosition(runtime.document, item, context.page, width, height, context)
+    if (!position.ok) { omit(chart, `anchor-unresolved: ${position.message}`); continue }
     placed.push({ chart, page: context.page, line: context.line, x: position.x, y: position.y, width, height, behind: anchor.stacking?.behind_doc === true, order: anchor.stacking?.relative_height ?? 0 })
   }
   placed.sort((left, right) => left.order - right.order)
@@ -356,6 +357,26 @@ export async function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<Nati
   for (const page of paint.pages) insertCommands(page, insertions.filter(entry => entry.page === page), removedIDs)
   result.reasons = buildReasons(charts, result, [...notes, ...layoutNotes], text)
   return result
+}
+
+/** Centered/aligned axes halve (extent - chart) and refuse a .5 result; an
+ * approximate chart rounds by retrying with a one-millipoint wider extent so
+ * parity never drops it. Offsets that are not whole millipoints round to the
+ * nearest one (at most 63 EMU). The painted extent is unchanged. */
+function resolveChartPosition(document: NativeDocxDocumentV1, item: NativeDocxTextboxGeometryItemV1, page: NativeDocxPaintPageV1, width: number, height: number, context: TextboxAnchorContext): { ok: true; x: number; y: number } | { ok: false; message: string } {
+  let message = 'unknown'
+  const anchor = item.page_anchor!
+  const rounded = { ...item, page_anchor: { ...anchor, x_emu: Math.round(anchor.x_emu / 127) * 127, y_emu: Math.round(anchor.y_emu / 127) * 127 } } as NativeDocxTextboxGeometryItemV1
+  for (const [dw, dh] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+    try {
+      const { x, y } = resolveTextboxPosition(document, rounded, page, { width_millipoints: width + dw, height_millipoints: height + dh } as never, context)
+      return { ok: true, x, y }
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'unknown'
+      if (!/coordinate precision/.test(message)) break
+    }
+  }
+  return { ok: false, message }
 }
 
 function findHighlight(pages: NativeDocxPaintPageV1[], runID: string): { page: NativeDocxPaintPageV1; line: NativeDocxPaintLineV1; command: NativeDocxFillTextHighlightCommandV1 } | undefined {
