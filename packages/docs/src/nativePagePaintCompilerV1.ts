@@ -207,7 +207,7 @@ export async function renderNativeDocxAutomaticBorderPreviewV1(input: NativeDocx
     protocol: DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, version: 1, fidelity: 'approximate', read_only: true,
     policy: DOCX_AUTO_BORDER_POLICY, page_background_rgb: 'FFFFFF', source: projection.source,
     approximated_render_properties: projection.facts, source_diagnostics: projection.source_diagnostics, reasons,
-    ...(eligibility ? { legacy_eligibility: eligibility,table_border_layout_policy:'collapsed-horizontal-border-reservation-v1' as const } : {}),
+    ...(eligibility ? { legacy_eligibility: eligibility,table_border_layout_policy:'collapsed-horizontal-border-reservation-v1' as const,table_width_policy:'approximate-authored-grid-fitted-v1' as const } : {}),
     ...(approximatedFontSizes ? { approximated_font_sizes: approximatedFontSizes } : {}),
     status: paint.status, pages: paint.pages, resources: paint.resources, diagnostics: paint.diagnostics, rendering_provenance: provenance,
   }

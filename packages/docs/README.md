@@ -652,6 +652,27 @@ conflicting cell preferences, and content requiring wrapping at those preference
 continue through the existing content policy and its refusal boundaries. This
 bounded case does not establish general Word autofit fidelity. Its named policy
 and source preferences enter the same independently re-derived table hash.
+The read-only approximate preview adds one more declared policy,
+`approximate-authored-grid-fitted-v1`, for the same omitted/auto width when the
+consistent authored `tblGrid`/`tcW` preferences exceed the owning text column.
+Word's grid widths include the horizontal cell margins, so a table authored to
+span the body has a grid wider than the column by exactly those margins, and the
+content policy above would otherwise collapse it to its text. The approximate
+preview instead scales that grid proportionally to the column width with
+largest-remainder integer twips (pagination refuses any table edge past the
+column, so the grid is never kept wider than the column). The fitted table then
+behaves like an authored fixed table: shaped content minima are not checked
+against the fitted slices, so long unbreakable words wrap or overflow at the
+fitted width. The policy records the container, available width, source grid,
+source cell widths and fitted grid, and enters the table hash. The approximate
+envelope declares it as `table_width_policy` together with a fidelity warning in
+`reasons`, and the envelope validators require both. The policy applies only
+with declared approximate eligibility. Because the approximate table
+qualifier is shared, strict `paginateNativeDocxV1` and strict request
+verification now also qualify tables strictly: an auto-width table that only
+the approximate relaxations could promote refuses at strict pagination with
+`body-table-unsupported`, matching the strict page-paint compiler, instead of
+paginating and then failing the request's table projection hash.
 Authored grid/cell widths remain source preferences recorded in the policy;
 they are not immutable column widths. Final wrapped glyph clusters independently
 rederive the same allocation during source-bound pagination and paint validation.
