@@ -19,10 +19,12 @@ type NativeDocxApproximationEligibilityV1 struct {
 	LegacyTableOrigins      []NativeDocxLegacyTableOriginV1   `json:"legacy_table_origins,omitempty"`
 }
 
-// ExtractNativeDocxApproximationEligibilityV1 allows exact legacy mode selection
-// and bounded, typed settings facts explicitly disregarded by current layout.
-// Malformed/duplicate/unknown settings remain ineligible. This does not qualify
-// unsupported document content such as math or legacy VML shapes.
+// ExtractNativeDocxApproximationEligibilityV1 allows exact legacy mode 12 or 14,
+// plus a current-layout fallback when Word attests mode 15 but extras keep the
+// strict profile unsupported. Bounded typed settings facts are disregarded by
+// current layout. Malformed/duplicate/unknown settings remain ineligible. This
+// does not qualify unsupported document content such as math or legacy VML shapes
+// for strict paint.
 func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApproximationEligibilityV1, error) {
 	settings, err := ExtractNativePaginationSettingsV1(data)
 	if err != nil {
@@ -108,19 +110,25 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 					if !seen["compatibilityMode"] {
 						return result, nil
 					}
-					if (name != "overrideTableStyleFontSizeAndJustification" && name != "enableOpenTypeFeatures" && name != "doNotFlipMirrorIndents") || value != "1" {
+					if !nativeApproximateCompatFlag(name, value) {
 						return result, nil
 					}
-					fact := NativeDocxApproximatedSettingV1{Kind: name, Path: child.Path, Values: map[string]string{"val": value}}
-					result.ApproximatedSettings = append(result.ApproximatedSettings, fact)
-					result.Reasons = append(result.Reasons, nativeApproximationSettingReason(fact))
+					// Word's fourth extra flag has no typed fact kind; TS covers
+					// compatSetting[5+] as current-layout extras without a join fact.
+					if name != "differentiateMultirowTableHeaders" {
+						fact := NativeDocxApproximatedSettingV1{Kind: name, Path: child.Path, Values: map[string]string{"val": value}}
+						result.ApproximatedSettings = append(result.ApproximatedSettings, fact)
+						result.Reasons = append(result.Reasons, nativeApproximationSettingReason(fact))
+					}
 					continue
 				}
-				if (value != "12" && value != "14") || child != compat[0].Children[0] {
+				if (value != "12" && value != "14" && value != "15") || child != compat[0].Children[0] {
 					return result, nil
 				}
 				if value == "14" {
 					mode = 14
+				} else if value == "15" {
+					mode = 15
 				}
 			}
 		}
@@ -139,4 +147,13 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 		}
 	}
 	return result, nil
+}
+
+func nativeApproximateCompatFlag(name, value string) bool {
+	switch name {
+	case "overrideTableStyleFontSizeAndJustification", "enableOpenTypeFeatures", "doNotFlipMirrorIndents", "differentiateMultirowTableHeaders":
+		return value == "1"
+	default:
+		return false
+	}
 }

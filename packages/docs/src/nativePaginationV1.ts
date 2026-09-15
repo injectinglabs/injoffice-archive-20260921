@@ -7,7 +7,7 @@
  * never exposes a plausible-looking partial page list.
  */
 
-import { decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
+import { decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {
@@ -294,15 +294,7 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   'HYPERLINK_SEMANTICS',
   'UNMODELED_COMMENT_MARKUP',
 ])
-const APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
-  'UNMODELED_RUN_CONTENT',
-  'UNMODELED_PARAGRAPH_CONTENT',
-  'UNMODELED_BODY_BLOCK',
-  'UNMODELED_FONT_METADATA',
-  'FIELD_SEMANTICS',
-  'WRAPPED_RUN_MARKUP',
-  'NUMBERING_STYLE_PRESERVED',
-])
+
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
@@ -879,7 +871,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
     if (context.columnFlow && entry.code === 'UNEQUAL_SECTION_COLUMNS') continue
-    if (context.approximateLegacySettings && APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)) {
+    if (context.approximateLegacySettings && DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)) {
       addDiagnostic(context, {
         code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
         source_code: entry.code, source_message: entry.message,
@@ -924,10 +916,24 @@ function refuseUnsupportedSource(context: PaginationContext): void {
         }
       }
     }
-    if (run.reference && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote') refuse(context, 'body-structure-unsupported', run.id, `Native ${run.reference.kind} reference placement is not represented by the shaped-lines v1 pagination input`)
+    if (run.reference && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote') {
+      if (context.approximateLegacySettings) {
+        addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: run.id, message: `Approximate preview omits unmodeled ${run.reference.kind} reference and paints remaining runs` })
+      } else {
+        refuse(context, 'body-structure-unsupported', run.id, `Native ${run.reference.kind} reference placement is not represented by the shaped-lines v1 pagination input`)
+      }
+    }
   }
   for (const diagnostic of shaped.diagnostics) {
     const source = { code: diagnostic.source_diagnostic_code ?? diagnostic.code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+    if (context.approximateLegacySettings) {
+      addDiagnostic(context, {
+        code: 'source-diagnostic', severity: 'deferred', scope_id: diagnostic.scope_id,
+        source_code: source.code, source_message: source.message,
+        message: `Approximate preview omits blocking shaping diagnostic and paints remaining glyphs: ${diagnostic.code}: ${diagnostic.message}`,
+      })
+      continue
+    }
     if (diagnostic.severity === 'unsupported' && scopes.has(diagnostic.scope_id)) {
       refuse(context, 'source-diagnostic', diagnostic.scope_id, `Body shaping diagnostic refuses pagination: ${diagnostic.code}: ${diagnostic.message}`, source)
     } else {
