@@ -325,10 +325,9 @@ func nativeDOCXInventoryFamilies(pkg *nativePackage, partName, wordNS, relNS, re
 		}
 		if len(altNames) == 1 {
 			alt, present := nativeAttr(altNames[0], wordNS, "val")
-			if !present || !nativeBoundedResolvedString(alt, 256) || nativeASCIIFold(alt) == key {
-				return nil, fmt.Errorf("docxpatch: native font inventory: invalid altName for %q", name)
+			if present && nativeBoundedResolvedString(alt, 256) && nativeASCIIFold(alt) != key {
+				family.AltName = nativeString(alt)
 			}
-			family.AltName = nativeString(alt)
 		}
 		if values := directNativeChildren(node, wordNS, "notTrueType"); len(values) > 1 {
 			return nil, fmt.Errorf("docxpatch: native font inventory: duplicate notTrueType for %q", name)

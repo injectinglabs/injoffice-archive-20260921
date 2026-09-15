@@ -294,6 +294,15 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   'HYPERLINK_SEMANTICS',
   'UNMODELED_COMMENT_MARKUP',
 ])
+const APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
+  'UNMODELED_RUN_CONTENT',
+  'UNMODELED_PARAGRAPH_CONTENT',
+  'UNMODELED_BODY_BLOCK',
+  'UNMODELED_FONT_METADATA',
+  'FIELD_SEMANTICS',
+  'WRAPPED_RUN_MARKUP',
+  'NUMBERING_STYLE_PRESERVED',
+])
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
@@ -870,6 +879,14 @@ function refuseUnsupportedSource(context: PaginationContext): void {
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
     if (context.columnFlow && entry.code === 'UNEQUAL_SECTION_COLUMNS') continue
+    if (context.approximateLegacySettings && APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)) {
+      addDiagnostic(context, {
+        code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
+        source_code: entry.code, source_message: entry.message,
+        message: `Approximate preview omits unmodeled source markup and paints remaining runs: ${entry.code}: ${entry.message}`,
+      })
+      continue
+    }
     if (LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED.has(entry.code)) {
       addDiagnostic(context, {
         code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
@@ -899,7 +916,13 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     if (run.control && UNSUPPORTED_CONTROLS.has(run.control)) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
     if (run.drawing) {
       const image = qualifyNativeDocxInlineImageV1(document, run.id, run.drawing)
-      if (!image.ok) refuse(context, 'body-structure-unsupported', run.id, `Native drawing is outside the exact inline-image slice: ${image.message}`)
+      if (!image.ok) {
+        if (context.approximateLegacySettings) {
+          addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: run.id, message: `Approximate preview omits unmodeled drawing: ${image.message}` })
+        } else {
+          refuse(context, 'body-structure-unsupported', run.id, `Native drawing is outside the exact inline-image slice: ${image.message}`)
+        }
+      }
     }
     if (run.reference && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote') refuse(context, 'body-structure-unsupported', run.id, `Native ${run.reference.kind} reference placement is not represented by the shaped-lines v1 pagination input`)
   }

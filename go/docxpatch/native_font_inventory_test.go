@@ -170,6 +170,19 @@ func TestNativeDOCXFontInventoryRejectsAdversarialRelationshipsPathsFontsAndLice
 	}
 }
 
+func TestNativeDOCXFontInventorySkipsInvalidAltName(t *testing.T) {
+	source := nativeFontTestPackage(t, false, nativeFontTestSFNT(0), "false", func(parts map[string]string) {
+		parts["Word/FontTable.XML"] = strings.Replace(parts["Word/FontTable.XML"], `w:val="Fixture Alias"`, `w:val="Fixture Sans"`, 1)
+	})
+	inventory, err := ExtractNativeDOCXFontInventoryV1(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Families) != 1 || inventory.Families[0].AltName != nil {
+		t.Fatalf("self altName must be omitted, not fail extract: %#v", inventory.Families)
+	}
+}
+
 func TestNativeDOCXFontInventoryManifestTamperRevisionAndStrictJSON(t *testing.T) {
 	source := nativeFontTestPackage(t, false, nativeFontTestSFNT(0), "false", nil)
 	inventory, err := ExtractNativeDOCXFontInventoryV1(source)
