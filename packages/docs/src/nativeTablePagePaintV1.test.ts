@@ -7,6 +7,7 @@ import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION, type NativeDocxS
 import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION } from './nativePaginationSettings.js'
 import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
+import { qualifyApproximateLegacyTables } from './nativeLegacyTableOriginV1.js'
 import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
 import { DOCX_AUTO_BORDER_POLICY, type NativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 
@@ -72,6 +73,24 @@ function appendRow(request: NativeDocxPaginationRequestV1, ordinal: number): voi
 }
 
 describe('bounded native DOCX table page-paint geometry', () => {
+  it('uses authored tblGrid as approximate fixed width when source layout is auto', () => {
+    const request = fixture()
+    const table = request.document.body.blocks[0]!.table!
+    delete table.layout
+    delete table.alignment
+    delete table.indent_twips
+    delete table.width_twips
+    delete table.cell_margins
+    table.grid_widths_twips = [400]
+    const original = structuredClone(request.document)
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout).status).toBe('refused')
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.table.layout).toBe('fixed')
+    expect(approximate.tables[0]!.table.width_twips).toBe(400)
+    expect(request.document).toEqual(original)
+  })
+
   it('uses bounded resolved geometry without changing source or overriding direct properties', () => {
     const request=fixture(), table=request.document.body.blocks[0]!.table!
     const expected=structuredClone(qualifyNativeDocxTablesV1(request.document,request.resolved_layout))
