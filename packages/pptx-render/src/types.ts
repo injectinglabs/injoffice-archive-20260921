@@ -58,7 +58,11 @@ export interface RenderTransform {
   readonly tyEmu: number
 }
 
-export type RenderClip = { readonly kind: 'rect'; readonly rect: RenderRect } | { readonly kind: 'roundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
+export type RenderClip =
+  | { readonly kind: 'rect'; readonly rect: RenderRect }
+  | { readonly kind: 'roundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
+  /** Source-evaluated DrawingML outline in the node's local frame; `rect` is the frame it was evaluated for. */
+  | { readonly kind: 'path'; readonly rect: RenderRect; readonly path: readonly RenderPathCommand[] }
 
 export type RenderPathCommand =
   | { readonly kind: 'moveTo'; readonly x: number; readonly y: number }

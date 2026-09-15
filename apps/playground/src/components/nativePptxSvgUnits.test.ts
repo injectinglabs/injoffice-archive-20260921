@@ -18,6 +18,13 @@ describe('native SVG change of user units',()=>{
   expect(2*(.0127*1+3)+20).toBeCloseTo((2*originalPoint[0]+254000)/12700,12)
   expect(JSON.stringify(source)).toBe(before)
  })
+ it('rescales path clips with the same rule as painted paths',()=>{
+  const source:PreviewNode={kind:'group',transform:[1,0,0,1,0,0],clip:{x:0,y:0,cx:1270000,cy:635000,d:'M 0 317500 A 635000 317500 0 0 1 635000 0 Z'},children:[]}
+  const before=JSON.stringify(source),normalized=nativePptxSvgNode(source)
+  if(normalized.kind!=='group')throw Error('group')
+  expect(normalized.clip).toEqual({x:0,y:0,cx:100,cy:50,d:'M 0 25 A 50 25 0 0 1 50 0 Z'})
+  expect(JSON.stringify(source)).toBe(before)
+ })
  it('rescales rectangles, ellipses, placeholders and image frames while preserving crop percentages',()=>{
   for(const kind of ['rect','ellipse','placeholder','image'] as const){
    const source={kind,rect:{x:12700,y:25400,cx:38100,cy:50800},radius:12700,fill:'FFFFFF',strokeWidth:12700,label:'x',resourceId:'r',crop:{left:1000,top:2000,right:3000,bottom:4000}} as PreviewNode

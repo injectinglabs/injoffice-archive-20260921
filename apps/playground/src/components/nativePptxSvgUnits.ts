@@ -23,7 +23,7 @@ export function nativePptxSvgPath(d:string):string {
 }
 export function nativePptxSvgNode(node:PreviewNode):PreviewNode {
  switch(node.kind){
-  case 'group':return {...node,transform:[...node.transform.slice(0,4),length(node.transform[4]),length(node.transform[5])] as [number,number,number,number,number,number],clip:node.clip?{...rect(node.clip),...(node.clip.radius===undefined?{}:{radius:length(node.clip.radius)})}:undefined,children:node.children.map(nativePptxSvgNode)}
+  case 'group':return {...node,transform:[...node.transform.slice(0,4),length(node.transform[4]),length(node.transform[5])] as [number,number,number,number,number,number],clip:node.clip?{...rect(node.clip),...(node.clip.radius===undefined?{}:{radius:length(node.clip.radius)}),...(node.clip.d===undefined?{}:{d:nativePptxSvgPath(node.clip.d)})}:undefined,children:node.children.map(nativePptxSvgNode)}
   case 'path':return {...node,d:nativePptxSvgPath(node.d),strokeWidth:node.strokeWidth===undefined?undefined:length(node.strokeWidth)}
   case 'rect':return {...node,rect:rect(node.rect),radius:length(node.radius),strokeWidth:node.strokeWidth===undefined?undefined:length(node.strokeWidth)}
   case 'ellipse':return {...node,rect:rect(node.rect),strokeWidth:node.strokeWidth===undefined?undefined:length(node.strokeWidth)}

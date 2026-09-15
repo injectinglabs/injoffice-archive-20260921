@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "43b7c7644fb7fd5cbcae1b701ef2761fbafbabfb1ae9f880a9c7d82dcfdf45a5"
+const NativePPTXSchemaSHA256 = "ee1243e0cfd3a5a561ba636a3b19d6edee79b6c7bbfff78e0b1968de9b135627"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -175,7 +175,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"bottom", "left", "right", "top"},
 	},
 	"NativePictureElement": {
-		Properties: []string{"animation", "assetId", "clip", "compatibility", "crop", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
+		Properties: []string{"animation", "assetId", "clip", "compatibility", "crop", "geometry", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"assetId", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
 	},
 	"NativePptxDeck": {

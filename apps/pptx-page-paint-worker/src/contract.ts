@@ -2,7 +2,9 @@
 import {decodeNativeDocxPagePaintResourceListV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
 export type PreviewMatrix = [number,number,number,number,number,number]
 export type PreviewRect = {x:number;y:number;cx:number;cy:number}
-export type PreviewClip = PreviewRect & {radius?:number}
+// `d` is a validated source-evaluated outline in the group's local units; a
+// clip carries either a corner radius or a path, never both.
+export type PreviewClip = PreviewRect & {radius?:number;d?:string}
 export type PreviewStroke = {stroke?:string;strokeWidth?:number;strokeLinecap?:'butt'|'round'|'square';strokeLinejoin?:'round'|'bevel'|'miter';strokeMiterlimit?:number}
 export type PreviewNode =
  | {kind:'group';transform:PreviewMatrix;clip?:PreviewClip;children:PreviewNode[];sourceRole?:'paragraphBullet'|'contentRun'|'connectorArrow'}
@@ -56,7 +58,7 @@ export function decodePptxPreview(value:unknown):PptxPreview {
   if(n.strokeLinejoin!==undefined&&!['round','bevel','miter'].includes(String(n.strokeLinejoin)))fail()
   if(n.strokeMiterlimit!==undefined)number(n.strokeMiterlimit,1)
   switch(n.kind){
-   case 'group':if(!Array.isArray(n.transform)||n.transform.length!==6||!Array.isArray(n.children)||n.sourceRole!==undefined&&!['paragraphBullet','contentRun','connectorArrow'].includes(String(n.sourceRole)))return fail();n.transform.forEach(v=>number(v));if(n.clip!==undefined){rect(n.clip);const c=record(n.clip);if(Object.keys(c).some(k=>!['x','y','cx','cy','radius'].includes(k)))fail();if(c.radius!==undefined)number(c.radius,0,Math.min(Number(c.cx),Number(c.cy))/2)}n.children.forEach(v=>node(v,depth+1));break
+   case 'group':if(!Array.isArray(n.transform)||n.transform.length!==6||!Array.isArray(n.children)||n.sourceRole!==undefined&&!['paragraphBullet','contentRun','connectorArrow'].includes(String(n.sourceRole)))return fail();n.transform.forEach(v=>number(v));if(n.clip!==undefined){rect(n.clip);const c=record(n.clip);if(Object.keys(c).some(k=>!['x','y','cx','cy','radius','d'].includes(k)))fail();if(c.radius!==undefined)number(c.radius,0,Math.min(Number(c.cx),Number(c.cy))/2);if(c.d!==undefined){const d=c.d;if(c.radius!==undefined||typeof d!=='string'||!d.trim()||d.length>200000||!/^[MLQCAZ0-9eE+.,\s-]*$/.test(d))return fail();path(d);pathBytes+=d.length;if(pathBytes>8e6)fail()}}n.children.forEach(v=>node(v,depth+1));break
    case 'path':if(typeof n.d!=='string'||n.d.length>200000||!/^[MLQCAZ0-9eE+.,\s-]*$/.test(n.d))return fail();path(n.d);pathBytes+=n.d.length;if(pathBytes>8e6)fail();color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break
    case 'rect':number(n.radius,0);
    case 'ellipse':rect(n.rect);color(n.fill);if(n.stroke!==undefined)color(n.stroke);if(n.strokeWidth!==undefined)number(n.strokeWidth,0);break

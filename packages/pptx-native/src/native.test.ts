@@ -88,6 +88,29 @@ describe('native PPTX contract', () => {
     }
   })
 
+  it('accepts read-only evaluated picture geometry and rejects editable, conflicting or misplaced outlines', () => {
+    const deck = fixture('valid/parsed-full.json') as NativePptxDeck
+    const picture = deck.slides[0]!.elements.find((item) => item.kind === 'picture')!
+    if (picture.kind !== 'picture') throw new Error('fixture requires a picture')
+    const arc = (x: number, y: number) => ({ kind: 'arcTo' as const, x, y, rx: 1500000, ry: 1000000, largeArc: false, clockwise: true })
+    const geometry = { profile: 'drawingml-paths-v1' as const, textRect: { x: 439340, y: 292893, cx: 2121320, cy: 1414214 }, paths: [{ fillMode: 'norm' as const, stroke: true, commands: [{ kind: 'moveTo' as const, x: 0, y: 1000000 }, arc(1500000, 0), arc(3000000, 1000000), arc(1500000, 2000000), arc(0, 1000000), { kind: 'close' as const }] }] }
+    delete picture.clip
+    picture.geometry = structuredClone(geometry)
+    picture.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.picture-geometry-preview', message: 'catalog outline evaluated from source' }] }
+    expect(validateNativePptx(deck)).toMatchObject({ ok: true })
+    const codes = (value: unknown) => { const result = validateNativePptx(value); return result.ok ? [] : result.issues.map((issue) => issue.code) }
+    picture.compatibility.status = 'editable'
+    expect(codes(deck)).toContain('native.geometryAuthority')
+    picture.compatibility.status = 'preserveOnly'; picture.clip = 'roundRect'
+    expect(codes(deck)).toContain('native.geometry')
+    delete picture.clip; picture.geometry = { ...structuredClone(geometry), paths: [] }
+    expect(validateNativePptx(deck).ok).toBe(false)
+    picture.geometry = structuredClone(geometry)
+    const text = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+    Object.assign(text, { geometry: structuredClone(geometry) })
+    expect(validateNativePptx(deck).ok).toBe(false)
+  })
+
   it('accepts the shared authored and parsed fixtures', () => {
     for (const name of readdirSync(resolve(fixtureRoot, 'valid')).filter((item) => item.endsWith('.json'))) {
       expect(validateNativePptx(fixture(`valid/${name}`)), name).toEqual({ ok: true, value: fixture(`valid/${name}`) })
