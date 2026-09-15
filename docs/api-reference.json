@@ -4986,7 +4986,7 @@
             {
               "name": "qualifyNativeDocxTablesV1",
               "kind": "function",
-              "signature": "export declare function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1): NativeDocxQualifiedTablesV1"
+              "signature": "export declare function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1, approximate?: boolean): NativeDocxQualifiedTablesV1"
             },
             {
               "name": "renderHeaderFooterTemplate",

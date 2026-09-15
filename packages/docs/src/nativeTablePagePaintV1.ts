@@ -263,7 +263,7 @@ export function nativeDocxTableGeometryV1(table: NativeDocxTableV1, resolved: Na
   return { ...table, ...width, layout: table.layout ?? geometry.layout, alignment: table.alignment ?? geometry.alignment, indent_twips: table.indent_twips ?? geometry.indent_twips, cell_margins: table.cell_margins ?? { ...geometry.cell_margins } }
 }
 
-export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1): NativeDocxQualifiedTablesV1 {
+export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shaped?: NativeDocxShapedLinesV1, approximate?: boolean): NativeDocxQualifiedTablesV1 {
   const sourceTables = document.body.blocks.flatMap((block) => block.kind === 'table' && block.table ? [nativeDocxTableGeometryV1(block.table, resolved)] : [])
   if (sourceTables.length === 0) return { status: 'qualified', tables: [], paragraph_widths: new Map(), sha256: nativeDocxTableProjectionSha256V1([]) }
   const fail = (scope_id: string, message: string): NativeDocxQualifiedTablesV1 => ({ status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'unsupported-table-source', scope_id, message }] })
@@ -317,6 +317,20 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
       if (!projected) return fail(table.id, 'Percentage table width requires one exact section column, matching source grid/cell preferences and integral proportional twip geometry (no content autofit)')
       table = projected.table; widthPolicy = projected.policy
     }
+    if (approximate && table.layout !== 'fixed') {
+      const grid = table.grid_widths_twips
+      const sum = grid?.reduce((total, width) => total + width, 0)
+      if (grid?.length && Number.isSafeInteger(sum) && sum! > 0 && (table.width_twips === undefined || table.width_twips === 0)) {
+        table = {
+          ...table,
+          layout: 'fixed',
+          width_twips: sum,
+          alignment: table.alignment ?? 'left',
+          indent_twips: table.indent_twips ?? 0,
+          cell_margins: table.cell_margins ?? { top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 },
+        }
+      }
+    }
     if (table.layout !== 'fixed' || table.alignment !== 'left' || table.indent_twips === undefined || table.width_twips === undefined || !table.cell_margins) return fail(table.id, 'Table requires explicit fixed dxa width, left alignment, indent, and all four cell margins')
     const grid = table.grid_widths_twips
     if (!grid || grid.length === 0 || grid.length > DOCX_TABLE_PAGE_PAINT_LIMITS.maxGridColumns || grid.some((width) => !Number.isSafeInteger(width) || width <= 0 || width > MAX_SAFE_TWIPS)) return fail(table.id, 'Table requires a bounded non-empty positive tblGrid')
@@ -337,7 +351,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     let bodyStarted = false
     const repeating = table.rows.some((row) => row.repeat_header)
     const splitting = table.rows.some((row) => row.cant_split !== true)
-    if (splitting && document.notes.length > 0) return fail(table.id, 'Split table rows with footnote/endnote reservation require a separate layout contract')
+    if (splitting && document.notes.length > 0 && !approximate) return fail(table.id, 'Split table rows with footnote/endnote reservation require a separate layout contract')
     for (const [rowOrdinal, row] of table.rows.entries()) {
       if (row.repeat_header && bodyStarted) return fail(row.id, 'Repeated headers must be a contiguous leading row prefix')
       if (!row.repeat_header) bodyStarted = true
@@ -386,7 +400,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
         const paintCell = shading === cell.shading_rgb ? cell : { ...cell, shading_rgb: shading }
         for (const paragraph of cell.paragraphs) {
           if (!resolvedParagraphs.has(paragraph.id)) return fail(paragraph.id, 'Cell paragraph does not exact-join the resolved layout')
-          if (resolvedParagraphs.get(paragraph.id)?.numbering) return fail(paragraph.id, 'Numbering inside tables is refused because list-counter state is not guessed')
+          if (resolvedParagraphs.get(paragraph.id)?.numbering && !approximate) return fail(paragraph.id, 'Numbering inside tables is refused because list-counter state is not guessed')
           if (row.cant_split !== true && (resolvedParagraphs.get(paragraph.id)?.properties.keep_next || resolvedParagraphs.get(paragraph.id)?.properties.page_break_before)) return fail(paragraph.id, 'Split rows cannot guess paragraph keep-next chains or forced page breaks')
           paragraphWidths.set(paragraph.id, contentWidth)
         }
@@ -401,7 +415,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     }
     tables.push({ ...(widthPolicy ? { width_policy: widthPolicy } : {}), table, width_millipoints: tableWidth, x_millipoints: tableX, grid_widths_millipoints: gridMP, rows: qualifiedRows })
   }
-  if (resolved.diagnostics.some((diagnostic) => !coveredStyleDiagnostics.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? '')) && sourceTables.some((table) => diagnostic.scope_id === table.id || table.rows.some((row) => row.cells.some((cell) => cell.id === diagnostic.scope_id || cell.paragraphs.some((paragraph) => paragraph.id === diagnostic.scope_id || paragraph.runs.some((run) => run.id === diagnostic.scope_id))))))) return fail(document.document_id, 'Resolved-layout diagnostics touch a table or descendant and exact table paint is unavailable')
+  if (!approximate && resolved.diagnostics.some((diagnostic) => !coveredStyleDiagnostics.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? '')) && sourceTables.some((table) => diagnostic.scope_id === table.id || table.rows.some((row) => row.cells.some((cell) => cell.id === diagnostic.scope_id || cell.paragraphs.some((paragraph) => paragraph.id === diagnostic.scope_id || paragraph.runs.some((run) => run.id === diagnostic.scope_id))))))) return fail(document.document_id, 'Resolved-layout diagnostics touch a table or descendant and exact table paint is unavailable')
   return { status: 'qualified', tables, paragraph_widths: paragraphWidths, sha256: nativeDocxTableProjectionSha256V1(tables) }
 }
 
