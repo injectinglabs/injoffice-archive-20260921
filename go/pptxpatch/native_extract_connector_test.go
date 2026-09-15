@@ -145,8 +145,6 @@ func TestExtractNativePPTXConnectorRenderingGapsAreRefusedAndPreserved(t *testin
 		{name: "unknown-arrow-type", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="star" w="med" len="med"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
 		{name: "unknown-arrow-size", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="triangle" w="huge"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
 		{name: "nonstandard-arrow-length-attribute", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: strings.Replace(exactLine, `</a:ln>`, `<a:tailEnd type="triangle" sz="med"/></a:ln>`, 1), wantCode: "pptx.connector-line-unavailable"},
-		{name: "rotation", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: exactLine, xfrmAttrs: ` rot="60000"`, wantCode: "pptx.connector-transform-unavailable"},
-		{name: "bent", geometry: `<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>`, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},
 		{name: "custom", geometry: customGeometry, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},
 		{name: "theme", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: themeLine, wantCode: "pptx.connector-line-unavailable"},
 		{name: "dash", geometry: `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line: dashedLine, wantCode: "pptx.connector-dash-unavailable"},
@@ -235,7 +233,7 @@ func TestExtractNativePPTXGroupedLateConnectorRefusalPublishesOnlyGroupCapabilit
 	t.Parallel()
 	line := nativeAutoShapeSolidLine("12700", "flat", `<a:round/>`, "123456")
 	attached := nativeConnectorXML(4, "Attached connector", `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line, "", `<a:stCxn id="2" idx="0"/>`, "", "")
-	refused := nativeConnectorXML(5, "Late bent", `<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>`, line, "", "", "", "")
+	refused := nativeConnectorXML(5, "Late non-connector preset", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, line, "", "", "", "")
 	group := `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Atomic connector group"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr>` + attached + refused + `</p:grpSp>`
 	requests := []NativePassthroughTokenRequest{}
 	issuer := nativeAtomicTestTokenFactory(NativePassthroughTokenFactoryFunc(func(request NativePassthroughTokenRequest) (string, error) {

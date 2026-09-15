@@ -23,6 +23,7 @@ import {createNativeLiteralScatterPaths} from './literalScatter.js'
 import {DRAWINGML_PATH_FILL_POLICY} from './geometryFillPolicy.js'
 import {createNativeLiteralBarPaths} from './literalBar.js'
 import { evaluatedGeometryPaths } from './evaluatedGeometry.js'
+import { CONNECTOR_PRESET_GEOMETRY_POLICY, connectorGeometryPath } from './connectorGeometry.js'
 import {createNativeLiteralDoughnutPaths} from './literalDoughnut.js'
 import {createNativeLiteralPiePaths} from './literalPie.js'
 import { qualifySymbolBullet } from './symbolBullet.js'
@@ -2040,13 +2041,19 @@ async function compileElementContent(element: NativeElement, zIndex: number, dep
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
         textBody: element.paragraphs.length || element.textBody ? await compileSourceText(element.paragraphs,nativeTextBodyBounds(element,state),element.textBody) : undefined,
       }
-    case 'connector':
+    case 'connector': {
+      // Evaluated connector-preset geometry replaces the exact straight shaft;
+      // the source affine already lives in the element transform, so the legacy
+      // anti-diagonal flag is never combined with it.
+      const geometryPaths=element.geometry?evaluatedGeometryPaths(element.geometry,(value,path)=>checkCoordinate(value,path,state.budget),`$.elements.${element.id}.geometry`,bounds=>{checkLeafBounds(bounds)}):undefined
+      if(geometryPaths)state.diagnostics.push({severity:'warning',code:'connector.presetGeometryPreview',message:`DrawingML connector preset path evaluated from source (${CONNECTOR_PRESET_GEOMETRY_POLICY}); arrowheads follow the terminal tangents of that path. Read-only preview, not Office connector routing.`,slideId:state.slide.id,elementId:element.id})
       return {
-        kind: 'connector', ...base, path: boundedPath(connectorPath(base.bounds.cx, base.bounds.cy, element.flipH ?? false), `$.elements.${element.id}.path`),
+        kind: 'connector', ...base, path: boundedPath(geometryPaths?connectorGeometryPath(geometryPaths,`$.elements.${element.id}.geometry`):connectorPath(base.bounds.cx, base.bounds.cy, element.flipH ?? false), `$.elements.${element.id}.path`),
         stroke: element.stroke ? boundedStroke(element.stroke, `$.elements.${element.id}.stroke`, state.budget) : undefined,
         headArrow: element.headArrow ?? false, tailArrow: element.tailArrow ?? false,
         ...(element.headEnd?{headEnd:{...element.headEnd}}:{}),...(element.tailEnd?{tailEnd:{...element.tailEnd}}:{}),
       }
+    }
     case 'picture': {
       if (element.compatibility.diagnostics.some((diagnostic) => diagnostic.code === 'pptx.picture-geometry-unavailable')) {
         return { kind: 'placeholder', ...base, reason: 'preserveOnly', label: 'Unsupported picture geometry preserved' }

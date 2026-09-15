@@ -37,6 +37,25 @@ it('retains typed arrow source descriptors through compile and paint without mut
  const before=JSON.stringify(deck),tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()}),surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
  expect(surface.finish()).toContainEqual(expect.objectContaining({kind:'path',tailArrow:true,tailEnd:{type:'diamond',w:'lg',len:'sm'}}));expect(JSON.stringify(deck)).toBe(before)
 })
+it('paints evaluated connector-preset geometry as the shaft with its source affine and refuses non-connector geometry',async()=>{
+ const deck=structuredClone(parsedFull),connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
+ if(connector.kind!=='connector')throw new Error('connector missing')
+ const elbow=[{kind:'moveTo' as const,x:0,y:0},{kind:'lineTo' as const,x:connector.transform.cx,y:0},{kind:'lineTo' as const,x:connector.transform.cx,y:connector.transform.cy}]
+ connector.geometry={profile:'drawingml-paths-v1',textRect:{x:0,y:0,cx:connector.transform.cx,cy:connector.transform.cy},paths:[{fillMode:'none',stroke:true,commands:elbow}]}
+ connector.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.connector-preset-preview',message:'catalog preview'}]}
+ connector.transform={...connector.transform,rotationAngle:16200000,flipV:true};delete connector.flipH
+ connector.tailArrow=true;connector.tailEnd={type:'triangle'}
+ const before=JSON.stringify(deck),tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()}),node=findNode(tree,'connector',connector.id)
+ expect(node.path).toEqual(elbow);expect(node.tailEnd).toEqual({type:'triangle'})
+ expect(node.transform).toMatchObject({aPpm:0,dPpm:0});expect(Math.abs(node.transform.bPpm??0)).toBe(1_000_000)
+ expect(tree.diagnostics.some(d=>d.code==='connector.presetGeometryPreview'&&d.elementId===connector.id&&d.message.includes('pptx.connector-preset-preview'))).toBe(true)
+ expect(tree.diagnostics.some(d=>d.code==='render.preserveOnly'&&d.elementId===connector.id)).toBe(true)
+ const surface=createRecordingPaintSurface();paintSlideRenderTree(tree,surface)
+ expect(surface.finish()).toContainEqual(expect.objectContaining({kind:'path',path:elbow,tailArrow:true}))
+ expect(JSON.stringify(deck)).toBe(before)
+ connector.geometry={...connector.geometry,paths:[{fillMode:'norm',stroke:true,commands:[...elbow,{kind:'close'}]}]}
+ await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout()})).rejects.toMatchObject({code:'native.connectorGeometry'})
+})
 const digest = 'sha256:054edec1d0211f624fed0cbca9d4f9400b0e491c43742af2c5b0abebf0c990d8' as const
 
 const manifest: NativeFontManifest = {

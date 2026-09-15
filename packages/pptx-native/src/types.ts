@@ -297,6 +297,8 @@ export interface NativeArrowEnd {
 }
 export interface NativeConnectorElement extends NativeElementBase {
   kind: 'connector'
+  /** Read-only connector-preset catalog path (pptx.connector-preset-preview); absent for the exact straight line. */
+  geometry?: NativeEvaluatedGeometry
   stroke?: NativeStroke
   headArrow?: boolean
   tailArrow?: boolean
