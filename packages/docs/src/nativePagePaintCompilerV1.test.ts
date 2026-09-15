@@ -3249,6 +3249,11 @@ describe('approximate DrawingML charts', () => {
     const ys = glyphs.flatMap(g => g.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(area.x_millipoints); expect(Math.max(...xs)).toBeLessThanOrEqual(area.x_millipoints + area.width_millipoints)
     expect(Math.min(...ys)).toBeGreaterThanOrEqual(area.y_millipoints); expect(Math.max(...ys)).toBeLessThanOrEqual(area.y_millipoints + area.height_millipoints)
+    // Chart text paints after the chart's own fills and strokes, so labels stay visible over the area fill.
+    const chartPaintIndex = Math.max(...page.commands.map((c, index) => (c.kind === 'fill_table_cell' || c.kind === 'stroke_table_border') && c.table_id === 'docx.approximate-drawing-chart-preview-v1' ? index : -1))
+    expect(Math.min(...glyphs.map(g => page.commands.indexOf(g)))).toBeGreaterThan(chartPaintIndex)
+    // Body text of the same line still precedes the chart paint in replay order.
+    expect(page.commands.findIndex(c => c.kind === 'fill_glyph_path' && c.source_id === 'run:1')).toBeLessThan(page.commands.indexOf(area))
     expect(paint.reasons).toContain(DOCX_APPROXIMATE_DRAWING_CHART_WARNING)
     expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-preview:') && r.includes('painted 1 of 1') && r.includes('2 categories x 2 series') && r.includes('value axis scale derived'))).toBe(true)
     // Calibri is not in the fixture manifest: the loaded DejaVu face substitutes and the substitution is disclosed.

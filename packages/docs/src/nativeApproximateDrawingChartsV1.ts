@@ -379,9 +379,11 @@ function firstBodyLine(pages: NativeDocxPaintPageV1[], paragraphID: string): { p
 const ORDINARY = new Set(['fill_glyph_path', 'fill_text_highlight', 'stroke_text_underline', 'paint_inline_image', 'stroke_note_separator'])
 
 /** Insert chart paint without disturbing the relative order of existing
- * commands: fills/strokes go after the behind floats (behind charts) or before
- * the front floats (everything else); glyph commands are re-sequenced so the
- * ordinary replay order still equals the concatenated line command ids. */
+ * commands. Ordinary (glyph) commands are re-sequenced so the replay order
+ * still equals the concatenated line command ids; a chart's fills and strokes
+ * go immediately before its own first glyph so its labels stay visible, or
+ * before the front floats when it has no text. Behind-text charts paint right
+ * after the behind floats. */
 function insertCommands(page: NativeDocxPaintPageV1, entries: Array<{ behind: boolean; commands: NativeDocxPagePaintCommandV1[] }>, removed: Set<string>): void {
   const kept = page.commands.filter(command => !removed.has(command.id))
   if (entries.length === 0 && kept.length === page.commands.length) return
@@ -396,11 +398,19 @@ function insertCommands(page: NativeDocxPaintPageV1, entries: Array<{ behind: bo
   const frontFloatsStart = others.findIndex(command => command.kind === 'paint_floating_image' && command.layer === 'front')
   const behindAt = behindFloatsEnd < 0 ? others.length : behindFloatsEnd
   const frontAt = frontFloatsStart < 0 ? others.length : frontFloatsStart
-  const behind: NativeDocxPagePaintCommandV1[] = [], front: NativeDocxPagePaintCommandV1[] = []
-  for (const entry of entries) for (const command of entry.commands) if (!ORDINARY.has(command.kind)) (entry.behind ? behind : front).push(command)
   const sequenced: NativeDocxPagePaintCommandV1[] = []
   for (const line of page.lines) for (const id of line.command_ids) { const command = ordinary.get(id); if (command) sequenced.push(command) }
-  const ordinaryAt = firstOrdinary < 0 ? Math.max(behindAt, Math.min(frontAt, others.findIndex(command => command.kind === 'stroke_table_border') < 0 ? frontAt : others.findIndex(command => command.kind === 'stroke_table_border'))) : firstOrdinary
+  const behind: NativeDocxPagePaintCommandV1[] = [], front: NativeDocxPagePaintCommandV1[] = []
+  for (const entry of entries) {
+    const paint = entry.commands.filter(command => !ORDINARY.has(command.kind))
+    if (entry.behind) { behind.push(...paint); continue }
+    const glyphIDs = new Set(entry.commands.filter(command => ORDINARY.has(command.kind)).map(command => command.id))
+    const at = sequenced.findIndex(command => glyphIDs.has(command.id))
+    if (at < 0) front.push(...paint)
+    else sequenced.splice(at, 0, ...paint)
+  }
+  const firstBorder = others.findIndex(command => command.kind === 'stroke_table_border')
+  const ordinaryAt = firstOrdinary >= 0 ? firstOrdinary : Math.max(behindAt, Math.min(frontAt, firstBorder < 0 ? frontAt : firstBorder))
   const output: NativeDocxPagePaintCommandV1[] = []
   for (const [index, command] of others.entries()) {
     if (index === behindAt) output.push(...behind)
