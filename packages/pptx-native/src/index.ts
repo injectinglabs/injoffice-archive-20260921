@@ -3,6 +3,7 @@ export { canonicalizeNativePptx, stringifyNativePptx } from './canonical'
 export { decodeNativePptxTableInspection, createNativePptxTableGeometryPreview } from './tableInspection'
 export type { NativePptxTablePaint, NativePptxTableGeometryPreview, NativePptxTableGeometrySlide, NativePptxTableGeometryCell, NativePptxInspectionRect, NativePptxInspectedCell, NativePptxInspectedTable, NativePptxTableOmission, NativePptxTableInspection } from './tableInspection'
 export { assertNativePptx, validateNativePptx } from './validate'
+export { PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE, PPTX_TABLE_BUILTIN_STYLE_POLICY } from './tableBuiltinStyle'
 export type { NativeValidationIssue } from './validate'
 export {
   PPTX_NATIVE_CONTRACT_VERSION,

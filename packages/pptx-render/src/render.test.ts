@@ -510,6 +510,41 @@ describe('native PPTX RenderTree', () => {
     expect(readFileSync(resolve(root, 'packages/pptx-render/src/paint.ts'), 'utf8')).not.toMatch(/\b(?:document|window|HTMLElement|innerHTML|DOMParser)\b/)
   })
 
+  it('paints text-free built-in table style preview cells as fills with uniform borders and no glyphs', async () => {
+    // Shape of the Go extractor's read-only catalog projection: legacy cells
+    // with empty text, a resolved fill and the uniform 1pt lt1 border.
+    const cell = (fill: string) => ({ text: '', fill, border: { color: 'FFFFFF', widthEmu: 12_700 } })
+    const table: Extract<NativeElement, { kind: 'table' }> = {
+      kind: 'table', id: 'styled-table', provenance: 'authored',
+      transform: { x: 100_000, y: 200_000, cx: 400_000, cy: 400_000 },
+      table: {
+        columnWidths: [200_000, 200_000], rowHeights: [200_000, 200_000],
+        rows: [[cell('000000'), cell('000000')], [cell('CBCBCB'), cell('CBCBCB')]],
+      },
+      passthrough: [], compatibility: { status: 'editable', diagnostics: [] },
+    }
+    const tree = await compileNativePptxSlide(authoredDeck([table]), 0, { textLayout: textLayout() })
+    const node = findNode(tree, 'table', table.id)
+    expect(node.cells.map((item) => item.fill?.color)).toEqual(['000000', '000000', 'CBCBCB', 'CBCBCB'])
+    expect(node.cells.map((item) => item.bounds)).toEqual([
+      { x: 0, y: 0, cx: 200_000, cy: 200_000 }, { x: 200_000, y: 0, cx: 200_000, cy: 200_000 },
+      { x: 0, y: 200_000, cx: 200_000, cy: 200_000 }, { x: 200_000, y: 200_000, cx: 200_000, cy: 200_000 },
+    ])
+    for (const item of node.cells) expect(item.border).toMatchObject({ color: 'FFFFFF', widthEmu: 12_700 })
+    const recording = createRecordingPaintSurface()
+    paintSlideRenderTree(tree, recording)
+    const commands = recording.finish()
+    const paths = commands.filter((command) => command.kind === 'path')
+    expect(paths).toHaveLength(4)
+    expect(paths[0]).toMatchObject({ kind: 'path', sourceElementId: 'styled-table', fill: '000000', stroke: { color: 'FFFFFF', widthEmu: 12_700 } })
+    expect(paths[3]).toMatchObject({ kind: 'path', fill: 'CBCBCB' })
+    // Legacy cells shape their (empty) text; nothing visible may be emitted.
+    for (const command of commands) if (command.kind === 'glyphRun') expect(command.run.text).toBe('')
+    const lastFill = commands.findIndex((command) => command.kind === 'path' && command.fill === 'CBCBCB')
+    const firstGlyph = commands.findIndex((command) => command.kind === 'glyphRun')
+    if (firstGlyph !== -1) expect(firstGlyph).toBeGreaterThan(lastFill)
+  })
+
   it('keeps nested native group projection renderer-neutral and composes source order without group clipping', async () => {
     const nested: NativeElement = {
       kind: 'group', id: 'outer-native-group', provenance: 'authored',
