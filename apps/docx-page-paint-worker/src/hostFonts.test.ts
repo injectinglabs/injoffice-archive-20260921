@@ -63,4 +63,33 @@ describe('operator-owned DOCX fonts',()=>{
   await expect(loadHostFonts(input(),'relative.json')).rejects.toThrow(/absolute/)
   await expect(loadHostFonts(input(),config([{...entry,extra:true}]))).rejects.toThrow(/Invalid/)
  })
+ it('keeps strict missing-face refusal and substitutes only loaded host faces on the approximate path',async()=>{
+  const value=input(),inventory=JSON.parse(value.font_inventory_json)
+  inventory.references=[{...inventory.references[0],family:'Candara'},{...inventory.references[0],family:'Trebuchet MS',scope_ids:['paragraph:2']}]
+  inventory.inventory_sha256='';inventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(inventory)
+  value.font_inventory_json=encodeNativeDOCXFontInventoryV1(inventory)
+  const p=config([entry])
+  await expect(loadHostFonts(value,p)).rejects.toThrow(/Exact configured font unavailable: Candara \/ 400 \/ normal, Trebuchet MS \/ 400 \/ normal/)
+  await expect(loadHostFonts(value,config([]),'approximate')).rejects.toThrow(/Exact configured font unavailable/)
+  const fonts=await loadHostFonts(value,p,'approximate')
+  expect(fonts.substitutionPolicy).toBeUndefined()
+  expect(fonts.manifest.faces.some(face=>face.family==='Calibri')).toBe(false)
+  expect(fonts.approximateSubstitutions).toEqual([
+   expect.objectContaining({source_family:'Candara',selected_family:'DejaVu Sans',reason:'loaded-host-manifest-face-v1'}),
+   expect.objectContaining({source_family:'Trebuchet MS',selected_family:'DejaVu Sans',reason:'loaded-host-manifest-face-v1'}),
+  ])
+  const candara={version:1 as const,text:'Linked',fontSizeMilliPoints:10000,font:{families:['Candara'],weight:400,style:'normal' as const,stretch:100},script:'Latn',language:'en',direction:'ltr' as const}
+  const selected=await fonts.resolver.resolve({manifest:fonts.manifest,run:candara})
+  if(!('face' in selected))throw new Error('Expected loaded host substitute')
+  expect(selected.face).toMatchObject({matchedFamily:'Candara',family:'DejaVu Sans',resolution:'exact',contentDigest:sha256})
+  expect(await fonts.resolver.load(selected.face)).toHaveProperty('bytes')
+  const unused=config([entry,{...entry,family:'Unused',path:'/nonexistent/unreferenced.ttf'}])
+  const reused=await loadHostFonts(value,unused,'approximate')
+  expect(reused.approximateSubstitutions?.every(record=>record.selected_family==='DejaVu Sans')).toBe(true)
+  const italic=structuredClone(value),italicInventory=JSON.parse(italic.font_inventory_json)
+  italicInventory.references=[{...italicInventory.references[0],family:'Candara',style:'italic'}]
+  italicInventory.inventory_sha256='';italicInventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(italicInventory)
+  italic.font_inventory_json=encodeNativeDOCXFontInventoryV1(italicInventory)
+  await expect(loadHostFonts(italic,p,'approximate')).rejects.toThrow(/Candara \/ 400 \/ italic/)
+ })
 })
