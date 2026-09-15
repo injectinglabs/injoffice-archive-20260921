@@ -287,8 +287,12 @@ function validateElement(
     add(issues, `${path}.source.partName`, 'native.sourcePart', 'parsed elements must be anchored to their owning slide part')
   }
   validateCompatibility(element.compatibility, `${path}.compatibility`, issues)
-  for(const diagnostic of element.compatibility.diagnostics){if(diagnostic.code==='pptx.source-inherited-text-approximate'&&(element.provenance!=='parsed'||!element.source||element.compatibility.status==='editable'||diagnostic.severity!=='warning'))add(issues,`${path}.compatibility`,'native.inheritedTextApproximation','inherited text approximation requires parsed source and explicit read-only warning')
-    if(diagnostic.code===PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE&&(element.kind!=='table'||element.provenance!=='parsed'||!element.source||element.compatibility.status==='editable'||diagnostic.severity!=='warning'))add(issues,`${path}.compatibility`,'native.tableStylePreview','built-in table style preview requires a parsed source table with read-only status and explicit warning')}
+  for(const diagnostic of element.compatibility.diagnostics){
+    const readOnlyPreview=element.provenance==='parsed'&&element.source!==undefined&&element.compatibility.status!=='editable'&&diagnostic.severity==='warning'
+    if((diagnostic.code==='pptx.source-inherited-text-approximate'||diagnostic.code==='pptx.inherited-text-properties-omitted'||diagnostic.code==='pptx.placeholder-inheritance-approximate')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.inheritedTextApproximation','inherited text approximation requires parsed source and explicit read-only warning')
+    if((diagnostic.code==='pptx.autofit-authored-scale-approximate'||diagnostic.code==='pptx.text-columns-single-column-approximate')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.autofitApproximation','authored autofit approximation requires parsed source and explicit read-only warning')
+    if(diagnostic.code===PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE&&(element.kind!=='table'||!readOnlyPreview))add(issues,`${path}.compatibility`,'native.tableStylePreview','built-in table style preview requires a parsed source table with read-only status and explicit warning')
+  }
   validateAnimation(element.animation, `${path}.animation`, issues)
   let worst = element.compatibility.status
 

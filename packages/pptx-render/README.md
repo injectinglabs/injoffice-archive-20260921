@@ -244,6 +244,12 @@ marked `shape-source-frame` text bodies. Without it, those bodies remain refused
 even when `lineLayoutPolicy` is set. Opted-in bodies report
 `fidelity: 'approximateSourceFrame'` and a warning; they use the original frame
 without resizing and do not qualify Office-equivalent layout or editing rights.
+Under the same Go-side opt-in the extractor may also deliver run sizes already
+scaled by an authored `a:normAutofit` `fontScale`, and multi-column bodies as one
+column; those elements arrive with `textBody.autoFit: 'none'` plus the
+`pptx.autofit-authored-scale-approximate` / `pptx.text-columns-single-column-approximate`
+compatibility warnings, which the renderer copies into its diagnostics and the
+preview worker gates behind `source_frame_autofit_preview`.
 
 Source-explicit unmerged table cells retain top, center, and bottom vertical
 anchors. Center/bottom painting requires the explicit `max-run-natural-v1`
