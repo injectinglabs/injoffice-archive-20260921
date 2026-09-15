@@ -66,7 +66,7 @@ func nativeDiagramLayoutRefuse(code, message string) error {
 	return refuseNativeDiagram(code, message)
 }
 
-// parseNativeDiagramModel builds the data tree from dgm:dataModel (§21.4.3.1).
+// parseNativeDiagramModel builds the data tree from dgm:dataModel (§21.4.2.10).
 func parseNativeDiagramModel(root *nativeXMLNode, diagramNS string, dialect nativeExtractDialect) (*nativeDiagramModel, error) {
 	refuse := func(message string) (*nativeDiagramModel, error) {
 		return nil, nativeDiagramLayoutRefuse(nativeDiagramLayoutDataCode, message)
@@ -211,10 +211,16 @@ func parseNativeDiagramModel(root *nativeXMLNode, diagramNS string, dialect nati
 			stack = append(stack, child)
 		}
 	}
+	// Every node/asst point must be reachable from the document point; a
+	// closed parOf cycle gives every member a parent but never reaches doc.
+	nodes := 0
 	for _, point := range model.points {
-		if (point.kind == "node" || point.kind == "asst") && point.parent == nil {
-			return refuse("diagram node point is not connected to the document point")
+		if point.kind == "node" || point.kind == "asst" {
+			nodes++
 		}
+	}
+	if reached != nodes+1 {
+		return refuse("diagram node points are not all connected to the document point (orphans or a closed cycle)")
 	}
 	return model, nil
 }
@@ -303,9 +309,11 @@ func nativeDiagramPointTypeMatches(ptType string, point *nativeDiagramPoint) boo
 	return false
 }
 
-// siblingSequence lists the parent's children with their transitions in the
-// order [parTrans, node, sibTrans] so precedSib/followSib with ptType parTrans
-// reach the connection points of the context node (§21.4.7.6).
+// nativeDiagramSiblingSequence lists the parent's children with their
+// transitions in the order [parTrans, node, sibTrans]. §21.4.7.6 does not place
+// transitions among siblings; this inferred order is what makes the layout
+// idiom precedSib ptType="parTrans" st="-1" cnt="1" reach the connection
+// point of the context node, and it is disclosed in the group diagnostic.
 func nativeDiagramSiblingSequence(parent *nativeDiagramPoint) []*nativeDiagramPoint {
 	sequence := make([]*nativeDiagramPoint, 0, len(parent.children)*3)
 	for _, child := range parent.children {
@@ -887,8 +895,8 @@ func parseNativeDiagramConstraint(node *nativeXMLNode, diagramNS string) (native
 			return constraint, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint attribute "+attr.Name.Local+" is unknown")
 		}
 	}
-	if constraint.typ == "" || constraint.typ == "none" {
-		return constraint, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint has no type")
+	if !nativeDiagramConstraintTypeModeled(constraint.typ) || (constraint.refType != "" && !nativeDiagramConstraintTypeModeled(constraint.refType)) {
+		return constraint, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint type "+constraint.typ+" is not consumed by the layout subset")
 	}
 	switch constraint.op {
 	case "", "none", "equ", "gte", "lte":
@@ -896,6 +904,18 @@ func parseNativeDiagramConstraint(node *nativeXMLNode, diagramNS string) (native
 		return constraint, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint operator "+constraint.op+" is unknown")
 	}
 	return constraint, nil
+}
+
+// nativeDiagramConstraintTypeModeled lists the ST_ConstraintType values
+// (§21.4.7.21) the algorithms consume, plus the pure user variables. Offset,
+// diameter, connection-distance and font-size types the subset does not apply
+// refuse so a layout relying on them is never laid out differently.
+func nativeDiagramConstraintTypeModeled(typ string) bool {
+	switch typ {
+	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "alignOff", "bendDist", "begPad", "endPad", "primFontSz", "lMarg", "rMarg", "tMarg", "bMarg":
+		return true
+	}
+	return len(typ) == 5 && strings.HasPrefix(typ, "user") && typ[4] >= 'A' && typ[4] <= 'Z'
 }
 
 func nativeDiagramParseFloat(value string) (float64, error) {
@@ -925,7 +945,11 @@ func parseNativeDiagramRule(node *nativeXMLNode, diagramNS string) (nativeDiagra
 				return rule, err
 			}
 			rule.val = value
-		case "type", "for", "forName", "ptType":
+		case "type":
+		case "for", "forName", "ptType":
+			if attr.Value != "" && attr.Value != "self" {
+				return rule, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram rules targeting other layout nodes are not modeled")
+			}
 		case "fact", "max":
 			if attr.Value != "NaN" {
 				return rule, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram rule factors are not modeled")

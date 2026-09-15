@@ -510,3 +510,90 @@ func TestExtractNativePPTXDiagramLayoutBudgetsAreBounded(t *testing.T) {
 	}
 	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{extraPts: points.String(), extraCxn: connections.String()}, nativeDiagramLayoutBudgetCode)
 }
+
+func TestExtractNativePPTXDiagramLayoutRefusesReviewedAdversarialInputs(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramLayoutLayoutXML(nativeDiagramURITransitional)
+	// A gigantic primFontSz must refuse instead of spinning the fitter.
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:constr type="primFontSz" val="65"/>`, `<dgm:constr type="primFontSz" val="100000000000"/>`, -1)}, nativeDiagramLayoutConstraintCode)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`, `<dgm:rule type="primFontSz" val="900" fact="NaN" max="NaN"/>`, -1)}, nativeDiagramLayoutConstraintCode)
+	// A closed parOf cycle disconnected from the document point.
+	cycle := nativeDiagramLayoutPointXML("{CA}", "", "Loop A") + nativeDiagramLayoutPointXML("{CB}", "", "Loop B")
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{extraPts: cycle, extraCxn: `<dgm:cxn modelId="{CC1}" srcId="{CA}" destId="{CB}" srcOrd="0" destOrd="0"/><dgm:cxn modelId="{CC2}" srcId="{CB}" destId="{CA}" srcOrd="0" destOrd="0"/>`}, nativeDiagramLayoutDataCode)
+	// Shapes nested under sp/tx nodes are refused, not dropped.
+	nested := strings.Replace(layout, `<dgm:layoutNode name="rootConnector1" styleLbl="node1" moveWith="rootText1"><dgm:alg type="sp"/><dgm:shape type="rect" hideGeom="1"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node" cnt="1"/><dgm:constrLst/><dgm:ruleLst/>`,
+		`<dgm:layoutNode name="rootConnector1" styleLbl="node1" moveWith="rootText1"><dgm:alg type="sp"/><dgm:shape type="rect" hideGeom="1"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node" cnt="1"/><dgm:constrLst/><dgm:ruleLst/><dgm:layoutNode name="hidden" styleLbl="node1"><dgm:alg type="sp"/><dgm:shape type="ellipse"><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/></dgm:layoutNode>`, 1)
+	if nested == layout {
+		t.Fatal("layout fixture drifted")
+	}
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: nested}, nativeDiagramLayoutAlgorithmCode)
+	// Constraint types the subset does not consume, and rules aimed at other nodes.
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:constr type="alignOff"/>`, `<dgm:constr type="alignOff"/><dgm:constr type="wOff" val="10"/>`, 1)}, nativeDiagramLayoutConstraintCode)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`, `<dgm:rule type="primFontSz" for="ch" forName="rootText1" val="5" fact="NaN" max="NaN"/>`, 1)}, nativeDiagramLayoutConstraintCode)
+}
+
+func TestExtractNativePPTXDiagramLayoutHiddenConnectorsAreNotEmitted(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramLayoutLayoutXML(nativeDiagramURITransitional)
+	marker := `<dgm:layoutNode name="Name111" styleLbl="parChTrans1D2">`
+	index := strings.Index(layout, marker)
+	if index < 0 {
+		t.Fatal("layout fixture drifted")
+	}
+	tail := strings.Replace(layout[index:], `<dgm:shape type="conn" zOrderOff="-99999">`, `<dgm:shape type="conn" zOrderOff="-99999" hideGeom="1">`, 1)
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{layout: layout[:index] + tail}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	connectors := 0
+	for _, child := range group.Children {
+		if child.Kind == NativeElementKindConnector {
+			connectors++
+		}
+	}
+	if len(group.Children) != 7 || connectors != 2 {
+		t.Fatalf("hidden assistant connector must not paint: %d children, %d connectors", len(group.Children), connectors)
+	}
+}
+
+// hierAlign tL is laid out as a hanging block below the root (declared
+// deviation from the §21.4.7.36 above-the-parent wording): a grandchild under
+// Employee hangs left-aligned at alignOff x width below its parent.
+func TestExtractNativePPTXDiagramLayoutHangingLeafChildrenDeclareTheTLDeviation(t *testing.T) {
+	t.Parallel()
+	extraPts := nativeDiagramLayoutPointXML("{GC}", "", "Intern") + nativeDiagramLayoutPointXML("{GC-PT}", "parTrans", "") + nativeDiagramLayoutPointXML("{GC-ST}", "sibTrans", "") +
+		nativeDiagramLayoutPresPointXML("{P-GC}", "{GC}", "rootText", "node2")
+	extraCxn := `<dgm:cxn modelId="{C7}" srcId="{EMP}" destId="{GC}" srcOrd="0" destOrd="0" parTransId="{GC-PT}" sibTransId="{GC-ST}"/>`
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{extraPts: extraPts, extraCxn: extraCxn}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if !strings.Contains(group.Compatibility.Diagnostics[0].Message, "tL/tR laid out as hanging blocks below the root") {
+		t.Fatalf("tL deviation is not disclosed: %s", group.Compatibility.Diagnostics[0].Message)
+	}
+	shapes := map[string]NativeElement{}
+	connectors := 0
+	for _, child := range group.Children {
+		if child.Kind == NativeElementKindConnector {
+			connectors++
+			continue
+		}
+		shapes[nativeDiagramLayoutChildText(child)] = child
+	}
+	employee, intern := shapes["Employee"], shapes["Intern"]
+	if len(shapes) != 6 || connectors != 4 || employee.ID == "" || intern.ID == "" {
+		t.Fatalf("expected six shapes and four connectors: %d shapes, %d connectors", len(shapes), connectors)
+	}
+	width := float64(*employee.Transform.Cx)
+	if dx := float64(*intern.Transform.X - *employee.Transform.X); dx < 0.25*width-2 || dx > 0.25*width+2 {
+		t.Fatalf("hanging child left edge must sit alignOff x width right of its parent: dx=%v width=%v", dx, width)
+	}
+	if dy := float64(*intern.Transform.Y - (*employee.Transform.Y + *employee.Transform.Cy)); dy < 0.21*width-2 || dy > 0.21*width+2 {
+		t.Fatalf("hanging child must sit sp below its parent: dy=%v width=%v", dy, width)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid deck: %#v", issues)
+	}
+}

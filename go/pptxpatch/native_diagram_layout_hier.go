@@ -13,7 +13,12 @@ import (
 //   - composite places children by their l/t/r/b/w/h constraints;
 //   - hierRoot stacks its root shape, then assistant blocks, then regular
 //     child blocks, separated by the sp constraint, aligned by hierAlign
-//     (bCtrCh default; tL/tR/bL/bR; alignOff as a fraction of the root width);
+//     (bCtrCh default; bCtrDes/bL/bR; alignOff as a fraction of the root
+//     width). DEVIATION: §21.4.7.36 describes tL/tR as children placed above
+//     the parent; orgChart1 selects tL with alignOff for shallow subtrees to
+//     hang leaf children below their parent, so tL/tR are laid out BELOW the
+//     root, left/right edge offset by alignOff x root width. This is declared
+//     in the group diagnostic;
 //   - hierChild lays out its child subtrees along linDir separated by sibSp,
 //     or in two hanging columns around a trunk line (secLinDir/secChAlign);
 //   - the finished tree is scaled uniformly to fit the frame and centered;
@@ -33,7 +38,10 @@ const (
 	nativeDiagramTextLineHeightFactor  = 1.2
 	nativeDiagramDefaultPrimFontSizePt = 65.0
 	nativeDiagramMinimumFontSizePt     = 5.0
-	nativeDiagramPointEMU              = 12700.0
+	// nativeDiagramMaxFontSizePt bounds primFontSz and rule minimums; larger
+	// values refuse before any fitting happens.
+	nativeDiagramMaxFontSizePt = 400.0
+	nativeDiagramPointEMU      = 12700.0
 )
 
 type nativeDiagramRect struct {
@@ -68,6 +76,9 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 	node.laidOut = true
 	switch node.alg {
 	case "", "sp", "tx":
+		if len(node.children) != 0 {
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout nodes nested under sp, tx or algorithm-less nodes are not laid out")
+		}
 		node.rect = nativeDiagramRect{0, 0, width, height}
 		node.blockW, node.blockH, node.anchorX = width, height, width/2
 		node.rootLeft, node.rootRight = 0, width
@@ -541,15 +552,23 @@ func nativeDiagramTextFits(paragraphs [][]string, fontPt, width, height float64)
 }
 
 // nativeDiagramFitFontSize returns the largest whole point size in
-// [minimum, maximum] whose wrapped text fits the box, else the minimum.
+// [minimum, maximum] whose wrapped text fits the box, else the minimum. Fit
+// is monotone in the size, so a binary search over the bounded range needs
+// at most a few probes; callers refuse sizes above nativeDiagramMaxFontSizePt.
 func nativeDiagramFitFontSize(paragraphs [][]string, maximum, minimum, width, height float64) int64 {
-	if maximum < minimum {
-		maximum = minimum
+	low := int64(math.Max(1, math.Ceil(minimum)))
+	high := int64(math.Floor(math.Min(maximum, nativeDiagramMaxFontSizePt)))
+	if high < low {
+		return low
 	}
-	for size := math.Floor(maximum); size >= minimum; size-- {
-		if nativeDiagramTextFits(paragraphs, size, width, height) {
-			return int64(size)
+	best := low
+	for probes := 0; low <= high && probes < 16; probes++ {
+		mid := low + (high-low)/2
+		if nativeDiagramTextFits(paragraphs, float64(mid), width, height) {
+			best, low = mid, mid+1
+		} else {
+			high = mid - 1
 		}
 	}
-	return int64(math.Max(1, math.Ceil(minimum)))
+	return best
 }

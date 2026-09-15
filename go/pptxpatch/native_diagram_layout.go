@@ -27,7 +27,7 @@ const (
 	contentTypeDiagramStyle  = "application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml"
 	contentTypeDiagramColors = "application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml"
 
-	nativeDiagramLayoutGroupMessage = "SmartArt laid out from the diagram data, layout, quick style and color parts (" + nativeDiagramLayoutPolicy + "): composite, hierRoot, hierChild, sp, tx and conn algorithms evaluated from the layout definition with declared defaults (uniform fit-to-frame scaling and centering, assistant blocks above regular children, bCtrCh alignment, average-advance text fitting at 0.5 em per glyph and 1.2 line height, right-angle connector routing); effects, 3D and image fills are omitted, PowerPoint's cached presentation graph is not used, and the frame remains read-only"
+	nativeDiagramLayoutGroupMessage = "SmartArt laid out from the diagram data, layout, quick style and color parts (" + nativeDiagramLayoutPolicy + "): composite, hierRoot, hierChild, sp, tx and conn evaluated from the layout definition (ECMA-376 §21.4) with declared approximations: uniform fit-to-frame scaling and centering; hierRoot stacks assistant blocks above regular children with bCtrCh default alignment, alignOff as a fraction of the root width, and hierAlign tL/tR laid out as hanging blocks below the root (deviating from the §21.4.7.36 above-the-parent text); hanging trunk gap sibSp/2; connectors as right-angle bends picking the nearest offered end site, bending at the midpoint when no bendDist constraint exists; text fitted with an average-advance model (0.5 em per glyph, 1.2 line height); siblings ordered [parTrans, node, sibTrans] for transition axes; maxDepth measured relative to the context point and depth from the first selected point; constraint references read the first referenced node; constraint types outside the consumed set refuse; budgets 256 points, layout depth 32, 2048 presentation nodes, 65536 selections, 4096 constraint evaluations. Cached presOf/presParOf connections are skipped while the authored presStyleLbl and presLayoutVars of presentation points are honored; effects, 3D and image fills are omitted; the frame remains read-only"
 	nativeDiagramLayoutChildMessage = "diagram element positioned by the approximate layout evaluation (" + nativeDiagramLayoutPolicy + "); target remains read-only"
 )
 
@@ -419,7 +419,7 @@ func (extractor *nativeExtractor) extractNativeDiagramLayoutGraphicFrame(node, g
 	var collect func(current *nativeDiagramPresNode)
 	collect = func(current *nativeDiagramPresNode) {
 		equalize = append(equalize, current.equalize...)
-		if current.hasShape && current.shapeType != "" && !current.hideGeom && current.laidOut || current.isConnector() && current.hasShape {
+		if current.hasShape && current.shapeType != "" && !current.hideGeom && (current.laidOut || current.isConnector()) {
 			items = append(items, &nativeDiagramLayoutItem{node: current, order: len(items), index: counts[current.styleLbl]})
 			counts[current.styleLbl]++
 		}
@@ -456,6 +456,9 @@ func (extractor *nativeExtractor) extractNativeDiagramLayoutGraphicFrame(node, g
 			if rule.typ == "primFontSz" && rule.val > 0 {
 				minimum = rule.val
 			}
+		}
+		if maximum > nativeDiagramMaxFontSizePt || minimum > nativeDiagramMaxFontSizePt || maximum < 0 || minimum < 0 {
+			return NativeElement{}, refuseNativeDiagram(nativeDiagramLayoutConstraintCode, "diagram primary font size constraint is outside the bounded range")
 		}
 		if minimum < nativeDiagramMinimumFontSizePt {
 			minimum = nativeDiagramMinimumFontSizePt
