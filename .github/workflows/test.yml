@@ -1,6 +1,7 @@
 name: Test
 
 # Every TypeScript package and Go module, with no private services or secrets.
+# Only the fast gates run here; see main-audit.yml for the post-merge audit.
 
 on:
   push:
@@ -17,14 +18,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Fast gates only. Slow and audit-style checks run after merge in
+  # .github/workflows/main-audit.yml; run them locally before opening a PR
+  # (CONTRIBUTING.md, "Rendering and browser qualification").
   ts-packages:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # native-office-completion reads pinned baseline SHA 420424b via git show/ls-tree
-          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -39,37 +40,40 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run check:docs-api
-      - name: XLSX read-only source grids in Chrome
-        timeout-minutes: 4
-        env:
-          VITE_INJOFFICE_API_BASE: ''
-        run: |
-          npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
-          SHOWCASE_OUTPUT="$GITHUB_WORKSPACE/artifacts/xlsx-rich-source" node scripts/smoke-xlsx-source-style-browser.mjs --rich --skip-build &
-          xlsx_rich_source_pid=$!
-          xlsx_source_status=0
-          wait "$xlsx_rich_source_pid" || xlsx_source_status=1
-          exit "$xlsx_source_status"
-      - name: XLSX rich source grid screenshots
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: xlsx-rich-source-browser
-          path: artifacts/xlsx-rich-source
-          if-no-files-found: ignore
-      - name: Qualification harness unit tests
-        run: |
-          test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
-          go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
-          node --test scripts/showcase-smoke-server.test.mjs
-          node --test scripts/qualify-rendering-corpus.test.mjs
-      - run: npm run test
-      - run: npm run check:office-architecture
-      - run: npm run check:office-provenance
-      - run: npm run qualify:office-reproducibility
-      - run: npm run check:native-office-completion
+      - run: npm run check:unicode13
+      - run: npm run check:typescript-version
+      - run: npm run test:dependency-integrity
+      - run: npm run test:declaration-specifiers
       - run: npm run check:packages
-      - run: npm run check:consumer
+      - name: Every workspace test script is assigned to a ts-tests shard
+        run: node scripts/run-ci-test-shard.mjs --check
+
+  ts-tests:
+    name: ts-tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Shard contents live in scripts/ci-test-shards.json; ts-packages
+        # fails if a workspace with a test script is missing from every shard.
+        shard: [docs, pdf-workers, office, core]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # test:native-office-completion (core shard) reads pinned baseline SHA 420424b via git show/ls-tree
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.23'
+          cache: false
+      - run: npm ci
+      - name: Build prerequisites and run the shard
+        run: node scripts/run-ci-test-shard.mjs ${{ matrix.shard }}
 
   go-modules:
     runs-on: ubuntu-latest
@@ -216,6 +220,7 @@ jobs:
     if: always()
     needs:
       - ts-packages
+      - ts-tests
       - go-modules
       - xlsx-wasm-contract
       - docx-wasm-contract
@@ -227,6 +232,7 @@ jobs:
       - name: Require every validation job to pass
         env:
           TS_PACKAGES: ${{ needs.ts-packages.result }}
+          TS_TESTS: ${{ needs.ts-tests.result }}
           GO_MODULES: ${{ needs.go-modules.result }}
           XLSX_WASM: ${{ needs.xlsx-wasm-contract.result }}
           DOCX_WASM: ${{ needs.docx-wasm-contract.result }}
@@ -235,6 +241,7 @@ jobs:
         run: |
           for result in \
             "$TS_PACKAGES" \
+            "$TS_TESTS" \
             "$GO_MODULES" \
             "$XLSX_WASM" \
             "$DOCX_WASM" \

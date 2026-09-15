@@ -1,7 +1,10 @@
 name: PPTX graphic frame qualification
 
 on:
-  pull_request:
+  # Not a merge gate: runs after merge to main (and on demand) so PR runners
+  # stay free for the required "CI required" aggregate in test.yml.
+  push:
+    branches: [main]
     paths:
       - '.github/workflows/pptx-graphic-frame-qualification.yml'
       - 'scripts/smoke-pptx-graphic-frames-browser.mjs'

@@ -1,0 +1,75 @@
+name: Main audit
+
+# Slow and audit-style checks that used to run inside the required PR job.
+# They still run on every push to main (and on demand) so each deployable SHA
+# receives a complete result; PRs run the fast gates in test.yml and are
+# expected to run these locally (see CONTRIBUTING.md, "Rendering and browser
+# qualification"). Nothing here was removed from the repository, only moved.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Main runs are kept so every SHA receives a complete audit result.
+  cancel-in-progress: false
+
+jobs:
+  office-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # native-office-completion reads pinned baseline SHA 420424b via git show/ls-tree
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.23'
+          # Go modules in this repository have no external dependencies, and
+          # there is no root go.mod for setup-go's default cache discovery.
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - name: XLSX read-only source grids in Chrome
+        timeout-minutes: 4
+        env:
+          VITE_INJOFFICE_API_BASE: ''
+        run: |
+          npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+          SHOWCASE_OUTPUT="$GITHUB_WORKSPACE/artifacts/xlsx-rich-source" node scripts/smoke-xlsx-source-style-browser.mjs --rich --skip-build &
+          xlsx_rich_source_pid=$!
+          xlsx_source_status=0
+          wait "$xlsx_rich_source_pid" || xlsx_source_status=1
+          exit "$xlsx_source_status"
+      - name: XLSX rich source grid screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: xlsx-rich-source-browser
+          path: artifacts/xlsx-rich-source
+          if-no-files-found: ignore
+      - name: Qualification harness unit tests
+        run: |
+          test -s node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf
+          go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
+          node --test scripts/showcase-smoke-server.test.mjs
+          node --test scripts/qualify-rendering-corpus.test.mjs
+      - run: npm run test:chrome-cdp-startup
+      - run: npm run test:release-packages
+      - run: npm run check:office-architecture
+      - run: npm run check:office-provenance
+      - run: npm run qualify:office-reproducibility
+      - run: npm run check:native-office-production-e2e
+      - run: npm run test:native-office-production-e2e
+      - run: npm run check:native-office-completion
+      - run: npm run check:consumer
