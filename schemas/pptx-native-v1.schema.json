@@ -1710,6 +1710,7 @@
         "provenance": { "$ref": "#/$defs/provenance" },
         "name": { "type": "string", "maxLength": 1024 },
         "transform": { "$ref": "#/$defs/transform" },
+        "geometry": { "$ref": "#/$defs/evaluatedGeometry" },
         "stroke": { "$ref": "#/$defs/stroke" },
         "headArrow": { "type": "boolean" },
         "tailArrow": { "type": "boolean" },
