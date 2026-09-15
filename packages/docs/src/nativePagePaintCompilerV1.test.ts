@@ -37,6 +37,7 @@ import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPre
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } from './nativeAbsentFontSizeV1.js'
 import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, decodeNativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
+import { DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING } from './nativePaginationV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -575,7 +576,8 @@ describe('native DOCX page-paint compiler v1', () => {
     const tableInput = tableFixture()
     const tableResolved = tableInput.resolved_layout as NativeDocxResolvedLayoutInputV1
     delete tableResolved.paragraphs[0]!.paragraph_mark_properties!.font_size_half_points
-    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 22 })).toThrow('scope anchor')
+    expect(projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 22 }).applied).toEqual([{ ...absent[0], chosen_half_points: 22 }])
+    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, [{ ...absent[0]!, path: '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[2]' }], { kind: 'host-default-size-v1', half_points: 22 })).toThrow('scope anchor')
     const strict = await prepareNativeDocxPagePaintV1(input)
     expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
   }, 20000)
@@ -2971,6 +2973,29 @@ describe('source-anchored textbox page composition',()=>{
   }
  },15000)
 
+
+  it('shapes an indented table-cell paragraph only in the approximate preview and declares the cell line-box policy', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1, settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    const paragraph = document.body.blocks[0]!.table!.rows[0]!.cells[0]!.paragraphs[0]!
+    resolved.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)!.properties.indent_left_twips = 360
+    const strict = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
+    expect(strict.page_paint_request.paginated_layout.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'line-geometry-invalid' })]))
+    settings.profile = 'unsupported'; delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy12' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy12'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+    const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(result.status).toBe('painted')
+    expect(result.reasons).toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+    const line = result.pages[0]!.lines.find((entry) => entry.paragraph_id === paragraph.id)!
+    expect(line.x_millipoints).toBe(result.pages[0]!.body_box.x_millipoints + 100 * 50 + 360 * 50)
+    expect(decodeNativeDocxApproximatePagePreviewV1(result).ok).toBe(true)
+    const unindented = tableFixture(); const unindentedSettings = unindented.pagination_settings as NativeDocxPaginationSettingsV1
+    unindentedSettings.profile = 'unsupported'; delete unindentedSettings.compatibility_mode; unindentedSettings.diagnostics = settings.diagnostics
+    expect((await renderNativeDocxApproximatePagePreviewV1(unindented, eligibility, provider)).reasons).not.toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+  }, 20000)
 })
 
 describe('approximate DrawingML shapes', () => {

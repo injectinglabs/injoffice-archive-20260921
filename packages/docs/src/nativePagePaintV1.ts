@@ -50,6 +50,7 @@ import {
 import {
   decodeNativeDocxPaginationRequestV1,
   paginateNativeDocxApproximateLegacyV1,
+  nativeDocxApproximatePaginationPolicyReasonsV1,
   type NativeDocxPaginationRequestV1,
   type NativeDocxPaginatedLayoutV1,
   type NativeDocxPaginatedPageV1,
@@ -63,6 +64,7 @@ import {
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
   layoutNativeDocxHeadersFootersV1,
   layoutNativeDocxFontHeadersFootersV1,
+  nativeDocxApproximateHeaderFooterPolicyReasonsV1,
   type NativeDocxHeaderFooterLayoutV1,
   type NativeDocxHeaderFooterPageLayoutV1,
   type NativeDocxPlacedHeaderFooterLineV1,
@@ -422,7 +424,7 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDo
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
-    ...(approximate ? { omit_unmodeled_section_geometry: true } : {}),
+    ...(approximate ? { omit_unmodeled_section_geometry: true, approximate_nonblocking_source: DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } : {}),
   }
   return font?layoutNativeDocxFontHeadersFootersV1(input,font):layoutNativeDocxHeadersFootersV1(input)
 }
@@ -899,7 +901,27 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   request.integrity.table_projection_sha256=originTables.status==='qualified'?originTables.sha256:nativeDocxTableProjectionSha256V1([])
   const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
-  return approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request)
+  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request)
+}
+
+/** Declared approximate table-style policy; disclosed as an envelope reason whenever applied. */
+export const DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING = 'Approximate read-only preview: table-style properties outside the exact border/fill subset (style indents, cell margins, conditional regions) are not applied; direct table properties and defaults are painted instead.' as const
+const APPROXIMATE_TABLE_STYLE_CODES: ReadonlySet<string> = new Set(['TABLE_STYLE_EFFECTS_PRESERVED', 'CONDITIONAL_TABLE_STYLE_PRESERVED'])
+function approximateTableStyleEffect(entry: NativeDocxPaginationRequestV1['resolved_layout']['diagnostics'][number], document: NativeDocxPaginationRequestV1['document']): boolean {
+  return APPROXIMATE_TABLE_STYLE_CODES.has(entry.code) && document.body.blocks.some((block) => block.table?.id === entry.scope_id)
+}
+
+/** Every applied approximate pagination, table-style, or header/footer policy is declared as an envelope reason. */
+function withApproximatePolicyReasons(envelope: NativeDocxApproximatePagePreviewV1, request: NativeDocxPagePaintRequestV1): NativeDocxApproximatePagePreviewV1 {
+  if (envelope.status !== 'painted') return envelope
+  const pagination = request.pagination_request
+  const reasons = [
+    ...nativeDocxApproximatePaginationPolicyReasonsV1(request.paginated_layout),
+    ...(pagination.resolved_layout.diagnostics.some((entry) => approximateTableStyleEffect(entry, pagination.document)) ? [DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING] : []),
+    ...nativeDocxApproximateHeaderFooterPolicyReasonsV1(headerFooterLayout(request, undefined, true)),
+  ]
+  for (const reason of reasons) if (!envelope.reasons.includes(reason)) envelope.reasons.push(reason)
+  return envelope
 }
 
 /** @internal Paints only a source-validated current-policy fixed-point result.
@@ -910,7 +932,7 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
   const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
-  return approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request)
+  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request)
 }
 
 /** Separate approximate envelope; never exports its prepared or strict paint. */
@@ -964,7 +986,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
   const allowedFontPagination=(entry:typeof layout.diagnostics[number])=>fontSubstitutions!==undefined&&entry.code==='source-diagnostic'&&entry.severity==='deferred'&&fontSubstitutions.some(r=>{const d=nativeDocxFontSubstitutionDiagnosticV1(r);return entry.scope_id===d.scope_id&&entry.source_code===d.code&&entry.source_message===d.message&&entry.message===`Shaping diagnostic retained by pagination: ${d.code}: ${d.message}`})
   const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !allowedFontPagination(entry)&&!(approximateLegacySettings && entry.severity === 'deferred' && (entry.code === 'settings-attestation-unsupported' || entry.code === 'source-diagnostic')) && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
   const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => !approximateLegacySettings&&!(fontSubstitutions!==undefined&&isQualifiedNativeDocxFontDiagnosticV1(entry,fontSubstitutions))&&(entry.code !== 'page-control-deferred' || entry.source_id !== undefined))
-  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout)&&!(approximateLegacySettings&&DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)))
+  // Approximate legacy tables already qualify without table-style effects (see
+  // qualifyApproximateLegacyTables); the same declared policy is disclosed as a reason.
+  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout)&&!(approximateLegacySettings&&(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)||approximateTableStyleEffect(entry, pagination.document))))
   if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]
     return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires no blocking shaping/resolution diagnostics and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }

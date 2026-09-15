@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
   layoutNativeDocxHeadersFootersV1,
+  nativeDocxApproximateHeaderFooterPolicyReasonsV1,
   nativeDocxHeaderFooterLayoutSha256V1,
   type NativeDocxHeaderFooterLayoutInputV1,
   type NativeDocxHeaderFooterLayoutSuccessV1,
@@ -143,5 +146,65 @@ describe('native DOCX header/footer layout v1', () => {
     input.document.sections[1]!.header_refs[0]!.relationship_id = 'r:header-even'
     const value = layoutNativeDocxHeadersFootersV1(input)
     expect(value).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'relationship-ambiguous' })]) }))
+  })
+})
+
+describe('approximate header/footer placement policy', () => {
+  const NONBLOCKING = new Set(['UNMODELED_PARAGRAPH_PROPERTY', 'UNMODELED_PARAGRAPH_MARK_PROPERTIES', 'PARTIAL_PARAGRAPH_PROPERTIES'])
+  const footerLine = (input: NativeDocxHeaderFooterLayoutInputV1) => input.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === 'paragraph:footer-default')!.lines[0]!
+  const approximate = (input: NativeDocxHeaderFooterLayoutInputV1) => { input.approximate_nonblocking_source = NONBLOCKING; return input }
+
+  it('keeps painting a story whose only source diagnostics are approximate-nonblocking, and still refuses other codes', () => {
+    const framePr = { id: 'unsupported:framePr', code: 'UNMODELED_PARAGRAPH_PROPERTY', capability: 'paragraph-properties', scope_id: 'paragraph:footer-default', preservation: 'preserve-verbatim', message: 'framePr page number frame is preserved verbatim' }
+    const strict = fixture(); strict.document.unsupported.push(framePr as never)
+    expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-unsupported', scope_id: 'paragraph:footer-default' })]) }))
+    const tolerated = approximate(fixture()); tolerated.document.unsupported.push(framePr as never)
+    tolerated.resolved_layout.diagnostics.push({ code: 'UNMODELED_PARAGRAPH_PROPERTY', severity: 'unsupported', scope_id: 'paragraph:footer-default', part_name: 'word/footer-default.xml', path: '/w:ftr[1]/w:p[1]/w:pPr[1]/w:framePr[1]', preservation: 'preserve-verbatim', message: 'This paragraph property is preserved and not guessed' } as never)
+    const placed = layoutNativeDocxHeadersFootersV1(tolerated)
+    expect(placed.status).toBe('placed')
+    expect(placed.approximations).toBeUndefined()
+    expect(placed.pages.some((page) => page.lines.some((line) => line.paragraph_id === 'paragraph:footer-default'))).toBe(true)
+    const blocking = approximate(fixture())
+    blocking.document.unsupported.push({ ...framePr, id: 'unsupported:field', code: 'FIELD_SEMANTICS' } as never)
+    expect(layoutNativeDocxHeadersFootersV1(blocking)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-field' })]) }))
+  })
+
+  it('accepts an expanded line box under the declared line-box policy and still refuses a compressed one', () => {
+    const expanded = approximate(fixture()); footerLine(expanded).line_height_millipoints = 14_000
+    const value = layoutNativeDocxHeadersFootersV1(expanded)
+    expect(value.status).toBe('placed')
+    expect(value.pages.flatMap((page) => page.lines).find((line) => line.paragraph_id === 'paragraph:footer-default')?.height_millipoints).toBe(14_000)
+    const strict = fixture(); footerLine(strict).line_height_millipoints = 14_000
+    expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-line-invalid' })]) }))
+    const compressed = approximate(fixture()); footerLine(compressed).line_height_millipoints = 9_000
+    expect(layoutNativeDocxHeadersFootersV1(compressed)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-line-invalid' })]) }))
+  })
+
+  it('paints an overflowing footer at the authored distance only in approximate mode, disclosed as a declared policy', () => {
+    const overflow = (input: NativeDocxHeaderFooterLayoutInputV1) => { for (const section of input.document.sections) section.page.margins.footer_twips = 1_440; return input }
+    expect(layoutNativeDocxHeadersFootersV1(overflow(fixture()))).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'footer-band-overflow' })]) }))
+    const value = layoutNativeDocxHeadersFootersV1(overflow(approximate(fixture())))
+    expect(value.status).toBe('placed')
+    expect(value.approximations).toEqual([{ policy: 'band-overflow', scope_id: 'story:footer-default', message: DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING }])
+    const footer = value.pages[0]!.lines.find((line) => line.region === 'footer')!
+    expect(footer.y_millipoints).toBe(792_000 - 72_000 - 10_000)
+    expect(nativeDocxApproximateHeaderFooterPolicyReasonsV1(value)).toEqual([DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING])
+    expect(nativeDocxApproximateHeaderFooterPolicyReasonsV1(layoutNativeDocxHeadersFootersV1(approximate(fixture())))).toEqual([])
+    // The disclosed approximation is part of the canonical layout hash.
+    expect(value.sha256).not.toBe(layoutNativeDocxHeadersFootersV1(approximate(fixture())).sha256)
+  })
+
+  it('omits an unshaped text-less story paragraph in approximate mode and still refuses one with text', () => {
+    const drop = (input: NativeDocxHeaderFooterLayoutInputV1) => { input.shaped_lines.paragraphs = input.shaped_lines.paragraphs.filter((entry) => entry.paragraph_id !== 'paragraph:footer-default'); return input }
+    expect(layoutNativeDocxHeadersFootersV1(drop(fixture()))).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-paragraph-missing' })]) }))
+    const omitted = layoutNativeDocxHeadersFootersV1(drop(approximate(fixture())))
+    expect(omitted.status).toBe('placed')
+    expect(omitted.pages.every((page) => page.lines.every((line) => line.region !== 'footer'))).toBe(true)
+    expect(omitted.approximations).toEqual([{ policy: 'omitted-paragraph', scope_id: 'paragraph:footer-default', message: DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING }])
+    expect(nativeDocxApproximateHeaderFooterPolicyReasonsV1(omitted)).toEqual([DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING])
+    const withText = drop(approximate(fixture()))
+    const story = withText.document.footers[0]!
+    ;(story.blocks[0]!.paragraph!.runs as unknown[]).push({ kind: 'text', id: 'run:footer-text', anchor: anchor(story.part_name, '/w:ftr[1]/w:p[1]/w:r[1]'), text: 'Page' })
+    expect(layoutNativeDocxHeadersFootersV1(withText)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-paragraph-missing' })]) }))
   })
 })

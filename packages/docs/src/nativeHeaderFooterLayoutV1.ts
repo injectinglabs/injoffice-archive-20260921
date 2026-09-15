@@ -79,11 +79,23 @@ export interface NativeDocxHeaderFooterPageLayoutV1 {
   lines: NativeDocxPlacedHeaderFooterLineV1[]
 }
 
+/** Declared approximate header/footer policies; each is disclosed as an envelope reason. */
+export const DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING = 'Approximate read-only preview: a header or footer story taller than its reserved band is painted at the authored header/footer distance and may overlap the body box; Word moves the body instead.' as const
+export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING = 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.' as const
+export type NativeDocxHeaderFooterApproximationPolicyV1 = 'band-overflow' | 'omitted-paragraph'
+export interface NativeDocxHeaderFooterApproximationV1 {
+  policy: NativeDocxHeaderFooterApproximationPolicyV1
+  scope_id: string
+  message: string
+}
+
 interface NativeDocxHeaderFooterLayoutBaseV1 {
   protocol: typeof DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL
   version: typeof DOCX_HEADER_FOOTER_LAYOUT_VERSION
   sha256: string
   diagnostics: NativeDocxHeaderFooterDiagnosticV1[]
+  /** Present only for approximate placement; every entry maps to a declared policy reason. */
+  approximations?: NativeDocxHeaderFooterApproximationV1[]
 }
 
 export interface NativeDocxHeaderFooterLayoutSuccessV1 extends NativeDocxHeaderFooterLayoutBaseV1 {
@@ -108,6 +120,12 @@ export interface NativeDocxHeaderFooterLayoutInputV1 {
   paginated_layout: NativeDocxPaginatedLayoutV1
   page_field_variants?: Array<{ page_id: string; shaped_lines: NativeDocxShapedLinesV1 }>
   omit_unmodeled_section_geometry?: boolean
+  /** Approximate preview only. Selected stories keep painting when their
+   * source diagnostics are all in this nonblocking set (disclosed by the
+   * approximate envelope), unshaped text-less story paragraphs are omitted,
+   * and expanded line boxes follow the declared current-layout line-box
+   * policy; compressed boxes and every other code still refuse. */
+  approximate_nonblocking_source?: ReadonlySet<string>
 }
 
 type VariantMap = Partial<Record<NativeDocxHeaderFooterReferenceV1['kind'], NativeDocxHeaderFooterReferenceV1>>
@@ -223,15 +241,20 @@ function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story
       if (run.control && run.control !== 'tab' && run.control !== 'line-break') diagnostics.push(diagnostic('selected-paragraph-unsupported', run.id, `Selected header/footer ${run.control} control is not supported`))
     }
   }
-  for (const unsupported of input.document.unsupported) if (selectedScopes.has(unsupported.scope_id)) {
+  const nonblocking = input.approximate_nonblocking_source
+  for (const unsupported of input.document.unsupported) if (selectedScopes.has(unsupported.scope_id) && !nonblocking?.has(unsupported.code)) {
     const code = unsupported.code === 'FIELD_SEMANTICS' ? 'selected-story-field' : 'selected-story-unsupported'
     diagnostics.push(diagnostic(code, unsupported.scope_id, `Selected header/footer source is preserve-only: ${unsupported.code}: ${unsupported.message}`))
   }
-  for (const entry of input.resolved_layout.diagnostics) if (selectedScopes.has(entry.scope_id)) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer resolved layout is not exact: ${entry.code}: ${entry.message}`))
+  for (const entry of input.resolved_layout.diagnostics) if (selectedScopes.has(entry.scope_id) && !nonblocking?.has(entry.code)) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer resolved layout is not exact: ${entry.code}: ${entry.message}`))
+  // Approximate shaping already tolerated these per paragraph: a paragraph either
+  // shaped (its diagnostics are deferred or nonblocking) or is missing below.
+  if (nonblocking) return
   for (const entry of input.shaped_lines.diagnostics) if ((!fontRecords||!isQualifiedNativeDocxFontDiagnosticV1(entry,fontRecords))&&(selectedScopes.has(entry.scope_id) || entry.source_id && selectedScopes.has(entry.source_id))) diagnostics.push(diagnostic('selected-story-diagnostic', entry.scope_id, `Selected header/footer shaping is not exact: ${entry.code}: ${entry.message}`))
 }
 
-function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDocxShapedParagraphV1>, resolved: NativeDocxResolvedLayoutInputV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[]): { lines: { paragraph: NativeDocxShapedParagraphV1; lineIndex: number; y: number }[]; height: number } | undefined {
+function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDocxShapedParagraphV1>, resolved: NativeDocxResolvedLayoutInputV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[], approximations?: NativeDocxHeaderFooterApproximationV1[]): { lines: { paragraph: NativeDocxShapedParagraphV1; lineIndex: number; y: number }[]; height: number } | undefined {
+  const approximate = approximations !== undefined
   const result: { paragraph: NativeDocxShapedParagraphV1; lineIndex: number; y: number }[] = []
   const resolvedParagraphs = new Map(resolved.paragraphs.map((entry) => [entry.paragraph_id, entry]))
   let cursor = 0
@@ -242,6 +265,12 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
     const paragraph = shaped.get(block.paragraph.id)
     const properties = resolvedParagraphs.get(block.paragraph.id)?.properties
     if (!paragraph || paragraph.story_id !== story.id || paragraph.story_kind !== story.kind) {
+      // Approximate preview omits an unshaped story paragraph that carries no
+      // text; its refusal codes stay disclosed through the shaping diagnostics.
+      if (approximations && !paragraph && !block.paragraph.runs.some((run) => run.kind === 'text' && (run.text ?? '') !== '')) {
+        approximations.push({ policy: 'omitted-paragraph', scope_id: block.paragraph.id, message: DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING })
+        continue
+      }
       diagnostics.push(diagnostic('selected-paragraph-missing', block.paragraph.id, 'Selected native header/footer paragraph has no exact shaped paragraph'))
       continue
     }
@@ -254,7 +283,11 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
     if (withGap === undefined) { diagnostics.push(diagnostic('resource-limit', paragraph.paragraph_id, 'Header/footer paragraph spacing exceeds the bounded coordinate range')); continue }
     cursor = withGap
     for (const [lineIndex, line] of paragraph.lines.entries()) {
-      if (line.ordinal !== lineIndex || line.line_height_millipoints !== line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints || line.advance_inline_millipoints < 0) {
+      const naturalHeight = line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints
+      // Strict placement needs the natural line box. The approximate preview
+      // accepts an expanded box (authored exact/atLeast spacing) under the
+      // declared line-box policy; a compressed box still refuses.
+      if (line.ordinal !== lineIndex || (approximate ? line.line_height_millipoints < naturalHeight : line.line_height_millipoints !== naturalHeight) || line.advance_inline_millipoints < 0) {
         diagnostics.push(diagnostic('selected-line-invalid', line.id, 'Selected header/footer line lacks exact natural LTR geometry'))
         continue
       }
@@ -271,10 +304,10 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
   return diagnostics.length === 0 && height !== undefined ? { lines: result, height } : undefined
 }
 
-function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
+function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[],approximations?:NativeDocxHeaderFooterApproximationV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
   validateSelectedStory(input, story, diagnostics,fontRecords)
   const shaped = new Map((input.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? input.shaped_lines).paragraphs.map((entry) => [entry.paragraph_id, entry]))
-  const offsets = storyLineOffsets(story, shaped, input.resolved_layout, diagnostics)
+  const offsets = storyLineOffsets(story, shaped, input.resolved_layout, diagnostics, approximations)
   if (!offsets || diagnostics.length > 0) return []
   const storyHeight = offsets.height
   const distance = twips(region === 'header' ? section.page.margins.header_twips : section.page.margins.footer_twips)
@@ -284,8 +317,10 @@ function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocx
   if (originY === undefined) { diagnostics.push(diagnostic('resource-limit', story.id, 'Header/footer origin exceeds the bounded coordinate range')); return [] }
   const storyBottom = safeSum(originY, storyHeight)
   if (storyBottom === undefined) { diagnostics.push(diagnostic('resource-limit', story.id, 'Header/footer story bounds exceed the bounded coordinate range')); return [] }
-  if (region === 'header' && storyBottom > page.body_box.y_millipoints) diagnostics.push(diagnostic('header-band-overflow', story.id, 'Selected header story does not fit between the exact header and top body margins'))
-  if (region === 'footer' && originY < bodyBottom) diagnostics.push(diagnostic('footer-band-overflow', story.id, 'Selected footer story does not fit between the exact body bottom and footer margin'))
+  const overflow = region === 'header' ? storyBottom > page.body_box.y_millipoints : originY < bodyBottom
+  if (overflow && approximations) approximations.push({ policy: 'band-overflow', scope_id: story.id, message: DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING })
+  else if (overflow && region === 'header') diagnostics.push(diagnostic('header-band-overflow', story.id, 'Selected header story does not fit between the exact header and top body margins'))
+  else if (overflow) diagnostics.push(diagnostic('footer-band-overflow', story.id, 'Selected footer story does not fit between the exact body bottom and footer margin'))
   if (diagnostics.length > 0) return []
   return offsets.lines.map(({ paragraph, lineIndex, y }) => {
     const line = paragraph.lines[lineIndex]!
@@ -316,6 +351,7 @@ export function layoutNativeDocxFontHeadersFootersV1(input:NativeDocxHeaderFoote
 function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:NativeDocxFontVariantPolicyV1):NativeDocxHeaderFooterLayoutV1{
   const diagnostics: NativeDocxHeaderFooterDiagnosticV1[] = []
   const pages: NativeDocxHeaderFooterPageLayoutV1[] = []
+  const approximations: NativeDocxHeaderFooterApproximationV1[] | undefined = input.approximate_nonblocking_source ? [] : undefined
   let qualifiedColumns = false
   if (input.column_shaped_lines) {
     const checked = decodeNativeDocxPaginationRequestV1({ protocol: 'injoffice.docx.pagination-request', version: 1, document: input.document, resolved_layout: input.resolved_layout, shaped_lines: input.shaped_lines, pagination_settings: input.pagination_settings, column_shaped_lines: input.column_shaped_lines })
@@ -348,7 +384,7 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
         else pageLayout.footer_ref = { ...reference }
         const story = selectedStory(input.document, region, reference, diagnostics)
         if (!story) continue
-        const placed = placeStory(input, page, section, region, reference, story, diagnostics,records)
+        const placed = placeStory(input, page, section, region, reference, story, diagnostics,records,approximations)
         placedCount += placed.length
         if (placedCount > MAX_PLACED_LINES) diagnostics.push(diagnostic('resource-limit', input.document.document_id, `Header/footer placements exceed ${MAX_PLACED_LINES}`))
         pageLayout.lines.push(...placed)
@@ -357,8 +393,22 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
     }
   }
   diagnostics.sort((left, right) => compareNativeCodeUnits(left.scope_id, right.scope_id) || compareNativeCodeUnits(left.code, right.code) || compareNativeCodeUnits(left.message, right.message))
+  // One disclosure per story and policy: the same story repeats on every page.
+  const unique = approximations?.filter((entry, index) => approximations.findIndex((other) => other.policy === entry.policy && other.scope_id === entry.scope_id) === index)
+    .sort((left, right) => compareNativeCodeUnits(left.scope_id, right.scope_id) || compareNativeCodeUnits(left.policy, right.policy))
+  const disclosed = unique && unique.length > 0 ? { approximations: unique } : {}
   const payload: NativeDocxHeaderFooterLayoutHashInputV1 = diagnostics.length > 0
-    ? { protocol: DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL, version: DOCX_HEADER_FOOTER_LAYOUT_VERSION, status: 'refused' as const, diagnostics, pages: [] as [] }
-    : { protocol: DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL, version: DOCX_HEADER_FOOTER_LAYOUT_VERSION, status: 'placed' as const, diagnostics, pages }
+    ? { protocol: DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL, version: DOCX_HEADER_FOOTER_LAYOUT_VERSION, status: 'refused' as const, diagnostics, pages: [] as [], ...disclosed }
+    : { protocol: DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL, version: DOCX_HEADER_FOOTER_LAYOUT_VERSION, status: 'placed' as const, diagnostics, pages, ...disclosed }
   return { ...payload, sha256: nativeDocxHeaderFooterLayoutSha256V1(payload) }
+}
+
+/** Declared policy reasons for the approximations an approximate header/footer layout applied. */
+export function nativeDocxApproximateHeaderFooterPolicyReasonsV1(layout: NativeDocxHeaderFooterLayoutV1): string[] {
+  const reasons: string[] = []
+  for (const entry of layout.approximations ?? []) {
+    const reason = entry.policy === 'band-overflow' ? DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING : DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING
+    if (!reasons.includes(reason)) reasons.push(reason)
+  }
+  return reasons
 }
