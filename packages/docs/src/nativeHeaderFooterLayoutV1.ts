@@ -107,6 +107,7 @@ export interface NativeDocxHeaderFooterLayoutInputV1 {
   pagination_settings: NativeDocxPaginationSettingsV1
   paginated_layout: NativeDocxPaginatedLayoutV1
   page_field_variants?: Array<{ page_id: string; shaped_lines: NativeDocxShapedLinesV1 }>
+  omit_unmodeled_section_geometry?: boolean
 }
 
 type VariantMap = Partial<Record<NativeDocxHeaderFooterReferenceV1['kind'], NativeDocxHeaderFooterReferenceV1>>
@@ -336,7 +337,9 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
       const variants = effective.get(page.section_id)
       if (!section || !variants) { diagnostics.push(diagnostic('selected-story-missing', page.section_id, 'Paginated page has no exact native section')); continue }
       const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS'))
-      for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
+      if (!input.omit_unmodeled_section_geometry) {
+        for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
+      }
       if (section.page.orientation === 'portrait' ? section.page.width_twips > section.page.height_twips : section.page.width_twips < section.page.height_twips) diagnostics.push(diagnostic('section-geometry-invalid', section.id, 'Section orientation contradicts its exact page width and height'))
       const kind = selectedKind(section, page, input.pagination_settings)
       const pageLayout: NativeDocxHeaderFooterPageLayoutV1 = { page_id: page.id, lines: [] }

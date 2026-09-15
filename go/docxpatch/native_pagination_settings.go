@@ -399,6 +399,24 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 			parseNativeModernCompatibility(result, child, wordNS)
 		case "footnotePr", "endnotePr":
 			parseNativeNoteSentinelRegistrations(result, child, wordNS)
+		case "stylePaneFormatFilter":
+			extra := false
+			for _, attr := range child.Attrs {
+				if nativeSettingsNamespaceDeclaration(attr) {
+					continue
+				}
+				if attr.Name.Local != "val" {
+					extra = true
+					break
+				}
+			}
+			if extra {
+				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Style pane format filter extra bits are UI chrome and do not change native pagination geometry")
+				continue
+			}
+			if !nativeSettingsNeutralWordElement(result, child, wordNS) {
+				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "This settings property is not proven neutral to native shaping and pagination")
+			}
 		case "characterSpacingControl":
 			if !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "val"}) {
 				continue
