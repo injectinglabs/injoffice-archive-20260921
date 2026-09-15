@@ -318,6 +318,11 @@ function validateElement(
   }
 
   if (element.kind === 'connector') {
+    if(element.geometry){
+      if(element.compatibility.status==='editable')add(issues,`${path}.geometry`,'native.geometryAuthority','evaluated geometry must remain read-only')
+      if(element.flipH!==undefined)add(issues,`${path}.flipH`,'native.connectorGeometry','legacy anti-diagonal flag is not allowed with evaluated geometry')
+      validateEvaluatedGeometry(element.geometry,`${path}.geometry`,issues)
+    }
     for (const [name, end, flag] of [['headEnd', element.headEnd, element.headArrow], ['tailEnd', element.tailEnd, element.tailArrow]] as const) {
       if (end && flag !== undefined && flag !== (end.type !== 'none')) add(issues, `${path}.${name}`, 'native.arrowPresence', 'typed endpoint conflicts with legacy presence flag')
     }

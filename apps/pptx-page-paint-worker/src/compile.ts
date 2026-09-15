@@ -10,7 +10,8 @@ import type {NativeFontManifest,NativeFontResolver,ResolvedFontFace,FontResource
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
 import {decodePptxPreview,type PreviewNode,type PptxPreview,type PreviewStroke} from './contract.js'
 import {prepareNativeRasterResourceV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
-import {previewArrow,previewArrowShaftInset} from './arrows.js'
+import {previewArrow} from './arrows.js'
+import {previewConnectorShaft} from './connectorShaft.js'
 
 const previewColor=(color:string)=>/^#[0-9A-F]{6}$/.test(color)?color.slice(1):color
 const hash=(bytes:Uint8Array)=>`sha256:${createHash('sha256').update(bytes).digest('hex')}` as const
@@ -104,14 +105,30 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
     else if(first?.kind==='ellipse')current.children.push({kind:'ellipse',rect:first.rect,...paint})
     else {
      let d=command.path.map(pathPart).join(' ')
-     if((command.headEnd||command.tailEnd)&&stroke){const start=command.path[0],finish=command.path[1];if(command.path.length!==2||start?.kind!=='moveTo'||finish?.kind!=='lineTo')throw new Error('Arrow shaft must be a straight source connector');const length=Math.hypot(finish.x-start.x,finish.y-start.y),head=previewArrowShaftInset(command.headEnd,stroke.widthEmu),tail=previewArrowShaftInset(command.tailEnd,stroke.widthEmu);if(length<=head+tail)throw new Error('Source connector is too short for arrow-v1 endpoint geometry');const x=(finish.x-start.x)/length,y=(finish.y-start.y)/length;d=`M${start.x+x*head} ${start.y+y*head} L${finish.x-x*tail} ${finish.y-y*tail}`}
-     current.children.push({kind:'path',d,...paint})
-    }
-    if(command.headEnd?.type!=='none'&&command.headEnd||command.tailEnd?.type!=='none'&&command.tailEnd){
-     const start=command.path[0],finish=command.path[1]
-     if(command.path.length!==2||start?.kind!=='moveTo'||finish?.kind!=='lineTo'||!stroke)throw new Error('Typed arrows require a source-bound straight stroked connector')
-     for(const [end,tip,other] of [[command.headEnd,start,finish],[command.tailEnd,finish,start]] as const){if(!end)continue;const arrow=previewArrow(end,tip,{x:tip.x-other.x,y:tip.y-other.y},stroke.widthEmu,stroke.color);if(arrow)current.children.push(arrow)}
-     diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × stroke; omitted = medium), not Office-equivalent geometry')
+     const typed=command.headEnd?.type!=='none'&&command.headEnd||command.tailEnd?.type!=='none'&&command.tailEnd
+     let shaft:ReturnType<typeof previewConnectorShaft>|undefined
+     const arrows:PreviewNode[]=[]
+     // Arrow-v1 endpoint geometry is element-scoped: a shaft or arrowhead that
+     // cannot be qualified paints this element as a placeholder and never
+     // rejects the rest of the slide.
+     try{
+      shaft=(command.headEnd||command.tailEnd)&&stroke?previewConnectorShaft(command.path,command.headEnd,command.tailEnd,stroke.widthEmu):undefined
+      if(typed){
+       if(!shaft||!stroke)throw new Error('Typed arrows require a source-bound stroked connector')
+       for(const [end,terminal] of [[command.headEnd,shaft.head],[command.tailEnd,shaft.tail]] as const){if(!end)continue;const arrow=previewArrow(end,terminal.tip,terminal.direction,stroke.widthEmu,stroke.color);if(arrow)arrows.push(arrow)}
+      }
+     }catch(error){
+      diagnostics.push(`connector.arrowUnavailable: ${error instanceof Error?error.message:'arrow-v1 endpoint geometry unavailable'}; element painted as a placeholder`)
+      current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Connector arrow unavailable'})
+      break
+     }
+     if(shaft)d=shaft.d
+     current.children.push({kind:'path',d,...paint},...arrows)
+     if(typed&&shaft){
+      diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × stroke; omitted = medium), not Office-equivalent geometry')
+      if(!shaft.straight)diagnostics.push('connector.presetShaftPreview: arrow-v1 endpoints follow the terminal tangents of the evaluated connector-preset path (pptx.connector-preset-preview); not Office-equivalent geometry')
+     }
+     if(shaft?.skippedInsets.length)diagnostics.push(`connector.shaftInsetSkipped: ${shaft.skippedInsets.join('/')} terminal segment shorter than the arrow-v1 inset; shaft left untrimmed under the arrowhead`)
     }
     break
    }
