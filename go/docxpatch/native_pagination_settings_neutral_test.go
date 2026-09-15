@@ -67,6 +67,35 @@ func paginationSettingsHasCode(settings *NativePaginationSettingsV1, code string
 	return false
 }
 
+func TestNativeExtractOmitsUnsafeAttachedTemplate(t *testing.T) {
+	settingsXML := `<w:settings xmlns:w="` + wordMLTransitional + `"><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+	parts := nativePaginationSettingsParts(settingsXML)
+	parts["Word/_rels/Settings.XML.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="file:///f:\dsbuildroot\global.doc.dotx" TargetMode="External"/></Relationships>`
+	if _, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(parts))); err != nil {
+		t.Fatal(err)
+	}
+	hyper := nativePaginationSettingsParts(settingsXML)
+	hyper["Word/_RELS/Document.XML.RELS"] = strings.Replace(hyper["Word/_RELS/Document.XML.RELS"], `Target="SETTINGS.xml"`, `Target="file:///f:\unsafe\settings.xml" TargetMode="External"`, 1)
+	if _, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(hyper))); err == nil {
+		t.Fatal("unsafe non-template external relationship must still fail extract")
+	}
+}
+
+func TestExtractNativePaginationSettingsV1StylePaneFilterBitsAreNotInvalid(t *testing.T) {
+	inner := `<w:stylePaneFormatFilter w:val="3F01" w:allStyles="1" w:customStyles="0"/><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>` + nativeMode15Compat()
+	settings := extractNativePaginationSettingsMarkup(t, wordMLTransitional, inner)
+	if paginationSettingsHasCode(settings, "INVALID_SETTINGS_STRUCTURE") {
+		t.Fatalf("style pane filter bits must not be invalid structure: %#v", settings.Diagnostics)
+	}
+	if !paginationSettingsHasCode(settings, "PAGINATION_SETTING_UNSUPPORTED") {
+		t.Fatal("style pane filter must remain pagination-unsupported")
+	}
+	nested := extractNativePaginationSettingsMarkup(t, wordMLTransitional, `<w:stylePaneFormatFilter w:val="3F01" w:allStyles="1"><w:foo/></w:stylePaneFormatFilter><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>`+nativeMode15Compat())
+	if !paginationSettingsHasCode(nested, "INVALID_SETTINGS_STRUCTURE") {
+		t.Fatal("nested style pane filter markup must stay invalid")
+	}
+}
+
 func TestExtractNativePaginationSettingsV1AdmitsImageCropNeutralSubset(t *testing.T) {
 	for _, wordNS := range []string{wordMLTransitional, wordMLStrict} {
 		t.Run(wordNS, func(t *testing.T) {

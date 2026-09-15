@@ -129,6 +129,15 @@ describe('native DOCX header/footer layout v1', () => {
     }
   })
 
+  it('omits unmodeled section geometry when approximate header/footer placement is requested', () => {
+    const input = fixture()
+    input.omit_unmodeled_section_geometry = true
+    input.document.unsupported.push({ id: 'unsupported:section', code: 'UNMODELED_SECTION_PROPERTY', capability: 'sections', scope_id: 'section:1', preservation: 'refuse-mutation', message: 'Ambiguous section geometry' })
+    const value = layoutNativeDocxHeadersFootersV1(input)
+    expect(value.status).toBe('placed')
+    expect(value.diagnostics).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]))
+  })
+
   it('refuses inconsistent relationship-id reuse before returning any placement', () => {
     const input = fixture()
     input.document.sections[1]!.header_refs[0]!.relationship_id = 'r:header-even'

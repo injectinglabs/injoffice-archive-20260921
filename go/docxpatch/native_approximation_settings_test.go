@@ -75,6 +75,18 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 	}
 }
 
+func TestNativeApproximationEligibleWithStylePaneFilterBits(t *testing.T) {
+	markup := `<w:stylePaneFormatFilter w:val="3F01" w:allStyles="1"/><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`
+	data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`">`+markup+`</w:settings>`)))
+	approx, err := ExtractNativeDocxApproximationEligibilityV1(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approx.Status != "eligible" || approx.LegacyCompatibilityMode == nil || *approx.LegacyCompatibilityMode != 14 {
+		t.Fatalf("style pane filter bits plus mode 14 must stay approximately eligible: %#v", approx)
+	}
+}
+
 func TestNativeApproximationAllowsUncoveredPaginationExtras(t *testing.T) {
 	data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`"><w:autoHyphenation/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat></w:settings>`)))
 	approx, err := ExtractNativeDocxApproximationEligibilityV1(data)
