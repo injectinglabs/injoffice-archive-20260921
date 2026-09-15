@@ -3,6 +3,7 @@ import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 import type {NativeDocxShapedLinesV1} from './nativeShapingLines.js'
 import {qualifyNativeDocxTablesV1,nativeDocxTableProjectionSha256V1} from './nativeTablePagePaintV1.js'
 export const DOCX_LEGACY_TABLE_ORIGIN_WARNING='Approximate read-only preview: eligible legacy tables align their leading cell content to the source indent by shifting the table left by its explicit cell margin; this is not Word-validated layout.'
+export const DOCX_TABLE_GRID_FIT_WARNING='Approximate read-only preview: auto-width tables whose consistent authored tblGrid/tcW preferences exceed the text column are scaled proportionally to that column (approximate-authored-grid-fitted-v1) instead of the shaped content width; authored widths are not painted as-is and this is not Word-validated layout.'
 export const DOCX_TABLE_BORDER_RESERVATION_WARNING='Approximate read-only preview: eligible legacy tables reserve one authored horizontal border width above each row’s content; this is a declared collapsed-border layout policy, not Word-validated layout.'
 export interface NativeDocxLegacyTableOriginV1 {table_id:string;package_sha256:string;indent_twips:number;left_margin_twips:number;source_indent:{part_name:string;path:string;sha256:string};source_margin:{part_name:string;path:string;sha256:string}}
 const keys=(v:object,names:string)=>Object.keys(v).sort().join(',')===names
@@ -32,7 +33,9 @@ export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,res
    if(entry)entry.properties={...entry.properties,spacing_before_twips:0}
   }
  }
- const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped,true),facts=eligibility?.legacy_table_origins??[]
+ // Approximate table relaxations apply only with declared approximate eligibility; strict
+ // request verification passes none and must reproduce the strict compiler's projection.
+ const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped,eligibility!==undefined),facts=eligibility?.legacy_table_origins??[]
  if(result.status!=='qualified'||eligibility?.legacy_compatibility_mode!==12&&!facts.length)return result
  if(eligibility?.legacy_compatibility_mode!==12||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
  const tables=structuredClone(result.tables),sections=new Map(document.sections.map(s=>[s.starts_at_block_id,s]))
