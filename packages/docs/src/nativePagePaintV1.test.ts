@@ -389,6 +389,8 @@ describe('native DOCX page-paint v1', () => {
       code: 'UNMODELED_FONT_METADATA', severity: 'unsupported', scope_id: settings.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[1]/w:embedRegular[1]', preservation: 'preserve-verbatim', message: 'Font metadata is preserved for future font matching',
     }, {
       code: 'UNMODELED_FONT_SELECTION', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/w:rFonts[1]', preservation: 'preserve-verbatim', message: 'Font selection contains unknown attributes or nested markup and is not resolved',
+    }, {
+      code: 'THEME_COLOR_PRESERVED', severity: 'unsupported', scope_id: 'run:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/w:color[1]', preservation: 'preserve-verbatim', message: 'Run color markup outside the exact RGB or theme-srgb subset is preserved and not guessed',
     })
     request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(request.pagination_request.shaped_lines)
     const refused = paginateNativeDocxV1(request.pagination_request)
