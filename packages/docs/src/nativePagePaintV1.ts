@@ -894,7 +894,7 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   request.integrity.table_projection_sha256=originTables.status==='qualified'?originTables.sha256:nativeDocxTableProjectionSha256V1([])
   const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
-  return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
+  return approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request)
 }
 
 /** @internal Paints only a source-validated current-policy fixed-point result.
@@ -905,7 +905,7 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
   const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
   if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
-  return approximatePagePreviewEnvelope(settings, eligibility, painted.value)
+  return approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request)
 }
 
 /** Separate approximate envelope; never exports its prepared or strict paint. */

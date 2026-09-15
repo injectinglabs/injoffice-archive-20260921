@@ -83,6 +83,10 @@ result. Eligible absent or legacy Word compatibility settings can use current
 layout rules with persistent, read-only approximation warnings. Original
 settings, diagnostics and source hashes remain attached; malformed settings,
 unsafe packages, missing fonts and unsupported geometry still refuse. The
+envelope's `content_status` is `partial` whenever `omitted_content` lists source
+items the preview could not paint (drawings, equations, fields, nested tables,
+comment markers, tracked changes) or `unpainted_pages` names a page without any
+paint command; `status: painted` alone never attests a complete rendering. The
 strict endpoint is unchanged, and neither action automatically uploads a file
 or falls back to the other endpoint.
 
