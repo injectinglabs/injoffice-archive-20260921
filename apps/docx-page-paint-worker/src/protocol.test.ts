@@ -103,3 +103,19 @@ describe('native DOCX page-paint worker protocol', () => {
     expect(touched).toBe(false)
   })
 })
+
+describe('approximate drawing shape sidecar', () => {
+  it('accepts the sidecar only on render-approximate and refuses malformed evidence without partial results', async () => {
+    for (const [op, input] of [
+      ['render-auto-borders', { prepare: {}, legacy_eligibility: {}, drawing_shapes: {} }],
+      ['render-font-substitution', { prepare: {}, drawing_shapes: {} }],
+      ['render-textbox-pages', { prepare: {}, evidence: {}, drawing_shapes: {} }],
+      ['render-approximate', { prepare: {}, eligibility: {}, drawing_shapes: { protocol: 'injoffice.docx.approximate-drawing-shapes', version: 1, items: 'not-an-array' } }],
+      ['render-approximate', { prepare: {}, eligibility: {}, drawing_shapes: null }],
+    ] as const) {
+      const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'shapes:refusal', op, input })
+      expect(response).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED' } })
+      expect(response).not.toHaveProperty('result')
+    }
+  })
+})
