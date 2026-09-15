@@ -1896,7 +1896,7 @@ async function shapeParagraph(context: NativeShapingContext, story: NativeDocxSt
   for (const run of paragraph.runs) sourceBlocked = reportBlockingDiagnostics(context, run.id, paragraph.id, run.id) || sourceBlocked
   const numberingAffected = resolved.numbering !== undefined || hasConcreteNumberingFailure(context, diagnosticScopes)
   const refuse = (): null => {
-    if (numberingAffected) context.numberingFailed = true
+    if (numberingAffected && context.nonblockingResolution === undefined) context.numberingFailed = true
     context.lineCount = lineCountSnapshot
     context.fragmentCount = fragmentCountSnapshot
     context.activeParagraphID = undefined
