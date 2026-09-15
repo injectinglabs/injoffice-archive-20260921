@@ -45,16 +45,16 @@ func nativeConnectorUsesExactStraightPath(xfrm, preset, custom *nativeXMLNode, d
 // orientation as a bounded rational affine preview. Connectors never use the
 // legacy quarter-turn transport, which the contract restricts to text/shapes.
 func validateNativeConnectorPresetTransform(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeConnectorGapSet) (NativeTransform, error) {
-	if err := requireOnlyNativeAttrs(node, xml.Name{Local: "rot"}, xml.Name{Local: "flipH"}, xml.Name{Local: "flipV"}); err != nil {
-		gaps.add("pptx.connector-transform-unavailable", "connector transform contains unmodeled attributes", true)
-	}
 	x, y, cx, cy, err := parseNativeConnectorFrame(node, dialect)
 	if err != nil {
 		return NativeTransform{}, err
 	}
+	// Unmodeled transform attributes or non-canonical orientation values stay
+	// an element-level refusal with zero orientation; they never abort the slide.
 	orientation, err := parseNativeSourceAffine(node)
 	if err != nil {
-		return NativeTransform{}, fmt.Errorf("pptxpatch: native extract: invalid connector orientation: %w", err)
+		gaps.add("pptx.connector-transform-unavailable", "connector transform attributes or orientation are outside the exact subset", true)
+		orientation = nativeSourceAffine{}
 	}
 	result := NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
 	if orientation.Rotation != 0 || orientation.FlipH || orientation.FlipV {
@@ -110,7 +110,35 @@ func requireOpenStrokedConnectorGeometry(geometry *NativeEvaluatedGeometry) erro
 			return fmt.Errorf("unsupported connector path command %q", command.Kind)
 		}
 	}
+	// Arrowheads take their direction from the terminal segments; a zero-length
+	// first or last segment (e.g. an elbow adjustment at 0 or 100000) has no
+	// tangent, so it refuses here instead of failing later in a renderer.
+	if nativeGeometrySegmentIsDegenerate(path.Commands[0], path.Commands[1]) {
+		return fmt.Errorf("first connector segment has zero length")
+	}
+	last := len(path.Commands) - 1
+	if last >= 2 && nativeGeometrySegmentIsDegenerate(path.Commands[last-1], path.Commands[last]) {
+		return fmt.Errorf("last connector segment has zero length")
+	}
 	return nil
+}
+
+// nativeGeometrySegmentIsDegenerate reports whether every point of a drawing
+// command coincides with the pen position left by the previous command.
+func nativeGeometrySegmentIsDegenerate(previous, command NativeGeometryCommand) bool {
+	if previous.X == nil || previous.Y == nil {
+		return false
+	}
+	penX, penY := *previous.X, *previous.Y
+	for _, point := range [][2]*int64{{command.X, command.Y}, {command.X1, command.Y1}, {command.X2, command.Y2}} {
+		if point[0] == nil || point[1] == nil {
+			continue
+		}
+		if *point[0] != penX || *point[1] != penY {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveNativeConnectorStyle projects a connector's style-matrix outline into

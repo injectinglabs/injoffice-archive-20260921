@@ -14,6 +14,9 @@ export interface ConnectorShaftPreview {
  readonly tail:{readonly tip:Point;readonly direction:Point}
  /** True for the pre-existing exact straight two-command connector. */
  readonly straight:boolean
+ /** Ends whose terminal segment is shorter than its inset; the shaft is left
+  * untrimmed there because the filled arrowhead covers the stub. */
+ readonly skippedInsets:readonly ('head'|'tail')[]
 }
 
 const SPLIT_ITERATIONS=48
@@ -50,26 +53,36 @@ function reverse(segment:Segment):Segment {
 
 /** Removes `inset` EMU measured as straight-line distance from the segment
  * start so a filled arrowhead covers the shaft end instead of a flat stub.
- * Straight segments trim exactly; curves use a bounded bisection on the
- * chord distance and a de Casteljau split. Refuses when the segment is too
- * short instead of drawing a reversed or empty shaft. */
-function trimStart(segment:Segment,inset:number):Segment {
- if(inset<=0)return segment
- if(segment.kind==='line'){
-  const length=distance(segment.from,segment.to)
-  if(length<=inset)throw new Error('Source connector is too short for arrow-v1 endpoint geometry')
-  return tailPortion(segment,inset/length)
- }
- if(distance(segment.from,segment.to)<=inset)throw new Error('Source connector is too short for arrow-v1 endpoint geometry')
+ * Straight segments trim exactly; curves use a bounded bisection on the chord
+ * distance and a de Casteljau split. A segment shorter than the inset is
+ * returned untrimmed (`trimmed:false`): the arrowhead covers it entirely and
+ * inventing a reversed or empty shaft would be worse than the stub. */
+function trimStart(segment:Segment,inset:number):{readonly segment:Segment;readonly trimmed:boolean} {
+ if(inset<=0)return {segment,trimmed:true}
+ const chord=distance(segment.from,segment.to)
+ if(chord<=inset)return {segment,trimmed:false}
+ if(segment.kind==='line')return {segment:tailPortion(segment,inset/chord),trimmed:true}
  let lo=0,hi=1
  for(let i=0;i<SPLIT_ITERATIONS;i++){const mid=(lo+hi)/2;if(distance(at(segment,mid),segment.from)<inset)lo=mid;else hi=mid}
- return tailPortion(segment,hi)
+ return {segment:tailPortion(segment,hi),trimmed:true}
 }
 
-function firstTangent(segment:Segment):Point {
- if(segment.kind==='line')return segment.to
- if(segment.kind==='quad')return same(segment.c1,segment.from)?segment.to:segment.c1
- return !same(segment.c1,segment.from)?segment.c1:!same(segment.c2,segment.from)?segment.c2:segment.to
+/** First point of a segment that differs from its start, or undefined for a
+ * fully degenerate (zero-length) segment. */
+function firstTangent(segment:Segment):Point|undefined {
+ const candidates=segment.kind==='line'?[segment.to]:segment.kind==='quad'?[segment.c1,segment.to]:[segment.c1,segment.c2,segment.to]
+ return candidates.find(point=>!same(point,segment.from))
+}
+
+/** Outward direction at the path start: tip minus the first point along the
+ * path that differs from it, skipping zero-length leading segments. A path
+ * whose every point coincides yields a zero vector, which previewArrow refuses. */
+function outwardDirection(tip:Point,segments:readonly Segment[]):Point {
+ for(const segment of segments){
+  const tangent=firstTangent(segment)
+  if(tangent)return {x:tip.x-tangent.x,y:tip.y-tangent.y}
+ }
+ return {x:0,y:0}
 }
 
 function segmentPath(segment:Segment):string {
@@ -100,13 +113,17 @@ export function previewConnectorShaft(path:readonly RenderPathCommand[],headEnd:
   segments.push(segment);pen=segment.to
  }
  const first=segments[0]!,last=segments[segments.length-1]!
- const head={tip:first.from,direction:{x:first.from.x-firstTangent(first).x,y:first.from.y-firstTangent(first).y}}
- const reversedLast=reverse(last),tailTangent=firstTangent(reversedLast)
- const tail={tip:last.to,direction:{x:last.to.x-tailTangent.x,y:last.to.y-tailTangent.y}}
- const headInset=previewArrowShaftInset(headEnd,strokeWidth),tailInset=previewArrowShaftInset(tailEnd,strokeWidth)
+ const reversed=segments.map(reverse).reverse()
+ const head={tip:first.from,direction:outwardDirection(first.from,segments)}
+ const tail={tip:last.to,direction:outwardDirection(last.to,reversed)}
+ const skippedInsets:('head'|'tail')[]=[]
  const trimmed=[...segments]
- trimmed[0]=trimStart(trimmed[0]!,headInset)
- trimmed[trimmed.length-1]=reverse(trimStart(reverse(trimmed[trimmed.length-1]!),tailInset))
+ const headTrim=trimStart(trimmed[0]!,previewArrowShaftInset(headEnd,strokeWidth))
+ trimmed[0]=headTrim.segment
+ if(!headTrim.trimmed)skippedInsets.push('head')
+ const tailTrim=trimStart(reverse(trimmed[trimmed.length-1]!),previewArrowShaftInset(tailEnd,strokeWidth))
+ trimmed[trimmed.length-1]=reverse(tailTrim.segment)
+ if(!tailTrim.trimmed)skippedInsets.push('tail')
  const origin=trimmed[0]!.from
- return {d:[`M${origin.x} ${origin.y}`,...trimmed.map(segmentPath)].join(' '),head,tail,straight:segments.length===1&&first.kind==='line'}
+ return {d:[`M${origin.x} ${origin.y}`,...trimmed.map(segmentPath)].join(' '),head,tail,straight:segments.length===1&&first.kind==='line',skippedInsets}
 }

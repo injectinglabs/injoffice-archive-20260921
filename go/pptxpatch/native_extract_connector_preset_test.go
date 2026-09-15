@@ -53,6 +53,8 @@ func TestExtractNativePPTXConnectorPresetsEvaluateCatalogGeometryReadOnly(t *tes
 				nativeConnectorXML(6, "Rotated straight", `<a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>`, exactLine, ` rot="5400000"`, "", "", ""),
 				// Local width overrides the inherited matrix outline.
 				nativeConnectorXML(7, "Wide", `<a:prstGeom prst="bentConnector2"><a:avLst/></a:prstGeom>`, `<a:ln w="38100"><a:headEnd type="oval" w="lg"/></a:ln>`, "", "", "", fmt.Sprintf(nativeConnectorStyleRefs, "1")),
+				// A schema-optional absent avLst is not the exact empty list: catalog preview.
+				nativeConnectorXML(8, "No adjustment list", `<a:prstGeom prst="straightConnector1"/>`, exactLine, "", "", "", ""),
 			}, "")
 			input := nativeConnectorPresetFixture(t, strict, children)
 			before := bytes.Clone(input)
@@ -69,8 +71,8 @@ func TestExtractNativePPTXConnectorPresetsEvaluateCatalogGeometryReadOnly(t *tes
 				t.Fatal("projection changed source bytes")
 			}
 			connectors := nativeFixtureConnectors(deck.Slides[0])
-			if len(connectors) != 5 {
-				t.Fatalf("connector count = %d, want 5: %#v", len(connectors), deck.Slides[0].Elements)
+			if len(connectors) != 6 {
+				t.Fatalf("connector count = %d, want 6: %#v", len(connectors), deck.Slides[0].Elements)
 			}
 			for index, connector := range connectors {
 				codes := nativeConnectorDiagnosticCodes(connector)
@@ -138,6 +140,10 @@ func TestExtractNativePPTXConnectorPresetsEvaluateCatalogGeometryReadOnly(t *tes
 			if wide.Stroke.Color != "1F77B4" || *wide.Stroke.WidthEMU != 38100 || *wide.Stroke.Join != NativeStrokeJoinMiter || wide.HeadEnd == nil || wide.HeadEnd.Type != "oval" || *wide.HeadEnd.W != "lg" {
 				t.Fatalf("local outline override over the matrix entry lost: %#v", wide)
 			}
+			noList := connectors[5]
+			if len(noList.Geometry.Paths[0].Commands) != 2 || noList.Transform.RotationAngle != nil || noList.FlipH != nil {
+				t.Fatalf("straight connector without avLst was not a plain catalog preview: %#v", noList)
+			}
 
 			if issues := ValidateNativePPTX(deck); len(issues) != 0 {
 				t.Fatalf("invalid preset connector deck: %#v", issues)
@@ -183,6 +189,10 @@ func TestExtractNativePPTXConnectorPresetGapsRemainRefused(t *testing.T) {
 		{name: "local-dash-overrides-matrix", geometry: `<a:prstGeom prst="bentConnector2"><a:avLst/></a:prstGeom>`, line: `<a:ln><a:prstDash val="dash"/></a:ln>`, rootExtra: fmt.Sprintf(nativeConnectorStyleRefs, "1"), wantCode: "pptx.connector-dash-unavailable"},
 		{name: "hidden", geometry: `<a:prstGeom prst="bentConnector2"><a:avLst/></a:prstGeom>`, line: exactLine, cNvPrAttrs: ` hidden="1"`, wantCode: "pptx.connector-nonvisual-unavailable"},
 		{name: "rotated-custom", geometry: `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst/></a:custGeom>`, line: exactLine, xfrmAttrs: ` rot="5400000"`, wantCode: "pptx.connector-geometry-unavailable"},
+		{name: "zero-length-first-segment", geometry: `<a:prstGeom prst="bentConnector3"><a:avLst><a:gd name="adj1" fmla="val 0"/></a:avLst></a:prstGeom>`, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},
+		{name: "zero-length-last-segment", geometry: `<a:prstGeom prst="bentConnector3"><a:avLst><a:gd name="adj1" fmla="val 100000"/></a:avLst></a:prstGeom>`, line: exactLine, wantCode: "pptx.connector-geometry-unavailable"},
+		{name: "unknown-transform-attribute", geometry: `<a:prstGeom prst="bentConnector2"><a:avLst/></a:prstGeom>`, line: exactLine, xfrmAttrs: ` rot="5400000" scale="2"`, wantCode: "pptx.connector-transform-unavailable"},
+		{name: "invalid-rotation", geometry: `<a:prstGeom prst="bentConnector2"><a:avLst/></a:prstGeom>`, line: exactLine, xfrmAttrs: ` rot="ninety"`, wantCode: "pptx.connector-transform-unavailable"},
 	}
 	for _, test := range cases {
 		test := test

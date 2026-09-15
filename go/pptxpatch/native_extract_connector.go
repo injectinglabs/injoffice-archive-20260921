@@ -372,11 +372,6 @@ func validateNativeConnectorTransform(node *nativeXMLNode, dialect nativeExtract
 	if err := requireOnlyNativeAttrs(node, xml.Name{Local: "rot"}, xml.Name{Local: "flipH"}, xml.Name{Local: "flipV"}); err != nil {
 		gaps.add("pptx.connector-transform-unavailable", "connector transform contains unmodeled attributes", true)
 	}
-	if err := requireOnlyNativeChildren(node,
-		xml.Name{Space: dialect.drawing, Local: "off"},
-		xml.Name{Space: dialect.drawing, Local: "ext"}); err != nil {
-		return NativeTransform{}, false, fmt.Errorf("pptxpatch: native extract: invalid connector transform children: %w", err)
-	}
 	x, y, cx, cy, err := parseNativeConnectorFrame(node, dialect)
 	if err != nil {
 		return NativeTransform{}, false, err

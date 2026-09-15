@@ -105,15 +105,30 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
     else if(first?.kind==='ellipse')current.children.push({kind:'ellipse',rect:first.rect,...paint})
     else {
      let d=command.path.map(pathPart).join(' ')
-     const shaft=(command.headEnd||command.tailEnd)&&stroke?previewConnectorShaft(command.path,command.headEnd,command.tailEnd,stroke.widthEmu):undefined
+     const typed=command.headEnd?.type!=='none'&&command.headEnd||command.tailEnd?.type!=='none'&&command.tailEnd
+     let shaft:ReturnType<typeof previewConnectorShaft>|undefined
+     const arrows:PreviewNode[]=[]
+     // Arrow-v1 endpoint geometry is element-scoped: a shaft or arrowhead that
+     // cannot be qualified paints this element as a placeholder and never
+     // rejects the rest of the slide.
+     try{
+      shaft=(command.headEnd||command.tailEnd)&&stroke?previewConnectorShaft(command.path,command.headEnd,command.tailEnd,stroke.widthEmu):undefined
+      if(typed){
+       if(!shaft||!stroke)throw new Error('Typed arrows require a source-bound stroked connector')
+       for(const [end,terminal] of [[command.headEnd,shaft.head],[command.tailEnd,shaft.tail]] as const){if(!end)continue;const arrow=previewArrow(end,terminal.tip,terminal.direction,stroke.widthEmu,stroke.color);if(arrow)arrows.push(arrow)}
+      }
+     }catch(error){
+      diagnostics.push(`connector.arrowUnavailable: ${error instanceof Error?error.message:'arrow-v1 endpoint geometry unavailable'}; element painted as a placeholder`)
+      current.children.push({kind:'placeholder',rect:{x:0,y:0,cx:300000,cy:100000},label:'Connector arrow unavailable'})
+      break
+     }
      if(shaft)d=shaft.d
-     current.children.push({kind:'path',d,...paint})
-     if(command.headEnd?.type!=='none'&&command.headEnd||command.tailEnd?.type!=='none'&&command.tailEnd){
-      if(!shaft||!stroke)throw new Error('Typed arrows require a source-bound stroked connector')
-      for(const [end,terminal] of [[command.headEnd,shaft.head],[command.tailEnd,shaft.tail]] as const){if(!end)continue;const arrow=previewArrow(end,terminal.tip,terminal.direction,stroke.widthEmu,stroke.color);if(arrow)current.children.push(arrow)}
+     current.children.push({kind:'path',d,...paint},...arrows)
+     if(typed&&shaft){
       diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × stroke; omitted = medium), not Office-equivalent geometry')
       if(!shaft.straight)diagnostics.push('connector.presetShaftPreview: arrow-v1 endpoints follow the terminal tangents of the evaluated connector-preset path (pptx.connector-preset-preview); not Office-equivalent geometry')
      }
+     if(shaft?.skippedInsets.length)diagnostics.push(`connector.shaftInsetSkipped: ${shaft.skippedInsets.join('/')} terminal segment shorter than the arrow-v1 inset; shaft left untrimmed under the arrowhead`)
     }
     break
    }
