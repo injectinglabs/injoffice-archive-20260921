@@ -40,6 +40,10 @@ All six path fill modes reach the public compiler, paint worker and existing `Na
 
 ECMA's [standard download](https://ecma-international.org/publications-and-standards/standards/ecma-376/) supplies the electronic geometry addendum. All downloaded benchmark/reference artifacts remain outside the repository; the explicitly licensed POI resource is product data.
 
+## Picture clip outlines
+
+`<p:pic>` shape properties reuse the catalog. The exact `rect` and default `roundRect` picture contract is unchanged; every other preset, and any authored adjustment, is evaluated at the picture frame extent by `evaluateNativePresetSource` and carried as the additive picture `geometry` field under the `pptx.picture-geometry-preview` policy. Pictures with evaluated outlines stay preserve-only and non-mutable, exactly like catalog AutoShapes. The renderer clips the image to the fillable subpaths (`clipPath` paint command, worker `clip.d`, SVG `<clipPath><path>`); evaluation failures keep the `pptx.picture-geometry-unavailable` placeholder. This is a source-evaluated outline preview, not a claim of PowerPoint picture-fill equivalence.
+
 ## Deterministic path shading policy
 
 ECMA-376 §20.1.10.37 specifies only qualitative lighter/darker fill modes; searches of Microsoft implementation notes did not establish normative numeric strengths. The renderer policy `linear-srgb-path-tone-20-40-v1` blends 20% (`*Less`) or 40% (unqualified mode) white/black in linear sRGB, followed by standard sRGB encoding and final 8-bit rounding. These explicit preview choices are not presented as Office behavior. Independent fixed color tests distinguish linear-light blending from encoded-RGB multiplication. Normal and no-fill paths preserve their original semantics. Source and renderer diagnostics disclose this policy whenever shaded modes are painted.
