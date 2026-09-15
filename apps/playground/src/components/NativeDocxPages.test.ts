@@ -42,6 +42,10 @@ describe('native document page viewer', () => {
       await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
     } finally { vi.unstubAllGlobals() }
   })
+  it('keeps the exact helper control name used by local capture', () => {
+    const html = renderToStaticMarkup(createElement(NativeDocxPages, { bytes: new Uint8Array([1]), packageDigest: `sha256:${'c'.repeat(64)}`, apiBase: '.' }))
+    expect(html).toMatch(/<button[^>]*>Upload to helper and render native pages<\/button>/)
+  })
   it('does not upload on render and names the actual destination', () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
     try {

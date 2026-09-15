@@ -13,6 +13,7 @@ import '../design-system/live-create-edit.css'
 import './docs-workspace.css'
 import { extractDocxPreviewImages } from '../docxPreviewImages'
 import { NativeDocxPages } from '../components/NativeDocxPages'
+import { digestNativeDocxPackage, nativeDocxHelperOffer } from '../docxNativeHelperOffer'
 import {NativeDocxPartialCoverage} from '../components/NativeDocxPartialCoverage'
 import {NativeDocxPartialText} from '../components/NativeDocxPartialText'
 import {
@@ -195,6 +196,7 @@ export default function DocsPage() {
   const [undoBytes, setUndoBytes] = useState<Uint8Array[]>([])
   const [changed, setChanged] = useState(false)
   const [previewImages, setPreviewImages] = useState<ReadonlyMap<string, string>>(new Map())
+  const [openedDigest, setOpenedDigest] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -223,6 +225,7 @@ export default function DocsPage() {
   const selectedOutsidePreview = document && preview && target
     ? document.body.blocks.slice(preview.blocks.length).find((block) => block.paragraph?.id === target.paragraphId || block.table?.rows.some((row) => row.cells.some((cell) => cell.paragraphs.some((paragraph) => paragraph.id === target.paragraphId))))
     : undefined
+  const helper = nativeDocxHelperOffer({ apiBase: API_BASE, bytes: authoritativeBytes, packageDigest: openedDigest })
   const canReplace = () => !changed && !hasDraft || window.confirm('Replace this document? Download any changes you want to keep first.')
   const mutationEvidence = useMemo(() => document && target
     ? JSON.stringify(buildDocxMutationEvidence(document, target, draft), null, 2)
@@ -268,6 +271,7 @@ export default function DocsPage() {
   const clearSession = () => {
     setDocument(null)
     setAuthoritativeBytes(null)
+    setOpenedDigest('')
     setArtifactId('')
     setSelection('')
     setDraft('')
@@ -299,26 +303,33 @@ export default function DocsPage() {
     setStatus(`Opening ${name}…`)
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer())
-      const extracted = await runtimeFor(mode).extract(bytes)
-      const next = extracted.document
+      const packageDigest = await digestNativeDocxPackage(bytes)
       setAuthoritativeBytes(bytes)
-      setArtifactId(extracted.artifactId)
+      setOpenedDigest(packageDigest)
       setSourceName(name)
-      adoptDocument(next)
-      sourceDigestRef.current = next.source.package_sha256
+      setDocument(null)
+      setArtifactId('')
+      setSelection('')
+      setDraft('')
       setProof(null)
       setOutput(null)
       setUndoBytes([])
       setChanged(false)
+      const extracted = await runtimeFor(mode).extract(bytes)
+      const next = extracted.document
+      if (next.source.package_sha256 !== packageDigest) throw new Error('Extracted package digest does not match the opened file.')
+      setArtifactId(extracted.artifactId)
+      adoptDocument(next)
+      sourceDigestRef.current = next.source.package_sha256
       const count = editableDocxRuns(next).length
       setStatus(`Opened ${name}. Select text in the preview to edit it. ${count} editable passage${count === 1 ? '' : 's'}.`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       if (mode === 'browser') {
         resetBrowserRuntime()
-        setStatus('Browser extraction did not complete. No document bytes were uploaded; choose Server fallback explicitly if you want to retry remotely.')
+        setStatus('Browser extraction did not complete. Native page preview remains available when a helper is configured. No document bytes were uploaded; choose Server fallback explicitly if you want to retry remotely.')
       } else {
-        setStatus('Server extraction did not complete. Check the configured DOCX API and retry.')
+        setStatus('Server extraction did not complete. Native page preview remains available when a helper is configured. Check the configured DOCX API and retry.')
       }
     } finally {
       setBusy(false)
@@ -366,6 +377,7 @@ export default function DocsPage() {
       const extracted = await runtimeFor(mode).extract(bytes)
       adoptDocument(extracted.document, target)
       setAuthoritativeBytes(bytes)
+      setOpenedDigest(extracted.document.source.package_sha256)
       setArtifactId(extracted.artifactId)
       setOutput(new Blob([copyArrayBuffer(bytes)], { type: DOCX_MEDIA_TYPE }))
       setProof(null)
@@ -481,9 +493,9 @@ export default function DocsPage() {
       <PreviewImages.Provider value={previewImages}>
       <div className="native-workspace docx-workspace ds-split">
         <section ref={previewRef} className="native-main docx-main ds-split-main" aria-label="Document preview">
-          {SERVER_FALLBACK_CONFIGURED && authoritativeBytes && document && <NativeDocxPages bytes={authoritativeBytes} packageDigest={document.source.package_sha256} apiBase={API_BASE} />}
+          {helper && <NativeDocxPages bytes={helper.bytes} packageDigest={helper.packageDigest} apiBase={helper.apiBase} />}
           {!document || !preview ? (
-            <div className="native-empty">
+            helper ? null : <div className="native-empty">
               <div>
                 <span className="native-empty-mark">D</span>
                 <h2>Open a real DOCX</h2>
