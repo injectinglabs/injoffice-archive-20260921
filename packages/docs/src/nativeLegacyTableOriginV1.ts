@@ -18,7 +18,20 @@ export function validLegacyTableOrigins(value:unknown,hash:string):value is Nati
 
 /** Internal explicit approximation. The public strict qualifier remains unchanged. */
 export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,resolved:NativeDocxResolvedLayoutInputV1,shaped:NativeDocxShapedLinesV1|undefined,eligibility?:{legacy_compatibility_mode:number|null;legacy_table_origins?:NativeDocxLegacyTableOriginV1[]}){
- const result=qualifyNativeDocxTablesV1(document,resolved,shaped),facts=eligibility?.legacy_table_origins??[]
+ const resolvedForQualify=structuredClone(resolved)
+ for(const [blockIndex,block] of document.body.blocks.entries()){
+  if(!block.table)continue
+  const previous=document.body.blocks[blockIndex-1]?.paragraph,next=document.body.blocks[blockIndex+1]?.paragraph
+  if(previous&&previous.runs.length===0){
+   const entry=resolvedForQualify.paragraphs.find(paragraph=>paragraph.paragraph_id===previous.id)
+   if(entry)entry.properties={...entry.properties,spacing_after_twips:0}
+  }
+  if(next&&next.runs.length===0){
+   const entry=resolvedForQualify.paragraphs.find(paragraph=>paragraph.paragraph_id===next.id)
+   if(entry)entry.properties={...entry.properties,spacing_before_twips:0}
+  }
+ }
+ const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped),facts=eligibility?.legacy_table_origins??[]
  if(result.status!=='qualified'||eligibility?.legacy_compatibility_mode!==12&&!facts.length)return result
  if(eligibility?.legacy_compatibility_mode!==12||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
  const tables=structuredClone(result.tables),sections=new Map(document.sections.map(s=>[s.starts_at_block_id,s]))
