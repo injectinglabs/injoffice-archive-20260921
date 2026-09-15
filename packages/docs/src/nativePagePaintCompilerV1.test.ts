@@ -774,6 +774,24 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(input.document).toEqual(original.document)
   })
 
+  it('paints remaining glyphs when approximate omits paragraph-scoped run diagnostics', async () => {
+    const input = fixture()
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    resolved.diagnostics.push({ code: 'PARTIAL_RUN_PROPERTIES', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]', preservation: 'preserve-verbatim', message: 'Only the conservative v1 run-property subset is exposed' })
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy layout' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 12 as const, reasons: ['Legacy layout approximation'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const outline = outlines.outline(request.glyph_id); return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em } } }
+    const strict = await prepareNativeDocxPagePaintV1(input)
+    expect(strict.page_paint_request.pagination_request.shaped_lines.paragraphs).toEqual([])
+    const approximate = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(approximate.status).toBe('painted')
+    expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path')).toBe(true)
+  })
+
   it('joins automatic-border whole-part hashes to exactly one preserved source part when available', () => {
     const input = autoBorderFixture()
     const document = input.document as NativeDocxDocumentV1
