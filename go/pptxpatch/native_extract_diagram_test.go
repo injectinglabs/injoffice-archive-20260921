@@ -138,37 +138,37 @@ func TestExtractNativePPTXDiagramDrawingWithoutDataModelExtUsesTheOnlyDrawing(t 
 func TestExtractNativePPTXDiagramDrawingMalformedPartIsRefused(t *testing.T) {
 	t.Parallel()
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: `<dsp:drawing xmlns:dsp="` + nsDiagramDrawing + `"><dsp:spTree>`}, "pptx.diagram-drawing-markup-unavailable")
-	nested := nativeDiagramDrawingXML(nsDrawingTransitional, `<dsp:grpSp/>`+nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""))
+	nested := nativeDiagramDrawingXML(nsDrawingTransitional, `<dsp:grpSp/>`+nativeDiagramShapeXML(0, "Manager", ""))
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nested}, "pptx.diagram-drawing-markup-unavailable")
 }
 
 func TestExtractNativePPTXDiagramDrawingUnmodeledPaintRefusesWholeFrame(t *testing.T) {
 	t.Parallel()
-	gradient := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 1, "Employee", ""),
+	gradient := strings.Replace(nativeDiagramShapeXML(1, "Employee", ""),
 		`<a:solidFill><a:schemeClr val="accent1"><a:hueOff val="0"/><a:satOff val="0"/><a:lumOff val="0"/><a:alphaOff val="0"/></a:schemeClr></a:solidFill>`,
 		`<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>`, 1)
 	if !strings.Contains(gradient, "gradFill") {
 		t.Fatal("fixture did not swap the fill")
 	}
-	drawing := nativeDiagramDrawingXML(nsDrawingTransitional, nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", "")+gradient)
+	drawing := nativeDiagramDrawingXML(nsDrawingTransitional, nativeDiagramShapeXML(0, "Manager", "")+gradient)
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: drawing}, "pptx.diagram-drawing-fill-unavailable")
 
-	hueShift := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), `<a:hueOff val="0"/>`, `<a:hueOff val="1200000"/>`, 1)
+	hueShift := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<a:hueOff val="0"/>`, `<a:hueOff val="1200000"/>`, 1)
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, hueShift)}, "pptx.diagram-drawing-fill-unavailable")
 
-	dashed := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), `<a:prstDash val="solid"/>`, `<a:prstDash val="dash"/>`, 1)
+	dashed := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<a:prstDash val="solid"/>`, `<a:prstDash val="dash"/>`, 1)
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, dashed)}, "pptx.diagram-drawing-line-unavailable")
 
-	bevel := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), `<a:effectLst/>`, `<a:effectLst/><a:sp3d/>`, 1)
+	bevel := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<a:effectLst/>`, `<a:effectLst/><a:sp3d/>`, 1)
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, bevel)}, "pptx.diagram-drawing-effects-unavailable")
 
-	hidden := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), `<dsp:cNvPr id="0" name=""/>`, `<dsp:cNvPr id="0" name="" hidden="1"/>`, 1)
+	hidden := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<dsp:cNvPr id="0" name=""/>`, `<dsp:cNvPr id="0" name="" hidden="1"/>`, 1)
 	assertNativeDiagramRefused(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, hidden)}, "pptx.diagram-drawing-markup-unavailable")
 }
 
 func TestExtractNativePPTXDiagramDrawingOmitsNonExactTextButKeepsGeometry(t *testing.T) {
 	t.Parallel()
-	spaced := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), `<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>`, `<a:lnSpc><a:spcPct val="90000"/></a:lnSpc>`, 1)
+	spaced := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), `<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>`, `<a:lnSpc><a:spcPct val="90000"/></a:lnSpc>`, 1)
 	deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, spaced)}), nativeTestExtractOptions())
 	if err != nil {
 		t.Fatalf("extract diagram: %v", err)
@@ -194,7 +194,7 @@ func TestExtractNativePPTXDiagramDrawingInheritedTextUsesDeclaredPreviewOnly(t *
 	t.Parallel()
 	// PowerPoint omits b/i on drawing runs. The exact tier omits that text;
 	// only the opt-in inherited preview supplies the declared defaults.
-	implicit := strings.Replace(nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""), ` b="0" i="0"`, ``, 1)
+	implicit := strings.Replace(nativeDiagramShapeXML(0, "Manager", ""), ` b="0" i="0"`, ``, 1)
 	drawing := nativeDiagramDrawingXML(nsDrawingTransitional, implicit)
 	exact, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: drawing}), nativeTestExtractOptions())
 	if err != nil {
@@ -238,7 +238,7 @@ func TestExtractNativePPTXDiagramDrawingShapeBudgetIsBounded(t *testing.T) {
 func TestExtractNativePPTXDiagramDrawingNoFillConnectorShape(t *testing.T) {
 	t.Parallel()
 	connector := `<dsp:sp modelId="{C1}"><dsp:nvSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvSpPr/></dsp:nvSpPr><dsp:spPr><a:xfrm><a:off x="3048000" y="914400"/><a:ext cx="45720" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="1D2427"/></a:solidFill><a:prstDash val="solid"/><a:miter lim="800000"/></a:ln></dsp:spPr></dsp:sp>`
-	deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, connector+nativeDiagramShapeXML(nsDrawingTransitional, 0, "Manager", ""))}), nativeTestExtractOptions())
+	deck, err := ExtractNativePPTX(nativeDiagramFixture(t, nativeDiagramFixtureOptions{drawingXML: nativeDiagramDrawingXML(nsDrawingTransitional, connector+nativeDiagramShapeXML(0, "Manager", ""))}), nativeTestExtractOptions())
 	if err != nil {
 		t.Fatalf("extract diagram: %v", err)
 	}
@@ -317,8 +317,7 @@ func nativeDiagramDrawingXML(drawingNS, shapes string) string {
 // nativeDiagramShapeXML mirrors what PowerPoint writes into drawing1.xml:
 // explicit frame-relative xfrm, preset, scheme paint with zero offsets, a
 // style matrix reference, and text with explicit size but no typeface.
-func nativeDiagramShapeXML(drawingNS string, index int, text, extra string) string {
-	_ = drawingNS
+func nativeDiagramShapeXML(index int, text, extra string) string {
 	x := 2_133_600 + int64(index%3)*2_286_000 - int64(index/3)*2_286_000
 	if x < 0 {
 		x = 0
@@ -350,7 +349,7 @@ func nativeDiagramFixture(t *testing.T, options nativeDiagramFixtureOptions) []b
 	if drawing == "" {
 		var shapes strings.Builder
 		for index, text := range []string{"Manager", "Manager2", "Assistant", "Employee", "Employee2"} {
-			shapes.WriteString(nativeDiagramShapeXML(drawingNS, index, text, ""))
+			shapes.WriteString(nativeDiagramShapeXML(index, text, ""))
 		}
 		drawing = nativeDiagramDrawingXML(drawingNS, shapes.String())
 	}
