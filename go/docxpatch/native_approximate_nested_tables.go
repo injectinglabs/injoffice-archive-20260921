@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 )
@@ -43,6 +44,11 @@ type NativeApproximateNestedTableV1 struct {
 	Geometry            *NativeResolvedTableGeometryV1 `json:"geometry,omitempty"`
 	StyleBorders        *NativeTableBordersV1          `json:"style_borders,omitempty"`
 	StyleCellShadingRGB *string                        `json:"style_cell_shading_rgb,omitempty"`
+	// firstRow conditional cell fill when the inner tblLook enables the region.
+	FirstRowCellShadingRGB *string `json:"first_row_cell_shading_rgb,omitempty"`
+	// Approximate geometry of the containing table from its own style cascade,
+	// for outer tables whose strict geometry resolution refused (active look).
+	OuterGeometry      *NativeResolvedTableGeometryV1 `json:"outer_geometry,omitempty"`
 	ResolvedParagraphs  []NativeResolvedParagraphV1    `json:"resolved_paragraphs"`
 	ResolvedRuns        []NativeResolvedRunV1          `json:"resolved_runs"`
 	OmittedRuns         int                            `json:"omitted_runs"`
@@ -255,10 +261,23 @@ func (context *nativeApproximateNestedContext) describe(outer *NativeTableV1, ce
 	}
 	item.Geometry = geometry
 	item.StyleBorders, item.StyleCellShadingRGB = context.approximateStyleBorders(&localResolver, tableStyles)
+	firstRow, firstRowShading := context.firstRowLayers(&localResolver, tableStyles, node, table.ID)
+	item.FirstRowCellShadingRGB = firstRowShading
 	for _, style := range tableStyles {
-		if firstDirectNativeChild(style.node, context.ns, "tblStylePr") != nil {
-			notes["conditional table-style regions not applied"] = true
+		for _, conditional := range directNativeChildren(style.node, context.ns, "tblStylePr") {
+			if kind, _ := nativeAttr(conditional, context.ns, "type"); kind == "firstRow" && len(firstRow) > 0 {
+				notes["firstRow conditional table-style region applied to the first row (paragraph, run and cell fill properties); its borders and other regions are not applied"] = true
+				continue
+			}
+			notes["conditional table-style regions other than firstRow not applied"] = true
 		}
+	}
+	if outerNode := context.nodes[outer.Anchor.Path]; outerNode != nil {
+		var outerStyles []*nativeStyleDefinition
+		if outer.TableStyleID != nil && localResolver.styles["table\x00"+*outer.TableStyleID] != nil {
+			outerStyles = localResolver.styleChain("table", *outer.TableStyleID, outer.ID)
+		}
+		item.OuterGeometry, _ = context.approximateGeometry(outerStyles, outerNode)
 	}
 	result := &NativeResolvedLayoutInputV1{}
 	numberingState := newNativeNumberingState()
@@ -293,7 +312,11 @@ func (context *nativeApproximateNestedContext) describe(outer *NativeTableV1, ce
 					runs = append(runs, run)
 				}
 				paragraph.Runs = runs
-				localResolver.resolveParagraph(paragraph, result, numberingState, tableStyles)
+				layers := tableStyles
+				if r == 0 && len(firstRow) > 0 {
+					layers = append(append([]*nativeStyleDefinition{}, tableStyles...), firstRow...)
+				}
+				localResolver.resolveParagraph(paragraph, result, numberingState, layers)
 			}
 		}
 	}
@@ -424,4 +447,60 @@ func (context *nativeApproximateNestedContext) approximateStyleBorders(resolver 
 		}
 	}
 	return borders, fill
+}
+
+// firstRowLayers returns the firstRow conditional layers of the style chain
+// (root first) as synthetic style definitions when the table's look enables
+// that region, plus the region's clear cell fill. Word applies the region to
+// the first row when tblLook selects it; an absent tblLook selects it too.
+func (context *nativeApproximateNestedContext) firstRowLayers(resolver *nativeLayoutResolver, styles []*nativeStyleDefinition, node *nativeXMLNode, tableID string) ([]*nativeStyleDefinition, *string) {
+	ns := context.ns
+	enabled := true
+	if tblPr := firstDirectNativeChild(node, ns, "tblPr"); tblPr != nil {
+		if look := firstDirectNativeChild(tblPr, ns, "tblLook"); look != nil {
+			enabled = false
+			if value, ok := nativeAttr(look, ns, "firstRow"); ok {
+				enabled = value == "1" || value == "true" || value == "on"
+			} else if value, ok := nativeAttr(look, ns, "val"); ok {
+				if mask, err := strconv.ParseUint(value, 16, 16); err == nil {
+					enabled = mask&0x0020 != 0
+				}
+			}
+		}
+	}
+	if !enabled {
+		return nil, nil
+	}
+	// The chain's firstRow layers merge into one region layer (later layers
+	// override earlier ones) so the region's toggle properties apply once,
+	// which is how the rendered header of the benchmark corpus appears.
+	var merged *nativeStyleDefinition
+	var fill *string
+	for _, style := range styles {
+		for _, conditional := range directNativeChildren(style.node, ns, "tblStylePr") {
+			if kind, _ := nativeAttr(conditional, ns, "type"); kind != "firstRow" {
+				continue
+			}
+			if merged == nil {
+				merged = &nativeStyleDefinition{id: style.id + ":firstRow", kind: "table", partName: style.partName, node: conditional}
+			}
+			if pPr := firstDirectNativeChild(conditional, ns, "pPr"); pPr != nil {
+				applyNativeParagraphProperties(&merged.p, resolver.parseParagraphProperties(style.partName, pPr, tableID))
+			}
+			if rPr := firstDirectNativeChild(conditional, ns, "rPr"); rPr != nil {
+				applyNativeRunProperties(&merged.r, resolver.parseRunProperties(style.partName, rPr, tableID), false)
+			}
+			if tcPr := firstDirectNativeChild(conditional, ns, "tcPr"); tcPr != nil {
+				if shd := firstDirectNativeChild(tcPr, ns, "shd"); shd != nil {
+					if parsed, ok := nativeExtractCellShading(shd, ns, resolver.resolveThemeSrgb); ok && parsed != nil {
+						fill = parsed
+					}
+				}
+			}
+		}
+	}
+	if merged == nil {
+		return nil, fill
+	}
+	return []*nativeStyleDefinition{merged}, fill
 }

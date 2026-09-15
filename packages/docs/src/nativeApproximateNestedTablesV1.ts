@@ -35,7 +35,7 @@ export const DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY = 'approximate-nested-t
 export const DOCX_APPROXIMATE_NESTED_TABLE_CODE = 'docx.approximate-nested-table-preview' as const
 export const DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE = 'docx.approximate-nested-table-omitted' as const
 export const DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE = 'docx.approximate-nested-table-substituted-font' as const
-export const DOCX_APPROXIMATE_NESTED_TABLE_WARNING = `${DOCX_APPROXIMATE_NESTED_TABLE_CODE}: tables nested one level inside a table cell are laid out inside the containing cell's content box (${DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY}): authored tblGrid/tcW columns are scaled proportionally to the cell when they exceed it, rows size from shaped content, table and cell borders and shading follow direct properties over the base table style, and the containing cell grows by the reserved extent through neighbouring paragraph spacing. Conditional table-style regions are not applied; deeper nesting and merged cells stay omitted. Source bytes and original diagnostics are unchanged.` as const
+export const DOCX_APPROXIMATE_NESTED_TABLE_WARNING = `${DOCX_APPROXIMATE_NESTED_TABLE_CODE}: tables nested one level inside a table cell are laid out inside the containing cell's content box (${DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY}): authored tblGrid/tcW columns are scaled proportionally to the cell when they exceed it, rows size from shaped content, table and cell borders and shading follow direct properties over the base table style, and the containing cell grows by the reserved extent through neighbouring paragraph spacing. Only the firstRow conditional table-style region is applied (when the table look selects it); other conditional regions are not, and deeper nesting and merged cells stay omitted. Source bytes and original diagnostics are unchanged.` as const
 export const DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE}: nested-table evidence did not exact-join the source document and was not used; refused nested tables stay omitted` as const
 /** Table paint primitives carry this id so consumers can tell nested-table paint from body table paint. */
 export const DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID = DOCX_APPROXIMATE_NESTED_TABLE_POLICY
@@ -64,6 +64,10 @@ export interface NativeDocxApproximateNestedTableV1 {
   geometry?: NativeDocxResolvedTableGeometryV1
   style_borders?: NativeDocxTableBordersV1
   style_cell_shading_rgb?: string
+  /** firstRow conditional cell fill when the inner tblLook enables the region. */
+  first_row_cell_shading_rgb?: string
+  /** Approximate geometry of the containing table from its own style cascade. */
+  outer_geometry?: NativeDocxResolvedTableGeometryV1
   resolved_paragraphs: NativeDocxResolvedParagraphV1[]
   resolved_runs: NativeDocxResolvedRunV1[]
   omitted_runs: number
@@ -124,7 +128,7 @@ export function decodeNativeDocxApproximateNestedTablesV1(value: unknown, docume
   const diagnostics = new Map(document.unsupported.map(entry => [entry.id, entry]))
   const ids = new Set<string>()
   for (const item of input.items) {
-    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'table_id', 'cell_id', 'diagnostic_ids', 'anchor', 'preceding_paragraphs', 'status', 'resolved_paragraphs', 'resolved_runs', 'omitted_runs'], ['reason', 'table', 'geometry', 'style_borders', 'style_cell_shading_rgb', 'notes'])) throw new TypeError('Approximate nested table has unknown or missing fields')
+    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'table_id', 'cell_id', 'diagnostic_ids', 'anchor', 'preceding_paragraphs', 'status', 'resolved_paragraphs', 'resolved_runs', 'omitted_runs'], ['reason', 'table', 'geometry', 'style_borders', 'style_cell_shading_rgb', 'first_row_cell_shading_rgb', 'outer_geometry', 'notes'])) throw new TypeError('Approximate nested table has unknown or missing fields')
     if (typeof item.id !== 'string' || !ID.test(item.id) || item.id.length > 256 || ids.has(item.id)) throw new TypeError('Approximate nested table id is invalid or duplicated')
     ids.add(item.id)
     const owner = cells.get(item.cell_id)
@@ -139,6 +143,7 @@ export function decodeNativeDocxApproximateNestedTablesV1(value: unknown, docume
     if (item.notes !== undefined && (!Array.isArray(item.notes) || item.notes.length > 32 || item.notes.some(note => typeof note !== 'string' || note.length > 512))) throw new TypeError('Approximate nested table notes are unbounded')
     if (!safeNonnegative(item.omitted_runs, 1_000_000) || !Array.isArray(item.resolved_paragraphs) || !Array.isArray(item.resolved_runs)) throw new TypeError('Approximate nested table content counts are invalid')
     if (item.status === 'omitted') continue
+    if ((item.first_row_cell_shading_rgb !== undefined && (typeof item.first_row_cell_shading_rgb !== 'string' || !RGB.test(item.first_row_cell_shading_rgb))) || (item.outer_geometry !== undefined && !geometryValid(item.outer_geometry))) throw new TypeError('Approximate nested table conditional fill or outer geometry is invalid')
     const table = item.table as unknown
     if (!record(table) || table.id !== item.id || !Array.isArray(table.grid_widths_twips) || table.grid_widths_twips.length === 0 || table.grid_widths_twips.length > MAX_COLUMNS || table.grid_widths_twips.some(width => !safeNonnegative(width) || width === 0) || !Array.isArray(table.rows) || table.rows.length === 0 || table.rows.length > MAX_ROWS || !geometryValid(item.geometry) || !bordersValid(table.borders) || !bordersValid(item.style_borders) || (item.style_cell_shading_rgb !== undefined && (typeof item.style_cell_shading_rgb !== 'string' || !RGB.test(item.style_cell_shading_rgb)))) throw new TypeError('Supported approximate nested table requires a bounded grid, geometry and borders')
     if (table.width_twips !== undefined && !safeNonnegative(table.width_twips) || table.indent_twips !== undefined && !safeNonnegative(table.indent_twips) || table.width_percent_fiftieths !== undefined && !safeNonnegative(table.width_percent_fiftieths, 5000)) throw new TypeError('Approximate nested table geometry is out of bounds')
@@ -330,7 +335,12 @@ export async function prepareNativeDocxApproximateNestedTableStageV1(sidecarValu
     const notes = new Set<string>(item.notes ?? [])
     try {
       // Containing cell content box from the outer table's authored geometry.
-      const outer = nativeDocxTableGeometryV1(owner.table, resolved)
+      // When strict resolution refused the outer style cascade (active look),
+      // the sidecar's approximate outer geometry is projected into the body
+      // copy so the outer table and this content box agree.
+      const outerResolved = projectedResolved.tables.find(entry => entry.table_id === owner.table.id)
+      if (outerResolved && !outerResolved.geometry && item.outer_geometry) { outerResolved.geometry = structuredClone(item.outer_geometry); notes.add('containing table geometry (indent, cell margins, layout) approximated from its table style cascade') }
+      const outer = nativeDocxTableGeometryV1(owner.table, projectedResolved)
       const outerMargins = outer.cell_margins ?? { top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 }
       const cellWidth = outerCellWidthTwips(outer, owner.cell)
       if (cellWidth === undefined) { omit(item, 'containing-cell-width-unknown'); continue }
@@ -387,7 +397,7 @@ export async function prepareNativeDocxApproximateNestedTableStageV1(sidecarValu
         for (const [column, cell] of row.cells.entries()) {
           const width = twips(grid[column]!)
           rowHeight = Math.max(rowHeight, top + cellContentHeight(cell, shapedParagraphs) + bottom)
-          const shading = cell.shading_rgb ?? item.style_cell_shading_rgb
+          const shading = cell.shading_rgb ?? (rows.length === 0 ? item.first_row_cell_shading_rgb : undefined) ?? item.style_cell_shading_rgb
           cellsOut.push({ cell, x_millipoints: x, width_millipoints: width, content_x_millipoints: x + left, content_width_millipoints: width - left - right, ...(shading ? { shading_rgb: shading } : {}) })
           x += width
         }

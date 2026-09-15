@@ -954,3 +954,54 @@ source bytes and original drawing diagnostics are unchanged. The PPTX literal
 chart primitives are not reused because they are scoped to `overlap = 0`,
 authored axis bounds and PPTX text bodies; the sidecar model mirrors
 `NativeLiteralBar` field-for-field where they overlap.
+
+
+### Approximate nested tables in the approximate page preview
+
+Strict extraction keeps refusing tables nested inside table cells
+(`NESTED_TABLE_OR_CELL_MARKUP`) and models only a cell's direct paragraphs. The
+read-only `InspectNativeApproximateNestedTablesV1` sidecar (protocol
+`injoffice.docx.approximate-nested-tables`, policy
+`docx.approximate-nested-table-preview-v1`) joins those retained refusals back
+to their `w:tbl` nodes and describes one level of nested tables through the
+ordinary table/paragraph extractor and style resolver: the inner table with
+read-only ids derived from the item id, its resolved paragraphs and runs, the
+base table-style geometry (indent, layout, width, cell margins) and borders /
+cell fill merged root first, the `firstRow` conditional region (paragraph, run
+and cell-fill properties, applied when `tblLook` selects it) and, for outer
+tables whose strict geometry resolution refused an active look, the containing
+table's approximate geometry. Depth two and deeper (`nested-depth-limit`),
+`gridSpan` / `vMerge` cells (`merged-cells`, `grid-mismatch`), rows or content
+outside direct cells, and budget overflows (64 items, 256 rows, 4096 cells,
+200 000 UTF-16 units) stay omitted with a declared reason; refused runs inside
+inner paragraphs (fields, drawings, references) are dropped and counted.
+
+The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
+`nested_tables` to the `render-approximate` worker operation only. The
+approximate compiler validates every item against the same-bytes document
+(package and main-part digests, containing table and cell, position between
+that cell's paragraphs, retained refusal at the identical anchor, inner ids
+prefixed by the item id) and lays each supported inner table out with the
+declared `approximate-nested-table-v1` policy: the inner table occupies the
+containing cell's content box (cell width minus the outer cell margins, minus
+the inner indent); authored `tblGrid` / `tcW` columns are used as-is and scaled
+proportionally with largest-remainder integer twips when they exceed that box;
+inner paragraphs are shaped at their cell content widths with the body fonts
+(absent sizes take the declared host default, unavailable families fall back
+to a loaded face and are disclosed as
+`docx.approximate-nested-table-substituted-font`); rows size from shaped
+content plus `trHeight` rules. The extent is reserved as additional spacing
+after the preceding cell paragraph (or before the following one) in the
+internal body copy, so the containing cell grows and strict font-inventory
+joins are untouched. After body pagination the compiler paints cell fills and
+borders through the `fill_table_cell` / `stroke_table_border` primitives tagged
+`table_id = docx.approximate-nested-table-preview-v1` (direct `tcBorders` and
+`shd` over table borders over the base style, `firstRow` fill on the first row)
+and attaches cell glyphs to the anchor paragraph's line. Painted nested tables
+drop out of `omitted_content`, which is re-derived last; items the painter
+cannot place keep their source refusals disclosed under
+`docx.approximate-nested-table-omitted`. Conditional regions other than
+`firstRow`, cell vertical alignment, nested-table row splitting across pages
+and Word's nested autofit are not modeled. Strict paint, source bytes and the
+original diagnostics are unchanged; the envelope `reasons` carry
+`docx.approximate-nested-table-preview` with every applied approximation.
