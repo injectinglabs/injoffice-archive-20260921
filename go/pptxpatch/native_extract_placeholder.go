@@ -134,13 +134,33 @@ func mergeNativePlaceholderPromptStyles(list, body *nativeXMLNode, dialect nativ
 	return list, nil
 }
 
+type nativePlaceholderUnsupportedError struct {
+	message string
+}
+
+func (err nativePlaceholderUnsupportedError) Error() string {
+	return err.message
+}
+
+func unsupportedNativePlaceholder(message string) error {
+	return nativePlaceholderUnsupportedError{message: "pptxpatch: " + message}
+}
+
+func isNativePlaceholderUnsupported(err error) bool {
+	_, ok := err.(nativePlaceholderUnsupportedError)
+	return ok
+}
+
 func nativeTextPlaceholder(node *nativeXMLNode, dialect nativeExtractDialect) (*nativePlaceholderIdentity, error) {
 	identity, err := nativePlaceholderMetadata(node, dialect)
-	if err != nil || identity == nil {
+	if identity == nil {
+		return nil, err
+	}
+	if err != nil {
 		return identity, err
 	}
 	if identity.kind != "" && identity.kind != "title" && identity.kind != "body" {
-		return nil, fmt.Errorf("pptxpatch: only title/body placeholder inheritance is qualified")
+		return identity, unsupportedNativePlaceholder("only title/body placeholder inheritance is qualified")
 	}
 	return identity, nil
 }
@@ -158,16 +178,18 @@ func nativePlaceholderMetadata(node *nativeXMLNode, dialect nativeExtractDialect
 	if err != nil || ph == nil {
 		return nil, err
 	}
-	if requireOnlyNativeAttrs(properties) != nil || requireOnlyNativeChildren(properties, xml.Name{Space: dialect.presentation, Local: "ph"}) != nil || requireOnlyNativeAttrs(ph, xml.Name{Local: "type"}, xml.Name{Local: "idx"}) != nil || requireOnlyNativeChildren(ph) != nil {
-		return nil, fmt.Errorf("pptxpatch: placeholder metadata is outside the exact subset")
-	}
 	identity := &nativePlaceholderIdentity{}
 	identity.kind, _ = exactNativeAttr(ph, "", "type")
 	if value, ok := exactNativeAttr(ph, "", "idx"); ok {
 		identity.index, err = parseCanonicalNativeInt(value, 0, 4294967295)
 		if err != nil {
-			return nil, err
+			return identity, err
 		}
+	}
+	// ST_PlaceholderSize/orient/hasCustomPrompt identify the slot; they do not
+	// widen title/body inheritance. Unknown leftover markup stays unqualified.
+	if requireOnlyNativeAttrs(properties) != nil || requireOnlyNativeChildren(properties, xml.Name{Space: dialect.presentation, Local: "ph"}) != nil || requireOnlyNativeAttrs(ph, xml.Name{Local: "type"}, xml.Name{Local: "idx"}, xml.Name{Local: "sz"}, xml.Name{Local: "orient"}, xml.Name{Local: "hasCustomPrompt"}) != nil || requireOnlyNativeChildren(ph) != nil {
+		return identity, unsupportedNativePlaceholder("placeholder metadata is outside the exact subset")
 	}
 	return identity, nil
 }
@@ -192,6 +214,9 @@ func nativeMatchingPlaceholder(root *nativeXMLNode, wanted nativePlaceholderIden
 		}
 		candidate, err := nativePlaceholderMetadata(shape, dialect)
 		if err != nil {
+			if candidate != nil && isNativePlaceholderUnsupported(err) {
+				continue
+			}
 			return nil, nil, err
 		}
 		if candidate == nil {

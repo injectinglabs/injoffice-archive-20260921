@@ -251,6 +251,85 @@ func TestNativeOmittedSlidePlaceholderTypeCannotWidenInheritedSubset(t *testing.
 	}
 }
 
+func TestNativeUnqualifiedPlaceholdersKeepRemainingSlideShapes(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		ph   string
+		body string
+	}{
+		{name: "obj-size", ph: `<p:ph type="obj" sz="quarter" idx="20"/>`, body: `<a:bodyPr/>`},
+		{name: "obj-custom-prompt", ph: `<p:ph type="obj" sz="quarter" idx="21" hasCustomPrompt="1"/>`, body: `<a:bodyPr/>`},
+		{name: "subtitle-columns", ph: `<p:ph type="subTitle" idx="1"/>`, body: `<a:bodyPr numCol="3" spcCol="108000"><a:normAutofit fontScale="62500" lnSpcReduction="20000"/></a:bodyPr>`},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			input := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+				unqualified := `<p:sp><p:nvSpPr><p:cNvPr id="8" name="Unqualified"/><p:cNvSpPr/><p:nvPr>` + test.ph + `</p:nvPr></p:nvSpPr><p:spPr/><p:txBody>` + test.body + `<a:lstStyle/><a:p><a:r><a:rPr/><a:t>Keep siblings</a:t></a:r></a:p></p:txBody></p:sp>`
+				parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, unqualified+`</p:spTree>`, 1)
+			}})
+			before := append([]byte(nil), input...)
+			deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+			if err != nil {
+				t.Fatalf("unqualified placeholder aborted extract: %v", err)
+			}
+			if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 1 || deck.Slides[0].Elements[0].Kind != NativeElementKindText {
+				t.Fatalf("remaining qualified shape was dropped: %+v", deck.Slides)
+			}
+			if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.unsupported-shape") {
+				t.Fatalf("unqualified placeholder was not refused in place: %+v", deck.Slides[0].Compatibility)
+			}
+			if !bytes.Equal(input, before) {
+				t.Fatal("source mutated")
+			}
+			if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+				t.Fatalf("invalid native: %+v", issues)
+			}
+		})
+	}
+}
+
+func TestNativeSubtitleColumnsWithLocalFrameStayRefusedNotBlank(t *testing.T) {
+	t.Parallel()
+	input := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+		slide := parts["relocated/slides/slide-a.xml"]
+		slide = strings.Replace(slide, `<p:cNvSpPr txBox="1"/><p:nvPr/>`, `<p:cNvSpPr/><p:nvPr><p:ph type="subTitle" idx="1"/></p:nvPr>`, 1)
+		slide = strings.Replace(slide, `<a:bodyPr/>`, `<a:bodyPr numCol="3" spcCol="108000"/>`, 1)
+		parts["relocated/slides/slide-a.xml"] = slide
+	}})
+	deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("three-column subtitle aborted extract: %v", err)
+	}
+	if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("local-frame placeholder disappeared: %+v", deck.Slides)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.Kind != NativeElementKindShape || element.Compatibility.Status != NativeCompatibilityStatusRefused || element.Transform.X == nil || *element.Transform.X != 914400 {
+		t.Fatalf("three-column subtitle lost its source frame: %+v", element)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid native: %+v", issues)
+	}
+}
+
+func TestNativeTitleBodyInheritanceIgnoresStandardFooterPlaceholderSize(t *testing.T) {
+	t.Parallel()
+	input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
+		footer := `<p:sp><p:nvSpPr><p:cNvPr id="9" name="Date"/><p:cNvSpPr/><p:nvPr><p:ph type="dt" sz="half" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>`
+		parts["relocated/layouts/layout.xml"] = strings.Replace(parts["relocated/layouts/layout.xml"], `</p:spTree>`, footer+`</p:spTree>`, 1)
+	})
+	deck, err := ExtractNativePPTX(input, nativeTestExtractOptions())
+	if err != nil || len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("footer sz blocked title/body inheritance: %v %+v", err, deck.Slides)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.Placeholder == nil || *element.Placeholder != "body" {
+		t.Fatalf("body placeholder was not inherited: %+v", element)
+	}
+}
+
 func TestNativePlaceholderAmbiguityAndUnknownMetadataStayClosed(t *testing.T) {
 	for _, mutation := range []struct{ part, from, to string }{
 		{"layout", `idx="7"`, `idx="8"`},

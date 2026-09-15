@@ -334,6 +334,41 @@ func TestExtractNativePPTXRoutesCaseInsensitiveOPCNamesToActualSpelling(t *testi
 	}
 }
 
+func TestExtractNativePPTXOmitsUntypedLeftoverParts(t *testing.T) {
+	t.Parallel()
+	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{extraParts: []nativeExtractZipPart{
+		{name: "relocated/slides/.slide1.xml.swp", data: "b0VIM 8.0\x00leftover"},
+	}})
+	before := append([]byte(nil), payload...)
+	deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("untyped leftover part aborted extract: %v", err)
+	}
+	if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("qualified slide was dropped: %+v", deck.Slides)
+	}
+	if !bytes.Equal(payload, before) {
+		t.Fatal("source mutated")
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid native: %+v", issues)
+	}
+}
+
+func TestExtractNativePPTXStillRefusesReferencedUntypedParts(t *testing.T) {
+	t.Parallel()
+	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{
+		extraParts: []nativeExtractZipPart{{name: "relocated/slides/orphan.swp", data: "no-type"}},
+		mutate: func(parts map[string]string) {
+			parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `</Relationships>`, `<Relationship Id="rOrphan" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="orphan.swp"/></Relationships>`, 1)
+		},
+	})
+	_, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+	if err == nil || !(strings.Contains(err.Error(), "no effective content type") || strings.Contains(err.Error(), "missing OPC part")) {
+		t.Fatalf("referenced untyped part was accepted: %v", err)
+	}
+}
+
 func TestExtractNativePPTXRejectsHostileContentTypeDeclarationsAndPartCharacters(t *testing.T) {
 	t.Parallel()
 

@@ -213,11 +213,11 @@ func (extractor *nativeExtractor) extractNativeGroup(
 		switch child.Name {
 		case xml.Name{Space: dialect.presentation, Local: "sp"}:
 			placeholder, placeholderErr := nativePlaceholderMetadata(child, dialect)
-			if placeholderErr != nil {
-				return nativeGroupExtractResult{}, placeholderErr
-			}
 			if placeholder != nil {
 				return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-placeholder-unavailable", "placeholder inheritance inside group coordinates remains unqualified")
+			}
+			if placeholderErr != nil {
+				return nativeGroupExtractResult{}, placeholderErr
 			}
 			textBox, textBoxErr := nativeShapeIsTextBox(child, dialect)
 			if textBoxErr != nil {
