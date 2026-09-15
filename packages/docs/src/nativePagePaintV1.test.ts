@@ -57,6 +57,7 @@ import {
   type NativeDocxPagePaintRequestV1,
 } from './nativePagePaintV1.js'
 import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
+import { DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}` as `sha256:${string}`
 const RELATIONSHIPS_HASH = `sha256:${'b'.repeat(64)}`
@@ -283,7 +284,7 @@ describe('native DOCX page-paint v1', () => {
     const strict = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
     expect(strict).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
     const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
-    expect(approximate).toMatchObject({ protocol: 'injoffice.docx.approximate-page-preview', fidelity: 'approximate', read_only: true, status: 'painted' })
+    expect(approximate).toMatchObject({ protocol: 'injoffice.docx.approximate-page-preview', fidelity: 'approximate', read_only: true, status: 'painted', content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [] })
     expect(approximate.pages).toHaveLength(1)
     expect(approximate.source_settings_diagnostics).toEqual(settings.diagnostics)
     expect(approximate.rendering_provenance.pagination_settings).toEqual(settings)
@@ -409,6 +410,53 @@ describe('native DOCX page-paint v1', () => {
     expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate' })
     expect(approximate.pages).toHaveLength(1)
     expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path')).toBe(true)
+    expect(approximate.content_status).toBe('partial')
+    expect(approximate.omitted_content).toEqual([
+      expect.objectContaining({ code: 'drawing-layout-unsupported', origin: 'shaping', category: 'drawing', scope_id: 'run:1', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]', count: 1 }),
+      expect.objectContaining({ code: 'empty-line-metrics-unresolved', origin: 'shaping', category: 'text', scope_id: 'paragraph:1', count: 1 }),
+    ])
+    expect(approximate.omitted_content.map(entry => entry.code)).not.toContain('THEME_COLOR_PRESERVED')
+    expect(approximate.unpainted_pages).toEqual([])
+    expect(approximate.reasons).toContain(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, content_status: 'complete' }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, omitted_content: [] }).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: approximate.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING) }).ok).toBe(false)
+    const { content_status: _status, ...legacyEnvelope } = approximate
+    expect(decodeNativeDocxApproximatePagePreviewV1(legacyEnvelope).ok).toBe(false)
+    expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
+  })
+  it('discloses a drawing-only document as partial with an unpainted page instead of a silently blank painted page', async () => {
+    const request = fixture()
+    const pagination = request.pagination_request
+    const settings = pagination.pagination_settings
+    const original = pagination.document.body.blocks[0]!.paragraph!
+    const drawingRun = { kind: 'drawing' as const, id: 'run:shape', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 110, 180), drawing: { id: 'drawing:shape', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 112, 178), placement: 'inline' as const, width_emu: 914_400, height_emu: 914_400, edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'DRAWING_EFFECTS_UNSUPPORTED', message: 'Preserve the original drawing.', preservation: 'refuse-mutation' as const } } } }
+    original.runs = [drawingRun]
+    pagination.document.unsupported = [{ id: 'unsupported:shape', code: 'UNMODELED_DRAWING', capability: 'drawings', scope_id: 'run:shape', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 112, 178), preservation: 'refuse-mutation', message: 'Drawing/object markup and related media are preserved verbatim' }]
+    pagination.resolved_layout.runs = [{ run_id: 'run:shape', paragraph_id: original.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } }]
+    pagination.shaped_lines.paragraphs = []
+    pagination.shaped_lines.diagnostics = [{ code: 'drawing-layout-unsupported', severity: 'unsupported', scope_id: original.id, source_id: 'run:shape', message: 'Drawing payload is missing' }]
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(pagination.shaped_lines)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(pagination)
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused' } })
+    request.paginated_layout = strict.ok ? strict.value : request.paginated_layout
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(request.paginated_layout)
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate', content_status: 'partial' })
+    expect(approximate.pages).toHaveLength(1)
+    expect(approximate.pages[0]!.commands).toEqual([])
+    expect(approximate.unpainted_pages).toEqual([approximate.pages[0]!.id])
+    expect(approximate.omitted_content.filter(entry => entry.code === 'UNMODELED_DRAWING')).toEqual([{ code: 'UNMODELED_DRAWING', origin: 'source', category: 'drawing', scope_id: 'run:shape', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', message: 'Drawing/object markup and related media are preserved verbatim', count: 1 }])
+    expect(approximate.omitted_content.map(entry => entry.code)).toEqual(['UNMODELED_DRAWING', 'drawing-layout-unsupported', 'PARAGRAPH_NOT_SHAPED'])
+    expect(approximate.omitted_content_total).toBe(3)
+    expect(approximate.reasons).toContain(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [], reasons: approximate.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING) }).ok).toBe(false)
     expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
   })
   it('omits a comment/drawing paragraph that failed shaping and still paints a sibling paragraph', async () => {
@@ -475,6 +523,12 @@ describe('native DOCX page-paint v1', () => {
     const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
     expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate' })
     expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path' && command.source_id === 'run:1')).toBe(true)
+    expect(approximate.content_status).toBe('partial')
+    expect(approximate.omitted_content.map(entry => [entry.code, entry.category, entry.scope_id])).toEqual([
+      ['reference-layout-unsupported', 'comment', 'run:comment-start'],
+      ['PARAGRAPH_NOT_SHAPED', 'text', 'paragraph:comment'],
+    ])
+    expect(approximate.unpainted_pages).toEqual([])
     expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
   })
   it('bounds upstream refusal reasons and keeps valid atomic output', async () => {

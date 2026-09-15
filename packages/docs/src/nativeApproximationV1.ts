@@ -5,6 +5,7 @@ import { preflightWire, decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, D
 import type { NativeDocxValidationIssue } from './nativeContract.js'
 import { nativeApproximationSettingReason, validNativeDocxApproximatedSettingV1, type NativeDocxApproximatedSettingV1 } from './nativeApproximationSettingsV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentFontSizesV1, validNativeDocxApproximatedFontSizesV1, type NativeDocxAbsentFontSizeV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+import { collectNativeDocxApproximateOmissionsV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
 
 export const DOCX_APPROXIMATE_PREVIEW_PROTOCOL = 'injoffice.docx.approximate-page-preview' as const
 export const DOCX_APPROXIMATE_PREVIEW_POLICY = 'current-layout-approximate-v1' as const
@@ -75,6 +76,12 @@ export interface NativeDocxApproximatePagePreviewV1 {
   diagnostics: NativeDocxPagePaintV1['diagnostics']
   resources: NativeDocxPagePaintV1['resources']
   pages: NativeDocxPagePaintV1['pages']
+  /** 'partial' whenever source content was dropped or a page painted nothing;
+   * `status: 'painted'` alone never attests completeness. */
+  content_status: NativeDocxApproximateOmissionsV1['content_status']
+  omitted_content: NativeDocxApproximateOmissionsV1['omitted_content']
+  omitted_content_total: NativeDocxApproximateOmissionsV1['omitted_content_total']
+  unpainted_pages: NativeDocxApproximateOmissionsV1['unpainted_pages']
 }
 
 /** Eligibility is produced from original package bytes by the native extractor,
@@ -97,19 +104,22 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   return input
 }
 
-export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSettingsV1, eligibility: NativeDocxApproximationEligibilityV1, paint: NativeDocxPagePaintV1): NativeDocxApproximatePagePreviewV1 {
+export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSettingsV1, eligibility: NativeDocxApproximationEligibilityV1, paint: NativeDocxPagePaintV1, source?: NativeDocxApproximateOmissionSourceV1): NativeDocxApproximatePagePreviewV1 {
+  if (paint.status === 'painted' && !source) throw new TypeError('Painted approximate output requires its source for omitted-content disclosure')
+  const omissions = source ? collectNativeDocxApproximateOmissionsV1(source, paint) : nativeDocxApproximateRefusalOmissionsV1()
   return {
     protocol: DOCX_APPROXIMATE_PREVIEW_PROTOCOL, version: 1, fidelity: 'approximate', policy: DOCX_APPROXIMATE_PREVIEW_POLICY, read_only: true,
     table_border_layout_policy:'collapsed-horizontal-border-reservation-v1',
     status: paint.status,
     source: { document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256 ?? null },
-    reasons: [...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[])],
+    reasons: [...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[]),...(omissions.omitted_content.length||omissions.unpainted_pages.length?[DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING]:[])],
     ...(eligibility.legacy_table_origins?{legacy_table_origins:structuredClone(eligibility.legacy_table_origins)}:{}),
     source_settings_diagnostics: structuredClone(settings.diagnostics),
     ...(eligibility.approximated_settings ? { approximated_settings: structuredClone(eligibility.approximated_settings) } : {}),
     ...(eligibility.absent_font_sizes ? { source_absent_font_sizes: structuredClone(eligibility.absent_font_sizes) } : {}),
     rendering_provenance: paint.provenance,
     diagnostics: paint.diagnostics, resources: paint.resources, pages: paint.pages,
+    ...omissions,
   }
 }
 
@@ -122,12 +132,13 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const issues = preflightWire(value, 'approximate page preview').filter(issue => !(issue.code === 'INVALID_VALUE' && issue.path === '/source/settings_sha256' && candidate?.source?.settings_sha256 === null))
     if (issues.length) return { ok: false, issues }
     const input = structuredClone(value) as NativeDocxApproximatePagePreviewV1
-    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes','legacy_table_origins','table_border_layout_policy'].includes(key)).sort().join(',') !== 'diagnostics,fidelity,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,version'
+    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes','legacy_table_origins','table_border_layout_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 264 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || !input.reasons.includes(DOCX_APPROXIMATE_LINE_BOX_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
     const paint = decodeNativeDocxPagePaintV1({ protocol: DOCX_PAGE_PAINT_PROTOCOL, version: DOCX_PAGE_PAINT_VERSION, status: input.status, provenance: input.rendering_provenance, diagnostics: input.diagnostics, resources: input.resources, pages: input.pages })
     if(input.table_border_layout_policy!==undefined&&(input.table_border_layout_policy!=='collapsed-horizontal-border-reservation-v1'||!input.reasons.includes(DOCX_TABLE_BORDER_RESERVATION_WARNING)))return invalid('Invalid declared table border reservation policy or warning')
     if (!paint.ok) return paint
+    if (!validNativeDocxApproximateOmissionsV1(input, paint.value) || (input.omitted_content.length > 0 || input.unpainted_pages.length > 0) !== input.reasons.includes(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)) return invalid('Omitted-content disclosure does not agree with painted pages or its warning')
     const settings = paint.value.provenance.pagination_settings
     if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,settings.package_sha256)||(input.legacy_table_origins.length>0&&!input.reasons.includes(DOCX_LEGACY_TABLE_ORIGIN_WARNING))))return invalid('Missing legacy origin evidence or warning')
     const absent = input.source_absent_font_sizes ?? []
