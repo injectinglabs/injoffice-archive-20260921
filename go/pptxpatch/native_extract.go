@@ -522,16 +522,28 @@ func openNativeExtractPackage(data []byte) (nativeExtractPackage, error) {
 	if err != nil {
 		return nativeExtractPackage{}, err
 	}
+	var omitted []string
 	for actualPart := range parts {
 		if actualPart == contentTypesPart {
 			continue
 		}
 		effective := contentTypes.forPart(actualPart)
 		if effective == "" {
-			return nativeExtractPackage{}, fmt.Errorf("pptxpatch: native extract OPC: part %q has no effective content type", actualPart)
+			// Unreferenced editor leftover parts (vim swap files, etc.) have no
+			// content type. Relationship targets still fail closed.
+			omitted = append(omitted, actualPart)
+			continue
 		}
 		if asciiEqualFoldNative(path.Ext(actualPart), ".rels") && !asciiEqualFoldNative(effective, "application/vnd.openxmlformats-package.relationships+xml") {
 			return nativeExtractPackage{}, fmt.Errorf("pptxpatch: native extract OPC: relationships part %q has invalid effective content type", actualPart)
+		}
+	}
+	for _, actualPart := range omitted {
+		delete(parts, actualPart)
+	}
+	for alias, name := range aliases {
+		if _, ok := parts[name]; !ok {
+			delete(aliases, alias)
 		}
 	}
 	return nativeExtractPackage{parts: parts, aliases: aliases, contentTypes: contentTypes}, nil
@@ -1593,14 +1605,18 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 				if errors.As(elementErr, &duplicate) {
 					return NativeSlide{}, elementErr
 				}
-				raw, rawErr := rawNativeNode(payload, child)
-				if rawErr != nil {
-					return NativeSlide{}, rawErr
+				if fallback, fallbackErr := extractor.extractAutoShape(child, part, slideID, dialect); fallbackErr == nil {
+					element = fallback
+				} else {
+					raw, rawErr := rawNativeNode(payload, child)
+					if rawErr != nil {
+						return NativeSlide{}, rawErr
+					}
+					if err := extractor.markSlideUnsupported(&slide, part, elementObjectID, nativeSHA256(raw), raw, "pptx.unsupported-shape", elementErr.Error()); err != nil {
+						return NativeSlide{}, err
+					}
+					continue
 				}
-				if err := extractor.markSlideUnsupported(&slide, part, elementObjectID, nativeSHA256(raw), raw, "pptx.unsupported-shape", elementErr.Error()); err != nil {
-					return NativeSlide{}, err
-				}
-				continue
 			}
 			slide.Elements = append(slide.Elements, element)
 			slide.Compatibility.Status = worseNativeStatus(slide.Compatibility.Status, element.Compatibility.Status)

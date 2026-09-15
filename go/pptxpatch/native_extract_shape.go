@@ -51,8 +51,11 @@ func nativeShapeIsTextBox(node *nativeXMLNode, dialect nativeExtractDialect) (bo
 	}
 	value, ok := exactNativeAttr(nonVisualShape, "", "txBox")
 	if !ok {
-		placeholder, err := nativeTextPlaceholder(node, dialect)
-		return placeholder != nil, err
+		placeholder, err := nativePlaceholderMetadata(node, dialect)
+		if placeholder != nil && (err == nil || isNativePlaceholderUnsupported(err)) {
+			return true, nil
+		}
+		return false, err
 	}
 	parsed, err := nativeBool(value)
 	if err != nil {

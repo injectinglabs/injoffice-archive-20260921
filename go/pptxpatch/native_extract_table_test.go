@@ -398,6 +398,38 @@ func TestNativeTableAuthorityRequiresCompleteExactFrameGeometry(t *testing.T) {
 	}
 }
 
+func TestExtractNativePPTXTableStyleWithUntypedLeftoverStillEmitsSlide(t *testing.T) {
+	t.Parallel()
+	table := nativeExactTableGraphicFrameXML(3, "Styled table", []int64{500000, 500000}, []int64{500000}, [][]string{{
+		nativeExactTableCellXML("One", "l", "FFFFFF"), nativeExactTableCellXML("Two", "r", "EEEEEE"),
+	}}, "")
+	table = strings.Replace(table, `<a:tblPr/>`, `<a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}</a:tableStyleId></a:tblPr>`, 1)
+	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{
+		extraParts: []nativeExtractZipPart{{name: "relocated/slides/.slide1.xml.swp", data: "b0VIM leftover"}},
+		mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, table+`</p:spTree>`, 1)
+		},
+	})
+	deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("styled table plus leftover swap aborted extract: %v", err)
+	}
+	if len(deck.Slides) != 1 {
+		t.Fatalf("slide was not emitted: %+v", deck.Slides)
+	}
+	for _, element := range deck.Slides[0].Elements {
+		if element.Kind == NativeElementKindTable {
+			t.Fatalf("predefined table style leaked a projection: %+v", element)
+		}
+	}
+	if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.table-style-unavailable") {
+		t.Fatalf("table style was not refused: %+v", deck.Slides[0].Compatibility)
+	}
+	if len(deck.Slides[0].Elements) != 1 || deck.Slides[0].Elements[0].Kind != NativeElementKindText {
+		t.Fatalf("remaining slide shape was dropped: %+v", deck.Slides[0].Elements)
+	}
+}
+
 func nativeTableFixture(t *testing.T, strict bool, children string) []byte {
 	t.Helper()
 	return nativeExtractFixture(t, nativeExtractFixtureOptions{strict: strict, mutate: func(parts map[string]string) {
