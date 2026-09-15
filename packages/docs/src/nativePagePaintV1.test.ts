@@ -32,6 +32,7 @@ import {
   DOCX_PAGINATION_REQUEST_PROTOCOL,
   DOCX_PAGINATION_REQUEST_VERSION,
   paginateNativeDocxV1,
+  paginateNativeDocxApproximateLegacyV1,
   type NativeDocxPaginationRequestV1,
 } from './nativePaginationV1.js'
 import {
@@ -329,6 +330,133 @@ describe('native DOCX page-paint v1', () => {
     const flagEligibility = { ...eligibility, approximated_settings: [flag], reasons: [`Current-layout approximation disregards ${flag.kind} at ${flag.path}; source values are retained and Word layout may differ`] }
     expect(decodeNativeDocxApproximationEligibilityV1(flagEligibility, flagSettings).status).toBe('eligible')
     expect(() => decodeNativeDocxApproximationEligibilityV1({ ...flagEligibility, approximated_settings: [], reasons: ['Legacy mode'] }, flagSettings)).toThrow('conflicts')
+  })
+  it('admits attested mode 15 extras as current-layout approximation without painting strict', async () => {
+    const request = fixture()
+    const settings = request.pagination_request.pagination_settings
+    settings.profile = 'unsupported'
+    const flags = [
+      { kind: 'overrideTableStyleFontSizeAndJustification' as const, path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '1' } },
+      { kind: 'enableOpenTypeFeatures' as const, path: '/w:settings[1]/w:compat[1]/w:compatSetting[3]', values: { val: '1' } },
+      { kind: 'doNotFlipMirrorIndents' as const, path: '/w:settings[1]/w:compat[1]/w:compatSetting[4]', values: { val: '1' } },
+    ]
+    const reasons = flags.map(flag => `Current-layout approximation disregards ${flag.kind} at ${flag.path}; source values are retained and Word layout may differ`)
+    settings.diagnostics = [
+      ...flags.map(flag => ({ code: 'COMPATIBILITY_SETTING_UNSUPPORTED' as const, severity: 'unsupported' as const, part_name: SETTINGS_PART, path: flag.path, preservation: 'preserve-verbatim' as const, message: 'Only one modern Word compatibilityMode=15 attestation is supported' })),
+      { code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]/w:compatSetting[5]', preservation: 'preserve-verbatim', message: 'Only one modern Word compatibilityMode=15 attestation is supported' },
+      { code: 'PAGINATION_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:themeFontLang[1]', preservation: 'preserve-verbatim', message: 'This settings property is not proven neutral to native shaping and pagination' },
+    ]
+    const refused = paginateNativeDocxV1(request.pagination_request)
+    if (!refused.ok) throw new Error('invalid fixture')
+    request.paginated_layout = refused.value
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(refused.value)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 15 as const, reasons, approximated_settings: flags }
+    expect(decodeNativeDocxApproximationEligibilityV1(eligibility, settings).legacy_compatibility_mode).toBe(15)
+    await expect(compileNativeDocxApproximatePagePreviewV1(request, { ...eligibility, legacy_compatibility_mode: 14, reasons: ['Legacy mode 14'] }, new FixtureProvider())).rejects.toThrow('conflicts')
+    const modern = structuredClone(settings)
+    modern.profile = 'word-modern-default'
+    modern.diagnostics = []
+    expect(() => decodeNativeDocxApproximationEligibilityV1(eligibility, modern)).toThrow('conflicts')
+    const missingMode = structuredClone(settings)
+    delete missingMode.compatibility_mode
+    expect(() => decodeNativeDocxApproximationEligibilityV1(eligibility, missingMode)).toThrow('conflicts')
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate' })
+    expect(approximate.pages).toHaveLength(1)
+    expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+  })
+  it('omits blocking shaping diagnostics in approximate paint and still refuses strict', async () => {
+    const request = fixture()
+    const settings = request.pagination_request.pagination_settings
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    request.pagination_request.shaped_lines.diagnostics.push({
+      code: 'drawing-layout-unsupported', severity: 'unsupported', scope_id: 'paragraph:1', source_id: 'run:1', message: 'Drawing payload is missing',
+    }, {
+      code: 'empty-line-metrics-unresolved', severity: 'unsupported', scope_id: 'paragraph:1', message: 'An empty line has no safely resolved font metrics',
+    })
+    request.pagination_request.resolved_layout.diagnostics.push({
+      code: 'UNMODELED_FONT_METADATA', severity: 'unsupported', scope_id: settings.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[1]/w:embedRegular[1]', preservation: 'preserve-verbatim', message: 'Font metadata is preserved for future font matching',
+    })
+    request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(request.pagination_request.shaped_lines)
+    const refused = paginateNativeDocxV1(request.pagination_request)
+    if (!refused.ok) throw new Error('invalid fixture')
+    expect(refused.value.status).toBe('refused')
+    request.paginated_layout = refused.value
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(refused.value)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate' })
+    expect(approximate.pages).toHaveLength(1)
+    expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path')).toBe(true)
+    expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
+  })
+  it('omits a comment/drawing paragraph that failed shaping and still paints a sibling paragraph', async () => {
+    const request = fixture()
+    const pagination = request.pagination_request
+    const settings = pagination.pagination_settings
+    const edit = pagination.document.body.blocks[0]!.paragraph!.edit_policy
+    const commentAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]', start_byte: 10, end_byte: 400, xml_sha256: HASH }
+    const storyAnchor = { part_name: 'word/comments.xml', path: '/w:comments[1]/w:comment[1]/w:p[1]', start_byte: 20, end_byte: 300, xml_sha256: HASH }
+    const commentBody = {
+      id: 'paragraph:comment-body',
+      anchor: storyAnchor,
+      edit_policy: edit,
+      properties: {},
+      runs: [{ kind: 'text' as const, id: 'run:comment-body', anchor: { ...storyAnchor, path: `${storyAnchor.path}/w:r[1]`, start_byte: 30, end_byte: 80 }, text: 'c' }],
+    }
+    pagination.document.comment_stories = [{
+      id: 'story:comment:1', kind: 'comment', part_name: 'word/comments.xml', native_story_id: '1',
+      anchor: storyAnchor, blocks: [{ kind: 'paragraph', id: commentBody.id, paragraph: commentBody }],
+    }]
+    pagination.document.comments = [{ id: 'comment:1', native_comment_id: '1', author: 't', anchor: commentAnchor, body_story_id: 'story:comment:1' }]
+    const dropped = {
+      id: 'paragraph:comment',
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]', 40, 90),
+      edit_policy: edit,
+      properties: {},
+      runs: [
+        { kind: 'reference' as const, id: 'run:comment-start', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:commentRangeStart[1]', 42, 50), reference: { kind: 'comment-range-start' as const, target_id: 'comment:1' } },
+        { kind: 'drawing' as const, id: 'run:comment-drawing', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 51, 70), drawing: { id: 'drawing:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 52, 69), placement: 'inline' as const, width_emu: 914_400, height_emu: 914_400, edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'DRAWING_EFFECTS_UNSUPPORTED', message: 'Preserve the original drawing.', preservation: 'refuse-mutation' as const } } } },
+        { kind: 'reference' as const, id: 'run:comment-end', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:commentRangeEnd[1]', 71, 78), reference: { kind: 'comment-range-end' as const, target_id: 'comment:1' } },
+        { kind: 'reference' as const, id: 'run:comment-ref', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', 79, 88), reference: { kind: 'comment' as const, target_id: 'comment:1' } },
+      ],
+    }
+    pagination.document.body.blocks.unshift({ kind: 'paragraph', id: dropped.id, paragraph: dropped })
+    pagination.document.sections[0]!.starts_at_block_id = dropped.id
+    pagination.resolved_layout.paragraphs.unshift(
+      { paragraph_id: dropped.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { paragraph_id: commentBody.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } },
+    )
+    pagination.resolved_layout.runs.push(
+      { run_id: 'run:comment-start', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: 'run:comment-drawing', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: 'run:comment-end', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: 'run:comment-ref', paragraph_id: dropped.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+      { run_id: 'run:comment-body', paragraph_id: commentBody.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } },
+    )
+    pagination.shaped_lines.diagnostics.push({
+      code: 'reference-layout-unsupported', severity: 'unsupported', scope_id: dropped.id, source_id: 'run:comment-start',
+      message: 'Reference display text is not in the exact uniquely ordered decimal note subset',
+    })
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(pagination.shaped_lines)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(pagination)
+    expect(strict, JSON.stringify(strict)).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+    const approximateLayout = paginateNativeDocxApproximateLegacyV1(pagination, eligibility)
+    expect(approximateLayout.layout.status).toBe('paginated')
+    expect(approximateLayout.layout.pages[0]!.lines.map(line => line.paragraph_id)).toEqual(['paragraph:1'])
+    request.paginated_layout = strict.ok ? strict.value : request.paginated_layout
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(request.paginated_layout)
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate' })
+    expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path' && command.source_id === 'run:1')).toBe(true)
+    expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
   })
   it('bounds upstream refusal reasons and keeps valid atomic output', async () => {
     const request = fixture()

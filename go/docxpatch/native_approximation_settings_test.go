@@ -18,6 +18,7 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 		{"math", math, true}, {"shape", shape, true},
 		{"combined", math + shape + `<w:themeFontLang w:val="fr-FR"/><w:decimalSymbol w:val="."/><w:listSeparator w:val=","/>`, true},
 		{"compatibility flags", `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, true},
+		{"mode 15 extras", `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/><w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="doNotFlipMirrorIndents" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="differentiateMultirowTableHeaders" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat><w:themeFontLang w:val="hu-HU"/>`, true},
 		{"malformed language", `<w:themeFontLang w:val="en_US"/>`, true},
 		{"unknown language", `<w:themeFontLang w:val="ar-SA"/>`, true},
 		{"duplicate locale", `<w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>`, false},
@@ -44,6 +45,9 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 			}
 			if (approx.Status == "eligible") != test.eligible {
 				t.Fatalf("wrong eligibility %#v", approx)
+			}
+			if test.name == "mode 15 extras" && (approx.LegacyCompatibilityMode == nil || *approx.LegacyCompatibilityMode != 15 || strict.CompatibilityMode == nil || *strict.CompatibilityMode != 15) {
+				t.Fatalf("mode 15 extras must name current-layout mode 15 while strict stays unsupported: %#v %#v", strict, approx)
 			}
 			if test.eligible && len(approx.Reasons) == 0 {
 				t.Fatalf("eligible approximation must retain a reason: %#v", approx)
