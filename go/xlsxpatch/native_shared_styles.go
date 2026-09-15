@@ -597,12 +597,17 @@ func (extractor *nativeWorkbookExtractor) extractStyles() ([]NativeWorkbookStyle
 	if err := extractor.inventoryNativeStylesMarkup(data, part); err != nil {
 		return nil, nil, nil, part, err
 	}
-	registry, err := newStyleRegistry(data)
+	registry, mismatches, err := newStyleRegistryForExtraction(data)
 	if err != nil {
 		return nil, nil, nil, part, fmt.Errorf("xlsxpatch: native extract: styles %q: %w", part, err)
 	}
 	if registry.index.namespace != extractor.namespace {
 		return nil, nil, nil, part, fmt.Errorf("xlsxpatch: native extract: styles and workbook use opposing Strict/Transitional namespaces")
+	}
+	if len(mismatches) != 0 {
+		if err := extractor.addUnsupported("STYLE_PARENT_APPLY_MISMATCH", "styles", "workbook", part, "", styleParentApplyMismatchMessage(mismatches)); err != nil {
+			return nil, nil, nil, part, err
+		}
 	}
 	normalStyle := projectNativeWorkbookNormalStyle(data, registry)
 	styles := make([]NativeWorkbookStyleV1, 0, len(registry.cellXfs))
