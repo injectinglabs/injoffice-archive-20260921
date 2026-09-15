@@ -79,7 +79,14 @@ func TestNativePageSettingsExplicitAndFailClosed(t *testing.T) {
 	if got.Status != "available" || got.Settings.Paper != "A4" || got.Settings.Scale != 100 {
 		t.Fatalf("unexpected %+v", got)
 	}
-	for _, edit := range [][2]string{{` scale="100"`, ""}, {`scale="100"`, `scale="0x64"`}, {`left="0.7"`, `left="NaN"`}, {`left="0.7"`, `left="0x1p2"`}, {`paperSize="9"`, `paperSize="999"`}, {`scale="100"`, `scale="100" horizontalDpi="300"`}, {`</worksheet>`, `<rowBreaks/></worksheet>`}, {`</worksheet>`, `<headerFooter/></worksheet>`}, {`</worksheet>`, `<pageSetup paperSize="9" orientation="portrait" scale="100"/></worksheet>`}, {`<pageSetup`, `<pageSetup xmlns="urn:foreign"`}} {
+	if previewNativePageSettings([]byte(strings.Replace(raw, ` scale="100"`, "", 1)), "sheet.xml", "1").Status != "available" {
+		t.Fatal("omitted scale must default to 100")
+	}
+	sentinel := strings.Replace(raw, `scale="100"`, `horizontalDpi="4294967293" verticalDpi="0" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"`, 1)
+	if got := previewNativePageSettings([]byte(sentinel), "sheet.xml", "1"); got.Status != "available" || got.Settings.Scale != 100 {
+		t.Fatalf("sentinel printer DPI / r:id must be ignored: %+v", got)
+	}
+	for _, edit := range [][2]string{{`scale="100"`, `scale="0x64"`}, {`left="0.7"`, `left="NaN"`}, {`left="0.7"`, `left="0x1p2"`}, {`paperSize="9"`, `paperSize="999"`}, {`scale="100"`, `scale="100" horizontalDpi="300"`}, {`</worksheet>`, `<rowBreaks/></worksheet>`}, {`</worksheet>`, `<headerFooter/></worksheet>`}, {`</worksheet>`, `<pageSetup paperSize="9" orientation="portrait" scale="100"/></worksheet>`}, {`<pageSetup`, `<pageSetup xmlns="urn:foreign"`}} {
 		if previewNativePageSettings([]byte(strings.Replace(raw, edit[0], edit[1], 1)), "sheet.xml", "1").Status != "unavailable" {
 			t.Fatalf("accepted %v", edit)
 		}
