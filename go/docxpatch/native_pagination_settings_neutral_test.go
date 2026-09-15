@@ -74,6 +74,11 @@ func TestNativeExtractOmitsUnsafeAttachedTemplate(t *testing.T) {
 	if _, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(parts))); err != nil {
 		t.Fatal(err)
 	}
+	hyper := nativePaginationSettingsParts(settingsXML)
+	hyper["Word/_RELS/Document.XML.RELS"] = strings.Replace(hyper["Word/_RELS/Document.XML.RELS"], `Target="SETTINGS.xml"`, `Target="file:///f:\unsafe\settings.xml" TargetMode="External"`, 1)
+	if _, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(hyper))); err == nil {
+		t.Fatal("unsafe non-template external relationship must still fail extract")
+	}
 }
 
 func TestExtractNativePaginationSettingsV1StylePaneFilterBitsAreNotInvalid(t *testing.T) {
@@ -84,6 +89,10 @@ func TestExtractNativePaginationSettingsV1StylePaneFilterBitsAreNotInvalid(t *te
 	}
 	if !paginationSettingsHasCode(settings, "PAGINATION_SETTING_UNSUPPORTED") {
 		t.Fatal("style pane filter must remain pagination-unsupported")
+	}
+	nested := extractNativePaginationSettingsMarkup(t, wordMLTransitional, `<w:stylePaneFormatFilter w:val="3F01" w:allStyles="1"><w:foo/></w:stylePaneFormatFilter><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>`+nativeMode15Compat())
+	if !paginationSettingsHasCode(nested, "INVALID_SETTINGS_STRUCTURE") {
+		t.Fatal("nested style pane filter markup must stay invalid")
 	}
 }
 

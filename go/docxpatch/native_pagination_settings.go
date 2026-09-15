@@ -411,6 +411,26 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 				}
 			}
 			if extra {
+				if !nativeSettingsExactNode(result, child, map[xml.Name]bool{
+					{Space: wordNS, Local: "val"}:                          true,
+					{Space: wordNS, Local: "allStyles"}:                    true,
+					{Space: wordNS, Local: "customStyles"}:                 true,
+					{Space: wordNS, Local: "latentStyles"}:                 true,
+					{Space: wordNS, Local: "stylesInUse"}:                  true,
+					{Space: wordNS, Local: "headingStyles"}:                true,
+					{Space: wordNS, Local: "numberingStyles"}:              true,
+					{Space: wordNS, Local: "tableStyles"}:                  true,
+					{Space: wordNS, Local: "directFormattingOnRuns"}:       true,
+					{Space: wordNS, Local: "directFormattingOnParagraphs"}: true,
+					{Space: wordNS, Local: "directFormattingOnNumbering"}:  true,
+					{Space: wordNS, Local: "directFormattingOnTables"}:     true,
+					{Space: wordNS, Local: "clearFormatting"}:              true,
+					{Space: wordNS, Local: "top3HeadingStyles"}:            true,
+					{Space: wordNS, Local: "visibleStyles"}:                true,
+					{Space: wordNS, Local: "alternateStyleNames"}:          true,
+				}, false) {
+					continue
+				}
 				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Style pane format filter extra bits are UI chrome and do not change native pagination geometry")
 				continue
 			}

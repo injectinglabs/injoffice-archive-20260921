@@ -1607,13 +1607,14 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
 }
 
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {
-  if (paragraph.runs.some((run) => run.kind === 'drawing' || run.kind === 'control' || (run.kind === 'reference' && run.reference !== undefined && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote'))) return true
+  if (paragraph.runs.some((run) => run.kind === 'drawing' || (run.kind === 'reference' && run.reference !== undefined && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote'))) return true
   const scopes = new Set([paragraph.id, ...paragraph.runs.map((run) => run.id)])
   return document.unsupported.some((entry) => scopes.has(entry.scope_id) && (
     entry.code === 'PARTIAL_RUN_PROPERTIES' ||
     entry.code === 'PICTURE_GRAPHIC_REQUIRED' ||
     entry.code === 'UNMODELED_RUN_CONTENT' ||
     entry.code === 'UNMODELED_PARAGRAPH_CONTENT' ||
+    entry.code === 'UNMODELED_DRAWING' ||
     entry.code === 'FIELD_SEMANTICS'
   ))
 }
@@ -1636,7 +1637,7 @@ function validateAndIndexParagraphs(context: PaginationContext, groups: readonly
       if (context.approximateLegacySettings && approximateOmittedUnshapedParagraph(paragraph, context.request.document)) {
         addDiagnostic(context, {
           code: 'source-diagnostic', severity: 'deferred', scope_id: paragraph.id,
-          message: 'Approximate preview omits a paragraph that failed shaping because of comment, drawing, or unmodeled reference runs and paints remaining paragraphs',
+          message: 'Approximate preview omits an unshaped paragraph with unmodeled drawing, comment, field, or partial-run source and paints remaining paragraphs',
         })
         continue
       }

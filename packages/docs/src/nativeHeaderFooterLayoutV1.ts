@@ -336,10 +336,8 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
       const section = sections.get(page.section_id)
       const variants = effective.get(page.section_id)
       if (!section || !variants) { diagnostics.push(diagnostic('selected-story-missing', page.section_id, 'Paginated page has no exact native section')); continue }
-      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS'))
-      if (!input.omit_unmodeled_section_geometry) {
-        for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
-      }
+      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS') && !(input.omit_unmodeled_section_geometry && entry.code === 'UNMODELED_SECTION_PROPERTY'))
+      for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
       if (section.page.orientation === 'portrait' ? section.page.width_twips > section.page.height_twips : section.page.width_twips < section.page.height_twips) diagnostics.push(diagnostic('section-geometry-invalid', section.id, 'Section orientation contradicts its exact page width and height'))
       const kind = selectedKind(section, page, input.pagination_settings)
       const pageLayout: NativeDocxHeaderFooterPageLayoutV1 = { page_id: page.id, lines: [] }

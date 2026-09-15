@@ -1155,6 +1155,38 @@ describe('native DOCX pagination v1', () => {
     expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:2'])
   })
 
+  it('omits an unshaped picture or partial-run paragraph in approximate layout and keeps the sibling paragraph', () => {
+    for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PARTIAL_RUN_PROPERTIES'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const dropped = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'drawings', scope_id: dropped.id, preservation: 'refuse-mutation', message: code })
+      request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      const strict = paginateNativeDocxV1(request)
+      expect(strict, code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:2'])
+    }
+  })
+
+  it('still refuses an unshaped text-only paragraph in approximate layout', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    const dropped = request.document.body.blocks[0]!.paragraph!
+    request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('refused')
+    expect(approximate.layout.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+  })
+
   it('refuses body tables, drawings, and note references from source authority even when shaped output omits them', () => {
     const table = fixture() as any
     table.document.body.blocks = [{
