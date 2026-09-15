@@ -156,6 +156,9 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       // current-layout approximate operation accepts it.
       const equations = value.op === 'render-approximate' && 'equations' in value.input ? value.input.equations : undefined
       if (equations !== undefined) fields.push('equations')
+      // Server-inspected chart sidecar for the same bytes; same operation gate.
+      const drawingCharts = value.op === 'render-approximate' && 'drawing_charts' in value.input ? value.input.drawing_charts : undefined
+      if (drawingCharts !== undefined) fields.push('drawing_charts')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
       if((fontOnly||textbox)&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
@@ -198,7 +201,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
           : await renderNativeDocxTextboxPagesPreviewV2(input,evidence,textboxFonts,outlineProvider,{fonts})
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
-      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}), ...(equations !== undefined ? { equations } : {}) }
+      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}), ...(equations !== undefined ? { equations } : {}), ...(drawingCharts !== undefined ? { drawingCharts } : {}) }
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)

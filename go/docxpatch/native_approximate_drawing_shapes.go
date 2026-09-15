@@ -155,6 +155,10 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 					// Modeled or otherwise owned content is never re-described here.
 					continue
 				}
+				if uri := nativeApproximateGraphicURI(drawing, wp, a); uri == nativeChartNSTransitional || uri == nativeChartNSStrict {
+					// Charts belong to InspectNativeApproximateDrawingChartsV1.
+					continue
+				}
 				if len(out.Items) >= nativeApproximateDrawingShapeLimit {
 					out.OmittedCount++
 					continue

@@ -3254,6 +3254,11 @@
               "signature": "export declare function decodeNativeDocxApproximateComputedPagePaintV1(value: unknown, eligibility: unknown):"
             },
             {
+              "name": "decodeNativeDocxApproximateDrawingChartsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximateDrawingChartsV1(value: unknown, document: NativeDocxDocumentV1): NativeDocxApproximateDrawingChartsV1"
+            },
+            {
               "name": "decodeNativeDocxApproximateDrawingShapesV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, document: NativeDocxDocumentV1): NativeDocxApproximateDrawingShapesV1"
@@ -3467,6 +3472,46 @@
               "name": "DEFAULT_PAGINATION_OPTIONS",
               "kind": "const",
               "signature": "export declare const DEFAULT_PAGINATION_OPTIONS: PaginationOptions"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_CHART_FONT_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_CODE: 'docx.approximate-drawing-chart-preview'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE: 'docx.approximate-drawing-chart-omitted'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_POLICY: 'docx.approximate-drawing-chart-preview-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED: \"docx.approximate-drawing-chart-omitted: drawing-chart evidence did not exact-join the source document and was not used; refused charts stay omitted\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID: \"docx.approximate-drawing-chart-preview-v1\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_WARNING: \"docx.approximate-drawing-chart-preview: DrawingML clustered bar/column charts are painted approximately from the values cached in the chart part with a host layout: plot margins, legend and title placement, dash segmentation and any unauthored value-axis scale are InjOffice approximations, not Office chart layout. Original drawing restrictions and source bytes are unchanged.\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL: 'injoffice.docx.approximate-drawing-charts'"
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_CODE",
@@ -3924,9 +3969,64 @@
               "signature": "export interface NativeDocxAbsentFontSizeV1"
             },
             {
+              "name": "NativeDocxApproximateChartAxisV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartAxisV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartFontSubstitutionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartFontSubstitutionV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartFontV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartFontV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartLegendV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartLegendV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartModelV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartModelV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartPaintResultV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartPaintResultV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartPaintRuntimeV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartPaintRuntimeV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartSeriesV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartSeriesV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartTitleV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartTitleV1"
+            },
+            {
               "name": "NativeDocxApproximatedFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximateDrawingChartsV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateDrawingChartsV1"
+            },
+            {
+              "name": "NativeDocxApproximateDrawingChartV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateDrawingChartV1"
             },
             {
               "name": "NativeDocxApproximateDrawingShapesV1",
@@ -3982,6 +4082,11 @@
               "name": "NativeDocxApproximateEquationV1",
               "kind": "type",
               "signature": "NativeDocxApproximateEquationV1"
+            },
+            {
+              "name": "NativeDocxApproximateInlineChartProjectionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateInlineChartProjectionV1"
             },
             {
               "name": "NativeDocxApproximateInlineShapeProjectionV1",
@@ -5149,6 +5254,11 @@
               "signature": "PaginationOptions"
             },
             {
+              "name": "paintNativeDocxApproximateDrawingChartsV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, charts: NativeDocxApproximateDrawingChartsV1, projection: NativeDocxApproximateInlineChartProjectionV1, runtime: NativeDocxApproximateChartPaintRuntimeV1): Promise<NativeDocxApproximateChartPaintResultV1>"
+            },
+            {
               "name": "paintNativeDocxApproximateDrawingShapesV1",
               "kind": "function",
               "signature": "export declare function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, shapes: NativeDocxApproximateDrawingShapesV1, projection: NativeDocxApproximateInlineShapeProjectionV1, runtime: NativeDocxApproximateShapePaintRuntimeV1): Promise<NativeDocxApproximateShapePaintResultV1>"
@@ -5187,6 +5297,11 @@
               "name": "projectNativeDocxApproximateEquationsV1",
               "kind": "function",
               "signature": "export declare function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1): NativeDocxApproximateEquationProjectionV1"
+            },
+            {
+              "name": "projectNativeDocxApproximateInlineChartsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxApproximateInlineChartsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, charts: NativeDocxApproximateDrawingChartsV1): NativeDocxApproximateInlineChartProjectionV1"
             },
             {
               "name": "projectNativeDocxApproximateInlineShapesV1",
@@ -5961,6 +6076,11 @@
               "signature": "export declare function createNativeDocxEmbeddedFontResolverV1(inventory: NativeDOCXFontInventoryV1, assetsValue: readonly NativeDocxAuthoritativeFontAssetV1[]): NativeFontResolver"
             },
             {
+              "name": "decodeNativeDocxApproximateDrawingChartsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximateDrawingChartsV1(value: unknown, document: NativeDocxDocumentV1): NativeDocxApproximateDrawingChartsV1"
+            },
+            {
               "name": "decodeNativeDocxApproximateDrawingShapesV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, document: NativeDocxDocumentV1): NativeDocxApproximateDrawingShapesV1"
@@ -5989,6 +6109,46 @@
               "name": "decodeNativeDocxFontSubstitutionPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxFontSubstitutionPreviewV1(value: unknown): NativeDocxFontSubstitutionPreviewV1"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_CHART_FONT_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_CODE: 'docx.approximate-drawing-chart-preview'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE: 'docx.approximate-drawing-chart-omitted'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_POLICY: 'docx.approximate-drawing-chart-preview-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED: \"docx.approximate-drawing-chart-omitted: drawing-chart evidence did not exact-join the source document and was not used; refused charts stay omitted\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID: \"docx.approximate-drawing-chart-preview-v1\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHART_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_WARNING: \"docx.approximate-drawing-chart-preview: DrawingML clustered bar/column charts are painted approximately from the values cached in the chart part with a host layout: plot margins, legend and title placement, dash segmentation and any unauthored value-axis scale are InjOffice approximations, not Office chart layout. Original drawing restrictions and source bytes are unchanged.\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL: 'injoffice.docx.approximate-drawing-charts'"
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_CODE",
@@ -6136,9 +6296,64 @@
               "signature": "export interface NativeDocxAbsentFontSizeV1"
             },
             {
+              "name": "NativeDocxApproximateChartAxisV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartAxisV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartFontSubstitutionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartFontSubstitutionV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartFontV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartFontV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartLegendV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartLegendV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartModelV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartModelV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartPaintResultV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartPaintResultV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartPaintRuntimeV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartPaintRuntimeV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartSeriesV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartSeriesV1"
+            },
+            {
+              "name": "NativeDocxApproximateChartTitleV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateChartTitleV1"
+            },
+            {
               "name": "NativeDocxApproximatedFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximateDrawingChartsV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateDrawingChartsV1"
+            },
+            {
+              "name": "NativeDocxApproximateDrawingChartV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateDrawingChartV1"
             },
             {
               "name": "NativeDocxApproximateDrawingShapesV1",
@@ -6194,6 +6409,11 @@
               "name": "NativeDocxApproximateEquationV1",
               "kind": "type",
               "signature": "NativeDocxApproximateEquationV1"
+            },
+            {
+              "name": "NativeDocxApproximateInlineChartProjectionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateInlineChartProjectionV1"
             },
             {
               "name": "NativeDocxApproximateInlineShapeProjectionV1",
@@ -6321,6 +6541,11 @@
               "signature": "export interface NativeDocxPagePaintPrepareInputV1"
             },
             {
+              "name": "paintNativeDocxApproximateDrawingChartsV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, charts: NativeDocxApproximateDrawingChartsV1, projection: NativeDocxApproximateInlineChartProjectionV1, runtime: NativeDocxApproximateChartPaintRuntimeV1): Promise<NativeDocxApproximateChartPaintResultV1>"
+            },
+            {
               "name": "paintNativeDocxApproximateDrawingShapesV1",
               "kind": "function",
               "signature": "export declare function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, shapes: NativeDocxApproximateDrawingShapesV1, projection: NativeDocxApproximateInlineShapeProjectionV1, runtime: NativeDocxApproximateShapePaintRuntimeV1): Promise<NativeDocxApproximateShapePaintResultV1>"
@@ -6344,6 +6569,11 @@
               "name": "projectNativeDocxApproximateEquationsV1",
               "kind": "function",
               "signature": "export declare function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1): NativeDocxApproximateEquationProjectionV1"
+            },
+            {
+              "name": "projectNativeDocxApproximateInlineChartsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxApproximateInlineChartsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, charts: NativeDocxApproximateDrawingChartsV1): NativeDocxApproximateInlineChartProjectionV1"
             },
             {
               "name": "projectNativeDocxApproximateInlineShapesV1",
