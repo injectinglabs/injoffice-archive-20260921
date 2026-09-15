@@ -538,11 +538,10 @@ describe('native PPTX RenderTree', () => {
     expect(paths).toHaveLength(4)
     expect(paths[0]).toMatchObject({ kind: 'path', sourceElementId: 'styled-table', fill: '000000', stroke: { color: 'FFFFFF', widthEmu: 12_700 } })
     expect(paths[3]).toMatchObject({ kind: 'path', fill: 'CBCBCB' })
-    // Legacy cells shape their (empty) text; nothing visible may be emitted.
-    for (const command of commands) if (command.kind === 'glyphRun') expect(command.run.text).toBe('')
-    const lastFill = commands.findIndex((command) => command.kind === 'path' && command.fill === 'CBCBCB')
-    const firstGlyph = commands.findIndex((command) => command.kind === 'glyphRun')
-    if (firstGlyph !== -1) expect(firstGlyph).toBeGreaterThan(lastFill)
+    // Text-free cells never enter the shaping pipeline, so no font is demanded.
+    for (const item of node.cells) expect(item).toMatchObject({ textFree: true })
+    expect(node.cells.every((item) => item.paragraph === undefined && item.textBody === undefined)).toBe(true)
+    expect(commands.filter((command) => command.kind === 'glyphRun')).toHaveLength(0)
   })
 
   it('keeps nested native group projection renderer-neutral and composes source order without group clipping', async () => {
