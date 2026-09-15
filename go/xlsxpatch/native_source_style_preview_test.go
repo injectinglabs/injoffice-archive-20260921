@@ -21,8 +21,8 @@ func TestSourceStylePreviewKeepsStrictAuthority(t *testing.T) {
 	p := sourceStyleFixture()
 	b := buildZip(t, p)
 	before := bytes.Clone(b)
-	if _, err := ExtractNativeWorkbookV2(b); err == nil {
-		t.Fatal("strict extraction accepted conflicting source")
+	if extracted, err := ExtractNativeWorkbookV2(b); err != nil || !nativeGetCorpusHasCode(extracted.Unsupported, "STYLE_PARENT_APPLY_MISMATCH") {
+		t.Fatalf("read-only extraction must record the apply-flag mismatch: err=%v", err)
 	}
 	got, err := PreviewNativeSourceStylesV1(b)
 	if err != nil {

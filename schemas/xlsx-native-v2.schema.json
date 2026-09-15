@@ -41,6 +41,7 @@
     "COLS_ATTRIBUTES": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
     "SHEET_FORMAT_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
     "SHEET_VIEW_GEOMETRY": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
+    "SHEET_VIEW_PANE": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
     "COLUMN_DIMENSION_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
     "ROW_DIMENSION_EXTRAS": { "capability": "dimensions", "scope": "sheet", "impact": "none" },
     "ROW_EXTENSIONS": { "capability": "extensions", "scope": "sheet", "impact": "none" },
@@ -75,6 +76,7 @@
     "STYLE_HORIZONTAL_ALIGNMENT": { "capability": "styles", "scope": "style", "impact": "none" },
     "STYLE_VERTICAL_ALIGNMENT": { "capability": "styles", "scope": "style", "impact": "none" },
     "STYLE_ALIGNMENT_EXTENDED": { "capability": "styles", "scope": "style", "impact": "none" },
+    "STYLE_PARENT_APPLY_MISMATCH": { "capability": "styles", "scope": "workbook", "impact": "none" },
     "CHART_CONTENT": { "capability": "charts", "scope": "workbook", "impact": "none" },
     "PIVOT_OR_SLICER_CONTENT": { "capability": "pivots", "scope": "workbook", "impact": "none" },
     "DRAWING_OR_MEDIA_CONTENT": { "capability": "drawings", "scope": "workbook", "impact": "none" },
@@ -104,6 +106,8 @@
   "$defs": {
     "dialect": { "type": "string", "enum": ["transitional", "strict"], "x-binding-name": "NativeWorkbookDialect" },
     "sheetState": { "type": "string", "enum": ["visible", "hidden", "veryHidden"], "x-binding-name": "NativeSheetState" },
+    "paneState": { "type": "string", "enum": ["frozen", "frozenSplit", "split"], "x-binding-name": "NativePaneState" },
+    "activePane": { "type": "string", "enum": ["topLeft", "topRight", "bottomLeft", "bottomRight"], "x-binding-name": "NativeActivePane" },
     "valueKind": { "type": "string", "enum": ["number", "boolean", "error", "date", "string"], "x-binding-name": "NativeValueKind" },
     "valueStorage": { "type": "string", "enum": ["number", "boolean", "error", "date", "formula-string", "shared", "inline"], "x-binding-name": "NativeValueStorage" },
     "ooxmlCellType": { "type": "string", "enum": ["n", "s", "str", "inlineStr", "b", "e", "d"], "x-binding-name": "NativeOOXMLCellType" },
@@ -235,6 +239,20 @@
         "zero_height": { "type": "boolean" }
       }
     },
+    "sheetView": {
+      "type": "object", "x-binding-name": "NativeWorkbookSheetViewV2", "additionalProperties": false,
+      "description": "Read-only sheetView pane fact as authored (frozen counts, split twips, top-left cell). It is preview metadata, never a mutation target.",
+      "required": ["pane_state", "frozen_rows", "frozen_columns"],
+      "properties": {
+        "pane_state": { "$ref": "#/$defs/paneState" },
+        "frozen_rows": { "type": "integer", "minimum": 0, "maximum": 1048576 },
+        "frozen_columns": { "type": "integer", "minimum": 0, "maximum": 16384 },
+        "split_x_twips": { "type": "number", "minimum": 0, "maximum": 2147483647 },
+        "split_y_twips": { "type": "number", "minimum": 0, "maximum": 2147483647 },
+        "top_left_cell": { "type": "string", "minLength": 2, "maxLength": 10, "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}$" },
+        "active_pane": { "$ref": "#/$defs/activePane" }
+      }
+    },
     "normalStyle": {
       "type": "object", "x-binding-name": "NativeWorkbookNormalStyleV2", "additionalProperties": false,
       "required": ["style_xf_id", "font_id", "font_name", "font_size_points", "font_bold", "font_italic", "font_record_sha256"],
@@ -344,6 +362,7 @@
         "state": { "$ref": "#/$defs/sheetState" },
         "part_name": { "type": "string", "minLength": 1, "maxLength": 8192 },
         "sheet_format": { "$ref": "#/$defs/sheetFormat" },
+        "sheet_view": { "$ref": "#/$defs/sheetView" },
         "rows": { "type": "array", "maxItems": 1048576, "items": { "$ref": "#/$defs/rowDimension" } },
         "columns": { "type": "array", "maxItems": 16384, "items": { "$ref": "#/$defs/columnDimension" } },
         "cells": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/cell" } },

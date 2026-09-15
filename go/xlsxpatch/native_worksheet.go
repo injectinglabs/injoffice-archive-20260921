@@ -47,12 +47,17 @@ func (extractor *nativeWorkbookExtractor) extractWorksheet(route nativeWorkbookS
 		switch token := token.(type) {
 		case xml.StartElement:
 			if token.Name.Space == extractor.namespace && token.Name.Local == "sheetViews" {
-				benign, parseErr := parseNativeBenignSheetViews(decoder, token)
+				views, parseErr := parseNativeSheetViews(decoder, token)
 				if parseErr != nil {
 					return sheet, parseErr
 				}
-				if !benign {
+				if !views.benign {
 					if err := extractor.addUnsupported("SHEET_VIEW_GEOMETRY", "dimensions", "sheet:"+route.id, route.part, "", "unmodeled sheet-view geometry remains authority-bound to the source package"); err != nil {
+						return sheet, err
+					}
+				} else if views.view != nil {
+					sheet.SheetView = views.view
+					if err := extractor.addUnsupported("SHEET_VIEW_PANE", "dimensions", "sheet:"+route.id, route.part, "", nativeSheetViewPaneMessage(views.view)); err != nil {
 						return sheet, err
 					}
 				}
@@ -240,90 +245,9 @@ func validNativeWorksheetUID(value string) bool {
 	return true
 }
 
-// Workbook selection state is UI metadata, not grid geometry. Only this narrow,
-// fully parsed shape is ignored; any view option or unknown markup remains
-// source-authoritative as SHEET_VIEW_GEOMETRY.
-func parseNativeBenignSheetViews(decoder *xml.Decoder, root xml.StartElement) (bool, error) {
-	benign := len(unexpectedSemanticXMLAttributes(root)) == 0
-	depth, sheetViews, selections := 0, 0, 0
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			return false, err
-		}
-		switch token := token.(type) {
-		case xml.StartElement:
-			if depth == 0 && token.Name == (xml.Name{Space: root.Name.Space, Local: "sheetView"}) {
-				sheetViews++
-				if sheetViews != 1 || !nativeBenignSheetViewAttributes(token) {
-					benign = false
-				}
-			} else if depth == 1 && token.Name == (xml.Name{Space: root.Name.Space, Local: "selection"}) {
-				selections++
-				if selections != 1 || !nativeBenignSelectionAttributes(token) {
-					benign = false
-				}
-			} else {
-				benign = false
-			}
-			depth++
-		case xml.EndElement:
-			if depth == 0 {
-				if token.Name != root.Name {
-					return false, fmt.Errorf("sheetViews has a mismatched closing element")
-				}
-				return benign && sheetViews == 1, nil
-			}
-			depth--
-		case xml.CharData:
-			if len(bytes.TrimSpace(token)) != 0 {
-				benign = false
-			}
-		case xml.ProcInst:
-			return false, fmt.Errorf("sheetViews contains a processing instruction")
-		case xml.Directive:
-			return false, fmt.Errorf("sheetViews contains an XML directive")
-		}
-	}
-}
-
-func nativeBenignSheetViewAttributes(element xml.StartElement) bool {
-	if len(unexpectedSemanticXMLAttributes(element, xml.Name{Local: "workbookViewId"}, xml.Name{Local: "tabSelected"}, xml.Name{Local: "showGridLines"})) != 0 {
-		return false
-	}
-	viewID, found, err := unqualifiedXMLAttribute(element, "workbookViewId")
-	if err != nil || !found {
-		return false
-	}
-	if _, err = strconv.ParseUint(viewID, 10, 32); err != nil {
-		return false
-	}
-	selected, found, err := unqualifiedXMLAttribute(element, "tabSelected")
-	if err != nil || (found && selected != "0" && selected != "1" && selected != "false" && selected != "true") {
-		return false
-	}
-	// Excel default is gridlines on. Native chrome already draws the grid;
-	// only an explicit off is view geometry that we do not project.
-	grid, found, err := unqualifiedXMLAttribute(element, "showGridLines")
-	return err == nil && (!found || grid == "1" || grid == "true")
-}
-
 func nativeDefaultOffXMLFlag(element xml.StartElement, local string) bool {
 	value, found, err := unqualifiedXMLAttribute(element, local)
 	return err == nil && (!found || value == "0" || value == "false")
-}
-
-func nativeBenignSelectionAttributes(element xml.StartElement) bool {
-	if len(unexpectedSemanticXMLAttributes(element, xml.Name{Local: "activeCell"}, xml.Name{Local: "sqref"})) != 0 {
-		return false
-	}
-	active, activeFound, activeErr := unqualifiedXMLAttribute(element, "activeCell")
-	selection, selectionFound, selectionErr := unqualifiedXMLAttribute(element, "sqref")
-	if activeErr != nil || selectionErr != nil || !activeFound || !selectionFound || active != selection {
-		return false
-	}
-	row, column, err := parseCellReference(active)
-	return err == nil && cellReference(row, column) == active
 }
 
 func (extractor *nativeWorkbookExtractor) parseNativeSheetFormat(decoder *xml.Decoder, root xml.StartElement, route nativeWorkbookSheetRoute) (NativeWorkbookSheetFormatV1, error) {

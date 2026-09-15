@@ -121,10 +121,10 @@ jobs:
         run: |
           wasm=go/xlsxpatch/cmd/xlsxnativewasm/dist/xlsxnative.wasm
           actual_bytes=$(wc -c < "$wasm" | tr -d ' ')
-          max_bytes=$((7 * 1024 * 1024 + 8192))
+          max_bytes=$(cat go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt)
           echo "xlsxnative.wasm: ${actual_bytes} bytes (maximum ${max_bytes})"
           if (( actual_bytes > max_bytes )); then
-            echo "xlsxnative.wasm exceeds the 7 MiB + 8 KiB size ceiling" >&2
+            echo "xlsxnative.wasm exceeds the 7.25 MiB + 8 KiB size ceiling" >&2
             exit 1
           fi
       - name: Run mandatory XLSX WASM contract

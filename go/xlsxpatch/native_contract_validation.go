@@ -114,6 +114,9 @@ func validateNativeWorkbookDeep(workbook *NativeWorkbookV1, issues *[]NativeWork
 				state.issue("INVALID_NUMBER", formatPath+"/default_column_width", "negative zero is not canonical")
 			}
 		}
+		for _, issue := range nativeSheetViewIssues(sheet.SheetView, path) {
+			state.issue(issue.code, issue.path, issue.message)
+		}
 		totalRows += len(sheet.Rows)
 		totalColumns += len(sheet.Columns)
 		totalCells += len(sheet.Cells)

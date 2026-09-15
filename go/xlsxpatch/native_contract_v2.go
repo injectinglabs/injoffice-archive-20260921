@@ -228,6 +228,7 @@ type NativeWorkbookSheetV2 struct {
 	State        string                            `json:"state"`
 	PartName     string                            `json:"part_name"`
 	SheetFormat  *NativeWorkbookSheetFormatV2      `json:"sheet_format,omitempty"`
+	SheetView    *NativeWorkbookSheetViewV2        `json:"sheet_view,omitempty"`
 	Rows         []NativeWorkbookRowDimensionV2    `json:"rows"`
 	Columns      []NativeWorkbookColumnDimensionV2 `json:"columns"`
 	Cells        []NativeWorkbookCellV2            `json:"cells"`

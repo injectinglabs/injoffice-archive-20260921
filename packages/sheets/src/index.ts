@@ -44,11 +44,13 @@ export {
 } from './nativeContract.generated.js'
 
 export type {
+  NativeActivePane,
   NativeBorderOrigin,
   NativeBorderStyle,
   NativeFormulaType,
   NativeHorizontalAlignment,
   NativeOOXMLCellType,
+  NativePaneState,
   NativeSheetState,
   NativeStyleProjection,
   NativeStyleUnsupportedCode,
@@ -70,6 +72,7 @@ export type {
   NativeWorkbookRowDimensionV1,
   NativeWorkbookSheetFormatV1,
   NativeWorkbookSheetV1,
+  NativeWorkbookSheetViewV1,
   NativeWorkbookSourceV1,
   NativeWorkbookStyleV1,
   NativeWorkbookUnsupportedV1,
@@ -181,6 +184,8 @@ export type {
   NativeHorizontalAlignment as NativeHorizontalAlignmentV2,
   NativeOOXMLCellType as NativeOOXMLCellTypeV2,
   NativeSheetState as NativeSheetStateV2,
+  NativeActivePane as NativeActivePaneV2,
+  NativePaneState as NativePaneStateV2,
   NativeStyleProjection as NativeStyleProjectionV2,
   NativeStyleUnsupportedCode as NativeStyleUnsupportedCodeV2,
   NativeValueKind as NativeValueKindV2,
@@ -201,6 +206,7 @@ export type {
   NativeWorkbookRowDimensionV2,
   NativeWorkbookSheetFormatV2,
   NativeWorkbookSheetV2,
+  NativeWorkbookSheetViewV2,
   NativeWorkbookSourceV2,
   NativeWorkbookStyleV2,
   NativeWorkbookUnsupportedV2,
