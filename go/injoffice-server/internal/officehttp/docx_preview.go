@@ -283,6 +283,17 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 			args = append(args, "--font-manifest", options.FontManifestPath)
 		}
 		operation, workerInput := docxApproximateWorkerInput(input, eligibility)
+		if operation == "render-approximate" {
+			// Same-bytes read-only sidecar; the compiler re-validates its joins.
+			shapes, shapesErr := docxpatch.InspectNativeApproximateDrawingShapesV1(data)
+			if shapesErr != nil {
+				xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, shapesErr)
+				return
+			}
+			if shapes != nil {
+				workerInput["drawing_shapes"] = shapes
+			}
+		}
 		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", operation, workerInput, 192*1024*1024, 64*1024*1024, args...)
 	} else {
 		result, err = compileDOCXPreview(ctx, options, input)
