@@ -176,8 +176,13 @@ export interface NativeDocxApproximateRuntimeV1 {
   drawingShapes?: unknown
   /** Server-supplied `InspectNativeApproximateEquationsV1` sidecar for the same bytes; validated against the document before use. */
   equations?: unknown
+  /** Server-supplied `InspectNativeApproximateDrawingChartsV1` sidecar for the same bytes; validated against the document before use. */
+  drawingCharts?: unknown
 }
 import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
+import { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, type NativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
+export { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL, DOCX_APPROXIMATE_DRAWING_CHART_POLICY, DOCX_APPROXIMATE_DRAWING_CHART_CODE, DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE, DOCX_APPROXIMATE_CHART_FONT_CODE, DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID } from './nativeApproximateDrawingChartsV1.js'
+export type { NativeDocxApproximateDrawingChartsV1, NativeDocxApproximateDrawingChartV1, NativeDocxApproximateChartModelV1, NativeDocxApproximateChartSeriesV1, NativeDocxApproximateChartAxisV1, NativeDocxApproximateChartTitleV1, NativeDocxApproximateChartLegendV1, NativeDocxApproximateChartFontV1, NativeDocxApproximateInlineChartProjectionV1, NativeDocxApproximateChartPaintResultV1, NativeDocxApproximateChartPaintRuntimeV1, NativeDocxApproximateChartFontSubstitutionV1 } from './nativeApproximateDrawingChartsV1.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
 export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
 export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
@@ -285,6 +290,21 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
       shapes = undefined; shapeProjection = undefined; sidecarRefused = true
     }
   }
+  // Approximate drawing charts: the same join discipline as shapes, reserving
+  // inline charts in the (possibly shape-projected) body copy and painting the
+  // cached chart model after pagination. Malformed evidence refuses the sidecar.
+  let charts: NativeDocxApproximateDrawingChartsV1 | undefined
+  let chartProjection: ReturnType<typeof projectNativeDocxApproximateInlineChartsV1> | undefined
+  if (runtime?.drawingCharts !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Approximate drawing charts require independently eligible approximate settings')
+    const currentDocument = decodeNativeDocxDocument(input.document)
+    const currentResolved = decodeNativeDocxResolvedLayout(input.resolved_layout)
+    if (!currentDocument.ok) failIssues('native document is invalid', currentDocument.issues)
+    if (!currentResolved.ok) failIssues('resolved layout is invalid', currentResolved.issues)
+    charts = decodeNativeDocxApproximateDrawingChartsV1(runtime.drawingCharts, currentDocument.value)
+    chartProjection = projectNativeDocxApproximateInlineChartsV1(currentDocument.value, currentResolved.value, charts)
+    input = { ...input, document: chartProjection.document, resolved_layout: chartProjection.resolved }
+  }
   const { result, prepared } = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
   if (sidecarRefused && !result.reasons.includes(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)) result.reasons.push(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)
   if (shapes && shapeProjection && result.status === 'painted') {
@@ -308,6 +328,19 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
     if (disclose) result.reasons.push(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
   }
+  if (charts && chartProjection && result.status === 'painted') {
+    const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
+    const resolver = runtime?.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+    const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
+    const painted = await paintNativeDocxApproximateDrawingChartsV1(result, charts, chartProjection, { request: prepared.page_paint_request, document: chartProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider })
+    for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
+    // Chart paint also changes which pages carry commands; keep the omitted-content record consistent.
+    const omissions = collectNativeDocxApproximateOmissionsV1(prepared.page_paint_request.pagination_request, result)
+    Object.assign(result, omissions)
+    const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
+    result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    if (disclose) result.reasons.push(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+  }
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
@@ -316,7 +349,7 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   // re-derives the omitted-content disclosure for the pages it touched.
   if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, shapeRestored)
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
-  if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes ? ` or approximate shape paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
+  if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes || charts ? ` or approximate ${shapes ? 'shape' : 'chart'} paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value
 }
 

@@ -36,6 +36,7 @@ import { renderNativeDocxAutomaticBorderPreviewV1 } from './nativePagePaintCompi
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } from './nativeAbsentFontSizeV1.js'
+import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING } from './nativeApproximateDrawingChartsV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -3155,4 +3156,162 @@ describe('approximate DrawingML shapes', () => {
     expect(layout.status).toBe('refused')
     expect(layout.diagnostics.some(d => d.code === 'body-structure-unsupported' && d.scope_id === 'run:textbox')).toBe(true)
   }, 20000)
+})
+
+describe('approximate DrawingML charts', () => {
+  const RUN_ANCHOR_START = 181, RUN_ANCHOR_END = 189
+  /** The sidecar arrives as JSON: undefined fields are absent on the wire. */
+  const wire = (value: unknown) => JSON.parse(JSON.stringify(value)) as unknown
+  const CHART_ID = 'approximate-drawing-chart:test:1'
+  function legacyEligibility(input: NativeDocxPagePaintPrepareInputV1) {
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile = 'unsupported'; delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy mode' }]
+    return { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy mode'] }
+  }
+  function outlineProvider(input: NativeDocxPagePaintPrepareInputV1) {
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    return { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+  }
+  const font = (size: number) => ({ family: 'Calibri', size_hundredth_pt: size, rgb: '595959', bold: false, italic: false })
+  const grey = { rgb: 'D9D9D9', width_emu: 9525, dash: 'solid' }
+  /** Two series over two categories, the first with a thick dotted outline like Chart_BorderLine_Style. */
+  function chartModel(overrides: Record<string, unknown> = {}) {
+    return {
+      kind: 'bar', bar_direction: 'column', grouping: 'clustered', gap_width_percent: 219, overlap_percent: -27, categories: ['Alpha', 'Beta'],
+      series: [
+        { index: 0, order: 0, title: 'First', values: ['4', '2'], fill_rgb: '4472C4', line: { rgb: '70AD47', width_emu: 76200, dash: 'sysDot' } },
+        { index: 1, order: 1, title: 'Second', values: ['1', '3'], fill_rgb: 'ED7D31' },
+      ],
+      category_axis: { deleted: false, orientation: 'minMax', line: grey, labels: font(900), number_format: 'General' },
+      value_axis: { deleted: false, orientation: 'minMax', labels: font(900), major_gridlines: grey, number_format: 'General' },
+      title: { font: font(1400), overlay: false }, legend: { position: 'b', font: font(900), overlay: false },
+      area_fill_rgb: 'FFFFFF', area_line: grey, ...overrides,
+    }
+  }
+  /** One refused chart drawing after the fixture text run, with its retained PICTURE_GRAPHIC_REQUIRED diagnostic. */
+  function chartInput(item: Record<string, unknown>) {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const paragraph = document.body.blocks[0]!.paragraph!
+    document.unsupported = [{ id: 'unsupported:chart', code: 'PICTURE_GRAPHIC_REQUIRED', capability: 'drawings', scope_id: paragraph.id, anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]/wp:inline[1]/a:graphic[1]/a:graphicData[1]', RUN_ANCHOR_START + 3, RUN_ANCHOR_END - 3), preservation: 'refuse-mutation', message: 'Drawing graphic requires a picture' }]
+    const eligibility = legacyEligibility(input)
+    const chart = {
+      id: CHART_ID, paragraph_id: paragraph.id, diagnostic_ids: ['unsupported:chart'],
+      anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]', RUN_ANCHOR_START + 1, RUN_ANCHOR_END - 1), run_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', RUN_ANCHOR_START, RUN_ANCHOR_END),
+      status: 'supported', placement: 'inline', width_emu: 2743200, height_emu: 1828800, chart_part: 'word/charts/chart1.xml', chart_part_sha256: HASH, chart: chartModel(), ...item,
+    }
+    const charts = { protocol: 'injoffice.docx.approximate-drawing-charts', version: 1, policy: 'docx.approximate-drawing-chart-preview-v1', package_sha256: HASH, part_sha256: HASH, items: [chart], omitted_count: 0 }
+    return { input, eligibility, charts, chart, paragraph }
+  }
+  const pageAnchor = () => ({ policy: 'relative-position-no-wrap-v2', source_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]/wp:anchor[1]', RUN_ANCHOR_START + 2, RUN_ANCHOR_END - 2), horizontal_anchor: anchor('/h', RUN_ANCHOR_START + 3, RUN_ANCHOR_START + 4), vertical_anchor: anchor('/v', RUN_ANCHOR_START + 4, RUN_ANCHOR_START + 5), x_emu: 914400, y_emu: 1828800, horizontal_relative: 'page', vertical_relative: 'page', stacking: { behind_doc: false, relative_height: 7 } })
+
+  it('reserves an inline clustered column chart on the line and paints bars, axes, legend and labels inside its frame', async () => {
+    const { input, eligibility, charts } = chartInput({})
+    const before = structuredClone(input)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) })
+    expect(paint.status).toBe('painted')
+    expect(input).toEqual(before)
+    const page = paint.pages[0]!
+    const line = page.lines[0]!
+    const fills = page.commands.filter((c): c is Extract<typeof c, { kind: 'fill_table_cell' }> => c.kind === 'fill_table_cell' && c.table_id === 'docx.approximate-drawing-chart-preview-v1')
+    const area = fills.find(c => c.cell_id === 'area')
+    if (!area) throw new Error('chart area missing')
+    // The atom follows the text run 'A' on the first line and sits on its baseline.
+    expect(area.width_millipoints).toBe(216_000); expect(area.height_millipoints).toBe(144_000)
+    expect(area.x_millipoints).toBeGreaterThan(line.x_millipoints); expect(area.y_millipoints + area.height_millipoints).toBe(line.baseline_y_millipoints)
+    expect(page.commands.filter(c => c.kind === 'fill_text_highlight')).toHaveLength(0)
+    const bars = fills.filter(c => c.cell_id.startsWith('bar:'))
+    expect(bars).toHaveLength(4)
+    for (const bar of bars) {
+      expect(bar.x_millipoints).toBeGreaterThanOrEqual(area.x_millipoints); expect(bar.x_millipoints + bar.width_millipoints).toBeLessThanOrEqual(area.x_millipoints + area.width_millipoints)
+      expect(bar.y_millipoints).toBeGreaterThanOrEqual(area.y_millipoints); expect(bar.y_millipoints + bar.height_millipoints).toBeLessThanOrEqual(area.y_millipoints + area.height_millipoints)
+    }
+    const first = bars.filter(c => c.cell_id.startsWith('bar:0:')), second = bars.filter(c => c.cell_id.startsWith('bar:1:'))
+    expect(first.map(c => c.fill_rgb)).toEqual(['4472C4', '4472C4']); expect(second.map(c => c.fill_rgb)).toEqual(['ED7D31', 'ED7D31'])
+    // Cached values 4 and 2 keep their ratio on the derived 0..5 scale; bars share one baseline.
+    expect(Math.abs(first[0]!.height_millipoints - 2 * first[1]!.height_millipoints)).toBeLessThanOrEqual(2)
+    expect(new Set(bars.map(c => c.y_millipoints + c.height_millipoints)).size).toBe(1)
+    // Series order left to right inside the first category, overlap gap between them.
+    expect(first[0]!.x_millipoints + first[0]!.width_millipoints).toBeLessThan(second[0]!.x_millipoints)
+    const strokes = page.commands.filter((c): c is Extract<typeof c, { kind: 'stroke_table_border' }> => c.kind === 'stroke_table_border' && c.table_id === 'docx.approximate-drawing-chart-preview-v1')
+    expect(strokes.filter(c => c.cell_id === 'gridline').length).toBe(6)
+    expect(strokes.filter(c => c.cell_id === 'category-axis').length).toBe(1)
+    expect(strokes.filter(c => c.cell_id.startsWith('bar-outline:0:')).length).toBeGreaterThan(8)
+    expect(strokes.filter(c => c.cell_id.startsWith('bar-outline:1:')).length).toBe(0)
+    expect(strokes.filter(c => c.cell_id === 'area-outline').length).toBe(4)
+    expect(fills.filter(c => c.cell_id.startsWith('legend:')).map(c => c.fill_rgb)).toEqual(['4472C4', 'ED7D31'])
+    const glyphs = page.commands.filter((c): c is Extract<typeof c, { kind: 'fill_glyph_path' }> => c.kind === 'fill_glyph_path' && c.source_id === CHART_ID)
+    // Category labels, six tick labels and two legend entries; the automatic title paints no text.
+    expect(glyphs.length).toBeGreaterThan(20)
+    for (const glyph of glyphs) { expect(glyph.line_id).toBe(line.line_id); expect(line.command_ids).toContain(glyph.id); expect(glyph.fill_rgb).toBe('595959') }
+    const xs = glyphs.flatMap(g => g.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
+    const ys = glyphs.flatMap(g => g.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(area.x_millipoints); expect(Math.max(...xs)).toBeLessThanOrEqual(area.x_millipoints + area.width_millipoints)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(area.y_millipoints); expect(Math.max(...ys)).toBeLessThanOrEqual(area.y_millipoints + area.height_millipoints)
+    expect(paint.reasons).toContain(DOCX_APPROXIMATE_DRAWING_CHART_WARNING)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-preview:') && r.includes('painted 1 of 1') && r.includes('2 categories x 2 series') && r.includes('value axis scale derived'))).toBe(true)
+    // Calibri is not in the fixture manifest: the loaded DejaVu face substitutes and the substitution is disclosed.
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-chart-substituted-font: Calibri / 400 / normal -> DejaVu Sans'))).toBe(true)
+    // The painted chart is no longer an omitted drawing.
+    expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED')).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('paints anchored charts at their resolved page position, keeps omitted charts disclosed and refuses degenerate models', async () => {
+    const { input, eligibility, charts, chart } = chartInput({ placement: 'anchored', page_anchor: pageAnchor(), wrap: 'none', chart: chartModel({ legend: undefined, title: undefined, bar_direction: 'bar', category_axis: { deleted: true, orientation: 'minMax', number_format: 'General' } }) })
+    charts.items.push({ ...chart, id: 'approximate-drawing-chart:test:2', status: 'omitted', reason: 'unsupported-chart-type:pieChart', chart: undefined, chart_part: undefined, chart_part_sha256: undefined, placement: undefined, page_anchor: undefined, wrap: undefined } as never)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) })
+    expect(paint.status).toBe('painted')
+    const commands = paint.pages[0]!.commands
+    const area = commands.find(c => c.kind === 'fill_table_cell' && c.cell_id === 'area')
+    expect(area).toMatchObject({ table_id: 'docx.approximate-drawing-chart-preview-v1', row_id: CHART_ID, x_millipoints: 72_000, y_millipoints: 144_000, width_millipoints: 216_000, height_millipoints: 144_000 })
+    const bars = commands.filter((c): c is Extract<typeof c, { kind: 'fill_table_cell' }> => c.kind === 'fill_table_cell' && c.cell_id.startsWith('bar:'))
+    expect(bars).toHaveLength(4)
+    // Horizontal bars grow to the right from one shared value baseline.
+    expect(new Set(bars.map(c => c.x_millipoints)).size).toBe(1)
+    const first = bars.filter(c => c.cell_id.startsWith('bar:0:'))
+    expect(Math.abs(first[0]!.width_millipoints - 2 * first[1]!.width_millipoints)).toBeLessThanOrEqual(2)
+    expect(commands.some(c => c.kind === 'stroke_table_border' && c.cell_id === 'category-axis')).toBe(false)
+    expect(commands.some(c => c.kind === 'fill_table_cell' && c.cell_id.startsWith('legend:'))).toBe(false)
+    // The anchored chart paints in front of body text.
+    expect(commands.indexOf(area!)).toBeGreaterThan(commands.findIndex(c => c.kind === 'fill_glyph_path' && c.source_id === 'run:1'))
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-omitted:') && r.includes('approximate-drawing-chart:test:2 (unsupported-chart-type:pieChart)'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('refuses sidecars that do not exact-join the source document or carry invalid models, and stays opt-in', async () => {
+    const cases: Array<[string, (charts: any, chart: any) => void]> = [
+      ['package', (charts) => { charts.package_sha256 = `sha256:${'b'.repeat(64)}` }],
+      ['paragraph', (_c, chart) => { chart.paragraph_id = 'paragraph:missing' }],
+      ['diagnostic', (_c, chart) => { chart.diagnostic_ids = ['unsupported:other'] }],
+      ['overlap', (_c, chart) => { chart.run_anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 105, 185); chart.anchor = anchor('/x', 110, 180) }],
+      ['unknown field', (charts) => { charts.extra = true }],
+      ['value lexeme', (_c, chart) => { chart.chart.series[0].values[0] = '4,3' }],
+      ['series length', (_c, chart) => { chart.chart.series[1].values = ['1'] }],
+      ['fill', (_c, chart) => { chart.chart.series[0].fill_rgb = 'blue' }],
+      ['grouping', (_c, chart) => { chart.chart.grouping = 'stacked' }],
+      ['omitted with model', (_c, chart) => { chart.status = 'omitted'; chart.reason = 'x' }],
+      ['inline anchor', (_c, chart) => { chart.page_anchor = pageAnchor() }],
+    ]
+    for (const [name, mutate] of cases) {
+      const { input, eligibility, charts, chart } = chartInput({})
+      mutate(charts, chart)
+      await expect(renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingCharts: wire(charts) }), name).rejects.toThrow()
+    }
+    const ineligible = chartInput({})
+    await expect(renderNativeDocxApproximatePagePreviewV1(ineligible.input, { ...ineligible.eligibility, status: 'ineligible' }, outlineProvider(ineligible.input), { drawingCharts: wire(ineligible.charts) })).rejects.toThrow()
+    // Without the sidecar the same document paints no chart and keeps disclosing the refused drawing.
+    const plain = chartInput({})
+    const paint = await renderNativeDocxApproximatePagePreviewV1(plain.input, plain.eligibility, outlineProvider(plain.input))
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell' && c.table_id === 'docx.approximate-drawing-chart-preview-v1')).toBe(false)
+    expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED')).toBe(true)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart'))).toBe(false)
+    // Strict preparation never reads the sidecar and keeps the source refusal untouched.
+    const strict = chartInput({})
+    const prepared = await prepareNativeDocxPagePaintV1(strict.input)
+    expect(prepared.page_paint_request.pagination_request.document.unsupported.map(entry => entry.id)).toEqual(['unsupported:chart'])
+    expect(JSON.stringify(prepared)).not.toContain('docx.approximate-drawing-chart')
+  }, 30000)
 })
