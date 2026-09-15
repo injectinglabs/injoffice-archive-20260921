@@ -876,10 +876,14 @@ func (context *nativeApproximateShapeContext) textbox(shape *nativeXMLNode, shap
 			textbox.OmittedBlocks++
 			continue
 		}
+		refusalsBefore := len(extractor.unsupported)
 		paragraph, err := extractor.extractParagraph(context.main, child)
 		if err != nil {
 			return nil, "unsupported-textbox-content"
 		}
+		// Content the ordinary extractor refuses (references, fields, nested
+		// markup) is dropped from the preview and counted, never merged.
+		textbox.OmittedRuns += len(extractor.unsupported) - refusalsBefore
 		paragraph.ID = fmt.Sprintf("%s:p%d", safeID, index)
 		paragraph.EditPolicy = nativeReadOnlyPolicy("APPROXIMATE_TEXTBOX_PREVIEW", "Textbox paragraphs are read-only approximate preview evidence")
 		runs := []NativeRunV1{}

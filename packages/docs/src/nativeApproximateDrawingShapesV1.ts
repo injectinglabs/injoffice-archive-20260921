@@ -38,7 +38,7 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_
 const MAX_SHAPES = 64
 const MAX_TEXTBOX_GLYPHS = 100_000
 /** Interactive viewers read at most 16 MiB; keep body paint plus shape paint under this. */
-const MAX_ENVELOPE_BYTES = 12 * 1024 * 1024
+const MAX_ENVELOPE_BYTES = 15 * 1024 * 1024
 const MAX_REASONS = 24
 const EMU_PER_MILLIPOINT = 12.7
 
@@ -425,10 +425,11 @@ function substituteTextboxFonts(resolved: NativeDocxResolvedLayoutInputV1, manif
     if (!properties.font_family) return true
     const weight = properties.bold ? 700 : 400, style = properties.italic ? 'italic' : 'normal'
     if (faceMatches(manifest, properties.font_family, weight, style)) return true
-    // Prefer the same weight and style; otherwise the nearest loaded host face,
-    // with the run's bold/italic rewritten so the shaper resolves exactly.
-    const hosts = manifest.faces.filter(face => face.source.kind === 'host' && !!face.source.contentDigest && face.stretch === 100)
-    const substitute = hosts.find(face => face.weight === weight && face.style === style) ?? hosts.find(face => face.style === style) ?? hosts.find(face => face.weight === weight) ?? hosts[0]
+    // Prefer a loaded host face with the same weight and style, then the nearest
+    // host face, then a document-embedded face; bold/italic are rewritten so the
+    // shaper resolves exactly. Never a system lookup, never an invented family.
+    const candidates = manifest.faces.filter(face => !!face.source.contentDigest && face.source.kind !== 'system' && face.stretch === 100).sort((left, right) => Number(right.source.kind === 'host') - Number(left.source.kind === 'host'))
+    const substitute = candidates.find(face => face.weight === weight && face.style === style) ?? candidates.find(face => face.style === style) ?? candidates.find(face => face.weight === weight) ?? candidates[0]
     if (!substitute) return false
     const key = `${asciiLowerNative(properties.font_family)}\0${weight}\0${style}`
     if (!seen.has(key)) { seen.add(key); outcome.substitutions.push({ source_family: properties.font_family, selected_family: substitute.family, face_id: substitute.faceId, weight, style, selected_weight: substitute.weight, selected_style: substitute.style }) }
@@ -520,12 +521,7 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
       const fragment: NativeDocxLineFragmentV1 = { ...source, id: `tb${chainOrdinal}.${placementIndex}.${source.id}` }
       const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placement.paragraphID)?.numbering?.marker_properties : resolvedRuns.get(fragment.source_id)?.properties
       const fragmentX = Math.round(x)
-      if (properties && fragment.source_kind !== 'image' && fragment.source_kind !== 'textbox' && fragmentX >= 0 && baseline >= 0) {
-        const underline = nativeTextUnderlineCommandsV1(properties.underline, properties.color, fragment, placedID, paintLine.line_id, fragmentX, baseline)
-        if (underline.ok) underlines.push(...underline.commands)
-        const highlight = nativeTextHighlightCommandV1(properties.highlight, fragment, placedID, paintLine.line_id, fragmentX, baseline)
-        if (highlight.ok && highlight.command) highlights.push(highlight.command)
-      }
+      const glyphsBefore = glyphs.length
       if (properties && fragment.glyphs.length && properties.font_size_half_points && fragment.face_id) {
         const fontSize = properties.font_size_half_points * 500
         const manifestFace = faces.get(fragment.face_id)
@@ -558,6 +554,13 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
             glyphX += glyph.advance_x_millipoints
           }
         }
+      }
+      // Decorations follow painted glyphs only, so budget truncation never leaves stray rules.
+      if (properties && fragment.source_kind !== 'image' && fragment.source_kind !== 'textbox' && fragmentX >= 0 && baseline >= 0 && (glyphs.length > glyphsBefore || fragment.glyphs.length === 0 && glyphIndexBudget > 0)) {
+        const underline = nativeTextUnderlineCommandsV1(properties.underline, properties.color, fragment, placedID, paintLine.line_id, fragmentX, baseline)
+        if (underline.ok) underlines.push(...underline.commands)
+        const highlight = nativeTextHighlightCommandV1(properties.highlight, fragment, placedID, paintLine.line_id, fragmentX, baseline)
+        if (highlight.ok && highlight.command) highlights.push(highlight.command)
       }
       x += fragment.advance_inline_millipoints
     }
