@@ -322,6 +322,10 @@ export interface NativePictureElement extends NativeElementBase {
   crop?: NativePictureCrop
   /** Exact DrawingML roundRect preset with its default (empty avLst) adjustment. */
   clip?: 'roundRect'
+  /** Source-evaluated DrawingML preset outline used as a read-only picture clip
+   * (`pptx.picture-geometry-preview`). Mutually exclusive with `clip`; the
+   * element must stay preserve-only until a preset serializer is qualified. */
+  geometry?: NativeEvaluatedGeometry
 }
 
 export interface NativeTableElement extends NativeElementBase {

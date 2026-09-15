@@ -126,6 +126,21 @@ crop, effects, links, and other semantics that v1 cannot represent stay
 capability-backed `preserveOnly` (or fail closed when relationship integrity is
 invalid).
 
+Picture outlines keep the exact `rect` / default `roundRect` (`clip`) contract.
+Any other `prstGeom`, including authored `avLst` adjustments, is evaluated
+through the same fingerprinted DrawingML preset catalog as AutoShapes and
+emitted as the additive picture `geometry` field with the warning
+`pptx.picture-geometry-preview`. That outline is a read-only clip preview: the
+picture remains `preserveOnly` with a passthrough capability, `clip` and
+`geometry` are mutually exclusive, editable pictures may not carry `geometry`,
+and mutation refuses every element that carries evaluated geometry. The
+renderer clips the image (after its exact source crop) to the fillable
+subpaths of that outline; stroke-only decoration paths never widen the clip.
+When catalog evaluation refuses (unknown preset, undeclared or non-literal
+adjustment, foreign markup, unstable numerics), the picture keeps the legacy
+`pptx.picture-geometry-unavailable` gap and paints as a placeholder rather than
+an invented outline.
+
 The exact text-body slice materializes DrawingML defaults and direct equivalents
 into `textBody`: left/right insets `91440` EMU, top/bottom insets `45720` EMU,
 `square` horizontal wrapping, `top` vertical anchoring, fixed `none` autofit, and
