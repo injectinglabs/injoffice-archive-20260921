@@ -858,3 +858,52 @@ counted under `docx.approximate-drawing-shape-omitted`. Body text is not
 wrapped around the shapes. Strict paint, source bytes and original drawing
 diagnostics are unchanged; the envelope `reasons` carry
 `docx.approximate-drawing-shape-preview` with every applied approximation.
+
+### Approximate OMML equations in the approximate page preview
+
+Strict extraction keeps refusing `m:oMath` / `m:oMathPara` paragraph content
+(`UNMODELED_PARAGRAPH_CONTENT`). The read-only
+`InspectNativeApproximateEquationsV1` sidecar (protocol
+`injoffice.docx.approximate-equations`, policy
+`docx.approximate-equation-preview-v1`) joins those retained refusals back to
+their source nodes and describes only the bounded OMML subset the explicitly
+labeled approximate preview can lay out: rows and text runs (`m:sty`, `m:scr`
+roman, `m:nor`), fractions (`bar` / `noBar`), `sSup`, `sSub`, `sSubSup`,
+n-ary operators (`chr`, `limLoc`, `subHide`, `supHide`, `grow`), delimiters
+(`begChr`, `endChr`, `sepChr`), radicals (`degHide`), functions, bars,
+accents, `limLow` / `limUpp`, and `m:oMathPara` justification. Run formatting
+resolves through the ordinary paragraph style resolver and the math style
+override. Matrices, equation arrays, boxes, phantoms, pre-scripts, group
+characters, non-roman script alphabets, argument size overrides, line breaks
+and every unknown element or property omit the whole equation with a declared
+reason. At most 64 equations per document, 32 depth, 512 nodes and 4096 UTF-16
+units per equation are described; the sidecar also lists the exact face
+identities (`font_requests`) it would like the host to load.
+
+The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
+`equations` to the `render-approximate` worker operation only; the worker
+widens the configured host faces it admits by those requests (never a
+substitution, never a document reference). The approximate compiler validates
+every equation against the same-bytes document (package digest, owning body
+paragraph, retained root refusal at the identical anchor, no overlap with
+modeled runs), lays it out as TeX-style boxes (script scaling 0.7 / 0.5,
+fraction rule on the math axis, display limits above and below n-ary
+operators, delimiters and radical signs stretched by uniform glyph scaling,
+TeX inter-atom spacing in text and display style), reserves the extent as a
+glyphless inline atom in its internal body copy (clamped to the column width;
+an empty `oMathPara` paragraph follows its justification, centered by
+default), and after pagination attaches glyph paint to the owning line plus
+`fill_table_cell` rules tagged `table_id = docx.approximate-equation-preview-v1`.
+The math face policy is declared per requested face as
+`docx.approximate-equation-font`: the authored family when the manifest
+provides it (`exact`), else a declared math family (`declared-math-substitute`),
+else the paragraph text face (`text-face-fallback`); symbols the chosen face
+lacks are shaped with another loaded face, and delimiters no loaded face
+covers are drawn as rules, both disclosed. Italic correction, OpenType MATH
+metrics and Word's equation line breaking are not modeled. Layout failures,
+budget overflow and unsupported equations are counted under
+`docx.approximate-equation-omitted`; painted equations drop out of
+`omitted_content`, which is re-derived after equation paint. Strict paint,
+source bytes and original equation diagnostics are unchanged; the envelope
+`reasons` carry `docx.approximate-equation-preview` with every applied
+approximation.

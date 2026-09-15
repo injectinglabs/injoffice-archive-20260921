@@ -119,3 +119,19 @@ describe('approximate drawing shape sidecar', () => {
     }
   })
 })
+
+describe('approximate equation sidecar', () => {
+  it('accepts the sidecar only on render-approximate and refuses malformed evidence without partial results', async () => {
+    for (const [op, input] of [
+      ['render-auto-borders', { prepare: {}, legacy_eligibility: {}, equations: {} }],
+      ['render-font-substitution', { prepare: {}, equations: {} }],
+      ['render-textbox-pages', { prepare: {}, evidence: {}, equations: {} }],
+      ['render-approximate', { prepare: {}, eligibility: {}, equations: { protocol: 'injoffice.docx.approximate-equations', version: 1, items: 'not-an-array' } }],
+      ['render-approximate', { prepare: {}, eligibility: {}, equations: null }],
+    ] as const) {
+      const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'equations:refusal', op, input })
+      expect(response).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED' } })
+      expect(response).not.toHaveProperty('result')
+    }
+  })
+})
