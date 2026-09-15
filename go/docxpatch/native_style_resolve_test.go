@@ -649,3 +649,45 @@ func resolvedNumberingTestParts(numbering string) map[string]string {
 		"word/numbering.xml":           numbering,
 	}
 }
+
+func TestResolveRunFontsKeepsLatinFacesBesideEmptyScriptSlot(t *testing.T) {
+	for _, tc := range []struct {
+		name, rFonts, wantFont, wantMessage string
+	}{
+		{name: "empty complex-script slot", rFonts: `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs=""/>`, wantFont: "Calibri", wantMessage: "Empty East-Asian or complex-script font slot"},
+		{name: "empty east-asian slot", rFonts: `<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia=""/>`, wantFont: "Arial", wantMessage: "Empty East-Asian or complex-script font slot"},
+		{name: "unbounded script slot stays unresolved", rFonts: `<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="` + strings.Repeat("a", 300) + `"/>`, wantMessage: "Invalid script font slot or hint"},
+		{name: "invalid hint stays unresolved", rFonts: `<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="latin"/>`, wantMessage: "Invalid script font slot or hint"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:docDefaults><w:rPrDefault><w:rPr>` + tc.rFonts + `<w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"/></w:styles>`
+			parts := resolvedStylesTestParts(styles)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r><w:t>text</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			before := bytes.Clone(data)
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			font := layout.Runs[0].Properties.FontFamily
+			if tc.wantFont == "" && font != nil {
+				t.Fatalf("font invented: %q", *font)
+			}
+			if tc.wantFont != "" && (font == nil || *font != tc.wantFont) {
+				t.Fatalf("latin font not kept: %v", font)
+			}
+			found := false
+			for _, diagnostic := range layout.Diagnostics {
+				if diagnostic.Code == "UNMODELED_FONT_SELECTION" && strings.Contains(diagnostic.Message, tc.wantMessage) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("strict refusal diagnostic missing: %#v", layout.Diagnostics)
+			}
+			if !bytes.Equal(data, before) {
+				t.Fatal("source mutated")
+			}
+		})
+	}
+}

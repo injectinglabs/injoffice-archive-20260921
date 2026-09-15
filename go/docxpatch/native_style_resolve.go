@@ -1986,8 +1986,16 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			_, csTheme := nativeAttr(child, resolver.wordNS, "cstheme")
 			hintValue, hint := nativeAttr(child, resolver.wordNS, "hint")
 			validScript := true
+			emptyScriptSlot := false
 			for _, local := range []string{"eastAsia", "cs"} {
 				if value, present := nativeAttr(child, resolver.wordNS, local); present && !nativeBoundedResolvedString(value, 256) {
+					// An empty script slot names no font for text this Latin
+					// resolver never shapes. It stays diagnosed (strict keeps
+					// refusing), but the authored ascii/hAnsi faces are kept.
+					if value == "" {
+						emptyScriptSlot = true
+						continue
+					}
 					validScript = false
 				}
 			}
@@ -2006,6 +2014,9 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			if !validScript {
 				resolver.addDiagnostic("UNMODELED_FONT_SELECTION", scopeID, partName, child, "Invalid script font slot or hint is preserved and not resolved")
 				continue
+			}
+			if emptyScriptSlot {
+				resolver.addDiagnostic("UNMODELED_FONT_SELECTION", scopeID, partName, child, "Empty East-Asian or complex-script font slot is preserved and not resolved; only the Latin font slots were resolved")
 			}
 			if eastAsia || eastAsiaTheme || cs || csTheme {
 				properties.deferScriptProperty("fonts", "SCRIPT_FONT_PRESERVED", partName, child, "East-Asia/complex-script font selection requires script shaping and is not guessed")
