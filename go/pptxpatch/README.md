@@ -23,10 +23,16 @@ by `pptx.inherited-text-properties-omitted` (a sorted list such as `a:lnSpc`,
 continues in a bullet-free paragraph at the same left margin, a paragraph
 without runs becomes one blank space run carrying its end-mark metrics, and an
 `a:t` with undeclared edge whitespace is projected as preserved; all three are
-listed in the same disclosure. Paint-active properties (strikethrough,
+listed in the same disclosure. `a:buFontTx`/`a:buSzTx`/`a:buClrTx` cancel a
+lower layer's bullet font/size/color before leaving the projection. Paint-active
+properties (strikethrough,
 underline, baseline shifts, highlights, automatic numbering, picture bullets)
 still refuse. A shape `fontRef` without an authored color contributes only its
-typeface.
+typeface. The `source-latin-inheritance-approximate-v1` identity names the
+declared layer order and Latin-only profile, which are unchanged; the widened
+property handling is disclosed per element by the omissions code rather than by
+a new policy identity, because hosts and the preview server re-validate the v1
+string as the inherited-text contract.
 
 `NativePPTXExtractOptions.AllowSourceFrameAutoFitPreview` explicitly permits a
 read-only preview of otherwise supported `spAutoFit` text in its saved source
@@ -194,7 +200,7 @@ When that exact chain does not qualify and `AllowInheritedTextPreview` is set,
 `title`, `ctrTitle`, `subTitle`, `body`, `obj` and untyped placeholders resolve
 through a declared approximation instead: layout match by `idx` (falling back to
 an exact `type` match), master match by title/body family, and the cascade
-master `titleStyle`/`bodyStyle` → master placeholder `lstStyle` → layout
+presentation `defaultTextStyle` → master `titleStyle`/`bodyStyle` → master placeholder `lstStyle` → layout
 placeholder `lstStyle` → slide `lstStyle` → local properties, fed through the
 inherited text preview above. Master/layout/slide `bodyPr` merge with the
 autofit child as one replaceable slot; the merged result is validated by the

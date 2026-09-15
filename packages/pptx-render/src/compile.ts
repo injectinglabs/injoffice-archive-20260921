@@ -110,6 +110,9 @@ interface CompileState {
   readonly lineLayoutPolicy?: 'max-run-natural-v1'
   readonly sourceFrameAutoFitPreview: boolean
 	readonly inheritedTextElements: ReadonlySet<string>
+  // Elements whose Go-side extraction applied an authored normAutofit scale or
+  // single-column projection; they carry the opt-in evidence per element.
+  readonly authoredFrameElements: ReadonlySet<string>
   readonly deck: NativePptxDeck
   readonly slide: NativeSlide
   readonly options: CompileSlideOptions
@@ -1707,7 +1710,9 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     }
     const squareWrap = context.layout?.wrap === 'square'
     const emergencyBreaks: WrapEmergencyBreakPolicy = {
-      allowed: state.sourceFrameAutoFitPreview || state.inheritedTextElements.has(context.elementId),
+      // Element evidence only: a marked source frame, an authored-scale/column
+      // element, or an inherited-text element. Exact elements never break.
+      allowed: context.layout?.autoFit === 'shape-source-frame' || state.authoredFrameElements.has(context.elementId) || state.inheritedTextElements.has(context.elementId),
       onBreak: () => {
         if (state.emergencyBreakDiagnosticElements.has(context.elementId)) return
         state.emergencyBreakDiagnosticElements.add(context.elementId)
@@ -1862,6 +1867,7 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     const verticalArea=context.exactArea?{x:sourceAffineRational(0n),y:sourceAffineRational(0n),cx:context.exactArea.cy,cy:context.exactArea.cx}:undefined
     const layoutContext = vertical ? {...context,bounds:{x:0,y:0,cx:context.bounds.cy,cy:context.bounds.cx},...(verticalArea?{exactArea:verticalArea}:{})} : context
     const compiled = await compileParagraphs(paragraphs, layoutContext, state)
+    const emergencyBroken = state.emergencyBreakDiagnosticElements.has(context.elementId)
     if(vertical && compiled.some(paragraph=>paragraph.runs.some(run=>run.direction!=='ltr'))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires qualified left-to-right Latin shaping.')
     const zero=sourceAffineRational(0n),one=sourceAffineRational(1n)
     const transform = vertical ? context.exactArea?sourceRenderTransform({values:[zero,one,sourceAffineRational(-1n),zero,exactTextOffsetSum(context.exactArea.x,context.exactArea.cx,state.budget.affine),context.exactArea.y],errors:[zero,zero,zero,zero,zero,zero],depth:1},state.budget.affine):{aPpm:0,bPpm:1_000_000,cPpm:-1_000_000,dPpm:0,txEmu:context.bounds.x+context.bounds.cx,tyEmu:context.bounds.y} : undefined
@@ -1871,7 +1877,7 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     return {
       kind: 'textBody', sourceElementId: context.elementId, bounds: context.bounds,
       ...(transform?{transform}:{}),
-      fidelity: compiled.some(p=>p.runs.some(r=>r.fontSelection&&r.fontSelection.resolution!=='exact')) ? 'approximateFontSubstitution' : state.inheritedTextElements.has(context.elementId) ? 'approximateInheritedText' : approximateSourceFrame ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
+      fidelity: compiled.some(p=>p.runs.some(r=>r.fontSelection&&r.fontSelection.resolution!=='exact')) ? 'approximateFontSubstitution' : state.inheritedTextElements.has(context.elementId) ? 'approximateInheritedText' : approximateSourceFrame || emergencyBroken ? 'approximateSourceFrame' : deterministic ? 'deterministicNative' : context.layout ? 'native' : 'legacyUnavailable',
       ...(deterministic ? {lineLayoutPolicy: state.lineLayoutPolicy} : {}),
       wrap: context.layout?.wrap, verticalAnchor: context.layout?.verticalAnchor, autoFit: context.layout?.autoFit,
       horizontalOverflow: context.layout?.horizontalOverflow, verticalOverflow: context.layout?.verticalOverflow,
@@ -2360,6 +2366,9 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
 	const inheritedTextElements=new Set<string>()
 	const collectInherited=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')){if(options.inheritedTextPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','source inherited text requires explicit read-only approximation opt-in');inheritedTextElements.add(element.id)}if(element.kind==='group')collectInherited(element.children)}}
 	collectInherited(nativeSlide.elements)
+	const authoredFrameElements=new Set<string>()
+	const collectAuthored=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.autofit-authored-scale-approximate'||d.code==='pptx.text-columns-single-column-approximate')){if(options.sourceFrameAutoFitPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.sourceFrameAutoFitPreview','authored autofit scale and column projections require explicit read-only source-frame preview opt-in');authoredFrameElements.add(element.id)}if(element.kind==='group')collectAuthored(element.children)}}
+	collectAuthored(nativeSlide.elements)
   const budget: Budget = {
     affine: new SourceAffineBudget(),
     nodes: 0,
@@ -2382,6 +2391,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
     lineLayoutPolicy,
     sourceFrameAutoFitPreview: options.sourceFrameAutoFitPreview === true,
 		inheritedTextElements,
+		authoredFrameElements,
     deck,
     slide: nativeSlide,
     options,

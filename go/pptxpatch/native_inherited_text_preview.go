@@ -238,6 +238,7 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 		return nil, err
 	}
 	merged = mergeNativeStyleNodes(merged, clean, d)
+	merged = nativeWithoutBulletTextMarkers(merged, d)
 	merged.Name = xml.Name{Space: d.drawing, Local: "pPr"}
 	if _, ok := exactNativeAttr(merged, "", "algn"); !ok {
 		merged.Attrs = append(merged.Attrs, xml.Attr{Name: xml.Name{Local: "algn"}, Value: "l"})
@@ -584,10 +585,13 @@ func sanitizeNativeInheritedPreviewProperties(node *nativeXMLNode, d nativeExtra
 				omit.add("a:buSzPts")
 				continue
 			case "buSzTx", "buFontTx", "buClrTx":
+				// "Follow text" markers cancel an inherited buFont/buSz*/buClr from
+				// a lower layer during the merge, then leave the projection.
 				if err := requireEmptyNativeElement(child); err != nil {
 					return nil, unsupportedNativeTextContent("unmodeled bullet inheritance marker")
 				}
 				omit.add("a:" + child.Name.Local)
+				out.Children = append(out.Children, child)
 				continue
 			case "tabLst":
 				if err := nativeInheritedTabList(child, d); err != nil {
@@ -627,10 +631,32 @@ func sanitizeNativeInheritedPreviewProperties(node *nativeXMLNode, d nativeExtra
 		out.Children = append(out.Children, child)
 	}
 	// Exact existing validators still enforce all active properties and duplicates.
-	if err := validateNativeTextStyleProperties(&out, d, paragraph, theme); err != nil {
+	if err := validateNativeTextStyleProperties(nativeWithoutBulletTextMarkers(&out, d), d, paragraph, theme); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+func nativeIsBulletTextMarker(node *nativeXMLNode, d nativeExtractDialect) bool {
+	return node != nil && node.Name.Space == d.drawing && (node.Name.Local == "buFontTx" || node.Name.Local == "buSzTx" || node.Name.Local == "buClrTx")
+}
+
+// nativeWithoutBulletTextMarkers returns an owned copy without a:buFontTx,
+// a:buSzTx and a:buClrTx. After the merge these markers only mean "no
+// inherited bullet font/size/color", which the exact extractor expresses by
+// absence.
+func nativeWithoutBulletTextMarkers(node *nativeXMLNode, d nativeExtractDialect) *nativeXMLNode {
+	if node == nil {
+		return nil
+	}
+	copy := *node
+	copy.Children = make([]*nativeXMLNode, 0, len(node.Children))
+	for _, child := range node.Children {
+		if !nativeIsBulletTextMarker(child, d) {
+			copy.Children = append(copy.Children, child)
+		}
+	}
+	return &copy
 }
 
 func nativeMarkInheritedTextPreview(element *NativeElement) {

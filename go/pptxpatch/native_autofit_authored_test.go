@@ -433,3 +433,117 @@ func TestNativeShapeStyleZeroIndexAndUnpaintedOutlineAreExact(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeBulletFollowTextMarkersCancelInheritedBulletFont(t *testing.T) {
+	build := func(layoutLevel string) []byte {
+		return nativePlaceholderFixture(t, false, func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<p:ph idx="7"/>`, `<p:ph type="subTitle" idx="7"/>`, 1)
+			layout := parts["relocated/layouts/layout.xml"]
+			layout = strings.Replace(layout, `<p:ph type="body" idx="7"/>`, `<p:ph type="subTitle" idx="7"/>`, 1)
+			layout = strings.Replace(layout, `<a:lstStyle><a:lvl1pPr marL="400000"/></a:lstStyle>`, `<a:lstStyle>`+layoutLevel+`</a:lstStyle>`, 1)
+			parts["relocated/layouts/layout.xml"] = layout
+			parts["relocated/masters/master.xml"] = strings.Replace(parts["relocated/masters/master.xml"], `<a:buChar char="▪"/>`, `<a:buFont typeface="Arial"/><a:buChar char="▪"/>`, 1)
+		})
+	}
+	options := nativeTestExtractOptions()
+	options.AllowInheritedTextPreview = true
+	control, err := ExtractNativePPTX(build(`<a:lvl1pPr marL="400000"/>`), options)
+	if err != nil || len(control.Slides[0].Elements) != 1 || control.Slides[0].Elements[0].Paragraphs == nil {
+		t.Fatalf("control placeholder preview failed: %v %+v", err, control.Slides[0].Compatibility)
+	}
+	if p := (*control.Slides[0].Elements[0].Paragraphs)[0]; p.BulletFontFamily == nil || *p.BulletFontFamily != "Arial" || p.BulletCharacter == nil || *p.BulletCharacter != "▪" {
+		t.Fatalf("master bullet font did not cascade: %+v", p)
+	}
+	deck, err := ExtractNativePPTX(build(`<a:lvl1pPr marL="400000"><a:buFontTx/></a:lvl1pPr>`), options)
+	if err != nil || len(deck.Slides[0].Elements) != 1 || deck.Slides[0].Elements[0].Paragraphs == nil {
+		t.Fatalf("buFontTx placeholder preview failed: %v %+v", err, deck.Slides[0].Compatibility)
+	}
+	element := deck.Slides[0].Elements[0]
+	if p := (*element.Paragraphs)[0]; p.BulletFontFamily != nil || p.BulletCharacter == nil || *p.BulletCharacter != "▪" {
+		t.Fatalf("buFontTx did not cancel the inherited bullet font: %+v", p)
+	}
+	disclosed := false
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		disclosed = disclosed || (diagnostic.Code == nativeInheritedTextOmissionsCode && strings.Contains(diagnostic.Message, "a:buFontTx"))
+	}
+	if !disclosed {
+		t.Fatalf("buFontTx was not disclosed: %+v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("invalid native: %+v", issues)
+	}
+	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
+	el := func(local string) *nativeXMLNode {
+		return &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: local}}
+	}
+	merged := mergeNativeStyleNodes(&nativeXMLNode{Children: []*nativeXMLNode{el("buFont"), el("buClr"), el("buSzPct")}}, &nativeXMLNode{Children: []*nativeXMLNode{el("buFontTx"), el("buClrTx"), el("buSzTx")}}, d)
+	names := []string{}
+	for _, child := range merged.Children {
+		names = append(names, child.Name.Local)
+	}
+	if strings.Join(names, ",") != "buFontTx,buClrTx,buSzTx" {
+		t.Fatalf("follow-text markers did not replace their slots: %v", names)
+	}
+	if got := nativeWithoutBulletTextMarkers(merged, d); len(got.Children) != 0 {
+		t.Fatalf("markers leaked into the projection: %+v", got.Children)
+	}
+}
+
+func TestNativeShapeStyleZeroIndexResolvesToNoPaint(t *testing.T) {
+	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
+	themeRoot, err := parseNativeXML([]byte(`<a:theme xmlns:a="`+d.drawing+`"><a:themeElements><a:fmtScheme><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/><a:round/></a:ln></a:lnStyleLst></a:fmtScheme></a:themeElements></a:theme>`), "theme.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	style, err := parseNativeXML([]byte(`<p:style xmlns:p="`+d.presentation+`" xmlns:a="`+d.drawing+`"><a:lnRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef><a:fillRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:effectRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:effectRef><a:fontRef idx="minor"/></p:style>`), "slide.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := func(node *nativeXMLNode) string {
+		out := []string{}
+		for _, child := range node.Children {
+			out = append(out, child.Name.Local)
+		}
+		return strings.Join(out, ",")
+	}
+	for _, tc := range []struct{ properties, expect string }{
+		{`<a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm>`, "xfrm,noFill,ln"},
+		{`<a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`, "xfrm,solidFill,ln"},
+		{`<a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm><a:noFill/><a:ln><a:noFill/></a:ln>`, "xfrm,noFill,ln"},
+		{`<a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm><a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill><a:prstDash val="solid"/><a:round/></a:ln>`, "xfrm,ln,noFill"},
+	} {
+		properties, err := parseNativeXML([]byte(`<p:spPr xmlns:p="`+d.presentation+`" xmlns:a="`+d.drawing+`">`+tc.properties+`</p:spPr>`), "slide.xml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sourceChildren := len(properties.Children)
+		resolved, err := resolveNativeShapeStyle(properties, style, themeRoot, d, nativeResolvedTheme{})
+		if err != nil {
+			t.Fatalf("idx=0 style refused: %v (%s)", err, tc.properties)
+		}
+		if got := names(resolved); got != tc.expect {
+			t.Fatalf("unexpected resolved paint %q for %s", got, tc.properties)
+		}
+		gaps := nativeShapeGapSet{}
+		if fill := validateNativeAutoShapeFill(resolved, d, nativeResolvedTheme{}, &gaps); len(gaps.values) != 0 {
+			t.Fatalf("resolved fill is not exact: %+v %v", gaps.values, fill)
+		}
+		if _, err := validateNativeAutoShapeLine(resolved, d, nativeResolvedTheme{}, false, &gaps); err != nil || len(gaps.values) != 0 {
+			t.Fatalf("resolved line is not exact: %v %+v", err, gaps.values)
+		}
+		if len(properties.Children) != sourceChildren {
+			t.Fatal("style resolution mutated the source properties")
+		}
+	}
+	// Non-zero indexes still need their placeholder color and a bounded entry.
+	for _, refs := range []string{`<a:lnRef idx="1"/><a:fillRef idx="0"/><a:effectRef idx="0"/><a:fontRef idx="minor"/>`, `<a:lnRef idx="0"/><a:fillRef idx="1000"/><a:effectRef idx="0"/><a:fontRef idx="minor"/>`, `<a:lnRef idx="0"/><a:fillRef idx="0"/><a:effectRef idx="1"/><a:fontRef idx="minor"/>`} {
+		style, err := parseNativeXML([]byte(`<p:style xmlns:p="`+d.presentation+`" xmlns:a="`+d.drawing+`">`+refs+`</p:style>`), "slide.xml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		properties, _ := parseNativeXML([]byte(`<p:spPr xmlns:p="`+d.presentation+`" xmlns:a="`+d.drawing+`"><a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm></p:spPr>`), "slide.xml")
+		if _, err := resolveNativeShapeStyle(properties, style, themeRoot, d, nativeResolvedTheme{}); err == nil {
+			t.Fatalf("unqualified style reference accepted: %s", refs)
+		}
+	}
+}

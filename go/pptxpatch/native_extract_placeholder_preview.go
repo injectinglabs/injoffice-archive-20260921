@@ -71,7 +71,9 @@ func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXM
 	if !ok {
 		return nil, nil, unsupportedNativePlaceholder("placeholder type " + identity.kind + " is outside the read-only title/body inheritance families")
 	}
-	preview := &nativePlaceholderPreview{kind: kind, sourceKind: identity.kind}
+	// Same bottom layer as the non-placeholder preview: presentation
+	// defaultTextStyle, then the master title/body style and placeholder chain.
+	preview := &nativePlaceholderPreview{kind: kind, sourceKind: identity.kind, layers: []*nativeXMLNode{extractor.presentationTextPreviewStyle}}
 	layout, layoutIdentity, err := nativeMatchingPlaceholder(extractor.slideDependencies.layoutRoot, *identity, true, dialect)
 	if err != nil && identity.kind != "" {
 		layout, layoutIdentity, err = nativeMatchingPlaceholder(extractor.slideDependencies.layoutRoot, *identity, false, dialect)

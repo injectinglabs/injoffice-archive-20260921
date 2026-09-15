@@ -165,7 +165,10 @@ by `pptx.autofit-authored-scale-approximate`), and paints `numCol`/`spcCol` bodi
 as one disclosed column; `AllowInheritedTextPreview` admits the declared
 inherited-text and placeholder-inheritance approximations described in
 `go/pptxpatch/README.md`. Each approximation is a preserve-only element with a
-warning diagnostic that validation requires. Script, language, and run direction still come from the
+warning diagnostic that validation requires. The inherited-text policy identity
+stays `source-latin-inheritance-approximate-v1`: its layer order and Latin-only
+profile are unchanged, and every property it validates but omits is named per
+element by `pptx.inherited-text-properties-omitted`. Script, language, and run direction still come from the
 injected font-layout host because v1 does not infer them from characters. Literal
 tab, CR, or LF characters inside `a:t`, and explicit `a:br` children, require modeled
 DrawingML hard-break metrics and therefore produce an exact object-local content
