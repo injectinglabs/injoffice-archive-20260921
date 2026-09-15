@@ -66,6 +66,8 @@ func (extractor *nativeExtractor) extractNativeGraphicFrame(node *nativeXMLNode,
 		} else if data != nil {
 			if uri, ok := exactNativeAttr(data, "", "uri"); ok && uri == dialect.chart {
 				return extractor.extractNativeChartGraphicFrame(node, slidePart, slideID, relationships, dialect)
+			} else if ok && uri == nativeDiagramURI(dialect) {
+				return extractor.extractNativeDiagramGraphicFrame(node, slidePart, slideID, relationships, dialect)
 			}
 		}
 	}
