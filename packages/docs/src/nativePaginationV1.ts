@@ -1607,6 +1607,7 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
 }
 
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {
+  if (paragraph.runs.length === 0) return true
   if (paragraph.runs.some((run) => run.kind === 'drawing' || (run.kind === 'reference' && run.reference !== undefined && run.reference.kind !== 'footnote' && run.reference.kind !== 'endnote'))) return true
   const scopes = new Set([paragraph.id, ...paragraph.runs.map((run) => run.id)])
   return document.unsupported.some((entry) => scopes.has(entry.scope_id) && (

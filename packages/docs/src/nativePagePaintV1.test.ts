@@ -330,6 +330,9 @@ describe('native DOCX page-paint v1', () => {
     const flagEligibility = { ...eligibility, approximated_settings: [flag], reasons: [`Current-layout approximation disregards ${flag.kind} at ${flag.path}; source values are retained and Word layout may differ`] }
     expect(decodeNativeDocxApproximationEligibilityV1(flagEligibility, flagSettings).status).toBe('eligible')
     expect(() => decodeNativeDocxApproximationEligibilityV1({ ...flagEligibility, approximated_settings: [], reasons: ['Legacy mode'] }, flagSettings)).toThrow('conflicts')
+    const duplicateSettings = structuredClone(settings)
+    duplicateSettings.diagnostics = [{ code: 'DUPLICATE_SETTINGS_PROPERTY', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:activeWritingStyle[2]', preservation: 'preserve-verbatim', message: 'Duplicate settings property is ambiguous' }]
+    expect(decodeNativeDocxApproximationEligibilityV1({ ...eligibility, approximated_settings: [], reasons: ['Legacy mode'] }, duplicateSettings).status).toBe('eligible')
   })
   it('admits attested mode 15 extras as current-layout approximation without painting strict', async () => {
     const request = fixture()
@@ -378,6 +381,8 @@ describe('native DOCX page-paint v1', () => {
     })
     request.pagination_request.resolved_layout.diagnostics.push({
       code: 'UNMODELED_FONT_METADATA', severity: 'unsupported', scope_id: settings.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[1]/w:embedRegular[1]', preservation: 'preserve-verbatim', message: 'Font metadata is preserved for future font matching',
+    }, {
+      code: 'UNMODELED_FONT_SELECTION', severity: 'unsupported', scope_id: 'paragraph:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/w:rFonts[1]', preservation: 'preserve-verbatim', message: 'Font selection contains unknown attributes or nested markup and is not resolved',
     })
     request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(request.pagination_request.shaped_lines)
     const refused = paginateNativeDocxV1(request.pagination_request)

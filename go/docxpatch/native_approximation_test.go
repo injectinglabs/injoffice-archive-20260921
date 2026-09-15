@@ -34,6 +34,8 @@ func TestNativeApproximationEligibilityRejectsAmbiguousLegacySettings(t *testing
 			{"foreign mode", `<w:compat><x:compatSetting xmlns:x="urn:foreign" w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="12"/></w:compat>`, false, 0},
 			{"enabled hyphenation", "<w:autoHyphenation/>", true, 12},
 			{"unknown attribute", `<w:compat w:unknown="1"/>`, false, 0},
+			{"applyBreakingRules mode14", "<w:compat><w:applyBreakingRules/>" + mode("14") + flag("overrideTableStyleFontSizeAndJustification") + flag("enableOpenTypeFeatures") + flag("doNotFlipMirrorIndents") + "</w:compat>", true, 14},
+			{"duplicate writing style", `<w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="64" w:dllVersion="1" w:checkStyle="1"/><w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="8" w:dllVersion="1" w:checkStyle="1"/><w:compat>` + mode("14") + extraFlags + "</w:compat>", true, 14},
 		} {
 			t.Run(test.name+map[bool]string{false: " transitional", true: " strict"}[strict], func(t *testing.T) {
 				parts := nativePaginationSettingsParts(`<w:settings xmlns:w="` + wordMLTransitional + `">` + test.markup + `</w:settings>`)

@@ -14,6 +14,7 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'UNMODELED_PARAGRAPH_CONTENT',
   'UNMODELED_BODY_BLOCK',
   'UNMODELED_FONT_METADATA',
+  'UNMODELED_FONT_SELECTION',
   'UNMODELED_PARAGRAPH_PROPERTY',
   'UNMODELED_SECTION_PROPERTY',
   'PARTIAL_PARAGRAPH_PROPERTIES',
@@ -134,7 +135,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
 function coveredSettingsDiagnostics(settings: NativeDocxPaginationSettingsV1, facts: NativeDocxApproximatedSettingV1[]): boolean {
   return settings.diagnostics.every(reason => {
     if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && (['/w:settings[1]', '/w:settings[1]/w:compat[1]', '/w:settings[1]/w:compat[1]/w:compatSetting[1]'].includes(reason.path) || /^\/w:settings\[1\]\/w:compat\[1\]\/w:compatSetting\[[5-9]\]$/.test(reason.path))) return true
-    if (reason.code === 'PAGINATION_SETTING_UNSUPPORTED' || reason.code === 'UNKNOWN_SETTINGS_ELEMENT') return true
+    if (reason.code === 'PAGINATION_SETTING_UNSUPPORTED' || reason.code === 'UNKNOWN_SETTINGS_ELEMENT' || reason.code === 'DUPLICATE_SETTINGS_PROPERTY') return true
     return facts.some(fact => fact.path === reason.path && reason.code === (fact.kind === 'mathPr' ? 'UNKNOWN_SETTINGS_ELEMENT' : fact.path.includes('/w:compat[1]/') ? 'COMPATIBILITY_SETTING_UNSUPPORTED' : 'PAGINATION_SETTING_UNSUPPORTED'))
   }) && facts.every(fact => settings.diagnostics.some(reason => reason.path === fact.path))
 }
