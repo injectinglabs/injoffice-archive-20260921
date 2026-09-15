@@ -92,4 +92,32 @@ describe('operator-owned DOCX fonts',()=>{
   italic.font_inventory_json=encodeNativeDOCXFontInventoryV1(italicInventory)
   await expect(loadHostFonts(italic,p,'approximate')).rejects.toThrow(/Candara \/ 400 \/ italic/)
  })
+ it('admits equation sidecar faces without changing the body substitute or counting them as references',async()=>{
+  const value=input(),inventory=JSON.parse(value.font_inventory_json)
+  inventory.references=[{...inventory.references[0],family:'Candara'}]
+  inventory.inventory_sha256='';inventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(inventory)
+  value.font_inventory_json=encodeNativeDOCXFontInventoryV1(inventory)
+  const mathPath=resolve(root,'node_modules/dejavu-fonts-ttf/ttf/DejaVuMathTeXGyre.ttf')
+  const mathSha=`sha256:${createHash('sha256').update(readFileSync(mathPath)).digest('hex')}`
+  const math={family:'Cambria Math',weight:400,style:'normal',path:mathPath,sha256:mathSha}
+  // Admitting the requested math face before body substitution would mark its
+  // weight/style as covered, block DejaVu Sans and hand Candara body text the
+  // math face; the sidecar must not change which substitute the body gets.
+  const p=config([entry,math])
+  const without=await loadHostFonts(value,p,'approximate')
+  const withEquation=await loadHostFonts(value,p,'approximate',[{family:'Cambria Math',weight:400,style:'normal'}])
+  for(const fonts of [without,withEquation]){
+   expect(fonts.approximateSubstitutions).toEqual([expect.objectContaining({source_family:'Candara',selected_family:'DejaVu Sans'})])
+   const selected=await fonts.resolver.resolve({manifest:fonts.manifest,run:{version:1 as const,text:'Body',fontSizeMilliPoints:10000,font:{families:['Candara'],weight:400,style:'normal' as const,stretch:100},script:'Latn',language:'en',direction:'ltr' as const}})
+   if(!('face' in selected))throw new Error('Expected loaded host substitute')
+   expect(selected.face).toMatchObject({family:'DejaVu Sans',contentDigest:sha256})
+  }
+  expect(without.manifest.faces.some(face=>face.family==='Cambria Math')).toBe(false)
+  const mathFace=withEquation.manifest.faces.find(face=>face.family==='Cambria Math')
+  expect(mathFace).toMatchObject({source:{kind:'host',contentDigest:mathSha}})
+  expect(withEquation.resources.has(mathFace!.faceId)).toBe(true)
+  // Requests for faces the operator did not configure are not failures; over-long request lists are.
+  expect((await loadHostFonts(value,p,'approximate',[{family:'STIX Two Math',weight:700,style:'italic'}])).manifest.faces).toHaveLength(1)
+  await expect(loadHostFonts(value,p,'approximate',Array.from({length:33},()=>({family:'Cambria Math',weight:400 as const,style:'normal' as const})))).rejects.toThrow(/exceed their bound/)
+ })
 })

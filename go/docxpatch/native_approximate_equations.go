@@ -239,9 +239,25 @@ func nativeApproximateEquationExtractor(resolver *nativeLayoutResolver) *nativeE
 	}
 }
 
+const nativeApproximateEquationReasonLimit = 256
+const nativeApproximateEquationFamilyLimit = 128
+
+// nativeApproximateEquationReason bounds a refusal reason to the wire limit at
+// a rune boundary; reasons may embed authored names or attribute values.
+func nativeApproximateEquationReason(reason string) string {
+	if len(reason) <= nativeApproximateEquationReasonLimit {
+		return reason
+	}
+	cut := nativeApproximateEquationReasonLimit
+	for cut > 0 && !utf8.RuneStart(reason[cut]) {
+		cut--
+	}
+	return reason[:cut]
+}
+
 func (context *nativeApproximateEquationContext) refuse(reason string) *nativeApproximateMathBuild {
 	if context.reason == "" {
-		context.reason = reason
+		context.reason = nativeApproximateEquationReason(reason)
 	}
 	return nil
 }
@@ -787,6 +803,10 @@ func (context *nativeApproximateEquationContext) mathRun(index int, resolved []N
 		context.refuse("equation font size exceeds the preview bound")
 		return nil
 	}
+	if len(run.FontFamily) > nativeApproximateEquationFamilyLimit {
+		context.refuse("equation font family exceeds the preview bound")
+		return nil
+	}
 	run.Bold = properties.Bold != nil && *properties.Bold
 	run.Italic = properties.Italic != nil && *properties.Italic
 	if properties.Hidden != nil && *properties.Hidden {
@@ -831,7 +851,7 @@ func (context *nativeApproximateEquationContext) fontRequests(lines []NativeAppr
 	requests := []NativeApproximateEquationFontV1{}
 	seen := map[string]bool{}
 	add := func(family string, bold, italic bool) {
-		if family == "" {
+		if family == "" || len(family) > nativeApproximateEquationFamilyLimit {
 			return
 		}
 		weight, style := 400, "normal"

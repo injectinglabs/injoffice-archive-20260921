@@ -233,6 +233,9 @@ describe('approximate OMML equations', () => {
     expect(paint.reasons.some(r => r.startsWith(`${DOCX_APPROXIMATE_EQUATION_OMITTED_CODE}: approximate-equation:test:1 (unsupported equation element m:eqArr)`))).toBe(true)
     expect(paint.reasons).not.toContain(DOCX_APPROXIMATE_EQUATION_WARNING)
     expect(paint.omitted_content.some(entry => entry.category === 'equation')).toBe(true)
+    // A painted equation drops its source refusal from omitted_content; only omitted or unplaced ones keep it.
+    const painted = await renderNativeDocxApproximatePagePreviewV1(input, eligibility(input), outlineProvider(input), { equations: sidecar([binomialTheorem()]) })
+    expect(painted.omitted_content.some(entry => entry.category === 'equation')).toBe(false)
     const cases: Array<[string, (equations: any) => void]> = [
       ['package', equations => { equations.package_sha256 = `sha256:${'b'.repeat(64)}` }],
       ['paragraph', equations => { equations.items[0].paragraph_id = 'paragraph:1' }],
@@ -244,11 +247,15 @@ describe('approximate OMML equations', () => {
       ['run color', equations => { equations.items[0].lines[0].children[1].run.color = 'blue' }],
       ['font request', equations => { equations.font_requests.push({ family: 'X', weight: 500, style: 'normal' }) }],
       ['display lines', equations => { equations.items[0].display = false; equations.items[0].justification = undefined; equations.items[0].lines.push(row(text('y'))) }],
+      ['family bound', equations => { equations.items[0].lines[0].children[1].run.font_family = 'F'.repeat(129) }],
+      ['request family bound', equations => { equations.font_requests[0].family = 'F'.repeat(129) }],
+      ['reason bound', equations => { equations.items[0] = { ...equations.items[0], status: 'omitted', reason: 'r'.repeat(257) }; delete equations.items[0].lines; delete equations.items[0].justification }],
+      ['main part digest', equations => { equations.part_sha256 = `sha256:${'c'.repeat(64)}` }],
     ]
     for (const [name, mutate] of cases) {
       const equations = sidecar([binomialTheorem()])
       mutate(equations)
-      expect(() => decodeNativeDocxApproximateEquationsV1(equations, input.document as NativeDocxDocumentV1), name).toThrow()
+      expect(() => decodeNativeDocxApproximateEquationsV1(equations, input.document as NativeDocxDocumentV1, HASH), name).toThrow()
       await expect(renderNativeDocxApproximatePagePreviewV1(input, eligibility(input), outlineProvider(input), { equations }), name).rejects.toThrow()
     }
     await expect(renderNativeDocxApproximatePagePreviewV1(input, { ...eligibility(input), status: 'ineligible' }, outlineProvider(input), { equations: sidecar([binomialTheorem()]) })).rejects.toThrow()

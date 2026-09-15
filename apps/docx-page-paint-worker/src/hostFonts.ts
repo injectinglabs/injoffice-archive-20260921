@@ -65,10 +65,7 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
   }
  }
  const needed=new Set(inventory.references.map(r=>key(r.family,r.weight,r.style)))
- // Sidecar requests only widen which configured faces are admitted; they never
- // count as document references, so an unavailable one is not a failure.
  if(extraReferences.length>32)throw new Error('Host font sidecar requests exceed their bound')
- for(const r of extraReferences)needed.add(key(r.family,r.weight,r.style))
  for(const mapping of policy?.mappings??[])if(needed.has(key(mapping.sourceFamily,mapping.weight,mapping.style)))needed.add(key(mapping.targetFamily,mapping.weight,mapping.style))
  const seen=new Set<string>();let total=[...resources.values()].reduce((n,r)=>n+r.bytes.length,0)
  if(total>64*1024*1024)throw new Error('Host font cumulative byte budget failed')
@@ -101,6 +98,14 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
    occupied.add(key(reference.family,reference.weight,reference.style))
    approximateSubstitutions.push(record)
   }
+ }
+ // Sidecar requests (equation faces) are admitted only now, after body
+ // substitution is settled: they never count as document references, never
+ // serve as body substitutes, and an unavailable one is not a failure.
+ const requested=new Set(extraReferences.map(r=>key(r.family,r.weight,r.style)))
+ for(const [index,f] of configured.entries()){
+  if(!f||occupied.has(key(f.family,f.weight,f.style))||!requested.has(key(f.family,f.weight,f.style)))continue
+  total=admitConfiguredFace(index,f,faces,resources,occupied,total)
  }
  const unavailable=missing()
  if(unavailable.length)throw new Error(`Exact configured font unavailable: ${unavailable.map(r=>`${r.family} / ${r.weight} / ${r.style}`).join(', ').slice(0,1024)}`)

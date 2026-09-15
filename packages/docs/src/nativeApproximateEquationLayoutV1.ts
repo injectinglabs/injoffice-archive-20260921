@@ -146,10 +146,11 @@ function validateNode(value: unknown, depth: number, budget: { nodes: number; un
  * body paragraph, carry its own retained UNMODELED_PARAGRAPH_CONTENT refusal at
  * exactly the same anchor, sit directly under the paragraph, and not overlap
  * modeled runs. A malformed sidecar refuses as a whole. */
-export function decodeNativeDocxApproximateEquationsV1(value: unknown, document: NativeDocxDocumentV1): NativeDocxApproximateEquationsV1 {
+export function decodeNativeDocxApproximateEquationsV1(value: unknown, document: NativeDocxDocumentV1, mainPartSha256?: string): NativeDocxApproximateEquationsV1 {
   if (preflightWire(value, 'approximate equations', 200_000, 10_000).length) throw new TypeError('Approximate equations exceed their bounded wire')
   const input = structuredClone(value) as NativeDocxApproximateEquationsV1
   if (!record(input) || !exactKeys(input as unknown as Record<string, unknown>, ['protocol', 'version', 'policy', 'package_sha256', 'part_sha256', 'items', 'omitted_count', 'font_requests']) || input.protocol !== DOCX_APPROXIMATE_EQUATIONS_PROTOCOL || input.version !== 1 || input.policy !== DOCX_APPROXIMATE_EQUATION_POLICY || input.package_sha256 !== document.source.package_sha256 || typeof input.part_sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(input.part_sha256) || !Array.isArray(input.items) || input.items.length > MAX_EQUATIONS || !Number.isSafeInteger(input.omitted_count) || input.omitted_count < 0 || input.omitted_count > 1_000_000) throw new TypeError('Approximate equations do not exact-join the source document')
+  if (mainPartSha256 !== undefined && input.part_sha256 !== mainPartSha256) throw new TypeError('Approximate equations were inspected from a different main part')
   if (!Array.isArray(input.font_requests) || input.font_requests.length > MAX_FONT_REQUESTS || !input.font_requests.every(fontValid)) throw new TypeError('Approximate equation font requests are invalid')
   const paragraphs = new Map(document.body.blocks.flatMap(block => block.paragraph ? [[block.id, block.paragraph] as const] : []))
   const diagnostics = new Map(document.unsupported.map(entry => [entry.id, entry]))
@@ -717,6 +718,8 @@ export interface NativeDocxApproximateEquationProjectionV1 {
   resolved: NativeDocxResolvedLayoutInputV1
   /** Equation id to the synthetic glyphless drawing run id reserved in the body copy. */
   inlineRuns: Map<string, string>
+  /** Equation id to the source diagnostics dropped from the body copy, restored when the equation is not painted. */
+  removedDiagnostics: Map<string, NativeDocxDocumentV1['unsupported']>
   notes: string[]
 }
 
@@ -758,6 +761,7 @@ export function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocu
   const projectedResolved = structuredClone(resolved)
   const inlineRuns = new Map<string, string>()
   const removed = new Set<string>()
+  const removedDiagnostics = new Map<string, NativeDocxDocumentV1['unsupported']>()
   const notes: string[] = []
   const paragraphs = new Map(projected.body.blocks.flatMap(block => block.paragraph ? [[block.id, block.paragraph] as const] : []))
   for (const equation of equations.items) {
@@ -766,6 +770,7 @@ export function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocu
     const paragraph = paragraphs.get(equation.paragraph_id)
     if (!paragraph) continue
     for (const id of equation.diagnostic_ids) removed.add(id)
+    removedDiagnostics.set(equation.id, document.unsupported.filter(entry => equation.diagnostic_ids.includes(entry.id)))
     let width = layout.width
     const column = columnWidth(projected, equation.paragraph_id)
     if (column !== undefined && width > column) { width = column; notes.push(`${equation.id}: equation width clamped to its column width`) }
@@ -792,7 +797,7 @@ export function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocu
     }
   }
   projected.unsupported = projected.unsupported.filter(entry => !removed.has(entry.id))
-  return { document: projected, resolved: projectedResolved, inlineRuns, notes }
+  return { document: projected, resolved: projectedResolved, inlineRuns, removedDiagnostics, notes }
 }
 
 export interface NativeDocxApproximateEquationPaintResultV1 {
@@ -905,8 +910,9 @@ function buildReasons(equations: NativeDocxApproximateEquationsV1, layouts: Nati
 
 /** Re-derive the omitted-content disclosure after equation paint changed page
  * commands; pages that only gained equation paint are no longer blank. */
-export function discloseNativeDocxApproximateEquationOmissionsV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[] }, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1 }): void {
-  const omissions = collectNativeDocxApproximateOmissionsV1(source, result)
+export function discloseNativeDocxApproximateEquationOmissionsV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[] }, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1 }, restored: NativeDocxDocumentV1['unsupported'] = []): void {
+  // Equations reserved but not painted get their source refusals back so they stay disclosed as omitted content.
+  const omissions = collectNativeDocxApproximateOmissionsV1(restored.length ? { ...source, document: { ...source.document, unsupported: [...source.document.unsupported, ...restored] } } : source, result)
   result.content_status = omissions.content_status
   result.omitted_content = omissions.omitted_content
   result.omitted_content_total = omissions.omitted_content_total
@@ -926,8 +932,8 @@ export interface NativeDocxApproximateEquationStageV1 {
 /** Compiler entry before body pagination: validate the same-bytes sidecar
  * against the source document, lay every supported equation out with the
  * declared math face policy, and reserve the extents in an internal body copy. */
-export async function prepareNativeDocxApproximateEquationStageV1(sidecar: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1): Promise<NativeDocxApproximateEquationStageV1> {
-  const equations = decodeNativeDocxApproximateEquationsV1(sidecar, document)
+export async function prepareNativeDocxApproximateEquationStageV1(sidecar: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1, mainPartSha256?: string): Promise<NativeDocxApproximateEquationStageV1> {
+  const equations = decodeNativeDocxApproximateEquationsV1(sidecar, document, mainPartSha256)
   const layouts = await layoutNativeDocxApproximateEquationsV1(equations, resolved, runtime)
   const projection = projectNativeDocxApproximateEquationsV1(document, resolved, equations, layouts)
   return { equations, layouts, projection }
@@ -938,6 +944,7 @@ export async function prepareNativeDocxApproximateEquationStageV1(sidecar: unkno
 export function completeNativeDocxApproximateEquationStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[] }, stage: NativeDocxApproximateEquationStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1 }): NativeDocxApproximateEquationPaintResultV1 {
   const painted = paintNativeDocxApproximateEquationsV1(result, stage.equations, stage.layouts, stage.projection)
   for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
-  discloseNativeDocxApproximateEquationOmissionsV1(result, source)
+  const restored = painted.omitted.flatMap(entry => stage.projection.removedDiagnostics.get(entry.id) ?? [])
+  discloseNativeDocxApproximateEquationOmissionsV1(result, source, restored)
   return painted
 }

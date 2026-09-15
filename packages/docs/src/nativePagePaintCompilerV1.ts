@@ -250,7 +250,7 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     if (!manifest) throw new TypeError('Approximate equations require host fonts or an embedded font manifest')
     const resolver = runtime.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
     const shaper = runtime.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
-    equationStage = await prepareNativeDocxApproximateEquationStageV1(runtime.equations, sourceDocument.value, sourceResolved.value, { manifest, resolver, shaper, outlineProvider })
+    equationStage = await prepareNativeDocxApproximateEquationStageV1(runtime.equations, sourceDocument.value, sourceResolved.value, { manifest, resolver, shaper, outlineProvider }, inventory.main_sha256)
     input = { ...input, document: equationStage.projection.document, resolved_layout: equationStage.projection.resolved }
   }
   let applied: NativeDocxApproximatedFontSizeV1[] = []

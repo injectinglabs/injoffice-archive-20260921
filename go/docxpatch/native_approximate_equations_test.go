@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const testMathStyles = `<w:styles xmlns:w="` + testW + `"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:color w:val="4F81BD"/><w:sz w:val="18"/></w:rPr></w:style></w:styles>`
@@ -280,6 +281,16 @@ func TestApproximateEquationsBudgetAndStrictNamespace(t *testing.T) {
 	_, out := inspectEquations(t, nativeApproximateEquationSource(t, paragraphs.String()))
 	if out == nil || len(out.Items) != nativeApproximateEquationLimit || out.OmittedCount != 2 {
 		t.Fatalf("equation budget: items=%d omitted=%d", len(out.Items), out.OmittedCount)
+	}
+	longFamily := strings.Repeat("F", nativeApproximateEquationFamilyLimit+1)
+	_, out = inspectEquations(t, nativeApproximateEquationSource(t, nativeMathParagraph("", `<m:oMath><m:r><w:rPr><w:rFonts w:ascii="`+longFamily+`" w:hAnsi="`+longFamily+`"/></w:rPr><m:t>x</m:t></m:r></m:oMath>`)))
+	if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != "equation font family exceeds the preview bound" || len(out.FontRequests) != 0 {
+		t.Fatalf("family bound: %+v", out)
+	}
+	longValue := strings.Repeat("é", 300)
+	_, out = inspectEquations(t, nativeApproximateEquationSource(t, nativeMathParagraph("", `<m:oMath><m:r><m:rPr><m:scr m:val="`+longValue+`"/></m:rPr>`+testMathRPr+`<m:t>x</m:t></m:r></m:oMath>`)))
+	if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || len(out.Items[0].Reason) > nativeApproximateEquationReasonLimit || !utf8.ValidString(out.Items[0].Reason) || !strings.HasPrefix(out.Items[0].Reason, "unsupported math script alphabet ") {
+		t.Fatalf("reason bound: %q", out.Items[0].Reason)
 	}
 	long := strings.Repeat("x", nativeApproximateEquationTextLimit+1)
 	_, out = inspectEquations(t, nativeApproximateEquationSource(t, nativeMathParagraph("", `<m:oMath>`+plain(long)+`</m:oMath>`)))
