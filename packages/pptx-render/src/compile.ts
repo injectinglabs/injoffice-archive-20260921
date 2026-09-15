@@ -116,6 +116,7 @@ interface CompileState {
   readonly assets: ReadonlyMap<string, NativeAsset>
   readonly referencedAssets: Map<string, RenderAsset>
   readonly hostResolutionDiagnosticElements: Set<string>
+  readonly emergencyBreakDiagnosticElements: Set<string>
   readonly diagnostics: RenderDiagnostic[]
   readonly budget: Budget
   readonly providers: ProviderSnapshot
@@ -1405,7 +1406,13 @@ function singleConsumableSeparator(
   )
 }
 
-function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number|AffineRational, continuationWidth = width,affineBudget?:SourceAffineBudget): Generator<WrapLineRange> {
+// An emergency break is the read-only approximate policy for a run wider than
+// the line with no Unicode break opportunity: PowerPoint breaks such text at
+// the last character that fits. It is only offered by approximate previews and
+// reported through onBreak; strict native layout keeps refusing.
+interface WrapEmergencyBreakPolicy { readonly allowed: boolean; readonly onBreak: () => void }
+
+function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: number|AffineRational, continuationWidth = width,affineBudget?:SourceAffineBudget,emergency?:WrapEmergencyBreakPolicy): Generator<WrapLineRange> {
   if (shaped.length === 0) {
     yield { startRunIndex: 0, startClusterIndex: 0, endRunIndex: 0, endClusterIndex: 0 }
     return
@@ -1449,6 +1456,18 @@ function* squareWrappedLineRanges(shaped: readonly ShapedRunResult[], width: num
       }
       if (cursor.runIndex === lineStartRunIndex && cursor.clusterIndex === lineStartClusterIndex) {
         throw new TextBodyLayoutRefusal('text.wrapUnavailable', 'one unbreakable shaped cluster exceeds the native text-body width')
+      }
+      if (emergency?.allowed && !wrapAtomUnsafe(shaped, cursor.runIndex, cursor.clusterIndex)) {
+        emergency.onBreak()
+        yield { startRunIndex: lineStartRunIndex, startClusterIndex: lineStartClusterIndex, endRunIndex: cursor.runIndex, endClusterIndex: cursor.clusterIndex }
+        lineStartRunIndex = cursor.runIndex
+        lineStartClusterIndex = cursor.clusterIndex
+        width = continuationWidth
+        advance = 0
+        hasBreakOpportunity = false
+        breakConsumedRunIndex = undefined
+        breakConsumedClusterIndex = undefined
+        continue
       }
       throw new TextBodyLayoutRefusal('text.wrapUnavailable', 'no modeled Unicode shaped-cluster boundary fits the native text-body width')
     }
@@ -1687,8 +1706,16 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       throw new TextBodyLayoutRefusal('text.wrapUnavailable', 'native square wrapping currently requires an exact horizontal LTR paragraph direction')
     }
     const squareWrap = context.layout?.wrap === 'square'
+    const emergencyBreaks: WrapEmergencyBreakPolicy = {
+      allowed: state.sourceFrameAutoFitPreview || state.inheritedTextElements.has(context.elementId),
+      onBreak: () => {
+        if (state.emergencyBreakDiagnosticElements.has(context.elementId)) return
+        state.emergencyBreakDiagnosticElements.add(context.elementId)
+        state.diagnostics.push({ severity: 'warning', code: 'text.emergencyBreakApproximate', message: 'A shaped run wider than the text body has no Unicode break opportunity; the read-only approximate preview breaks it at the last shaped cluster that fits, as PowerPoint does, instead of refusing. Break positions are not Office-qualified.', slideId: state.slide.id, elementId: context.elementId })
+      },
+    }
     const lineRanges: Iterable<WrapLineRange> = squareWrap
-      ? squareWrappedLineRanges(shaped, firstWidth, continuationWidth,state.budget.affine)
+      ? squareWrappedLineRanges(shaped, firstWidth, continuationWidth,state.budget.affine,emergencyBreaks)
       : [{ startRunIndex: 0, startClusterIndex: 0, endRunIndex: shaped.length, endClusterIndex: 0 }]
     const fragmentProgress: FragmentProgress[] | undefined = squareWrap
       ? shaped.map(() => ({ clusterIndex: 0, glyphIndex: 0, glyphPenXEmu: 0, glyphPenYEmu: 0 }))
@@ -2361,6 +2388,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
     assets: new Map(deck.assets.map((asset) => [asset.id, asset])),
     referencedAssets: new Map(),
     hostResolutionDiagnosticElements: new Set(),
+    emergencyBreakDiagnosticElements: new Set(),
     diagnostics: [],
     budget,
     providers,
