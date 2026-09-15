@@ -11,9 +11,9 @@ They cover the Injecting native GET chain that previously 422/503'd in productio
 | `pass-excel-defaults.xlsx` | 200 | Excel `showGridLines=1` and xf `pivotButton/quotePrefix=0` |
 | `pass-excel-defaults-chart.xlsx` | 200 | The combined GET path: Excel defaults + DrawingML chart |
 | `refuse-calibri.xlsx` | 422 `xlsx.native.font-unavailable` | Calibri is not a host-native face |
-| `refuse-apply-flags.xlsx` | 422 `xlsx.native.unsupported` | cellXf ids differ without apply flags |
+| `refuse-apply-flags.xlsx` | 200 (`STYLE_PARENT_APPLY_MISMATCH`) | cellXf ids differ without apply flags; each cellXf's own record previews read-only, style mutation stays refused |
 | `refuse-gridlines-off.xlsx` | 503 compile (`SHEET_VIEW_GEOMETRY`) | Explicit gridlines off is unbuilt view geometry |
-| `refuse-freeze-pane.xlsx` | 503 compile (`SHEET_VIEW_GEOMETRY`) | Freeze pane is unbuilt view geometry |
+| `refuse-freeze-pane.xlsx` | 200 (`SHEET_VIEW_PANE`) | Freeze pane is recorded as a read-only `sheet_view` fact; grid and print previews ignore view state |
 | `refuse-quote-prefix.xlsx` | 503 compile (`STYLE_RECORD_ATTRIBUTES`) | `quotePrefix=1` is style-record authority |
 | `refuse-shape-drawing.xlsx` | 422 `xlsx.native.unsupported` | Shapes are not chart-covered GET overlays |
 
