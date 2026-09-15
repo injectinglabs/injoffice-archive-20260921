@@ -5932,6 +5932,21 @@
               "signature": "export declare function decodeNativeDocxTextboxPagePreviewV1(source: unknown, evidence: unknown, input: unknown, expectedFontSHA256: string): NativeDocxTextboxPagePreviewV1"
             },
             {
+              "name": "DOCX_APPROXIMATE_OMITTED_CATEGORIES",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_OMITTED_CATEGORIES: readonly ['drawing', 'equation', 'field', 'table', 'comment', 'content-control', 'revision', 'reference', 'text', 'block', 'other']"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT: 64"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING: 'Approximate preview omitted source content it cannot paint; see omitted_content for each dropped item.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_PREVIEW_POLICY",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_PREVIEW_POLICY: 'current-layout-approximate-v1'"
@@ -5987,6 +6002,16 @@
               "signature": "export declare const DOCX_TEXTBOX_PAGE_PREVIEW_WARNING = \"Read-only approximate textbox composition: one page-relative rectangle anchored before its paragraph text; original drawing restrictions remain.\""
             },
             {
+              "name": "NativeDocxApproximateContentStatusV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateContentStatusV1"
+            },
+            {
+              "name": "NativeDocxApproximateOmissionsV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateOmissionsV1"
+            },
+            {
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "NativeDocxApproximatePagePreviewV1"
@@ -6005,6 +6030,21 @@
               "name": "NativeDocxFontSubstitutionPreviewV1",
               "kind": "type",
               "signature": "NativeDocxFontSubstitutionPreviewV1"
+            },
+            {
+              "name": "NativeDocxOmittedContentCategoryV1",
+              "kind": "type",
+              "signature": "NativeDocxOmittedContentCategoryV1"
+            },
+            {
+              "name": "nativeDocxOmittedContentSummaryV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxOmittedContentSummaryV1(value: Pick<NativeDocxApproximateOmissionsV1, 'omitted_content' | 'omitted_content_total' | 'unpainted_pages'>): string | null"
+            },
+            {
+              "name": "NativeDocxOmittedContentV1",
+              "kind": "type",
+              "signature": "NativeDocxOmittedContentV1"
             },
             {
               "name": "NativeDocxPagePaintCommandV1",

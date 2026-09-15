@@ -472,6 +472,23 @@ from the top and leaves extra leading below the text. This declared host policy
 is not Word baseline fidelity; strict rendering still requires natural line
 height, and compressed line boxes remain refused in both paths.
 
+Every approximate envelope also discloses what it did not paint. `content_status`
+is `'complete'` only when no source content was dropped and every painted page
+has at least one paint command; otherwise it is `'partial'` (refusals are always
+`'partial'`). `omitted_content` lists each skipped content diagnostic (bounded to
+64 merged entries, `omitted_content_total` keeps the full count) with its code,
+origin (`source`, `resolution`, `shaping` or `pagination`), a display category
+(`drawing`, `equation`, `field`, `table`, `comment`, `content-control`,
+`revision`, `reference`, `text`, `block`, `other`), scope id, source part and
+path, and the original message. Formatting-only approximations (theme colors,
+spacing, font metadata) and non-visual markers (bookmarks, proofing and
+permission ranges) stay in the original diagnostics and do not appear here; a
+dropped paragraph is listed once, under the diagnostic that explains it.
+`unpainted_pages` lists exactly the painted pages without any paint command;
+the decoder rejects an envelope whose `content_status` disagrees with these
+lists, so a blank painted page can never decode as complete. `status: 'painted'`
+is kept for compatibility and only attests that painting finished.
+
 Eligible mode-12 previews can also carry `legacy_table_origins` source facts.
 For a qualified unmerged, left-aligned table in a single page column, the
 read-only `legacy-content-aligned-origin-v1` policy shifts the table and its

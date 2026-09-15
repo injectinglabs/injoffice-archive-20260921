@@ -3,6 +3,8 @@ export {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_PREVIEW
 export type {NativeDocxFontSubstitutionPreviewV1} from './nativeFontSubstitutionPreviewV1.js'
 export { decodeNativeDocxApproximatePagePreviewV1, DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, DOCX_APPROXIMATE_PREVIEW_WARNING } from './nativeApproximationV1.js'
 export type { NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+export { nativeDocxOmittedContentSummaryV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT, DOCX_APPROXIMATE_OMITTED_CATEGORIES } from './nativeApproximateOmittedContentV1.js'
+export type { NativeDocxOmittedContentV1, NativeDocxApproximateOmissionsV1, NativeDocxApproximateContentStatusV1, NativeDocxOmittedContentCategoryV1 } from './nativeApproximateOmittedContentV1.js'
 export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from './nativeAutomaticBorderPreviewV1.js'
 export type { NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 export { decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
