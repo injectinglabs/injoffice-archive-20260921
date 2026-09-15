@@ -98,3 +98,20 @@ convention. Projected `main` plus #220 plus #221 is about 8,334,771 bytes,
 leaving roughly 324,000 bytes of measured margin for the diagram-layout lane;
 `main` alone has 575,157 bytes of margin. The build script and CI gate now print
 the ceiling read from that file instead of a hand-maintained figure.
+
+### Ceiling raised to 8.5 MiB + 8 KiB
+
+The SmartArt hierarchy layout evaluator (#227: bounded ECMA-376 §21.4 data
+model, layout definition evaluation, composite/hierRoot/hierChild/sp/tx/conn
+algorithms and style resolution) compiles to roughly 327,000 bytes of WASM.
+`main` at 3953cc64 (with #220 and #226 merged) measured 8,150,024 bytes on Go
+1.23.0 darwin/arm64; the #227 head measured 8,477,268 bytes locally (CI Linux
+builds run about 5,000 bytes larger), leaving 181,676 bytes under the
+8.25 MiB + 8 KiB ceiling (8,658,944 bytes). The pending autofit/placeholder
+work (#221) adds 184,747 bytes, so `main` plus #227 plus #221 projects to about
+8,662,000 bytes locally and 8,667,000 bytes in CI, a few hundred bytes over
+that ceiling. As the largest consumer, #227 carries the next deliberate
+quarter-MiB step: `go/pptxpatch/cmd/pptxnativewasm/max-bytes.txt` is raised to
+8.5 MiB + 8 KiB (8,921,088 bytes), leaving 443,820 bytes of measured margin for
+this head and roughly 254,000 bytes once #221 lands. The build script and CI
+gate keep reading the ceiling from that file.

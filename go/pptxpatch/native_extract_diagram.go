@@ -98,6 +98,12 @@ func (extractor *nativeExtractor) extractNativeDiagramGraphicFrame(node *nativeX
 	}
 	shapes, drawingPayload, err := extractor.parseNativeDiagramDrawingShapes(drawingRel.Part)
 	if err != nil {
+		// Without stored fallback shapes the opt-in approximate tier lays the
+		// diagram out from its parts (native_diagram_layout.go). The exact
+		// tier and the populated-fallback path are unchanged.
+		if extractor.options.AllowInheritedTextPreview && nativeDiagramRefusalCode(err) == nativeDiagramDrawingEmptyCode {
+			return extractor.extractNativeDiagramLayoutGraphicFrame(node, graphic, slidePart, slideID, relationships, dialect, objectID, name, transform)
+		}
 		return NativeElement{}, err
 	}
 	children := make([]NativeElement, 0, len(shapes))
@@ -323,7 +329,7 @@ func (extractor *nativeExtractor) parseNativeDiagramDrawingShapes(part string) (
 	}
 	shapes := nativeChildren(spTree, nsDiagramDrawing, "sp")
 	if len(shapes) == 0 {
-		return nil, nil, refuseNativeDiagram("pptx.diagram-drawing-empty-unavailable", "diagram drawing part has no pre-laid-out shapes; diagram layout is not evaluated")
+		return nil, nil, refuseNativeDiagram(nativeDiagramDrawingEmptyCode, "diagram drawing part has no pre-laid-out shapes; diagram layout is not evaluated")
 	}
 	if len(shapes) > nativeMaxDiagramDrawingShapes {
 		return nil, nil, refuseNativeDiagram("pptx.diagram-drawing-budget-unavailable", "diagram drawing exceeds the bounded shape budget")
