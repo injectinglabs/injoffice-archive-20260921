@@ -259,6 +259,8 @@ func (extractor *nativeExtractor) extractNativeGroup(
 					code := "pptx.group-table-unavailable"
 					if strings.HasPrefix(refusal.code, "pptx.chart-") {
 						code = "pptx.group-chart-unavailable"
+					} else if strings.HasPrefix(refusal.code, "pptx.diagram-") {
+						code = "pptx.group-diagram-unavailable"
 					}
 					return nativeGroupExtractResult{}, refuseNativeGroup(code, refusal.message)
 				}
