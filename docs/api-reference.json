@@ -3474,6 +3474,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY: 'docx.approximate-drawing-shape-preview-v1'"
             },
             {
+              "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED: \"docx.approximate-drawing-shape-omitted: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted\""
+            },
+            {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID: \"docx.approximate-drawing-shape-preview-v1\""
@@ -3481,7 +3486,7 @@
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING",
               "kind": "const",
-              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Original drawing restrictions and source bytes are unchanged.\""
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.\""
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL",
@@ -5846,6 +5851,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY: 'docx.approximate-drawing-shape-preview-v1'"
             },
             {
+              "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED: \"docx.approximate-drawing-shape-omitted: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted\""
+            },
+            {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID: \"docx.approximate-drawing-shape-preview-v1\""
@@ -5853,7 +5863,7 @@
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING",
               "kind": "const",
-              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Original drawing restrictions and source bytes are unchanged.\""
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.\""
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL",

@@ -17,6 +17,7 @@ import { DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION, ty
 import {
   DOCX_PAGE_PAINT_COMPILER_PROTOCOL,
   DOCX_PAGE_PAINT_COMPILER_VERSION,
+  decodeNativeDocxApproximateDrawingShapesV1,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
@@ -3073,6 +3074,43 @@ describe('approximate DrawingML shapes', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
 
+  it('keeps painting the body when the sidecar does not exact-join, discloses the refusal, and omits nothing else', async () => {
+    // A supported shape claiming a run that also carries modeled text (the Go sidecar omits these as shared-run).
+    const { input, eligibility, shapes, item } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
+    item.run_anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 105, 185); item.anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', 111, 179)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_glyph_path')).toBe(true)
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell' || c.kind === 'stroke_table_border')).toBe(false)
+    expect(paint.reasons).toContain('docx.approximate-drawing-shape-omitted: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted')
+    expect(paint.omitted_content.some(entry => entry.code === 'UNMODELED_RUN_CONTENT')).toBe(true)
+    expect(paint.content_status).toBe('partial')
+  }, 20000)
+
+  it('centers odd-width shapes without dropping them on coordinate parity', async () => {
+    for (const cx of [2990000, 2995000, 2998800]) {
+      const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', width_emu: cx, page_anchor: pageAnchor({ x_emu: 0, horizontal_align: 'center' }) })
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+      const fill = paint.pages[0]!.commands.find(c => c.kind === 'fill_table_cell')
+      if (!fill || fill.kind !== 'fill_table_cell') throw new Error(`centered shape ${cx} was dropped: ${paint.reasons.filter(r => r.includes('omitted')).join(' | ')}`)
+      const width = Math.round(cx / 12.7)
+      expect(fill.width_millipoints).toBe(width)
+      expect(Math.abs(fill.x_millipoints - (612_000 - width) / 2)).toBeLessThanOrEqual(1)
+      expect(paint.content_status).toBe('complete')
+    }
+  }, 30000)
+
+  it('discloses shapes the painter drops as omitted content', async () => {
+    const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor({ x_emu: 120_000_000, y_emu: 120_000_000 }) })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell')).toBe(false)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('outside-page')), paint.reasons.filter(r => r.includes('approximate-drawing')).join(' / ')).toBe(true)
+    expect(paint.content_status).toBe('partial')
+    expect(paint.omitted_content.some(entry => entry.code === 'UNMODELED_RUN_CONTENT' && entry.scope_id === 'paragraph:1')).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
   it('refuses sidecars that do not exact-join the source document', async () => {
     const cases: Array<[string, (shapes: any, item: any) => void]> = [
       ['package', (shapes) => { shapes.package_sha256 = `sha256:${'b'.repeat(64)}` }],
@@ -3087,7 +3125,11 @@ describe('approximate DrawingML shapes', () => {
     for (const [name, mutate] of cases) {
       const { input, eligibility, shapes, item } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
       mutate(shapes, item)
-      await expect(renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes }), name).rejects.toThrow()
+      expect(() => decodeNativeDocxApproximateDrawingShapesV1(shapes, input.document as NativeDocxDocumentV1), name).toThrow()
+      const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+      expect(paint.status, name).toBe('painted')
+      expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell'), name).toBe(false)
+      expect(paint.reasons.some(r => r.includes('did not exact-join')), name).toBe(true)
     }
     const ineligible = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
     await expect(renderNativeDocxApproximatePagePreviewV1(ineligible.input, { ...ineligible.eligibility, status: 'ineligible' }, outlineProvider(ineligible.input), { drawingShapes: ineligible.shapes })).rejects.toThrow()

@@ -189,6 +189,24 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 			t.Fatalf("line preset: %#v", item)
 		}
 	})
+	t.Run("shared run with text", func(t *testing.T) {
+		// Modeled text runs anchor inside the same w:r; the shape must not claim it.
+		source := nativeApproximateShapeSource(t, `<w:p><w:r><w:t>a</w:t>`+base+`<w:t>b</w:t></w:r></w:p>`, nil)
+		doc, err := ExtractNativeDocumentV1(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := InspectNativeApproximateDrawingShapesV1(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != "shared-run" {
+			t.Fatalf("shared run must be omitted: %#v", out)
+		}
+		if runs := doc.Body.Blocks[0].Paragraph.Runs; len(runs) != 2 || *runs[0].Text != "a" || *runs[1].Text != "b" {
+			t.Fatalf("text runs must stay modeled: %#v", runs)
+		}
+	})
 	t.Run("vml only stays refused", func(t *testing.T) {
 		source := nativeApproximateShapeSource(t, `<w:p><w:r><w:pict><v:rect xmlns:v="`+nativeTextboxVML+`" style="width:10pt;height:10pt" fillcolor="#ff0000"/></w:pict></w:r></w:p>`, nil)
 		out, err := InspectNativeApproximateDrawingShapesV1(source)

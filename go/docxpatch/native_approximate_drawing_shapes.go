@@ -217,6 +217,15 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		item.Reason = reason
 		return item
 	}
+	// A run that also carries text (or anything but its properties) would leave
+	// modeled runs nested inside the shape's run anchor; only the drawing may
+	// share the w:r with w:rPr.
+	for _, sibling := range run.Children {
+		if sibling.Name == (xml.Name{Space: context.ns, Local: "rPr"}) || sibling == drawing || (sibling.Name == (xml.Name{Space: nativeMarkupCompatibilityNS, Local: "AlternateContent"}) && context.drawingNode(sibling) == drawing) {
+			continue
+		}
+		return omit("shared-run")
+	}
 	wp, a := context.wp, context.a
 	var container *nativeXMLNode
 	for _, c := range drawing.Children {

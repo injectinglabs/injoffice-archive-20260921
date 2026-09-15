@@ -175,9 +175,9 @@ export interface NativeDocxApproximateRuntimeV1 {
   /** Server-supplied `InspectNativeApproximateDrawingShapesV1` sidecar for the same bytes; validated against the document before use. */
   drawingShapes?: unknown
 }
-import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
+import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
-export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
+export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
 export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, type NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
@@ -241,17 +241,26 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   // the whole sidecar; the body preview itself never depends on it.
   let shapes: NativeDocxApproximateDrawingShapesV1 | undefined
   let shapeProjection: ReturnType<typeof projectNativeDocxApproximateInlineShapesV1> | undefined
+  let sidecarRefused = false
   if (runtime?.drawingShapes !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Approximate drawing shapes require independently eligible approximate settings')
     const sourceDocument = decodeNativeDocxDocument(input.document)
     const sourceResolved = decodeNativeDocxResolvedLayout(input.resolved_layout)
     if (!sourceDocument.ok) failIssues('native document is invalid', sourceDocument.issues)
     if (!sourceResolved.ok) failIssues('resolved layout is invalid', sourceResolved.issues)
-    shapes = decodeNativeDocxApproximateDrawingShapesV1(runtime.drawingShapes, sourceDocument.value)
-    shapeProjection = projectNativeDocxApproximateInlineShapesV1(sourceDocument.value, sourceResolved.value, shapes)
-    input = { ...input, document: shapeProjection.document, resolved_layout: shapeProjection.resolved }
+    // The body preview never depends on the sidecar: evidence that does not
+    // exact-join the source is dropped as a whole and disclosed, the refused
+    // drawings stay omitted exactly as before.
+    try {
+      shapes = decodeNativeDocxApproximateDrawingShapesV1(runtime.drawingShapes, sourceDocument.value)
+      shapeProjection = projectNativeDocxApproximateInlineShapesV1(sourceDocument.value, sourceResolved.value, shapes)
+      input = { ...input, document: shapeProjection.document, resolved_layout: shapeProjection.resolved }
+    } catch {
+      shapes = undefined; shapeProjection = undefined; sidecarRefused = true
+    }
   }
   const { result, prepared } = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
+  if (sidecarRefused && !result.reasons.includes(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)) result.reasons.push(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)
   if (shapes && shapeProjection && result.status === 'painted') {
     const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
     const resolver = runtime?.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
@@ -259,8 +268,14 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const painted = await paintNativeDocxApproximateDrawingShapesV1(result, shapes, shapeProjection, { request: prepared.page_paint_request, document: shapeProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider })
     for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
     // Shape paint changes which pages carry commands; re-derive the omitted-content
-    // disclosure from the same inputs so content_status stays consistent.
-    const omissions = collectNativeDocxApproximateOmissionsV1(prepared.page_paint_request.pagination_request, result)
+    // disclosure from the same inputs so content_status stays consistent. Shapes the
+    // painter dropped get their source refusals back first so they are disclosed as
+    // omitted content, not only in the free-text reason.
+    const omittedIDs = new Set(painted.omitted.map(entry => entry.id))
+    const restored = new Set(shapes.items.filter(shape => omittedIDs.has(shape.id)).flatMap(shape => shape.diagnostic_ids))
+    const pagination = prepared.page_paint_request.pagination_request
+    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...shapeProjection.removedDiagnostics.filter(entry => restored.has(entry.id))] } }
+    const omissions = collectNativeDocxApproximateOmissionsV1(omissionSource, result)
     Object.assign(result, omissions)
     const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
     result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)

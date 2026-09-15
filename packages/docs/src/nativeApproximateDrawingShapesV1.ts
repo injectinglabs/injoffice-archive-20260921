@@ -10,7 +10,7 @@
  * rectangle/border primitives, text-box glyphs attach to the anchor line of
  * the owning paragraph. Nothing here touches strict paint or source bytes. */
 import type { NativeFontManifest, NativeFontResolver, NativeTextShaper } from '@injoffice/font-metrics/layout'
-import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxSourceAnchorV1 } from './nativeContract.js'
+import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxSourceAnchorV1, NativeDocxUnsupportedCapabilityV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1, NativeDocxResolvedParagraphV1, NativeDocxResolvedRunPropertiesV1, NativeDocxResolvedRunV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
 import type { NativeDocxShapedLinesV1, NativeDocxLineFragmentV1 } from './nativeShapingLines.js'
@@ -31,7 +31,8 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
 
@@ -117,12 +118,14 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
     const paragraph = paragraphs.get(item.paragraph_id)
     if (!paragraph || !anchorValid(item.anchor, main) || !anchorValid(item.run_anchor, main) || !within(item.run_anchor, paragraph.anchor) || !within(item.anchor, item.run_anchor)) throw new TypeError('Approximate drawing shape does not exact-join its body paragraph')
     if (!Array.isArray(item.diagnostic_ids) || item.diagnostic_ids.length === 0 || item.diagnostic_ids.length > 64 || item.diagnostic_ids.some(id => { const d = typeof id === 'string' ? diagnostics.get(id) : undefined; return !d || d.scope_id !== item.paragraph_id || !d.anchor || !within(d.anchor, item.run_anchor) })) throw new TypeError('Approximate drawing shape must join retained source drawing diagnostics')
-    if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing shape overlaps modeled text')
     if (item.status !== 'supported' && item.status !== 'omitted') throw new TypeError('Approximate drawing shape status is invalid')
     if (!safeNonnegative(item.width_emu) || !safeNonnegative(item.height_emu) || !safeNonnegative(item.rotation_degrees, 359) || typeof item.flip_horizontal !== 'boolean' || typeof item.flip_vertical !== 'boolean') throw new TypeError('Approximate drawing shape geometry is out of bounds')
     if (item.notes !== undefined && (!Array.isArray(item.notes) || item.notes.length > 32 || item.notes.some(note => typeof note !== 'string' || note.length > 512))) throw new TypeError('Approximate drawing shape notes are unbounded')
     if (item.reason !== undefined && (typeof item.reason !== 'string' || item.reason.length > 256)) throw new TypeError('Approximate drawing shape reason is unbounded')
     if (item.status === 'omitted') continue
+    // A painted shape must own its run: a w:r that also carries modeled text is
+    // omitted by the sidecar (shared-run); a supported item claiming one is forged.
+    if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing shape overlaps modeled text')
     if (item.width_emu <= 0 || item.height_emu <= 0 || (item.placement !== 'inline' && item.placement !== 'anchored') || (item.preset !== 'rect' && item.preset !== 'line')) throw new TypeError('Supported approximate drawing shape requires positive extent, placement and preset')
     if (item.fill_rgb !== undefined && (typeof item.fill_rgb !== 'string' || !RGB.test(item.fill_rgb))) throw new TypeError('Approximate drawing shape fill is not an explicit RGB value')
     if (item.line !== undefined && (!record(item.line) || !exactKeys(item.line as unknown as Record<string, unknown>, ['rgb', 'width_emu', 'dash']) || typeof item.line.rgb !== 'string' || !RGB.test(item.line.rgb) || !safeNonnegative(item.line.width_emu, 12_700_000) || item.line.width_emu <= 0 || typeof item.line.dash !== 'string' || item.line.dash.length > 32)) throw new TypeError('Approximate drawing shape outline is invalid')
@@ -143,6 +146,8 @@ export interface NativeDocxApproximateInlineShapeProjectionV1 {
   resolved: NativeDocxResolvedLayoutInputV1
   /** Shape id to the synthetic glyphless drawing run id reserved in the body copy. */
   inlineRuns: Map<string, string>
+  /** Source refusals removed from the body copy for supported shapes; restored for shapes the painter drops. */
+  removedDiagnostics: NativeDocxUnsupportedCapabilityV1[]
 }
 
 /** Reserve supported inline shapes as glyphless textbox atoms so surrounding
@@ -182,8 +187,9 @@ export function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxD
     projectedResolved.runs.push({ run_id: runID, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: {} })
     inlineRuns.set(shape.id, runID)
   }
+  const removedDiagnostics = projected.unsupported.filter(entry => removed.has(entry.id))
   projected.unsupported = projected.unsupported.filter(entry => !removed.has(entry.id))
-  return { document: projected, resolved: projectedResolved, inlineRuns }
+  return { document: projected, resolved: projectedResolved, inlineRuns, removedDiagnostics }
 }
 
 /** Equal-width column extent of the section owning a body block, in EMU. */
@@ -271,13 +277,8 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
       if (!first) { omit(shape, 'anchor-paragraph-not-placed'); continue }
       context = { page: first.page, line: first.line, character_x: first.line.x_millipoints, paragraph_y: first.line.y_millipoints }
     }
-    let position: { x: number; y: number }
-    try {
-      position = resolveTextboxPosition(runtime.document, item, context.page, { width_millipoints: width, height_millipoints: height } as never, context)
-    } catch (error) {
-      omit(shape, `anchor-unresolved: ${error instanceof Error ? error.message : 'unknown'}`)
-      continue
-    }
+    const position = resolveShapePosition(runtime.document, item, context.page, width, height, context)
+    if (!position.ok) { omit(shape, `anchor-unresolved: ${position.message}`); continue }
     placed.push({ shape, page: context.page, line: context.line, x: position.x, y: position.y, width, height, behind: anchor.stacking?.behind_doc === true, order: anchor.stacking?.relative_height ?? 0 })
   }
   placed.sort((left, right) => left.order - right.order)
@@ -288,11 +289,31 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
     bucket.set(entry.page.id, [...(bucket.get(entry.page.id) ?? []), ...commands])
     result.painted.push(entry.shape.id)
   }
-  const textboxResult = await paintTextboxes(placed, runtime, extra, result)
+  const textboxResult = await paintTextboxes(placed, paint.pages, runtime, extra, result)
   result.substitutions = textboxResult.substitutions
   for (const page of paint.pages) rebuildCommands(page, behindByPage.get(page.id) ?? [], frontByPage.get(page.id) ?? [], extra, removedIDs)
   result.reasons = buildReasons(shapes, result, textboxResult)
   return result
+}
+
+/** Centered/aligned axes halve (extent - shape) and refuse a .5 result; an
+ * approximate shape rounds by retrying with a one-millipoint wider extent so
+ * parity never drops it. The painted extent is unchanged. */
+function resolveShapePosition(document: NativeDocxDocumentV1, item: NativeDocxTextboxGeometryItemV1, page: NativeDocxPaintPageV1, width: number, height: number, context: TextboxAnchorContext): { ok: true; x: number; y: number } | { ok: false; message: string } {
+  let message = 'unknown'
+  // Offsets that are not whole millipoints (EMU not a multiple of 127) are rounded to the nearest one (at most 63 EMU).
+  const anchor = item.page_anchor!
+  const rounded = { ...item, page_anchor: { ...anchor, x_emu: Math.round(anchor.x_emu / 127) * 127, y_emu: Math.round(anchor.y_emu / 127) * 127 } } as NativeDocxTextboxGeometryItemV1
+  for (const [dw, dh] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+    try {
+      const { x, y } = resolveTextboxPosition(document, rounded, page, { width_millipoints: width + dw, height_millipoints: height + dh } as never, context)
+      return { ok: true, x, y }
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'unknown'
+      if (!/coordinate precision/.test(message)) break
+    }
+  }
+  return { ok: false, message }
 }
 
 function findHighlight(pages: NativeDocxPaintPageV1[], runID: string): { page: NativeDocxPaintPageV1; line: NativeDocxPaintLineV1; command: NativeDocxFillTextHighlightCommandV1 } | undefined {
@@ -354,8 +375,10 @@ function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
   return [stroke]
 }
 
-/** Rebuild page paint order: behind floats, table fills, behind shapes, the
- * line-owned commands in line order, table borders, front shapes, front floats.
+/** Rebuild page paint order: behind floats, behind shapes, table fills, the
+ * line-owned commands in line order, table borders, front shapes, front floats
+ * (the wire requires floats to bracket everything else, so shapes cannot be
+ * interleaved with floats by relativeHeight; the warning discloses this).
  * Every original command keeps its category; only shape paint is added. */
 function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePaintCommandV1[], front: NativeDocxPagePaintCommandV1[], extra: Map<string, NativeDocxPagePaintCommandV1>, removed: Set<string>): void {
   const byID = new Map<string, NativeDocxPagePaintCommandV1>()
@@ -370,7 +393,7 @@ function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePain
   for (const [id, command] of extra) byID.set(id, command)
   const ordinary: NativeDocxPagePaintCommandV1[] = []
   for (const line of page.lines) for (const id of line.command_ids) { const command = byID.get(id); if (command) ordinary.push(command) }
-  page.commands = [...behindFloats, ...fills, ...behind, ...ordinary, ...borders, ...front, ...frontFloats]
+  page.commands = [...behindFloats, ...behind, ...fills, ...ordinary, ...borders, ...front, ...frontFloats]
 }
 
 interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]; textboxes: number; droppedLines: number; droppedGlyphs: number; omittedContent: number; failures: string[]; byteBudget: number }
@@ -379,7 +402,7 @@ interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontS
  * the resulting lines into the linked chain of boxes in source seq order.
  * Glyph paint attaches to the anchor line so the wire decoder keeps its
  * line ownership invariants. */
-async function paintTextboxes(placed: PlacedShape[], runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, result: NativeDocxApproximateShapePaintResultV1): Promise<TextboxPaintOutcome> {
+async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxPaintPageV1[], runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, result: NativeDocxApproximateShapePaintResultV1): Promise<TextboxPaintOutcome> {
   const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, droppedGlyphs: 0, omittedContent: 0, failures: [], byteBudget: 0 }
   const chains = new Map<string, PlacedShape[]>()
   for (const entry of placed) {
@@ -393,7 +416,7 @@ async function paintTextboxes(placed: PlacedShape[], runtime: NativeDocxApproxim
   let glyphBudget = MAX_TEXTBOX_GLYPHS
   // Glyph paths dominate the wire; measure the body paint once and spend only
   // the remaining viewer budget on text box glyphs. Excess is disclosed.
-  if (chains.size) outcome.byteBudget = Math.max(0, MAX_ENVELOPE_BYTES - JSON.stringify(placed[0]?.page ? placed.map(entry => entry.page).filter((page, index, pages) => pages.indexOf(page) === index) : []).length - extra.size * 512)
+  if (chains.size) outcome.byteBudget = Math.max(0, MAX_ENVELOPE_BYTES - JSON.stringify(pages).length - extra.size * 512)
   for (const [key, boxes] of chains) {
     boxes.sort((left, right) => left.shape.textbox!.link_seq - right.shape.textbox!.link_seq)
     const head = boxes.find(entry => entry.shape.textbox!.paragraphs.length > 0)
@@ -536,7 +559,7 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
             if (!outline) {
               const live = await runtime.outlineProvider.getGlyphOutline(Object.freeze({ face: Object.freeze({ ...face }), glyph_id: glyph.glyph_id }))
               outline = nativeDocxCaptureGlyphOutlineV1(structuredClone(live), face, glyph.glyph_id)
-              if (!outline) break
+              if (!outline) { outcome.droppedGlyphs += fragment.glyphs.length - glyphIndex; break }
               outlineCache.set(cacheKey, outline)
             }
             if (outline.status === 'outlined') {
