@@ -453,11 +453,16 @@ explicit request may return `status: 'refused'` with no pages.
 The separate opt-in `renderNativeDocxApproximatePagePreviewV1` path may use
 current layout rules for exact legacy mode 12/14 settings. Its extractor-owned
 eligibility can additionally retain bounded known theme-language, locale,
-math-default, shape-ID and compatibility-flag facts in `approximated_settings`.
-These are explicitly disregarded settings, not implemented Word semantics:
-each carries a warning, its original values and source path, while original
-strict diagnostics and source hashes remain attached. Unknown or malformed
-settings still refuse. Active unsupported math, VML content, missing fonts and
+math-default, shape-ID and compatibility-flag facts in `approximated_settings`,
+plus typed not-applied facts for active `autoHyphenation` (hyphenation is not
+performed), repeated or non-leading agreeing `compatibilityMode` attestations,
+ECMA-376 `w:compat` legacy options, grouped authoring-only settings such as
+`attachedTemplate` or `activeWritingStyle`, and duplicate settings that repeat
+their first occurrence. These are explicitly disregarded settings, not
+implemented Word semantics: each carries a warning, its original values and
+source path, while original strict diagnostics and source hashes remain
+attached. Unknown or malformed settings, disagreeing duplicates, and more than
+eight typed facts still refuse. Active unsupported math, VML content, missing fonts and
 unsupported geometry are not made renderable by this settings policy. The
 result remains a distinct, read-only approximate envelope; strict pagination
 and mutation safety are unchanged.
