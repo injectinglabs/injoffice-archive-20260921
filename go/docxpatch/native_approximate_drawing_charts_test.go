@@ -200,6 +200,10 @@ func TestApproximateDrawingChartsOmissions(t *testing.T) {
 		{"stacked", `<c:grouping val="clustered"/>`, `<c:grouping val="stacked"/>`, "unsupported-grouping:stacked"},
 		{"missing value cache", `<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="4"/><c:pt idx="0"><c:v>4.3</c:v></c:pt><c:pt idx="1"><c:v>2.5</c:v></c:pt><c:pt idx="2"><c:v>3.5</c:v></c:pt><c:pt idx="3"><c:v>4.5</c:v></c:pt></c:numCache>`, ``, "missing-value-cache"},
 		{"non numeric cached value", `<c:v>4.3</c:v>`, `<c:v>4,3</c:v>`, "missing-value-cache"},
+		// U+000D is legal XML but not cached chart text: the category cache is refused.
+		{"control character in category", `<c:v>Kategória 1</c:v>`, `<c:v>Kateg&#xD;ória 1</c:v>`, "missing-category-cache"},
+		// C0 controls XML 1.0 forbids never reach the model; the part itself is refused.
+		{"illegal xml character", `<c:v>Kategória 1</c:v>`, `<c:v>Kateg&#x1;ória 1</c:v>`, "invalid-chart-xml"},
 		{"combination", `<c:catAx>`, `<c:lineChart><c:axId val="1"/><c:axId val="2"/></c:lineChart><c:catAx>`, "combination-chart"},
 		{"missing value axis", `<c:valAx>`, `<c:valAx><c:axId val="9"/>`, "missing-axis"},
 		{"overlap out of range", `<c:overlap val="-27"/>`, `<c:overlap val="-150"/>`, "invalid-overlap"},

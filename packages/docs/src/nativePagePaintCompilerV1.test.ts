@@ -3340,6 +3340,8 @@ describe('approximate DrawingML charts', () => {
       ['overlap', (_c, chart) => { chart.run_anchor = anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]', 105, 185); chart.anchor = anchor('/x', 110, 180) }],
       ['unknown field', (charts) => { charts.extra = true }],
       ['value lexeme', (_c, chart) => { chart.chart.series[0].values[0] = '4,3' }],
+      ['control character in category', (_c, chart) => { chart.chart.categories[0] = 'Al\u0001pha' }],
+      ['carriage return in series title', (_c, chart) => { chart.chart.series[0].title = 'First\r' }],
       ['series length', (_c, chart) => { chart.chart.series[1].values = ['1'] }],
       ['fill', (_c, chart) => { chart.chart.series[0].fill_rgb = 'blue' }],
       ['grouping', (_c, chart) => { chart.chart.grouping = 'stacked' }],

@@ -133,7 +133,16 @@ function anchorValid(value: unknown, part: string): value is NativeDocxSourceAnc
   return record(value) && exactKeys(value, ['part_name', 'path', 'start_byte', 'end_byte', 'xml_sha256']) && value.part_name === part && typeof value.path === 'string' && Number.isSafeInteger(value.start_byte) && Number.isSafeInteger(value.end_byte) && (value.start_byte as number) >= 0 && (value.end_byte as number) > (value.start_byte as number) && typeof value.xml_sha256 === 'string' && /^sha256:[0-9a-f]{64}$/.test(value.xml_sha256)
 }
 function within(inner: NativeDocxSourceAnchorV1, outer: NativeDocxSourceAnchorV1): boolean { return inner.part_name === outer.part_name && inner.start_byte >= outer.start_byte && inner.end_byte <= outer.end_byte }
-function boundedText(value: unknown, max = MAX_TEXT): value is string { return typeof value === 'string' && value.length <= max && !/[ --]/.test(value) }
+/** C0 controls other than TAB (U+0009) and LF (U+000A) never come from a cached
+ * chart string; each rejected code point is tested explicitly (no range). */
+function hasForbiddenControl(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code < 0x20 && code !== 0x09 && code !== 0x0a) return true
+  }
+  return false
+}
+function boundedText(value: unknown, max = MAX_TEXT): value is string { return typeof value === 'string' && value.length <= max && !hasForbiddenControl(value) }
 function lineValid(value: unknown): boolean {
   return record(value) && exactKeys(value, ['rgb', 'width_emu', 'dash']) && typeof value.rgb === 'string' && RGB.test(value.rgb) && safeNonnegative(value.width_emu, 12_700_000) && (value.width_emu as number) > 0 && typeof value.dash === 'string' && value.dash.length <= 32
 }
