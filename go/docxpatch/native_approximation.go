@@ -1,6 +1,9 @@
 package docxpatch
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"strings"
+)
 
 // NativeDocxApproximationEligibilityV1 is a separate read-only policy attestation.
 // It never changes the strict pagination settings projection or mutation model.
@@ -22,9 +25,10 @@ type NativeDocxApproximationEligibilityV1 struct {
 // ExtractNativeDocxApproximationEligibilityV1 allows exact legacy mode 12 or 14,
 // plus a current-layout fallback when Word attests mode 15 but extras keep the
 // strict profile unsupported. Bounded typed settings facts are disregarded by
-// current layout. Malformed/duplicate/unknown settings remain ineligible. This
-// does not qualify unsupported document content such as math or legacy VML shapes
-// for strict paint.
+// current layout. Duplicate w:activeWritingStyle leaves and empty
+// w:applyBreakingRules compat flags are current-layout extras. Malformed or
+// unknown settings remain ineligible. This does not qualify unsupported document
+// content such as math or legacy VML shapes for strict paint.
 func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApproximationEligibilityV1, error) {
 	settings, err := ExtractNativePaginationSettingsV1(data)
 	if err != nil {
@@ -39,7 +43,7 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 		return result, nil
 	}
 	for _, diagnostic := range settings.Diagnostics {
-		if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" && diagnostic.Code != "UNKNOWN_SETTINGS_ELEMENT" {
+		if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" && diagnostic.Code != "UNKNOWN_SETTINGS_ELEMENT" && diagnostic.Code != "DUPLICATE_SETTINGS_PROPERTY" {
 			return result, nil
 		}
 	}
@@ -79,6 +83,12 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 			}
 		}
 		for _, diagnostic := range settings.Diagnostics {
+			if diagnostic.Code == "DUPLICATE_SETTINGS_PROPERTY" {
+				if !nativeApproximateDuplicateWritingStyle(diagnostic) {
+					return result, nil
+				}
+				continue
+			}
 			if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" && diagnostic.Code != "UNKNOWN_SETTINGS_ELEMENT" && !covered[diagnostic.Path] {
 				return result, nil
 			}
@@ -92,9 +102,16 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 				return result, nil
 			}
 			seen := map[string]bool{}
+			var firstSetting *nativeXMLNode
 			for _, child := range compat[0].Children {
+				if child.Name == (xml.Name{Space: wordNS, Local: "applyBreakingRules"}) && nativeExactLeaf(child) {
+					continue
+				}
 				if child.Name != (xml.Name{Space: wordNS, Local: "compatSetting"}) || !nativeExactLeaf(child, xml.Name{Space: wordNS, Local: "name"}, xml.Name{Space: wordNS, Local: "uri"}, xml.Name{Space: wordNS, Local: "val"}) {
 					return result, nil
+				}
+				if firstSetting == nil {
+					firstSetting = child
 				}
 				name, _ := nativeAttr(child, wordNS, "name")
 				uri, _ := nativeAttr(child, wordNS, "uri")
@@ -122,7 +139,7 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 					}
 					continue
 				}
-				if (value != "12" && value != "14" && value != "15") || child != compat[0].Children[0] {
+				if (value != "12" && value != "14" && value != "15") || child != firstSetting {
 					return result, nil
 				}
 				if value == "14" {
@@ -156,4 +173,8 @@ func nativeApproximateCompatFlag(name, value string) bool {
 	default:
 		return false
 	}
+}
+
+func nativeApproximateDuplicateWritingStyle(diagnostic NativePaginationSettingsDiagnosticV1) bool {
+	return diagnostic.Code == "DUPLICATE_SETTINGS_PROPERTY" && strings.Contains(diagnostic.Path, "/w:activeWritingStyle[")
 }
