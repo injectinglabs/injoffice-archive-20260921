@@ -1174,6 +1174,24 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('omits an unshaped empty-run sibling paragraph in approximate layout and keeps the sibling paragraph', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    const dropped = request.document.body.blocks[0]!.paragraph!
+    dropped.runs = []
+    request.resolved_layout.runs = request.resolved_layout.runs.filter(run => run.paragraph_id !== dropped.id)
+    request.shaped_lines.paragraphs = request.shaped_lines.paragraphs.filter(entry => entry.paragraph_id !== dropped.id)
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(request)
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'shaped-paragraph-missing', scope_id: dropped.id })]))
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('paginated')
+    expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:2'])
+  })
+
   it('still refuses an unshaped text-only paragraph in approximate layout', () => {
     const request = fixture({ lineCounts: [1, 1] })
     const dropped = request.document.body.blocks[0]!.paragraph!

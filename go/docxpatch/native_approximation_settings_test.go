@@ -22,6 +22,7 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 		{"malformed language", `<w:themeFontLang w:val="en_US"/>`, true},
 		{"unknown language", `<w:themeFontLang w:val="ar-SA"/>`, true},
 		{"duplicate locale", `<w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>`, false},
+		{"duplicate writing style", `<w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="64" w:dllVersion="1" w:checkStyle="1"/><w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="8" w:dllVersion="1" w:checkStyle="1"/><w:compat><w:applyBreakingRules/><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, true},
 		{"unknown decimal", `<w:decimalSymbol w:val="unknown"/>`, false},
 		{"nested locale", `<w:decimalSymbol w:val="."><w:foo/></w:decimalSymbol>`, false},
 		{"unknown math", strings.Replace(math, `m:val="1440"`, `m:val="999"`, 1), true},
