@@ -8,6 +8,11 @@ export async function digestNativeDocxPackage(
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
+/** Prefer the extracted document digest so helper identity follows mutate/undo. */
+export function nativeDocxHelperPackageDigest(documentDigest: string | undefined, openedDigest: string): string {
+  return documentDigest && PACKAGE_DIGEST.test(documentDigest) ? documentDigest : openedDigest
+}
+
 /** Native page controls bind to opened package bytes, not a successful extract. */
 export function nativeDocxHelperOffer(input: {
   apiBase: string
