@@ -835,8 +835,9 @@ adjust values, solid or theme-referenced fills, solid outlines, `wp:inline` or
 `wps:txbx` / `wps:linkedTxbx` content resolved through the ordinary paragraph
 extractor and style resolver. Scheme colors resolve through the package theme;
 shade, tint and luminance transforms are approximated in sRGB and disclosed.
-Groups, other presets, custom geometry, gradient/picture fills, charts and
-VML-only fallbacks stay omitted with a declared reason. At most 64 shapes and
+Groups, other presets, custom geometry, gradient/picture fills and VML-only
+fallbacks stay omitted with a declared reason; chart drawings are handed to the
+chart sidecar below instead of being listed as omitted shapes. At most 64 shapes and
 100 000 UTF-16 units of text box content are described.
 
 The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
@@ -907,3 +908,49 @@ budget overflow and unsupported equations are counted under
 source bytes and original equation diagnostics are unchanged; the envelope
 `reasons` carry `docx.approximate-equation-preview` with every applied
 approximation.
+### Approximate DrawingML charts in the approximate page preview
+
+Strict extraction keeps refusing `c:chart` drawings (`PICTURE_GRAPHIC_REQUIRED`
+/ `UNMODELED_DRAWING`). The read-only `InspectNativeApproximateDrawingChartsV1`
+sidecar (protocol `injoffice.docx.approximate-drawing-charts`, policy
+`docx.approximate-drawing-chart-preview-v1`) joins those retained refusals back
+to their `w:drawing` with the same discipline as the shape sidecar (package
+digest, owning body paragraph, diagnostic anchors inside the drawing run) and
+describes a bounded chart model read only from values cached in the chart
+part: clustered `c:barChart` bar/column charts with `c:strCache` /
+`c:numCache` (or literal) points, cached series names, rich or cached title
+text, legend position, axis presence and paint, gap width and overlap, and the
+`wp:extent` frame with inline or anchored placement. Explicit solid fills and outlines
+resolve through the package theme; a series without any fill takes the theme
+accent cycle, a series with `noFill` or a gradient/pattern/picture fill is
+painted white, an automatic title keeps its band without text, and every
+default or transform is disclosed in the item notes. An authored value-axis
+scale must be a finite increasing range with a positive major unit or the chart
+refuses (`invalid-axis-scale`). Other chart types,
+combination plots, stacked groupings, logarithmic axes, references without a
+cache and unresolvable colours refuse per chart with a declared reason. No
+workbook cell is read and no value is recalculated. At most 16 charts, 16
+series and 256 categories are described.
+
+The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
+`drawing_charts` to the `render-approximate` worker operation only, next to
+`drawing_shapes`. The approximate compiler validates every chart against the
+same-bytes document, reserves inline charts as glyphless textbox atoms in its
+internal body copy (clamped to the column width), and after pagination paints
+the chart with a host layout: chart area, bars, legend swatches and plot fills
+reuse `fill_table_cell`, axes, gridlines and (dash-segmented) bar outlines
+reuse `stroke_table_border`, all tagged
+`table_id = docx.approximate-drawing-chart-preview-v1`; title, axis and legend
+text is shaped with the current InjOffice shaper and painted as glyph paths
+attached to the anchor line. An unauthored value-axis scale is derived from the
+cached values (zero-anchored, 1/2/5 major units) and disclosed; missing chart
+fonts fall back to an already loaded manifest face and are disclosed as
+`docx.approximate-chart-substituted-font`. The envelope `reasons` carry
+`docx.approximate-drawing-chart-preview` with every applied approximation and
+`docx.approximate-drawing-chart-omitted` for every refused chart; evidence that
+does not exact-join the source is dropped as a whole, disclosed with the same
+code, and the refused drawings stay omitted content. Strict paint,
+source bytes and original drawing diagnostics are unchanged. The PPTX literal
+chart primitives are not reused because they are scoped to `overlap = 0`,
+authored axis bounds and PPTX text bodies; the sidecar model mirrors
+`NativeLiteralBar` field-for-field where they overlap.

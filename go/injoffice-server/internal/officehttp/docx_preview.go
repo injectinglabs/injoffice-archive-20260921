@@ -302,6 +302,14 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 			if equations != nil {
 				workerInput["equations"] = equations
 			}
+			charts, chartsErr := docxpatch.InspectNativeApproximateDrawingChartsV1(data)
+			if chartsErr != nil {
+				xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, chartsErr)
+				return
+			}
+			if charts != nil {
+				workerInput["drawing_charts"] = charts
+			}
 		}
 		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", operation, workerInput, 192*1024*1024, 64*1024*1024, args...)
 	} else {
