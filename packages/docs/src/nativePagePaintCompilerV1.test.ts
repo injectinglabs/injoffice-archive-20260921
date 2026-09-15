@@ -3255,7 +3255,7 @@ describe('approximate DrawingML charts', () => {
     // Body text of the same line still precedes the chart paint in replay order.
     expect(page.commands.findIndex(c => c.kind === 'fill_glyph_path' && c.source_id === 'run:1')).toBeLessThan(page.commands.indexOf(area))
     expect(paint.reasons).toContain(DOCX_APPROXIMATE_DRAWING_CHART_WARNING)
-    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-preview:') && r.includes('painted 1 of 1') && r.includes('2 categories x 2 series') && r.includes('value axis scale derived'))).toBe(true)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-preview:') && r.includes('painted 1 of 1') && r.includes('2 categories x 2 series') && r.includes('value axis min/max/major unit derived by the host'))).toBe(true)
     // Calibri is not in the fixture manifest: the loaded DejaVu face substitutes and the substitution is disclosed.
     expect(paint.reasons.some(r => r.startsWith('docx.approximate-chart-substituted-font: Calibri / 400 / normal -> DejaVu Sans'))).toBe(true)
     // The painted chart is no longer an omitted drawing.
@@ -3295,6 +3295,42 @@ describe('approximate DrawingML charts', () => {
     expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED' && entry.scope_id === 'paragraph:1')).toBe(true)
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
+
+  it('keeps a dropped shape disclosed when both sidecars are attached, and omits a chart whose authored scale is not finite', async () => {
+    // A chart that paints plus an anchored shape the shape painter drops (outside the page).
+    const { input, eligibility, charts, paragraph } = chartInput({})
+    paragraph.anchor = anchor('/w:document[1]/w:body[1]/w:p[1]', 100, 300)
+    const document = input.document as NativeDocxDocumentV1
+    document.unsupported.push({ id: 'unsupported:shape', code: 'UNMODELED_RUN_CONTENT', capability: 'runs', scope_id: paragraph.id, anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/mc:AlternateContent[1]', 203, 207), preservation: 'refuse-mutation', message: 'Run content outside text, controls, and native references is preserved verbatim' })
+    const shapes = {
+      protocol: 'injoffice.docx.approximate-drawing-shapes', version: 1, policy: 'docx.approximate-drawing-shape-preview-v1', package_sha256: HASH, part_sha256: HASH, omitted_count: 0,
+      items: [{
+        id: 'approximate-drawing-shape:test:1', paragraph_id: paragraph.id, diagnostic_ids: ['unsupported:shape'], anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]', 201, 209), run_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]', 200, 210),
+        status: 'supported', placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', width_emu: 914400, height_emu: 457200, rotation_degrees: 0, flip_horizontal: false, flip_vertical: false, wrap: 'none',
+        page_anchor: { policy: 'relative-position-no-wrap-v2', source_anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]', 202, 208), horizontal_anchor: anchor('/h', 203, 204), vertical_anchor: anchor('/v', 204, 205), x_emu: 120_000_000, y_emu: 120_000_000, horizontal_relative: 'page', vertical_relative: 'page', stacking: { behind_doc: false, relative_height: 7 } },
+      }],
+    }
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: wire(shapes), drawingCharts: wire(charts) })
+    expect(paint.status).toBe('painted')
+    const commands = paint.pages[0]!.commands
+    expect(commands.some(c => c.kind === 'fill_table_cell' && c.table_id === 'docx.approximate-drawing-chart-preview-v1' && c.cell_id === 'area')).toBe(true)
+    expect(commands.some(c => c.kind === 'fill_table_cell' && c.table_id === 'docx.approximate-drawing-shape-preview-v1')).toBe(false)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('outside-page'))).toBe(true)
+    // The chart recompute must not erase the shape's restored refusal.
+    expect(paint.omitted_content.some(entry => entry.code === 'UNMODELED_RUN_CONTENT' && entry.scope_id === paragraph.id)).toBe(true)
+    expect(paint.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED')).toBe(false)
+    expect(paint.content_status).toBe('partial')
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+    // Authored bounds that are individually finite but span an infinite range omit only that chart.
+    const infinite = chartInput({ chart: chartModel({ value_axis: { deleted: false, orientation: 'minMax', labels: font(900), number_format: 'General', min: '-1e308', max: '1e308' } }) })
+    const painted = await renderNativeDocxApproximatePagePreviewV1(infinite.input, infinite.eligibility, outlineProvider(infinite.input), { drawingCharts: wire(infinite.charts) })
+    expect(painted.status).toBe('painted')
+    expect(painted.pages[0]!.commands.some(c => c.kind === 'fill_table_cell')).toBe(false)
+    expect(painted.reasons.some(r => r.startsWith('docx.approximate-drawing-chart-omitted:') && r.includes('paint-failed: chart value scale is not finite'))).toBe(true)
+    expect(painted.omitted_content.some(entry => entry.code === 'PICTURE_GRAPHIC_REQUIRED')).toBe(true)
+    expect(painted.content_status).toBe('partial')
+    expect(decodeNativeDocxApproximatePagePreviewV1(painted).ok).toBe(true)
+  }, 30000)
 
   it('refuses sidecars that do not exact-join the source document or carry invalid models, and stays opt-in', async () => {
     const cases: Array<[string, (charts: any, chart: any) => void]> = [

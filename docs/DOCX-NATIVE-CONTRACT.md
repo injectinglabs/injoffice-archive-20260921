@@ -835,8 +835,9 @@ adjust values, solid or theme-referenced fills, solid outlines, `wp:inline` or
 `wps:txbx` / `wps:linkedTxbx` content resolved through the ordinary paragraph
 extractor and style resolver. Scheme colors resolve through the package theme;
 shade, tint and luminance transforms are approximated in sRGB and disclosed.
-Groups, other presets, custom geometry, gradient/picture fills, charts and
-VML-only fallbacks stay omitted with a declared reason. At most 64 shapes and
+Groups, other presets, custom geometry, gradient/picture fills and VML-only
+fallbacks stay omitted with a declared reason; chart drawings are handed to the
+chart sidecar below instead of being listed as omitted shapes. At most 64 shapes and
 100 000 UTF-16 units of text box content are described.
 
 The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
@@ -919,10 +920,13 @@ describes a bounded chart model read only from values cached in the chart
 part: clustered `c:barChart` bar/column charts with `c:strCache` /
 `c:numCache` (or literal) points, cached series names, rich or cached title
 text, legend position, axis presence and paint, gap width and overlap, and the
-`wp:extent` frame with inline or anchored placement. Explicit fills and outlines
-resolve through the package theme; a series without explicit fill takes the
-theme accent cycle, an automatic title keeps its band without text, and every
-default or transform is disclosed in the item notes. Other chart types,
+`wp:extent` frame with inline or anchored placement. Explicit solid fills and outlines
+resolve through the package theme; a series without any fill takes the theme
+accent cycle, a series with `noFill` or a gradient/pattern/picture fill is
+painted white, an automatic title keeps its band without text, and every
+default or transform is disclosed in the item notes. An authored value-axis
+scale must be a finite increasing range with a positive major unit or the chart
+refuses (`invalid-axis-scale`). Other chart types,
 combination plots, stacked groupings, logarithmic axes, references without a
 cache and unresolvable colours refuse per chart with a declared reason. No
 workbook cell is read and no value is recalculated. At most 16 charts, 16

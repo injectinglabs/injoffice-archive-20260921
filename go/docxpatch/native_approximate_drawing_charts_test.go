@@ -141,6 +141,10 @@ func TestApproximateDrawingChartsClusteredColumn(t *testing.T) {
 	if !bytes.Equal(source, before) {
 		t.Fatal("source bytes changed")
 	}
+	// The shape sidecar hands chart drawings to this sidecar instead of listing them as omitted shapes.
+	if shapesOut, err := InspectNativeApproximateDrawingShapesV1(source); err != nil || shapesOut != nil {
+		t.Fatalf("shape sidecar must skip chart drawings: %#v %v", shapesOut, err)
+	}
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		t.Fatal(err)
@@ -201,6 +205,9 @@ func TestApproximateDrawingChartsOmissions(t *testing.T) {
 		{"overlap out of range", `<c:overlap val="-27"/>`, `<c:overlap val="-150"/>`, "invalid-overlap"},
 		{"log scale", `<c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, `<c:scaling><c:logBase val="10"/><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, "unsupported-axis-paint"},
 		{"not a chart space", `<c:chartSpace `, `<c:userShapes `, "not-chart-space"},
+		{"authored scale not increasing", `<c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, `<c:scaling><c:orientation val="minMax"/><c:max val="5"/><c:min val="5"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, "invalid-axis-scale"},
+		{"authored scale not finite", `<c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, `<c:scaling><c:orientation val="minMax"/><c:max val="1e308"/><c:min val="-1e308"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>`, "invalid-axis-scale"},
+		{"zero major unit", `<c:crossBetween val="between"/></c:valAx>`, `<c:crossBetween val="between"/><c:majorUnit val="0"/></c:valAx>`, "invalid-axis-scale"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			part := strings.Replace(base, test.from, test.to, 1)
@@ -260,6 +267,20 @@ func TestApproximateDrawingChartsOmissions(t *testing.T) {
 		}
 		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != "unsupported-series-fill" {
 			t.Fatalf("scheme colours without a theme must refuse: %#v", out)
+		}
+	})
+	t.Run("gradient series fill paints white, not an accent", func(t *testing.T) {
+		part := strings.Replace(base, `<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>`, `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>`, 1)
+		out, err := InspectNativeApproximateDrawingChartsV1(nativeApproximateChartSource(t, body, part, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].Chart.Series[0].FillRGB != "FFFFFF" || out.Items[0].Chart.Series[1].FillRGB != "ED7D31" {
+			t.Fatalf("gradient fill handling: %#v", out)
+		}
+		notes := strings.Join(out.Items[0].Notes, "|")
+		if !strings.Contains(notes, "gradFill is not approximated; bar painted white") || strings.Contains(notes, "accent cycle") {
+			t.Fatalf("gradient fill must be disclosed without an accent default: %v", out.Items[0].Notes)
 		}
 	})
 	t.Run("shared run is omitted", func(t *testing.T) {

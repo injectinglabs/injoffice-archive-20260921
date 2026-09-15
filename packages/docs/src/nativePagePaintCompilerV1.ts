@@ -181,6 +181,7 @@ export interface NativeDocxApproximateRuntimeV1 {
 }
 import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
 import { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, type NativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
+import type { NativeDocxUnsupportedCapabilityV1 as NativeDocxRestoredRefusalV1 } from './nativeContract.js'
 export { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL, DOCX_APPROXIMATE_DRAWING_CHART_POLICY, DOCX_APPROXIMATE_DRAWING_CHART_CODE, DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE, DOCX_APPROXIMATE_CHART_FONT_CODE, DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID } from './nativeApproximateDrawingChartsV1.js'
 export type { NativeDocxApproximateDrawingChartsV1, NativeDocxApproximateDrawingChartV1, NativeDocxApproximateChartModelV1, NativeDocxApproximateChartSeriesV1, NativeDocxApproximateChartAxisV1, NativeDocxApproximateChartTitleV1, NativeDocxApproximateChartLegendV1, NativeDocxApproximateChartFontV1, NativeDocxApproximateInlineChartProjectionV1, NativeDocxApproximateChartPaintResultV1, NativeDocxApproximateChartPaintRuntimeV1, NativeDocxApproximateChartFontSubstitutionV1 } from './nativeApproximateDrawingChartsV1.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
@@ -273,6 +274,10 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   let shapeProjection: ReturnType<typeof projectNativeDocxApproximateInlineShapesV1> | undefined
   let sidecarRefused = false
   let shapeRestored: NativeDocxDocumentV1['unsupported'] = []
+  // Source refusals restored for drawings any approximate painter dropped; every
+  // omission recompute below spreads the whole accumulator so one sidecar can
+  // never erase what another restored.
+  const restoredDiagnostics: NativeDocxRestoredRefusalV1[] = []
   if (runtime?.drawingShapes !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Approximate drawing shapes require independently eligible approximate settings')
     const sourceDocument = decodeNativeDocxDocument(input.document)
@@ -329,7 +334,8 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const restored = new Set(shapes.items.filter(shape => omittedIDs.has(shape.id)).flatMap(shape => shape.diagnostic_ids))
     const pagination = prepared.page_paint_request.pagination_request
     shapeRestored = shapeProjection.removedDiagnostics.filter(entry => restored.has(entry.id))
-    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...shapeRestored] } }
+    restoredDiagnostics.push(...shapeRestored)
+    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...restoredDiagnostics] } }
     const omissions = collectNativeDocxApproximateOmissionsV1(omissionSource, result)
     Object.assign(result, omissions)
     const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
@@ -347,7 +353,8 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const omittedIDs = new Set(painted.omitted.map(entry => entry.id))
     const restored = new Set(charts.items.filter(chart => omittedIDs.has(chart.id)).flatMap(chart => chart.diagnostic_ids))
     const pagination = prepared.page_paint_request.pagination_request
-    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...chartProjection.removedDiagnostics.filter(entry => restored.has(entry.id))] } }
+    restoredDiagnostics.push(...chartProjection.removedDiagnostics.filter(entry => restored.has(entry.id)))
+    const omissionSource = { ...pagination, document: { ...pagination.document, unsupported: [...pagination.document.unsupported, ...restoredDiagnostics] } }
     const omissions = collectNativeDocxApproximateOmissionsV1(omissionSource, result)
     Object.assign(result, omissions)
     const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
@@ -360,7 +367,9 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   }
   // Equation paint attaches to the reserved atoms after body pagination and
   // re-derives the omitted-content disclosure for the pages it touched.
-  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, shapeRestored)
+  // The equation stage recomputes omissions last: hand it every refusal restored by
+  // the shape and chart painters, not only the shapes'.
+  if (equationStage && result.status === 'painted') completeNativeDocxApproximateEquationStageV1(result, equationStage, prepared.page_paint_request.pagination_request, restoredDiagnostics)
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
   if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes || charts ? ` or approximate ${shapes ? 'shape' : 'chart'} paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value

@@ -3,6 +3,7 @@ package docxpatch
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -223,12 +224,18 @@ func InspectNativeApproximateDrawingChartsV1(data []byte) (*NativeApproximateDra
 	return out, nil
 }
 
-// isChartDrawing reports whether the single graphicData of the drawing carries
-// the DrawingML chart URI. Anything else is left to other sidecars.
+// isChartDrawing reports whether the drawing's graphicData carries the
+// DrawingML chart URI. Anything else is left to other sidecars.
 func (context *nativeApproximateChartContext) isChartDrawing(drawing *nativeXMLNode) bool {
-	a := context.shapes.a
+	return nativeApproximateGraphicURI(drawing, context.shapes.wp, context.shapes.a) == context.c
+}
+
+// nativeApproximateGraphicURI returns the uri of the first graphicData under
+// the drawing's inline/anchor container, or "" when there is none. The shape
+// and chart sidecars use it to hand each drawing to exactly one describer.
+func nativeApproximateGraphicURI(drawing *nativeXMLNode, wp, a string) string {
 	for _, container := range drawing.Children {
-		if container.Name.Space != context.shapes.wp || (container.Name.Local != "inline" && container.Name.Local != "anchor") {
+		if container.Name.Space != wp || (container.Name.Local != "inline" && container.Name.Local != "anchor") {
 			continue
 		}
 		graphic := firstDirectNativeChild(container, a, "graphic")
@@ -240,11 +247,9 @@ func (context *nativeApproximateChartContext) isChartDrawing(drawing *nativeXMLN
 			continue
 		}
 		uri, _ := nativeUnqualifiedAttr(graphicData, "uri")
-		if uri == context.c {
-			return true
-		}
+		return uri
 	}
-	return false
+	return ""
 }
 
 func (context *nativeApproximateChartContext) describe(paragraphID string, diagnosticIDs []string, run, drawing *nativeXMLNode) NativeApproximateDrawingChartV1 {
@@ -526,6 +531,22 @@ func (context *nativeApproximateChartContext) chartModel(root *nativeXMLNode) (*
 	if category == nil || value == nil {
 		return nil, nil, "missing-axis"
 	}
+	// An authored scale must be a finite, increasing range with a positive
+	// unit; anything else refuses this chart only (the preview never derives
+	// around authored bounds).
+	if value.Min != nil && value.Max != nil {
+		low, errLow := strconv.ParseFloat(*value.Min, 64)
+		high, errHigh := strconv.ParseFloat(*value.Max, 64)
+		if errLow != nil || errHigh != nil || !(low < high) || math.IsInf(high-low, 0) {
+			return nil, nil, "invalid-axis-scale"
+		}
+	}
+	if value.MajorUnit != nil {
+		unit, err := strconv.ParseFloat(*value.MajorUnit, 64)
+		if err != nil || !(unit > 0) || math.IsInf(unit, 0) {
+			return nil, nil, "invalid-axis-scale"
+		}
+	}
 	model.CategoryAxis, model.ValueAxis = *category, *value
 	if value.Min == nil || value.Max == nil {
 		notes = append(notes, "value axis scale is not authored; the preview derives a host scale from the cached values")
@@ -702,12 +723,21 @@ func (context *nativeApproximateChartContext) series(ser *nativeXMLNode, ordinal
 			return nil, nil, nil, "unsupported-series-fill"
 		}
 		notes = append(notes, fillNotes...)
-		if resolved == nil && firstDirectNativeChild(spPr, context.shapes.a, "noFill") != nil {
-			// An explicit noFill paints nothing; keep the bar white so outlines still show.
-			fill = nativeString("FFFFFF")
-			notes = append(notes, "series without fill is painted white")
-		} else {
-			fill = resolved
+		fill = resolved
+		if resolved == nil {
+			// An explicit noFill paints nothing, and gradient/pattern/picture fills
+			// are not approximated: keep the bar white so outlines still show
+			// rather than inventing an accent colour.
+			for _, child := range spPr.Children {
+				if child.Name.Space != context.shapes.a {
+					continue
+				}
+				switch child.Name.Local {
+				case "noFill", "gradFill", "pattFill", "blipFill", "grpFill":
+					fill = nativeString("FFFFFF")
+					notes = append(notes, "series "+child.Name.Local+" is not approximated; bar painted white")
+				}
+			}
 		}
 		line, lineNotes, ok := context.shapes.shapeLine(spPr, nil)
 		if !ok {

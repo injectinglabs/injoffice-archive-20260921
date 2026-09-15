@@ -591,6 +591,7 @@ const DASH_PATTERNS: Record<string, readonly number[]> = { solid: [], dot: [1, 3
 /** Axis-aligned stroke primitives, optionally segmented per the ECMA-376 preset
  * dash pattern in multiples of the line width. Coordinates are clamped to the page. */
 function strokeCommands(idBase: string, chartID: string, cellID: string, edge: NativeDocxStrokeTableBorderCommandV1['edge'], x1: number, y1: number, x2: number, y2: number, line: NativeDocxApproximateShapeLineV1, page: NativeDocxPaintPageV1, budget: { segments: number; solidFallback: boolean }): NativeDocxStrokeTableBorderCommandV1[] {
+  if (![x1, y1, x2, y2].every(Number.isFinite)) throw new RangeError('non-finite chart geometry')
   const width = Math.max(1, toMillipoints(line.width_emu))
   const clampX = (value: number) => Math.min(Math.max(Math.round(value), 0), page.width_millipoints)
   const clampY = (value: number) => Math.min(Math.max(Math.round(value), 0), page.height_millipoints)
@@ -631,6 +632,7 @@ function rectOutline(idBase: string, chartID: string, cellID: string, rect: Rect
 }
 
 function fillCommand(id: string, chartID: string, cellID: string, rect: Rect, rgb: string, page: NativeDocxPaintPageV1): NativeDocxFillTableCellCommandV1 | undefined {
+  if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) throw new RangeError('non-finite chart geometry')
   const left = Math.min(Math.max(Math.round(rect.x), 0), page.width_millipoints), top = Math.min(Math.max(Math.round(rect.y), 0), page.height_millipoints)
   const right = Math.min(Math.max(Math.round(rect.x + rect.width), 0), page.width_millipoints), bottom = Math.min(Math.max(Math.round(rect.y + rect.height), 0), page.height_millipoints)
   if (right <= left || bottom <= top) return undefined
@@ -671,7 +673,8 @@ async function paintChart(entry: PlacedChart, ordinal: number, text: ChartTextPa
   const ordered = [...model.series].sort((a, b) => a.order - b.order)
   const numeric = ordered.flatMap(series => series.values.map(value => value === '' ? Number.NaN : Number(value))).filter(value => Number.isFinite(value))
   const scale = valueScale(model.value_axis, numeric)
-  if (scale.derived) notes.add('value axis scale derived by the host from cached values (min/max/major unit not authored)')
+  if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max) || !Number.isFinite(scale.unit) || !Number.isFinite(scale.max - scale.min) || scale.max <= scale.min || scale.unit <= 0) throw new RangeError('chart value scale is not finite')
+  if (scale.derived) notes.add(`value axis ${(['min', 'max', 'major_unit'] as const).filter(key => model.value_axis[key] === undefined).map(key => key.replace('_', ' ')).join('/')} derived by the host from cached values (not authored)`)
   const ticks: number[] = []
   for (let value = scale.min, index = 0; value <= scale.max + scale.unit * 1e-9 && index <= MAX_TICKS; value += scale.unit, index += 1) ticks.push(Number(value.toPrecision(12)))
   if (model.value_axis.number_format !== 'General' && model.value_axis.labels && !model.value_axis.deleted) notes.add(`value axis number format ${JSON.stringify(model.value_axis.number_format)} approximated as General`)
@@ -705,7 +708,7 @@ async function paintChart(entry: PlacedChart, ordinal: number, text: ChartTextPa
   if (plot.width < 1 || plot.height < 1) throw new RangeError('chart frame leaves no plot area')
   if (model.plot_fill_rgb) { const fill = fillCommand(`${chartID}:plot`, chartID, 'plot', plot, model.plot_fill_rgb, page); if (fill) commands.push(fill) }
   // Value coordinate along the value axis; reversed orientation flips it.
-  const valueReverse = column ? model.value_axis.orientation === 'maxMin' : model.value_axis.orientation === 'maxMin'
+  const valueReverse = model.value_axis.orientation === 'maxMin'
   const valueExtent = column ? plot.height : plot.width
   const valueCoordinate = (value: number) => {
     const clamped = Math.min(Math.max(value, scale.min), scale.max)
