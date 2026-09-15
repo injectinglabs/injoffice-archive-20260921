@@ -455,10 +455,10 @@ func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNo
 		return nil, nil, false
 	}
 	notes = append(notes, colorNotes...)
-	if context.theme == nil || index < 1 || index > int64(len(context.theme.fills)) {
+	fillStyle := context.theme.styleAt(context.theme.fills, index)
+	if fillStyle == nil {
 		return nil, append(notes, "theme fill style unavailable; fill omitted"), true
 	}
-	fillStyle := context.theme.fills[int(index)-1]
 	if fillStyle.Name != (xml.Name{Space: context.theme.ns, Local: "solidFill"}) {
 		return nil, append(notes, "theme "+fillStyle.Name.Local+" is not approximated; fill omitted"), true
 	}
@@ -478,14 +478,14 @@ func (context *nativeApproximateShapeContext) shapeLine(spPr, style *nativeXMLNo
 	if style != nil {
 		if reference := firstDirectNativeChild(style, a, "lnRef"); reference != nil {
 			index, _ := nativeNonnegativeInt64Attr(reference, "", "idx")
-			if index >= 1 && context.theme != nil && index <= int64(len(context.theme.lines)) {
+			if styled := context.theme.styleAt(context.theme.lines, index); styled != nil {
 				color, colorNotes, ok := context.referenceColor(reference)
 				if !ok {
 					return nil, nil, false
 				}
 				phClr = color
 				notes = append(notes, colorNotes...)
-				themeLine = context.theme.lines[int(index)-1]
+				themeLine = styled
 			}
 		}
 	}
@@ -759,6 +759,20 @@ type nativeApproximateTheme struct {
 	colors map[string]string
 	fills  []*nativeXMLNode
 	lines  []*nativeXMLNode
+}
+
+// styleAt selects the 1-based fmtScheme entry without converting the parsed
+// index to a narrower integer type; idx 0 and out-of-range values select nothing.
+func (theme *nativeApproximateTheme) styleAt(styles []*nativeXMLNode, index int64) *nativeXMLNode {
+	if theme == nil || index < 1 {
+		return nil
+	}
+	for position, style := range styles {
+		if int64(position)+1 == index {
+			return style
+		}
+	}
+	return nil
 }
 
 func nativeApproximateThemeFromPackage(pkg *nativePackage, mainPart, wordNS string) *nativeApproximateTheme {
