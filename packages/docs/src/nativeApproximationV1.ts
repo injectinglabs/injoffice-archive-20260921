@@ -4,6 +4,7 @@ import type { NativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 import { preflightWire, decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION } from './nativePagePaintWireV1.js'
 import type { NativeDocxValidationIssue } from './nativeContract.js'
 import { nativeApproximationSettingReason, validNativeDocxApproximatedSettingV1, type NativeDocxApproximatedSettingV1 } from './nativeApproximationSettingsV1.js'
+import { DOCX_LATIN_FONT_FALLBACK_WARNING, validNativeDocxApproximatedFontFacesV1, validNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentFontSizesV1, validNativeDocxApproximatedFontSizesV1, type NativeDocxAbsentFontSizeV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 import { collectNativeDocxApproximateOmissionsV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
 
@@ -54,6 +55,7 @@ export interface NativeDocxApproximationEligibilityV1 {
   reasons: string[]
   approximated_settings?: NativeDocxApproximatedSettingV1[]
   absent_font_sizes?: NativeDocxAbsentFontSizeV1[]
+  latin_font_fallbacks?: NativeDocxLatinFontFallbackV1[]
   legacy_table_origins?: NativeDocxLegacyTableOriginV1[]
 }
 
@@ -72,6 +74,8 @@ export interface NativeDocxApproximatePagePreviewV1 {
   approximated_settings?: NativeDocxApproximatedSettingV1[]
   source_absent_font_sizes?: NativeDocxAbsentFontSizeV1[]
   approximated_font_sizes?: NativeDocxApproximatedFontSizeV1[]
+  source_latin_font_fallbacks?: NativeDocxLatinFontFallbackV1[]
+  approximated_font_faces?: NativeDocxLatinFontFallbackV1[]
   legacy_table_origins?: NativeDocxLegacyTableOriginV1[]
   rendering_provenance: NativeDocxPagePaintV1['provenance']
   diagnostics: NativeDocxPagePaintV1['diagnostics']
@@ -92,7 +96,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   const issues = preflightWire(value, 'approximation eligibility', 20_000, 1000).filter(issue => !(issue.code === 'INVALID_VALUE' && ((issue.path === '/settings_sha256' && candidate?.settings_sha256 === null) || (issue.path === '/legacy_compatibility_mode' && candidate?.legacy_compatibility_mode === null))))
   if (issues.length) throw new TypeError('invalid approximation eligibility wire')
   const input = structuredClone(value) as NativeDocxApproximationEligibilityV1
-  if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings' && key !== 'absent_font_sizes' && key !== 'legacy_table_origins').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
+  if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings' && key !== 'absent_font_sizes' && key !== 'latin_font_fallbacks' && key !== 'legacy_table_origins').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
     || input.protocol !== 'injoffice.docx.approximation-eligibility' || input.version !== 1
     || !['eligible', 'ineligible'].includes(input.status) || ![null, 12, 14, 15].includes(input.legacy_compatibility_mode)
     || !Array.isArray(input.reasons) || input.reasons.length > 256 || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)
@@ -100,6 +104,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   const facts = input.approximated_settings ?? []
   if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,input.package_sha256)||input.legacy_compatibility_mode!==12||input.status!=='eligible'))throw new TypeError('Invalid legacy table origin evidence')
   if (input.absent_font_sizes !== undefined && !validNativeDocxAbsentFontSizesV1(input.absent_font_sizes, input.package_sha256)) throw new TypeError('Invalid source-absent font-size evidence')
+  if (input.latin_font_fallbacks !== undefined && !validNativeDocxLatinFontFallbacksV1(input.latin_font_fallbacks, input.package_sha256)) throw new TypeError('Invalid Latin font fallback evidence')
   if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
   if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || (input.legacy_compatibility_mode === 15) !== (settings.compatibility_mode === 15) || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
   return input
@@ -119,6 +124,7 @@ export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSet
     source_settings_diagnostics: structuredClone(settings.diagnostics),
     ...(eligibility.approximated_settings ? { approximated_settings: structuredClone(eligibility.approximated_settings) } : {}),
     ...(eligibility.absent_font_sizes ? { source_absent_font_sizes: structuredClone(eligibility.absent_font_sizes) } : {}),
+    ...(eligibility.latin_font_fallbacks ? { source_latin_font_fallbacks: structuredClone(eligibility.latin_font_fallbacks) } : {}),
     rendering_provenance: paint.provenance,
     diagnostics: paint.diagnostics, resources: paint.resources, pages: paint.pages,
     ...omissions,
@@ -134,7 +140,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const issues = preflightWire(value, 'approximate page preview').filter(issue => !(issue.code === 'INVALID_VALUE' && issue.path === '/source/settings_sha256' && candidate?.source?.settings_sha256 === null))
     if (issues.length) return { ok: false, issues }
     const input = structuredClone(value) as NativeDocxApproximatePagePreviewV1
-    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
+    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes', 'source_latin_font_fallbacks', 'approximated_font_faces','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 264 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || !input.reasons.includes(DOCX_APPROXIMATE_LINE_BOX_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
     const paint = decodeNativeDocxPagePaintV1({ protocol: DOCX_PAGE_PAINT_PROTOCOL, version: DOCX_PAGE_PAINT_VERSION, status: input.status, provenance: input.rendering_provenance, diagnostics: input.diagnostics, resources: input.resources, pages: input.pages })
@@ -149,6 +155,9 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     if (input.approximated_font_sizes !== undefined) {
       if (!validNativeDocxApproximatedFontSizesV1(input.approximated_font_sizes, absent, settings.package_sha256) || !input.reasons.includes(DOCX_ABSENT_FONT_SIZE_WARNING)) return invalid('Missing explicit host size policy, source evidence or warning')
     } else if (input.status === 'painted' && absent.length > 0) return invalid('Painted source-absent sizes require declared host policy')
+    const fallbacks = input.source_latin_font_fallbacks ?? []
+    if (!validNativeDocxLatinFontFallbacksV1(fallbacks, settings.package_sha256)) return invalid('Invalid Latin font fallback evidence')
+    if (input.approximated_font_faces !== undefined && (!validNativeDocxApproximatedFontFacesV1(input.approximated_font_faces, fallbacks, settings.package_sha256) || !input.reasons.includes(DOCX_LATIN_FONT_FALLBACK_WARNING))) return invalid('Applied Latin font fallbacks require retained source evidence and the declared warning')
     const facts = input.approximated_settings ?? []
     if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) return invalid('invalid retained approximate settings facts')
     if (facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || (input.status === 'painted' && !coveredSettingsDiagnostics(settings, facts))) return invalid('missing approximate setting coverage or warning')

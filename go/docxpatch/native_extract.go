@@ -127,6 +127,10 @@ type NativeExtractionOptions struct {
 	// kind, canonical part, and XML path then retain their previous IDs after
 	// fingerprint matching has had first priority.
 	RetainPathIdentity bool
+	// tolerateEmptyScriptSlots is package-private evidence tooling for the
+	// approximate preview (nativeLatinFontFallbacks); public extraction never
+	// sets it, so strict resolved output stays byte-identical.
+	tolerateEmptyScriptSlots bool
 }
 
 // ExtractNativeDocumentV1 parses a DOCX directly from its OPC and

@@ -65,6 +65,7 @@ import {
   layoutNativeDocxHeadersFootersV1,
   layoutNativeDocxFontHeadersFootersV1,
   nativeDocxApproximateHeaderFooterPolicyReasonsV1,
+  DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
   type NativeDocxHeaderFooterLayoutV1,
   type NativeDocxHeaderFooterPageLayoutV1,
   type NativeDocxPlacedHeaderFooterLineV1,
@@ -424,7 +425,9 @@ function headerFooterLayout(request: NativeDocxPagePaintRequestV1,font?:NativeDo
     pagination_settings: request.pagination_request.pagination_settings,
     paginated_layout: request.paginated_layout,
     page_field_variants: request.page_field_variants,
-    ...(approximate ? { omit_unmodeled_section_geometry: true, approximate_nonblocking_source: DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } : {}),
+    // The font-substitution legacy preview keeps the pre-existing header/footer
+    // behavior: only the separate approximate preview applies story policies.
+    ...(approximate ? { omit_unmodeled_section_geometry: true, ...(font ? {} : { approximate_nonblocking_source: DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE }) } : {}),
   }
   return font?layoutNativeDocxFontHeadersFootersV1(input,font):layoutNativeDocxHeadersFootersV1(input)
 }
@@ -894,14 +897,15 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   if (request.body_field_source) {
     return approximatePagePreviewEnvelope(settings, eligibility, refusal(provenance, 'unsupported-source', settings.document_id, 'Approximate legacy preview currently excludes body-field source variants'))
   }
+  const paintedLayouts: PaintedLayouts = {}
   const approximate = paginateNativeDocxApproximateLegacyV1(request.pagination_request, eligibility)
   request.paginated_layout = approximate.layout
   request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(approximate.layout)
   const originTables=qualifyApproximateLegacyTables(request.pagination_request.document,request.pagination_request.resolved_layout,request.pagination_request.shaped_lines,eligibility)
   request.integrity.table_projection_sha256=originTables.status==='qualified'?originTables.sha256:nativeDocxTableProjectionSha256V1([])
-  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
+  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility, undefined, undefined, paintedLayouts)
   if (!painted.ok) throw new TypeError('approximate page painting failed bounded validation')
-  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request)
+  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request, paintedLayouts.headerFooter)
 }
 
 /** Declared approximate table-style policy; disclosed as an envelope reason whenever applied. */
@@ -912,13 +916,16 @@ function approximateTableStyleEffect(entry: NativeDocxPaginationRequestV1['resol
 }
 
 /** Every applied approximate pagination, table-style, or header/footer policy is declared as an envelope reason. */
-function withApproximatePolicyReasons(envelope: NativeDocxApproximatePagePreviewV1, request: NativeDocxPagePaintRequestV1): NativeDocxApproximatePagePreviewV1 {
+/** Layouts the paint actually used, so disclosure derives from them rather than a recomputation. */
+interface PaintedLayouts { headerFooter?: NativeDocxHeaderFooterLayoutV1 }
+function withApproximatePolicyReasons(envelope: NativeDocxApproximatePagePreviewV1, request: NativeDocxPagePaintRequestV1, headerFooter: NativeDocxHeaderFooterLayoutV1 | undefined): NativeDocxApproximatePagePreviewV1 {
   if (envelope.status !== 'painted') return envelope
+  if (!headerFooter) throw new TypeError('Approximate disclosure requires the painted header/footer layout')
   const pagination = request.pagination_request
   const reasons = [
     ...nativeDocxApproximatePaginationPolicyReasonsV1(request.paginated_layout),
     ...(pagination.resolved_layout.diagnostics.some((entry) => approximateTableStyleEffect(entry, pagination.document)) ? [DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING] : []),
-    ...nativeDocxApproximateHeaderFooterPolicyReasonsV1(headerFooterLayout(request, undefined, true)),
+    ...nativeDocxApproximateHeaderFooterPolicyReasonsV1(headerFooter),
   ]
   for (const reason of reasons) if (!envelope.reasons.includes(reason)) envelope.reasons.push(reason)
   return envelope
@@ -930,9 +937,10 @@ export async function compileNativeDocxApproximateComputedPagePreviewV1(value: u
   const { request } = decodeNativeDocxApproximateComputedPagePaintV1(value, eligibilityValue)
   const settings = request.pagination_request.pagination_settings
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings)
-  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility)
+  const paintedLayouts: PaintedLayouts = {}
+  const painted = await compileDecodedPagePaint(request, outlineProvider, eligibility, undefined, undefined, paintedLayouts)
   if (!painted.ok) throw new TypeError('Approximate computed page painting failed validation')
-  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request)
+  return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request, paintedLayouts.headerFooter)
 }
 
 /** Separate approximate envelope; never exports its prepared or strict paint. */
@@ -956,7 +964,7 @@ export async function compileNativeDocxFontSubstitutionPreviewV1(value:unknown,p
  return decodeNativeDocxFontSubstitutionPreviewV1({protocol:DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL,version:1,fidelity:'approximate',read_only:true,policy:EXPLICIT_FONT_POLICY_V1,operator_policy:policy,policy_sha256:nativeDocxFontPolicySha256V1(policy),source:{document_id:paint.provenance.document_id,revision:paint.provenance.revision,package_sha256:paint.provenance.package_sha256},selected_font_manifest:request.font_manifest,substitutions:records,...(composition?{composition:composition.value,composition_sha256:composition.sha256}:{}),reasons:[DOCX_FONT_SUBSTITUTION_WARNING,...(composition?.reasons??[]),...records.map(r=>nativeDocxFontSubstitutionDiagnosticV1(r).message)],status:paint.status,pages:paint.pages,resources:paint.resources,diagnostics:paint.diagnostics,rendering_provenance:paint.provenance})
 }
 
-async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false,fontSubstitutions?:readonly NativeDocxFontSubstitutionV1[],font?:NativeDocxFontVariantPolicyV1): Promise<CompileNativeDocxPagePaintV1Result> {
+async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, outlineProvider: NativeDocxGlyphOutlineProviderV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false,fontSubstitutions?:readonly NativeDocxFontSubstitutionV1[],font?:NativeDocxFontVariantPolicyV1,paintedLayouts?:PaintedLayouts): Promise<CompileNativeDocxPagePaintV1Result> {
   const providerResult = snapshotProvider(outlineProvider)
   if (!providerResult.ok) return providerResult
   const provider = providerResult.value
@@ -965,6 +973,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     return { ok: true, value: refusal(expectedProvenance, 'provider-mismatch', request.pagination_request.document.document_id, 'Injected outline provider id and revision do not match the page-paint request') }
   }
   const headerFooter = headerFooterLayout(request,font,Boolean(approximateLegacySettings))
+  if (paintedLayouts) paintedLayouts.headerFooter = headerFooter
   const provenance = requestProvenance(request, provider.id, provider.revision, headerFooter)
   const pagination = request.pagination_request
   const layout = request.paginated_layout
@@ -983,12 +992,18 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     return { ok: true, value: result }
   }
   if (headerFooter.status === 'refused') return { ok: true, value: refusal(provenance, 'unsupported-source', headerFooter.diagnostics[0]?.scope_id ?? documentID, headerFooter.diagnostics[0]?.message ?? 'Native header/footer layout refused') }
+  // The font-substitution legacy preview declares no pagination policy reasons, so a
+  // layout that needed one refuses there exactly as it did before those policies existed.
+  if (font && approximateLegacySettings) {
+    const policies = nativeDocxApproximatePaginationPolicyReasonsV1(layout)
+    if (policies.length > 0) return { ok: true, value: refusal(provenance, 'unsupported-source', documentID, `Font preview does not apply approximate pagination policies: ${policies.join(' ')}`) }
+  }
   const allowedFontPagination=(entry:typeof layout.diagnostics[number])=>fontSubstitutions!==undefined&&entry.code==='source-diagnostic'&&entry.severity==='deferred'&&fontSubstitutions.some(r=>{const d=nativeDocxFontSubstitutionDiagnosticV1(r);return entry.scope_id===d.scope_id&&entry.source_code===d.code&&entry.source_message===d.message&&entry.message===`Shaping diagnostic retained by pagination: ${d.code}: ${d.message}`})
   const blockingPaginationDiagnostics = layout.diagnostics.filter((entry) => !allowedFontPagination(entry)&&!(approximateLegacySettings && entry.severity === 'deferred' && (entry.code === 'settings-attestation-unsupported' || entry.code === 'source-diagnostic')) && entry.code !== 'header-footer-selection-deferred' && !(entry.code === 'source-diagnostic' && entry.severity === 'deferred' && entry.source_code === 'page-control-deferred'))
   const blockingShapingDiagnostics = pagination.shaped_lines.diagnostics.filter((entry) => !approximateLegacySettings&&!(fontSubstitutions!==undefined&&isQualifiedNativeDocxFontDiagnosticV1(entry,fontSubstitutions))&&(entry.code !== 'page-control-deferred' || entry.source_id !== undefined))
   // Approximate legacy tables already qualify without table-style effects (see
   // qualifyApproximateLegacyTables); the same declared policy is disclosed as a reason.
-  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout)&&!(approximateLegacySettings&&(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)||approximateTableStyleEffect(entry, pagination.document))))
+  const blockingResolutionDiagnostics = pagination.resolved_layout.diagnostics.filter((entry) => !isRenderNeutralLayoutDiagnostic(entry, pagination.resolved_layout)&&!(approximateLegacySettings&&(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(entry.code)||(!font&&approximateTableStyleEffect(entry, pagination.document)))))
   if (blockingShapingDiagnostics.length > 0 || blockingPaginationDiagnostics.length > 0 || blockingResolutionDiagnostics.length > 0) {
     const first = blockingShapingDiagnostics[0] ?? blockingPaginationDiagnostics[0] ?? blockingResolutionDiagnostics[0]
     return { ok: true, value: refusal(provenance, 'unsupported-diagnostic', documentID, `Page-paint v1 requires no blocking shaping/resolution diagnostics and permits only the exact header/footer selection handoff from pagination${first ? `: ${first.code}` : ''}`) }

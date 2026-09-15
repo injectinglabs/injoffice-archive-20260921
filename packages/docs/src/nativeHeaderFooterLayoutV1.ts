@@ -79,6 +79,38 @@ export interface NativeDocxHeaderFooterPageLayoutV1 {
   lines: NativeDocxPlacedHeaderFooterLineV1[]
 }
 
+/** Source codes an approximate header/footer story may carry and still paint. Each is
+ * already disclosed by the approximate omitted-content mechanism. Deliberately NOT
+ * included: FIELD_SEMANTICS (complex fields keep stale cached result text, so the story
+ * must refuse rather than paint it), UNMODELED_DRAWING / PICTURE_GRAPHIC_REQUIRED
+ * (header images would silently vanish; selected-story-shape keeps refusing),
+ * UNMODELED_SECTION_PROPERTY (section geometry has its own omit flag),
+ * UNMODELED_BODY_BLOCK / NESTED_TABLE_OR_CELL_MARKUP / UNMODELED_TABLE_PROPERTY
+ * (header/footer tables always refuse). */
+export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<string> = new Set([
+  'UNMODELED_RUN_CONTENT',
+  'UNMODELED_PARAGRAPH_CONTENT',
+  'UNMODELED_FONT_METADATA',
+  'FONT_MATCHING_METADATA_PRESERVED',
+  'UNMODELED_FONT_SELECTION',
+  'THEME_COLOR_PRESERVED',
+  'THEME_UNDERLINE_COLOR_PRESERVED',
+  'UNDERLINE_COLOR_PRESERVED',
+  'INVALID_COLOR',
+  'INVALID_KERNING_THRESHOLD',
+  'UNSUPPORTED_HIGHLIGHT',
+  'UNSUPPORTED_UNDERLINE',
+  'AUTO_PARAGRAPH_SPACING_PRESERVED',
+  'UNMODELED_PARAGRAPH_PROPERTY',
+  'UNMODELED_PARAGRAPH_MARK_PROPERTIES',
+  'PARTIAL_PARAGRAPH_PROPERTIES',
+  'PARTIAL_RUN_PROPERTIES',
+  'UNRESOLVED_COMMENT_RANGE',
+  'UNRESOLVED_COMMENT_REFERENCE',
+  'WRAPPED_RUN_MARKUP',
+  'NUMBERING_STYLE_PRESERVED',
+])
+
 /** Declared approximate header/footer policies; each is disclosed as an envelope reason. */
 export const DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING = 'Approximate read-only preview: a header or footer story taller than its reserved band is painted at the authored header/footer distance and may overlap the body box; Word moves the body instead.' as const
 export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING = 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.' as const

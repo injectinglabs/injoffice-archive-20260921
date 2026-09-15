@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
   DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
@@ -150,7 +151,8 @@ describe('native DOCX header/footer layout v1', () => {
 })
 
 describe('approximate header/footer placement policy', () => {
-  const NONBLOCKING = new Set(['UNMODELED_PARAGRAPH_PROPERTY', 'UNMODELED_PARAGRAPH_MARK_PROPERTIES', 'PARTIAL_PARAGRAPH_PROPERTIES'])
+  // The production allowlist the paint passes, not a hand-built set.
+  const NONBLOCKING = DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE
   const footerLine = (input: NativeDocxHeaderFooterLayoutInputV1) => input.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === 'paragraph:footer-default')!.lines[0]!
   const approximate = (input: NativeDocxHeaderFooterLayoutInputV1) => { input.approximate_nonblocking_source = NONBLOCKING; return input }
 
@@ -164,9 +166,12 @@ describe('approximate header/footer placement policy', () => {
     expect(placed.status).toBe('placed')
     expect(placed.approximations).toBeUndefined()
     expect(placed.pages.some((page) => page.lines.some((line) => line.paragraph_id === 'paragraph:footer-default'))).toBe(true)
-    const blocking = approximate(fixture())
-    blocking.document.unsupported.push({ ...framePr, id: 'unsupported:field', code: 'FIELD_SEMANTICS' } as never)
-    expect(layoutNativeDocxHeadersFootersV1(blocking)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-field' })]) }))
+    for (const [code, expected] of [['FIELD_SEMANTICS', 'selected-story-field'], ['UNMODELED_DRAWING', 'selected-story-unsupported'], ['PICTURE_GRAPHIC_REQUIRED', 'selected-story-unsupported'], ['UNMODELED_SECTION_PROPERTY', 'selected-story-unsupported'], ['NESTED_TABLE_OR_CELL_MARKUP', 'selected-story-unsupported']] as const) {
+      expect(NONBLOCKING.has(code)).toBe(false)
+      const blocking = approximate(fixture())
+      blocking.document.unsupported.push({ ...framePr, id: `unsupported:${code}`, code } as never)
+      expect(layoutNativeDocxHeadersFootersV1(blocking)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: expected, scope_id: 'paragraph:footer-default' })]) }))
+    }
   })
 
   it('accepts an expanded line box under the declared line-box policy and still refuses a compressed one', () => {
