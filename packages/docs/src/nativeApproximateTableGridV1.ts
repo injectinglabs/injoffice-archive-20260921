@@ -28,8 +28,11 @@ const bounded = (n: unknown): n is number => typeof n === 'number' && Number.isS
  * by Word carries a grid wider than the column by exactly those margins; the
  * preview scales the grid proportionally to the column with deterministic
  * largest-remainder integer twips because pagination refuses any table edge
- * past the column. Anything else returns undefined so the existing policies
- * and refusals decide.
+ * past the column. The fitted table then behaves exactly like an authored
+ * fixed table: shaped content minima are not compared against the fitted
+ * slices, so long unbreakable words wrap or overflow at the fitted width as
+ * they would in a fixed grid. Anything else returns undefined so the existing
+ * policies and refusals decide.
  */
 export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, containerWidth: number, sectionID: string): { table: NativeDocxTableV1; policy: NativeDocxApproximateTableGridPolicyV1 } | undefined {
   const grid = table.grid_widths_twips, margins = table.cell_margins

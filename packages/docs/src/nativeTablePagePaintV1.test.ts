@@ -143,7 +143,9 @@ describe('bounded native DOCX table page-paint geometry', () => {
   it('approximate preview without a tblGrid or with a fitting grid keeps the existing behavior', () => {
     const missing = autoGridFixture([4428, 4428])
     delete missing.document.body.blocks[0]!.table!.grid_widths_twips
-    expect(qualifyApproximateLegacyTables(missing.document, missing.resolved_layout, missing.shaped_lines, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+    const missingStrict = qualifyNativeDocxTablesV1(missing.document, missing.resolved_layout, missing.shaped_lines)
+    expect(missingStrict.status).toBe('refused')
+    expect(qualifyApproximateLegacyTables(missing.document, missing.resolved_layout, missing.shaped_lines, { legacy_compatibility_mode: 14 })).toEqual(missingStrict)
     const fitting = autoGridFixture([4000, 4000])
     const approximate = qualifyApproximateLegacyTables(fitting.document, fitting.resolved_layout, fitting.shaped_lines, { legacy_compatibility_mode: 14 })
     expect(approximate.status).toBe('qualified')
@@ -170,6 +172,11 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(approximate.status).toBe('qualified')
     expect(approximate.tables[0]!.table.layout).toBe('fixed')
     expect(approximate.tables[0]!.table.width_twips).toBe(400)
+    expect(request.document).toEqual(original)
+    // Strict pagination shares the qualifier and qualifies strictly without eligibility.
+    const strictPagination = paginateNativeDocxV1(request)
+    expect(strictPagination).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+    if (strictPagination.ok) expect(strictPagination.value.diagnostics.some(diagnostic => diagnostic.code === 'body-table-unsupported')).toBe(true)
     expect(request.document).toEqual(original)
   })
 

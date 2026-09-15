@@ -308,9 +308,9 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     let widthPolicy: NativeDocxQualifiedTableV1['width_policy']
     if (approximate && table.layout === 'autofit') {
       // Approximate preview only: consistent authored tcW/tblGrid preferences
-      // that exceed the text column keep their grid (Word's grid includes the
-      // cell margins) or scale to that extent instead of collapsing to the
-      // shaped content width. Strict paint never takes this branch.
+      // that exceed the text column (Word's grid includes the cell margins) are
+      // scaled proportionally to the column instead of collapsing to the shaped
+      // content width. Strict qualification never takes this branch.
       const container = tableContainers.get(table.id)
       const fitted = container ? fitNativeDocxApproximateTableGridV1(table, container.width, container.sectionID) : undefined
       if (fitted) { table = fitted.table; widthPolicy = fitted.policy }
