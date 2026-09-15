@@ -1911,6 +1911,10 @@ async function compileTableCells(element: Extract<NativeElement, { kind: 'table'
             layout: cell.textBody,
           }, state),
         })
+      } else if (cell.text === '') {
+        // A text-free legacy cell (e.g. the built-in table style preview) has
+        // nothing to shape; shaping an empty run would demand a font family.
+        cells.push({ ...common, textFree: true })
       } else {
         const paragraph = (await compileParagraphs([{ runs: [{ text: cell.text }], align: cell.align }], {
           elementId: element.id,
