@@ -35,9 +35,30 @@ The repository contains independent Go modules under `go/` (`xlsxpatch`, `docxpa
 
 ## Rendering and browser qualification
 
-PR and main CI retain builds, typechecks, unit/contract/security checks, package-consumer checks, and the installed-WASM browser smoke test. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are deliberately not merge gates.
+PR CI is deliberately short (a few minutes) and keeps only the fast gates as the required `CI required` status: build, typecheck, `check:docs-api`, `check:unicode13`, `check:typescript-version`, `test:dependency-integrity`, `test:declaration-specifiers`, `check:packages`, the workspace unit tests (sharded across the `ts-tests` matrix from `scripts/ci-test-shards.json`, plus `test:native-office-completion`), the Go modules, the WASM size ceilings and contracts, and the officecompat fuzz shards. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are not merge gates either.
 
-For rendering or UI changes, run the relevant heavier checks locally before opening the PR. After `npm ci` and `npm run build`:
+The slower and audit-style checks run after merge, on every push to `main`, in the **Main audit** workflow (`.github/workflows/main-audit.yml`, also runnable on demand via **Run workflow**). They were moved out of the PR job, not removed, so run them locally before opening a PR that touches the office pipeline, packaging, or the qualification harness. After `npm ci` and `npm run build`:
+
+```bash
+npm run test                       # every workspace test plus the root script tests, sequentially
+npm run test:chrome-cdp-startup
+npm run test:release-packages
+npm run check:office-architecture
+npm run check:office-provenance
+npm run qualify:office-reproducibility
+npm run check:native-office-production-e2e
+npm run test:native-office-production-e2e
+npm run check:native-office-completion  # needs full git history (baseline SHA 420424b)
+npm run check:consumer
+go -C go/docxpatch test -count=1 ./cmd/nativepreviewfixture
+node --test scripts/showcase-smoke-server.test.mjs scripts/qualify-rendering-corpus.test.mjs
+npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
+node scripts/smoke-xlsx-source-style-browser.mjs --rich --skip-build   # XLSX read-only source grids in Chrome
+```
+
+To reproduce one PR test shard exactly as CI runs it, use `node scripts/run-ci-test-shard.mjs <shard>` (`--list` prints the shard names, `--check` verifies every workspace test script is assigned). The PPTX chart and graphic-frame browser qualification workflows (`pptx-*-qualification.yml`) likewise run on push to `main` and on demand rather than on pull requests.
+
+For rendering or UI changes, also run the relevant heavier checks locally before opening the PR:
 
 ```bash
 npm run build:renderer -w apps/playground -- --base=/injoffice-smoke/
