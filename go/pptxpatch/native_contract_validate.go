@@ -346,7 +346,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if !paragraphs && element.Paragraphs != nil {
 			v.add(p+".paragraphs", "native.elementUnion", "is not allowed for this element kind")
 		}
-		if !preset && element.Geometry != nil {
+		// Pictures carry evaluated geometry as a read-only clip outline; every
+		// other non-preset kind rejects it.
+		if !preset && element.Kind != NativeElementKindPicture && element.Geometry != nil {
 			v.add(p+".geometry", "native.elementUnion", "is not allowed for this element kind")
 		}
 		if !preset && element.Preset != nil {
@@ -475,6 +477,15 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		commonForbidden(false, false, false, false, false, true, false, false, false, false)
 		if element.Clip != nil && *element.Clip != "roundRect" {
 			v.add(p+".clip", "schema.const", "only the default roundRect picture clip is supported")
+		}
+		if element.Geometry != nil {
+			v.geometry(*element.Geometry, p+".geometry")
+			if element.Clip != nil {
+				v.add(p+".geometry", "native.geometry", "picture clip and geometry are mutually exclusive")
+			}
+			if element.Compatibility.Status == NativeCompatibilityStatusEditable {
+				v.add(p+".geometry", "native.geometryAuthority", "evaluated picture geometry must remain read-only")
+			}
 		}
 		if crop := element.Crop; crop != nil {
 			valid := true

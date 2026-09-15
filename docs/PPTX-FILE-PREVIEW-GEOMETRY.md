@@ -14,7 +14,7 @@ All move/line/quadratic/cubic/elliptical-arc/close commands survive into SVG; pr
 
 ## Clips and text boundaries
 
-Compiled node clips remain active, and the slide SVG clips to its viewport. Evaluated callout geometry is not clipped to its nominal shape frame. Legacy text without text-body metadata remains clipped by its foreign-object frame; text with metadata uses the compiled text rectangle and insets exactly once, followed by the existing source orientation transform. Its DOM glyph metrics remain approximate.
+Compiled node clips remain active, and the slide SVG clips to its viewport. Pictures whose preset outline was evaluated through the catalog (`pptx.picture-geometry-preview`) clip to that outline path; the exact `roundRect` clip and the frame rectangle behave as before. Evaluated callout geometry is not clipped to its nominal shape frame. Legacy text without text-body metadata remains clipped by its foreign-object frame; text with metadata uses the compiled text rectangle and insets exactly once, followed by the existing source orientation transform. Its DOM glyph metrics remain approximate.
 
 An empty projection cannot establish the original vertical text/script/list admission. The adapter checks original vertical content before removing runs and keeps unsupported content unavailable. Existing source refusals and invalid contracts remain unavailable; unavailable native text-body metadata is not promoted into a qualified text claim. New complex table/chart group qualification, upright text and separate text-body rotation remain governed by the native source/compiler boundary. Tables still have an explicit local-preview placeholder; charts use only an existing embedded raster preview in this local view.
 

@@ -1749,6 +1749,7 @@
         "assetId": { "$ref": "#/$defs/nativeId" },
         "crop": { "$ref": "#/$defs/pictureCrop" },
         "clip": { "const": "roundRect" },
+        "geometry": { "$ref": "#/$defs/evaluatedGeometry" },
         "animation": { "$ref": "#/$defs/animation" },
         "source": { "$ref": "#/$defs/sourceAnchor" },
         "passthrough": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/passthroughRef" } },

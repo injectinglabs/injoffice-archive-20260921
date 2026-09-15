@@ -13,6 +13,7 @@ export type PaintCommand =
   | { readonly kind: 'transform'; readonly transform: RenderTransform }
   | { readonly kind: 'clipRect'; readonly rect: RenderRect }
   | { readonly kind: 'clipRoundRect'; readonly rect: RenderRect; readonly radiusEmu: number }
+  | { readonly kind: 'clipPath'; readonly rect: RenderRect; readonly path: readonly RenderPathCommand[] }
   | { readonly kind: 'path'; readonly sourceElementId: string; readonly path: readonly RenderPathCommand[]; readonly fill?: string; readonly stroke?: RenderStroke; readonly headArrow?: boolean; readonly tailArrow?: boolean; readonly headEnd?:Readonly<NativeArrowEnd>;readonly tailEnd?:Readonly<NativeArrowEnd> }
   | { readonly kind: 'image'; readonly sourceElementId: string; readonly role: 'picture' | 'chartPreview'; readonly assetId: string; readonly rect: RenderRect; readonly crop?: Readonly<NativePictureCrop> }
   | { readonly kind: 'glyphRun'; readonly sourceElementId: string; readonly run: RenderTextRunNode }
@@ -95,7 +96,7 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
 function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRect, depth=1): void {
   surface.push({ kind: 'save' })
   surface.push({ kind: 'transform', transform: node.transform })
-  if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : { kind: 'clipRect', rect: node.clip.rect })
+  if (node.clip) surface.push(node.clip.kind === 'roundRect' ? { kind: 'clipRoundRect', rect: node.clip.rect, radiusEmu: node.clip.radiusEmu } : node.clip.kind === 'path' ? { kind: 'clipPath', rect: node.clip.rect, path: node.clip.path } : { kind: 'clipRect', rect: node.clip.rect })
   switch (node.kind) {
     case 'shape':
       if(node.geometryPaths) for(const part of node.geometryPaths) surface.push({kind:'path',sourceElementId:node.sourceElementId,path:part.path,fill:geometryPathFill(node.fill?.color,part.fillMode),stroke:part.stroke?node.stroke:undefined})

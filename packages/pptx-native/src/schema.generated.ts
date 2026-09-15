@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "43b7c7644fb7fd5cbcae1b701ef2761fbafbabfb1ae9f880a9c7d82dcfdf45a5" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "ee1243e0cfd3a5a561ba636a3b19d6edee79b6c7bbfff78e0b1968de9b135627" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -675,6 +675,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "clip",
       "compatibility",
       "crop",
+      "geometry",
       "id",
       "kind",
       "name",
@@ -3445,6 +3446,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "clip": {
           "const": "roundRect"
+        },
+        "geometry": {
+          "$ref": "#/$defs/evaluatedGeometry"
         },
         "animation": {
           "$ref": "#/$defs/animation"

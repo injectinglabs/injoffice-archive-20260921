@@ -310,6 +310,11 @@ function validateElement(
     if(element.compatibility.status==='editable')add(issues,`${path}.geometry`,'native.geometryAuthority','evaluated geometry must remain read-only')
     validateEvaluatedGeometry(element.geometry,`${path}.geometry`,issues)
   }
+  if(element.kind==='picture'&&element.geometry){
+    if(element.clip!==undefined)add(issues,`${path}.geometry`,'native.geometry','picture clip and geometry are mutually exclusive')
+    if(element.compatibility.status==='editable')add(issues,`${path}.geometry`,'native.geometryAuthority','evaluated picture geometry must remain read-only')
+    validateEvaluatedGeometry(element.geometry,`${path}.geometry`,issues)
+  }
   if ((element.kind === 'shape' || element.kind === 'connector') && element.stroke) {
     const metadataCount = Number(element.stroke.cap !== undefined) + Number(element.stroke.join !== undefined) + Number(element.stroke.dash !== undefined)
     if (metadataCount !== 0 && metadataCount !== 3) add(issues, `${path}.stroke`, 'native.strokeMetadata', 'cap, join, and dash must be supplied together')
