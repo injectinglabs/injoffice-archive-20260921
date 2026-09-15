@@ -172,7 +172,12 @@ export interface NativeDocxApproximateRuntimeV1 {
   createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1
   fonts?: NativeDocxHostFontsV1
   fontSizePolicy?: NativeDocxHostDefaultSizePolicyV1
+  /** Server-supplied `InspectNativeApproximateDrawingShapesV1` sidecar for the same bytes; validated against the document before use. */
+  drawingShapes?: unknown
 }
+import { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, type NativeDocxApproximateDrawingShapesV1 } from './nativeApproximateDrawingShapesV1.js'
+export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
+export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, type NativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 export { decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL } from './nativeAutomaticBorderPreviewV1.js'
@@ -229,19 +234,42 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     input = { ...input, resolved_layout: projected.resolved }
     applied = projected.applied
   }
-  const result = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
+  // Approximate drawing shapes: validate the same-bytes sidecar against the
+  // source document, reserve inline shapes in the internal body copy, and paint
+  // fills/strokes/text boxes after body pagination. Anything malformed refuses
+  // the whole sidecar; the body preview itself never depends on it.
+  let shapes: NativeDocxApproximateDrawingShapesV1 | undefined
+  let shapeProjection: ReturnType<typeof projectNativeDocxApproximateInlineShapesV1> | undefined
+  if (runtime?.drawingShapes !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Approximate drawing shapes require independently eligible approximate settings')
+    const sourceDocument = decodeNativeDocxDocument(input.document)
+    const sourceResolved = decodeNativeDocxResolvedLayout(input.resolved_layout)
+    if (!sourceDocument.ok) failIssues('native document is invalid', sourceDocument.issues)
+    if (!sourceResolved.ok) failIssues('resolved layout is invalid', sourceResolved.issues)
+    shapes = decodeNativeDocxApproximateDrawingShapesV1(runtime.drawingShapes, sourceDocument.value)
+    shapeProjection = projectNativeDocxApproximateInlineShapesV1(sourceDocument.value, sourceResolved.value, shapes)
+    input = { ...input, document: shapeProjection.document, resolved_layout: shapeProjection.resolved }
+  }
+  const { result, prepared } = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
+  if (shapes && shapeProjection && result.status === 'painted') {
+    const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
+    const resolver = runtime?.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
+    const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
+    const painted = await paintNativeDocxApproximateDrawingShapesV1(result, shapes, shapeProjection, { request: prepared.page_paint_request, document: shapeProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider })
+    for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
+  }
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
   }
   const validated = decodeNativeDocxApproximatePagePreviewV1(result)
-  if (!validated.ok) throw new TypeError('Approximate output omitted its source absence or explicit host-size policy')
+  if (!validated.ok) throw new TypeError(`Approximate output omitted its source absence or explicit host-size policy${shapes ? ` or approximate shape paint failed validation: ${validated.issues[0]?.path ?? ''} ${validated.issues[0]?.message ?? ''}` : ''}`)
   return validated.value
 }
 
-async function renderNativeDocxApproximatePagePreviewInternalV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1> {
+async function renderNativeDocxApproximatePagePreviewInternalV1(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<{ result: import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1; prepared: NativeDocxPagePaintPreparedV1 }> {
   const prepared = await prepareNativeDocxPagePaintInternalV1(input, runtime, eligibility)
-  return compileNativeDocxApproximateComputedPagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider)
+  return { result: await compileNativeDocxApproximateComputedPagePreviewV1(prepared.page_paint_request, eligibility, outlineProvider), prepared }
 }
 
 export interface NativeDocxPagePaintCompletedV1 {

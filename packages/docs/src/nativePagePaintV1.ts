@@ -720,6 +720,11 @@ function placePath(path: NativeDocxGlyphDesignPathCommandV1[], originX: number, 
   return maxX > minX && maxY > minY ? output : undefined
 }
 
+/** @internal Shared glyph placement for the approximate drawing-shape module.
+ * Strict paint keeps calling the private functions directly. */
+export const nativeDocxPlaceGlyphPathV1 = placePath
+export const nativeDocxCaptureGlyphOutlineV1 = captureOutline
+
 function refusal(provenance: NativeDocxPagePaintProvenanceV1, code: NativeDocxPagePaintDiagnosticCode, scopeID: string, message: string): NativeDocxPagePaintRefusedV1 {
   const safeMessage = message.replace(/[\u0000\r\n]/g, ' ').slice(0, DOCX_PAGE_PAINT_LIMITS.maxProviderMessageLength) || 'Native page paint refused'
   return {
@@ -1102,6 +1107,8 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             if (!qualified.ok || fragment.advance_inline_millipoints !== (qualified.ok ? qualified.value.width_millipoints : -1) || fragment.ascent_millipoints !== (qualified.ok ? qualified.value.height_millipoints : -1) || fragment.descent_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, qualified.ok ? 'Textbox fragment geometry changed after source projection' : qualified.message) }
             highlights.push({kind:'fill_text_highlight', id:`paint:${placed.id}:${fragment.id}:highlight`, line_id:line.id, fragment_id:fragment.id, source_id:fragment.source_id, x_millipoints:fragmentX, y_millipoints:baselineY-qualified.value.height_millipoints, width_millipoints:qualified.value.width_millipoints, height_millipoints:qualified.value.height_millipoints, fill_rgb:qualified.value.fill_rgb})
             fragmentX += fragment.advance_inline_millipoints
+            // The glyphless textbox atom is the drawing run's single visual fragment.
+            if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) sourceImageCounts.set(coveragePrefix + nativeRun.id, (sourceImageCounts.get(coveragePrefix + nativeRun.id) ?? 0) + 1)
             coveredFragmentIDs.add(coveragePrefix + fragment.id)
             continue
           }

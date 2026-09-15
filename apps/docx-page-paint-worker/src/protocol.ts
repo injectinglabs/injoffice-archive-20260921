@@ -140,6 +140,10 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       if (!record(value.input)) throw new TypeError('approximate render requires an input object')
       const fields = textbox?['prepare','evidence']:fontOnly?('composition' in value.input?['prepare','composition']:['prepare']):automatic ? ('legacy_eligibility' in value.input ? ['prepare', 'legacy_eligibility'] : ['prepare']) : ['prepare', 'eligibility']
       if ('font_size_policy' in value.input) fields.push('font_size_policy')
+      // Server-inspected drawing-shape sidecar for the same bytes; only the
+      // current-layout approximate operation accepts it.
+      const drawingShapes = value.op === 'render-approximate' && 'drawing_shapes' in value.input ? value.input.drawing_shapes : undefined
+      if (drawingShapes !== undefined) fields.push('drawing_shapes')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
       if((fontOnly||textbox)&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
@@ -182,7 +186,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
           : await renderNativeDocxTextboxPagesPreviewV2(input,evidence,textboxFonts,outlineProvider,{fonts})
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
-      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy }
+      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}) }
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)

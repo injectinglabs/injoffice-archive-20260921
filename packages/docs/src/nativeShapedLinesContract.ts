@@ -221,7 +221,11 @@ function validateFragment(value: unknown, path: string, issues: NativeDocxValida
   if (id && id !== expectedID) add(issues, 'INVALID_VALUE', `${path}/id`, 'must equal the deterministic paragraph/line/fragment id')
   if (id && state.fragmentIDs.has(id)) add(issues, 'DUPLICATE_ID', `${path}/id`, 'fragment id is duplicated')
   if (id) state.fragmentIDs.add(id)
-  const sourceKind = enumValue(entry.source_kind, `${path}/source_kind`, ['run', 'list-marker', 'tab', 'image'], issues)
+  // `textbox` is the glyphless inline atom the shaper reserves for an exactly
+  // qualified inline text box (see shapeAuthoredRun); paint re-derives its
+  // geometry from the source drawing, so it carries no text or glyphs here.
+  const sourceKind = enumValue(entry.source_kind, `${path}/source_kind`, ['run', 'list-marker', 'tab', 'image', 'textbox'], issues)
+  if (sourceKind === 'textbox' && (entry.text !== '' || (Array.isArray(entry.glyphs) && entry.glyphs.length !== 0) || entry.start_utf16 !== 0 || entry.end_utf16 !== 0)) add(issues, 'INVALID_VALUE', path, 'textbox atoms must be glyphless with empty text')
   if (entry.script_transform !== undefined && (sourceKind !== 'run' || !validateNativeDocxScriptTransformV1(entry.script_transform))) add(issues, 'INVALID_VALUE', `${path}/script_transform`, 'requires bounded font-authored subscript/superscript metrics on a text run')
   stringValue(entry.source_id, `${path}/source_id`, issues, { pattern: SHORT_ID, max: 256 })
   const start = integer(entry.start_utf16, `${path}/start_utf16`, issues, 0, MAX_FRAGMENT_TEXT_UTF16)
