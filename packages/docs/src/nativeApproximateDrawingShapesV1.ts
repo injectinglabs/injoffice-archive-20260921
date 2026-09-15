@@ -37,6 +37,8 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_
 
 const MAX_SHAPES = 64
 const MAX_TEXTBOX_GLYPHS = 100_000
+/** Interactive viewers read at most 16 MiB; keep body paint plus shape paint under this. */
+const MAX_ENVELOPE_BYTES = 12 * 1024 * 1024
 const MAX_REASONS = 24
 const EMU_PER_MILLIPOINT = 12.7
 
@@ -371,14 +373,14 @@ function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePain
   page.commands = [...behindFloats, ...fills, ...behind, ...ordinary, ...borders, ...front, ...frontFloats]
 }
 
-interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]; textboxes: number; droppedLines: number; omittedContent: number; failures: string[] }
+interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]; textboxes: number; droppedLines: number; droppedGlyphs: number; omittedContent: number; failures: string[]; byteBudget: number }
 
 /** Shape text box content with the same shaping core as body text and place
  * the resulting lines into the linked chain of boxes in source seq order.
  * Glyph paint attaches to the anchor line so the wire decoder keeps its
  * line ownership invariants. */
 async function paintTextboxes(placed: PlacedShape[], runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, result: NativeDocxApproximateShapePaintResultV1): Promise<TextboxPaintOutcome> {
-  const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, omittedContent: 0, failures: [] }
+  const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, droppedGlyphs: 0, omittedContent: 0, failures: [], byteBudget: 0 }
   const chains = new Map<string, PlacedShape[]>()
   for (const entry of placed) {
     const box = entry.shape.textbox
@@ -389,6 +391,9 @@ async function paintTextboxes(placed: PlacedShape[], runtime: NativeDocxApproxim
   }
   const outlineCache = new Map<string, NativeDocxGlyphOutlineResultV1>()
   let glyphBudget = MAX_TEXTBOX_GLYPHS
+  // Glyph paths dominate the wire; measure the body paint once and spend only
+  // the remaining viewer budget on text box glyphs. Excess is disclosed.
+  if (chains.size) outcome.byteBudget = Math.max(0, MAX_ENVELOPE_BYTES - JSON.stringify(placed[0]?.page ? placed.map(entry => entry.page).filter((page, index, pages) => pages.indexOf(page) === index) : []).length - extra.size * 512)
   for (const [key, boxes] of chains) {
     boxes.sort((left, right) => left.shape.textbox!.link_seq - right.shape.textbox!.link_seq)
     const head = boxes.find(entry => entry.shape.textbox!.paragraphs.length > 0)
@@ -529,7 +534,7 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
           const face: NativeDocxContentAddressedFaceV1 = { face_id: manifestFace.faceId, content_digest: manifestFace.source.contentDigest, ...(manifestFace.source.collectionIndex !== undefined ? { collection_index: manifestFace.source.collectionIndex } : {}) }
           let glyphX = x
           for (const [glyphIndex, glyph] of fragment.glyphs.entries()) {
-            if (glyphIndexBudget <= 0) break
+            if (glyphIndexBudget <= 0) { outcome.droppedGlyphs += 1; continue }
             const cacheKey = `${face.content_digest}\0${face.collection_index ?? ''}\0${glyph.glyph_id}`
             let outline = outlineCache.get(cacheKey)
             if (!outline) {
@@ -541,8 +546,13 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
             if (outline.status === 'outlined') {
               const path = nativeDocxPlaceGlyphPathV1(outline.path, Math.round(glyphX + glyph.offset_x_millipoints), Math.round(baseline - glyph.offset_y_millipoints), fontSize, outline.units_per_em)
               if (path) {
-                glyphIndexBudget -= 1
-                glyphs.push({ kind: 'fill_glyph_path', id: paintCommandID(placedID, fragment.id, glyphIndex), line_id: paintLine.line_id, fragment_id: fragment.id, source_id: fragment.source_id, glyph_index: glyphIndex, face, glyph_id: glyph.glyph_id, font_size_millipoints: fontSize, fill_rgb: fill, fill_rule: 'nonzero', outline_kind: 'path', path })
+                const command: NativeDocxFillGlyphPathCommandV1 = { kind: 'fill_glyph_path', id: paintCommandID(placedID, fragment.id, glyphIndex), line_id: paintLine.line_id, fragment_id: fragment.id, source_id: fragment.source_id, glyph_index: glyphIndex, face, glyph_id: glyph.glyph_id, font_size_millipoints: fontSize, fill_rgb: fill, fill_rule: 'nonzero', outline_kind: 'path', path }
+                const bytes = JSON.stringify(command).length + 1
+                if (bytes > outcome.byteBudget) { outcome.droppedGlyphs += 1; glyphIndexBudget = 0; glyphX += glyph.advance_x_millipoints; continue } else {
+                  outcome.byteBudget -= bytes
+                  glyphIndexBudget -= 1
+                  glyphs.push(command)
+                }
               }
             }
             glyphX += glyph.advance_x_millipoints
@@ -571,6 +581,6 @@ function buildReasons(shapes: NativeDocxApproximateDrawingShapesV1, result: Nati
   }
   if (result.omitted.length || shapes.omitted_count) reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: ${result.omitted.map(entry => `${entry.id} (${entry.reason})`).join('; ')}${shapes.omitted_count ? `; ${shapes.omitted_count} shapes beyond the ${MAX_SHAPES} shape budget` : ''}`.slice(0, 8000))
   for (const substitution of result.substitutions.slice(0, MAX_REASONS - 4)) reasons.push(`${DOCX_APPROXIMATE_TEXTBOX_FONT_CODE}: ${substitution.source_family} / ${substitution.weight} / ${substitution.style} -> ${substitution.selected_family} / ${substitution.selected_weight} / ${substitution.selected_style} (loaded host face ${substitution.face_id}); text box metrics and layout may differ`)
-  if (textboxes.droppedLines || textboxes.omittedContent || textboxes.failures.length) reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: text box content partially omitted (${textboxes.droppedLines} overflow lines dropped, ${textboxes.omittedContent} unsupported runs/blocks/diagnostics${textboxes.failures.length ? `, ${textboxes.failures.join('; ')}` : ''})`.slice(0, 8000))
+  if (textboxes.droppedLines || textboxes.droppedGlyphs || textboxes.omittedContent || textboxes.failures.length) reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: text box content partially omitted (${textboxes.droppedLines} overflow lines dropped, ${textboxes.droppedGlyphs} glyphs beyond the preview size budget, ${textboxes.omittedContent} unsupported runs/blocks/diagnostics${textboxes.failures.length ? `, ${textboxes.failures.join('; ')}` : ''})`.slice(0, 8000))
   return reasons.slice(0, MAX_REASONS)
 }
