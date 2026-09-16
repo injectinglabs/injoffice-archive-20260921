@@ -326,6 +326,19 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 			v.add(p+".textBody.autoFit", "native.autofitApproximation", "source-frame autofit requires a parsed source, non-editable status and explicit approximation warning")
 		}
 	}
+	// The authored line-spacing reduction is a read-only approximate projection:
+	// it may only travel with the disclosure that names it.
+	if element.TextBody != nil && element.TextBody.LineSpacingReductionPercent1000 != nil {
+		warning := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeAuthoredAutoFitCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warning = true
+			}
+		}
+		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
+			v.add(p+".textBody.lineSpacingReductionPercent1000", "native.autofitApproximation", "the authored line-spacing reduction requires a parsed source, non-editable status and the authored autofit approximation warning")
+		}
+	}
 	if element.TextBody != nil && element.TextBody.WritingMode != nil && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
 		v.add(p+".textBody.writingMode", "native.verticalPreview", "parsed vertical text must remain read-only")
 	}
@@ -602,6 +615,9 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	if body.AutoFit != "none" && body.AutoFit != "shape-source-frame" {
 		v.add(p+".autoFit", "schema.enum", "must be none or shape-source-frame")
 	}
+	if body.LineSpacingReductionPercent1000 != nil && (*body.LineSpacingReductionPercent1000 < 1 || *body.LineSpacingReductionPercent1000 > 99999) {
+		v.add(p+".lineSpacingReductionPercent1000", "schema.range", "must be a 0.001%-99.999% reduction in thousandths of a percent")
+	}
 	if body.WritingMode != nil && *body.WritingMode != "vertical-clockwise" {
 		v.add(p+".writingMode", "schema.enum", "must equal vertical-clockwise")
 	}
@@ -867,6 +883,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, so
 			if hasParagraphs && hasTextBody {
 				if cell.TextBody.AutoFit != "none" {
 					v.add(cp+".textBody.autoFit", "native.autofitApproximation", "table cell autofit preview is not supported")
+				}
+				if cell.TextBody.LineSpacingReductionPercent1000 != nil {
+					v.add(cp+".textBody.lineSpacingReductionPercent1000", "native.autofitApproximation", "table cell autofit preview is not supported")
 				}
 				if cell.TextBody.WritingMode != nil {
 					v.add(cp+".textBody.writingMode", "native.verticalPreview", "vertical table cells are not supported")

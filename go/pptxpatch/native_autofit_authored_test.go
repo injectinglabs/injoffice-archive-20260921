@@ -553,3 +553,107 @@ func TestNativeShapeStyleZeroIndexResolvesToNoPaint(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeAuthoredLnSpcReductionTravelsOnlyInTheApproximateTier(t *testing.T) {
+	const body = `<a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="20000"/></a:bodyPr>`
+	for _, strict := range []bool{false, true} {
+		// Strict extraction still refuses normAutofit, so the field cannot appear.
+		strictDeck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, body), nativeMutationExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if element := strictDeck.Slides[0].Elements[0]; element.TextBody != nil {
+			t.Fatalf("strict extraction emitted a text body for normAutofit: %+v", element.TextBody)
+		}
+
+		options := nativeMutationExtractOptions()
+		options.AllowSourceFrameAutoFitPreview = true
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, body), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.TextBody == nil || element.TextBody.LineSpacingReductionPercent1000 == nil || *element.TextBody.LineSpacingReductionPercent1000 != 20000 {
+			t.Fatalf("approximate extraction did not carry the authored lnSpcReduction: %+v", element.TextBody)
+		}
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code != nativeAuthoredAutoFitCode {
+				continue
+			}
+			if !strings.Contains(diagnostic.Message, "reduces the line pitch by the authored lnSpcReduction=20%") {
+				t.Fatalf("disclosure still claims the reduction is unapplied: %s", diagnostic.Message)
+			}
+			if strings.Contains(diagnostic.Message, "outside the native v1 layout contract") {
+				t.Fatalf("disclosure still claims the reduction is unapplied: %s", diagnostic.Message)
+			}
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("invalid approximate contract: %+v", issues)
+		}
+	}
+}
+
+func TestNativeAuthoredLnSpcReductionOmittedWhenAbsentOrZero(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	for _, body := range []string{
+		`<a:bodyPr><a:normAutofit fontScale="85000"/></a:bodyPr>`,
+		`<a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="0"/></a:bodyPr>`,
+		`<a:bodyPr numCol="3" spcCol="108000"/>`,
+	} {
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, body), options)
+		if err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.TextBody == nil || element.TextBody.LineSpacingReductionPercent1000 != nil {
+			t.Fatalf("%s emitted a line-spacing reduction: %+v", body, element.TextBody)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("%s: invalid contract: %+v", body, issues)
+		}
+	}
+}
+
+func TestNativeAuthoredLnSpcReductionContractRules(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	extract := func(t *testing.T) NativePPTXDeck {
+		t.Helper()
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr><a:normAutofit fontScale="85000" lnSpcReduction="20000"/></a:bodyPr>`), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return deck
+	}
+	for _, value := range []int64{1, 50000, 99999} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.LineSpacingReductionPercent1000 = int64Pointer(value)
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("reduction %d was rejected: %+v", value, issues)
+		}
+	}
+	for _, value := range []int64{0, -1, 100000, 2147483647} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.LineSpacingReductionPercent1000 = int64Pointer(value)
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatalf("reduction %d validated", value)
+		}
+	}
+	// The field is a read-only projection: it may not outlive its disclosure.
+	deck := extract(t)
+	deck.Slides[0].Elements[0].Compatibility.Diagnostics = nil
+	deck.Slides[0].Elements[0].Compatibility.Status = NativeCompatibilityStatusEditable
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("an editable element kept the authored line-spacing reduction")
+	}
+	deck = extract(t)
+	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
+		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeAuthoredAutoFitCode {
+			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeTextColumnsOmittedCode
+		}
+	}
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("the column disclosure authorized a line-pitch reduction")
+	}
+}

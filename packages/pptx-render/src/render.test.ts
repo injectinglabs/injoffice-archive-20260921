@@ -1002,6 +1002,64 @@ describe('native PPTX RenderTree', () => {
     }
   })
 
+  it('reduces the approximate line pitch by the authored lnSpcReduction without touching glyphs or exact lanes', async () => {
+    const text = 'AA AA AA AA AA AA'
+    const frame = { x: 0, y: 0, cx: 60_000, cy: 900_000 }
+    const laidOut = async (body: NativeTextBodyLayout, status: 'preserveOnly' | 'editable') => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, body, frame)
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      element.compatibility = status === 'preserveOnly'
+        ? { status, diagnostics: [{ severity: 'warning', code: 'pptx.autofit-authored-scale-approximate', message: 'Declared read-only approximation' }] }
+        : { status, diagnostics: [] }
+      deck.slides[0]!.elements = [element]
+      const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })
+      return findNode(tree, 'text', element.id).textBody
+    }
+    const natural = await laidOut(nativeTextBody(), 'preserveOnly')
+    const reduced = await laidOut(nativeTextBody({ lineSpacingReductionPercent1000: 20_000 }), 'preserveOnly')
+    expect(natural.paragraphs.length).toBeGreaterThan(2)
+    expect(reduced.paragraphs).toHaveLength(natural.paragraphs.length)
+    const pitch = natural.paragraphs[1]!.y - natural.paragraphs[0]!.y
+    const reducedPitch = reduced.paragraphs[1]!.y - reduced.paragraphs[0]!.y
+    expect(pitch).toBeGreaterThan(0)
+    expect(reducedPitch).toBe(Math.floor((pitch * 80_000) / 100_000))
+    for (const [index, line] of reduced.paragraphs.entries()) {
+      const source = natural.paragraphs[index]!
+      // The first line never moves; every later baseline rises by the reduction.
+      expect(line.y).toBe(natural.paragraphs[0]!.y + reducedPitch * index)
+      expect(source.y).toBe(natural.paragraphs[0]!.y + pitch * index)
+      // Glyph sizes, line boxes and within-line baselines stay exactly as measured.
+      expect(line.heightEmu).toBe(source.heightEmu)
+      expect(line.widthEmu).toBe(source.widthEmu)
+      expect(line.x).toBe(source.x)
+      expect(line.runs.map((run) => [run.x - line.x, run.baselineY - line.y, run.advanceInlineEmu]))
+        .toEqual(source.runs.map((run) => [run.x - source.x, run.baselineY - source.y, run.advanceInlineEmu]))
+    }
+    // The contract refuses the field without its read-only approximation evidence.
+    await expect(laidOut(nativeTextBody({ lineSpacingReductionPercent1000: 20_000 }), 'editable')).rejects.toThrow('authored line-spacing reduction')
+    // Within one slide the reduction stays scoped to the element that authored it.
+    const mixed = structuredClone(parsedFull), source = mixed.slides[0]!.elements.find((item) => item.kind === 'text')!
+    if (source.kind !== 'text') throw new Error('text missing')
+    const shaped = nativeTextElement(source.id, text, nativeTextBody(), frame)
+    source.paragraphs = shaped.paragraphs.map((paragraph) => ({ ...paragraph, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+    source.textBody = { ...nativeTextBody(), lineSpacingReductionPercent1000: 20_000 }
+    source.transform = frame
+    source.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.autofit-authored-scale-approximate', message: 'Declared read-only approximation' }] }
+    const sibling = structuredClone(source)
+    sibling.id = `${source.id}-sibling`
+    sibling.source = { ...source.source!, objectId: `${source.source!.objectId}-sibling` }
+    sibling.textBody = nativeTextBody()
+    mixed.slides[0]!.elements = [source, sibling]
+    const mixedTree = await compileNativePptxSlide(mixed, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })
+    const mixedReduced = findNode(mixedTree, 'text', source.id).textBody
+    const mixedNatural = findNode(mixedTree, 'text', sibling.id).textBody
+    expect(mixedReduced.paragraphs[1]!.y - mixedReduced.paragraphs[0]!.y).toBe(reducedPitch)
+    expect(mixedNatural.paragraphs.map((line) => line.y)).toEqual(natural.paragraphs.map((line) => line.y))
+  })
+
   it('refuses an overfull unbreakable shaped cluster visibly instead of splitting or approximating it', async () => {
     const base = fixtureShaper()
     const ligatureShaper: NativeTextShaper = {

@@ -1645,10 +1645,33 @@ function nativeRunLacksExplicitFont(run: NativeTextRun): boolean {
   return !run.fontFamily || run.fontFamily.startsWith('+') || run.fontSizeHundredthPt === undefined
 }
 
+// ECMA-376 21.1.2.1.3: a:normAutofit/@lnSpcReduction is a percentage reduction
+// of the authored line spacing, stored in the contract as thousandths of a
+// percent. The approximate lane reduces the line pitch (the advance between
+// consecutive baselines) by that percentage and leaves glyph sizes, ascents and
+// paragraph spacing untouched, because the authored fontScale already sized the
+// runs. The reduction is honored only for elements the contract marked as
+// read-only authored-frame approximations.
+function authoredLineSpacingReduction(context: TextContainerContext, state: CompileState): number {
+  if (!state.authoredFrameElements.has(context.elementId)) return 0
+  const reduction = context.layout?.lineSpacingReductionPercent1000
+  if (reduction === undefined || reduction <= 0) return 0
+  return reduction
+}
+
+function reducedLinePitch(lineHeight: number, reductionPercent1000: number, path: string, state: CompileState): number {
+  if (reductionPercent1000 <= 0) return lineHeight
+  const pitch = Number((BigInt(lineHeight) * BigInt(100000 - reductionPercent1000)) / 100000n)
+  if (!Number.isSafeInteger(pitch)) throw new RenderCompileError('render.textMetric', path, 'reduced line pitch exceeds integer precision')
+  // A 99.999% reduction must still advance, or lines would stack on one baseline.
+  return pitch < 1 ? 1 : pitch
+}
+
 async function compileParagraphs(paragraphs: readonly NativeParagraph[], context: TextContainerContext, state: CompileState): Promise<readonly RenderParagraphNode[]> {
   if (context.layout && !state.lineLayoutPolicy && context.layout.verticalAnchor !== 'top') {
     throw new TextBodyLayoutRefusal('text.verticalAnchorUnavailable', 'native center/bottom text anchoring requires an Office-qualified line-box rule')
   }
+  const lineSpacingReduction = authoredLineSpacingReduction(context, state)
   const result: RenderParagraphNode[] = []
   let y = 0
   for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
@@ -1816,7 +1839,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       }
       if (runs.some((run) => run.status === 'refused')) state.diagnostics.push({ severity: 'refusal', code: 'text.refused', message: 'the injected font resolver or shaper refused a rich-text run', slideId: state.slide.id, elementId: context.elementId })
       if (runs.some((run) => run.decisions.some((decision) => decision.code === 'unsupported-direction'))) state.diagnostics.push({ severity: 'refusal', code: 'text.verticalUnsupported', message: 'vertical text is represented by a refusal placeholder until native vertical layout is modeled', slideId: state.slide.id, elementId: context.elementId })
-      y += lineHeight
+      y += reducedLinePitch(lineHeight, lineSpacingReduction, path, state)
       checkCoordinate(y, path, state.budget)
       lineIndex++
     }
