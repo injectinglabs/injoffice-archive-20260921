@@ -80,6 +80,15 @@ is passed to shaping ahead of host language defaults. An explicit host
 presentation-default cascade rules, autofit, vertical flow, or bullet font
 substitution; those remain separate rendering boundaries.
 
+The native run's optional `kerningThresholdHundredthPt` (0-400000) retains the
+authored DrawingML `kern` threshold from direct run properties or a shape-local
+list-style level. The compiler turns it into an explicit `kern` feature that is
+on when the run's font size reaches the threshold and off otherwise, replacing
+any host `kern` feature; other host `resolveRun` features pass through. Runs
+without a threshold keep the host feature list unchanged. Mutation requests that
+carry a threshold are refused rather than serialized. This does not qualify
+PowerPoint's kerning behaviour, autofit, or other inherited text defaults.
+
 Resolver, load, and shaper results are untrusted runtime inputs. The compiler
 normalizes exact known fields into fresh bounded objects, validates face identity,
 digests, decisions, attempted face IDs, metrics, glyphs, and clusters, and refuses

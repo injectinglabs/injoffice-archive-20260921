@@ -119,7 +119,7 @@ func resolveNativeLocalTextStyles(body *nativeXMLNode, dialect nativeExtractDial
 }
 
 func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtractDialect, paragraph bool, theme nativeResolvedTheme) error {
-	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}, {Local: "err"}, {Local: "lang"}}
+	attrs := []xml.Name{{Local: "b"}, {Local: "i"}, {Local: "sz"}, {Local: "dirty"}, {Local: "smtClean"}, {Local: "err"}, {Local: "lang"}, {Local: "kern"}}
 	names := []string{"latin", "ea", "cs", "solidFill"}
 	if paragraph {
 		attrs = []xml.Name{{Local: "algn"}, {Local: "lvl"}, {Local: "marL"}, {Local: "indent"}}
@@ -140,6 +140,8 @@ func validateNativeTextStyleProperties(node *nativeXMLNode, dialect nativeExtrac
 			_, err = nativeBool(attr.Value)
 		case "sz":
 			_, err = parseCanonicalNativeInt(attr.Value, 1, 400000)
+		case "kern":
+			_, err = parseCanonicalNativeInt(attr.Value, 0, 400000)
 		case "lvl":
 			_, err = parseCanonicalNativeInt(attr.Value, 0, 8)
 		case "marL":

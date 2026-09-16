@@ -55,6 +55,19 @@ describe('native PPTX contract', () => {
       run.language=language;expect(validateNativePptx(deck).ok).toBe(false)
     }
   })
+  it('retains bounded authored kerning thresholds including zero and refuses out-of-range values', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text fixture missing')
+    const run=element.paragraphs[0]!.runs[0]!
+    for(const value of [0,1200,400000]){
+      run.kerningThresholdHundredthPt=value;expect(validateNativePptx(deck).ok).toBe(true)
+      expect(JSON.parse(stringifyNativePptx(deck)).slides[0].elements.find((item:NativeElement)=>item.kind==='text').paragraphs[0].runs[0].kerningThresholdHundredthPt).toBe(value)
+    }
+    for(const value of [-1,400001,1.5,Number.NaN,Number.POSITIVE_INFINITY]){
+      run.kerningThresholdHundredthPt=value;expect(validateNativePptx(deck).ok).toBe(false)
+    }
+  })
   it('preserves typed source endpoints and refuses contradictory legacy flags',()=>{
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck,connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
     if(connector.kind!=='connector')throw new Error('connector missing')
