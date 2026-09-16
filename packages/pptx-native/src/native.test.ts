@@ -42,6 +42,16 @@ describe('native PPTX contract', () => {
       element.compatibility.status='preserveOnly';element.compatibility.diagnostics[0]!.severity='info';expect(validateNativePptx(deck).ok).toBe(false)
     }
   })
+  it('accepts an inherited placeholder frame painted as a read-only rect shape', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='shape')!
+    if(element.kind!=='shape')throw new Error('shape missing')
+    element.preset='rect';element.placeholder='body';element.fill='FBE4D5';element.stroke={color:'C55A11',widthEmu:9525}
+    element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.placeholder-inheritance-approximate',message:'Declared read-only inherited frame'}]}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.status='preserveOnly';element.compatibility.diagnostics[0]!.severity='info';expect(validateNativePptx(deck).ok).toBe(false)
+  })
   it('retains bounded authored language tags and refuses malformed tags', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!

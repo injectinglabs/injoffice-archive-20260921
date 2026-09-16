@@ -219,11 +219,20 @@ presentation `defaultTextStyle` → master `titleStyle`/`bodyStyle` → master p
 placeholder `lstStyle` → slide `lstStyle` → local properties, fed through the
 inherited text preview above. Master/layout/slide `bodyPr` merge with the
 autofit child as one replaceable slot; the merged result is validated by the
-text-body layout policy. Ancestor prompt paragraphs, fill, outline, effects and
-shape styles are never painted; the element carries
-`pptx.placeholder-inheritance-approximate` listing what was not painted, plus the
-inherited-text disclosures. A slide placeholder without a text body keeps its
-inherited frame and paints nothing (PowerPoint shows no prompt). Slide-level
-fill, outline paint, shape styles and `hidden` placeholders refuse, as do date,
-footer, slide-number, picture, chart, table, media and diagram placeholders.
-`element.placeholder` reports the family (`obj` and untyped report `body`).
+text-body layout policy. Solid frame paint cascades the same way, nearest layer
+wins: an exact sRGB or documented theme `a:solidFill` and an `a:ln` solid fill
+(its declared `w`, or a 9525 EMU hairline when none is declared) are painted
+read-only, and the element becomes a `rect` preset shape carrying the existing
+AutoShape `fill`/`stroke` fields; a nearer `a:noFill` paints nothing. Gradient,
+pattern and picture fills, effects, shape styles, dashes, compound lines, caps
+and joins are not painted and are disclosed on ancestors; on the slide
+placeholder itself they refuse. Ancestor prompt paragraphs are never painted;
+the element carries `pptx.placeholder-inheritance-approximate` describing the
+inherited frame and listing what was not painted, plus the inherited-text
+disclosures. A slide placeholder without a text body keeps its inherited frame
+and paints no text (PowerPoint shows no prompt); because PowerPoint slideshow
+and export hide placeholders without text, a painted frame on an empty
+placeholder is disclosed as an approximation. `hidden` placeholders refuse, as
+do date, footer, slide-number, picture, chart, table, media and diagram
+placeholders. `element.placeholder` reports the family (`obj` and untyped report
+`body`).

@@ -225,7 +225,7 @@ func TestNativeEmptyContentPlaceholderPaintsNoPromptText(t *testing.T) {
 	}
 }
 
-func TestNativePlaceholderPreviewDisclosesAncestorPaintAndRefusesOtherKinds(t *testing.T) {
+func TestNativePlaceholderPreviewPaintsAncestorFrameAndRefusesOtherKinds(t *testing.T) {
 	input := nativePlaceholderFixture(t, false, func(parts map[string]string) {
 		layout := parts["relocated/layouts/layout.xml"]
 		layout = strings.Replace(layout, `<p:ph type="body" idx="7"/></p:nvPr></p:nvSpPr><p:spPr>`, `<p:ph type="body" idx="7"/></p:nvPr></p:nvSpPr><p:spPr><a:solidFill><a:srgbClr val="FBE4D5"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="C55A11"/></a:solidFill></a:ln>`, 1)
@@ -243,14 +243,20 @@ func TestNativePlaceholderPreviewDisclosesAncestorPaintAndRefusesOtherKinds(t *t
 		t.Fatalf("obj placeholder with painted layout ancestor was refused: %+v", deck.Slides[0].Compatibility)
 	}
 	element := deck.Slides[0].Elements[0]
+	if element.Kind != NativeElementKindShape || element.Preset == nil || *element.Preset != NativeShapePresetRect || element.Fill == nil || *element.Fill != "FBE4D5" || element.Stroke == nil || element.Stroke.Color != "C55A11" {
+		t.Fatalf("ancestor frame paint was not projected: %+v", element)
+	}
 	disclosed := false
 	for _, diagnostic := range element.Compatibility.Diagnostics {
 		if diagnostic.Code == nativePlaceholderPreviewCode {
-			disclosed = strings.Contains(diagnostic.Message, "ancestor a:solidFill") && strings.Contains(diagnostic.Message, "ancestor a:ln") && strings.Contains(diagnostic.Message, "ancestor prompt paragraphs")
+			disclosed = strings.Contains(diagnostic.Message, "solid fill FBE4D5") && strings.Contains(diagnostic.Message, "solid outline C55A11") && strings.Contains(diagnostic.Message, "ancestor prompt paragraphs")
 		}
 	}
 	if !disclosed {
-		t.Fatalf("ancestor paint omission was not disclosed: %+v", element.Compatibility.Diagnostics)
+		t.Fatalf("inherited frame paint was not disclosed: %+v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("invalid native: %+v", issues)
 	}
 	for _, p := range *element.Paragraphs {
 		for _, r := range p.Runs {
