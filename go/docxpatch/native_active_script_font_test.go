@@ -17,7 +17,15 @@ func TestNativeScriptPropertiesResolveAtActualRunScript(t *testing.T) {
 			{"Arabic", "مرحبا", "", true},
 			{"CJK", "你好", "", true},
 			{"mixed scripts", "Latin العربية", "", true},
-			{"Latin outside bounded slice", "café", "", true},
+			// MS-OI29500 17.3.2.26 resolves Latin-1 Supplement, Latin Extended and
+			// General Punctuation through the ascii/hAnsi slots, not cs/eastAsia,
+			// so these need no script font selection.
+			{"Latin-1 Supplement", "café", "", false},
+			{"Latin Extended-A", "Ostrov Krk — Hrvatska š", "", false},
+			{"General Punctuation curly quotes", "he said \u201chello\u201d", "", false},
+			{"Greek is script-bearing", "\u03b1\u03b2\u03b3", "", true},
+			{"Cyrillic is script-bearing", "\u043f\u0440\u0438\u0432\u0435\u0442", "", true},
+			{"Hebrew is script-bearing", "\u05e9\u05dc\u05d5\u05dd", "", true},
 			{"explicit RTL", "ASCII", `<w:rtl/>`, true},
 		} {
 			t.Run(test.name+map[bool]string{false: " transitional", true: " strict"}[strict], func(t *testing.T) {
@@ -96,6 +104,39 @@ func TestNativeEmptyParagraphScriptSelectionRetainsBidiUncertainty(t *testing.T)
 		mark := resolved.Paragraphs[0].ParagraphMarkProperties
 		if !bidi && (mark.FontFamily == nil || *mark.FontFamily != "Latin" || mark.FontSizeHalfPoint == nil || *mark.FontSizeHalfPoint != 24) {
 			t.Fatalf("literal-CR Latin mark changed %#v", mark)
+		}
+	}
+}
+
+// The slot decision is by Unicode range, not by an ASCII cutoff: a rune above
+// U+007F that Word resolves through ascii/hAnsi must not defer script
+// properties, while East-Asian and complex-script ranges still must.
+func TestNativeRequiresScriptShapingByUnicodeRange(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		char rune
+		want bool
+	}{
+		{"ASCII upper bound", 0x007f, false},
+		{"C1 control stays deferred", 0x0080, true},
+		{"Latin-1 Supplement lower bound", 0x00a0, false},
+		{"u with diaeresis", 0x00fc, false},
+		{"Latin Extended-A s with caron", 0x0161, false},
+		{"Latin Extended-B upper bound", 0x024f, false},
+		{"IPA Extensions stays deferred", 0x0250, true},
+		{"Greek stays deferred", 0x03b1, true},
+		{"Cyrillic stays deferred", 0x0440, true},
+		{"Hebrew stays deferred", 0x05d0, true},
+		{"Arabic stays deferred", 0x0627, true},
+		{"General Punctuation lower bound", 0x2000, false},
+		{"en dash", 0x2013, false},
+		{"left double quotation mark", 0x201c, false},
+		{"General Punctuation upper bound", 0x206f, false},
+		{"Superscripts stay deferred", 0x2070, true},
+		{"CJK stays deferred", 0x4f60, true},
+	} {
+		if got := nativeRequiresScriptShaping(tc.char); got != tc.want {
+			t.Fatalf("%s (U+%04X): requires script shaping %v, want %v", tc.name, tc.char, got, tc.want)
 		}
 	}
 }
