@@ -620,6 +620,32 @@ func TestExtractNativeDocumentContentTypeEqualityIsASCIIOnly(t *testing.T) {
 	}
 }
 
+// A content-type Override that names a part the package does not store is
+// inert: it maps nothing. Word and LibreOffice open such packages, which real
+// saves produce whenever a header, footer or glossary part is dropped without
+// the Override being pruned with it.
+func TestExtractNativeDocumentAcceptsContentTypeOverrideForAbsentPart(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		override string
+	}{
+		{name: "absent sibling story", override: `<Override PartName="/custom/stories/headerz.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`},
+		{name: "absent glossary directory", override: `<Override PartName="/custom/glossary/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parts := cloneNativeParts(transitionalNativeParts())
+			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], "</Types>", test.override+"</Types>", 1)
+			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatalf("inert content-type Override must not refuse the package: %v", err)
+			}
+			if len(doc.Headers) != 1 || len(doc.Footers) != 1 {
+				t.Fatalf("stored parts must keep their content types: headers=%d footers=%d", len(doc.Headers), len(doc.Footers))
+			}
+		})
+	}
+}
+
 // An internal relationship whose target part the package does not store
 // resolves to nothing. Word repairs such a package by dropping the entry and
 // LibreOffice reads the related part as absent, which is the state the format
