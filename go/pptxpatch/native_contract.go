@@ -130,9 +130,16 @@ type NativeTextBodyLayout struct {
 	AutoFit            string                   `json:"autoFit"`
 	HorizontalOverflow string                   `json:"horizontalOverflow"`
 	VerticalOverflow   string                   `json:"verticalOverflow"`
-	WritingMode        *string                  `json:"writingMode,omitempty"`
-	RotationAngle60000 *int64                   `json:"rotationAngle60000,omitempty"`
-	Upright            *bool                    `json:"upright,omitempty"`
+	// LineSpacingReductionPercent1000 carries the authored
+	// a:normAutofit/@lnSpcReduction in thousandths of a percent. It is emitted
+	// only for read-only approximate elements that also carry
+	// pptx.autofit-authored-scale-approximate; the approximate preview lane
+	// reduces its line pitch by that percentage.
+	LineSpacingReductionPercent1000 *int64 `json:"lineSpacingReductionPercent1000,omitempty"`
+
+	WritingMode        *string `json:"writingMode,omitempty"`
+	RotationAngle60000 *int64  `json:"rotationAngle60000,omitempty"`
+	Upright            *bool   `json:"upright,omitempty"`
 }
 
 type NativeArrowEnd struct {

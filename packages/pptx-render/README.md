@@ -258,7 +258,14 @@ scaled by an authored `a:normAutofit` `fontScale`, and multi-column bodies as on
 column; those elements arrive with `textBody.autoFit: 'none'` plus the
 `pptx.autofit-authored-scale-approximate` / `pptx.text-columns-single-column-approximate`
 compatibility warnings, which the renderer copies into its diagnostics and the
-preview worker gates behind `source_frame_autofit_preview`. Under either
+preview worker gates behind `source_frame_autofit_preview`. For those elements
+only, an authored `textBody.lineSpacingReductionPercent1000` reduces the line
+pitch — the advance between consecutive baselines — by that percentage, per
+ECMA-376 21.1.2.1.3. Glyph sizes, ascents, line boxes and paragraph offsets are
+untouched (the authored `fontScale` already sized the runs), so measured lines
+sit closer together and later baselines rise; the first baseline never moves.
+This is a declared read-only approximation of PowerPoint's saved autofit pass,
+not an Office-equivalent line-spacing model. Under either
 approximate opt-in (`sourceFrameAutoFitPreview`, or `inheritedTextPreview` for a
 source-marked inherited element) a run wider than the text body with no Unicode
 break opportunity is broken at the last shaped cluster that fits, reported as

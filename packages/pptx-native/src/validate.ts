@@ -303,6 +303,9 @@ function validateElement(
     }
     validateParagraphMarkers(element.paragraphs, `${path}.paragraphs`, issues)
     for (const paragraph of element.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
+    if (element.textBody?.lineSpacingReductionPercent1000 !== undefined && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.autofit-authored-scale-approximate' && diagnostic.severity === 'warning'))) {
+      add(issues, `${path}.textBody.lineSpacingReductionPercent1000`, 'native.autofitApproximation', 'the authored line-spacing reduction requires a parsed source, non-editable status and the authored autofit approximation warning')
+    }
     if (element.textBody?.writingMode && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody.writingMode`,'native.verticalPreview','parsed vertical text must remain read-only')
     if (((element.textBody?.rotationAngle60000??0)!==0||element.textBody?.upright===true) && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody`,'native.textOrientationPreview','parsed body rotation and upright text must remain read-only')
     if (element.textBody) validateTextBody(element.textBody, element.transform, `${path}.textBody`, issues)
@@ -367,6 +370,7 @@ function validateElement(
           const width = element.table.columnWidths[columnIndex]
           const height = element.table.rowHeights[rowIndex]
           if (cell.textBody.autoFit !== 'none') add(issues, `${cellPath}.textBody.autoFit`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
+          if (cell.textBody.lineSpacingReductionPercent1000 !== undefined) add(issues, `${cellPath}.textBody.lineSpacingReductionPercent1000`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
           if(cell.textBody.writingMode) add(issues,`${cellPath}.textBody.writingMode`,'native.verticalPreview','vertical table cells are not supported')
           if (width !== undefined && height !== undefined) validateTextBody(cell.textBody, { x: 0, y: 0, cx: width, cy: height }, `${cellPath}.textBody`, issues)
         } else {

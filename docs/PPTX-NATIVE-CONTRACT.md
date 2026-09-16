@@ -160,7 +160,9 @@ element-scoped capability-backed refusals. The extractor does not approximate th
 with the exact subset. Two explicit read-only opt-ins exist outside the exact
 subset and never change strict output: `AllowSourceFrameAutoFitPreview` admits
 `spAutoFit` in its saved frame (`autoFit: shape-source-frame`), applies the
-authored `normAutofit` `fontScale` to run sizes (`autoFit` stays `none`; disclosed
+authored `normAutofit` `fontScale` to run sizes and carries its `lnSpcReduction`
+as `textBody.lineSpacingReductionPercent1000` for the approximate renderer to
+reduce line pitch by (`autoFit` stays `none`; both disclosed
 by `pptx.autofit-authored-scale-approximate`), and paints `numCol`/`spcCol` bodies
 as one disclosed column; `AllowInheritedTextPreview` admits the declared
 inherited-text and placeholder-inheritance approximations described in
