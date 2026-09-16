@@ -16,19 +16,20 @@ import (
 // NativeWorkbookObjectsV1 is a read-only supplement, never mutation authority.
 // Chart values come from saved chart caches, not evaluated worksheet formulas.
 type NativeWorkbookObjectsV1 struct {
-	RichText         *NativeRichTextPreviewV1         `json:"rich_text,omitempty"`
-	ConditionalFills []NativeConditionalFillPreviewV1 `json:"conditional_fills,omitempty"`
-	Protocol         string                           `json:"protocol"`
-	Version          int                              `json:"version"`
-	PackageSHA256    string                           `json:"package_sha256"`
-	Tables           []NativeTablePreviewV1           `json:"tables"`
-	Charts           []NativeChartPreviewV1           `json:"charts"`
-	RowGeometry      []NativeStoredRowGeometryV1      `json:"row_geometry,omitempty"`
-	PageSettings     []NativeSheetPageSettingsV1      `json:"page_settings,omitempty"`
-	DrawingObjects   []NativeDrawingObjectV1          `json:"drawing_objects,omitempty"`
-	PrintAreas       []NativeSheetPrintAreaV1         `json:"print_areas,omitempty"`
-	PrintAreaSets    []NativeSheetPrintAreaSetV1      `json:"print_area_sets,omitempty"`
-	PrintTitles      []NativeSheetPrintTitlesV1       `json:"print_titles,omitempty"`
+	RichText            *NativeRichTextPreviewV1           `json:"rich_text,omitempty"`
+	ConditionalFills    []NativeConditionalFillPreviewV1   `json:"conditional_fills,omitempty"`
+	Protocol            string                             `json:"protocol"`
+	Version             int                                `json:"version"`
+	PackageSHA256       string                             `json:"package_sha256"`
+	Tables              []NativeTablePreviewV1             `json:"tables"`
+	Charts              []NativeChartPreviewV1             `json:"charts"`
+	RowGeometry         []NativeStoredRowGeometryV1        `json:"row_geometry,omitempty"`
+	DimensionNeutrality []NativeSheetDimensionNeutralityV1 `json:"dimension_neutrality,omitempty"`
+	PageSettings        []NativeSheetPageSettingsV1        `json:"page_settings,omitempty"`
+	DrawingObjects      []NativeDrawingObjectV1            `json:"drawing_objects,omitempty"`
+	PrintAreas          []NativeSheetPrintAreaV1           `json:"print_areas,omitempty"`
+	PrintAreaSets       []NativeSheetPrintAreaSetV1        `json:"print_area_sets,omitempty"`
+	PrintTitles         []NativeSheetPrintTitlesV1         `json:"print_titles,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -217,6 +218,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		if len(result.RowGeometry) < 64 {
 			result.RowGeometry = append(result.RowGeometry, previewNativeStoredRows(pkg.files[sheet.PartName], sheet.PartName))
 			result.PageSettings = append(result.PageSettings, previewNativePageSettings(pkg.files[sheet.PartName], sheet.PartName, sheet.ID))
+			result.DimensionNeutrality = append(result.DimensionNeutrality, previewNativeDimensionNeutrality(pkg.files[sheet.PartName], sheet.PartName))
 		}
 		relPart := path.Join(path.Dir(sheet.PartName), "_rels", path.Base(sheet.PartName)+".rels")
 		if raw, ok := pkg.files[relPart]; ok {

@@ -6,6 +6,7 @@ import { NativePlainDataError, snapshotNativePlainData } from './nativePlainData
 import { isNativeMaximumDigitWidthAuthorityV2 } from './nativeMaximumDigitWidthV2.js'
 import {decodeNativeWorkbookObjectsV1,type NativeWorkbookObjectsV1} from './nativeObjectsPreviewV1.js'
 import type {NativeStoredRowGeometryV1} from './nativeStoredRowsPreviewV1.js'
+import {nativeSheetDimensionNeutralityCodesV1} from './nativeSheetDimensionNeutralityV1.js'
 
 export const NATIVE_SHEET_GEOMETRY_V2_PROTOCOL = 'injoffice.xlsx.sheet-geometry'
 export const NATIVE_SHEET_GEOMETRY_V2_VERSION = 1 as const
@@ -42,7 +43,7 @@ export function compileNativeStoredRowSheetGeometryV1(workbook:NativeWorkbookRen
  if(rows.length!==1||rows[0]!.rows.length!==32)throw new TypeError('Qualified stored row dimensions unavailable')
  const view=snapshotViewport(viewport)
  if(view.end_row>=32)throw new RangeError('Stored row approximation covers only the first 32 rows')
- return compileGeometry(workbook,sheetId,view,metricAuthority,rows[0]) as NativeStoredRowSheetGeometryV1
+ return compileGeometry(workbook,sheetId,view,metricAuthority,rows[0],objects) as NativeStoredRowSheetGeometryV1
 }
 
 export type NativeSheetGeometryIssueCode =
@@ -178,15 +179,26 @@ export interface NativeSheetGeometryCommandAdapterV2<HostContext> {
   execute(context: HostContext, command: NativeSheetGeometryCommandV2): void
 }
 
+/**
+ * Compiles the bounded dimension projection for one viewport.
+ *
+ * The optional `objects` argument carries read-only source evidence that a
+ * worksheet's unmodeled markup was limited to view state, outline levels,
+ * border flags, text-descent metadata or markup-compatibility attributes —
+ * markup ECMA-376 gives no role in a row height, a column width or a merged
+ * rectangle. Only the disclosure codes that evidence names are waived; the
+ * compiled numbers are the same either way, and every other refusal stands.
+ */
 export function compileNativeSheetGeometryV2(
   workbook: NativeWorkbookRenderModelV2,
   sheetId: string,
   viewport: NativeSheetViewportV2,
   metricAuthority: NativeMaximumDigitWidthAuthorityV2,
+  objects?: NativeWorkbookObjectsV1,
 ): NativeSheetGeometryV2 {
- return compileGeometry(workbook,sheetId,viewport,metricAuthority)
+ return compileGeometry(workbook,sheetId,viewport,metricAuthority,undefined,objects)
 }
-function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,viewport:NativeSheetViewportV2,metricAuthority:NativeMaximumDigitWidthAuthorityV2,storedRows?:NativeStoredRowGeometryV1):NativeSheetGeometryV2 {
+function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,viewport:NativeSheetViewportV2,metricAuthority:NativeMaximumDigitWidthAuthorityV2,storedRows?:NativeStoredRowGeometryV1,objects?:NativeWorkbookObjectsV1):NativeSheetGeometryV2 {
   if (!isProjectedNativeWorkbookV2(workbook)) throw new NativeSheetGeometryV2Error('geometry.sourceUnsupported', '$.workbook', 'workbook must be the branded frozen result of projectNativeWorkbookV2')
   const safeViewport = snapshotViewport(viewport)
   if (!isNativeMaximumDigitWidthAuthorityV2(metricAuthority)) throw new NativeSheetGeometryV2Error('geometry.metricAuthority', '$.metric_authority', 'maximum digit width must come from the pinned native sfnt provider over exact font bytes')
@@ -197,7 +209,13 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   const format = sheet.sheet_format
   if (!format) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format', 'source worksheet has no authoritative sheetFormatPr geometry')
   if (format.zero_height) throw new NativeSheetGeometryV2Error('geometry.zeroHeightUnavailable', '$.sheet.sheet_format.zero_height', 'zeroHeight needs explicit-row visibility provenance not available in native v2')
-  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && !(storedRows&&(item.code==='SHEET_FORMAT_EXTRAS'||item.code==='ROW_DIMENSION_EXTRAS'||(item.code==='WORKSHEET_ATTRIBUTES'&&storedRows.root_policy==='x14ac-descent-only-v1'))) && (
+  const neutral = objects === undefined
+    ? new Set<string>()
+    : nativeSheetDimensionNeutralityCodesV1(
+        decodeNativeWorkbookObjectsV1(objects, workbook.source.package_sha256).dimension_neutrality,
+        sheet.mutation_authority.source_part,
+      )
+  const dimensionIssue = workbook.unsupported.find((item) => item.scope_id === `sheet:${sheet.id}` && !neutral.has(item.code) && !(storedRows&&(item.code==='SHEET_FORMAT_EXTRAS'||item.code==='ROW_DIMENSION_EXTRAS'||(item.code==='WORKSHEET_ATTRIBUTES'&&storedRows.root_policy==='x14ac-descent-only-v1'))) && (
     item.code === 'SHEET_FORMAT_EXTRAS' || item.code === 'ROW_DIMENSION_EXTRAS' || item.code === 'COLUMN_DIMENSION_EXTRAS' || item.code === 'COLS_ATTRIBUTES'
     || item.code === 'SHEET_VIEW_GEOMETRY' || item.code === 'WORKSHEET_ATTRIBUTES' || item.code === 'FOREIGN_WORKSHEET_MARKUP'
   ))
