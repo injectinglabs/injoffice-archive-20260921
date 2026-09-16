@@ -1634,7 +1634,7 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 	for _, run := range paragraph.Runs {
 		if run.Text != nil {
 			for _, character := range *run.Text {
-				if character > 0x7f {
+				if nativeRequiresScriptShaping(character) {
 					markScriptUncertain = true
 					break
 				}
@@ -1886,6 +1886,33 @@ func (resolver *nativeLayoutResolver) styleChain(kind, id, scopeID string) []*na
 	return chain
 }
 
+// nativeRequiresScriptShaping reports whether a rune resolves through the
+// East-Asian or complex-script font slots rather than ascii/hAnsi.
+//
+// MS-OI29500 17.3.2.26 assigns a character to a slot by Unicode range, not by
+// an ASCII cutoff. Latin-1 Supplement, Latin Extended-A/B and General
+// Punctuation all resolve through ascii/hAnsi, so an umlaut, an en dash or a
+// curly quotation mark needs no script font selection. Treating every rune
+// above U+007F as script-bearing made ordinary Western text carry deferred
+// script diagnostics, which block the whole paragraph downstream.
+//
+// Everything outside these ranges keeps the previous behaviour and still
+// defers: this narrows the trigger, it does not model script shaping.
+func nativeRequiresScriptShaping(character rune) bool {
+	switch {
+	case character <= 0x7f:
+		return false
+	case character >= 0x00a0 && character <= 0x024f:
+		// Latin-1 Supplement, Latin Extended-A, Latin Extended-B.
+		return false
+	case character >= 0x2000 && character <= 0x206f:
+		// General Punctuation: quotation marks, dashes, ellipsis.
+		return false
+	default:
+		return true
+	}
+}
+
 func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string, scriptContextUncertain ...bool) {
 	// MS-OI29500 17.3.2.26 assigns Basic Latin to ascii regardless of
 	// inactive East-Asia/complex-script slots. Forced cs remains an unmodeled
@@ -1895,7 +1922,7 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 		basicLatin = false
 	}
 	for _, character := range text {
-		if character > 0x7f {
+		if nativeRequiresScriptShaping(character) {
 			basicLatin = false
 			break
 		}
