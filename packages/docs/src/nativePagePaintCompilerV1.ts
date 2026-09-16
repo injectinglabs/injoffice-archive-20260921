@@ -680,7 +680,15 @@ async function attestResolvedFontReferencesBeforeBidi(
 function validateInventoryPackagePartJoins(inventory: NativeDOCXFontInventoryV1, document: NativeDocxDocumentV1, settings: NativeDocxPaginationSettingsV1): void {
   const binding = inventory.font_table
   if (!binding) throw new TypeError('font inventory has no font-table package binding')
-  if (binding.main_relationships_part !== settings.relationships_part || binding.main_relationships_sha256 !== settings.relationships_sha256) throw new TypeError('font inventory main relationship part/hash does not exact-join pagination settings')
+  // word/settings.xml is optional in the format, and its absence is a modelled
+  // state ('absent-default'): the settings then carry no relationship evidence
+  // at all. Requiring equality against that absence refused every document with
+  // no settings part, because a real part name never equals undefined. Compare
+  // only when the settings actually attest a relationship part; the binding is
+  // still joined against the document's passthrough inventory below either way.
+  if (settings.relationships_part !== undefined || settings.relationships_sha256 !== undefined) {
+    if (binding.main_relationships_part !== settings.relationships_part || binding.main_relationships_sha256 !== settings.relationships_sha256) throw new TypeError('font inventory main relationship part/hash does not exact-join pagination settings')
+  }
   const parts = new Map(document.passthrough_parts.map((part) => [part.part_name, part]))
   const join = (partName: string, sha: string, contentType?: string, byteLength?: number) => {
     const part = parts.get(partName)
