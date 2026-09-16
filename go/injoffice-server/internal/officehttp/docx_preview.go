@@ -260,7 +260,14 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 				if options.FontManifestPath != "" {
 					args = append(args, "--font-manifest", options.FontManifestPath)
 				}
-				result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-textbox-pages", map[string]any{"prepare": input, "evidence": source.Geometry}, 192*1024*1024, 64*1024*1024, args...)
+				// A document with no text box has no geometry part at all. Like every
+				// other read-only sidecar here, omit the key rather than sending a JSON
+				// null the decoder would read as a malformed evidence record.
+				workerInput := map[string]any{"prepare": input}
+				if nativeTextboxGeometryPresent(source.Geometry) {
+					workerInput["evidence"] = source.Geometry
+				}
+				result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", "render-textbox-pages", workerInput, 192*1024*1024, 64*1024*1024, args...)
 			}
 		}
 	} else if fontSubstitution {
@@ -331,6 +338,14 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(result)
+}
+
+// nativeTextboxGeometryPresent reports whether the source inspector actually
+// produced a text box geometry record. The part is absent from documents that
+// contain no text box, and an absent json.RawMessage marshals as "null".
+func nativeTextboxGeometryPresent(geometry json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(geometry)
+	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
 }
 
 func docxFontPreviewComposition(input map[string]any, data []byte) (map[string]any, error) {

@@ -79,3 +79,26 @@ func TestDOCXTextboxPreviewRealWorker(t *testing.T) {
 		t.Fatal("missing no-store response")
 	}
 }
+
+// A document with no text box has no textbox_geometry part, and the absent
+// json.RawMessage marshals as "null". Sending that null reached the decoder as a
+// malformed evidence record and refused the whole preview with 422, so the key
+// is omitted instead -- the same shape every other read-only sidecar uses.
+func TestNativeTextboxGeometryPresent(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		geometry json.RawMessage
+		want     bool
+	}{
+		{"absent part", nil, false},
+		{"empty", json.RawMessage{}, false},
+		{"json null", json.RawMessage("null"), false},
+		{"padded json null", json.RawMessage(" null\n"), false},
+		{"empty evidence record", json.RawMessage(`{"items":[],"omitted_count":0}`), true},
+		{"populated evidence record", json.RawMessage(`{"items":[{"owner":{},"geometry":null}],"omitted_count":0}`), true},
+	} {
+		if got := nativeTextboxGeometryPresent(tc.geometry); got != tc.want {
+			t.Fatalf("%s: present %v want %v", tc.name, got, tc.want)
+		}
+	}
+}
