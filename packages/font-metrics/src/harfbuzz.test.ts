@@ -357,6 +357,31 @@ describe('canonical HarfBuzz text shaper v1', () => {
     for (const resource of [badMagic, overlapping, descendingLoca, badChecksum]) expect(refusalCode(shape('abc', {}, resource))).toBe('unsupported-font-format')
   })
 
+  it('accepts an empty optional prep table, including when it shares loca\'s offset', () => {
+    const emptyPrep = mutatedResource((bytes) => {
+      const prep = tableRecord(bytes, 'prep')
+      const loca = tableRecord(bytes, 'loca')
+      writeU32(bytes, prep + 4, 0)
+      writeU32(bytes, prep + 8, readU32(bytes, loca + 8))
+      writeU32(bytes, prep + 12, 0)
+    })
+    expect(inspectHarfBuzzFontMetricsV1({ bytes: emptyPrep.bytes, contentDigest: emptyPrep.face.contentDigest })).toEqual(font.metrics)
+    const result = shape('office', {}, emptyPrep)
+    expect('status' in result).toBe(false)
+    if ('status' in result) return
+    expect(result.glyphs.map((glyph) => glyph.glyphId)).toEqual([82, 5_044, 70, 72])
+  })
+
+  it('still refuses an empty required head table', () => {
+    const emptyHead = mutatedResource((bytes) => {
+      const head = tableRecord(bytes, 'head')
+      writeU32(bytes, head + 4, 0)
+      writeU32(bytes, head + 12, 0)
+    })
+    expect(refusalCode(shape('office', {}, emptyHead))).toBe('unsupported-font-format')
+    expect(() => inspectHarfBuzzFontMetricsV1({ bytes: emptyHead.bytes, contentDigest: emptyHead.face.contentDigest })).toThrow(/empty or outside/)
+  })
+
   it('selects an explicit face from deterministic TTC bytes', () => {
     const result = shape('office', {}, oneFaceTtc())
     expect('status' in result).toBe(false)

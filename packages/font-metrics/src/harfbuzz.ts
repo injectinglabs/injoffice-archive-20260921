@@ -68,6 +68,7 @@ const QUALIFIED_FEATURE_SET = new Set<string>(QUALIFIED_FEATURES)
 const BUFFER_FLAG_NAMES = Object.freeze(['bot', 'eot', 'produce-unsafe-to-concat'] as const)
 const BUFFER_FLAGS = hb.BufferFlag.BOT | hb.BufferFlag.EOT | hb.BufferFlag.PRODUCE_UNSAFE_TO_CONCAT
 const REQUIRED_TABLES = ['cmap', 'head', 'hhea', 'hmtx', 'maxp'] as const
+const NONEMPTY_TABLES = new Set<string>([...REQUIRED_TABLES, 'glyf', 'loca'])
 const PROVIDER_ID = 'injoffice.harfbuzzjs'
 const EXPECTED_WASM_BYTES = 421_964
 const MAX_ABS_DESIGN_VALUE = 1_000_000_000
@@ -283,19 +284,21 @@ function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | und
     const length = u32(bytes, recordOffset + 12)
     if (tables.has(tableTag)) return `sfnt table ${JSON.stringify(tableTag)} is duplicated`
     if (offset % 4 !== 0) return `sfnt table ${JSON.stringify(tableTag)} is not four-byte aligned`
-    if (length === 0 || !checkedRange(bytes, offset, length)) return `sfnt table ${JSON.stringify(tableTag)} is empty or outside the font bytes`
+    // Optional tables (prep/fpgm/cvt) may have length 0; required and glyf/loca may not.
+    if (length === 0 && NONEMPTY_TABLES.has(tableTag)) return `sfnt table ${JSON.stringify(tableTag)} is empty or outside the font bytes`
+    if (!checkedRange(bytes, offset, length)) return `sfnt table ${JSON.stringify(tableTag)} is empty or outside the font bytes`
     tables.set(tableTag, { checksum, offset, length })
   }
   const directoryEnd = sfntOffset + 12 + numTables * 16
   for (const [tableTag, record] of tables) {
-    if (record.offset < directoryEnd && record.offset + record.length > sfntOffset) return `sfnt table ${JSON.stringify(tableTag)} overlaps its face directory`
+    if (record.length > 0 && record.offset < directoryEnd && record.offset + record.length > sfntOffset) return `sfnt table ${JSON.stringify(tableTag)} overlaps its face directory`
     if (tableChecksum(bytes, tableTag, record) !== record.checksum) return `sfnt table ${JSON.stringify(tableTag)} checksum is invalid`
   }
   const orderedTables = [...tables.entries()].sort((left, right) => left[1].offset - right[1].offset || compareCodeUnits(left[0], right[0]))
   for (let index = 1; index < orderedTables.length; index++) {
     const previous = orderedTables[index - 1]![1]
     const current = orderedTables[index]![1]
-    if (current.offset < previous.offset + previous.length) return 'sfnt tables overlap'
+    if (previous.length > 0 && current.length > 0 && current.offset < previous.offset + previous.length) return 'sfnt tables overlap'
   }
   for (const required of REQUIRED_TABLES) if (!tables.has(required)) return `required sfnt table ${required} is missing`
   const hasGlyf = tables.has('glyf') && tables.has('loca')
