@@ -32,7 +32,7 @@ describe('native PPTX contract', () => {
     element.compatibility.status='preserveOnly';element.compatibility.diagnostics=[];expect(validateNativePptx(deck).ok).toBe(false)
   })
   it('requires parsed read-only source evidence for authored autofit, column and placeholder approximations', () => {
-    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview']){
+    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview','pptx.text-warp-flattened-approximate','pptx.text-nonvisual-preview']){
       const deck=fixture('valid/parsed-full.json') as NativePptxDeck
       const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
       if(element.kind!=='text')throw new Error('text missing')
