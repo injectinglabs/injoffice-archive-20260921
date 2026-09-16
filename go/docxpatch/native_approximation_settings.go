@@ -19,7 +19,10 @@ type NativeDocxApproximatedSettingV1 struct {
 const (
 	// nativeApproximationMaxFacts mirrors the TS decoder bound on
 	// approximated_settings; more typed facts fail closed instead of joining.
-	nativeApproximationMaxFacts = 8
+	// The bound exists to keep the disclosure vector small, not to judge layout:
+	// a legacy w:compat block legitimately carries dozens of not-applied option
+	// leaves, so it matches the grouped-member bound rather than capping at 8.
+	nativeApproximationMaxFacts = 64
 	// nativeApproximationMaxGroupMembers bounds grouped authoring/duplicate facts.
 	nativeApproximationMaxGroupMembers = 64
 	// nativeApproximationMaxSummaryBytes bounds one retained attribute summary.
@@ -29,6 +32,11 @@ const (
 
 var nativeApproximationLanguageTagPattern = regexp.MustCompile(nativeApproximationLanguageTag)
 
+// nativeApproximateCharacterSpacingControl are the ECMA-376 17.15.1.20 values
+// strict pagination refuses. doNotCompress never reaches here: strict already
+// consumes it, so only the two compressing values become typed facts.
+var nativeApproximateCharacterSpacingControl = map[string]bool{"compressPunctuation": true, "compressPunctuationAndJapaneseKana": true}
+
 // nativeApproximationSettingReason must stay byte-identical to the TS mirror in
 // packages/docs/src/nativeApproximationSettingsV1.ts.
 func nativeApproximationSettingReason(fact NativeDocxApproximatedSettingV1) string {
@@ -37,6 +45,10 @@ func nativeApproximationSettingReason(fact NativeDocxApproximatedSettingV1) stri
 		return "Current-layout approximation records autoHyphenation at " + fact.Path + " as not applied; automatic hyphenation is not performed and Word line breaks may differ"
 	case fact.Kind == "compatibilityMode":
 		return "Current-layout approximation records the repeated or non-leading compatibilityMode attestation at " + fact.Path + "; its agreeing value is the disclosed legacy mode and Word layout may differ"
+	case fact.Kind == "characterSpacingControl":
+		return "Current-layout approximation records characterSpacingControl at " + fact.Path + " as not applied; East Asian punctuation and kana advances are not compressed and Word line breaks may differ"
+	case fact.Kind == "repeatedCompatSettings":
+		return "Current-layout approximation records " + strconv.Itoa(len(fact.Values)) + " repeated compatSetting attestations anchored at " + fact.Path + " as not applied; none of them is an input to current layout, so their disagreement cannot change this preview"
 	case fact.Kind == "themeFontLang":
 		return "Current-layout approximation records themeFontLang at " + fact.Path + " as not applied; language-driven theme font selection is not performed and Word font choice may differ"
 	case fact.Kind == "authoringSettings":
@@ -91,14 +103,17 @@ var nativeApproximateLegacyCompatFlags = map[string]bool{
 }
 
 // nativeApproximateCompatSettingFlag lists the Microsoft compatSetting flags the
-// current-layout policy records as typed facts. Word 2010+ emits the first four
-// with val="1"; Word 2013+ adds the hyphenation and floating-table flags, whose
-// 0/1 values do not change InjOffice current layout, which never hyphenates.
+// current-layout policy records as typed facts. Word 2010+ emits the first four,
+// Word 2013+ adds the hyphenation and floating-table flags. Neither attested
+// value changes InjOffice current layout: the tier emulates no Word
+// compatibility behaviour, so both 0 and 1 are recorded rather than refused.
 func nativeApproximateCompatSettingFlag(name, value string) bool {
 	switch name {
-	case "overrideTableStyleFontSizeAndJustification", "enableOpenTypeFeatures", "doNotFlipMirrorIndents", "differentiateMultirowTableHeaders":
-		return value == "1"
-	case "useWord2013TrackBottomHyphenation", "allowHyphenationAtTrackBottom", "allowTextAfterFloatingTableBreak":
+	case "overrideTableStyleFontSizeAndJustification", "enableOpenTypeFeatures", "doNotFlipMirrorIndents", "differentiateMultirowTableHeaders",
+		"useWord2013TrackBottomHyphenation", "allowHyphenationAtTrackBottom", "allowTextAfterFloatingTableBreak":
+		// Recorded, never applied: both attested values select a Word behaviour
+		// the approximate tier does not emulate either way, so the value cannot
+		// change this tier's output and is not a qualification signal.
 		return value == "0" || value == "1"
 	default:
 		return false

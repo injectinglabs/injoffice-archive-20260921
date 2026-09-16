@@ -1,12 +1,13 @@
 /** Exact source settings supported only by the opt-in current-layout policy.
  * Values are retained facts, not proof these Word semantics were implemented.
- * Grouped kinds (`authoringSettings`, `duplicateSettings`) key `values` by each
+ * Grouped kinds (`authoringSettings`, `duplicateSettings`, `repeatedCompatSettings`) key `values` by each
  * member's settings.xml path and retain that element's own attributes; the fact
  * `path` is one of those members, the first one strict diagnosed. */
 export interface NativeDocxApproximatedSettingV1 {
   kind: 'themeFontLang' | 'decimalSymbol' | 'listSeparator' | 'shapeDefaults' | 'mathPr'
     | NativeDocxApproximatedCompatSettingFlag | NativeDocxApproximatedLegacyCompatOption
-    | 'compatibilityMode' | 'autoHyphenation' | 'authoringSettings' | 'duplicateSettings'
+    | 'compatibilityMode' | 'autoHyphenation' | 'characterSpacingControl' | 'authoringSettings'
+    | 'duplicateSettings' | 'repeatedCompatSettings'
   path: string
   values: Record<string, string>
 }
@@ -51,6 +52,7 @@ const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/
 const SETTINGS_ROOT = '/w:settings[1]'
 const TOP_LEVEL_MEMBER = /^\/w:settings\[1\]\/w:([A-Za-z][A-Za-z0-9]*)\[([1-9][0-9]*)\]$/
 const NESTED_MEMBER = /^\/w:settings\[1\](\/[A-Za-z][A-Za-z0-9]*:[A-Za-z][A-Za-z0-9]*\[[1-9][0-9]*\])+$/
+const COMPAT_SETTING_MEMBER = /^\/w:settings\[1\]\/w:compat\[1\]\/w:compatSetting\[[1-9][0-9]*\]$/
 const MAX_GROUP_MEMBERS = 64
 const MAX_SUMMARY_LENGTH = 512
 
@@ -62,6 +64,10 @@ export function nativeApproximationSettingReason(fact: NativeDocxApproximatedSet
       return `Current-layout approximation records autoHyphenation at ${fact.path} as not applied; automatic hyphenation is not performed and Word line breaks may differ`
     case fact.kind === 'compatibilityMode':
       return `Current-layout approximation records the repeated or non-leading compatibilityMode attestation at ${fact.path}; its agreeing value is the disclosed legacy mode and Word layout may differ`
+    case fact.kind === 'characterSpacingControl':
+      return `Current-layout approximation records characterSpacingControl at ${fact.path} as not applied; East Asian punctuation and kana advances are not compressed and Word line breaks may differ`
+    case fact.kind === 'repeatedCompatSettings':
+      return `Current-layout approximation records ${members} repeated compatSetting attestations anchored at ${fact.path} as not applied; none of them is an input to current layout, so their disagreement cannot change this preview`
     case fact.kind === 'themeFontLang':
       return `Current-layout approximation records themeFontLang at ${fact.path} as not applied; language-driven theme font selection is not performed and Word font choice may differ`
     case fact.kind === 'authoringSettings':
@@ -84,7 +90,9 @@ export function validNativeDocxApproximatedSettingV1(value: unknown): value is N
   const source = fact.values
   if (COMPAT_SETTING_FLAGS.has(fact.kind)) {
     if (!/^\/w:settings\[1\]\/w:compat\[1\]\/w:compatSetting\[[1-9]\]$/.test(fact.path) || keys !== 'val') return false
-    return ['useWord2013TrackBottomHyphenation', 'allowHyphenationAtTrackBottom', 'allowTextAfterFloatingTableBreak'].includes(fact.kind) ? source.val === '0' || source.val === '1' : source.val === '1'
+    // Recorded, never applied: the approximate tier emulates neither attested
+    // behaviour, so the value is disclosed rather than used to qualify a source.
+    return source.val === '0' || source.val === '1'
   }
   if (LEGACY_COMPAT_OPTIONS.has(fact.kind)) {
     return fact.path === `${SETTINGS_ROOT}/w:compat[1]/w:${fact.kind}[1]` && (keys === '' || (keys === 'val' && ON_OFF.includes(source.val)))
@@ -95,6 +103,13 @@ export function validNativeDocxApproximatedSettingV1(value: unknown): value is N
     case 'autoHyphenation':
       return fact.path === `${SETTINGS_ROOT}/w:autoHyphenation[1]` && Object.entries(source).every(([key, value]) =>
         (key === 'val' && ON_OFF.includes(value)) || (key === 'doNotHyphenateCaps' && ON_OFF.includes(value)) || ((key === 'hyphenationZone' || key === 'consecutiveHyphenLimit') && /^[0-9]{1,10}$/.test(value)))
+    case 'characterSpacingControl':
+      return fact.path === `${SETTINGS_ROOT}/w:characterSpacingControl[1]` && keys === 'val' && ['compressPunctuation', 'compressPunctuationAndJapaneseKana'].includes(source.val)
+    case 'repeatedCompatSettings':
+      return validGroupedFact(fact, path => COMPAT_SETTING_MEMBER.test(path), summary => {
+        const split = summary.indexOf('=')
+        return split > 0 && COMPAT_SETTING_FLAGS.has(summary.slice(0, split)) && ['0', '1'].includes(summary.slice(split + 1))
+      })
     case 'authoringSettings':
       return validGroupedFact(fact, path => { const match = TOP_LEVEL_MEMBER.exec(path); return match !== null && AUTHORING_SETTINGS.has(match[1]!) })
     case 'duplicateSettings':
@@ -127,8 +142,8 @@ function validLanguageSlot(value: string, scriptSlot: boolean): boolean {
 }
 
 /** Grouped facts anchor at one member path and retain bounded attribute summaries. */
-function validGroupedFact(fact: NativeDocxApproximatedSettingV1, memberPath: (path: string) => boolean): boolean {
+function validGroupedFact(fact: NativeDocxApproximatedSettingV1, memberPath: (path: string) => boolean, memberSummary?: (summary: string) => boolean): boolean {
   const members = Object.entries(fact.values)
   if (members.length === 0 || members.length > MAX_GROUP_MEMBERS || !(fact.path in fact.values)) return false
-  return members.every(([path, summary]) => path.length <= 4096 && memberPath(path) && summary.length <= MAX_SUMMARY_LENGTH)
+  return members.every(([path, summary]) => path.length <= 4096 && memberPath(path) && summary.length <= MAX_SUMMARY_LENGTH && (memberSummary === undefined || memberSummary(summary)))
 }

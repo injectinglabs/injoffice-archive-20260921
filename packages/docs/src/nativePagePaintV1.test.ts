@@ -56,7 +56,7 @@ import {
   type NativeDocxGlyphOutlineResultV1,
   type NativeDocxPagePaintRequestV1,
 } from './nativePagePaintV1.js'
-import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximationEligibilityV1 } from './nativeApproximationV1.js'
+import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_PAINT_REFUSED_WARNING, nativeDocxApproximatePaintRefusalReason } from './nativeApproximationV1.js'
 import { DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}` as `sha256:${string}`
@@ -300,6 +300,16 @@ describe('native DOCX page-paint v1', () => {
     await expect(compileNativeDocxApproximatePagePreviewV1(request, { ...eligibility, package_sha256: 'wrong' }, new FixtureProvider())).rejects.toThrow('exact-join')
     const ineligible = await compileNativeDocxApproximatePagePreviewV1(request, { ...eligibility, status: 'ineligible', legacy_compatibility_mode: null }, new FixtureProvider())
     expect(ineligible).toMatchObject({ fidelity: 'approximate', status: 'refused', pages: [] })
+    // A refused approximate preview says why in the reasons vector callers read,
+    // not only in the paint diagnostics array.
+    expect(ineligible.reasons).toContain(DOCX_APPROXIMATE_PAINT_REFUSED_WARNING)
+    expect(ineligible.reasons).toContain(nativeDocxApproximatePaintRefusalReason(ineligible.diagnostics[0]!))
+    expect(ineligible.reasons.some((reason) => reason.includes('Approximate legacy preview requires eligible settings'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(ineligible).ok).toBe(true)
+    // The declaration and the status must agree in both directions.
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...ineligible, reasons: ineligible.reasons.filter((reason) => reason !== DOCX_APPROXIMATE_PAINT_REFUSED_WARNING) }).ok).toBe(false)
+    expect(approximate.reasons).not.toContain(DOCX_APPROXIMATE_PAINT_REFUSED_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: [...approximate.reasons, DOCX_APPROXIMATE_PAINT_REFUSED_WARNING] }).ok).toBe(false)
   })
   it('retains known approximate settings values and requires matching facts and warnings', async () => {
     const request = fixture()

@@ -3,6 +3,8 @@ package docxpatch
 import (
 	"bytes"
 	"reflect"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -123,7 +125,7 @@ func requireNativeApproximationDisclosure(t *testing.T, data []byte) (*NativePag
 	if strict.Profile != "unsupported" || !bytes.Equal(before, data) {
 		t.Fatalf("strict refusal or source bytes changed: %#v", strict)
 	}
-	if len(approx.ApproximatedSettings) > 8 {
+	if len(approx.ApproximatedSettings) > nativeApproximationMaxFacts {
 		t.Fatalf("facts exceed the decoder bound: %#v", approx.ApproximatedSettings)
 	}
 	kinds, paths := map[string]bool{}, map[string]bool{}
@@ -272,10 +274,10 @@ func TestNativeApproximationCompatibilityModeFactsAndLegacyOptions(t *testing.T)
 		t.Fatalf("a repeated agreeing mode 15 attestation must be a fact under current-layout mode 15: %#v", approx)
 	}
 	for name, markup := range map[string]string{
-		"two extra mode facts": `<w:compat>` + flag + mode("14") + mode("14") + `</w:compat>`,
-		"invalid option value": `<w:compat><w:useFELayout w:val="maybe"/></w:compat>`,
-		"option with content":  `<w:compat><w:useFELayout><w:x/></w:useFELayout></w:compat>`,
-		"nine facts":           `<w:compat><w:useFELayout/><w:noLeading/><w:noTabHangInd/><w:spaceForUL/><w:ulTrailSpace/><w:wpJustification/><w:growAutofit/><w:useWord97LineBreakRules/><w:mwSmallCaps/>` + mode("14") + `</w:compat>`,
+		"two extra mode facts":      `<w:compat>` + flag + mode("14") + mode("14") + `</w:compat>`,
+		"invalid option value":      `<w:compat><w:useFELayout w:val="maybe"/></w:compat>`,
+		"option with content":       `<w:compat><w:useFELayout><w:x/></w:useFELayout></w:compat>`,
+		"more facts than the bound": `<w:compat>` + nativeApproximationEveryLegacyCompatLeaf() + mode("14") + `</w:compat>`,
 	} {
 		_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, markup))
 		if approx.Status != "ineligible" {
@@ -284,12 +286,117 @@ func TestNativeApproximationCompatibilityModeFactsAndLegacyOptions(t *testing.T)
 	}
 }
 
+// nativeApproximationEveryLegacyCompatLeaf emits one leaf per ECMA-376 legacy
+// w:compat option, in deterministic order: 65 leaves, one past the fact bound.
+func nativeApproximationEveryLegacyCompatLeaf() string {
+	names := make([]string, 0, len(nativeApproximateLegacyCompatFlags))
+	for name := range nativeApproximateLegacyCompatFlags {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out strings.Builder
+	for _, name := range names {
+		out.WriteString("<w:" + name + "/>")
+	}
+	return out.String()
+}
+
+// A full legacy w:compat block is ordinary Word 97-2003 output. Every option is
+// recorded as not applied, so the bound must admit the whole block rather than
+// refusing the document over the size of its disclosure vector.
+func TestNativeApproximationAdmitsAWholeLegacyCompatBlock(t *testing.T) {
+	names := make([]string, 0, len(nativeApproximateLegacyCompatFlags))
+	for name := range nativeApproximateLegacyCompatFlags {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var markup strings.Builder
+	for _, name := range names[:len(names)-1] {
+		markup.WriteString("<w:" + name + "/>")
+	}
+	_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, `<w:compat>`+markup.String()+`<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`))
+	if approx.Status != "eligible" || *approx.LegacyCompatibilityMode != 14 {
+		t.Fatalf("a whole legacy compat block must stay eligible: %#v", approx)
+	}
+	if len(approx.ApproximatedSettings) != len(names)-1 {
+		t.Fatalf("every legacy option must be disclosed as its own fact: %d of %d", len(approx.ApproximatedSettings), len(names)-1)
+	}
+	if len(approx.ApproximatedSettings) > nativeApproximationMaxFacts {
+		t.Fatalf("facts exceed the decoder bound: %d", len(approx.ApproximatedSettings))
+	}
+}
+
+// East Asian punctuation compression is recorded, never performed: the
+// approximate tier shapes natural advances, so the value cannot change what it
+// paints and is disclosed instead of refusing every East-Asian-locale save.
+func TestNativeApproximationRecordsCharacterSpacingControl(t *testing.T) {
+	compat := `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`
+	for _, value := range []string{"compressPunctuation", "compressPunctuationAndJapaneseKana"} {
+		_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, `<w:characterSpacingControl w:val="`+value+`"/>`+compat))
+		if approx.Status != "eligible" {
+			t.Fatalf("%s must be recorded, not refused: %#v", value, approx)
+		}
+		fact := nativeApproximationFact(approx.ApproximatedSettings, "characterSpacingControl")
+		if fact == nil || fact.Path != "/w:settings[1]/w:characterSpacingControl[1]" || fact.Values["val"] != value {
+			t.Fatalf("%s must be a typed not-applied fact: %#v", value, approx.ApproximatedSettings)
+		}
+		if !slices.Contains(approx.Reasons, nativeApproximationSettingReason(*fact)) {
+			t.Fatalf("%s must disclose its not-applied reason: %#v", value, approx.Reasons)
+		}
+	}
+	// A value outside ECMA-376 17.15.1.20 is not a known compression mode and
+	// still fails closed.
+	approx, err := ExtractNativeDocxApproximationEligibilityV1(nativeApproximationTestDOCX(t, `<w:characterSpacingControl w:val="squashEverything"/>`+compat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approx.Status != "ineligible" {
+		t.Fatalf("an unknown character spacing value must stay ineligible: %#v", approx)
+	}
+}
+
+// Both attested values of a recorded compatSetting flag select Word behaviour
+// this tier never emulates, and repeats cannot disagree about anything it uses.
+func TestNativeApproximationRecordsRepeatedAndZeroValuedCompatSettings(t *testing.T) {
+	setting := func(value string) string {
+		return `<w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="` + value + `"/>`
+	}
+	mode := `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`
+	_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, `<w:compat>`+mode+setting("0")+`</w:compat>`))
+	if approx.Status != "eligible" {
+		t.Fatalf("a zero-valued recorded flag must not refuse: %#v", approx)
+	}
+	if fact := nativeApproximationFact(approx.ApproximatedSettings, "overrideTableStyleFontSizeAndJustification"); fact == nil || fact.Values["val"] != "0" {
+		t.Fatalf("the attested value must be retained verbatim: %#v", approx.ApproximatedSettings)
+	}
+	_, approx = requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, `<w:compat>`+mode+setting("1")+setting("1")+setting("0")+`</w:compat>`))
+	if approx.Status != "eligible" {
+		t.Fatalf("disagreeing repeats of a not-applied flag must not refuse: %#v", approx)
+	}
+	group := nativeApproximationFact(approx.ApproximatedSettings, "repeatedCompatSettings")
+	if group == nil || len(group.Values) != 2 {
+		t.Fatalf("every repeat must be disclosed in one grouped fact: %#v", approx.ApproximatedSettings)
+	}
+	if group.Values["/w:settings[1]/w:compat[1]/w:compatSetting[3]"] != "overrideTableStyleFontSizeAndJustification=1" || group.Values["/w:settings[1]/w:compat[1]/w:compatSetting[4]"] != "overrideTableStyleFontSizeAndJustification=0" {
+		t.Fatalf("repeat values must be retained verbatim by path: %#v", group.Values)
+	}
+	// compatibilityMode is consumed, not recorded, so disagreement still refuses.
+	bad, err := ExtractNativeDocxApproximationEligibilityV1(nativeApproximationTestDOCX(t, `<w:compat>`+mode+`<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.Status != "ineligible" {
+		t.Fatalf("disagreeing compatibilityMode attestations must stay ineligible: %#v", bad)
+	}
+}
+
 func TestNativeApproximationKeepsGenuinelyUnsupportedSettingsRefused(t *testing.T) {
 	for name, markup := range map[string]string{
-		"mirror margins":    `<w:mirrorMargins/>`,
-		"invalid tab stop":  `<w:defaultTabStop w:val="-1"/>`,
-		"structure":         `<w:compat w:unknown="1"/>`,
-		"character spacing": `<w:characterSpacingControl w:val="compressPunctuation"/>`,
+		"mirror margins":         `<w:mirrorMargins/>`,
+		"invalid tab stop":       `<w:defaultTabStop w:val="-1"/>`,
+		"structure":              `<w:compat w:unknown="1"/>`,
+		"unknown compat setting": `<w:compat><w:compatSetting w:name="madeUpFlag" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`,
+		"note sentinels":         `<w:footnotePr><w:footnote w:id="0"/><w:footnote w:id="1"/></w:footnotePr>`,
 	} {
 		approx, err := ExtractNativeDocxApproximationEligibilityV1(nativeApproximationTestDOCX(t, markup+`<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`))
 		if err != nil {
@@ -352,5 +459,54 @@ func TestNativeApproximationBareHyphenationLeavesRecordTrue(t *testing.T) {
 	fact := nativeApproximationFact(approx.ApproximatedSettings, "autoHyphenation")
 	if approx.Status != "eligible" || fact == nil || !reflect.DeepEqual(fact.Values, map[string]string{"val": "true", "doNotHyphenateCaps": "true"}) {
 		t.Fatalf("omitted w:val must be recorded as the schema default true: %#v", approx.ApproximatedSettings)
+	}
+}
+
+// The approximate eligibility policy is a separate read-only attestation: every
+// newly admitted settings shape must leave strict extraction, the strict
+// pagination settings projection and its diagnostics byte-identical.
+func TestNativeApproximationNeverChangesStrictSettingsProjection(t *testing.T) {
+	compat := `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`
+	flag := func(value string) string {
+		return `<w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="` + value + `"/>`
+	}
+	for name, markup := range map[string]string{
+		"character spacing":         `<w:characterSpacingControl w:val="compressPunctuation"/>` + compat,
+		"whole legacy compat block": `<w:compat>` + nativeApproximationEveryLegacyCompatLeaf() + `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`,
+		"repeated compat settings":  `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>` + flag("1") + flag("0") + `</w:compat>`,
+		"note sentinels":            `<w:footnotePr><w:footnote w:id="0"/><w:footnote w:id="1"/></w:footnotePr>` + compat,
+	} {
+		data := nativeApproximationTestDOCX(t, markup)
+		before := append([]byte(nil), data...)
+		strict, err := ExtractNativePaginationSettingsV1(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		strictDigest := nativeDOCXCanonicalWireSHA256(strict)
+		document, err := ExtractNativeDocumentV1(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		documentDigest := nativeDOCXCanonicalWireSHA256(document)
+		if _, err := ExtractNativeDocxApproximationEligibilityV1(data); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		again, err := ExtractNativePaginationSettingsV1(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		repeated, err := ExtractNativeDocumentV1(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !bytes.Equal(before, data) {
+			t.Fatalf("%s: source package bytes changed", name)
+		}
+		if again.Profile != "unsupported" || nativeDOCXCanonicalWireSHA256(again) != strictDigest {
+			t.Fatalf("%s: strict settings projection changed: %#v", name, again)
+		}
+		if nativeDOCXCanonicalWireSHA256(repeated) != documentDigest {
+			t.Fatalf("%s: strict document extraction changed", name)
+		}
 	}
 }

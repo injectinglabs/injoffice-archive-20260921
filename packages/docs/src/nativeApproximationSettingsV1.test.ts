@@ -13,10 +13,39 @@ describe('bounded current-layout settings facts', () => {
     expect(validNativeDocxApproximatedSettingV1({ kind: 'enableOpenTypeFeatures', path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '1' } })).toBe(true)
     expect(validNativeDocxApproximatedSettingV1({ kind: 'differentiateMultirowTableHeaders', path: '/w:settings[1]/w:compat[1]/w:compatSetting[5]', values: { val: '1' } })).toBe(true)
     expect(validNativeDocxApproximatedSettingV1({ kind: 'useWord2013TrackBottomHyphenation', path: '/w:settings[1]/w:compat[1]/w:compatSetting[6]', values: { val: '0' } })).toBe(true)
-    expect(validNativeDocxApproximatedSettingV1({ kind: 'enableOpenTypeFeatures', path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '0' } })).toBe(false)
+    // Recorded, never applied: both attested values select Word behaviour this
+    // tier does not emulate, so neither value is a qualification signal.
+    expect(validNativeDocxApproximatedSettingV1({ kind: 'enableOpenTypeFeatures', path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '0' } })).toBe(true)
     expect(validNativeDocxApproximatedSettingV1({ kind: 'useWord2013TrackBottomHyphenation', path: '/w:settings[1]/w:compat[1]/w:compatSetting[6]', values: { val: 'yes' } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ kind: 'enableOpenTypeFeatures', path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '1', extra: '1' } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ kind: 'madeUpFlag', path: '/w:settings[1]/w:compat[1]/w:compatSetting[2]', values: { val: '1' } })).toBe(false)
     for (const spidmax of ['01026', '-1', '2147483648', 'oops']) expect(validNativeDocxApproximatedSettingV1({ kind: 'shapeDefaults', path: '/w:settings[1]/w:shapeDefaults[1]', values: { spidmax, idmap: '1' } })).toBe(false)
     expect(validNativeDocxApproximatedSettingV1({ kind: 'shapeDefaults', path: '/w:settings[1]/w:shapeDefaults[1]', values: { spidmax: '1026', idmap: '1' } })).toBe(true)
+  })
+  it('records East Asian punctuation compression as a not-applied fact and rejects unknown modes', () => {
+    const fact = { kind: 'characterSpacingControl', path: '/w:settings[1]/w:characterSpacingControl[1]', values: { val: 'compressPunctuation' } }
+    expect(validNativeDocxApproximatedSettingV1(fact)).toBe(true)
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, values: { val: 'compressPunctuationAndJapaneseKana' } })).toBe(true)
+    // doNotCompress is what strict pagination already consumes, so it can never
+    // be a not-applied fact; anything else is not an ECMA-376 17.15.1.20 value.
+    for (const val of ['doNotCompress', 'compress', '']) expect(validNativeDocxApproximatedSettingV1({ ...fact, values: { val } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, path: '/w:settings[1]/w:characterSpacingControl[2]' })).toBe(false)
+    expect(nativeApproximationSettingReason(fact as never)).toContain('are not compressed')
+  })
+  it('groups repeated compatSetting attestations by their own diagnosed paths', () => {
+    const fact = {
+      kind: 'repeatedCompatSettings',
+      path: '/w:settings[1]/w:compat[1]/w:compatSetting[3]',
+      values: { '/w:settings[1]/w:compat[1]/w:compatSetting[3]': 'overrideTableStyleFontSizeAndJustification=1', '/w:settings[1]/w:compat[1]/w:compatSetting[4]': 'overrideTableStyleFontSizeAndJustification=0' },
+    }
+    expect(validNativeDocxApproximatedSettingV1(fact)).toBe(true)
+    // The anchor must be one of its own members, members must be compatSetting
+    // paths, and the summaries must name a recorded flag and an on/off value.
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, path: '/w:settings[1]/w:compat[1]/w:compatSetting[9]' })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, values: { '/w:settings[1]/w:compat[1]/w:compatSetting[3]': 'madeUpFlag=1' } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, values: { '/w:settings[1]/w:compat[1]/w:compatSetting[3]': 'enableOpenTypeFeatures=yes' } })).toBe(false)
+    expect(validNativeDocxApproximatedSettingV1({ ...fact, values: { '/w:settings[1]/w:autoHyphenation[1]': 'enableOpenTypeFeatures=1' } })).toBe(false)
+    expect(nativeApproximationSettingReason(fact as never)).toContain('2 repeated compatSetting attestations')
   })
   it('requires exact complete math defaults and the namespace-derived source path', () => {
     const fact = { kind: 'mathPr', path: '/w:settings[1]/nsf4b2b884:mathPr[1]', values: { mathFont: 'Cambria Math', brkBin: 'before', brkBinSub: '--', lMargin: '0', rMargin: '0', defJc: 'centerGroup', wrapIndent: '1440', intLim: 'subSup', naryLim: 'undOvr', smallFrac: 'off', dispDef: 'true' } }
