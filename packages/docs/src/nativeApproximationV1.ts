@@ -42,7 +42,7 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'NUMBERING_STYLE_PRESERVED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
-export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of expanded line boxes, leaving extra leading below the text; compressed line boxes remain unsupported.' as const
+export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of an expanded automatic line box, leaving extra leading below the text; an expanded exact or at-least line box instead seats the descent on the box bottom, leaving the leading above the text. Compressed line boxes remain unsupported.' as const
 export interface NativeDocxApproximationEligibilityV1 {
   protocol: 'injoffice.docx.approximation-eligibility'
   version: 1

@@ -1449,7 +1449,25 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
   context.previousAfter = 0
 }
 
+/** Word leaves the preceding paragraph's space-after above a table: a table has
+ * no space-before of its own, so nothing collapses it away, and the first cell
+ * paragraph's own space-before is then applied inside the cell. Pagination v1
+ * dropped it, starting the table at the bare cursor. The correction is scoped to
+ * the explicitly approximate lane; strict pagination output stays byte-identical. */
+function applyApproximateTableSpaceBefore(context: PaginationContext, table: NativeDocxQualifiedTableV1): void {
+  if (!context.approximateLegacySettings || context.previousAfter <= 0 || !columnHasContent(context)) return
+  const top = checkedSum(context.cursorY, context.previousAfter)
+  if (top === undefined) {
+    refuse(context, 'resource-limit', table.table.id, 'Table placement coordinate exceeds the bounded integer range')
+    return
+  }
+  context.cursorY = top
+  context.previousAfter = 0
+}
+
 function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTableV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
+  applyApproximateTableSpaceBefore(context, table)
+  if (context.refused) return
   const rows = layoutNativeDocxTableRowsV1(table, context.request.shaped_lines)
   if (!rows) { refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs'); return }
   if (table.table.rows.some((row) => row.cant_split !== true)) { paginateSplittableTable(context, table, rows, shaped); return }
