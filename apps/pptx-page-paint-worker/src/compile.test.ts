@@ -145,6 +145,15 @@ describe('actual source-font native PPTX worker',()=>{
   const request=input(),source=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8')),connector=source.slides[0].elements.find((e:{kind:string})=>e.kind==='connector');request.deck.slides[0].elements=[connector];connector.tailArrow=true
   const legacy=await compilePptxPreview(request);expect(JSON.stringify(legacy.nodes)).toContain('Arrowhead unavailable');expect(JSON.stringify(legacy.nodes)).not.toContain('connectorArrow')
   connector.tailEnd={type:'diamond',w:'lg',len:'sm'};const typed=await compilePptxPreview(request);expect(JSON.stringify(typed.nodes)).toContain('connectorArrow');expect(typed.diagnostics.join(' ')).toContain('arrow.deterministicGeometry')
+  expect(typed.diagnostics.join(' ')).toContain('2pt hairline')
+  // Theme 0.5pt lnRef strokes (connectors.pptx) must not produce sub-pixel 3×0.5pt
+  // triangles; arrow-v1 floors the named 2/3/5 scale at 2pt. Shaft paint stays 0.5pt.
+  connector.stroke.widthEmu=6350;connector.tailEnd={type:'triangle'}
+  const hairline=await compilePptxPreview(request),hairlineText=JSON.stringify(hairline.nodes)
+  expect(hairlineText).toContain('M0 0 L-76200 -38100 L-76200 38100 Z')
+  expect(hairlineText).not.toContain('L-19050')
+  expect(hairlineText).toContain('"strokeWidth":6350')
+  expect(hairline.diagnostics.join(' ')).toContain('2pt hairline')
  connector.geometry={profile:'drawingml-paths-v1',textRect:{x:0,y:0,cx:connector.transform.cx,cy:connector.transform.cy},paths:[{fillMode:'none',stroke:true,commands:[{kind:'moveTo',x:0,y:0},{kind:'lineTo',x:connector.transform.cx,y:0},{kind:'lineTo',x:connector.transform.cx,y:connector.transform.cy}]}]}
  connector.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.connector-preset-preview',message:'catalog preview'}]};connector.transform={...connector.transform,rotationAngle:5400000};delete connector.flipH
  const bent=await compilePptxPreview(request),bentText=JSON.stringify(bent.nodes)
