@@ -315,7 +315,15 @@ func nativeDOCXInventoryFamilies(pkg *nativePackage, partName, wordNS, relNS, re
 		}
 		key := nativeASCIIFold(name)
 		if seen[key] {
-			return nil, fmt.Errorf("docxpatch: native font inventory: duplicate font identity %q", name)
+			// The inventory identifies a family once. A repeated w:font that
+			// binds no embedded face adds no resource to inventory, so the
+			// first entry already names the family completely; a repeat that
+			// does bind one leaves two faces claiming a single family id, and
+			// that stays a refusal.
+			if nativeDOCXHasEmbeddedFace(node, wordNS) {
+				return nil, fmt.Errorf("docxpatch: native font inventory: duplicate font identity %q binds an embedded face", name)
+			}
+			continue
 		}
 		seen[key] = true
 		family := NativeDOCXFontFamilyV1{FamilyID: "font-family:" + nativeStableToken(name), Name: name, Faces: []NativeDOCXFontFaceV1{}}
