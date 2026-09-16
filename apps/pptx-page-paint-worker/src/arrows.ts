@@ -1,6 +1,15 @@
 import type {NativeArrowEnd} from '@injoffice/pptx-native'
 import type {PreviewNode} from './contract.js'
 
+/** 2pt in EMU. Theme lnRef hairlines (0.5pt) still get visible named heads;
+ * thicker source strokes keep 2/3/5 × their own width. Not Office metrics. */
+export const ARROW_HAIRLINE_EMU=25400
+
+export function previewArrowStrokeBase(strokeWidth:number):number {
+ if(!Number.isFinite(strokeWidth)||strokeWidth<=0)return strokeWidth
+ return Math.max(strokeWidth, ARROW_HAIRLINE_EMU)
+}
+
 export function previewArrowShaftInset(end:Readonly<NativeArrowEnd>|undefined,strokeWidth:number):number {
  if(!end||end.type==='none'||end.type==='arrow')return 0
  const length=strokeWidth*({sm:2,med:3,lg:5}[end.len??'med'])

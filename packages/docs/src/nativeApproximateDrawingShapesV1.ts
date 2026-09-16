@@ -28,6 +28,7 @@ import type { NativeDocxTextboxGeometryItemV1 } from './nativeTextboxGeometryPre
 import type { NativeTextboxRelativeAnchorV2 } from './nativeTextboxPageAnchorV1.js'
 import { asciiLowerNative } from './nativeDeterminism.js'
 import { DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
+import { nativeDocxApproximateTextboxInnerFrameV1, overflowNativeDocxApproximateLinkedStoryV1, type NativeDocxApproximateLinkedOverflowPlacementV1, type NativeDocxApproximateLinkedOverflowStoryV1 } from './nativeApproximateLinkedOverflowV1.js'
 
 export const DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL = 'injoffice.docx.approximate-drawing-shapes' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-shape-preview-v1' as const
@@ -446,8 +447,9 @@ interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontS
 
 /** Shape text box content with the same shaping core as body text and place
  * the resulting lines into the linked chain of boxes in source seq order.
- * Glyph paint attaches to the anchor line so the wire decoder keeps its
- * line ownership invariants. */
+ * Remaining story is re-wrapped at each slot's inner width; the split is not
+ * computed from the head box alone. Glyph paint attaches to the anchor line
+ * so the wire decoder keeps its line ownership invariants. */
 async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxPaintPageV1[], runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, result: NativeDocxApproximateShapePaintResultV1): Promise<TextboxPaintOutcome> {
   const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, droppedGlyphs: 0, omittedContent: 0, failures: [], byteBudget: 0, firstGlyphByShape: new Map() }
   const chains = new Map<string, PlacedShape[]>()
@@ -469,18 +471,25 @@ async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxP
     if (!head) continue
     const chainOrdinal = [...chains.keys()].indexOf(key)
     try {
-      const shaped = await shapeTextbox(head.shape.textbox!, runtime, head, outcome)
-      if (!shaped) { outcome.failures.push(`${head.shape.id}: no host face for text box fonts`); continue }
+      const resolved: NativeDocxResolvedLayoutInputV1 = { ...structuredClone(runtime.request.pagination_request.resolved_layout), paragraphs: structuredClone(head.shape.textbox!.resolved_paragraphs), runs: structuredClone(head.shape.textbox!.resolved_runs), tables: [], diagnostics: [] }
+      if (!substituteTextboxFonts(resolved, runtime.manifest, outcome)) { outcome.failures.push(`${head.shape.id}: no host face for text box fonts`); continue }
+      const story: NativeDocxApproximateLinkedOverflowStoryV1 = { paragraphs: structuredClone(head.shape.textbox!.paragraphs), resolved_paragraphs: resolved.paragraphs, resolved_runs: resolved.runs }
+      const frames = boxes.map(box => nativeDocxApproximateTextboxInnerFrameV1(box.x, box.y, box.width, box.height, box.shape.textbox!.insets_emu))
+      const overflow = await overflowNativeDocxApproximateLinkedStoryV1(frames.map((frame, index) => ({ wrap_width_millipoints: boxes[index]!.shape.textbox!.wrap === 'none' ? 1_000_000_000 : frame.inner_width_millipoints, inner_height_millipoints: frame.inner_height_millipoints })), story, async (width, remaining) => (await shapeTextbox(remaining, width, runtime, outcome)).paragraphs)
       outcome.textboxes += 1
-      glyphBudget = await placeTextboxLines(shaped, boxes, chainOrdinal, runtime, extra, outlineCache, outcome, glyphBudget)
+      outcome.droppedLines += overflow.dropped_lines
+      if (frames.length === 1 && overflow.placements.length) {
+        const anchor = boxes[0]!.shape.textbox!.vertical_anchor
+        const free = frames[0]!.inner_height_millipoints - overflow.used_height_millipoints[0]!
+        if (free > 0 && anchor !== 't') { const shift = anchor === 'ctr' ? Math.floor(free / 2) : free; for (const placement of overflow.placements) placement.y_millipoints += shift }
+      }
+      glyphBudget = await placeTextboxLines(overflow.placements, boxes, frames, chainOrdinal, resolved, runtime, extra, outlineCache, outcome, glyphBudget)
     } catch (error) {
       outcome.failures.push(`${head.shape.id}: ${(error instanceof Error ? error.message : 'shaping failed').slice(0, 200)}`)
     }
   }
   return outcome
 }
-
-interface ShapedTextbox { lines: NativeDocxShapedLinesV1; resolved: NativeDocxResolvedLayoutInputV1 }
 
 function faceMatches(manifest: NativeFontManifest, family: string, weight: number, style: string): boolean {
   return manifest.faces.some(face => face.weight === weight && face.style === style && face.stretch === 100 && [face.family, ...(face.aliases ?? [])].some(name => asciiLowerNative(name) === asciiLowerNative(family)))
@@ -515,80 +524,42 @@ function substituteTextboxFonts(resolved: NativeDocxResolvedLayoutInputV1, manif
   return true
 }
 
-async function shapeTextbox(box: NativeDocxApproximateTextboxV1, runtime: NativeDocxApproximateShapePaintRuntimeV1, head: PlacedShape, outcome: TextboxPaintOutcome): Promise<ShapedTextbox | undefined> {
+async function shapeTextbox(story: NativeDocxApproximateLinkedOverflowStoryV1, wrapWidth: number, runtime: NativeDocxApproximateShapePaintRuntimeV1, outcome: TextboxPaintOutcome): Promise<NativeDocxShapedLinesV1> {
   const source = runtime.document
-  const paragraphs = structuredClone(box.paragraphs)
-  const first = paragraphs[0]
-  if (!first || !source.sections[0]) return undefined
+  const first = story.paragraphs[0]
+  if (!first || !source.sections[0]) throw new TypeError('text box shaping refused: empty story')
   const section = structuredClone(source.sections[0])
   section.starts_at_block_id = first.id
   section.header_refs = []
   section.footer_refs = []
-  const document: NativeDocxDocumentV1 = { ...structuredClone(source), body: { ...structuredClone(source.body), blocks: paragraphs.map(paragraph => ({ kind: 'paragraph' as const, id: paragraph.id, paragraph })) }, sections: [section], headers: [], footers: [], notes: [], comment_stories: [], comments: [], unsupported: [] }
-  const resolved: NativeDocxResolvedLayoutInputV1 = { ...structuredClone(runtime.request.pagination_request.resolved_layout), paragraphs: structuredClone(box.resolved_paragraphs), runs: structuredClone(box.resolved_runs), tables: [], diagnostics: [] }
-  if (!substituteTextboxFonts(resolved, runtime.manifest, outcome)) return undefined
-  const insets = box.insets_emu
-  const innerWidth = Math.max(1, head.width - toMillipoints(insets[0]) - toMillipoints(insets[2]))
-  const shaped = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document, resolved_layout: resolved, font_manifest: runtime.manifest, available_width_millipoints: box.wrap === 'none' ? 1_000_000_000 : innerWidth, tab_interval_millipoints: Math.max(1, runtime.settings.default_tab_stop_twips * 50) }, { resolver: runtime.resolver, shaper: runtime.shaper }, new Map(), undefined, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED)
+  const document: NativeDocxDocumentV1 = { ...structuredClone(source), body: { ...structuredClone(source.body), blocks: structuredClone(story.paragraphs).map(paragraph => ({ kind: 'paragraph' as const, id: paragraph.id, paragraph })) }, sections: [section], headers: [], footers: [], notes: [], comment_stories: [], comments: [], unsupported: [] }
+  const resolved: NativeDocxResolvedLayoutInputV1 = { ...structuredClone(runtime.request.pagination_request.resolved_layout), paragraphs: structuredClone(story.resolved_paragraphs), runs: structuredClone(story.resolved_runs), tables: [], diagnostics: [] }
+  const shaped = await shapeNativeDocxLinesWithParagraphWidthsV1({ protocol: 'injoffice.docx.shaping-request', version: 1, document, resolved_layout: resolved, font_manifest: runtime.manifest, available_width_millipoints: wrapWidth, tab_interval_millipoints: Math.max(1, runtime.settings.default_tab_stop_twips * 50) }, { resolver: runtime.resolver, shaper: runtime.shaper }, new Map(), undefined, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED)
   if (!shaped.ok) throw new TypeError(`text box shaping refused: ${shaped.issues.map(issue => issue.message).slice(0, 3).join('; ')}`)
   outcome.omittedContent += shaped.value.diagnostics.filter(entry => entry.severity === 'unsupported').length
-  return { lines: shaped.value, resolved }
+  return shaped.value
 }
 
-async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], chainOrdinal: number, runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, outlineCache: Map<string, NativeDocxGlyphOutlineResultV1>, outcome: TextboxPaintOutcome, glyphBudget: number): Promise<number> {
-  const resolvedRuns = new Map(shaped.resolved.runs.map(run => [run.run_id, run]))
-  const resolvedParagraphs = new Map(shaped.resolved.paragraphs.map(paragraph => [paragraph.paragraph_id, paragraph]))
+async function placeTextboxLines(placements: NativeDocxApproximateLinkedOverflowPlacementV1<NativeDocxShapedLinesV1['paragraphs'][number]['lines'][number]>[], boxes: PlacedShape[], frames: ReturnType<typeof nativeDocxApproximateTextboxInnerFrameV1>[], chainOrdinal: number, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, outlineCache: Map<string, NativeDocxGlyphOutlineResultV1>, outcome: TextboxPaintOutcome, glyphBudget: number): Promise<number> {
+  const resolvedRuns = new Map(resolved.runs.map(run => [run.run_id, run]))
+  const resolvedParagraphs = new Map(resolved.paragraphs.map(paragraph => [paragraph.paragraph_id, paragraph]))
   const faces = new Map(runtime.manifest.faces.map(face => [face.faceId, face]))
-  type Slot = { box: PlacedShape; top: number; bottom: number; left: number }
-  const slots: Slot[] = boxes.map(box => {
-    const insets = box.shape.textbox!.insets_emu
-    return { box, top: box.y + toMillipoints(insets[1]), bottom: box.y + box.height - toMillipoints(insets[3]), left: box.x + toMillipoints(insets[0]) }
-  })
-  // First pass: assign every shaped line to a slot at a y offset.
-  const placements: Array<{ slot: number; y: number; paragraphID: string; line: NativeDocxShapedLinesV1['paragraphs'][number]['lines'][number]; spacingBefore: number }> = []
-  let slotIndex = 0
-  let cursor = slots[0]!.top
-  let exhausted = false
-  for (const paragraph of shaped.lines.paragraphs) {
-    if (exhausted) break
-    cursor += paragraph.spacing_before_millipoints
-    for (const line of paragraph.lines) {
-      let height = line.line_height_millipoints
-      if (height <= 0) height = 1
-      while (cursor + height > slots[slotIndex]!.bottom) {
-        if (slotIndex + 1 >= slots.length) { exhausted = true; break }
-        slotIndex += 1
-        cursor = slots[slotIndex]!.top
-      }
-      if (exhausted) { outcome.droppedLines += 1; continue }
-      placements.push({ slot: slotIndex, y: cursor, paragraphID: paragraph.paragraph_id, line, spacingBefore: 0 })
-      cursor += height
-    }
-    cursor += paragraph.spacing_after_millipoints
-  }
-  if (exhausted) for (const paragraph of shaped.lines.paragraphs) void paragraph
-  // Vertical anchoring applies to a single unlinked box only.
-  if (slots.length === 1 && placements.length) {
-    const anchor = boxes[0]!.shape.textbox!.vertical_anchor
-    const used = cursor - slots[0]!.top
-    const free = slots[0]!.bottom - slots[0]!.top - used
-    if (free > 0 && anchor !== 't') { const shift = anchor === 'ctr' ? Math.floor(free / 2) : free; for (const placement of placements) placement.y += shift }
-  }
   let glyphIndexBudget = glyphBudget
   for (const [placementIndex, placement] of placements.entries()) {
-    const slot = slots[placement.slot]!
-    const paintLine = slot.box.line
-    const page = slot.box.page
+    const box = boxes[placement.slot]!
+    const frame = frames[placement.slot]!
+    const paintLine = box.line
+    const page = box.page
     const placedID = paintLine.placed_line_id
     const line = placement.line
-    const baseline = Math.round(placement.y + line.ascent_millipoints)
-    let x = slot.left + line.inline_offset_millipoints
+    const baseline = Math.round(frame.top + placement.y_millipoints + line.ascent_millipoints)
+    let x = frame.left + line.inline_offset_millipoints
     const highlights: NativeDocxFillTextHighlightCommandV1[] = []
     const underlines: NativeDocxStrokeTextUnderlineCommandV1[] = []
     const glyphs: NativeDocxFillGlyphPathCommandV1[] = []
     for (const source of line.fragments) {
       const fragment: NativeDocxLineFragmentV1 = { ...source, id: `tb${chainOrdinal}.${placementIndex}.${source.id}` }
-      const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placement.paragraphID)?.numbering?.marker_properties : resolvedRuns.get(fragment.source_id)?.properties
+      const properties = fragment.source_kind === 'list-marker' ? resolvedParagraphs.get(placement.paragraph_id)?.numbering?.marker_properties : resolvedRuns.get(fragment.source_id)?.properties
       const fragmentX = Math.round(x)
       const glyphsBefore = glyphs.length
       if (properties && fragment.glyphs.length && properties.font_size_half_points && fragment.face_id) {
@@ -638,7 +609,7 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
       if (extra.has(command.id) || page.commands.some(existing => existing.id === command.id)) continue
       extra.set(command.id, command)
       paintLine.command_ids.push(command.id)
-      if (!outcome.firstGlyphByShape.has(slot.box.shape.id)) outcome.firstGlyphByShape.set(slot.box.shape.id, command.id)
+      if (!outcome.firstGlyphByShape.has(box.shape.id)) outcome.firstGlyphByShape.set(box.shape.id, command.id)
     }
   }
   return glyphIndexBudget

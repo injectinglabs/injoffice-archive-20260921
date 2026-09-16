@@ -1,6 +1,14 @@
 import {describe,it,expect} from 'vitest'
-import {previewArrow,previewArrowShaftInset} from './arrows.js'
+import {ARROW_HAIRLINE_EMU,previewArrow,previewArrowShaftInset,previewArrowStrokeBase} from './arrows.js'
 describe('explicit arrow-v1 preview geometry',()=>{
+ it('floors theme hairlines to 2pt and leaves thicker strokes unchanged',()=>{
+  expect(ARROW_HAIRLINE_EMU).toBe(25400)
+  expect(previewArrowStrokeBase(6350)).toBe(25400)
+  expect(previewArrowStrokeBase(12700)).toBe(25400)
+  expect(previewArrowStrokeBase(25400)).toBe(25400)
+  expect(previewArrowStrokeBase(38100)).toBe(38100)
+  expect(previewArrowStrokeBase(0)).toBe(0)
+ })
  it('insets shafts under filled endpoints instead of painting flat stubs over their tips',()=>{expect(previewArrowShaftInset({type:'triangle',len:'lg'},10)).toBe(50);expect(previewArrowShaftInset({type:'stealth',len:'lg'},10)).toBe(37.5);expect(previewArrowShaftInset({type:'diamond',len:'lg'},10)).toBe(25);expect(previewArrowShaftInset({type:'arrow'},10)).toBe(0)})
  it('preserves distinct named shapes and width/length policy without mutating descriptors',()=>{
   const rendered=[]
