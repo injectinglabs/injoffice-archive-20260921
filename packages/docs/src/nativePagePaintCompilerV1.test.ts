@@ -929,6 +929,39 @@ describe('native DOCX page-paint compiler v1', () => {
     return { input, fonts: { manifest, resolver } }
   }
 
+  // word/settings.xml is optional in the format. Without it the pagination
+  // settings carry no relationship evidence, and the font-inventory join used to
+  // compare a real part name against undefined and refuse the whole document.
+  it('paints a document whose package has no settings.xml, and still joins the inventory to the package', async () => {
+    const input = fixture()
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile = 'absent-default'
+    delete settings.relationships_part
+    delete settings.relationships_sha256
+    delete settings.relationship_id
+    delete settings.settings_part
+    delete settings.settings_sha256
+    delete settings.compatibility_mode
+    // The regression: this threw 'does not exact-join pagination settings' and
+    // refused the document outright, because a real part name never equals the
+    // absent settings evidence. It must now compile.
+    await expect(prepareNativeDocxPagePaintV1(input)).resolves.toBeDefined()
+
+    // The binding is still joined against the document's passthrough inventory:
+    // a font table whose hash does not match the package is still refused.
+    const forged = fixture()
+    const forgedSettings = forged.pagination_settings as NativeDocxPaginationSettingsV1
+    forgedSettings.profile = 'absent-default'
+    delete forgedSettings.relationships_part
+    delete forgedSettings.relationships_sha256
+    delete forgedSettings.relationship_id
+    delete forgedSettings.settings_part
+    delete forgedSettings.settings_sha256
+    delete forgedSettings.compatibility_mode
+    rewriteInventory(forged, inventory => { inventory.font_table!.sha256 = `sha256:${'d'.repeat(64)}` })
+    await expect(prepareNativeDocxPagePaintV1(forged)).rejects.toThrow('does not exact-join the native document passthrough inventory')
+  }, 15_000)
+
   it('renders a non-embedded-font document with explicit content-addressed host fonts', async () => {
     const { input, fonts } = hostFixture()
     const before = JSON.stringify(input)
