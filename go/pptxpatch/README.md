@@ -17,9 +17,9 @@ mutation safety remain unchanged. Shape autofit requires its separate opt-in.
 
 Within that policy, properties that PowerPoint lays out but native v1 paint does
 not model are validated, dropped from the projection, and disclosed per element
-by `pptx.inherited-text-properties-omitted` (a sorted list such as `a:lnSpc`,
-`a:spcBef`, `a:spcAft`, `a:buClr`, `a:buSzPct`, `a:tabLst`, `a:rPr@spc`,
-`a:rPr@strike=noStrike`, `a:buFont@panose`, `a:endParaRPr`). Authored `a:br`
+by `pptx.inherited-text-properties-omitted` (a sorted list such as `a:buClr`,
+`a:buSzPct`, `a:tabLst`, `a:rPr@spc`, `a:rPr@strike=noStrike`,
+`a:buFont@panose`, `a:endParaRPr`). Authored `a:br`
 continues in a bullet-free paragraph at the same left margin, a paragraph
 without runs becomes one blank space run carrying its end-mark metrics, and an
 `a:t` with undeclared edge whitespace is projected as preserved; all three are
@@ -76,6 +76,27 @@ together, only when `numCol` is at least 2 and the saved frame still leaves a
 positive width for every column; otherwise the same disclosure reports the
 single-column fallback. `rtlCol` stays a refusal, so column order is always left
 to right. Strict extraction keeps refusing `a:normAutofit` and multiple columns.
+
+Authored paragraph spacing travels the same way. The inherited-text preview
+resolves `a:lnSpc`, `a:spcBef` and `a:spcAft` through the layer order it already
+walks — direct `a:pPr` over the body `a:lstStyle` over the placeholder/master
+text style over the presentation defaults — and carries the result as
+`paragraphs[].lineSpacingPercent1000` or `paragraphs[].lineSpacingEmu` plus
+`paragraphs[].spaceBeforeEmu` / `paragraphs[].spaceAfterEmu`, disclosed by
+`pptx.paragraph-spacing-approximate`. `a:spcPts` converts exactly at 127 EMU per
+hundredth of a point; an `a:spcBef`/`a:spcAft` `a:spcPct` resolves against the
+paragraph's largest authored run size, after any `a:normAutofit` `fontScale`,
+per ECMA-376 21.1.2.2.7 and 21.1.2.2.9. A layer order that only a placeholder
+reaches stays that way: a non-placeholder shape resolves through the master
+`otherStyle`, never `bodyStyle`, so master body spacing does not leak into a
+plain text box. Identity values (100% line spacing, a zero gap) emit nothing,
+because absence already means "no authored adjustment". Anything that cannot be
+modeled — a zero-point absolute line spacing, a percentage gap on a paragraph
+whose runs declare no size — stays an omission under the disclosure above. The
+values never reach the exact paragraph extractor: the projection strips them
+from the paint XML once the paragraph has recorded them, so strict output is
+unchanged by construction. The diagram fallback has no per-shape disclosure and
+therefore keeps reporting every authored slot as an omission.
 
 ```bash
 go get github.com/injectinglabs/injoffice/go/pptxpatch

@@ -320,14 +320,24 @@ func TestNativeInheritedPreviewOmissionsAreDisclosedAndBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(clean.Attrs) != 0 || len(clean.Children) != 2 {
+	// a:lnSpc and a:spcBef now survive the sanitizer so the cascade merge can
+	// resolve them; only the properties still outside layout are dropped.
+	if len(clean.Attrs) != 0 || len(clean.Children) != 4 {
 		t.Fatalf("unexpected paragraph projection: %+v", clean)
+	}
+	for _, local := range []string{"lnSpc", "spcBef"} {
+		if nativeChild(clean, d.drawing, local) == nil {
+			t.Fatalf("sanitizer dropped a:%s instead of keeping it for the cascade: %+v", local, clean)
+		}
+	}
+	if stripped := nativeWithoutParagraphSpacing(clean, d); len(stripped.Children) != 2 {
+		t.Fatalf("paint projection still carries spacing markup: %+v", stripped)
 	}
 	run := &nativeXMLNode{Attrs: []xml.Attr{a("sz", "3200"), a("strike", "noStrike"), a("spc", "-1"), a("noProof", "1"), a("altLang", "en-US"), a("kern", "1200")}}
 	if _, err := sanitizeNativeInheritedPreviewProperties(run, d, false, nativeResolvedTheme{}, omit); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(omit.names(), ","); got != "a:buClr,a:buFont@panose,a:buSzPct,a:lnSpc,a:pPr@fontAlgn,a:rPr@spc,a:rPr@strike=noStrike,a:spcBef,a:tabLst" {
+	if got := strings.Join(omit.names(), ","); got != "a:buClr,a:buFont@panose,a:buSzPct,a:pPr@fontAlgn,a:rPr@spc,a:rPr@strike=noStrike,a:tabLst" {
 		t.Fatalf("unexpected omission disclosure: %s", got)
 	}
 	// Paint-active properties and malformed spacing still refuse.
@@ -401,9 +411,14 @@ func TestNativeInheritedPreviewProjectsBreaksAndEmptyParagraphs(t *testing.T) {
 		if codes[nativeInheritedTextOmissionsCode] != 1 {
 			t.Fatalf("omissions were not disclosed: %+v", e.Compatibility.Diagnostics)
 		}
+		// An authored 100% a:lnSpc is exactly what absence already means, so it
+		// emits no contract field and needs no spacing disclosure.
+		if codes[nativeParagraphSpacingCode] != 0 || nativeParagraphsCarrySpacing(*e.Paragraphs) {
+			t.Fatalf("identity line spacing was projected: %+v %+v", *e.Paragraphs, e.Compatibility.Diagnostics)
+		}
 		for _, diagnostic := range e.Compatibility.Diagnostics {
 			if diagnostic.Code == nativeInheritedTextOmissionsCode {
-				for _, name := range []string{"a:br→continuation-paragraph", "empty-paragraph→blank-line", "a:lnSpc", "a:rPr@spc", "a:rPr@strike=noStrike", "a:t@xml:space=preserve-assumed", "a:endParaRPr"} {
+				for _, name := range []string{"a:br→continuation-paragraph", "empty-paragraph→blank-line", "a:rPr@spc", "a:rPr@strike=noStrike", "a:t@xml:space=preserve-assumed", "a:endParaRPr"} {
 					if !strings.Contains(diagnostic.Message, name) {
 						t.Fatalf("disclosure lacks %s: %s", name, diagnostic.Message)
 					}

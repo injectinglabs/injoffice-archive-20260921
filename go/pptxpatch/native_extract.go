@@ -1878,12 +1878,13 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	paintText := txBody
 	var paragraphErr error
 	var inheritedOmissions *nativeInheritedTextOmissions
+	var inheritedSpacing []nativeParagraphSpacingSource
 	inheritedPreview := extractor.options.AllowInheritedTextPreview && (inheritedPlaceholder == nil || placeholderPreview != nil)
 	if inheritedPreview {
 		if placeholderPreview != nil {
-			paintText, inheritedOmissions, paragraphErr = extractor.inheritedTextPreviewLayers(txBody, placeholderPreview.layers, dialect)
+			paintText, inheritedOmissions, inheritedSpacing, paragraphErr = extractor.inheritedTextPreviewLayers(txBody, placeholderPreview.layers, dialect)
 		} else {
-			paintText, inheritedOmissions, paragraphErr = extractor.inheritedTextPreview(txBody, nil, false, dialect)
+			paintText, inheritedOmissions, inheritedSpacing, paragraphErr = extractor.inheritedTextPreview(txBody, nil, false, dialect)
 		}
 	}
 	var paragraphs []NativeParagraph
@@ -1907,8 +1908,16 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		textContentMessage = paragraphErr.Error()
 		paragraphs = []NativeParagraph{}
 	}
+	// Authored paragraph spacing resolves after the authored fontScale, because
+	// a percentage gap is measured against the run sizes the preview will paint.
+	paragraphSpacingApplied := false
 	if textLayoutMessage == "" && textContentMessage == "" {
 		nativeApplyAuthoredFontScale(paragraphs, authoredFit)
+		paragraphSpacingApplied = nativeApplyParagraphSpacing(paragraphs, inheritedSpacing, inheritedOmissions)
+	} else {
+		for _, source := range inheritedSpacing {
+			nativeDiscloseParagraphSpacing(source, inheritedOmissions)
+		}
 	}
 	paragraphPointer := &paragraphs
 	raw, err := rawNativeNode(extractor.pkg.parts[part], node)
@@ -1968,6 +1977,9 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	}
 	if inheritedPreview {
 		nativeMarkInheritedTextPreview(&element)
+		if paragraphSpacingApplied {
+			nativeMarkParagraphSpacing(&element)
+		}
 		nativeMarkInheritedTextOmissions(&element, inheritedOmissions)
 	}
 	if textLayoutMessage == "" && textContentMessage == "" {

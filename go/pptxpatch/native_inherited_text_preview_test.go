@@ -59,7 +59,7 @@ func TestNativeInheritedTextPreviewSourceAndSafety(t *testing.T) {
 func TestNativeInheritedTextPreviewDroppedMetadataSafety(t *testing.T) {
 	d := nativeExtractDialect{drawing: nsDrawingTransitional, presentation: nsPresentationTransitional}
 	duplicateEnd := &nativeXMLNode{Children: []*nativeXMLNode{{Name: xml.Name{Space: d.drawing, Local: "lstStyle"}}, {Name: xml.Name{Space: d.drawing, Local: "p"}, Children: []*nativeXMLNode{{Name: xml.Name{Space: d.drawing, Local: "endParaRPr"}}, {Name: xml.Name{Space: d.drawing, Local: "endParaRPr"}}}}}}
-	if _, _, err := (&nativeExtractor{}).inheritedTextPreview(duplicateEnd, nil, false, d); err == nil {
+	if _, _, _, err := (&nativeExtractor{}).inheritedTextPreview(duplicateEnd, nil, false, d); err == nil {
 		t.Fatal("duplicate terminal elements hidden")
 	}
 	for _, field := range []string{"kern", "defTabSz", "rtl", "eaLnBrk", "latinLnBrk", "hangingPunct"} {

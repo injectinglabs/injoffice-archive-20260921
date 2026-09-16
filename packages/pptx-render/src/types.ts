@@ -100,6 +100,7 @@ export type RenderDiagnosticCode =
   | 'text.sourceFrameAutoFitApproximate'
   | 'text.emergencyBreakApproximate'
   | 'text.authoredColumnsApproximate'
+  | 'text.authoredParagraphSpacingApproximate'
   | 'text.textColumnsUnavailable'
   | 'text.paragraphSemanticsUnavailable'
   | 'text.inheritanceUnavailable'

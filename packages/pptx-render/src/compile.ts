@@ -113,6 +113,8 @@ interface CompileState {
   // Elements whose Go-side extraction applied an authored normAutofit scale or
   // single-column projection; they carry the opt-in evidence per element.
   readonly authoredFrameElements: ReadonlySet<string>
+  /** Elements the contract marked as carrying resolved authored paragraph spacing. */
+  readonly paragraphSpacingElements: ReadonlySet<string>
   readonly deck: NativePptxDeck
   readonly slide: NativeSlide
   readonly options: CompileSlideOptions
@@ -1693,6 +1695,57 @@ function authoredColumnLayout(context: TextContainerContext, state: CompileState
   return { count, spacingEmu, widthEmu }
 }
 
+// ECMA-376 21.1.2.2.5 / 21.1.2.2.7 / 21.1.2.2.9: a:lnSpc, a:spcBef and a:spcAft
+// carry the authored paragraph spacing. The Go extractor resolved the style
+// cascade and converted every a:spcPts to EMU exactly, so only two decisions
+// remain here: an absolute line pitch replaces the measured one, and a
+// percentage scales it. The percentage form is a declared approximation of the
+// renderer's measured natural line box, not PowerPoint's line-spacing model.
+// The gaps are already EMU and are applied only between paragraphs. Only
+// elements the contract marked as read-only paragraph-spacing approximations
+// carry any of it.
+function authoredParagraphSpacing(paragraph: NativeParagraph, context: TextContainerContext, state: CompileState): NativeParagraph | undefined {
+  if (!state.paragraphSpacingElements.has(context.elementId)) return undefined
+  if (paragraph.lineSpacingPercent1000 === undefined && paragraph.lineSpacingEmu === undefined && paragraph.spaceBeforeEmu === undefined && paragraph.spaceAfterEmu === undefined) return undefined
+  return paragraph
+}
+
+// The authored line spacing and the authored normAutofit lnSpcReduction are both
+// percentages of the same line spacing, so ECMA-376 21.1.2.1.3's "percentage
+// amount by which the line spacing is reduced" subtracts from the authored
+// percentage rather than scaling it: 90% reduced by 20% is 70%, not 72%. The two
+// readings agree whenever no a:lnSpc is authored (100% - 20% = 100% x 80%), which
+// is every element #235 measured; the PowerPoint 16.112.4 exports of
+// font-scale.pptx and 3columns.pptx discriminate them, and only the subtractive
+// reading fits both with one line-height constant. An absolute a:lnSpc has no
+// percentage to subtract from, so there the reduction scales. Either way the
+// reduction reaches the line spacing exactly once and never the paragraph gaps.
+function authoredLinePitch(lineHeight: number, spacing: NativeParagraph | undefined, reductionPercent1000: number, path: string, state: CompileState): number {
+  if (spacing?.lineSpacingEmu !== undefined) return reducedLinePitch(spacing.lineSpacingEmu, reductionPercent1000, path, state)
+  const authored = spacing?.lineSpacingPercent1000
+  if (authored === undefined) return reducedLinePitch(lineHeight, reductionPercent1000, path, state)
+  const effective = authored - reductionPercent1000
+  // A reduction at least as large as the authored spacing must still advance.
+  if (effective < 1) return 1
+  const pitch = Number((BigInt(lineHeight) * BigInt(effective)) / 100000n)
+  if (!Number.isSafeInteger(pitch)) throw new RenderCompileError('render.textMetric', path, 'authored line pitch exceeds integer precision')
+  return pitch < 1 ? 1 : pitch
+}
+
+// A line whose pitch is smaller than its measured natural box has had leading
+// removed, and that leading comes off the TOP of the box: the descent below the
+// baseline is what the following line must clear, so it is preserved, and the
+// baseline rises by exactly the amount the box shrank. An authored absolute
+// a:lnSpc larger than the natural box adds its extra space above the text the
+// same way. When nothing compresses or expands the box this returns the
+// measured ascent unchanged, so every element without authored line spacing or
+// an authored lnSpcReduction lays out byte-identically.
+function compressedLineAscent(ascent: number, lineHeight: number, pitch: number): number {
+  if (pitch === lineHeight) return ascent
+  const shifted = ascent + pitch - lineHeight
+  return shifted < 0 ? 0 : shifted
+}
+
 async function compileParagraphs(paragraphs: readonly NativeParagraph[], context: TextContainerContext, state: CompileState): Promise<readonly RenderParagraphNode[]> {
   if (context.layout && !state.lineLayoutPolicy && context.layout.verticalAnchor !== 'top') {
     throw new TextBodyLayoutRefusal('text.verticalAnchorUnavailable', 'native center/bottom text anchoring requires an Office-qualified line-box rule')
@@ -1710,6 +1763,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     if (context.layout && !state.lineLayoutPolicy && (paragraph.align === undefined || paragraph.level !== 0 || paragraph.bullet !== false || (paragraph.marginLeftEmu ?? 0) !== 0 || (paragraph.indentEmu ?? 0) !== 0)) {
       throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable', 'native layout requires explicit alignment and refuses bullets, nonzero list levels, margins or indents until their line geometry is qualified')
     }
+    const spacing = authoredParagraphSpacing(paragraph, context, state)
     const measuredParagraph = Boolean(context.layout && state.lineLayoutPolicy)
     const margin = measuredParagraph ? paragraph.marginLeftEmu ?? 0 : 0
     const indent = measuredParagraph ? paragraph.indentEmu ?? 0 : 0
@@ -1779,6 +1833,13 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     const fragmentProgress: FragmentProgress[] | undefined = squareWrap
       ? shaped.map(() => ({ clusterIndex: 0, glyphIndex: 0, glyphPenXEmu: 0, glyphPenYEmu: 0 }))
       : undefined
+    // Space before never moves the top of the text body, and a column break
+    // starts the next column at its own top, so the gap only ever separates
+    // two paragraphs that already share a column.
+    if (spacing?.spaceBeforeEmu !== undefined && paragraphIndex > 0) {
+      y += spacing.spaceBeforeEmu
+      checkCoordinate(y, `$.elements.${context.elementId}.paragraphs[${paragraphIndex}]`, state.budget)
+    }
     let lineIndex = 0
     for (const lineRange of lineRanges) {
       const path = `$.elements.${context.elementId}.paragraphs[${paragraphIndex}].lines[${lineIndex}]`
@@ -1824,6 +1885,9 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(milliPointsToEmu(-descentMilliPoints, path), path, state.budget)
       checkCoordinate(milliPointsToEmu(lineGapMilliPoints, path), path, state.budget)
       checkCoordinate(lineHeight, path, state.budget, true)
+      const pitch = authoredLinePitch(lineHeight, spacing, lineSpacingReduction, path, state)
+      const baselineAscent = compressedLineAscent(ascent, lineHeight, pitch)
+      checkCoordinate(baselineAscent, path, state.budget)
       const align = paragraph.align ?? 'left'
       const textOffset=lineIndex===0?firstTextOffset:margin
       // A full column moves the remaining lines into the next one; the last
@@ -1839,8 +1903,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
         const runX = cursor
         if (direction !== 'rtl') cursor += item.run.advanceInlineEmu
         checkCoordinate(runX, path, state.budget)
-        checkCoordinate(y + ascent, path, state.budget)
-        return { ...item.run, x: runX, baselineY: y + ascent }
+        checkCoordinate(y + baselineAscent, path, state.budget)
+        return { ...item.run, x: runX, baselineY: y + baselineAscent }
       })
       let consumedSoftSeparators: RenderParagraphNode['consumedSoftSeparators']
       if (lineRange.consumedSeparatorRunIndex !== undefined && lineRange.consumedSeparatorClusterIndex !== undefined) {
@@ -1856,7 +1920,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
         }]
       }
       let marker:RenderTextRunNode|undefined
-      if(lineIndex===0&&shapedMarker){takeTextFragment(state,`${path}.marker`);checkCoordinate(columnOffsetX+margin+indent,path,state.budget);marker={...shapedMarker.run,sourceRole:'paragraphBullet',x:columnOffsetX+margin+indent,baselineY:y+ascent}}
+      if(lineIndex===0&&shapedMarker){takeTextFragment(state,`${path}.marker`);checkCoordinate(columnOffsetX+margin+indent,path,state.budget);marker={...shapedMarker.run,sourceRole:'paragraphBullet',x:columnOffsetX+margin+indent,baselineY:y+baselineAscent}}
       result.push({
         kind: 'paragraph', sourceElementId: context.elementId, paragraphIndex, lineIndex,
         align, direction, level: paragraph.level ?? 0, bullet: paragraph.bullet ?? false,
@@ -1874,10 +1938,16 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       }
       if (runs.some((run) => run.status === 'refused')) state.diagnostics.push({ severity: 'refusal', code: 'text.refused', message: 'the injected font resolver or shaper refused a rich-text run', slideId: state.slide.id, elementId: context.elementId })
       if (runs.some((run) => run.decisions.some((decision) => decision.code === 'unsupported-direction'))) state.diagnostics.push({ severity: 'refusal', code: 'text.verticalUnsupported', message: 'vertical text is represented by a refusal placeholder until native vertical layout is modeled', slideId: state.slide.id, elementId: context.elementId })
-      y += reducedLinePitch(lineHeight, lineSpacingReduction, path, state)
+      y += pitch
       checkCoordinate(y, path, state.budget)
       if (y > tallestColumnEmu) tallestColumnEmu = y
       lineIndex++
+    }
+    // Space after is suppressed on the last paragraph for the same reason, so
+    // the measured block height and the vertical anchor never change.
+    if (spacing?.spaceAfterEmu !== undefined && paragraphIndex < paragraphs.length - 1) {
+      y += spacing.spaceAfterEmu
+      checkCoordinate(y, `$.elements.${context.elementId}.paragraphs[${paragraphIndex}]`, state.budget)
     }
   }
   if(context.exactArea){
@@ -1925,6 +1995,9 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     const authoredColumns = state.authoredFrameElements.has(context.elementId) && (context.layout?.columnCount ?? 0) > 1
     const vertical = context.layout?.writingMode === 'vertical-clockwise'
     if (authoredColumns && (vertical || context.exactArea)) throw new TextBodyLayoutRefusal('text.textColumnsUnavailable', 'authored text columns are not modeled for vertical or rotated-upright text bodies')
+    if (state.paragraphSpacingElements.has(context.elementId) && paragraphs.some((paragraph) => paragraph.lineSpacingPercent1000 !== undefined || paragraph.lineSpacingEmu !== undefined || paragraph.spaceBeforeEmu !== undefined || paragraph.spaceAfterEmu !== undefined)) {
+      state.diagnostics.push({ severity: 'warning', code: 'text.authoredParagraphSpacingApproximate', message: 'Read-only approximate preview applies the authored paragraph spacing the extractor resolved from the style cascade: an absolute a:lnSpc replaces the measured line pitch and a percentage a:lnSpc scales it, which approximates the authored spacing against this renderer\'s measured natural line box rather than modeling PowerPoint\'s line spacing. The authored a:spcBef and a:spcAft gaps appear only between paragraphs, never above the first or below the last, and an authored normAutofit lnSpcReduction still reduces only the resulting line pitch. Line positions, wrapping and overflow are not Office-qualified.', slideId: state.slide.id, elementId: context.elementId })
+    }
     if (authoredColumns) state.diagnostics.push({ severity: 'warning', code: 'text.authoredColumnsApproximate', message: `Read-only approximate preview flows the shaped lines through ${context.layout!.columnCount} equal-width authored columns separated by the authored ${context.layout!.columnSpacingEmu ?? 0} EMU gap, wrapping at the column width and continuing left to right once the frame height is reached. Column balancing, line breaks and overflow are not Office-qualified.`, slideId: state.slide.id, elementId: context.elementId })
     if (vertical && paragraphs.some(paragraph=>paragraph.bullet!==false || paragraph.level!==0 || (paragraph.marginLeftEmu??0)!==0 || (paragraph.indentEmu??0)!==0 || paragraph.runs.some(run=>!run.text || !/^[\x20-\x7e]+$/.test(run.text)))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires nonempty ASCII Latin text and no bullets or paragraph offsets.')
     const verticalArea=context.exactArea?{x:sourceAffineRational(0n),y:sourceAffineRational(0n),cx:context.exactArea.cy,cy:context.exactArea.cx}:undefined
@@ -2432,6 +2505,9 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
 	const authoredFrameElements=new Set<string>()
 	const collectAuthored=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.autofit-authored-scale-approximate'||d.code==='pptx.text-columns-approximate')){if(options.sourceFrameAutoFitPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.sourceFrameAutoFitPreview','authored autofit scale and column projections require explicit read-only source-frame preview opt-in');authoredFrameElements.add(element.id)}if(element.kind==='group')collectAuthored(element.children)}}
 	collectAuthored(nativeSlide.elements)
+	const paragraphSpacingElements=new Set<string>()
+	const collectParagraphSpacing=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.paragraph-spacing-approximate')){if(options.inheritedTextPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','authored paragraph spacing requires explicit read-only inherited-text preview opt-in');paragraphSpacingElements.add(element.id)}if(element.kind==='group')collectParagraphSpacing(element.children)}}
+	collectParagraphSpacing(nativeSlide.elements)
   const budget: Budget = {
     affine: new SourceAffineBudget(),
     nodes: 0,
@@ -2455,6 +2531,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
     sourceFrameAutoFitPreview: options.sourceFrameAutoFitPreview === true,
 		inheritedTextElements,
 		authoredFrameElements,
+		paragraphSpacingElements,
     deck,
     slide: nativeSlide,
     options,

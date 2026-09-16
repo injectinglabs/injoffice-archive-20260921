@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "612582c8931727e737e560d906752a58b300adf1091484401699a376b9f9f698" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "adcba77049e7ab92748c8cf741edd8d618f86a497131e7ab36d8269bfd62245e" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -630,8 +630,12 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "bulletFontFamily",
       "indentEmu",
       "level",
+      "lineSpacingEmu",
+      "lineSpacingPercent1000",
       "marginLeftEmu",
-      "runs"
+      "runs",
+      "spaceAfterEmu",
+      "spaceBeforeEmu"
     ],
     "required": [
       "runs"
@@ -1553,6 +1557,26 @@ export const PPTX_NATIVE_SCHEMA = {
         "indentEmu": {
           "type": "integer",
           "minimum": -51206400,
+          "maximum": 51206400
+        },
+        "lineSpacingPercent1000": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 13200000
+        },
+        "lineSpacingEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 51206400
+        },
+        "spaceBeforeEmu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 51206400
+        },
+        "spaceAfterEmu": {
+          "type": "integer",
+          "minimum": 1,
           "maximum": 51206400
         }
       }

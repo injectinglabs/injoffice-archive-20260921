@@ -314,6 +314,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if (diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.autofitApproximation", "authored autofit approximation requires parsed source and explicit read-only warning")
 		}
+		if diagnostic.Code == nativeParagraphSpacingCode && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+			v.add(p+".compatibility", "native.paragraphSpacingApproximation", "authored paragraph spacing approximation requires parsed source and explicit read-only warning")
+		}
 	}
 	if element.TextBody != nil && element.TextBody.AutoFit == "shape-source-frame" {
 		warning := false
@@ -337,6 +340,19 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
 			v.add(p+".textBody.lineSpacingReductionPercent1000", "native.autofitApproximation", "the authored line-spacing reduction requires a parsed source, non-editable status and the authored autofit approximation warning")
+		}
+	}
+	// Authored paragraph spacing is a read-only approximation of the style
+	// cascade: it may only travel with the disclosure that names it.
+	if element.Paragraphs != nil && nativeParagraphsCarrySpacing(*element.Paragraphs) {
+		warning := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeParagraphSpacingCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warning = true
+			}
+		}
+		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
+			v.add(p+".paragraphs", "native.paragraphSpacingApproximation", "authored paragraph spacing requires a parsed source, non-editable status and the authored paragraph-spacing approximation warning")
 		}
 	}
 	// The authored column projection is a read-only approximation: it may only
@@ -819,6 +835,23 @@ func (v *nativeValidator) paragraphs(paragraphs []NativeParagraph, p string) {
 		if paragraph.IndentEmu != nil && (*paragraph.IndentEmu < -51206400 || *paragraph.IndentEmu > 51206400) {
 			v.add(pp+".indentEmu", "schema.range", "invalid paragraph indent")
 		}
+		if paragraph.LineSpacingPercent1000 != nil && (*paragraph.LineSpacingPercent1000 < 1 || *paragraph.LineSpacingPercent1000 > 13200000) {
+			v.add(pp+".lineSpacingPercent1000", "schema.range", "must be a 0.001%-13200% line spacing in thousandths of a percent")
+		}
+		if paragraph.LineSpacingEmu != nil && (*paragraph.LineSpacingEmu < 1 || *paragraph.LineSpacingEmu > 51206400) {
+			v.add(pp+".lineSpacingEmu", "schema.range", "must be a positive bounded EMU line pitch")
+		}
+		if paragraph.LineSpacingPercent1000 != nil && paragraph.LineSpacingEmu != nil {
+			v.add(pp+".lineSpacingEmu", "native.paragraphSpacing", "a paragraph carries either a percentage or an absolute authored line spacing, never both")
+		}
+		for _, gap := range []struct {
+			name  string
+			value *int64
+		}{{"spaceBeforeEmu", paragraph.SpaceBeforeEmu}, {"spaceAfterEmu", paragraph.SpaceAfterEmu}} {
+			if gap.value != nil && (*gap.value < 1 || *gap.value > 51206400) {
+				v.add(pp+"."+gap.name, "schema.range", "must be a positive bounded EMU paragraph gap")
+			}
+		}
 		if len(paragraph.Runs) > nativeMaxRunsPerParagraph {
 			v.add(pp+".runs", "schema.maxItems", fmt.Sprintf("must contain at most %d runs", nativeMaxRunsPerParagraph))
 		}
@@ -923,6 +956,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, so
 				}
 				authoritativeCells++
 				v.paragraphs(*cell.Paragraphs, cp+".paragraphs")
+				if nativeParagraphsCarrySpacing(*cell.Paragraphs) {
+					v.add(cp+".paragraphs", "native.paragraphSpacingApproximation", "table cell authored paragraph spacing is not supported")
+				}
 				if cell.Align != nil {
 					v.add(cp+".align", "native.tableTextAuthority", "legacy align is not allowed with authoritative cell paragraphs")
 				}

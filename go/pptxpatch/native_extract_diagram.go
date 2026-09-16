@@ -864,7 +864,7 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingText(txBody, style 
 	}
 	paintText := body
 	if extractor.options.AllowInheritedTextPreview {
-		resolved, omissions, previewErr := extractor.inheritedTextPreview(body, style, true, dialect)
+		resolved, omissions, spacing, previewErr := extractor.inheritedTextPreview(body, style, true, dialect)
 		if previewErr != nil {
 			var duplicate nativeDuplicateSingletonError
 			if isNativeDuplicateSingleton(previewErr, &duplicate) {
@@ -872,8 +872,13 @@ func (extractor *nativeExtractor) extractNativeDiagramDrawingText(txBody, style 
 			}
 			return nil, nil, "diagram shape inherited text preview is unavailable: " + previewErr.Error(), false, nil
 		}
-		// The diagram fallback has no per-shape omission disclosure yet, so
-		// validated-but-unmodeled properties keep it fail-closed here.
+		// The diagram fallback has no per-shape disclosure yet, so it cannot
+		// carry the approximate paragraph spacing either: every authored slot
+		// stays an omission and validated-but-unmodeled properties keep this
+		// path fail-closed.
+		for _, source := range spacing {
+			nativeDiscloseParagraphSpacing(source, omissions)
+		}
 		if omitted := omissions.names(); len(omitted) != 0 {
 			return nil, nil, "diagram shape inherited text omits unmodeled properties: " + strings.Join(omitted, ", "), false, nil
 		}

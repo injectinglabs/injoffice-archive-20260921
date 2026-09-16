@@ -50,23 +50,23 @@ func (o *nativeInheritedTextOmissions) names() []string {
 
 // This is a declared preview policy, NOT qualified Office cascade semantics.
 // All nodes are owned projections; the package and mutation anchors stay raw.
-func (e *nativeExtractor) inheritedTextPreview(body, style *nativeXMLNode, shape bool, d nativeExtractDialect) (*nativeXMLNode, *nativeInheritedTextOmissions, error) {
+func (e *nativeExtractor) inheritedTextPreview(body, style *nativeXMLNode, shape bool, d nativeExtractDialect) (*nativeXMLNode, *nativeInheritedTextOmissions, []nativeParagraphSpacingSource, error) {
 	if body == nil {
-		return nil, nil, unsupportedNativeTextContent("missing inherited preview text body")
+		return nil, nil, nil, unsupportedNativeTextContent("missing inherited preview text body")
 	}
 	layers := []*nativeXMLNode{e.presentationTextPreviewStyle}
 	if shape && e.slideDependencies.masterRoot != nil {
 		styles, err := nativeSingleton(e.slideDependencies.masterRoot, d.presentation, "txStyles", false)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if styles != nil {
 			if requireOnlyNativeAttrs(styles) != nil || requireOnlyNativeChildren(styles, xml.Name{Space: d.presentation, Local: "titleStyle"}, xml.Name{Space: d.presentation, Local: "bodyStyle"}, xml.Name{Space: d.presentation, Local: "otherStyle"}) != nil {
-				return nil, nil, unsupportedNativeTextContent("unmodeled master text styles")
+				return nil, nil, nil, unsupportedNativeTextContent("unmodeled master text styles")
 			}
 			other, err := nativeSingleton(styles, d.presentation, "otherStyle", false)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			layers = append(layers, other)
 		}
@@ -74,21 +74,21 @@ func (e *nativeExtractor) inheritedTextPreview(body, style *nativeXMLNode, shape
 	if shape && style != nil {
 		ref, err := nativeSingleton(style, d.drawing, "fontRef", true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if requireOnlyNativeAttrs(ref, xml.Name{Local: "idx"}) != nil {
-			return nil, nil, unsupportedNativeTextContent("invalid inherited shape font reference")
+			return nil, nil, nil, unsupportedNativeTextContent("invalid inherited shape font reference")
 		}
 		idx, _ := exactNativeAttr(ref, "", "idx")
 		token := "+mn-lt"
 		if idx == "major" {
 			token = "+mj-lt"
 		} else if idx != "minor" {
-			return nil, nil, unsupportedNativeTextContent("unsupported inherited shape font reference")
+			return nil, nil, nil, unsupportedNativeTextContent("unsupported inherited shape font reference")
 		}
 		family, err := e.theme.resolveTypeface(token)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		latin := &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: "latin"}, Attrs: []xml.Attr{{Name: xml.Name{Local: "typeface"}, Value: family}}}
 		run := &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: "defRPr"}, Children: []*nativeXMLNode{latin}}
@@ -97,7 +97,7 @@ func (e *nativeExtractor) inheritedTextPreview(body, style *nativeXMLNode, shape
 		if len(ref.Children) != 0 || !onlyNativeXMLSpace(ref.Text) {
 			color, err := exactNativeSolidColor(&nativeXMLNode{Children: ref.Children, Text: ref.Text}, d, e.theme)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			rgb := &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: "srgbClr"}, Attrs: []xml.Attr{{Name: xml.Name{Local: "val"}, Value: color}}}
 			run.Children = append(run.Children, &nativeXMLNode{Name: xml.Name{Space: d.drawing, Local: "solidFill"}, Children: []*nativeXMLNode{rgb}})
@@ -112,21 +112,22 @@ func (e *nativeExtractor) inheritedTextPreview(body, style *nativeXMLNode, shape
 // loses) followed by the body's own list style and local properties. Layers
 // may be nil. Validated-but-unmodeled properties are collected as omissions
 // for disclosure; unknown or paint-active unsupported source still refuses.
-func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers []*nativeXMLNode, d nativeExtractDialect) (*nativeXMLNode, *nativeInheritedTextOmissions, error) {
+func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers []*nativeXMLNode, d nativeExtractDialect) (*nativeXMLNode, *nativeInheritedTextOmissions, []nativeParagraphSpacingSource, error) {
 	if body == nil {
-		return nil, nil, unsupportedNativeTextContent("missing inherited preview text body")
+		return nil, nil, nil, unsupportedNativeTextContent("missing inherited preview text body")
 	}
 	omit := &nativeInheritedTextOmissions{}
+	spacing := []nativeParagraphSpacingSource{}
 	for _, p := range body.Children {
 		for _, r := range p.Children {
 			if r.Name == (xml.Name{Space: d.drawing, Local: "r"}) {
 				t, err := nativeSingleton(r, d.drawing, "t", true)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 				for _, cp := range t.Text {
 					if cp < 32 || cp > 126 {
-						return nil, nil, unsupportedNativeTextContent("inherited preview requires graphic ASCII Latin text")
+						return nil, nil, nil, unsupportedNativeTextContent("inherited preview requires graphic ASCII Latin text")
 					}
 				}
 			}
@@ -134,7 +135,7 @@ func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers
 	}
 	local, err := nativeSingleton(body, d.drawing, "lstStyle", true)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	layers = append(append([]*nativeXMLNode(nil), layers...), local)
 	styles := make([]map[string]*nativeXMLNode, 0, len(layers))
@@ -142,19 +143,19 @@ func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers
 		levels := map[string]*nativeXMLNode{}
 		if layer != nil {
 			if requireOnlyNativeAttrs(layer) != nil || !onlyNativeXMLSpace(layer.Text) {
-				return nil, nil, unsupportedNativeTextContent("unmodeled inherited text style container")
+				return nil, nil, nil, unsupportedNativeTextContent("unmodeled inherited text style container")
 			}
 			for _, child := range layer.Children {
 				n := child.Name.Local
 				if child.Name.Space != d.drawing || (n != "defPPr" && (len(n) != 7 || n[:3] != "lvl" || n[3] < '1' || n[3] > '9' || n[4:] != "pPr")) {
-					return nil, nil, unsupportedNativeTextContent("unmodeled inherited style level")
+					return nil, nil, nil, unsupportedNativeTextContent("unmodeled inherited style level")
 				}
 				if levels[n] != nil {
-					return nil, nil, fmt.Errorf("duplicate inherited preview level")
+					return nil, nil, nil, fmt.Errorf("duplicate inherited preview level")
 				}
 				clean, err := sanitizeNativeInheritedPreviewProperties(child, d, true, e.theme, omit)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 				levels[n] = clean
 			}
@@ -173,16 +174,17 @@ func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers
 			result.Children = append(result.Children, p)
 			continue
 		}
-		projected, err := e.inheritedPreviewParagraph(p, styles, d, omit, &breaks)
+		projected, projectedSpacing, err := e.inheritedPreviewParagraph(p, styles, d, omit, &breaks)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		result.Children = append(result.Children, projected...)
+		spacing = append(spacing, projectedSpacing...)
 	}
 	// Resolve validated source layers before applying documented false b/i defaults.
 	resolved, err := resolveNativeLocalTextStyles(&result, d, e.theme)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for _, p := range resolved.Children {
 		for _, r := range p.Children {
@@ -191,7 +193,7 @@ func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers
 			}
 			props, err := nativeSingleton(r, d.drawing, "rPr", true)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			for _, name := range []string{"b", "i"} {
 				if _, ok := exactNativeAttr(props, "", name); !ok {
@@ -200,31 +202,31 @@ func (e *nativeExtractor) inheritedTextPreviewLayers(body *nativeXMLNode, layers
 			}
 		}
 	}
-	return resolved, omit, nil
+	return resolved, omit, spacing, nil
 }
 
 // inheritedPreviewParagraph projects one source paragraph. An authored a:br
 // continues in a bullet-free paragraph at the same left margin, and a paragraph
 // without runs becomes one blank space run carrying its end-mark metrics so
 // the line still occupies height. Both projections are disclosed omissions.
-func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []map[string]*nativeXMLNode, d nativeExtractDialect, omit *nativeInheritedTextOmissions, breaks *int) ([]*nativeXMLNode, error) {
+func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []map[string]*nativeXMLNode, d nativeExtractDialect, omit *nativeInheritedTextOmissions, breaks *int) ([]*nativeXMLNode, []nativeParagraphSpacingSource, error) {
 	if requireOnlyNativeAttrs(p) != nil || !onlyNativeXMLSpace(p.Text) {
-		return nil, unsupportedNativeTextContent("unmodeled inherited paragraph markup")
+		return nil, nil, unsupportedNativeTextContent("unmodeled inherited paragraph markup")
 	}
 	end, err := nativeSingleton(p, d.drawing, "endParaRPr", false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ppr, err := nativeSingleton(p, d.drawing, "pPr", false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	level := int64(0)
 	if ppr != nil {
 		if v, ok := exactNativeAttr(ppr, "", "lvl"); ok {
 			level, err = parseCanonicalNativeInt(v, 0, 8)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
@@ -235,7 +237,7 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 	}
 	clean, err := sanitizeNativeInheritedPreviewProperties(ppr, d, true, e.theme, omit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	merged = mergeNativeStyleNodes(merged, clean, d)
 	merged = nativeWithoutBulletTextMarkers(merged, d)
@@ -257,11 +259,20 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 		}
 		merged.Children = kept
 	}
+	// The merged a:pPr now holds the cascaded a:lnSpc/a:spcBef/a:spcAft. They
+	// leave the projected paint XML here so the exact paragraph extractor still
+	// sees the node shape it already accepts; the values travel beside it.
+	spacingSource, err := nativeReadParagraphSpacing(merged, d)
+	if err != nil {
+		return nil, nil, err
+	}
+	merged = nativeWithoutParagraphSpacing(merged, d)
+	merged.Name = xml.Name{Space: d.drawing, Local: "pPr"}
 	var endProperties *nativeXMLNode
 	if end != nil {
 		endProperties, err = sanitizeNativeInheritedPreviewEnd(end, d, e.theme, omit)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	newParagraph := func(properties *nativeXMLNode) *nativeXMLNode {
@@ -279,18 +290,18 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 		switch r.Name {
 		case xml.Name{Space: d.drawing, Local: "br"}:
 			if requireOnlyNativeAttrs(r) != nil || requireOnlyNativeChildren(r, xml.Name{Space: d.drawing, Local: "rPr"}) != nil || !onlyNativeXMLSpace(r.Text) {
-				return nil, unsupportedNativeTextContent("unmodeled inherited line break markup")
+				return nil, nil, unsupportedNativeTextContent("unmodeled inherited line break markup")
 			}
 			breakProperties, err := nativeSingleton(r, d.drawing, "rPr", false)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if _, err := sanitizeNativeInheritedPreviewProperties(breakProperties, d, false, e.theme, omit); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			*breaks++
 			if *breaks > nativeMaxInheritedPreviewBreaks {
-				return nil, unsupportedNativeTextContent("inherited preview line-break budget exceeded")
+				return nil, nil, unsupportedNativeTextContent("inherited preview line-break budget exceeded")
 			}
 			if runs == 0 {
 				current.Children = append(current.Children, nativeInheritedBlankRun(endProperties, d))
@@ -302,11 +313,11 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 		case xml.Name{Space: d.drawing, Local: "r"}:
 			rpr, err := nativeSingleton(r, d.drawing, "rPr", false)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			clean, err := sanitizeNativeInheritedPreviewProperties(rpr, d, false, e.theme, omit)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if clean == nil {
 				clean = &nativeXMLNode{}
@@ -330,7 +341,25 @@ func (e *nativeExtractor) inheritedPreviewParagraph(p *nativeXMLNode, styles []m
 		omit.add("empty-paragraph→blank-line")
 		current.Children = append(current.Children, nativeInheritedBlankRun(endProperties, d))
 	}
-	return result, nil
+	// One source paragraph may project as several: space before belongs to the
+	// first fragment and space after to the last, so a hard break never repeats
+	// either gap inside what PowerPoint authored as one paragraph.
+	spacing := make([]nativeParagraphSpacingSource, len(result))
+	for index := range spacing {
+		spacing[index] = nativeParagraphSpacingSource{
+			present:                spacingSource.present,
+			lineSpacingPercent1000: spacingSource.lineSpacingPercent1000,
+			lineSpacingHundredthPt: spacingSource.lineSpacingHundredthPt,
+		}
+	}
+	if len(spacing) > 0 {
+		spacing[0].spaceBeforePercent1000 = spacingSource.spaceBeforePercent1000
+		spacing[0].spaceBeforeHundredthPt = spacingSource.spaceBeforeHundredthPt
+		last := len(spacing) - 1
+		spacing[last].spaceAfterPercent1000 = spacingSource.spaceAfterPercent1000
+		spacing[last].spaceAfterHundredthPt = spacingSource.spaceAfterHundredthPt
+	}
+	return result, spacing, nil
 }
 
 // nativeInheritedContinuationProperties derives the paragraph properties for
@@ -561,10 +590,13 @@ func sanitizeNativeInheritedPreviewProperties(node *nativeXMLNode, d nativeExtra
 				out.Children = append(out.Children, clean)
 				continue
 			case "lnSpc", "spcBef", "spcAft":
+				// Kept in the owned copy so the cascade merge resolves the
+				// authored spacing; nativeWithoutParagraphSpacing removes it
+				// again once the projected paragraph has recorded the values.
 				if err := nativeInheritedSpacingValue(child, d); err != nil {
 					return nil, err
 				}
-				omit.add("a:" + child.Name.Local)
+				out.Children = append(out.Children, child)
 				continue
 			case "buClr":
 				if _, err := exactNativeSolidColor(&nativeXMLNode{Children: child.Children, Text: child.Text, Attrs: child.Attrs}, d, theme); err != nil {
@@ -631,7 +663,7 @@ func sanitizeNativeInheritedPreviewProperties(node *nativeXMLNode, d nativeExtra
 		out.Children = append(out.Children, child)
 	}
 	// Exact existing validators still enforce all active properties and duplicates.
-	if err := validateNativeTextStyleProperties(nativeWithoutBulletTextMarkers(&out, d), d, paragraph, theme); err != nil {
+	if err := validateNativeTextStyleProperties(nativeWithoutParagraphSpacing(nativeWithoutBulletTextMarkers(&out, d), d), d, paragraph, theme); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -678,6 +710,6 @@ func nativeMarkInheritedTextOmissions(element *NativeElement, omit *nativeInheri
 	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 		Severity: NativeDiagnosticSeverityWarning,
 		Code:     nativeInheritedTextOmissionsCode,
-		Message:  "Read-only inherited text preview validated these source properties but omits them from native v1 layout: " + strings.Join(names, ", ") + ". Paragraph spacing, bullet color/size, character spacing, tab stops, terminal run metrics, hard-break continuation and blank-line projections are approximations, not PowerPoint layout.",
+		Message:  "Read-only inherited text preview validated these source properties but omits them from native v1 layout: " + strings.Join(names, ", ") + ". Bullet color/size, character spacing, tab stops, terminal run metrics, hard-break continuation and blank-line projections are approximations, not PowerPoint layout.",
 	})
 }
