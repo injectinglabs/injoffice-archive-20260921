@@ -11,7 +11,7 @@ import {
   compileNativeSheetPrintAreaSetPreviewV1,
   type NativeSheetPrintAreaSetPreviewV1,
 } from './nativeSheetPrintAreaSetPreviewV1.js'
-import type {NativeSheetPreviewRegionV1} from './nativeSheetPagePreviewV1.js'
+import type {NativeSheetHostPagePolicyV1,NativeSheetPreviewRegionV1} from './nativeSheetPagePreviewV1.js'
 import type {NativeSheetCellPaintPlanV2} from './nativeSheetCellPaintV2.js'
 
 export const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL='injoffice.xlsx.print-page-preview' as const
@@ -20,6 +20,17 @@ export const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI=96 as const
 const GRID_UNCHANGED='Grid preview is unchanged.'
 const NO_INVENT='Print-page preview does not invent paper, margins, scale, printer defaults or a used-range fallback.'
 const APPROXIMATION='Read-only print-page preview at 96 CSS pixels per inch from source-qualified page rectangles. This is not Excel printer calibration, LibreOffice PDF raster parity, or fit-to-page qualification.'
+/**
+ * ECMA-376 §18.18.50 gives an absent pageSetup the application default rather
+ * than no page at all, and Excel 16.112.4 paginates every such worksheet: all
+ * 33 in the local hard-v2 corpus that declare margins and no pageSetup export
+ * at US Letter portrait. This is that default, named as a host constant so it
+ * stays a declared choice rather than a literal inside the layout, and so an
+ * A4-region host can retarget it. Authored margins are always preferred; only
+ * paper, orientation and scale come from here.
+ */
+const HOST_DEFAULT_PAGE={paper:'Letter',orientation:'portrait',scale:100} as const
+const HOST_DEFAULT_DISCLOSURE='Paper, orientation and scale are a host default, not authored workbook settings: this worksheet declares page margins and no pageSetup element. Authored margins are used unchanged.'
 
 export interface NativeSheetPrintPageCssRectV1 {
  readonly x_css_px:number;readonly y_css_px:number;readonly width_css_px:number;readonly height_css_px:number
@@ -73,7 +84,8 @@ type NativeSheetPrintPagePreviewBaseV1={
  readonly sheet_id:string
  readonly source_revision:string
  readonly source_package_sha256:string
- readonly settings_origin:'source'
+ /** 'host-default' when the worksheet authored margins but no pageSetup. */
+ readonly settings_origin:'source'|'host-default'
  readonly warnings:readonly string[]
 }
 export type NativeSheetPrintPagePreviewV1=NativeSheetPrintPagePreviewBaseV1&(
@@ -140,18 +152,33 @@ function refuse(geometry:NativeSheetGeometryV2,reason:string,warnings:readonly s
   warnings:Object.freeze([...warnings,APPROXIMATION,NO_INVENT,GRID_UNCHANGED]),
  })
 }
-function pageSettingsReason(source:NativeWorkbookObjectsV1,sheetId:string,part:string|undefined):string|undefined{
- if(source.page_settings===undefined)return `Source page settings are missing. ${NO_INVENT} ${GRID_UNCHANGED}`
+/** Either a refusal, or the host policy to paginate with (absent when the source authored its own). */
+type PageSettingsResolutionV1={readonly reason:string}|{readonly host_policy:NativeSheetHostPagePolicyV1|undefined}
+function resolvePageSettings(source:NativeWorkbookObjectsV1,sheetId:string,part:string|undefined):PageSettingsResolutionV1{
+ if(source.page_settings===undefined)return {reason:`Source page settings are missing. ${NO_INVENT} ${GRID_UNCHANGED}`}
  const candidates=source.page_settings.filter(s=>s.sheet_id===sheetId)
- if(candidates.length!==1)return `Source page settings do not join the source worksheet. ${NO_INVENT} ${GRID_UNCHANGED}`
+ if(candidates.length!==1)return {reason:`Source page settings do not join the source worksheet. ${NO_INVENT} ${GRID_UNCHANGED}`}
  const page=candidates[0]!
- if(!part||page.sheet_part!==part)return `Source page settings do not join the source worksheet part. ${NO_INVENT} ${GRID_UNCHANGED}`
+ if(!part||page.sheet_part!==part)return {reason:`Source page settings do not join the source worksheet part. ${NO_INVENT} ${GRID_UNCHANGED}`}
+ // No pageSetup element is authored, so no paper is authored to contradict. Use
+ // the host default for paper, orientation and scale, and the worksheet's own
+ // margins unchanged. A pageSetup that exists but is ambiguous or unsupported is
+ // a different fact and still refuses: that would be overriding an authored value.
+ if(page.status==='margins-only'){
+  if(!page.margins)return {reason:`Source page margins are missing. ${NO_INVENT} ${GRID_UNCHANGED}`}
+  return {host_policy:{
+   kind:'explicit-host-page-policy-v1',
+   paper:HOST_DEFAULT_PAGE.paper,orientation:HOST_DEFAULT_PAGE.orientation,scale:HOST_DEFAULT_PAGE.scale,
+   left_inches:page.margins.left_inches,right_inches:page.margins.right_inches,
+   top_inches:page.margins.top_inches,bottom_inches:page.margins.bottom_inches,
+  }}
+ }
  if(page.status!=='available'||!page.settings){
   const detail=page.warnings[0]??'Source page settings are printer-dependent or unsupported'
-  return `${detail} ${NO_INVENT} ${GRID_UNCHANGED}`
+  return {reason:`${detail} ${NO_INVENT} ${GRID_UNCHANGED}`}
  }
- if(page.settings.fit_to_page)return `Source page settings include fit-to-page. Print-page preview does not invent a fit scale and is not Excel fit-to-page qualification. ${GRID_UNCHANGED}`
- return undefined
+ if(page.settings.fit_to_page)return {reason:`Source page settings include fit-to-page. Print-page preview does not invent a fit scale and is not Excel fit-to-page qualification. ${GRID_UNCHANGED}`}
+ return {host_policy:undefined}
 }
 function printAreaReason(source:NativeWorkbookObjectsV1,sheetId:string,part:string|undefined):string|undefined{
  const entry=source.print_area_sets!==undefined?source.print_area_sets.find(s=>s.sheet_id===sheetId):source.print_areas?.find(s=>s.sheet_id===sheetId)
@@ -202,8 +229,9 @@ export function compileNativeSheetPrintPagePreviewV1(
  const parsed=readOptions(options,owned.length)
  const source=decodeNativeWorkbookObjectsV1(objects,first.source_package_sha256)
  const part=compiledNativeSheetGeometrySourcePart(first)
- const settingsRefusal=pageSettingsReason(source,first.sheet_id,part)
- if(settingsRefusal)return refuse(first,settingsRefusal,source.page_settings?.find(s=>s.sheet_id===first.sheet_id)?.warnings??[])
+ const settings=resolvePageSettings(source,first.sheet_id,part)
+ if('reason'in settings)return refuse(first,settings.reason,source.page_settings?.find(s=>s.sheet_id===first.sheet_id)?.warnings??[])
+ const hostPolicy=settings.host_policy
  const areaRefusal=printAreaReason(source,first.sheet_id,part)
  if(areaRefusal)return refuse(first,areaRefusal)
  if(parsed.paint_plans){
@@ -216,7 +244,7 @@ export function compileNativeSheetPrintPagePreviewV1(
  }
  let source_plan:NativeSheetPrintAreaSetPreviewV1
  try{
-  source_plan=compileNativeSheetPrintAreaSetPreviewV1(owned,source,undefined,parsed.repeat?{repeat_print_titles:true}:undefined)
+  source_plan=compileNativeSheetPrintAreaSetPreviewV1(owned,source,hostPolicy,parsed.repeat?{repeat_print_titles:true}:undefined)
  }catch(error){
   if(error instanceof RangeError)return refuse(first,`${error.message} ${GRID_UNCHANGED}`)
   if(error instanceof TypeError){
@@ -234,10 +262,12 @@ export function compileNativeSheetPrintPagePreviewV1(
  return Object.freeze({
   protocol:NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL,version:1,fidelity:'approximate' as const,read_only:true as const,
   dpi:NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI,document_id:first.document_id,sheet_id:first.sheet_id,
-  source_revision:first.source_revision,source_package_sha256:first.source_package_sha256,settings_origin:'source' as const,
+  source_revision:first.source_revision,source_package_sha256:first.source_package_sha256,
+  settings_origin:hostPolicy?'host-default' as const:'source' as const,
   status:'available' as const,pages:Object.freeze(pages),source_plan,
   warnings:Object.freeze([
    ...new Set(source_plan.areas.flatMap(area=>area.plan.warnings)),
+   ...(hostPolicy?[HOST_DEFAULT_DISCLOSURE]:[]),
    APPROXIMATION,
    'Hosts map viewport-local paint with x * scale + translate, clip to each page source_clip, and raster isolated pages at 96 CSS pixels per inch. Fractional A4 CSS sizes are retained; paper size is not rounded.',
   ]),

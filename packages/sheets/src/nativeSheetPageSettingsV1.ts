@@ -9,9 +9,16 @@ export interface NativeSheetPageConfigV1 {
  /** Read-only shrink-to-fit target; zero leaves that dimension unconstrained. */
  fit_to_page?:{width:number;height:number};
 }
+/** Authored margins for a worksheet that declares no pageSetup at all. */
+export interface NativeSheetPageMarginsV1 {
+ left_inches:number;right_inches:number;top_inches:number;bottom_inches:number;
+}
 export interface NativeSheetPageSettingsV1 {
- sheet_id:string;sheet_part:string;status:'available'|'unavailable';
- settings?:NativeSheetPageConfigV1;warnings:string[];
+ sheet_id:string;sheet_part:string;status:'available'|'margins-only'|'unavailable';
+ settings?:NativeSheetPageConfigV1;
+ /** Present only for 'margins-only': paper, orientation and scale are unauthored. */
+ margins?:NativeSheetPageMarginsV1;
+ warnings:string[];
 }
 /** A standalone bounded copy; package identity is joined by its enclosing object response. */
 export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSettingsV1[]{
@@ -27,8 +34,8 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
  const ids=new Set<string>(),parts=new Set<string>()
  return value.map(v=>{
   const status=(v as Record<string,unknown>)?.status
-  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[])])
-  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='unavailable'))return fail()
+  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[]),...(status==='margins-only'?['margins']:[])])
+  if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='margins-only'&&status!=='unavailable'))return fail()
   ids.add(o.sheet_id);parts.add(o.sheet_part)
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096))return fail()
   let settings:NativeSheetPageConfigV1|undefined
@@ -45,6 +52,12 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
    for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof s[key]!=='number'||!Number.isFinite(s[key])||Number(s[key])<0||Number(s[key])>20)return fail()
    settings=s as unknown as NativeSheetPageConfigV1
   }
-  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{})}
+  let margins:NativeSheetPageMarginsV1|undefined
+  if(status==='margins-only'){
+   const m=exact(o.margins,['left_inches','right_inches','top_inches','bottom_inches'])
+   for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof m[key]!=='number'||!Number.isFinite(m[key])||Number(m[key])<0||Number(m[key])>20)return fail()
+   margins=m as unknown as NativeSheetPageMarginsV1
+  }
+  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{}),...(margins?{margins}:{})}
  })
 }
