@@ -195,6 +195,7 @@ The capabilities enumerated by the scoped v3 completion matrix are complete, but
 ## Documentation
 
 - [Native Office completion matrix](docs/NATIVE-OFFICE-COMPLETION.md)
+- [Save write-back fidelity](docs/SAVE-FIDELITY.md)
 - [Native Office production E2E contract kit](docs/NATIVE-OFFICE-PRODUCTION-E2E.md)
 - [Collaboration protocol](docs/COLLABORATION-PROTOCOL.md)
 - [Agent change sets](docs/AGENT-CHANGESETS.md)
