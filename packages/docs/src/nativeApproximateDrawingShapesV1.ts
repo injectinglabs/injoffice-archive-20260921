@@ -34,7 +34,7 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
@@ -310,16 +310,30 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
     placed.push({ shape, page: context.page, line: context.line, x: position.x, y: position.y, width, height, behind: anchor.stacking?.behind_doc === true, order: anchor.stacking?.relative_height ?? 0 })
   }
   placed.sort((left, right) => left.order - right.order)
+  const shapeFillsByID = new Map<string, NativeDocxPagePaintCommandV1[]>()
   for (const entry of placed) {
     const commands = shapeCommands(entry)
     if (commands.length === 0 && !entry.shape.textbox) { omit(entry.shape, 'outside-page'); continue }
-    const bucket = entry.behind ? behindByPage : frontByPage
-    bucket.set(entry.page.id, [...(bucket.get(entry.page.id) ?? []), ...commands])
+    shapeFillsByID.set(entry.shape.id, commands)
     result.painted.push(entry.shape.id)
   }
   const textboxResult = await paintTextboxes(placed, paint.pages, runtime, extra, result)
   result.substitutions = textboxResult.substitutions
-  for (const page of paint.pages) rebuildCommands(page, behindByPage.get(page.id) ?? [], frontByPage.get(page.id) ?? [], extra, removedIDs)
+  // A text box's glyphs replay with the body lines they are anchored to, so a
+  // shape layered in front of the body would otherwise paint its own opaque
+  // fill on top of its own text. Anchor such a shape's fill and outline to the
+  // first glyph command it owns instead: fill and outline stay immediately
+  // under that shape's text. Shapes with no painted text keep their layer.
+  const underlay = new Map<string, NativeDocxPagePaintCommandV1[]>()
+  for (const entry of placed) {
+    const commands = shapeFillsByID.get(entry.shape.id)
+    if (!commands || commands.length === 0) continue
+    const anchorID = textboxResult.firstGlyphByShape.get(entry.shape.id)
+    if (anchorID !== undefined) { underlay.set(anchorID, commands); continue }
+    const bucket = entry.behind ? behindByPage : frontByPage
+    bucket.set(entry.page.id, [...(bucket.get(entry.page.id) ?? []), ...commands])
+  }
+  for (const page of paint.pages) rebuildCommands(page, behindByPage.get(page.id) ?? [], frontByPage.get(page.id) ?? [], extra, removedIDs, underlay)
   result.reasons = buildReasons(shapes, result, textboxResult)
   return result
 }
@@ -407,8 +421,12 @@ function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
  * line-owned commands in line order, table borders, front shapes, front floats
  * (the wire requires floats to bracket everything else, so shapes cannot be
  * interleaved with floats by relativeHeight; the warning discloses this).
+ * `underlay` splices a shape's own fill and outline into the line-owned run
+ * immediately before the first glyph command that shape owns, so a text box
+ * never disappears under its own fill. Those are cell/border primitives, which
+ * the wire excludes from the glyph replay order, so the splice is order-safe.
  * Every original command keeps its category; only shape paint is added. */
-function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePaintCommandV1[], front: NativeDocxPagePaintCommandV1[], extra: Map<string, NativeDocxPagePaintCommandV1>, removed: Set<string>): void {
+function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePaintCommandV1[], front: NativeDocxPagePaintCommandV1[], extra: Map<string, NativeDocxPagePaintCommandV1>, removed: Set<string>, underlay: Map<string, NativeDocxPagePaintCommandV1[]> = new Map()): void {
   const byID = new Map<string, NativeDocxPagePaintCommandV1>()
   const behindFloats: NativeDocxPagePaintCommandV1[] = [], frontFloats: NativeDocxPagePaintCommandV1[] = [], fills: NativeDocxPagePaintCommandV1[] = [], borders: NativeDocxPagePaintCommandV1[] = []
   for (const command of page.commands) {
@@ -420,18 +438,18 @@ function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePain
   }
   for (const [id, command] of extra) byID.set(id, command)
   const ordinary: NativeDocxPagePaintCommandV1[] = []
-  for (const line of page.lines) for (const id of line.command_ids) { const command = byID.get(id); if (command) ordinary.push(command) }
+  for (const line of page.lines) for (const id of line.command_ids) { const command = byID.get(id); if (!command) continue; const under = underlay.get(id); if (under) ordinary.push(...under); ordinary.push(command) }
   page.commands = [...behindFloats, ...behind, ...fills, ...ordinary, ...borders, ...front, ...frontFloats]
 }
 
-interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]; textboxes: number; droppedLines: number; droppedGlyphs: number; omittedContent: number; failures: string[]; byteBudget: number }
+interface TextboxPaintOutcome { substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]; textboxes: number; droppedLines: number; droppedGlyphs: number; omittedContent: number; failures: string[]; byteBudget: number; firstGlyphByShape: Map<string, string> }
 
 /** Shape text box content with the same shaping core as body text and place
  * the resulting lines into the linked chain of boxes in source seq order.
  * Glyph paint attaches to the anchor line so the wire decoder keeps its
  * line ownership invariants. */
 async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxPaintPageV1[], runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, result: NativeDocxApproximateShapePaintResultV1): Promise<TextboxPaintOutcome> {
-  const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, droppedGlyphs: 0, omittedContent: 0, failures: [], byteBudget: 0 }
+  const outcome: TextboxPaintOutcome = { substitutions: [], textboxes: 0, droppedLines: 0, droppedGlyphs: 0, omittedContent: 0, failures: [], byteBudget: 0, firstGlyphByShape: new Map() }
   const chains = new Map<string, PlacedShape[]>()
   for (const entry of placed) {
     const box = entry.shape.textbox
@@ -620,6 +638,7 @@ async function placeTextboxLines(shaped: ShapedTextbox, boxes: PlacedShape[], ch
       if (extra.has(command.id) || page.commands.some(existing => existing.id === command.id)) continue
       extra.set(command.id, command)
       paintLine.command_ids.push(command.id)
+      if (!outcome.firstGlyphByShape.has(slot.box.shape.id)) outcome.firstGlyphByShape.set(slot.box.shape.id, command.id)
     }
   }
   return glyphIndexBudget
