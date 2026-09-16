@@ -474,6 +474,12 @@ func nativeWriterSingletonRelationship(pkg *nativePackage, owner, want string, d
 		if match != nil {
 			return nil, fmt.Errorf("multiple %q relationships", want)
 		}
+		// Writing is fail-closed where reading is tolerant: a dangling entry
+		// holds an id the package cannot account for, so a note write into it
+		// refuses and says so rather than silently reusing the id.
+		if rel.Dangling {
+			return nil, fmt.Errorf("relationship %q targets part %q, which the package does not store", rel.ID, rel.Target)
+		}
 		if rel.External || rel.PartName == "" {
 			return nil, fmt.Errorf("relationship %q must be internal", rel.ID)
 		}

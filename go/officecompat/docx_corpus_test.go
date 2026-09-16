@@ -99,7 +99,11 @@ func TestDOCXCorpusSpecsContainNoLegacyReconstructionAuthority(t *testing.T) {
 	}
 }
 
-func TestDOCXCorpusRefusesDanglingRelatedStoryRelationship(t *testing.T) {
+// A related-story relationship whose part the package does not store relates
+// nothing. Word repairs the package by dropping the entry and LibreOffice reads
+// the story as absent; the document's body, sections and remaining stories are
+// unaffected, so extraction reports that state rather than refusing the file.
+func TestDOCXCorpusReadsDanglingRelatedStoryRelationshipAsAbsent(t *testing.T) {
 	manifestBytes := readDOCXCorpusFile(t, "manifest.json")
 	var manifest corpus.Manifest
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
@@ -124,9 +128,26 @@ func TestDOCXCorpusRefusesDanglingRelatedStoryRelationship(t *testing.T) {
 		return bytes.Replace(data, []byte(target), []byte(`Target="stories/missing-header.xml"`), 1)
 	})
 	doc, err := docxpatch.ExtractNativeDocumentV1(broken)
-	if err == nil || doc != nil || !strings.Contains(err.Error(), `relationship "rHeader"`) || !strings.Contains(err.Error(), `targets missing part "word/stories/missing-header.xml"`) {
-		t.Fatalf("dangling related-story relationship did not fail closed: doc=%#v err=%v", doc, err)
+	if err != nil {
+		t.Fatalf("dangling related-story relationship must not refuse the package: %v", err)
 	}
+	if len(doc.Headers) != 0 {
+		t.Fatalf("the unstored header story must be absent: %d headers", len(doc.Headers))
+	}
+	if len(doc.Footers) != 1 || len(doc.Body.Blocks) == 0 {
+		t.Fatalf("the rest of the document must survive: footers=%d blocks=%d", len(doc.Footers), len(doc.Body.Blocks))
+	}
+	for _, section := range doc.Sections {
+		if len(section.HeaderRefs) != 0 {
+			t.Fatalf("a section must not reference an absent header story: %+v", section.HeaderRefs)
+		}
+	}
+	for _, part := range doc.PassthroughParts {
+		if part.PartName == "word/stories/header.xml" {
+			return
+		}
+	}
+	t.Fatal("the stored header part must remain in the passthrough inventory")
 }
 
 func assertAcceptedDOCXCorpusFixture(t *testing.T, fixture corpus.FixtureRecord, packageBytes []byte, expectation corpus.Expectation, doc *docxpatch.NativeDocumentV1, extractErr error) {

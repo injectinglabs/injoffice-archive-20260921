@@ -276,6 +276,10 @@ func nativeDOCXSingletonFontTable(pkg *nativePackage, mainPart, relBase string) 
 		if rel.Type != relBase+"fontTable" {
 			continue
 		}
+		// A fontTable relationship whose part is absent binds no font table.
+		if rel.Dangling {
+			continue
+		}
 		if rel.External || rel.PartName == "" {
 			return nil, fmt.Errorf("docxpatch: native font inventory: fontTable relationship %q must be internal", rel.ID)
 		}
