@@ -1066,9 +1066,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       selectedParagraphIDs.set(coveragePrefix + paragraph.paragraph_id, { paragraphID: paragraph.paragraph_id, prefix: coveragePrefix, ordinal: page.ordinal })
       if (paragraph.alignment === 'distribute') return { ok: true, value: refusal(provenance, 'unsupported-source', paragraph.paragraph_id, 'Distributed character expansion is outside page-paint v1') }
       const naturalHeight = line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints
-      // Current-layout approximation deliberately anchors natural ascent at
-      // the top of an expanded line box. It does not claim Word leading
-      // distribution or permit clipping/compressed-line semantics.
+      // Current-layout approximation accepts an expanded line box (see the
+      // seating rule below); it does not claim Word leading distribution or
+      // permit clipping/compressed-line semantics.
       if (line.line_height_millipoints !== naturalHeight && !(approximateLegacySettings && line.line_height_millipoints >= naturalHeight)) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline; only explicit current-layout approximation supports expanded line boxes') }
       // A w:lineRule of "exact"/"atLeast" fixes the line box height: Word puts
       // the surplus leading above the text and seats the descent on the box
