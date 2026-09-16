@@ -131,12 +131,18 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 	}
 	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
 	if fit.normAutofit {
+		reduction := ", and the authored lnSpcReduction=" + nativeFormatPercent(fit.lnSpcReduction) + " leaves line pitch at the measured natural line height"
+		if fit.lnSpcReduction > 0 {
+			reduction = ", and reduces the line pitch by the authored lnSpcReduction=" + nativeFormatPercent(fit.lnSpcReduction)
+			if element.TextBody != nil {
+				element.TextBody.LineSpacingReductionPercent1000 = int64Pointer(fit.lnSpcReduction)
+			}
+		}
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning,
 			Code:     nativeAuthoredAutoFitCode,
 			Message: "Read-only approximate autofit preview applies the authored a:normAutofit fontScale=" + nativeFormatPercent(fit.fontScale) +
-				" to resolved run sizes without resizing the frame; the authored lnSpcReduction=" + nativeFormatPercent(fit.lnSpcReduction) +
-				" is validated but paragraph line spacing is outside the native v1 layout contract, so line pitch, wrapping and overflow may differ from PowerPoint.",
+				" to resolved run sizes" + reduction + ", without resizing the frame; wrapping and overflow may still differ from PowerPoint.",
 		})
 	}
 	if fit.columns > 1 || fit.columnSpacingEMU > 0 {

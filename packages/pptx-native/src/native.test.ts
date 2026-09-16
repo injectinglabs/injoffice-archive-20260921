@@ -42,6 +42,39 @@ describe('native PPTX contract', () => {
       element.compatibility.status='preserveOnly';element.compatibility.diagnostics[0]!.severity='info';expect(validateNativePptx(deck).ok).toBe(false)
     }
   })
+  it('carries the authored line-spacing reduction only with its read-only approximation evidence', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text missing')
+    element.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'square',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow',lineSpacingReductionPercent1000:20_000}
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autofit-authored-scale-approximate',message:'Declared read-only approximation'}]}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    // The column disclosure alone never authorizes a line-pitch reduction.
+    element.compatibility.diagnostics[0]!.code='pptx.text-columns-single-column-approximate'
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.diagnostics[0]!.code='pptx.autofit-authored-scale-approximate'
+    element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.status='preserveOnly'
+    for(const value of [1,50_000,99_999]){element.textBody.lineSpacingReductionPercent1000=value;expect(validateNativePptx(deck).ok).toBe(true)}
+    for(const value of [0,-1,100_000,20_000.5]){element.textBody.lineSpacingReductionPercent1000=value;expect(validateNativePptx(deck).ok).toBe(false)}
+    delete element.textBody.lineSpacingReductionPercent1000
+    expect(validateNativePptx(deck).ok).toBe(true)
+  })
+  it('refuses an authored line-spacing reduction on a table cell text body', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='table')!
+    if(element.kind!=='table')throw new Error('table missing')
+    for(const cell of element.table.rows.flat()){
+      delete cell.align;delete cell.fill;delete cell.border
+      cell.paragraphs=[{align:'left',level:0,bullet:false,runs:[{text:cell.text!,fontFamily:'Aptos',fontSizeHundredthPt:1_200}]}]
+      cell.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'square',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow'}
+    }
+    const cell=element.table.rows[0]![0]!
+    expect(validateNativePptx(deck).ok).toBe(true)
+    cell.textBody!.lineSpacingReductionPercent1000=20_000
+    expect(validateNativePptx(deck).ok).toBe(false)
+  })
   it('accepts an inherited placeholder frame painted as a read-only rect shape', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='shape')!

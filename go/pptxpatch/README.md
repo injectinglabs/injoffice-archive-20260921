@@ -61,10 +61,13 @@ refusals.
 The same option admits `a:normAutofit` as a read-only approximation of the
 values PowerPoint itself authored: canonical `fontScale` (1%–100%, default 100%)
 scales every resolved run size, rounded half up to whole hundredths of a point,
-and canonical `lnSpcReduction` (0%–99%, default 0%) is validated but not applied
-because paragraph line spacing is outside the native v1 layout contract. The
+and canonical `lnSpcReduction` (0%–99%, default 0%) travels in the contract as
+`textBody.lineSpacingReductionPercent1000` (thousandths of a percent, omitted
+when zero) for the approximate renderer to reduce its line pitch by. The
 frame is never resized, `textBody.autoFit` stays `none`, the element becomes
 preserve-only, and `pptx.autofit-authored-scale-approximate` names both values.
+Validation keeps the reduction bound to that disclosure: it may only appear on a
+parsed, non-editable element that carries the warning, and never on a table cell.
 Percent-string forms and out-of-range values refuse. `numCol`/`spcCol` (1–16
 columns, nonnegative spacing) are validated and painted as one column with the
 `pptx.text-columns-single-column-approximate` disclosure; column flow is not

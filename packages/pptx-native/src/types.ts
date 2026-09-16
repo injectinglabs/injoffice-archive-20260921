@@ -116,6 +116,13 @@ export interface NativeTextBodyLayout {
   autoFit: 'none' | 'shape-source-frame'
   horizontalOverflow: 'overflow' | 'clip'
   verticalOverflow: 'overflow'
+  /**
+   * Authored `a:normAutofit/@lnSpcReduction` in thousandths of a percent
+   * (20000 = 20%). Present only on read-only approximate elements that also
+   * carry `pptx.autofit-authored-scale-approximate`; the approximate preview
+   * lane reduces its line pitch by this percentage. Absent means no reduction.
+   */
+  lineSpacingReductionPercent1000?: number
   writingMode?: 'vertical-clockwise'
   /** Raw signed DrawingML body angle; distinct from the shape transform. */
   rotationAngle60000?: number
