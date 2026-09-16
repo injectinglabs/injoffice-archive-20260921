@@ -13,7 +13,7 @@ import type {
   ShapedGlyph,
   ShapedSegment,
 } from '@injoffice/font-metrics/layout'
-import type { NativeElement, NativePptxDeck, NativeTextAlign, NativeTextBodyLayout } from '@injoffice/pptx-native'
+import type { NativeElement, NativeParagraph, NativePptxDeck, NativeTextAlign, NativeTextBodyLayout } from '@injoffice/pptx-native'
 import {
   RenderCompileError,
   compileNativePptxSlide,
@@ -1026,17 +1026,27 @@ describe('native PPTX RenderTree', () => {
     const reducedPitch = reduced.paragraphs[1]!.y - reduced.paragraphs[0]!.y
     expect(pitch).toBeGreaterThan(0)
     expect(reducedPitch).toBe(Math.floor((pitch * 80_000) / 100_000))
+    // The reduction removes leading from the TOP of each line box, so the text
+    // rises inside its box by exactly the amount the box lost. Measured against
+    // the PowerPoint 16.112.4 export of font-scale.pptx, whose first baseline
+    // sits one whole reduction above the natural ascent.
+    const lostLeading = natural.paragraphs[0]!.heightEmu - reducedPitch
+    expect(lostLeading).toBeGreaterThan(0)
     for (const [index, line] of reduced.paragraphs.entries()) {
       const source = natural.paragraphs[index]!
-      // The first line never moves; every later baseline rises by the reduction.
+      // Line origins still advance by the reduced pitch from a fixed origin.
       expect(line.y).toBe(natural.paragraphs[0]!.y + reducedPitch * index)
       expect(source.y).toBe(natural.paragraphs[0]!.y + pitch * index)
-      // Glyph sizes, line boxes and within-line baselines stay exactly as measured.
+      // Glyph sizes and the measured line box are untouched; only the baseline
+      // inside the box moves, and it moves by exactly the lost leading.
       expect(line.heightEmu).toBe(source.heightEmu)
       expect(line.widthEmu).toBe(source.widthEmu)
       expect(line.x).toBe(source.x)
       expect(line.runs.map((run) => [run.x - line.x, run.baselineY - line.y, run.advanceInlineEmu]))
-        .toEqual(source.runs.map((run) => [run.x - source.x, run.baselineY - source.y, run.advanceInlineEmu]))
+        .toEqual(source.runs.map((run) => [run.x - source.x, run.baselineY - source.y - lostLeading, run.advanceInlineEmu]))
+      // The first line's own baseline rises; it is no longer pinned to the
+      // unreduced ascent, which is what pushed whole blocks down.
+      if (index === 0) expect(line.runs[0]!.baselineY).toBe(source.runs[0]!.baselineY - lostLeading)
     }
     // The contract refuses the field without its read-only approximation evidence.
     await expect(laidOut(nativeTextBody({ lineSpacingReductionPercent1000: 20_000 }), 'editable')).rejects.toThrow('authored line-spacing reduction')
@@ -1058,6 +1068,78 @@ describe('native PPTX RenderTree', () => {
     const mixedNatural = findNode(mixedTree, 'text', sibling.id).textBody
     expect(mixedReduced.paragraphs[1]!.y - mixedReduced.paragraphs[0]!.y).toBe(reducedPitch)
     expect(mixedNatural.paragraphs.map((line) => line.y)).toEqual(natural.paragraphs.map((line) => line.y))
+  })
+
+  it('takes an authored line-spacing change out of the top of the line box and leaves unspaced elements untouched', async () => {
+    const text = 'AA AA AA AA AA AA'
+    const frame = { x: 0, y: 0, cx: 60_000, cy: 900_000 }
+    const laidOut = async (paragraphPatch: Partial<NativeParagraph>, spaced: boolean) => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, nativeTextBody(), frame)
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, ...paragraphPatch, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      element.compatibility = spaced
+        ? { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.paragraph-spacing-approximate', message: 'Declared read-only approximation' }] }
+        : { status: 'editable', diagnostics: [] }
+      deck.slides[0]!.elements = [element]
+      const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', inheritedTextPreview: true })
+      return findNode(tree, 'text', element.id).textBody
+    }
+    const natural = await laidOut({}, false)
+    const box = natural.paragraphs[0]!.heightEmu
+    const naturalBaseline = natural.paragraphs[0]!.runs[0]!.baselineY
+
+    // A 70% authored line spacing loses 30% of the box, all of it above the text.
+    const tighter = await laidOut({ lineSpacingPercent1000: 70_000 }, true)
+    const tightPitch = tighter.paragraphs[1]!.y - tighter.paragraphs[0]!.y
+    expect(tightPitch).toBe(Math.floor((box * 70_000) / 100_000))
+    expect(tighter.paragraphs[0]!.runs[0]!.baselineY).toBe(naturalBaseline - (box - tightPitch))
+    // The measured line box itself is reported unchanged; only the baseline moves.
+    expect(tighter.paragraphs[0]!.heightEmu).toBe(box)
+
+    // An absolute line spacing taller than the measured box adds its extra
+    // leading above the text the same way, so the baseline drops.
+    const looser = await laidOut({ lineSpacingEmu: box + 40_000 }, true)
+    expect(looser.paragraphs[1]!.y - looser.paragraphs[0]!.y).toBe(box + 40_000)
+    expect(looser.paragraphs[0]!.runs[0]!.baselineY).toBe(naturalBaseline + 40_000)
+
+    // An element that authors no line spacing lays out exactly as before.
+    const unchanged = await laidOut({ spaceBeforeEmu: 50_000 }, true)
+    expect(unchanged.paragraphs.map((line) => [line.y, line.runs[0]!.baselineY]))
+      .toEqual(natural.paragraphs.map((line) => [line.y, line.runs[0]!.baselineY]))
+  })
+
+  it('subtracts the authored lnSpcReduction from the authored line-spacing percentage', async () => {
+    const text = 'AA AA AA AA AA AA'
+    const frame = { x: 0, y: 0, cx: 60_000, cy: 900_000 }
+    const laidOut = async (percent: number | undefined, reduction: number | undefined) => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, reduction === undefined ? nativeTextBody() : nativeTextBody({ lineSpacingReductionPercent1000: reduction }), frame)
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, ...(percent === undefined ? {} : { lineSpacingPercent1000: percent }), runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      const diagnostics = [
+        ...(percent === undefined ? [] : [{ severity: 'warning' as const, code: 'pptx.paragraph-spacing-approximate', message: 'Declared read-only approximation' }]),
+        ...(reduction === undefined ? [] : [{ severity: 'warning' as const, code: 'pptx.autofit-authored-scale-approximate', message: 'Declared read-only approximation' }]),
+      ]
+      element.compatibility = diagnostics.length === 0 ? { status: 'editable', diagnostics } : { status: 'preserveOnly', diagnostics }
+      deck.slides[0]!.elements = [element]
+      const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', inheritedTextPreview: true, sourceFrameAutoFitPreview: true })
+      const body = findNode(tree, 'text', element.id).textBody
+      return { pitch: body.paragraphs[1]!.y - body.paragraphs[0]!.y, box: body.paragraphs[0]!.heightEmu }
+    }
+    const { box } = await laidOut(undefined, undefined)
+    // 90% authored spacing reduced by 20% is 70% of the box, not 72%.
+    const both = await laidOut(90_000, 20_000)
+    expect(both.pitch).toBe(Math.floor((box * 70_000) / 100_000))
+    expect(both.pitch).not.toBe(Math.floor((Math.floor((box * 90_000) / 100_000) * 80_000) / 100_000))
+    // With no authored a:lnSpc the two readings agree, so #235 is unchanged.
+    const reductionOnly = await laidOut(undefined, 20_000)
+    expect(reductionOnly.pitch).toBe(Math.floor((box * 80_000) / 100_000))
+    // A reduction at least as large as the authored spacing still advances.
+    const collapsed = await laidOut(20_000, 20_000)
+    expect(collapsed.pitch).toBe(1)
   })
 
   it('flows approximate text bodies through the authored columns instead of one wide block', async () => {

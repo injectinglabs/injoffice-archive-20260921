@@ -103,6 +103,20 @@ export interface NativeParagraph {
   bulletFontEncoding?: 'windows-symbol-byte-v1'
   marginLeftEmu?: number
   indentEmu?: number
+  /**
+   * Authored `a:lnSpc` `a:spcPct` in thousandths of a percent (90000 = 90%),
+   * resolved through the declared style cascade. Present only on read-only
+   * approximate elements that also carry `pptx.paragraph-spacing-approximate`;
+   * the approximate preview lane scales its measured line pitch by it.
+   * Mutually exclusive with `lineSpacingEmu`. Absent means no adjustment.
+   */
+  lineSpacingPercent1000?: number
+  /** Authored `a:lnSpc` `a:spcPts` as an absolute EMU line pitch. */
+  lineSpacingEmu?: number
+  /** Authored `a:spcBef` as an EMU gap; applied only between paragraphs. */
+  spaceBeforeEmu?: number
+  /** Authored `a:spcAft` as an EMU gap; applied only between paragraphs. */
+  spaceAfterEmu?: number
 }
 
 /** Exact v1 horizontal text-frame slice with materialized OOXML defaults. */

@@ -168,7 +168,11 @@ by `pptx.autofit-authored-scale-approximate`), and carries `numCol`/`spcCol` as
 flows the body through equal-width columns (disclosed by
 `pptx.text-columns-approximate`); `AllowInheritedTextPreview` admits the declared
 inherited-text and placeholder-inheritance approximations described in
-`go/pptxpatch/README.md`. Each approximation is a preserve-only element with a
+`go/pptxpatch/README.md`, and resolves authored `a:lnSpc` / `a:spcBef` /
+`a:spcAft` through that same cascade into `paragraphs[].lineSpacingPercent1000`
+or `paragraphs[].lineSpacingEmu` with `paragraphs[].spaceBeforeEmu` /
+`paragraphs[].spaceAfterEmu` (disclosed by `pptx.paragraph-spacing-approximate`;
+identity values and anything unmodelable stay omitted). Each approximation is a preserve-only element with a
 warning diagnostic that validation requires. Strict output has one further
 preserve-only lane that needs no opt-in: a non-placeholder shape whose text is not
 self-contained may be completed from the explicit matching `lvlNpPr` levels of

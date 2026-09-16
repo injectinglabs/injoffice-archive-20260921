@@ -115,6 +115,17 @@ type NativeParagraph struct {
 	BulletFontEncoding *string          `json:"bulletFontEncoding,omitempty"`
 	MarginLeftEmu      *int64           `json:"marginLeftEmu,omitempty"`
 	IndentEmu          *int64           `json:"indentEmu,omitempty"`
+	// LineSpacingPercent1000, LineSpacingEmu, SpaceBeforeEmu and SpaceAfterEmu
+	// carry the authored a:lnSpc, a:spcBef and a:spcAft after the read-only
+	// approximate preview resolved them through the style cascade. They are
+	// emitted only for parsed, non-editable elements that also carry
+	// pptx.paragraph-spacing-approximate. LineSpacingPercent1000 (thousandths
+	// of a percent) and LineSpacingEmu (an absolute pitch) are mutually
+	// exclusive; absence always means "no authored adjustment".
+	LineSpacingPercent1000 *int64 `json:"lineSpacingPercent1000,omitempty"`
+	LineSpacingEmu         *int64 `json:"lineSpacingEmu,omitempty"`
+	SpaceBeforeEmu         *int64 `json:"spaceBeforeEmu,omitempty"`
+	SpaceAfterEmu          *int64 `json:"spaceAfterEmu,omitempty"`
 }
 
 // NativeTextBodyLayout is the exact v1 horizontal text-frame slice. Extraction

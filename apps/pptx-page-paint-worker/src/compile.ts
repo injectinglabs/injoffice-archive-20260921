@@ -76,7 +76,9 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  else {const tables=(elements:readonly NativeElement[])=>{for(const e of elements){if(e.kind==='group')tables(e.children);if(e.kind==='table')for(const row of e.table.rows)for(const cell of row)if(cell.paragraphs)checkParagraphs(cell.paragraphs)}};tables(deck.slides[request.slide_index as number]!.elements)}
  const countSourceFrames=(elements:readonly NativeElement[]):number=>elements.reduce((count,element)=>count+((element.kind==='text'||element.kind==='shape')&&element.textBody?.autoFit==='shape-source-frame'?1:0)+(element.kind==='group'?countSourceFrames(element.children):0),0)
  const sourceFrameAutoFitCount=countSourceFrames(deck.slides[request.slide_index as number]!.elements)
- const countInherited=(elements:readonly NativeElement[]):number=>elements.reduce((n,e)=>n+(e.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')?1:0)+(e.kind==='group'?countInherited(e.children):0),0)
+ // Authored paragraph spacing is resolved by the same Go-side inherited-text
+ // cascade projection, so the worker re-checks that opt-in for it too.
+ const countInherited=(elements:readonly NativeElement[]):number=>elements.reduce((n,e)=>n+(e.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate'||d.code==='pptx.paragraph-spacing-approximate')?1:0)+(e.kind==='group'?countInherited(e.children):0),0)
  const inheritedTextCount=countInherited(deck.slides[request.slide_index as number]!.elements)
  if(inheritedTextCount>0&&request.inherited_text_preview!==true)throw new Error('Inherited text requires explicit preview opt-in')
  if(sourceFrameAutoFitCount>0&&request.source_frame_autofit_preview!==true)throw new Error('Source-frame autofit requires explicit preview opt-in')

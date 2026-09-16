@@ -129,6 +129,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	var textBodyLayout *NativeTextBodyLayout
 	var authoredFit *nativeAuthoredAutoFit
 	var inheritedOmissions *nativeInheritedTextOmissions
+	paragraphSpacingApplied := false
 	textOmitted := false
 	if textBody != nil {
 		if err := extractor.reserveNativeTextOutput(textBody, dialect); err != nil {
@@ -155,6 +156,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		paintText := textBody
 		fontReferenceUsed := false
 		var parseErr error
+		var inheritedSpacing []nativeParagraphSpacingSource
 		if extractor.options.AllowInheritedTextPreview {
 			placeholder, err := nativeTextPlaceholder(node, dialect)
 			if err != nil {
@@ -164,7 +166,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			} else if styleErr != nil {
 				parseErr = styleErr
 			} else {
-				paintText, inheritedOmissions, parseErr = extractor.inheritedTextPreview(textBody, style, true, dialect)
+				paintText, inheritedOmissions, inheritedSpacing, parseErr = extractor.inheritedTextPreview(textBody, style, true, dialect)
 			}
 		} else if style != nil && styleErr == nil {
 			placeholder, placeholderErr := nativeTextPlaceholder(node, dialect)
@@ -210,7 +212,10 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			authoredFit = nil
 			inheritedOmissions = nil
 		} else {
+			// Authored paragraph spacing resolves after the authored fontScale,
+			// because a percentage gap measures the run sizes we will paint.
 			nativeApplyAuthoredFontScale(paragraphs, authoredFit)
+			paragraphSpacingApplied = nativeApplyParagraphSpacing(paragraphs, inheritedSpacing, inheritedOmissions)
 		}
 	}
 
@@ -232,6 +237,9 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	}
 	if extractor.options.AllowInheritedTextPreview && textBody != nil {
 		nativeMarkInheritedTextPreview(&element)
+		if paragraphSpacingApplied {
+			nativeMarkParagraphSpacing(&element)
+		}
 		nativeMarkInheritedTextOmissions(&element, inheritedOmissions)
 	}
 	if name != "" {
