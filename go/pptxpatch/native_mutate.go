@@ -581,7 +581,7 @@ func resolveNativePPTXMutations(deck NativePPTXDeck, operations []NativePPTXMuta
 			if diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsCode {
 				return nil, fmt.Errorf("%s: authored autofit and column approximations are preview-only", prefix)
 			}
-			if diagnostic.Code == nativeTextWarpFlattenedCode || diagnostic.Code == nativeTextNonVisualPreviewCode {
+			if diagnostic.Code == nativeTextWarpFlattenedCode || diagnostic.Code == nativeTextWarpApproximateCode || diagnostic.Code == nativeTextNonVisualPreviewCode {
 				return nil, fmt.Errorf("%s: flattened text warps and preserved nonvisual metadata are preview-only", prefix)
 			}
 			switch diagnostic.Code {

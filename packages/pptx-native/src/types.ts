@@ -145,6 +145,15 @@ export interface NativeTextBodyLayout {
   columnCount?: number
   /** Authored `a:bodyPr/@spcCol` gap in EMU. Only meaningful with columnCount. */
   columnSpacingEmu?: number
+  /**
+   * Modeled `a:prstTxWarp/@prst`. Present only on read-only approximate
+   * elements that also carry `pptx.text-warp-approximate`; the
+   * approximate preview lane warps glyphs along an InjOffice arch envelope.
+   * Unmodeled presets stay omitted and flattened. Not PowerPoint-equivalent.
+   */
+  presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate'
+  /** Authored `a:gd name="adj"` in thousandths of a percent. Only with presetTextWarp. */
+  presetTextWarpAdj?: number
   writingMode?: 'vertical-clockwise'
   /** Raw signed DrawingML body angle; distinct from the shape transform. */
   rotationAngle60000?: number

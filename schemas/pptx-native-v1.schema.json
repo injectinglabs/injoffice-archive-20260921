@@ -322,6 +322,8 @@
         "lineSpacingReductionPercent1000": { "type": "integer", "minimum": 1, "maximum": 99999 },
         "columnCount": { "type": "integer", "minimum": 2, "maximum": 16 },
         "columnSpacingEmu": { "type": "integer", "minimum": 0, "maximum": 51206400 },
+        "presetTextWarp": { "enum": ["textArchUp", "textArchDown", "textDeflate"] },
+        "presetTextWarpAdj": { "type": "integer", "minimum": 0, "maximum": 100000 },
         "writingMode": { "const": "vertical-clockwise" },
         "rotationAngle60000": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "upright": { "type": "boolean" },

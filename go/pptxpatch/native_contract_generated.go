@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "adcba77049e7ab92748c8cf741edd8d618f86a497131e7ab36d8269bfd62245e"
+const NativePPTXSchemaSHA256 = "dc42f7a99f6f272bd68d4946de1248dcc01f06586e061249715506cf9ccea665"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -219,7 +219,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"compatibility", "id", "kind", "passthrough", "provenance", "table", "transform"},
 	},
 	"NativeTextBodyLayout": {
-		Properties: []string{"autoFit", "bottomInsetEmu", "columnCount", "columnSpacingEmu", "horizontalOverflow", "leftInsetEmu", "lineSpacingReductionPercent1000", "rightInsetEmu", "rotationAngle60000", "topInsetEmu", "upright", "verticalAnchor", "verticalOverflow", "wrap", "writingMode"},
+		Properties: []string{"autoFit", "bottomInsetEmu", "columnCount", "columnSpacingEmu", "horizontalOverflow", "leftInsetEmu", "lineSpacingReductionPercent1000", "presetTextWarp", "presetTextWarpAdj", "rightInsetEmu", "rotationAngle60000", "topInsetEmu", "upright", "verticalAnchor", "verticalOverflow", "wrap", "writingMode"},
 		Required:   []string{"autoFit", "bottomInsetEmu", "horizontalOverflow", "leftInsetEmu", "rightInsetEmu", "topInsetEmu", "verticalAnchor", "verticalOverflow", "wrap"},
 	},
 	"NativeTextElement": {

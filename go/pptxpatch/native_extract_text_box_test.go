@@ -183,8 +183,8 @@ func TestNativePowerPointAuthoredTextBoxPaintsOnlyInTheApproximateTier(t *testin
 			codes            []string
 		}{
 			{name: "creationId", creationID: true, codes: []string{nativeTextNonVisualPreviewCode}},
-			{name: "prstTxWarp", warp: true, codes: []string{nativeTextWarpFlattenedCode}},
-			{name: "both", creationID: true, warp: true, codes: []string{nativeTextNonVisualPreviewCode, nativeTextWarpFlattenedCode}},
+			{name: "prstTxWarp", warp: true, codes: []string{nativeTextWarpApproximateCode}},
+			{name: "both", creationID: true, warp: true, codes: []string{nativeTextNonVisualPreviewCode, nativeTextWarpApproximateCode}},
 		} {
 			original := nativePowerPointAuthoredTextBoxFixture(t, strict, shape.creationID, shape.warp)
 			before := bytes.Clone(original)

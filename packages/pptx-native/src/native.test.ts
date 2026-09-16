@@ -32,7 +32,7 @@ describe('native PPTX contract', () => {
     element.compatibility.status='preserveOnly';element.compatibility.diagnostics=[];expect(validateNativePptx(deck).ok).toBe(false)
   })
   it('requires parsed read-only source evidence for authored autofit, column and placeholder approximations', () => {
-    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview','pptx.text-warp-flattened-approximate','pptx.text-nonvisual-preview']){
+    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview','pptx.text-warp-flattened-approximate','pptx.text-warp-approximate','pptx.text-nonvisual-preview']){
       const deck=fixture('valid/parsed-full.json') as NativePptxDeck
       const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
       if(element.kind!=='text')throw new Error('text missing')
@@ -87,6 +87,31 @@ describe('native PPTX contract', () => {
     element.textBody.columnCount=3;element.textBody.columnSpacingEmu=1_500_000
     expect(validateNativePptx(deck).ok).toBe(false)
   })
+  it('carries a modeled preset text warp only with its read-only approximation evidence', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text missing')
+    element.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'square',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow',presetTextWarp:'textDeflate',presetTextWarpAdj:37_500}
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.text-warp-approximate',message:'Declared read-only approximation'}]}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    element.compatibility.diagnostics[0]!.code='pptx.autofit-authored-scale-approximate'
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.diagnostics[0]!.code='pptx.text-warp-flattened-approximate'
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.diagnostics[0]!.code='pptx.text-warp-approximate'
+    element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.status='preserveOnly'
+    for(const preset of ['textArchUp','textArchDown','textDeflate'] as const){element.textBody.presetTextWarp=preset;expect(validateNativePptx(deck).ok).toBe(true)}
+    ;(element.textBody as {presetTextWarp?: string}).presetTextWarp='textInflate'
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.textBody.presetTextWarp='textDeflate'
+    for(const value of [0,18_750,37_500,100_000]){element.textBody.presetTextWarpAdj=value;expect(validateNativePptx(deck).ok).toBe(true)}
+    for(const value of [-1,100_001,37_500.5]){element.textBody.presetTextWarpAdj=value;expect(validateNativePptx(deck).ok).toBe(false)}
+    delete element.textBody.presetTextWarp
+    element.textBody.presetTextWarpAdj=37_500
+    expect(validateNativePptx(deck).ok).toBe(false)
+  })
   it('refuses authored autofit reduction and column projections on a table cell text body', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='table')!
@@ -102,6 +127,9 @@ describe('native PPTX contract', () => {
     expect(validateNativePptx(deck).ok).toBe(false)
     delete cell.textBody!.lineSpacingReductionPercent1000
     cell.textBody!.columnCount=2;cell.textBody!.columnSpacingEmu=0
+    expect(validateNativePptx(deck).ok).toBe(false)
+    delete cell.textBody!.columnCount;delete cell.textBody!.columnSpacingEmu
+    cell.textBody!.presetTextWarp='textDeflate'
     expect(validateNativePptx(deck).ok).toBe(false)
   })
   it('accepts an inherited placeholder frame painted as a read-only rect shape', () => {
