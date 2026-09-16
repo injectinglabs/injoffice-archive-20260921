@@ -1406,7 +1406,7 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
       const paragraph = shaped.get(sourceParagraph.id)
       if (!paragraph) {
         if (context.approximateLegacySettings && approximateOmittedUnshapedParagraph(sourceParagraph, context.request.document)) continue
-        refuse(context, 'shaped-paragraph-missing', sourceParagraph.id, 'Qualified table cell paragraph has no shaped lines')
+        refuse(context, 'shaped-paragraph-missing', sourceParagraph.id, 'Qualified table cell paragraph has no shaped lines', unshapedParagraphCause(context, sourceParagraph.id))
         return
       }
       if (context.sliceCount >= DOCX_PAGINATION_LIMITS.maxParagraphSlices || context.linePlacementCount + paragraph.lines.length > DOCX_PAGINATION_LIMITS.maxLinePlacements) {
@@ -1670,6 +1670,21 @@ function approximateInertNoteSeparators(document: NativeDocxDocumentV1): boolean
   return true
 }
 
+/**
+ * Shaping drops a paragraph whose resolved layout carries a blocking diagnostic,
+ * recording why in its own diagnostics. Pagination then sees only the absence, so
+ * an unqualified 'shaped-paragraph-missing' names a symptom and discards the
+ * cause. Recover the originating resolved-layout code so the refusal is
+ * actionable; every field here is already on the shaped-lines wire.
+ */
+function unshapedParagraphCause(context: PaginationContext, paragraphID: string): { code: string; message: string } | undefined {
+  for (const diagnostic of context.request.shaped_lines.diagnostics) {
+    if (diagnostic.scope_id !== paragraphID || diagnostic.source_diagnostic_code === undefined) continue
+    return { code: diagnostic.source_diagnostic_code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+  }
+  return undefined
+}
+
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {
   if (paragraph.runs.some((run) => run.kind === 'text' && (run.text ?? '') !== '')) return false
   if (paragraph.runs.length === 0) return true
@@ -1698,7 +1713,7 @@ function validateAndIndexParagraphs(context: PaginationContext, groups: readonly
   for (const group of groups) for (const paragraph of group.blocks.flatMap(blockParagraphs)) {
     const resolvedParagraph = resolved.get(paragraph.id)
     const shapedParagraph = shaped.get(paragraph.id)
-    if (!resolvedParagraph) refuse(context, 'shaped-paragraph-missing', paragraph.id, 'Native body paragraph has no resolved-layout paragraph')
+    if (!resolvedParagraph) refuse(context, 'shaped-paragraph-missing', paragraph.id, 'Native body paragraph has no resolved-layout paragraph', unshapedParagraphCause(context, paragraph.id))
     if (!shapedParagraph) {
       if (context.approximateLegacySettings && approximateOmittedUnshapedParagraph(paragraph, context.request.document)) {
         addDiagnostic(context, {
@@ -1707,7 +1722,7 @@ function validateAndIndexParagraphs(context: PaginationContext, groups: readonly
         })
         continue
       }
-      refuse(context, 'shaped-paragraph-missing', paragraph.id, 'Native body paragraph has no shaped-lines paragraph')
+      refuse(context, 'shaped-paragraph-missing', paragraph.id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, paragraph.id))
     }
     if (shapedParagraph && (shapedParagraph.story_kind !== 'body' || shapedParagraph.story_id !== context.request.document.body.id)) {
       refuse(context, 'shaped-paragraph-mismatch', paragraph.id, 'Shaped body paragraph has the wrong story identity')
@@ -1806,7 +1821,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
           if (!paragraph) {
             const native = bodyParagraphs(context.request.document).find((entry) => entry.id === slice.paragraph_id)
             if (context.approximateLegacySettings && native && approximateOmittedUnshapedParagraph(native, context.request.document)) continue
-            refuse(context, 'shaped-paragraph-missing', slice.paragraph_id, 'Native body paragraph has no shaped-lines paragraph')
+            refuse(context, 'shaped-paragraph-missing', slice.paragraph_id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, slice.paragraph_id))
             return
           }
           placeSlice(context, paragraph, slice.start, slice.end-slice.start, 0)
@@ -1822,7 +1837,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
         const paragraph = shaped.get(native.id)
         if (!paragraph) {
           if (context.approximateLegacySettings && approximateOmittedUnshapedParagraph(native, context.request.document)) continue
-          refuse(context, 'shaped-paragraph-missing', native.id, 'Native body paragraph has no shaped-lines paragraph')
+          refuse(context, 'shaped-paragraph-missing', native.id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, native.id))
           return
         }
         const activates = reservation.references.find((entry) => entry.reference_paragraph_id === native.id)
@@ -1857,7 +1872,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
         if (!paragraph) {
           const native = bodyParagraphs(context.request.document).find((entry) => entry.id === placement.paragraph_id)
           if (context.approximateLegacySettings && native && approximateOmittedUnshapedParagraph(native, context.request.document)) continue
-          refuse(context, 'shaped-paragraph-missing', placement.paragraph_id, 'Native body paragraph has no shaped-lines paragraph')
+          refuse(context, 'shaped-paragraph-missing', placement.paragraph_id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, placement.paragraph_id))
           return
         }
         placeSlice(context, paragraph, 0, paragraph.lines.length, 0)
@@ -1897,7 +1912,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
         const shapedParagraph = shaped.get(nativeParagraph.id)
         if (!resolvedParagraph || !shapedParagraph) {
           if (context.approximateLegacySettings && approximateOmittedUnshapedParagraph(nativeParagraph, context.request.document)) continue
-          refuse(context, 'shaped-paragraph-missing', nativeParagraph.id, 'Native body paragraph has no shaped-lines paragraph')
+          refuse(context, 'shaped-paragraph-missing', nativeParagraph.id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, nativeParagraph.id))
           return
         }
         const chainEnd = keepPlan.ends[index]!
