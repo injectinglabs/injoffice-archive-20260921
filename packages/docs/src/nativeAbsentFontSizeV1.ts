@@ -136,7 +136,13 @@ export function projectNativeDocxAbsentFontSizesV1(
       s.blocks[0]?.paragraph?.runs.length === 0 &&
       !document.value.unsupported.some((d) => d.scope_id === s.id || d.anchor?.part_name === s.part_name)
     ).flatMap((s) => s.blocks),
-  ].flatMap((block) => block.paragraph ? [block.paragraph] : []);
+  ].flatMap((block) =>
+    block.paragraph
+      ? [block.paragraph]
+      : (block.table?.rows ?? []).flatMap((row) =>
+          row.cells.flatMap((cell) => cell.paragraphs),
+        ),
+  );
   const resolved = structuredClone(layout.value);
   const applied: NativeDocxApproximatedFontSizeV1[] = [];
   for (const fact of facts) {

@@ -299,6 +299,7 @@ const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
 const BIDI_TRAILING_RE = /^[\u0009-\u000d\u001c-\u001e\u0020\u0085\u2028\u2029]+$/u
 
 interface PaginationContext {
+  indentedCellDisclosures?: Set<string>
   footnoteFlow?: NativeDocxFootnoteFlowV1
   footnoteReservation?: NativeDocxFootnoteReservationV1
   reservedBottomHeight?: number
@@ -1419,7 +1420,7 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
         const x = checkedSum(targetColumn.x_millipoints, cell.content_x_millipoints, line.inline_offset_millipoints)
         const y = checkedSum(targetColumn.y_millipoints, rowTop, localY)
         const bottomInset = table.border_reservation_policy ? table.table.cell_margins!.bottom_twips * 50 : cell.content_y_millipoints
-        if (x === undefined || y === undefined || line.available_width_millipoints !== cell.content_width_millipoints || line.advance_inline_millipoints + line.inline_offset_millipoints > cell.content_width_millipoints || localY + line.line_height_millipoints > cell.height_millipoints - bottomInset) {
+        if (x === undefined || y === undefined || !cellLineWithinContentWidth(context, line, cell.content_width_millipoints, paragraph.paragraph_id) || localY + line.line_height_millipoints > cell.height_millipoints - bottomInset) {
           refuse(context, 'line-geometry-invalid', line.id, 'Cell line escapes its exact qualified content box')
           return
         }
@@ -1509,7 +1510,7 @@ function placeRowFragment(context: PaginationContext, table: NativeDocxQualified
     if (context.sliceCount >= DOCX_PAGINATION_LIMITS.maxParagraphSlices || context.linePlacementCount + selected.length > DOCX_PAGINATION_LIMITS.maxLinePlacements) { refuse(context,'resource-limit',row.row_id,'Split row exceeds the bounded paragraph/line placement budget'); return }
     const placed: NativeDocxPlacedLineV1[] = []
     for (const { line,y } of selected) {
-      if (line.available_width_millipoints !== entry.content_width || line.inline_offset_millipoints + line.advance_inline_millipoints > entry.content_width) { refuse(context,'line-geometry-invalid',line.id,'Split cell line escapes the qualified content width'); return }
+      if (!cellLineWithinContentWidth(context, line, entry.content_width, paragraph.paragraph_id)) { refuse(context,'line-geometry-invalid',line.id,'Split cell line escapes the qualified content width'); return }
       placed.push({ id:`placed:${line.id}`,line_id:line.id,paragraph_id:paragraph.paragraph_id,table_cell_id:entry.cell_id,section_id:section.id,column_id:column.id,column_ordinal:column.ordinal,source_line_ordinal:line.ordinal,x_millipoints:column.x_millipoints+entry.content_x+line.inline_offset_millipoints,y_millipoints:pageY+y-start,width_millipoints:line.advance_inline_millipoints,height_millipoints:line.line_height_millipoints })
     }
     const sliceOrdinal = context.sliceCountForParagraph?.get(paragraph.paragraph_id) ?? 0
@@ -1604,6 +1605,51 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
       : undefined
   }
   return { ends, contentHeights, pageBreakConflicts, atomic }
+}
+
+/** Declared approximate pagination policies. Each deferred 'source-diagnostic'
+ * carrying one of these messages is surfaced verbatim as an envelope reason. */
+export const DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING = 'Approximate read-only preview: footnote/endnote separator stories with unmodeled markup are omitted because the document has no footnote or endnote references; nothing is painted for them.' as const
+export const DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING = 'Approximate read-only preview: indented table-cell lines are placed inside the qualified cell content width instead of requiring an exact full-width line box.' as const
+const APPROXIMATE_PAGINATION_POLICY_WARNINGS: ReadonlySet<string> = new Set([DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING, DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING])
+
+/** Declared policy reasons for the approximations an approximate pagination applied. */
+export function nativeDocxApproximatePaginationPolicyReasonsV1(layout: NativeDocxPaginatedLayoutV1): string[] {
+  const reasons: string[] = []
+  for (const entry of layout.diagnostics) {
+    if (entry.code !== 'source-diagnostic' || entry.severity !== 'deferred' || !APPROXIMATE_PAGINATION_POLICY_WARNINGS.has(entry.message) || reasons.includes(entry.message)) continue
+    reasons.push(entry.message)
+  }
+  return reasons
+}
+
+// Strict placement requires the shaped line box to equal the cell content
+// width exactly. Shaping reports the box after paragraph indents, so the
+// approximate preview instead requires the indented box (and its advance) to
+// stay inside the qualified content width; the indent itself is authored.
+function cellLineWithinContentWidth(context: PaginationContext, line: NativeDocxShapedParagraphV1['lines'][number], contentWidth: number, paragraphID: string): boolean {
+  if (line.inline_offset_millipoints + line.advance_inline_millipoints > contentWidth) return false
+  if (line.available_width_millipoints === contentWidth) return true
+  if (!context.approximateLegacySettings || line.inline_offset_millipoints < 0 || line.available_width_millipoints < 0 || line.inline_offset_millipoints + line.available_width_millipoints > contentWidth) return false
+  // Disclosed once per paragraph on the first line that actually needs the policy
+  // (a hanging indent leaves line 0 full-width and indents the rest).
+  context.indentedCellDisclosures ??= new Set()
+  if (!context.indentedCellDisclosures.has(paragraphID)) {
+    context.indentedCellDisclosures.add(paragraphID)
+    addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: paragraphID, message: DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING })
+  }
+  return true
+}
+
+// Inert note parts: only separator/continuation-separator stories exist and no
+// story anywhere carries a footnote or endnote reference run.
+function approximateInertNoteSeparators(document: NativeDocxDocumentV1): boolean {
+  if (document.notes.length === 0 || document.notes.some((story) => story.note_role !== 'separator' && story.note_role !== 'continuation-separator')) return false
+  const stories = [document.body, ...document.headers, ...document.footers, ...document.notes, ...document.comment_stories]
+  for (const story of stories) for (const paragraph of story.blocks.flatMap(blockParagraphs)) for (const run of paragraph.runs) {
+    if (run.kind === 'reference' && run.reference !== undefined && (run.reference.kind === 'footnote' || run.reference.kind === 'endnote')) return false
+  }
+  return true
 }
 
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {
@@ -1934,7 +1980,16 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
     else context.footnoteFlow = flow
   }
   if (!context.refused) paginateGroups(context, groups, indexed.resolved, indexed.shaped)
-  if (!context.refused) {
+  if (!context.refused && approximateLegacySettings && approximateInertNoteSeparators(request.document)) {
+    // Word 2010 writes separator stories with a trailing empty paragraph. With
+    // no footnote or endnote reference anywhere, they never paint, so the
+    // approximate preview omits them (disclosed) instead of refusing the page.
+    for (const page of context.pages) page.note_stories = []
+    for (const story of request.document.notes) addDiagnostic(context, {
+      code: 'source-diagnostic', severity: 'deferred', scope_id: story.id,
+      message: DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING,
+    })
+  } else if (!context.refused) {
     const noteFailure = placeNativeDocxNotesV1({
       protocol: DOCX_PAGINATED_LAYOUT_PROTOCOL,
       version: DOCX_PAGINATED_LAYOUT_VERSION,

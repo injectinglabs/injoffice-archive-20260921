@@ -37,6 +37,8 @@ import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPre
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } from './nativeAbsentFontSizeV1.js'
 import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, decodeNativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
+import { DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING, DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING } from './nativePaginationV1.js'
+import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1 } from './nativeLatinFontFallbackV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -575,7 +577,8 @@ describe('native DOCX page-paint compiler v1', () => {
     const tableInput = tableFixture()
     const tableResolved = tableInput.resolved_layout as NativeDocxResolvedLayoutInputV1
     delete tableResolved.paragraphs[0]!.paragraph_mark_properties!.font_size_half_points
-    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 22 })).toThrow('scope anchor')
+    expect(projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 22 }).applied).toEqual([{ ...absent[0], chosen_half_points: 22 }])
+    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, [{ ...absent[0]!, path: '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[2]' }], { kind: 'host-default-size-v1', half_points: 22 })).toThrow('scope anchor')
     const strict = await prepareNativeDocxPagePaintV1(input)
     expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
   }, 20000)
@@ -890,6 +893,42 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(JSON.stringify(input)).toBe(before)
     await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow(/configure explicit host fonts/)
   })
+
+  it('refuses approximate pagination policies in the font-substitution legacy preview instead of applying them undisclosed', async () => {
+    const {input,fonts}=hostFixture()
+    const document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1
+    resolved.fonts[0]!.name='Missing Family'
+    for(const run of resolved.runs)run.properties.font_family='Missing Family'
+    for(const paragraph of resolved.paragraphs)paragraph.paragraph_mark_properties!.font_family='Missing Family'
+    rewriteInventory(input,inventory=>{inventory.families[0]!.name='Missing Family';inventory.references.forEach(reference=>{reference.family='Missing Family'})})
+    // Word 2010 separator stories with unmodeled markup and no note reference anywhere.
+    const part='word/footnotes.xml'
+    for(const [index,role] of (['separator','continuation-separator'] as const).entries()){
+      const first={id:`paragraph:${role}:1`,anchor:{part_name:part,path:`/w:footnotes[1]/w:footnote[${index+1}]/w:p[1]`,start_byte:10+index*100,end_byte:40+index*100,xml_sha256:HASH},edit_policy:document.body.blocks[0]!.paragraph!.edit_policy,properties:{},runs:[]}
+      const story={id:`story:footnote:${role}`,kind:'footnote' as const,native_story_id:role==='separator'?'-1':'0',relationship_id:'rIdFootnotes',note_role:role,part_name:part,anchor:{part_name:part,path:`/w:footnotes[1]/w:footnote[${index+1}]`,start_byte:1+index*100,end_byte:70+index*100,xml_sha256:HASH},blocks:[{kind:'paragraph' as const,id:first.id,paragraph:first}]}
+      document.notes.push(story as never)
+      document.unsupported.push({id:`unsupported:${role}`,code:'UNMODELED_NOTE_MARKUP',capability:'notes',scope_id:story.id,anchor:story.anchor,preservation:'preserve-verbatim',message:'Reserved note separator stories must contain exactly one matching instruction leaf and no visible text'} as never)
+      resolved.paragraphs.push({paragraph_id:first.id,applied_styles:[],properties:{},paragraph_mark_properties:{font_family:'Missing Family',font_size_half_points:20}})
+    }
+    rewriteInventory(input,inventory=>{for(const reference of inventory.references)if(reference.weight===400&&reference.style==='normal')reference.scope_ids=[...reference.scope_ids,'paragraph:separator:1','paragraph:continuation-separator:1'].sort()})
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy12'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:HASH,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy12']}
+    const policy={version:1 as const,mappings:[{sourceFamily:'Missing Family',targetFamily:'DejaVu Sans',weight:400 as const,style:'normal' as const}]}
+    const metrics=inspectHarfBuzzFontMetricsV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    fonts.resolver.resolve=({run})=>{const selection=selectExplicitFontV1(fonts.manifest,run,policy);if(!selection)throw new Error('No configured face');return {status:'resolved',face:selection.face,attemptedFaceIds:[selection.face.faceId],decisions:[]}}
+    fonts.resolver.load=face=>({face,bytes:Uint8Array.from(FONT_BYTES),metrics})
+    const configured={...fonts,substitutionPolicy:policy}
+    const provider=createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const outlines={providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:any){const outline=provider.outline(request.glyph_id);return outline.path.length?{status:'outlined' as const,...request,...outline}:{status:'empty' as const,...request,units_per_em:outline.units_per_em}}}
+    const inv=JSON.parse(input.font_inventory_json)
+    const composition={source_document:input.document,source_resolved_layout:input.resolved_layout,source_pagination_settings:input.pagination_settings,source_font_inventory_json:input.font_inventory_json,font_descriptor_eligibility:{protocol:'injoffice.docx.font-substitution-eligibility',version:1,document_id:inv.document_id,revision:inv.revision,package_sha256:inv.package_sha256,font_table:inv.font_table??null,facts:[]},legacy_eligibility:eligibility}
+    const fontPreview=await renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured,composition})
+    expect(fontPreview.status).toBe('refused')
+    expect(fontPreview.diagnostics.map(d=>d.message).join(' ')).toContain('Font preview does not apply approximate pagination policies')
+    expect(fontPreview.diagnostics.map(d=>d.message).join(' ')).toContain(DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING)
+    expect(fontPreview.reasons).not.toContain(DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING)
+  },20000)
 
   it('renders missing source fonts only through the distinct read-only substitution envelope', async () => {
     const {input,fonts}=hostFixture()
@@ -2971,6 +3010,103 @@ describe('source-anchored textbox page composition',()=>{
   }
  },15000)
 
+
+  it('shapes an indented table-cell paragraph only in the approximate preview and declares the cell line-box policy', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1, settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    const paragraph = document.body.blocks[0]!.table!.rows[0]!.cells[0]!.paragraphs[0]!
+    resolved.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)!.properties.indent_left_twips = 360
+    const strict = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
+    expect(strict.page_paint_request.paginated_layout.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'line-geometry-invalid' })]))
+    settings.profile = 'unsupported'; delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy12' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy12'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+    const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(result.status).toBe('painted')
+    expect(result.reasons).toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+    const line = result.pages[0]!.lines.find((entry) => entry.paragraph_id === paragraph.id)!
+    expect(line.x_millipoints).toBe(result.pages[0]!.body_box.x_millipoints + 100 * 50 + 360 * 50)
+    expect(decodeNativeDocxApproximatePagePreviewV1(result).ok).toBe(true)
+    const unindented = tableFixture(); const unindentedSettings = unindented.pagination_settings as NativeDocxPaginationSettingsV1
+    unindentedSettings.profile = 'unsupported'; delete unindentedSettings.compatibility_mode; unindentedSettings.diagnostics = settings.diagnostics
+    expect((await renderNativeDocxApproximatePagePreviewV1(unindented, eligibility, provider)).reasons).not.toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+  }, 20000)
+
+  it('projects evidenced Latin fallback faces only in the approximate preview, only onto attested references, and declares them', async () => {
+    const legacy = (input: NativeDocxPagePaintPrepareInputV1) => {
+      const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+      settings.profile = 'unsupported'; delete settings.compatibility_mode
+      settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy12' }]
+      return settings
+    }
+    const input = fixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const run = document.body.blocks[0]!.paragraph!.runs[0]!, resolvedRun = resolved.runs.find((entry) => entry.run_id === run.id)!
+    const family = resolvedRun.properties.font_family!
+    // Strict resolution left this run without a face; the inventory covers only the remaining scopes.
+    delete resolvedRun.properties.font_family
+    rewriteInventory(input, (inventory) => { for (const reference of inventory.references) reference.scope_ids = reference.scope_ids.filter((id) => id !== run.id) })
+    const fact = { scope_kind: 'run' as const, scope_id: run.id, part_name: run.anchor.part_name, path: run.anchor.path, font_family: family, package_sha256: HASH }
+    const strict = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
+    const settings = legacy(input)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy12'], latin_font_fallbacks: [fact] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+    const before = structuredClone(input)
+    const { latin_font_fallbacks: _facts, ...withoutFacts } = eligibility
+    const withoutEvidence = await renderNativeDocxApproximatePagePreviewV1(input, withoutFacts, provider)
+    expect(withoutEvidence.status).toBe('refused')
+    const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(result.status).toBe('painted')
+    expect(result.approximated_font_faces).toEqual([fact])
+    expect(result.source_latin_font_fallbacks).toEqual([fact])
+    expect(result.reasons).toContain(DOCX_LATIN_FONT_FALLBACK_WARNING)
+    expect(result.pages[0]!.lines.some((line) => line.paragraph_id === document.body.blocks[0]!.paragraph!.id)).toBe(true)
+    expect(input).toEqual(before)
+    expect(decodeNativeDocxApproximatePagePreviewV1(result).ok).toBe(true)
+    for (const mutation of [{ approximated_font_faces: [{ ...fact, font_family: 'Other' }] }, { reasons: result.reasons.filter((r) => r !== DOCX_LATIN_FONT_FALLBACK_WARNING) }, { source_latin_font_fallbacks: [] }, { approximated_font_faces: [] }]) expect(decodeNativeDocxApproximatePagePreviewV1({ ...result, ...mutation }).ok).toBe(false)
+    // A face the strict inventory never attests is skipped, so the run stays unshaped and the page refuses as before.
+    const unattested = await renderNativeDocxApproximatePagePreviewV1(input, { ...eligibility, latin_font_fallbacks: [{ ...fact, font_family: 'Unattested Face' }] }, provider)
+    expect(unattested.status).toBe('refused')
+    expect(unattested.approximated_font_faces).toBeUndefined()
+    const refs = (layout: NativeDocxResolvedLayoutInputV1) => [...layout.runs.map((entry) => entry.properties), ...layout.paragraphs.map((entry) => entry.paragraph_mark_properties)].flatMap((p) => p?.font_family ? [{ family: p.font_family, weight: p.bold ? 700 : 400, style: p.italic ? 'italic' : 'normal' }] : [])
+    expect(projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, [fact], refs).applied).toEqual([fact])
+    expect(projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, [{ ...fact, font_family: 'Unattested Face' }], refs).applied).toEqual([])
+    // A host manifest that attests the authored face admits it even as a new reference.
+    expect(projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, [{ ...fact, font_family: 'Unattested Face' }], refs, (family, weight, style) => family === 'Unattested Face' && weight === 400 && style === 'normal').applied).toEqual([{ ...fact, font_family: 'Unattested Face' }])
+    expect(projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, [{ ...fact, font_family: 'Unattested Face' }], refs, (_family, weight) => weight === 700).applied).toEqual([])
+    expect(() => projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, [{ ...fact, path: '/w:document[1]/w:body[1]/w:p[9]/w:r[1]' }], refs)).toThrow('scope anchor')
+    const authored = structuredClone(resolved); authored.runs.find((entry) => entry.run_id === run.id)!.properties.font_family = family
+    expect(() => projectNativeDocxLatinFontFallbacksV1(input.document, authored, [fact], refs)).toThrow('override')
+    // Evidence is bound to the eligibility wire: a mismatching hash is refused at decode.
+    await expect(renderNativeDocxApproximatePagePreviewV1(input, { ...eligibility, latin_font_fallbacks: [{ ...fact, package_sha256: `sha256:${'f'.repeat(64)}` }] }, provider)).rejects.toThrow()
+  }, 20000)
+
+  it('declares the indented cell line policy once per paragraph even when only a hanging indent continuation line needs it', async () => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1, settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    const paragraph = document.body.blocks[0]!.table!.rows[0]!.cells[0]!.paragraphs[0]!
+    const properties = resolved.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)!.properties
+    properties.indent_left_twips = 360; properties.hanging_twips = 360
+    settings.profile = 'unsupported'; delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy12' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy12'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+    // One line: the hanging first line is full width, so no policy is needed or declared.
+    const single = await renderNativeDocxApproximatePagePreviewV1(structuredClone(input), eligibility, provider)
+    expect(single.status).toBe('painted')
+    expect(single.reasons).not.toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+    // Wrapped: continuation lines are indented and take the approximate branch.
+    paragraph.runs[0]!.text = Array.from({ length: 60 }, () => 'hanging').join(' ')
+    const wrapped = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(wrapped.status).toBe('painted')
+    const lines = wrapped.pages.flatMap((page) => page.lines.filter((line) => line.paragraph_id === paragraph.id))
+    expect(lines.length).toBeGreaterThan(1)
+    expect(wrapped.reasons).toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+    expect(wrapped.reasons.filter((r) => r === DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)).toHaveLength(1)
+  }, 20000)
 })
 
 describe('approximate DrawingML shapes', () => {

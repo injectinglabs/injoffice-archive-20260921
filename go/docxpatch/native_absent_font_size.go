@@ -56,52 +56,65 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, error) {
 			stories = append(stories, note)
 		}
 	}
+	consider := func(p *NativeParagraphV1) {
+		resolved, ok := paragraphs[p.ID]
+		if !ok || resolved.Numbering != nil || !r.absentStyleSize(resolved.AppliedStyles, "paragraph") {
+			return
+		}
+		node := r.nodeForAnchor(p.Anchor)
+		if node == nil || node.Name != (xml.Name{Space: r.wordNS, Local: "p"}) {
+			return
+		}
+		pprs := directNativeChildren(node, r.wordNS, "pPr")
+		if len(pprs) > 1 {
+			return
+		}
+		var ppr *nativeXMLNode
+		if len(pprs) == 1 {
+			ppr = pprs[0]
+		}
+		if !r.exactSizeStyleReference(ppr, "pStyle", resolved.StyleID) {
+			return
+		}
+		if resolved.ParagraphMarkProperties.FontSizeHalfPoint == nil && r.absentOwnerRunSize(ppr) {
+			add("paragraph-mark", p.ID, p.Anchor)
+		}
+		for _, run := range p.Runs {
+			rr, ok := runs[run.ID]
+			if !ok || rr.Properties.FontSizeHalfPoint != nil || !r.absentStyleSize(rr.AppliedCharacterStyles, "character") {
+				continue
+			}
+			owner := r.nodeForAnchor(run.Anchor)
+			for owner != nil && owner.Name != (xml.Name{Space: r.wordNS, Local: "r"}) {
+				owner = owner.parent
+			}
+			if owner == nil || !r.absentOwnerRunSize(owner) {
+				continue
+			}
+			rpr := firstDirectNativeChild(owner, r.wordNS, "rPr")
+			if !r.exactSizeStyleReference(rpr, "rStyle", rr.CharacterStyle) {
+				continue
+			}
+			add("run", run.ID, run.Anchor)
+		}
+	}
 	for _, story := range stories {
 		for _, block := range story.Blocks {
-			// Table cascade exceptions are deliberately outside this first policy.
-			p := block.Paragraph
-			if p == nil {
+			if block.Paragraph != nil {
+				consider(block.Paragraph)
 				continue
 			}
-			resolved, ok := paragraphs[p.ID]
-			if !ok || resolved.Numbering != nil || !r.absentStyleSize(resolved.AppliedStyles, "paragraph") {
+			// Cell paragraphs qualify only when the whole table-style chain is
+			// also size-free, so no table cascade exception can apply.
+			if block.Table == nil || !r.absentTableStyleSize(block.Table.TableStyleID) {
 				continue
 			}
-			node := r.nodeForAnchor(p.Anchor)
-			if node == nil || node.Name != (xml.Name{Space: r.wordNS, Local: "p"}) {
-				continue
-			}
-			pprs := directNativeChildren(node, r.wordNS, "pPr")
-			if len(pprs) > 1 {
-				continue
-			}
-			var ppr *nativeXMLNode
-			if len(pprs) == 1 {
-				ppr = pprs[0]
-			}
-			if !r.exactSizeStyleReference(ppr, "pStyle", resolved.StyleID) {
-				continue
-			}
-			if resolved.ParagraphMarkProperties.FontSizeHalfPoint == nil && r.absentOwnerRunSize(ppr) {
-				add("paragraph-mark", p.ID, p.Anchor)
-			}
-			for _, run := range p.Runs {
-				rr, ok := runs[run.ID]
-				if !ok || rr.Properties.FontSizeHalfPoint != nil || !r.absentStyleSize(rr.AppliedCharacterStyles, "character") {
-					continue
+			for _, row := range block.Table.Rows {
+				for _, cell := range row.Cells {
+					for index := range cell.Paragraphs {
+						consider(&cell.Paragraphs[index])
+					}
 				}
-				owner := r.nodeForAnchor(run.Anchor)
-				for owner != nil && owner.Name != (xml.Name{Space: r.wordNS, Local: "r"}) {
-					owner = owner.parent
-				}
-				if owner == nil || !r.absentOwnerRunSize(owner) {
-					continue
-				}
-				rpr := firstDirectNativeChild(owner, r.wordNS, "rPr")
-				if !r.exactSizeStyleReference(rpr, "rStyle", rr.CharacterStyle) {
-					continue
-				}
-				add("run", run.ID, run.Anchor)
 			}
 		}
 	}
@@ -116,7 +129,9 @@ func (r *nativeLayoutResolver) absentDefaultSize() bool {
 		return false
 	}
 	root, err := parseNativeXML(*r.parts.StylesPart, r.pkg.files[*r.parts.StylesPart])
-	if err != nil || root.Name != (xml.Name{Space: r.wordNS, Local: "styles"}) || !nativeExactContainer(root) {
+	// mc:Ignorable only declares ignorable namespaces, exactly as the main
+	// part extractor already accepts on part roots; it carries no size.
+	if err != nil || root.Name != (xml.Name{Space: r.wordNS, Local: "styles"}) || !nativeExactContainer(root, xml.Name{Space: nativeMCNamespace, Local: "Ignorable"}) {
 		return false
 	}
 	defaults := directNativeChildren(root, r.wordNS, "docDefaults")
@@ -229,6 +244,66 @@ func (r *nativeLayoutResolver) absentOwnerRunSize(owner *nativeXMLNode) bool {
 			// Their independently retained diagnostics still qualify or refuse
 			// actual rendering. No unknown/complex-size override is bypassed.
 		default:
+			return false
+		}
+	}
+	return true
+}
+
+// absentTableStyleSize proves the table-style cascade adds no run size. A
+// table without a style reference uses the declared default table style, so
+// that chain is checked rather than assumed empty; conditional table-style
+// regions are refused because their run layers are not evaluated here.
+func (r *nativeLayoutResolver) absentTableStyleSize(styleID *string) bool {
+	id := ""
+	if styleID != nil {
+		id = *styleID
+	} else {
+		for _, definition := range r.styles {
+			if definition == nil || definition.kind != "table" || definition.node == nil {
+				continue
+			}
+			value, present := nativeAttr(definition.node, r.wordNS, "default")
+			if !present {
+				continue
+			}
+			isDefault, valid := nativeLexicalOnOff(value)
+			if !valid {
+				return false
+			}
+			if isDefault {
+				if id != "" {
+					return false
+				}
+				id = definition.id
+			}
+		}
+		if id == "" {
+			return true
+		}
+	}
+	ids := []string{}
+	seen := map[string]bool{}
+	for current := id; current != ""; {
+		if seen[current] || len(ids) >= NativeDOCXMaxDepth {
+			return false
+		}
+		seen[current] = true
+		definition := r.styles["table\x00"+current]
+		if definition == nil {
+			return false
+		}
+		ids = append(ids, current)
+		current = definition.basedOn
+	}
+	for left, right := 0, len(ids)-1; left < right; left, right = left+1, right-1 {
+		ids[left], ids[right] = ids[right], ids[left]
+	}
+	if !r.absentStyleSize(ids, "table") {
+		return false
+	}
+	for _, id := range ids {
+		if len(directNativeChildren(r.styles["table\x00"+id].node, r.wordNS, "tblStylePr")) > 0 {
 			return false
 		}
 	}

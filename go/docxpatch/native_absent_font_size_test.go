@@ -128,3 +128,80 @@ func TestAbsentFontSizeEvidenceRequiresRealSourceAbsence(t *testing.T) {
 		}
 	}
 }
+
+func TestAbsentFontSizeTableCellParagraphsRequireSizeFreeTableStyle(t *testing.T) {
+	for _, tc := range []struct {
+		name, tableStyle, tblStyleRef, wantMark, wantRun string
+		want                                             int
+	}{
+		{name: "size-free table style chain", tableStyle: `<w:style w:type="table" w:styleId="Procedure"><w:basedOn w:val="TableNormal"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr><w:tblPr><w:tblInd w:w="360" w:type="dxa"/></w:tblPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>`, tblStyleRef: `<w:tblStyle w:val="Procedure"/>`, want: 2},
+		{name: "table style size", tableStyle: `<w:style w:type="table" w:styleId="Procedure"><w:rPr><w:sz w:val="20"/></w:rPr></w:style>`, tblStyleRef: `<w:tblStyle w:val="Procedure"/>`},
+		{name: "table style ancestor size", tableStyle: `<w:style w:type="table" w:styleId="Procedure"><w:basedOn w:val="TableNormal"/></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:rPr><w:sz w:val="20"/></w:rPr></w:style>`, tblStyleRef: `<w:tblStyle w:val="Procedure"/>`},
+		{name: "conditional table style regions", tableStyle: `<w:style w:type="table" w:styleId="Procedure"><w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr></w:tblStylePr></w:style>`, tblStyleRef: `<w:tblStyle w:val="Procedure"/>`},
+		{name: "missing table style", tblStyleRef: `<w:tblStyle w:val="Procedure"/>`},
+		{name: "no table style and no default table style", want: 2},
+		{name: "no table style with size-free default table style", tableStyle: `<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:tblPr><w:tblInd w:w="0" w:type="dxa"/></w:tblPr></w:style>`, want: 2},
+		{name: "no table style with sized default table style", tableStyle: `<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:rPr><w:sz w:val="20"/></w:rPr></w:style>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			styles := `<w:styles xmlns:w="` + wordMLTransitional + `" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"/><w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"/>` + tc.tableStyle + `</w:styles>`
+			parts := resolvedStylesTestParts(styles)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr>` + tc.tblStyleRef + `<w:tblW w:w="4000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:ind w:left="360"/></w:pPr><w:r><w:t>Cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>Sized</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			before := bytes.Clone(data)
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cell []NativeDocxAbsentFontSizeV1
+			for _, fact := range eligibility.AbsentFontSizes {
+				if strings.Contains(fact.Path, "/w:tbl[1]/") {
+					cell = append(cell, fact)
+				}
+			}
+			if len(cell) != tc.want {
+				t.Fatalf("cell facts=%d want %d: %#v", len(cell), tc.want, eligibility.AbsentFontSizes)
+			}
+			for _, fact := range cell {
+				if fact.PackageSHA256 != eligibility.PackageSHA256 || fact.PartName != "word/document.xml" || !strings.HasPrefix(fact.Path, "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[1]") || (fact.ScopeKind != "paragraph-mark" && fact.ScopeKind != "run") {
+					t.Fatalf("unbound cell fact %#v", fact)
+				}
+			}
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, run := range layout.Runs {
+				if run.Properties.FontSizeHalfPoint != nil && *run.Properties.FontSizeHalfPoint != 24 && tc.want > 0 {
+					t.Fatalf("strict size was invented: %#v", run.Properties)
+				}
+			}
+			if !bytes.Equal(data, before) {
+				t.Fatal("source mutated")
+			}
+		})
+	}
+}
+
+func TestAbsentFontSizeAcceptsIgnorableStylesRootOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name, attrs string
+		want        int
+	}{
+		{name: "markup compatibility ignorable", attrs: ` xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14"`, want: 2},
+		{name: "foreign root attribute", attrs: ` unknown="value"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			styles := `<w:styles xmlns:w="` + wordMLTransitional + `"` + tc.attrs + `><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"/><w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"/></w:styles>`
+			parts := resolvedStylesTestParts(styles)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r><w:t>Source</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(eligibility.AbsentFontSizes) != tc.want {
+				t.Fatalf("got %d want %d: %#v", len(eligibility.AbsentFontSizes), tc.want, eligibility.AbsentFontSizes)
+			}
+		})
+	}
+}

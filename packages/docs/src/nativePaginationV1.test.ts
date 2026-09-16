@@ -47,6 +47,8 @@ import {
   decodeNativeDocxPaginationRequestV1,
   paginateNativeDocxV1,
   paginateNativeDocxApproximateLegacyV1,
+  DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING,
+  nativeDocxApproximatePaginationPolicyReasonsV1,
   type NativeDocxPaginationRequestV1,
 } from './nativePaginationV1.js'
 import { asciiLowerNative, asciiUpperNative, compareNativeCodeUnits } from './nativeDeterminism.js'
@@ -2371,4 +2373,58 @@ describe('joint body and continued footnote flow',()=>{
    try{Object.assign(limits,{[key]:bound});expect(paginateNativeDocxV1(input())).toMatchObject({ok:true,value:{status:'refused',pages:[],sections:[]}})}finally{Object.assign(limits,{[key]:original})}
   }
  })
+})
+
+describe('approximate pagination of inert note separator stories', () => {
+  function legacy(request: NativeDocxPaginationRequestV1) {
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different layout semantics' }]
+    return { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256 ?? null, status: 'eligible', legacy_compatibility_mode: 14, reasons: ['Legacy mode 14 uses current layout'] }
+  }
+  // Word 2010 separator stories: the instruction paragraph plus a trailing empty
+  // paragraph, which the extractor reports as UNMODELED_NOTE_MARKUP and leaves unshaped.
+  function addInertSeparators(request: NativeDocxPaginationRequestV1): void {
+    for (const [index, role] of (['separator', 'continuation-separator'] as const).entries()) {
+      const part = 'word/footnotes.xml'
+      const first = paragraph(`paragraph:${role}:1`, 40 + index * 2); first.runs = []; first.anchor = noteAnchor(part, `/w:footnotes[1]/w:footnote[${index + 1}]/w:p[1]`, 10 + index * 100, 40 + index * 100)
+      const second = paragraph(`paragraph:${role}:2`, 41 + index * 2); second.runs = []; second.anchor = noteAnchor(part, `/w:footnotes[1]/w:footnote[${index + 1}]/w:p[2]`, 41 + index * 100, 60 + index * 100)
+      const story = { id: `story:footnote:${role}`, kind: 'footnote' as const, native_story_id: role === 'separator' ? '-1' : '0', relationship_id: 'rIdFootnotes', note_role: role, part_name: part, anchor: noteAnchor(part, `/w:footnotes[1]/w:footnote[${index + 1}]`, 1 + index * 100, 70 + index * 100), blocks: [first, second].map((entry) => ({ kind: 'paragraph' as const, id: entry.id, paragraph: entry })) }
+      request.document.notes.push(story)
+      request.document.unsupported.push({ id: `unsupported:${role}`, code: 'UNMODELED_NOTE_MARKUP', capability: 'notes', scope_id: story.id, anchor: story.anchor, preservation: 'preserve-verbatim', message: 'Reserved note separator stories must contain exactly one matching instruction leaf and no visible text' })
+      for (const entry of [first, second]) request.resolved_layout.paragraphs.push({ paragraph_id: entry.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+    }
+  }
+
+  it('omits unreferenced separator stories with unmodeled markup only in approximate layout, disclosed as a declared policy', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    addInertSeparators(request)
+    const strict = paginateNativeDocxV1(structuredClone(request))
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'note-structure-unsupported' })]))
+    const eligibility = legacy(request)
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('paginated')
+    if (approximate.layout.status !== 'paginated') return
+    expect(approximate.layout.pages.flatMap((page) => page.lines.map((line) => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2'])
+    expect(approximate.layout.pages.every((page) => (page.note_stories ?? []).length === 0)).toBe(true)
+    expect(approximate.layout.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'source-diagnostic', severity: 'deferred', scope_id: 'story:footnote:separator', message: DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING }),
+      expect.objectContaining({ code: 'source-diagnostic', severity: 'deferred', scope_id: 'story:footnote:continuation-separator', message: DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING }),
+    ]))
+    expect(nativeDocxApproximatePaginationPolicyReasonsV1(approximate.layout)).toEqual([DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING])
+    const clean = fixture({ lineCounts: [1, 1] })
+    expect(nativeDocxApproximatePaginationPolicyReasonsV1(paginateNativeDocxApproximateLegacyV1(clean, legacy(clean)).layout)).toEqual([])
+  })
+
+  it('still refuses unmodeled separator markup in approximate layout once a footnote reference exists', () => {
+    const request = fixture({ lineCounts: [1, 1] })
+    addFootnote(request)
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    request.document.unsupported.push({ id: 'unsupported:separator', code: 'UNMODELED_NOTE_MARKUP', capability: 'notes', scope_id: separator.id, anchor: separator.anchor!, preservation: 'preserve-verbatim', message: 'Reserved note separator stories must contain exactly one matching instruction leaf and no visible text' })
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, legacy(request))
+    expect(approximate.layout.status).toBe('refused')
+    expect(approximate.layout.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'note-structure-unsupported' })]))
+    expect(nativeDocxApproximatePaginationPolicyReasonsV1(approximate.layout)).toEqual([])
+  })
 })
