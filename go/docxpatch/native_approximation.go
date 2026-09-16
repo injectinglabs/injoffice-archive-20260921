@@ -25,6 +25,23 @@ type NativeDocxApproximationEligibilityV1 struct {
 
 const nativeApproximationCompatSettingURI = "http://schemas.microsoft.com/office/word"
 
+// nativeApproximationAdmittedDiagnostics are the strict settings diagnostic
+// codes the current-layout policy can still disclose as typed "not applied"
+// facts. Every other code (malformed structure, unrepresentable note
+// registrations, foreign markup that strict could not even shape into a
+// diagnosable leaf) keeps the attestation ineligible.
+var nativeApproximationAdmittedDiagnostics = map[string]bool{
+	"COMPATIBILITY_SETTING_UNSUPPORTED": true,
+	"PAGINATION_SETTING_UNSUPPORTED":    true,
+	"UNKNOWN_SETTINGS_ELEMENT":          true,
+	"DUPLICATE_SETTINGS_PROPERTY":       true,
+	// ECMA-376 17.15.1.20 w:characterSpacingControl selects East Asian
+	// punctuation compression. The approximate tier never compresses advances,
+	// so the value is recorded as not applied instead of refusing every
+	// East-Asian-locale save; strict pagination keeps refusing it unchanged.
+	"CHARACTER_SPACING_CONTROL_UNSUPPORTED": true,
+}
+
 // ExtractNativeDocxApproximationEligibilityV1 allows exact legacy mode 12 or 14,
 // plus a current-layout fallback when Word attests mode 15 but extras keep the
 // strict profile unsupported. Every setting the policy admits beyond strict
@@ -52,7 +69,7 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 		return result, nil
 	}
 	for _, diagnostic := range settings.Diagnostics {
-		if diagnostic.Code != "COMPATIBILITY_SETTING_UNSUPPORTED" && diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" && diagnostic.Code != "UNKNOWN_SETTINGS_ELEMENT" && diagnostic.Code != "DUPLICATE_SETTINGS_PROPERTY" {
+		if !nativeApproximationAdmittedDiagnostics[diagnostic.Code] {
 			return result, nil
 		}
 	}
@@ -190,6 +207,20 @@ func (b *nativeApproximationBuilder) topLevel(root *nativeXMLNode) bool {
 			if !b.add(fact) {
 				return false
 			}
+		case child.Name.Local == "characterSpacingControl" && codes["CHARACTER_SPACING_CONTROL_UNSUPPORTED"]:
+			// Recorded, never performed: the approximate tier shapes natural
+			// advances, so East Asian punctuation compression is disclosed as a
+			// typed fact instead of refusing the whole attestation.
+			if !nativeExactLeaf(child, b.val()) {
+				return b.refuse("characterSpacingControl at " + child.Path + " is not an exact value leaf")
+			}
+			value, present := nativeAttr(child, b.wordNS, "val")
+			if !present || !nativeApproximateCharacterSpacingControl[value] {
+				return b.refuse("characterSpacingControl at " + child.Path + " is not a known ECMA-376 compression value")
+			}
+			if !b.add(NativeDocxApproximatedSettingV1{Kind: "characterSpacingControl", Path: child.Path, Values: map[string]string{"val": value}}) {
+				return false
+			}
 		case nativeApproximateAuthoringSettings[child.Name.Local] && codes["PAGINATION_SETTING_UNSUPPORTED"]:
 			summary, ok := nativeApproximateAttributeSummary(child)
 			if !ok || !nativeXMLWhitespaceOnly(child.Text) {
@@ -309,6 +340,13 @@ func (b *nativeApproximationBuilder) compat(root *nativeXMLNode, mode *int) bool
 		return b.refuse("w:compat carries unexpected attributes or text")
 	}
 	modeValue := ""
+	// Word and third-party writers sometimes emit the same non-mode compatSetting
+	// more than once, occasionally with disagreeing values. None of those flags is
+	// an input to current layout, so every repeat is recorded verbatim in one
+	// grouped fact instead of refusing the attestation over an ambiguity that
+	// cannot reach this tier's output. compatibilityMode is excluded: its value is
+	// consumed, so disagreeing attestations still refuse below.
+	repeated := NativeDocxApproximatedSettingV1{Kind: "repeatedCompatSettings", Values: map[string]string{}}
 	for _, child := range compat[0].Children {
 		codes := b.diagnosed[child.Path]
 		if child.Name.Space != b.wordNS {
@@ -366,12 +404,28 @@ func (b *nativeApproximationBuilder) compat(root *nativeXMLNode, mode *int) bool
 			if !nativeApproximateCompatSettingFlag(name, value) {
 				return b.refuse("compatSetting " + name + " at " + child.Path + " is not a recorded flag value")
 			}
+			if b.kinds[name] {
+				if len(repeated.Values) >= nativeApproximationMaxGroupMembers {
+					return b.refuse("more than 64 repeated compatSetting attestations")
+				}
+				if b.diagnosed[child.Path] == nil {
+					return b.refuse("repeated compatSetting at " + child.Path + " has no strict diagnostic to join")
+				}
+				if repeated.Path == "" {
+					repeated.Path = child.Path
+				}
+				repeated.Values[child.Path] = name + "=" + value
+				continue
+			}
 			if !b.add(NativeDocxApproximatedSettingV1{Kind: name, Path: child.Path, Values: map[string]string{"val": value}}) {
 				return false
 			}
 		default:
 			return b.refuse("unknown compat markup at " + child.Path)
 		}
+	}
+	if len(repeated.Values) > 0 && !b.add(repeated) {
+		return false
 	}
 	switch modeValue {
 	case "14":

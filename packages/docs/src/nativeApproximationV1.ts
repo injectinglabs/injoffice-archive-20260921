@@ -8,6 +8,11 @@ import { DOCX_LATIN_FONT_FALLBACK_WARNING, validNativeDocxApproximatedFontFacesV
 import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentFontSizesV1, validNativeDocxApproximatedFontSizesV1, type NativeDocxAbsentFontSizeV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 import { collectNativeDocxApproximateOmissionsV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
 
+/** Bound on the typed not-applied disclosure vector, mirrored by the Go
+ * extractor's nativeApproximationMaxFacts. It bounds wire size only: a legacy
+ * w:compat block routinely carries dozens of option leaves that this tier
+ * records rather than applies, so it matches the grouped-member bound. */
+export const DOCX_APPROXIMATE_MAX_SETTING_FACTS = 64
 export const DOCX_APPROXIMATE_PREVIEW_PROTOCOL = 'injoffice.docx.approximate-page-preview' as const
 export const DOCX_APPROXIMATE_PREVIEW_POLICY = 'current-layout-approximate-v1' as const
 /** Source/resolution codes approximate preview omits while painting remaining glyphs. */
@@ -42,6 +47,16 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'NUMBERING_STYLE_PRESERVED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
+/** Declared whenever the approximate preview produced no page. The refusal
+ * cause is otherwise reachable only by reading the paint diagnostics array, so
+ * callers that render `reasons` saw an empty preview with no explanation. */
+export const DOCX_APPROXIMATE_PAINT_REFUSED_WARNING = 'Approximate read-only preview produced no page. The reasons below beginning "Approximate paint refused" name the exact source facts that stopped it.' as const
+/** Bound on how many painter diagnostics are restated as envelope reasons. */
+export const DOCX_APPROXIMATE_PAINT_REFUSED_MAX_REASONS = 8
+/** Byte-identical restatement of one painter diagnostic as an envelope reason. */
+export function nativeDocxApproximatePaintRefusalReason(diagnostic: NativeDocxPagePaintV1['diagnostics'][number]): string {
+  return `Approximate paint refused (${diagnostic.code} at ${diagnostic.scope_id}): ${diagnostic.message}`
+}
 export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of an expanded automatic line box, leaving extra leading below the text; an expanded exact or at-least line box instead seats the descent on the box bottom, leaving the leading above the text. Compressed line boxes remain unsupported.' as const
 export interface NativeDocxApproximationEligibilityV1 {
   protocol: 'injoffice.docx.approximation-eligibility'
@@ -105,7 +120,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,input.package_sha256)||input.legacy_compatibility_mode!==12||input.status!=='eligible'))throw new TypeError('Invalid legacy table origin evidence')
   if (input.absent_font_sizes !== undefined && !validNativeDocxAbsentFontSizesV1(input.absent_font_sizes, input.package_sha256)) throw new TypeError('Invalid source-absent font-size evidence')
   if (input.latin_font_fallbacks !== undefined && !validNativeDocxLatinFontFallbacksV1(input.latin_font_fallbacks, input.package_sha256)) throw new TypeError('Invalid Latin font fallback evidence')
-  if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
+  if (!Array.isArray(facts) || facts.length > DOCX_APPROXIMATE_MAX_SETTING_FACTS || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
   if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || (input.legacy_compatibility_mode === 15) !== (settings.compatibility_mode === 15) || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
   return input
 }
@@ -113,13 +128,19 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
 export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSettingsV1, eligibility: NativeDocxApproximationEligibilityV1, paint: NativeDocxPagePaintV1, source?: NativeDocxApproximateOmissionSourceV1): NativeDocxApproximatePagePreviewV1 {
   if (paint.status === 'painted' && !source) throw new TypeError('Painted approximate output requires its source for omitted-content disclosure')
   const omissions = source ? collectNativeDocxApproximateOmissionsV1(source, paint) : nativeDocxApproximateRefusalOmissionsV1()
+  // A refused paint carries its cause only in the paint diagnostics. Restate it
+  // in the reasons vector so the disclosure surface every caller already reads
+  // says why no page exists, within the decoder's bounded reason count.
+  const refused = paint.status === 'refused'
+    ? [DOCX_APPROXIMATE_PAINT_REFUSED_WARNING, ...paint.diagnostics.slice(0, DOCX_APPROXIMATE_PAINT_REFUSED_MAX_REASONS).map(nativeDocxApproximatePaintRefusalReason)]
+    : []
   return {
     protocol: DOCX_APPROXIMATE_PREVIEW_PROTOCOL, version: 1, fidelity: 'approximate', policy: DOCX_APPROXIMATE_PREVIEW_POLICY, read_only: true,
     table_border_layout_policy:'collapsed-horizontal-border-reservation-v1',
     table_width_policy:'approximate-authored-grid-fitted-v1',
     status: paint.status,
     source: { document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256 ?? null },
-    reasons: [...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[]),...(omissions.omitted_content.length||omissions.unpainted_pages.length?[DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING]:[])],
+    reasons: boundedApproximateReasons([...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[]),...(omissions.omitted_content.length||omissions.unpainted_pages.length?[DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING]:[])], refused),
     ...(eligibility.legacy_table_origins?{legacy_table_origins:structuredClone(eligibility.legacy_table_origins)}:{}),
     source_settings_diagnostics: structuredClone(settings.diagnostics),
     ...(eligibility.approximated_settings ? { approximated_settings: structuredClone(eligibility.approximated_settings) } : {}),
@@ -143,6 +164,9 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes', 'source_latin_font_fallbacks', 'approximated_font_faces','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 264 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || !input.reasons.includes(DOCX_APPROXIMATE_LINE_BOX_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
+    // A refused approximate preview must say so in its reasons, and a painted one
+    // must not claim a refusal it did not make.
+    if ((input.status === 'refused') !== input.reasons.includes(DOCX_APPROXIMATE_PAINT_REFUSED_WARNING)) return invalid('Refused approximate preview must declare its refusal in reasons')
     const paint = decodeNativeDocxPagePaintV1({ protocol: DOCX_PAGE_PAINT_PROTOCOL, version: DOCX_PAGE_PAINT_VERSION, status: input.status, provenance: input.rendering_provenance, diagnostics: input.diagnostics, resources: input.resources, pages: input.pages })
     if(input.table_border_layout_policy!==undefined&&(input.table_border_layout_policy!=='collapsed-horizontal-border-reservation-v1'||!input.reasons.includes(DOCX_TABLE_BORDER_RESERVATION_WARNING)))return invalid('Invalid declared table border reservation policy or warning')
     if(input.table_width_policy!==undefined&&(input.table_width_policy!=='approximate-authored-grid-fitted-v1'||!input.reasons.includes(DOCX_TABLE_GRID_FIT_WARNING)))return invalid('Invalid declared table width policy or warning')
@@ -159,7 +183,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     if (!validNativeDocxLatinFontFallbacksV1(fallbacks, settings.package_sha256)) return invalid('Invalid Latin font fallback evidence')
     if (input.approximated_font_faces !== undefined && (!validNativeDocxApproximatedFontFacesV1(input.approximated_font_faces, fallbacks, settings.package_sha256) || !input.reasons.includes(DOCX_LATIN_FONT_FALLBACK_WARNING))) return invalid('Applied Latin font fallbacks require retained source evidence and the declared warning')
     const facts = input.approximated_settings ?? []
-    if (!Array.isArray(facts) || facts.length > 8 || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) return invalid('invalid retained approximate settings facts')
+    if (!Array.isArray(facts) || facts.length > DOCX_APPROXIMATE_MAX_SETTING_FACTS || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) return invalid('invalid retained approximate settings facts')
     if (facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || (input.status === 'painted' && !coveredSettingsDiagnostics(settings, facts))) return invalid('missing approximate setting coverage or warning')
     if (paint.value.provenance.document_id !== settings.document_id || paint.value.provenance.revision !== settings.revision || paint.value.provenance.package_sha256 !== settings.package_sha256) return invalid('approximate rendering identity does not match retained source settings')
     if (!input.source || Object.keys(input.source).sort().join(',') !== 'document_id,package_sha256,revision,settings_sha256' || input.source.document_id !== settings.document_id || input.source.revision !== settings.revision || input.source.package_sha256 !== settings.package_sha256 || input.source.settings_sha256 !== (settings.settings_sha256 ?? null) || JSON.stringify(input.source_settings_diagnostics) !== JSON.stringify(settings.diagnostics)) return invalid('approximate source facts and retained settings diagnostics do not exact-join')
@@ -167,10 +191,21 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
   } catch { return invalid('approximate output could not be safely inspected') }
 }
 
+/** Keeps the declared refusal reasons inside the decoder's 264-reason bound by
+ * dropping repeated eligibility detail first, never the refusal declaration. */
+function boundedApproximateReasons(declared: string[], refused: string[]): string[] {
+  const limit = 264
+  if (declared.length + refused.length <= limit) return [...declared, ...refused]
+  return [...declared.slice(0, Math.max(0, limit - refused.length)), ...refused.slice(0, limit)]
+}
+
 function coveredSettingsDiagnostics(settings: NativeDocxPaginationSettingsV1, facts: NativeDocxApproximatedSettingV1[]): boolean {
   return settings.diagnostics.every(reason => {
     if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && (['/w:settings[1]', '/w:settings[1]/w:compat[1]', '/w:settings[1]/w:compat[1]/w:compatSetting[1]', '/w:settings[1]/w:compat[1]/w:applyBreakingRules[1]'].includes(reason.path) || /^\/w:settings\[1\]\/w:compat\[1\]\/w:compatSetting\[[5-9]\]$/.test(reason.path))) return true
     if (reason.code === 'PAGINATION_SETTING_UNSUPPORTED' || reason.code === 'UNKNOWN_SETTINGS_ELEMENT' || reason.code === 'DUPLICATE_SETTINGS_PROPERTY') return true
-    return facts.some(fact => fact.path === reason.path && reason.code === (fact.kind === 'mathPr' ? 'UNKNOWN_SETTINGS_ELEMENT' : fact.path.includes('/w:compat[1]/') ? 'COMPATIBILITY_SETTING_UNSUPPORTED' : 'PAGINATION_SETTING_UNSUPPORTED'))
+    // Grouped repeated compatSetting attestations disclose each member by its own
+    // settings.xml path, so the join is on the member key, not the anchor path.
+    if (reason.code === 'COMPATIBILITY_SETTING_UNSUPPORTED' && facts.some(fact => fact.kind === 'repeatedCompatSettings' && reason.path in fact.values)) return true
+    return facts.some(fact => fact.path === reason.path && reason.code === (fact.kind === 'mathPr' ? 'UNKNOWN_SETTINGS_ELEMENT' : fact.kind === 'characterSpacingControl' ? 'CHARACTER_SPACING_CONTROL_UNSUPPORTED' : fact.path.includes('/w:compat[1]/') ? 'COMPATIBILITY_SETTING_UNSUPPORTED' : 'PAGINATION_SETTING_UNSUPPORTED'))
   }) && facts.every(fact => settings.diagnostics.some(reason => reason.path === fact.path))
 }
