@@ -41,6 +41,13 @@ describe('operator-owned DOCX fonts',()=>{
   expect(await fonts.resolver.resolve({manifest:fonts.manifest,run:{...run,text:'漢',script:'Hani'}})).toMatchObject({status:'refused'})
   await expect(loadHostFonts(value,config([entry]),true)).rejects.toThrow(/not configured/)
  })
+ it('loads approximate fallback evidence faces as sidecar requests without making them required',async()=>{
+  const extra={...entry,family:'Fallback Face'}
+  const fonts=await loadHostFonts(input(),config([entry,extra]),'approximate',[{family:'Fallback Face',weight:400,style:'normal'},{family:'Nowhere Face',weight:400,style:'normal'}])
+  expect(fonts.manifest.faces.map(f=>f.family).sort()).toEqual(['DejaVu Sans','Fallback Face'])
+  // Sidecar faces never satisfy or substitute an inventory reference.
+  await expect(loadHostFonts(input(),config([extra]),false,[{family:'Fallback Face',weight:400,style:'normal'}])).rejects.toThrow(/Exact configured font unavailable/)
+ })
  it('loads only exact referenced fonts and owns each returned byte buffer',async()=>{
   const fonts=await loadHostFonts(input(),config([entry,{...entry,family:'Unused',path:'/nonexistent/unreferenced.ttf'}]))
   expect(fonts.manifest.faces).toHaveLength(1)

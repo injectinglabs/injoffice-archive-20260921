@@ -49,6 +49,34 @@ export type NativeDocxPagePaintWorkerResponseV1 = {
   id: string
 } & ({ ok: true; result: unknown } | { ok: false; error: { code: string; message: string } })
 
+/** One bounded, de-duplicated sidecar request list: equation faces first, then evidenced
+ * Latin fallback faces. Requests past the loader bound are dropped (their facts then stay
+ * unapplied), never turned into a failure. */
+function sidecarFontRequests(...groups: HostFontReference[][]): HostFontReference[] {
+  const seen = new Set<string>(), requests: HostFontReference[] = []
+  for (const group of groups) for (const request of group) {
+    const identity = `${request.family.toLowerCase()}\u0000${request.weight}\u0000${request.style}`
+    if (seen.has(identity) || requests.length >= 32) continue
+    seen.add(identity); requests.push(request)
+  }
+  return requests
+}
+
+/** Host faces the approximate preview may need for evidenced Latin font fallbacks; the compiler
+ * re-validates every fact and applies a face only when the loaded manifest attests it. */
+function latinFallbackReferences(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown): HostFontReference[] {
+  if (!record(eligibility) || !Array.isArray(eligibility.latin_font_fallbacks) || eligibility.latin_font_fallbacks.length > 1000) return []
+  const layout = input.resolved_layout as { runs?: Array<{ run_id: string; properties?: { bold?: boolean; italic?: boolean } }>; paragraphs?: Array<{ paragraph_id: string; paragraph_mark_properties?: { bold?: boolean; italic?: boolean } }> } | undefined
+  const references: HostFontReference[] = []
+  for (const fact of eligibility.latin_font_fallbacks) {
+    if (!record(fact) || typeof fact.font_family !== 'string' || typeof fact.scope_id !== 'string') continue
+    const properties = fact.scope_kind === 'run' ? layout?.runs?.find((run) => run.run_id === fact.scope_id)?.properties : layout?.paragraphs?.find((paragraph) => paragraph.paragraph_id === fact.scope_id)?.paragraph_mark_properties
+    if (!properties) continue
+    references.push({ family: fact.font_family, weight: properties.bold === true ? 700 : 400, style: properties.italic === true ? 'italic' : 'normal' })
+  }
+  return references
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -165,7 +193,8 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       if (fontSizePolicy !== undefined && !validNativeDocxHostDefaultSizePolicyV1(fontSizePolicy)) throw new TypeError('Host default size policy is invalid')
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
-      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false, equationFontRequests(equations)) : undefined
+      const evidence = value.op === 'render-approximate' ? value.input.eligibility : value.op === 'render-auto-borders' ? value.input.legacy_eligibility : undefined
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false, sidecarFontRequests(equationFontRequests(equations), latinFallbackReferences(input, evidence))) : undefined
       if(fontOnly&&!fonts)throw new TypeError('Font preview requires explicit operator fonts')
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const outlineProvider: Parameters<typeof renderNativeDocxAutomaticBorderPreviewV1>[1] = {

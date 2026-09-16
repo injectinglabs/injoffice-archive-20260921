@@ -211,7 +211,7 @@ func newNativeLayoutResolver(data []byte, options NativeExtractionOptions) (*nat
 		return nil, err
 	}
 	resolver := &nativeLayoutResolver{
-		pkg: pkg, doc: doc, mainPart: mainPart,
+		pkg: pkg, doc: doc, mainPart: mainPart, tolerateEmptyScriptSlots: options.tolerateEmptyScriptSlots,
 		wordNS: wordMLTransitional, relBase: relBaseTransitional,
 		styles:        map[string]*nativeStyleDefinition{},
 		abstractNums:  map[string]*nativeAbstractNumbering{},
@@ -245,34 +245,37 @@ func EncodeNativeResolvedLayoutInputV1(input *NativeResolvedLayoutInputV1) ([]by
 }
 
 type nativeLayoutResolver struct {
-	pkg                     *nativePackage
-	doc                     *NativeDocumentV1
-	mainPart                string
-	wordNS                  string
-	relBase                 string
-	parts                   NativeResolvedSourcePartsV1
-	numberingSource         *NativeResolvedNumberingSourceV1
-	styles                  map[string]*nativeStyleDefinition
-	abstractNums            map[string]*nativeAbstractNumbering
-	nums                    map[string]*nativeNumberingInstance
-	docP                    nativeParagraphProperties
-	docR                    nativeRunProperties
-	defaultP                string
-	defaultC                string
-	fonts                   []NativeResolvedFontV1
-	unusedFontDescriptors   []nativeUnusedFontDescriptor
-	diagnostics             []NativeResolutionDiagnosticV1
-	diagnosticSet           map[string]bool
-	diagnosticOverflow      bool
-	deferredNumbering       *[]nativeDeferredNumberingDiagnostic
-	deferredDiagnosticCount int
-	numberingRootDeferred   []nativeDeferredNumberingDiagnostic
-	nodeByAnchor            map[string]*nativeXMLNode
-	mainRoot                *nativeXMLNode
-	autoBorderWhiteChecked  bool
-	autoBorderWhite         bool
-	themeSrgb               map[string]string
-	themeLatinFonts         nativeThemeLatinFonts
+	pkg             *nativePackage
+	doc             *NativeDocumentV1
+	mainPart        string
+	wordNS          string
+	relBase         string
+	parts           NativeResolvedSourcePartsV1
+	numberingSource *NativeResolvedNumberingSourceV1
+	styles          map[string]*nativeStyleDefinition
+	abstractNums    map[string]*nativeAbstractNumbering
+	nums            map[string]*nativeNumberingInstance
+	docP            nativeParagraphProperties
+	docR            nativeRunProperties
+	defaultP        string
+	defaultC        string
+	// Evidence-only tolerant pass (nativeLatinFontFallbacks): never set by
+	// strict extraction, so strict resolved output is byte-identical.
+	tolerateEmptyScriptSlots bool
+	fonts                    []NativeResolvedFontV1
+	unusedFontDescriptors    []nativeUnusedFontDescriptor
+	diagnostics              []NativeResolutionDiagnosticV1
+	diagnosticSet            map[string]bool
+	diagnosticOverflow       bool
+	deferredNumbering        *[]nativeDeferredNumberingDiagnostic
+	deferredDiagnosticCount  int
+	numberingRootDeferred    []nativeDeferredNumberingDiagnostic
+	nodeByAnchor             map[string]*nativeXMLNode
+	mainRoot                 *nativeXMLNode
+	autoBorderWhiteChecked   bool
+	autoBorderWhite          bool
+	themeSrgb                map[string]string
+	themeLatinFonts          nativeThemeLatinFonts
 }
 
 type nativeDeferredNumberingDiagnostic struct {
@@ -1988,6 +1991,9 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			validScript := true
 			for _, local := range []string{"eastAsia", "cs"} {
 				if value, present := nativeAttr(child, resolver.wordNS, local); present && !nativeBoundedResolvedString(value, 256) {
+					if value == "" && resolver.tolerateEmptyScriptSlots {
+						continue
+					}
 					validScript = false
 				}
 			}

@@ -168,6 +168,7 @@ import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximate
 import { projectNativeDocxAbsentFontSizesV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
+import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1, stripNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
 export interface NativeDocxApproximateRuntimeV1 {
   createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1
   fonts?: NativeDocxHostFontsV1
@@ -317,6 +318,14 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
       charts = undefined; chartProjection = undefined; chartSidecarRefused = true
     }
   }
+  let appliedFaces: NativeDocxLatinFontFallbackV1[] = []
+  if (eligibility.status === 'eligible' && eligibility.latin_font_fallbacks?.length) {
+    const manifestFaces = runtime?.fonts?.manifest.faces ?? []
+    const attested = (family: string, weight: 400 | 700, style: 'normal' | 'italic') => manifestFaces.some((face) => face.weight === weight && face.style === style && face.stretch === 100 && [face.family, ...(face.aliases ?? [])].some((name) => asciiEqual(name, family)))
+    const projected = projectNativeDocxLatinFontFallbacksV1(input.document, input.resolved_layout, eligibility.latin_font_fallbacks, resolvedFontReferences, attested)
+    input = { ...input, resolved_layout: projected.resolved }
+    appliedFaces = projected.applied
+  }
   const { result, prepared } = await renderNativeDocxApproximatePagePreviewInternalV1(input, eligibility, outlineProvider, runtime)
   if (sidecarRefused && !result.reasons.includes(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)) result.reasons.push(DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED)
   if (chartSidecarRefused && !result.reasons.includes(DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED)) result.reasons.push(DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED)
@@ -364,6 +373,10 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
+  }
+  if (appliedFaces.length > 0 && result.status === 'painted') {
+    result.approximated_font_faces = appliedFaces
+    result.reasons.push(DOCX_LATIN_FONT_FALLBACK_WARNING)
   }
   // Equation paint attaches to the reserved atoms after body pagination and
   // re-derives the omitted-content disclosure for the pages it touched.
@@ -720,7 +733,11 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     || inventory.document_id !== resolved.value.document_id || inventory.revision !== resolved.value.revision || inventory.main_part !== resolved.value.source_parts.main_part
     || inventory.font_table?.part_name !== resolved.value.source_parts.font_table_part
     || inventory.document_id !== settings.value.document_id || inventory.revision !== settings.value.revision || inventory.package_sha256 !== settings.value.package_sha256 || inventory.main_part !== settings.value.main_part) throw new TypeError('font inventory does not exact-join the document, resolved layout, pagination settings, package, main part, and source revision')
-  if (JSON.stringify(inventory.references) !== JSON.stringify(resolvedFontReferences(resolved.value))) throw new TypeError('font inventory references do not exactly and completely cover the resolved document scopes')
+  // The approximate preview may have projected evidenced Latin fallback faces onto
+  // scopes strict resolution left unresolved; the strict inventory is joined against
+  // the layout with those projections removed. Projected faces never add a reference.
+  const strictView = approximateEligibility === undefined ? resolved.value : stripNativeDocxLatinFontFallbacksV1(resolved.value, decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value).latin_font_fallbacks ?? [])
+  if (JSON.stringify(inventory.references) !== JSON.stringify(resolvedFontReferences(strictView))) throw new TypeError('font inventory references do not exactly and completely cover the resolved document scopes')
   validateInventoryPackagePartJoins(inventory, document.value, settings.value)
   if (!inventory.native_text_manifest && !runtime?.fonts) throw new TypeError('document has no embedded fonts; configure explicit host fonts for native preview')
   const manifest = validateFontManifest(runtime?.fonts?.manifest ?? inventory.native_text_manifest)

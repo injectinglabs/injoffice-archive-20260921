@@ -3584,6 +3584,31 @@
               "signature": "export declare const DOCX_APPROXIMATE_EQUATIONS_PROTOCOL: 'injoffice.docx.approximate-equations'"
             },
             {
+              "name": "DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING: 'Approximate read-only preview: a header or footer story taller than its reserved band is painted at the authored header/footer distance and may overlap the body box; Word moves the body instead.'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<string>"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING: 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING: 'Approximate read-only preview: indented table-cell lines are placed inside the qualified cell content width instead of requiring an exact full-width line box.'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING: 'Approximate read-only preview: footnote/endnote separator stories with unmodeled markup are omitted because the document has no footnote or endnote references; nothing is painted for them.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES: readonly ['Cambria Math', 'STIX Two Math', 'STIX Math', 'STIXGeneral', 'XITS Math', 'Latin Modern Math', 'Asana Math', 'Libertinus Math', 'TeX Gyre Termes Math', 'TeX Gyre Pagella Math', 'DejaVu Math TeX Gyre', 'Fira Math', 'Noto Sans Math']"
@@ -3597,6 +3622,11 @@
               "name": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL",
               "kind": "export",
               "signature": "DOCX_APPROXIMATE_PREVIEW_PROTOCOL"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING: 'Approximate read-only preview: table-style properties outside the exact border/fill subset (style indents, cell margins, conditional regions) are not applied; direct table properties and defaults are painted instead.'"
             },
             {
               "name": "DOCX_APPROXIMATE_TEXTBOX_FONT_CODE",
@@ -3652,6 +3682,11 @@
               "name": "DOCX_INLINE_IMAGE_LIMITS",
               "kind": "const",
               "signature": "export declare const DOCX_INLINE_IMAGE_LIMITS: Readonly<"
+            },
+            {
+              "name": "DOCX_LATIN_FONT_FALLBACK_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_LATIN_FONT_FALLBACK_WARNING: 'Approximate read-only preview: runs whose font selection strict resolution leaves unresolved because of an empty East-Asian or complex-script font slot use the authored ascii/hAnsi face; Word may select the complex-script font for right-to-left or complex-script text.'"
             },
             {
               "name": "DOCX_MAX_TWIPS_FOR_MILLIPOINTS",
@@ -4084,6 +4119,11 @@
               "signature": "NativeDocxApproximateEquationV1"
             },
             {
+              "name": "nativeDocxApproximateHeaderFooterPolicyReasonsV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxApproximateHeaderFooterPolicyReasonsV1(layout: NativeDocxHeaderFooterLayoutV1): string[]"
+            },
+            {
               "name": "NativeDocxApproximateInlineChartProjectionV1",
               "kind": "type",
               "signature": "NativeDocxApproximateInlineChartProjectionV1"
@@ -4122,6 +4162,11 @@
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatePagePreviewV1"
+            },
+            {
+              "name": "nativeDocxApproximatePaginationPolicyReasonsV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxApproximatePaginationPolicyReasonsV1(layout: NativeDocxPaginatedLayoutV1): string[]"
             },
             {
               "name": "NativeDocxApproximateRuntimeV1",
@@ -4319,6 +4364,11 @@
               "signature": "export interface NativeDocxHardBreakV1"
             },
             {
+              "name": "NativeDocxHeaderFooterApproximationV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxHeaderFooterApproximationV1"
+            },
+            {
               "name": "NativeDocxHeaderFooterDiagnosticCodeV1",
               "kind": "type",
               "signature": "export type NativeDocxHeaderFooterDiagnosticCodeV1 = 'relationship-ambiguous' | 'selected-story-missing' | 'selected-story-kind-mismatch' | 'selected-story-unsupported' | 'selected-story-table' | 'selected-story-shape' | 'selected-story-reference' | 'selected-story-field' | 'selected-story-diagnostic' | 'section-geometry-invalid' | 'selected-paragraph-missing' | 'selected-paragraph-unsupported' | 'selected-line-invalid' | 'header-band-overflow' | 'footer-band-overflow' | 'resource-limit'"
@@ -4387,6 +4437,11 @@
               "name": "NativeDocxIssueCode",
               "kind": "type",
               "signature": "export type NativeDocxIssueCode = 'UNKNOWN_FIELD' | 'REQUIRED' | 'INVALID_TYPE' | 'INVALID_VALUE' | 'OUT_OF_RANGE' | 'UNSUPPORTED_PROTOCOL' | 'UNSUPPORTED_VERSION' | 'DUPLICATE_ID' | 'BROKEN_REFERENCE' | 'INVALID_UNION' | 'LIMIT_EXCEEDED'"
+            },
+            {
+              "name": "NativeDocxLatinFontFallbackV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxLatinFontFallbackV1"
             },
             {
               "name": "NativeDocxLineFragmentV1",
@@ -5409,9 +5464,19 @@
               "signature": "export declare function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1): NativeDocxValidationIssue[]"
             },
             {
+              "name": "validNativeDocxApproximatedFontFacesV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxApproximatedFontFacesV1(value: unknown, source: readonly NativeDocxLatinFontFallbackV1[], packageSHA256: string): value is NativeDocxLatinFontFallbackV1[]"
+            },
+            {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
               "kind": "export",
               "signature": "validNativeDocxHostDefaultSizePolicyV1"
+            },
+            {
+              "name": "validNativeDocxLatinFontFallbacksV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxLatinFontFallbacksV1(value: unknown, packageSHA256: string): value is NativeDocxLatinFontFallbackV1[]"
             }
           ]
         },

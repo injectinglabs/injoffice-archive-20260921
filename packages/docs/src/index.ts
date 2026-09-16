@@ -63,6 +63,11 @@ export {
   type NativeDocxHeaderFooterLayoutInputV1,
   nativeDocxHeaderFooterLayoutSha256V1,
   layoutNativeDocxHeadersFootersV1,
+  DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
+  nativeDocxApproximateHeaderFooterPolicyReasonsV1,
+  type NativeDocxHeaderFooterApproximationV1,
 } from './nativeHeaderFooterLayoutV1'
 export * from './nativeImagePagePaintV1'
 // Keep approximate implementation seams outside the public package API.
@@ -116,6 +121,7 @@ export {
   DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS,
   DOCX_PAGE_PAINT_V1_BINDING_FIELDS,
   decodeNativeDocxPagePaintV1,
+  DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING,
 } from './nativePagePaintV1'
 export { DOCX_PAGE_FIELD_LIMITS } from './nativePageFieldsV1'
 export type { NativeDocxPageFieldVariantV1 } from './nativePageFieldsV1'
@@ -138,3 +144,4 @@ export * from './nativeTextboxGeometryPreviewV1.js'
 export * from './nativeTextboxPagePreviewV1.js'
 export * from './nativeTextboxPagesPreviewV2.js'
 export * from './nativeTextboxPageCompilerV1.js'
+export { DOCX_LATIN_FONT_FALLBACK_WARNING, validNativeDocxLatinFontFallbacksV1, validNativeDocxApproximatedFontFacesV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1'
