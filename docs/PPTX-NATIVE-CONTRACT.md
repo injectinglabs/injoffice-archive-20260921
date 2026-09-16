@@ -163,8 +163,10 @@ subset and never change strict output: `AllowSourceFrameAutoFitPreview` admits
 authored `normAutofit` `fontScale` to run sizes and carries its `lnSpcReduction`
 as `textBody.lineSpacingReductionPercent1000` for the approximate renderer to
 reduce line pitch by (`autoFit` stays `none`; both disclosed
-by `pptx.autofit-authored-scale-approximate`), and paints `numCol`/`spcCol` bodies
-as one disclosed column; `AllowInheritedTextPreview` admits the declared
+by `pptx.autofit-authored-scale-approximate`), and carries `numCol`/`spcCol` as
+`textBody.columnCount` / `textBody.columnSpacingEmu` so the approximate renderer
+flows the body through equal-width columns (disclosed by
+`pptx.text-columns-approximate`); `AllowInheritedTextPreview` admits the declared
 inherited-text and placeholder-inheritance approximations described in
 `go/pptxpatch/README.md`. Each approximation is a preserve-only element with a
 warning diagnostic that validation requires. Strict output has one further

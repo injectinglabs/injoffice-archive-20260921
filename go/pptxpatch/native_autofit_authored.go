@@ -8,7 +8,7 @@ import (
 
 const (
 	nativeAuthoredAutoFitCode     = "pptx.autofit-authored-scale-approximate"
-	nativeTextColumnsOmittedCode  = "pptx.text-columns-single-column-approximate"
+	nativeTextColumnsCode         = "pptx.text-columns-approximate"
 	nativeAuthoredAutoFitFullSize = int64(100000)
 	nativeMaxTextColumns          = int64(16)
 )
@@ -123,6 +123,21 @@ func nativeFormatPercent(value int64) string {
 	return text + "%"
 }
 
+// nativeAuthoredColumnsFit reports whether the saved frame still leaves a
+// positive width for every authored column after the insets and the authored
+// gaps. When it does not, the preview keeps painting one disclosed column
+// instead of emitting a column projection the renderer could not honor.
+func nativeAuthoredColumnsFit(element *NativeElement, fit *nativeAuthoredAutoFit) bool {
+	if element == nil || element.TextBody == nil || fit == nil || fit.columns < 2 {
+		return false
+	}
+	if element.Transform.Cx == nil || element.TextBody.LeftInsetEMU == nil || element.TextBody.RightInsetEMU == nil {
+		return false
+	}
+	content := *element.Transform.Cx - *element.TextBody.LeftInsetEMU - *element.TextBody.RightInsetEMU - (fit.columns-1)*fit.columnSpacingEMU
+	return content > 0 && content/fit.columns > 0
+}
+
 // nativeMarkAuthoredAutoFit labels the projection. The element becomes
 // preserve-only because PowerPoint recomputes these values on edit.
 func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFit) {
@@ -146,11 +161,20 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 		})
 	}
 	if fit.columns > 1 || fit.columnSpacingEMU > 0 {
+		authored := "the authored numCol=" + strconv.FormatInt(fit.columns, 10) +
+			" spcCol=" + strconv.FormatInt(fit.columnSpacingEMU, 10) + " EMU text body"
+		message := "Read-only approximate preview paints " + authored +
+			" as a single column because the saved frame leaves no positive column width; column flow and line breaks differ from PowerPoint."
+		if fit.columns > 1 && nativeAuthoredColumnsFit(element, fit) {
+			element.TextBody.ColumnCount = int64Pointer(fit.columns)
+			element.TextBody.ColumnSpacingEMU = int64Pointer(fit.columnSpacingEMU)
+			message = "Read-only approximate preview flows " + authored +
+				" left to right through equal-width columns, wrapping at the column width and continuing in the next column once the frame height is reached; rtlCol is not modeled and column balancing, line breaks and overflow may differ from PowerPoint."
+		}
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning,
-			Code:     nativeTextColumnsOmittedCode,
-			Message: "Read-only approximate preview paints the authored numCol=" + strconv.FormatInt(fit.columns, 10) +
-				" spcCol=" + strconv.FormatInt(fit.columnSpacingEMU, 10) + " EMU text body as a single column; column flow and line breaks differ from PowerPoint.",
+			Code:     nativeTextColumnsCode,
+			Message:  message,
 		})
 	}
 }

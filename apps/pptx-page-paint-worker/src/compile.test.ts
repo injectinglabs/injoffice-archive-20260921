@@ -26,7 +26,7 @@ it('requires explicit source-frame opt-in and retains real glyph paint with a bo
  await expect(compilePptxPreview({...request,source_frame_autofit_preview:'true'})).rejects.toThrow('boolean')
 })
 it('gates Go-side authored autofit scale and single-column disclosures behind the same autofit opt-in',async()=>{
- for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-single-column-approximate']){
+ for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate']){
   const request=input(),element=request.deck.slides[0].elements[0]
   element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code,message:'Authored frame layout approximation'}]}
   await expect(compilePptxPreview(request)).rejects.toThrow('Authored autofit scale requires explicit preview opt-in')

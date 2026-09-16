@@ -316,6 +316,8 @@
         "verticalAnchor": { "$ref": "#/$defs/textVerticalAnchor" },
         "autoFit": { "enum": ["none", "shape-source-frame"] },
         "lineSpacingReductionPercent1000": { "type": "integer", "minimum": 1, "maximum": 99999 },
+        "columnCount": { "type": "integer", "minimum": 2, "maximum": 16 },
+        "columnSpacingEmu": { "type": "integer", "minimum": 0, "maximum": 51206400 },
         "writingMode": { "const": "vertical-clockwise" },
         "rotationAngle60000": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "upright": { "type": "boolean" },
