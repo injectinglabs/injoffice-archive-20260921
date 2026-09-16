@@ -509,11 +509,11 @@ func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtract
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	cx, err := requiredCanonicalNativeShapeInt(ext, "cx", 1, nativeMaxSafeInteger)
+	cx, err := requiredCanonicalNativeShapeInt(ext, "cx", 0, nativeMaxSafeInteger)
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	cy, err := requiredCanonicalNativeShapeInt(ext, "cy", 1, nativeMaxSafeInteger)
+	cy, err := requiredCanonicalNativeShapeInt(ext, "cy", 0, nativeMaxSafeInteger)
 	if err != nil {
 		return NativeTransform{}, err
 	}

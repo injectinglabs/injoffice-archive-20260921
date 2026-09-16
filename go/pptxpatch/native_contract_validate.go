@@ -1228,8 +1228,8 @@ func (v *nativeValidator) transform(transform NativeTransform, p string) {
 
 	v.requiredInteger(transform.X, p+".x")
 	v.requiredInteger(transform.Y, p+".y")
-	v.requiredPositive(transform.Cx, p+".cx")
-	v.requiredPositive(transform.Cy, p+".cy")
+	v.requiredNonnegative(transform.Cx, p+".cx")
+	v.requiredNonnegative(transform.Cy, p+".cy")
 	if transform.QuarterTurns != nil {
 		q := *transform.QuarterTurns
 		if q < 1 || q > 3 {

@@ -11734,7 +11734,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"dc42f7a99f6f272bd68d4946de1248dcc01f06586e061249715506cf9ccea665\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"521b28d4abd34e68b898536d4a79057ef418a603dcd9853b1c8bdecd131060d6\""
             },
             {
               "name": "PPTX_TABLE_BUILTIN_STYLE_POLICY",

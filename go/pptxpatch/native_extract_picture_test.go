@@ -521,6 +521,7 @@ type nativePictureFixtureOptions struct {
 	xfrmAttrs               string
 	sourceRect              string
 	pictureGeometry         string
+	pictureExtent           string
 	blipContent             string
 	nonVisualContent        string
 	omitImagePart           bool
@@ -640,6 +641,9 @@ func nativePictureFixture(t *testing.T, options nativePictureFixtureOptions) []b
 				}
 				if options.pictureGeometry != "" {
 					pictures = strings.ReplaceAll(pictures, `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, options.pictureGeometry)
+				}
+				if options.pictureExtent != "" {
+					pictures = strings.ReplaceAll(pictures, `<a:ext cx="3657600" cy="2743200"/>`, options.pictureExtent)
 				}
 				parts[slidePart] = strings.Replace(parts[slidePart], `</p:spTree>`, pictures+`</p:spTree>`, 1)
 				parts[relationshipsPart] = strings.Replace(parts[relationshipsPart], `</Relationships>`, relationships+`</Relationships>`, 1)

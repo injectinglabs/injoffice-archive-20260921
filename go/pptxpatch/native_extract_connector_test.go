@@ -273,11 +273,14 @@ func TestExtractNativePPTXConnectorMalformedOrMixedDialectFailsWithoutProjection
 	line := nativeAutoShapeSolidLine("12700", "flat", `<a:round/>`, "123456")
 	base := nativeConnectorXML(3, "Malformed connector", `<a:prstGeom prst="line"><a:avLst/></a:prstGeom>`, line, "", "", "", "")
 	duplicateTransform := strings.Replace(base, `<a:prstGeom`, `<a:xfrm><a:off x="1" y="2"/><a:ext cx="3" cy="4"/></a:xfrm><a:prstGeom`, 1)
-	zeroExtent := strings.Replace(base, `cx="1000000"`, `cx="0"`, 1)
+	// cx="0" is conformant ST_PositiveCoordinate and is covered by
+	// TestExtractNativePPTXAcceptsDegenerateExtents; only a negative extent is
+	// outside the type.
+	negativeExtent := strings.Replace(base, `cx="1000000"`, `cx="-1"`, 1)
 	mixedDialect := strings.Replace(base, `<a:prstDash`, fmt.Sprintf(`<s:prstDash xmlns:s="%s"`, nsDrawingStrict), 1)
 	for name, value := range map[string]string{
 		"duplicate-transform": duplicateTransform,
-		"zero-extent":         zeroExtent,
+		"negative-extent":     negativeExtent,
 		"mixed-dialect":       mixedDialect,
 	} {
 		name, value := name, value

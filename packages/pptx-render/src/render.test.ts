@@ -1983,3 +1983,19 @@ it('renders literal pie vectors only on opt-in and accounts for slice nodes',asy
  expect(JSON.stringify(deck)).toBe(before)
  await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout(),literalPiePreview:true,maxNodes:2})).rejects.toThrow()
 })
+
+// ST_PositiveCoordinate is minInclusive 0, so cy="0" is conformant DrawingML
+// and is how a horizontal straight connector is authored. Rejecting it failed
+// the whole slide compile, which is why a deck carrying one degenerate box
+// produced no page at all.
+it('compiles a degenerate zero extent as an empty region instead of failing the slide',async()=>{
+ const deck=structuredClone(parsedFull),connector=deck.slides[0]!.elements.find(e=>e.kind==='connector')!
+ if(connector.kind!=='connector')throw new Error('connector fixture')
+ connector.transform={...connector.transform,cy:0}
+ const tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()})
+ const node=findNode(tree,'connector',connector.id)
+ expect(node.bounds).toMatchObject({x:0,y:0,cx:500000,cy:0})
+ expect(tree.nodes.length).toBeGreaterThan(1)
+ connector.transform={...connector.transform,cy:-1}
+ await expect(compileNativePptxSlide(deck,0,{textLayout:textLayout()})).rejects.toThrow(/transform\.cy/)
+})
