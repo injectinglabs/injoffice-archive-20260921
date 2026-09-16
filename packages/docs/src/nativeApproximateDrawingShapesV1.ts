@@ -146,6 +146,11 @@ export interface NativeDocxApproximateInlineShapeProjectionV1 {
   resolved: NativeDocxResolvedLayoutInputV1
   /** Shape id to the synthetic glyphless drawing run id reserved in the body copy. */
   inlineRuns: Map<string, string>
+  /** Shape id to the declared `wp:extent` width in EMU, for inline shapes whose
+   * reserved atom was narrowed to the column. The painter uses this extent
+   * instead of the reservation so the object overflows the margin as declared;
+   * shapes absent from this map paint at their reserved width exactly as before. */
+  paintedInlineWidths: Map<string, number>
   /** Source refusals removed from the body copy for supported shapes; restored for shapes the painter drops. */
   removedDiagnostics: NativeDocxUnsupportedCapabilityV1[]
 }
@@ -157,20 +162,36 @@ export function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxD
   const projected = structuredClone(document)
   const projectedResolved = structuredClone(resolved)
   const inlineRuns = new Map<string, string>()
+  const paintedInlineWidths = new Map<string, number>()
   const removed = new Set<string>()
   const paragraphs = new Map(projected.body.blocks.flatMap(block => block.paragraph ? [[block.id, block.paragraph] as const] : []))
   const blockIndex = new Map(projected.body.blocks.map((block, index) => [block.id, index]))
+  const rightToLeft = new Set(projectedResolved.paragraphs.flatMap(entry => entry.properties?.bidi === true ? [entry.paragraph_id] : []))
   for (const shape of shapes.items) {
     if (shape.status !== 'supported') continue
     for (const id of shape.diagnostic_ids) removed.add(id)
     if (shape.placement !== 'inline') continue
     const paragraph = paragraphs.get(shape.paragraph_id)
     if (!paragraph) continue
-    // An inline atom wider than its column cannot paginate; Word lets it overflow
-    // into the margin. Clamp the reserved width and disclose the clamp.
+    // An inline atom wider than its column cannot break or paginate, so the
+    // reserved atom is narrowed to the column. The painted extent is a separate
+    // question: ECMA-376 §20.4.2.7 makes wp:extent the object's final displayed
+    // size ("this rectangle shall dictate the size of the object as displayed"),
+    // and §20.4.2.8 lays an inline object out "like a character glyph of similar
+    // size" - an oversized glyph overflows, it is not rescaled. So the declared
+    // extent still paints, overflowing into the margin and clipped to the page.
+    // A right-to-left paragraph would have to overflow toward the start margin
+    // instead; that is not modeled, so those keep the narrowed extent and say so.
     let widthEMU = shape.width_emu
     const columnWidth = columnWidthEMU(projected, blockIndex.get(shape.paragraph_id) ?? 0)
-    if (columnWidth !== undefined && widthEMU > columnWidth) { widthEMU = columnWidth; shape.notes = [...(shape.notes ?? []), 'inline shape width clamped to its column width'] }
+    if (columnWidth !== undefined && widthEMU > columnWidth) {
+      widthEMU = columnWidth
+      if (rightToLeft.has(shape.paragraph_id)) shape.notes = [...(shape.notes ?? []), 'inline shape width clamped to its column width: overflow toward the start margin of a right-to-left paragraph is not modeled']
+      else {
+        paintedInlineWidths.set(shape.id, shape.width_emu)
+        shape.notes = [...(shape.notes ?? []), 'inline shape reserved at its column width for line breaking; its declared extent paints and overflows into the margin, clipped to the page']
+      }
+    }
     const runID = `${shape.id}:run`
     const run: NativeDocxRunV1 = {
       kind: 'drawing', id: runID, anchor: shape.run_anchor,
@@ -189,7 +210,7 @@ export function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxD
   }
   const removedDiagnostics = projected.unsupported.filter(entry => removed.has(entry.id))
   projected.unsupported = projected.unsupported.filter(entry => !removed.has(entry.id))
-  return { document: projected, resolved: projectedResolved, inlineRuns, removedDiagnostics }
+  return { document: projected, resolved: projectedResolved, inlineRuns, paintedInlineWidths, removedDiagnostics }
 }
 
 /** Equal-width column extent of the section owning a body block, in EMU. */
@@ -262,9 +283,13 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
       const found = runID ? findHighlight(paint.pages, runID) : undefined
       if (!found) { omit(shape, 'inline-shape-not-placed'); continue }
       // The reservation highlight only located the atom; the shape paints itself.
+      // A reservation narrowed to the column still paints its declared extent,
+      // anchored at the atom's start edge and clipped to the page by shapeCommands.
       removedIDs.add(found.command.id)
       found.line.command_ids = found.line.command_ids.filter(id => id !== found.command.id)
-      placed.push({ shape, page: found.page, line: found.line, x: found.command.x_millipoints, y: found.command.y_millipoints, width: found.command.width_millipoints, height: found.command.height_millipoints, behind: false, order: 0 })
+      const declared = projection.paintedInlineWidths.get(shape.id)
+      const paintedWidth = declared === undefined ? found.command.width_millipoints : toMillipoints(declared)
+      placed.push({ shape, page: found.page, line: found.line, x: found.command.x_millipoints, y: found.command.y_millipoints, width: paintedWidth, height: found.command.height_millipoints, behind: false, order: 0 })
       continue
     }
     const anchor = shape.page_anchor!

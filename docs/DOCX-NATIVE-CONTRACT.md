@@ -845,8 +845,12 @@ The `/v1/docx/page-preview-approximate` helper attaches the sidecar as
 approximate compiler validates every shape against the same-bytes document
 (package digest, owning body paragraph, retained diagnostic ids anchored inside
 the shape's run, no overlap with modeled runs), reserves inline shapes as
-glyphless textbox atoms in its internal body copy (clamped to the column width),
-and after pagination appends paint: fills and strokes reuse the
+glyphless textbox atoms in its internal body copy (reserved at the column width
+when the declared extent is wider, because an atom wider than its column cannot
+break or paginate; the object itself still paints at its declared `wp:extent`
+per ECMA-376 §20.4.2.7, overflowing into the margin and clipped to the page,
+except in a right-to-left paragraph, where the narrowed extent is kept and
+disclosed), and after pagination appends paint: fills and strokes reuse the
 `fill_table_cell` / `stroke_table_border` primitives tagged with
 `table_id = docx.approximate-drawing-shape-preview-v1`, ordered behind or in
 front of body content per `behindDoc` and relative height; text box glyphs are
