@@ -178,8 +178,15 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			}
 		}
 		var parsed []NativeParagraph
+		presentationProjection := false
 		if parseErr == nil {
 			parsed, parseErr = extractor.extractNativeParagraphs(paintText, dialect)
+			// Exact text stays exact. Text that is not self-contained may still
+			// be completed by explicit presentation levels, as a read-only projection.
+			if parseErr != nil && !extractor.options.AllowInheritedTextPreview && extractor.presentationTextPreviewStyle != nil {
+				parsed, parseErr = extractor.extractNativeShapeParagraphs(paintText, dialect)
+				presentationProjection = parseErr == nil
+			}
 		}
 		if parseErr != nil {
 			var duplicate nativeDuplicateSingletonError
@@ -192,6 +199,9 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			paragraphs = parsed
 			if fontReferenceUsed && !textOmitted {
 				gaps.add("pptx.shape-font-reference-preview", "shape text font/color resolved from its authored theme reference; target remains read-only", false)
+			}
+			if presentationProjection {
+				gaps.add(nativePresentationTextStylePreviewCode, nativePresentationTextStylePreviewMessage, false)
 			}
 		}
 		if textOmitted {

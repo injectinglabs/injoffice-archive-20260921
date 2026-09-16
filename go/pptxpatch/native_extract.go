@@ -1272,10 +1272,12 @@ func (extractor *nativeExtractor) extract() (NativePPTXDeck, error) {
 				return NativePPTXDeck{}, fmt.Errorf("foreign presentation text defaults")
 			}
 		}
-		extractor.presentationTextPreviewStyle, err = nativeSingleton(presentationRoot, dialect.presentation, "defaultTextStyle", false)
-		if err != nil {
-			return NativePPTXDeck{}, err
-		}
+	}
+	// The presentation text defaults feed both the opt-in inherited preview
+	// lanes and the exact shape projection of explicit matching levels.
+	extractor.presentationTextPreviewStyle, err = nativeSingleton(presentationRoot, dialect.presentation, "defaultTextStyle", false)
+	if err != nil {
+		return NativePPTXDeck{}, err
 	}
 	presentationUnsupported := []nativeUnsupportedSource{}
 	if hasNativeSemanticAttrs(presentationRoot) || !onlyNativeXMLSpace(presentationRoot.Text) {
@@ -1885,10 +1887,17 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		}
 	}
 	var paragraphs []NativeParagraph
+	presentationProjection := false
 	if placeholderPreview != nil && !placeholderPreview.hasTextBody {
 		paragraphs, paragraphErr = []NativeParagraph{}, nil
 	} else if paragraphErr == nil {
 		paragraphs, paragraphErr = extractor.extractNativeParagraphs(paintText, dialect)
+		// Exact text stays exact. Text that is not self-contained may still be
+		// completed by explicit presentation levels, as a read-only projection.
+		if paragraphErr != nil && !inheritedPreview && inheritedPlaceholder == nil && extractor.presentationTextPreviewStyle != nil {
+			paragraphs, paragraphErr = extractor.extractNativeShapeParagraphs(paintText, dialect)
+			presentationProjection = paragraphErr == nil
+		}
 	}
 	textContentMessage := ""
 	if paragraphErr != nil {
@@ -1962,6 +1971,9 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		nativeMarkInheritedTextOmissions(&element, inheritedOmissions)
 	}
 	if textLayoutMessage == "" && textContentMessage == "" {
+		if presentationProjection {
+			nativeMarkPresentationTextStylePreview(&element)
+		}
 		nativeMarkVerticalTextPreview(&element)
 		nativePreserveTextCheckingMetadata(&element, txBody, dialect)
 		_ = fingerprint
