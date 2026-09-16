@@ -7,7 +7,7 @@ Thank you for improving InjOffice. Bug reports, focused fixes, tests, documentat
 - Search existing issues and pull requests.
 - Keep changes scoped to one behavior or package when practical.
 - Do not submit confidential documents, credentials, customer data, proprietary fonts, or copyrighted fixture files without redistribution permission.
-- For fidelity bugs, prefer the smallest synthetic file that reproduces the OOXML structure.
+- For fidelity bugs, prefer the smallest synthetic file that reproduces the OOXML structure. Save write-back tests follow [docs/SAVE-FIDELITY.md](docs/SAVE-FIDELITY.md).
 
 For a security vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
