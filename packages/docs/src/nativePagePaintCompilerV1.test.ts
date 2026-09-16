@@ -3211,6 +3211,90 @@ describe('approximate DrawingML shapes', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
 
+  // The fixture section is 12240 twips wide with 1440 twip side margins, so the
+  // single column is 9360 twips = 468_000 millipoints = 5_943_600 EMU.
+  const COLUMN_MILLIPOINTS = 468_000, PAGE_MILLIPOINTS = 612_000, MARGIN_MILLIPOINTS = 72_000
+  const inlineFill = (paint: Awaited<ReturnType<typeof renderNativeDocxApproximatePagePreviewV1>>) => {
+    const fill = paint.pages[0]!.commands.find(c => c.kind === 'fill_table_cell')
+    if (!fill || fill.kind !== 'fill_table_cell') throw new Error(`inline fill missing: ${paint.reasons.filter(r => r.includes('approximate-drawing')).join(' | ')}`)
+    return fill
+  }
+
+  it('paints an over-wide inline shape at its declared extent while the reserved atom stays inside the column', async () => {
+    // 540pt wide against a 468pt column: the atom must shrink to break, the object must not.
+    const { input, eligibility, shapes, paragraph } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D', width_emu: 6_858_000, height_emu: 25_400 })
+    const before = structuredClone(input)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(input).toEqual(before)
+    const fill = inlineFill(paint)
+    // The painted extent is the declared wp:extent, not the narrowed reservation.
+    expect(fill.width_millipoints).toBe(540_000)
+    expect(fill.height_millipoints).toBe(2_000)
+    // The reserved atom still broke inside the column, so no line exceeds it.
+    const lines = paint.pages[0]!.lines.filter(line => line.paragraph_id === paragraph.id)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) expect(line.width_millipoints).toBeLessThanOrEqual(COLUMN_MILLIPOINTS)
+    // It starts at the atom's start edge and runs past the column into the margin.
+    expect(fill.x_millipoints).toBe(MARGIN_MILLIPOINTS)
+    expect(fill.x_millipoints + fill.width_millipoints).toBeGreaterThan(MARGIN_MILLIPOINTS + COLUMN_MILLIPOINTS)
+    expect(fill.x_millipoints + fill.width_millipoints).toBeLessThanOrEqual(PAGE_MILLIPOINTS)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('declared extent paints and overflows into the margin, clipped to the page'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('clips a declared inline extent that runs past the page edge instead of painting outside the page', async () => {
+    const { input, eligibility, shapes } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D', width_emu: 12_700_000, height_emu: 25_400 })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const fill = inlineFill(paint)
+    // 1000pt declared from the 72pt margin would reach 1072pt; the page stops it at 612pt.
+    expect(fill.x_millipoints).toBe(MARGIN_MILLIPOINTS)
+    expect(fill.x_millipoints + fill.width_millipoints).toBe(PAGE_MILLIPOINTS)
+    expect(fill.width_millipoints).toBeLessThan(1_000_000)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('keeps the narrowed extent for an over-wide inline shape in a right-to-left paragraph and discloses why', async () => {
+    const { input, eligibility, shapes, paragraph } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D', width_emu: 6_858_000, height_emu: 25_400 })
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    resolved.paragraphs.find(entry => entry.paragraph_id === paragraph.id)!.properties.bidi = true
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const fill = inlineFill(paint)
+    // Overflow would have to run toward the start margin, which this preview does not model.
+    expect(fill.width_millipoints).toBe(COLUMN_MILLIPOINTS)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('overflow toward the start margin of a right-to-left paragraph is not modeled'))).toBe(true)
+    expect(paint.reasons.some(r => r.includes('declared extent paints and overflows'))).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('leaves an inline shape that already fits its column painted at its reserved extent with no clamp disclosure', async () => {
+    const { input, eligibility, shapes } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D', width_emu: 914_400, height_emu: 457_200 })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const fill = inlineFill(paint)
+    expect(fill.width_millipoints).toBe(72_000)
+    expect(paint.reasons.some(r => r.includes('column width') || r.includes('declared extent paints'))).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('leaves the strict page paint request and response byte-identical whether or not the inline shape evidence is supplied', async () => {
+    const { input, eligibility, shapes } = shapeInput({ placement: 'inline', preset: 'rect', fill_rgb: '0D0D0D', width_emu: 6_858_000, height_emu: 25_400 })
+    const strictWithout = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    const strictWith = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    expect(JSON.stringify(strictWith)).toBe(JSON.stringify(strictWithout))
+    // Running the approximate tier with the evidence must not perturb the strict tier either.
+    const before = structuredClone(input)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(inlineFill(paint).width_millipoints).toBe(540_000)
+    expect(input).toEqual(before)
+    const strictAfter = await prepareNativeDocxPagePaintV1(structuredClone(input))
+    expect(JSON.stringify(strictAfter)).toBe(JSON.stringify(strictWithout))
+    expect(strictAfter.page_paint_request.paginated_layout.status).toBe('refused')
+  }, 30000)
+
   it('keeps painting the body when the sidecar does not exact-join, discloses the refusal, and omits nothing else', async () => {
     // A supported shape claiming a run that also carries modeled text (the Go sidecar omits these as shared-run).
     const { input, eligibility, shapes, item } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', page_anchor: pageAnchor() })
