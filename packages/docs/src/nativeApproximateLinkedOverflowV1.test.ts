@@ -12,7 +12,7 @@ import {
 } from './nativeApproximateLinkedOverflowV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
-const POLICY = { mode: 'read-only' as const, allowed_operations: [] as const, refusal: { code: 'NATIVE_READ_ONLY', message: 'Fixture is immutable.', preservation: 'refuse-mutation' as const } }
+const POLICY = { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'NATIVE_READ_ONLY', message: 'Fixture is immutable.', preservation: 'refuse-mutation' as const } }
 const LINE = 8_000
 const UNIT = 1_000
 
