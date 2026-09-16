@@ -215,6 +215,38 @@ jobs:
           cache: false
       - run: ${{ matrix.command }}
 
+  injoffice-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Reject foreign commit identity
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            range="${BASE_SHA}..${HEAD_SHA}"
+          elif [ "${BEFORE:-}" = '0000000000000000000000000000000000000000' ] || [ -z "${BEFORE:-}" ]; then
+            range="-1 ${HEAD_SHA}"
+          else
+            range="${BEFORE}..${HEAD_SHA}"
+          fi
+          hits="$(
+            git log --format='%ae%n%ce%n%(trailers:only,key=Co-authored-by)' $range \
+              | grep -E -i '@hydradb\.com|nick-hydradb|@anthropic\.com' || true
+          )"
+          if [ -n "$hits" ]; then
+            echo "InjOffice commits must not use HydraDB or Claude Git identity." >&2
+            echo "$hits" >&2
+            exit 1
+          fi
+
   ci-required:
     name: CI required
     if: always()
@@ -226,6 +258,7 @@ jobs:
       - docx-wasm-contract
       - pptx-wasm-contract
       - office-qualification
+      - injoffice-identity
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -238,6 +271,7 @@ jobs:
           DOCX_WASM: ${{ needs.docx-wasm-contract.result }}
           PPTX_WASM: ${{ needs.pptx-wasm-contract.result }}
           OFFICE_QUALIFICATION: ${{ needs.office-qualification.result }}
+          INJOFFICE_IDENTITY: ${{ needs.injoffice-identity.result }}
         run: |
           for result in \
             "$TS_PACKAGES" \
@@ -246,7 +280,8 @@ jobs:
             "$XLSX_WASM" \
             "$DOCX_WASM" \
             "$PPTX_WASM" \
-            "$OFFICE_QUALIFICATION"
+            "$OFFICE_QUALIFICATION" \
+            "$INJOFFICE_IDENTITY"
           do
             if [ "$result" != 'success' ]; then
               echo "A required validation job finished with: $result" >&2
