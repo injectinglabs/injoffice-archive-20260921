@@ -136,6 +136,13 @@ type NativeTextBodyLayout struct {
 	// pptx.autofit-authored-scale-approximate; the approximate preview lane
 	// reduces its line pitch by that percentage.
 	LineSpacingReductionPercent1000 *int64 `json:"lineSpacingReductionPercent1000,omitempty"`
+	// ColumnCount and ColumnSpacingEMU carry the authored a:bodyPr numCol/spcCol
+	// for the approximate preview lane to flow already-shaped lines through. They
+	// are emitted together, only for read-only approximate elements that also
+	// carry pptx.text-columns-approximate, and only when the saved frame leaves a
+	// positive column width.
+	ColumnCount      *int64 `json:"columnCount,omitempty"`
+	ColumnSpacingEMU *int64 `json:"columnSpacingEmu,omitempty"`
 
 	WritingMode        *string `json:"writingMode,omitempty"`
 	RotationAngle60000 *int64  `json:"rotationAngle60000,omitempty"`

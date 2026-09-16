@@ -123,6 +123,14 @@ export interface NativeTextBodyLayout {
    * lane reduces its line pitch by this percentage. Absent means no reduction.
    */
   lineSpacingReductionPercent1000?: number
+  /**
+   * Authored `a:bodyPr/@numCol` (2..16). Present only on read-only approximate
+   * elements that also carry `pptx.text-columns-approximate`; the approximate
+   * preview lane flows its shaped lines through that many columns.
+   */
+  columnCount?: number
+  /** Authored `a:bodyPr/@spcCol` gap in EMU. Only meaningful with columnCount. */
+  columnSpacingEmu?: number
   writingMode?: 'vertical-clockwise'
   /** Raw signed DrawingML body angle; distinct from the shape transform. */
   rotationAngle60000?: number

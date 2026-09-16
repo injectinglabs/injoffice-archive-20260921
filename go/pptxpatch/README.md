@@ -69,9 +69,13 @@ preserve-only, and `pptx.autofit-authored-scale-approximate` names both values.
 Validation keeps the reduction bound to that disclosure: it may only appear on a
 parsed, non-editable element that carries the warning, and never on a table cell.
 Percent-string forms and out-of-range values refuse. `numCol`/`spcCol` (1–16
-columns, nonnegative spacing) are validated and painted as one column with the
-`pptx.text-columns-single-column-approximate` disclosure; column flow is not
-modeled. Strict extraction keeps refusing `a:normAutofit` and multiple columns.
+columns, nonnegative spacing) travel as `textBody.columnCount` /
+`textBody.columnSpacingEmu` for the approximate renderer to flow the shaped lines
+through, disclosed by `pptx.text-columns-approximate`. The fields are emitted
+together, only when `numCol` is at least 2 and the saved frame still leaves a
+positive width for every column; otherwise the same disclosure reports the
+single-column fallback. `rtlCol` stays a refusal, so column order is always left
+to right. Strict extraction keeps refusing `a:normAutofit` and multiple columns.
 
 ```bash
 go get github.com/injectinglabs/injoffice/go/pptxpatch

@@ -290,7 +290,7 @@ function validateElement(
   for(const diagnostic of element.compatibility.diagnostics){
     const readOnlyPreview=element.provenance==='parsed'&&element.source!==undefined&&element.compatibility.status!=='editable'&&diagnostic.severity==='warning'
     if((diagnostic.code==='pptx.source-inherited-text-approximate'||diagnostic.code==='pptx.inherited-text-properties-omitted'||diagnostic.code==='pptx.placeholder-inheritance-approximate'||diagnostic.code==='pptx.presentation-text-style-preview')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.inheritedTextApproximation','inherited text approximation requires parsed source and explicit read-only warning')
-    if((diagnostic.code==='pptx.autofit-authored-scale-approximate'||diagnostic.code==='pptx.text-columns-single-column-approximate')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.autofitApproximation','authored autofit approximation requires parsed source and explicit read-only warning')
+    if((diagnostic.code==='pptx.autofit-authored-scale-approximate'||diagnostic.code==='pptx.text-columns-approximate')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.autofitApproximation','authored autofit approximation requires parsed source and explicit read-only warning')
     if(diagnostic.code===PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE&&(element.kind!=='table'||!readOnlyPreview))add(issues,`${path}.compatibility`,'native.tableStylePreview','built-in table style preview requires a parsed source table with read-only status and explicit warning')
   }
   validateAnimation(element.animation, `${path}.animation`, issues)
@@ -305,6 +305,9 @@ function validateElement(
     for (const paragraph of element.paragraphs) for (const run of paragraph.runs) budget.textCodeUnits += run.text.length
     if (element.textBody?.lineSpacingReductionPercent1000 !== undefined && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.autofit-authored-scale-approximate' && diagnostic.severity === 'warning'))) {
       add(issues, `${path}.textBody.lineSpacingReductionPercent1000`, 'native.autofitApproximation', 'the authored line-spacing reduction requires a parsed source, non-editable status and the authored autofit approximation warning')
+    }
+    if ((element.textBody?.columnCount !== undefined || element.textBody?.columnSpacingEmu !== undefined) && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.text-columns-approximate' && diagnostic.severity === 'warning'))) {
+      add(issues, `${path}.textBody.columnCount`, 'native.autofitApproximation', 'the authored column projection requires a parsed source, non-editable status and the authored text-column approximation warning')
     }
     if (element.textBody?.writingMode && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody.writingMode`,'native.verticalPreview','parsed vertical text must remain read-only')
     if (((element.textBody?.rotationAngle60000??0)!==0||element.textBody?.upright===true) && element.provenance==='parsed' && element.compatibility.status==='editable') add(issues,`${path}.textBody`,'native.textOrientationPreview','parsed body rotation and upright text must remain read-only')
@@ -371,6 +374,7 @@ function validateElement(
           const height = element.table.rowHeights[rowIndex]
           if (cell.textBody.autoFit !== 'none') add(issues, `${cellPath}.textBody.autoFit`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
           if (cell.textBody.lineSpacingReductionPercent1000 !== undefined) add(issues, `${cellPath}.textBody.lineSpacingReductionPercent1000`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
+          if (cell.textBody.columnCount !== undefined || cell.textBody.columnSpacingEmu !== undefined) add(issues, `${cellPath}.textBody.columnCount`, 'native.textColumns', 'table cell text columns are not supported')
           if(cell.textBody.writingMode) add(issues,`${cellPath}.textBody.writingMode`,'native.verticalPreview','vertical table cells are not supported')
           if (width !== undefined && height !== undefined) validateTextBody(cell.textBody, { x: 0, y: 0, cx: width, cy: height }, `${cellPath}.textBody`, issues)
         } else {
@@ -475,6 +479,13 @@ function validateTextBody(
   const height = transform.cy - body.topInsetEmu - body.bottomInsetEmu
   if (!Number.isSafeInteger(width) || width <= 0) add(issues, path, 'native.textBodyBounds', 'horizontal insets must leave a positive safe-integer text-body width')
   if (!Number.isSafeInteger(height) || height <= 0) add(issues, path, 'native.textBodyBounds', 'vertical insets must leave a positive safe-integer text-body height')
+  if ((body.columnCount === undefined) !== (body.columnSpacingEmu === undefined)) add(issues, `${path}.columnSpacingEmu`, 'native.textColumns', 'the authored column count and spacing must be supplied together')
+  if (body.columnCount !== undefined && body.columnSpacingEmu !== undefined) {
+    const content = width - (body.columnCount - 1) * body.columnSpacingEmu
+    if (!Number.isSafeInteger(content) || content <= 0 || Math.floor(content / body.columnCount) <= 0) {
+      add(issues, path, 'native.textBodyBounds', 'authored columns and gaps must leave a positive width for every column')
+    }
+  }
 }
 
 function validateExactGroupTransform(transform: NativeElement['transform'], childTransform: NativeElement['transform'], path: string, issues: NativeValidationIssue[]): void {
