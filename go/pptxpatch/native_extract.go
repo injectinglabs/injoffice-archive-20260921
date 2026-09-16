@@ -2259,7 +2259,7 @@ func (extractor *nativeExtractor) extractNativeTextRun(node *nativeXMLNode, dial
 	if err != nil {
 		return NativeTextRun{}, err
 	}
-	if err := requireOnlyNativeAttrs(rPr, xml.Name{Local: "b"}, xml.Name{Local: "i"}, xml.Name{Local: "sz"}, xml.Name{Local: "lang"}); err != nil {
+	if err := requireOnlyNativeAttrs(rPr, xml.Name{Local: "b"}, xml.Name{Local: "i"}, xml.Name{Local: "sz"}, xml.Name{Local: "lang"}, xml.Name{Local: "kern"}); err != nil {
 		return NativeTextRun{}, fmt.Errorf("pptxpatch: native extract: unmodeled run metadata: %w", err)
 	}
 	if err := requireOnlyNativeChildren(rPr,
@@ -2300,6 +2300,15 @@ func (extractor *nativeExtractor) extractNativeTextRun(node *nativeXMLNode, dial
 			return NativeTextRun{}, fmt.Errorf("invalid authored language tag")
 		}
 		run.Language = &value
+	}
+	if value, ok := exactNativeAttr(rPr, "", "kern"); ok {
+		// Authored pair-kerning threshold in hundredths of a point; the source
+		// value is validated here before any style precedence can hide it.
+		threshold, err := parseCanonicalNativeInt(value, 0, 400000)
+		if err != nil {
+			return NativeTextRun{}, fmt.Errorf("pptxpatch: native extract: invalid kerning threshold: %w", err)
+		}
+		run.KerningThresholdHundredthPt = &threshold
 	}
 	if value, ok := exactNativeAttr(rPr, "", "sz"); ok {
 		size, err := strconv.ParseInt(value, 10, 64)

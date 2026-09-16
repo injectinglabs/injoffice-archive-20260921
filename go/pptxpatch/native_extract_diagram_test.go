@@ -275,8 +275,13 @@ func TestExtractNativePPTXDiagramDrawingKerningThresholdFollowsAutoShapeTiers(t 
 		t.Fatalf("extract exact diagram: %v", err)
 	}
 	exactChild := nativeFixtureDiagramGroup(t, exact.Slides[0]).Children[0]
-	if len(*exactChild.Paragraphs) != 0 || len(exactChild.Compatibility.Diagnostics) != 2 || exactChild.Compatibility.Diagnostics[1].Code != nativeDiagramDrawingTextOmittedCode {
-		t.Fatalf("exact tier must omit kerned diagram text like AutoShape runs: %#v", exactChild.Compatibility.Diagnostics)
+	// AutoShape runs retain an authored kerning threshold in the exact tier, so
+	// the shared extractor now paints the kerned diagram text with it as well.
+	if len(*exactChild.Paragraphs) != 1 || len(exactChild.Compatibility.Diagnostics) != 1 || exactChild.Compatibility.Diagnostics[0].Code != nativeDiagramDrawingPreviewCode {
+		t.Fatalf("exact tier must paint kerned diagram text like AutoShape runs: %#v", exactChild.Compatibility.Diagnostics)
+	}
+	if run := (*exactChild.Paragraphs)[0].Runs[0]; *run.Text != "Manager" || run.KerningThresholdHundredthPt == nil || *run.KerningThresholdHundredthPt != 1200 {
+		t.Fatalf("exact tier lost the authored kerning threshold: %#v", run)
 	}
 	options := nativeTestExtractOptions()
 	options.AllowInheritedTextPreview = true
