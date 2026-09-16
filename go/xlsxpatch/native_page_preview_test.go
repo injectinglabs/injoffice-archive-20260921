@@ -147,3 +147,51 @@ func TestNativePageSettingsExplicitFit(t *testing.T) {
 		}
 	}
 }
+
+// A worksheet that authors margins and declares no pageSetup has no authored
+// paper to contradict, which a host may default. A pageSetup that exists but is
+// ambiguous or unsupported is a different fact and must stay unavailable.
+func TestNativePageSettingsMarginsOnlyWithoutPageSetup(t *testing.T) {
+	margins := `<pageMargins left="0.7" right="0.75" top="0.8" bottom="0.85" header="0.3" footer="0.3"/>`
+	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
+		raw := `<worksheet xmlns="` + ns + `">` + margins + `</worksheet>`
+		got := previewNativePageSettings([]byte(raw), "xl/worksheets/sheet1.xml", "1")
+		if got.Status != "margins-only" || got.Settings != nil || got.Margins == nil {
+			t.Fatalf("unexpected %+v", got)
+		}
+		if got.Margins.Left != 0.7 || got.Margins.Right != 0.75 || got.Margins.Top != 0.8 || got.Margins.Bottom != 0.85 {
+			t.Fatalf("authored margins not reported exactly: %+v", got.Margins)
+		}
+		if len(got.Warnings) != 1 || !strings.Contains(got.Warnings[0], "no pageSetup element") {
+			t.Fatalf("missing disclosure: %+v", got.Warnings)
+		}
+	}
+	base := `<worksheet xmlns="` + spreadsheetMLTransitional + `">` + margins
+	for _, tc := range []struct{ name, body string }{
+		{"duplicate pageSetup reads as ambiguous, not absent", `<pageSetup paperSize="9" orientation="portrait"/><pageSetup paperSize="1" orientation="landscape"/>`},
+		{"fit-to-page activation without its dimensions", `<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>`},
+		{"page-affecting markup still refuses", `<headerFooter/>`},
+		{"print options still refuse", `<printOptions/>`},
+		{"row breaks still refuse", `<rowBreaks/>`},
+		{"foreign margins", ``},
+	} {
+		body := base + tc.body + `</worksheet>`
+		if tc.name == "foreign margins" {
+			body = `<worksheet xmlns="` + spreadsheetMLTransitional + `">` + strings.Replace(margins, "<pageMargins", `<pageMargins xmlns="urn:foreign"`, 1) + `</worksheet>`
+		}
+		if got := previewNativePageSettings([]byte(body), "sheet.xml", "1"); got.Status != "unavailable" {
+			t.Fatalf("%s: got %q", tc.name, got.Status)
+		}
+	}
+	// Margins must still be exact and bounded to be reported.
+	for _, bad := range []string{`left="NaN"`, `left="-1"`, `left="21"`} {
+		body := `<worksheet xmlns="` + spreadsheetMLTransitional + `">` + strings.Replace(margins, `left="0.7"`, bad, 1) + `</worksheet>`
+		if got := previewNativePageSettings([]byte(body), "sheet.xml", "1"); got.Status != "unavailable" {
+			t.Fatalf("accepted %s: %q", bad, got.Status)
+		}
+	}
+	// No margins at all remains unavailable: nothing authored to build a page from.
+	if got := previewNativePageSettings([]byte(`<worksheet xmlns="`+spreadsheetMLTransitional+`"/>`), "sheet.xml", "1"); got.Status != "unavailable" {
+		t.Fatalf("bare worksheet: %q", got.Status)
+	}
+}

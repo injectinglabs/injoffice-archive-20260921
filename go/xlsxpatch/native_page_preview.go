@@ -6,12 +6,27 @@ import (
 )
 
 // Explicit source settings only. This is not a printer-default resolver.
+//
+// Status "margins-only" is still a source fact and not a default: it asserts
+// that the worksheet carries no pageSetup element at all, that its authored
+// margins are bounded and exact, and that nothing else on the sheet blocks
+// pagination. Choosing paper for such a sheet is a host decision, made and
+// disclosed by the preview tier, never here.
 type NativeSheetPageSettingsV1 struct {
-	SheetID   string                   `json:"sheet_id"`
-	SheetPart string                   `json:"sheet_part"`
-	Status    string                   `json:"status"`
-	Settings  *NativeSheetPageConfigV1 `json:"settings,omitempty"`
-	Warnings  []string                 `json:"warnings"`
+	SheetID   string                    `json:"sheet_id"`
+	SheetPart string                    `json:"sheet_part"`
+	Status    string                    `json:"status"`
+	Settings  *NativeSheetPageConfigV1  `json:"settings,omitempty"`
+	Margins   *NativeSheetPageMarginsV1 `json:"margins,omitempty"`
+	Warnings  []string                  `json:"warnings"`
+}
+
+// Authored page margins for a worksheet that declares no pageSetup.
+type NativeSheetPageMarginsV1 struct {
+	Left   float64 `json:"left_inches"`
+	Right  float64 `json:"right_inches"`
+	Top    float64 `json:"top_inches"`
+	Bottom float64 `json:"bottom_inches"`
 }
 type NativeSheetPageConfigV1 struct {
 	Paper       string  `json:"paper"`
@@ -38,17 +53,20 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		return result
 	}
 	setup, margins := root.child("pageSetup"), root.child("pageMargins")
-	if setup == nil || margins == nil {
+	if margins == nil {
 		return result
 	}
 	var fitPr *previewXML
-	sheetPrCount := 0
+	sheetPrCount, pageSetupCount := 0, 0
 	// Do not silently ignore alternate/foreign settings or page-affecting data.
 	for _, child := range root.children {
 		switch child.name.Local {
 		case "pageSetup", "pageMargins":
 			if child.name.Space != root.name.Space {
 				return result
+			}
+			if child.name.Local == "pageSetup" {
+				pageSetupCount++
 			}
 		case "rowBreaks", "colBreaks", "headerFooter", "printOptions", "pageSetUpPr":
 			return result
@@ -109,6 +127,42 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		}
 		return count == len(names)
 	}
+	readMargins := func() (map[string]float64, bool) {
+		if !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
+			return nil, false
+		}
+		values := map[string]float64{}
+		for _, name := range []string{"left", "right", "top", "bottom", "header", "footer"} {
+			value, ok := boundedPreviewRowNumber(margins.attr(name), 20)
+			if !ok {
+				return nil, false
+			}
+			values[name] = value
+		}
+		return values, true
+	}
+	// A worksheet that declares no pageSetup at all has authored margins and no
+	// authored paper. Report that precisely instead of collapsing it into the
+	// same "unavailable" as a pageSetup this tier cannot support: the two differ
+	// in whether a host may supply paper of its own. Fit-to-page activation
+	// without the pageSetup that carries its dimensions stays unavailable.
+	//
+	// child() returns nil for a duplicated element as well as an absent one, so
+	// the count is what separates "no paper is authored" from "paper is authored
+	// ambiguously"; only the former may be defaulted.
+	if setup == nil {
+		if fitPr != nil || pageSetupCount != 0 {
+			return result
+		}
+		values, ok := readMargins()
+		if !ok {
+			return result
+		}
+		result.Status = "margins-only"
+		result.Margins = &NativeSheetPageMarginsV1{Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"]}
+		result.Warnings = []string{"Worksheet declares authored page margins and no pageSetup element, so no paper size, orientation or scale is authored. Page geometry requires a host paper choice; this tier does not select one."}
+		return result
+	}
 	setupFields := []string{"paperSize", "orientation"}
 	var fit *NativeSheetFitToPageV1
 	if fitPr != nil {
@@ -133,7 +187,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		}
 		setupFields = append(setupFields, "pageOrder")
 	}
-	if !pageSetupLayoutAttrs(setup, setupFields) || !exactLeaf(margins, "left", "right", "top", "bottom", "header", "footer") {
+	if !pageSetupLayoutAttrs(setup, setupFields) {
 		return result
 	}
 	paper := map[string]string{"1": "Letter", "9": "A4"}[setup.attr("paperSize")]
@@ -146,13 +200,9 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	if paper == "" || (orientation != "portrait" && orientation != "landscape") || err != nil || scale < 10 || scale > 400 || strconv.Itoa(scale) != scaleText {
 		return result
 	}
-	values := map[string]float64{}
-	for _, name := range []string{"left", "right", "top", "bottom", "header", "footer"} {
-		value, ok := boundedPreviewRowNumber(margins.attr(name), 20)
-		if !ok {
-			return result
-		}
-		values[name] = value
+	values, ok := readMargins()
+	if !ok {
+		return result
 	}
 	result.Status = "available"
 	result.Settings = &NativeSheetPageConfigV1{Paper: paper, Orientation: orientation, Scale: scale, Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], PageOrder: order, FitToPage: fit}

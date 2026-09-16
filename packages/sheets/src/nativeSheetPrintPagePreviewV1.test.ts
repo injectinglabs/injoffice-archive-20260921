@@ -119,3 +119,40 @@ describe('source-only 96 DPI print-page preview',()=>{
   expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects,{paint_plans:[{geometry_sha256:`sha256:${'c'.repeat(64)}`,sheet_id:'7',source_package_sha256:geometry.source_package_sha256}]} as never)).toThrow('join compiled geometry')
  })
 })
+
+describe('host-default paper for a worksheet that authors margins and no pageSetup',()=>{
+ const marginsOnly=(part:string)=>({
+  sheet_id:'7',sheet_part:part,status:'margins-only' as const,
+  warnings:['Worksheet declares authored page margins and no pageSetup element, so no paper size, orientation or scale is authored. Page geometry requires a host paper choice; this tier does not select one.'],
+  margins:{left_inches:1,right_inches:1,top_inches:1,bottom_inches:1},
+ })
+ it('paginates at the host default and says so, matching the authored-Letter geometry exactly',()=>{
+  const {objects,geometry,part}=fixture()
+  const authored=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  objects.page_settings=[marginsOnly(part)]
+  const preview=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  expect(preview.status).toBe('available')
+  if(preview.status!=='available'||authored.status!=='available')return
+  expect(preview.settings_origin).toBe('host-default')
+  expect(preview.warnings.some(w=>w.includes('host default, not authored workbook settings'))).toBe(true)
+  // US Letter portrait at 96 DPI, identical to the same workbook with the paper authored.
+  expect(preview.pages).toHaveLength(authored.pages.length)
+  expect(preview.pages[0]!.width_css_px).toBe(816)
+  expect(preview.pages[0]!.height_css_px).toBe(1056)
+  expect(preview.pages.map(p=>[p.width_emu,p.height_emu])).toEqual(authored.pages.map(p=>[p.width_emu,p.height_emu]))
+ })
+ it('keeps refusing an authored pageSetup this tier cannot support, and margins-only with no margins',()=>{
+  const {objects,geometry,part}=fixture()
+  objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['Unsupported page settings']}]
+  const unsupported=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  expect(unsupported.status).toBe('unavailable')
+  if(unsupported.status!=='unavailable')return
+  expect(unsupported.reason).toContain('Unsupported page settings')
+  expect(unsupported.settings_origin).toBe('source')
+  // A margins-only record with no margins is a malformed payload, not a soft
+  // refusal: the decoder requires the key for that status and rejects it.
+  const {margins:_omitted,...withoutMargins}=marginsOnly(part)
+  objects.page_settings=[withoutMargins as never]
+  expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects)).toThrow('Invalid native worksheet page settings')
+ })
+})
