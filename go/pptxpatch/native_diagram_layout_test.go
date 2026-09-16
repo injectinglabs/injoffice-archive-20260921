@@ -488,11 +488,15 @@ func assertNativeDiagramLayoutRefused(t *testing.T, options nativeDiagramLayoutF
 	for _, diagnostic := range slide.Compatibility.Diagnostics {
 		codes = append(codes, diagnostic.Code)
 	}
-	if !strings.Contains(strings.Join(codes, ","), code) || slide.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+	// The refused frame keeps an empty region, so the slide reports a refusal.
+	if !strings.Contains(strings.Join(codes, ","), code) || slide.Compatibility.Status != NativeCompatibilityStatusRefused {
 		t.Fatalf("diagram frame was not refused with %s: %v", code, codes)
 	}
-	if len(slide.Elements) != 1 || slide.Elements[0].Kind != NativeElementKindText {
+	if len(slide.Elements) != 2 || slide.Elements[0].Kind != NativeElementKindText {
 		t.Fatalf("sibling text element was lost by the diagram refusal: %#v", slide.Elements)
+	}
+	if regions := nativeRefusedFrameRegions(t, slide.Elements, code); len(regions) != 1 {
+		t.Fatalf("refused diagram frame did not keep an empty region: %#v", slide.Elements)
 	}
 	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
 		t.Fatalf("invalid refused diagram deck: %#v", issues)

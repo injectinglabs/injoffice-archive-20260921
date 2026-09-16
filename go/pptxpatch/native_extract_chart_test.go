@@ -73,8 +73,13 @@ func TestExtractNativePPTXUnknownChartArrowMarkupRemainsRefused(t *testing.T) {
 			t.Fatalf("malformed chart leaked a projection: %#v", element)
 		}
 	}
-	if deck.Slides[0].Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+	// The refused frame keeps an empty region at its box, so the slide carries
+	// that element refusal rather than reporting the frame as merely preserved.
+	if deck.Slides[0].Compatibility.Status != NativeCompatibilityStatusRefused {
 		t.Fatalf("malformed chart did not preserve the slide: %#v", deck.Slides[0].Compatibility)
+	}
+	if regions := nativeRefusedFrameRegions(t, deck.Slides[0].Elements, "pptx.chart-markup-unavailable"); len(regions) != 1 {
+		t.Fatalf("refused chart frame did not keep an empty region: %#v", deck.Slides[0].Elements)
 	}
 }
 
