@@ -226,7 +226,7 @@ func nativeMarkParagraphSpacing(element *NativeElement) {
 		Severity: NativeDiagnosticSeverityWarning,
 		Code:     nativeParagraphSpacingCode,
 		Message: "Read-only approximate preview resolves authored a:lnSpc, a:spcBef and a:spcAft through the declared style cascade (direct paragraph properties over the body list style over the placeholder/master text style over presentation defaults). " +
-			"a:spcPts converts exactly to EMU; a:spcBef/a:spcAft a:spcPct resolves against the paragraph's largest authored run size per ECMA-376 21.1.2.2.7/21.1.2.2.9; a:lnSpc a:spcPct scales the measured natural line height, which is a declared approximation of the renderer's line box, not PowerPoint's line-spacing model. " +
+			"a:spcPts converts exactly to EMU; a:spcBef/a:spcAft a:spcPct resolves against the paragraph's largest authored run size per ECMA-376 21.1.2.2.7/21.1.2.2.9; a:lnSpc a:spcPct scales the single-spaced line height of 1.2 times the largest font size on the line, the base two PowerPoint 16.112.4 PDF exports measure, rather than the face's own ascent/descent box. " +
 			"Space before is suppressed on the first paragraph of the text body and space after on the last, so authored spacing only ever appears between paragraphs. An authored a:normAutofit lnSpcReduction still reduces the resulting line pitch and never the paragraph gaps. Line pitch, wrapping and overflow may differ from PowerPoint.",
 	})
 }

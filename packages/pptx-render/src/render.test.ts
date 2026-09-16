@@ -13,6 +13,7 @@ import type {
   ShapedGlyph,
   ShapedSegment,
 } from '@injoffice/font-metrics/layout'
+import { scaleLineMetrics } from '@injoffice/font-metrics/layout'
 import type { NativeElement, NativeParagraph, NativePptxDeck, NativeTextAlign, NativeTextBodyLayout } from '@injoffice/pptx-native'
 import {
   RenderCompileError,
@@ -1140,6 +1141,79 @@ describe('native PPTX RenderTree', () => {
     // A reduction at least as large as the authored spacing still advances.
     const collapsed = await laidOut(20_000, 20_000)
     expect(collapsed.pitch).toBe(1)
+  })
+
+  it('takes a percentage line spacing against 1.2 x the font size, not against the face line box', async () => {
+    const text = 'AA AA AA AA AA AA'
+    const frame = { x: 0, y: 0, cx: 60_000, cy: 900_000 }
+    // The default fixture face measures exactly 1.2 em, which cannot tell the
+    // two candidate bases apart. This face measures 1.3 em (0.95 ascent, 0.35
+    // descent, no line gap), the shape of a real text face whose own box is
+    // wider than PowerPoint's single-spaced line.
+    const design = { unitsPerEm: 1_000, ascender: 950, descender: -350, lineGap: 0 }
+    const base = fixtureShaper()
+    const wideBoxLayout: NativePptxTextLayout = {
+      manifest,
+      resolver: { ...resolver, load: (resolved) => ({ face: resolved, bytes: new Uint8Array([0, 1, 2, 3]), metrics: design }) },
+      shaper: {
+        ...base,
+        shape(request) {
+          const shaped = base.shape(request)
+          return 'status' in shaped ? shaped : { ...shaped, metrics: scaleLineMetrics(design, request.run.fontSizeMilliPoints) }
+        },
+      },
+      defaults: { fontFamilies: ['Fixture Sans'], fontSizeHundredthPt: 1_000, script: 'Latn', language: 'en-US', direction: 'ltr', fallbackChainIds: ['fixture.default'] },
+    }
+    const laidOut = async (percent: number | undefined, reduction: number | undefined) => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, reduction === undefined ? nativeTextBody() : nativeTextBody({ lineSpacingReductionPercent1000: reduction }), frame)
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, ...(percent === undefined ? {} : { lineSpacingPercent1000: percent }), runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      const diagnostics = [
+        ...(percent === undefined ? [] : [{ severity: 'warning' as const, code: 'pptx.paragraph-spacing-approximate', message: 'Declared read-only approximation' }]),
+        ...(reduction === undefined ? [] : [{ severity: 'warning' as const, code: 'pptx.autofit-authored-scale-approximate', message: 'Declared read-only approximation' }]),
+      ]
+      element.compatibility = diagnostics.length === 0 ? { status: 'editable', diagnostics } : { status: 'preserveOnly', diagnostics }
+      deck.slides[0]!.elements = [element]
+      const tree = await compileNativePptxSlide(deck, 0, { textLayout: wideBoxLayout, lineLayoutPolicy: 'max-run-natural-v1', inheritedTextPreview: true, sourceFrameAutoFitPreview: true })
+      const body = findNode(tree, 'text', element.id).textBody
+      return {
+        pitch: body.paragraphs[1]!.y - body.paragraphs[0]!.y,
+        box: body.paragraphs[0]!.heightEmu,
+        baseline: body.paragraphs[0]!.runs[0]!.baselineY,
+        sizeMilliPoints: body.paragraphs[0]!.runs[0]!.fontSizeMilliPoints,
+      }
+    }
+    const emu = (milliPoints: number) => Math.round((milliPoints * 127) / 10)
+    const natural = await laidOut(undefined, undefined)
+    const { box, sizeMilliPoints } = natural
+    const singleSpaced = emu(Math.floor((sizeMilliPoints * 12 + 5) / 10))
+    // The measured face box really is wider than the single-spaced line here,
+    // so every assertion below discriminates the two bases.
+    expect(box).toBe(emu((sizeMilliPoints * 13) / 10))
+    expect(singleSpaced).toBeLessThan(box)
+
+    // 90% authored spacing less a 20% reduction is 70% of 1.2 x the size.
+    const both = await laidOut(90_000, 20_000)
+    expect(both.pitch).toBe(Math.floor((singleSpaced * 70_000) / 100_000))
+    expect(both.pitch).not.toBe(Math.floor((box * 70_000) / 100_000))
+    // A reduction with no authored a:lnSpc is still a percentage of the same
+    // single-spaced line, which is what the font-scale.pptx export measures.
+    const reductionOnly = await laidOut(undefined, 20_000)
+    expect(reductionOnly.pitch).toBe(Math.floor((singleSpaced * 80_000) / 100_000))
+    expect(reductionOnly.pitch).not.toBe(Math.floor((box * 80_000) / 100_000))
+    // An authored 100% spacing is the single-spaced line itself.
+    expect((await laidOut(100_000, undefined)).pitch).toBe(singleSpaced)
+
+    // ECMA-376 21.1.2.2.5: with no percentage in effect the omitted-a:lnSpc
+    // rule stands and the measured face box is the pitch, unchanged.
+    expect(natural.pitch).toBe(box)
+    // The face box also stays the reported line height in every case, because
+    // overflow, column breaks and anchoring still measure the real box.
+    for (const measured of [both, reductionOnly, natural]) expect(measured.box).toBe(box)
+    // The removed leading still comes off the top of the box.
+    expect(both.baseline).toBe(natural.baseline - (box - both.pitch))
   })
 
   it('flows approximate text bodies through the authored columns instead of one wide block', async () => {
