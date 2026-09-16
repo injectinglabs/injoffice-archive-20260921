@@ -1107,6 +1107,53 @@ describe('native DOCX pagination v1', () => {
     })]))
   })
 
+  // paint-diagnostic-preserved also carries a source code, but it is emitted for
+  // codes that explicitly do not change shaping advances. Attributing a refusal
+  // to one names an innocent code and sends the reader at the wrong subsystem.
+  it('ignores non-blocking paint-only diagnostics when naming the cause', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [
+      {
+        code: 'paint-diagnostic-preserved', severity: 'deferred', scope_id: droppedID,
+        source_diagnostic_code: 'THEME_COLOR_PRESERVED',
+        source_diagnostic_message: 'Automatic color requires presentation context',
+        message: 'Paint-only resolved-layout diagnostic does not change shaping advances',
+      },
+      {
+        code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: droppedID,
+        source_diagnostic_code: 'UNSUPPORTED_NUMBER_FORMAT',
+        source_diagnostic_message: 'Numbering format is not modelled',
+        message: 'Resolved layout diagnostic UNSUPPORTED_NUMBER_FORMAT blocks native shaping',
+      },
+    ]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toMatchObject({ source_code: 'UNSUPPORTED_NUMBER_FORMAT' })
+  })
+
+  // A paint-only diagnostic alone never blocked shaping, so it must not be named.
+  it('names no cause when only a paint-only diagnostic is present', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [{
+      code: 'paint-diagnostic-preserved', severity: 'deferred', scope_id: droppedID,
+      source_diagnostic_code: 'THEME_COLOR_PRESERVED',
+      source_diagnostic_message: 'Automatic color requires presentation context',
+      message: 'Paint-only resolved-layout diagnostic does not change shaping advances',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toBeDefined()
+    expect(entry).not.toHaveProperty('source_code')
+  })
+
   // With no shaping diagnostic to attribute it to, the refusal stays as it was.
   it('still refuses an unexplained missing shaped paragraph without inventing a cause', () => {
     const request = fixture({}) as any
