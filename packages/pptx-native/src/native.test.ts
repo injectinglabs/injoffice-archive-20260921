@@ -32,7 +32,7 @@ describe('native PPTX contract', () => {
     element.compatibility.status='preserveOnly';element.compatibility.diagnostics=[];expect(validateNativePptx(deck).ok).toBe(false)
   })
   it('requires parsed read-only source evidence for authored autofit, column and placeholder approximations', () => {
-    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-single-column-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview']){
+    for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.inherited-text-properties-omitted','pptx.placeholder-inheritance-approximate','pptx.presentation-text-style-preview']){
       const deck=fixture('valid/parsed-full.json') as NativePptxDeck
       const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
       if(element.kind!=='text')throw new Error('text missing')
@@ -51,7 +51,7 @@ describe('native PPTX contract', () => {
     element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.autofit-authored-scale-approximate',message:'Declared read-only approximation'}]}
     expect(validateNativePptx(deck).ok).toBe(true)
     // The column disclosure alone never authorizes a line-pitch reduction.
-    element.compatibility.diagnostics[0]!.code='pptx.text-columns-single-column-approximate'
+    element.compatibility.diagnostics[0]!.code='pptx.text-columns-approximate'
     expect(validateNativePptx(deck).ok).toBe(false)
     element.compatibility.diagnostics[0]!.code='pptx.autofit-authored-scale-approximate'
     element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
@@ -61,7 +61,33 @@ describe('native PPTX contract', () => {
     delete element.textBody.lineSpacingReductionPercent1000
     expect(validateNativePptx(deck).ok).toBe(true)
   })
-  it('refuses an authored line-spacing reduction on a table cell text body', () => {
+  it('carries the authored column projection only with its evidence and a positive column width', () => {
+    const deck=fixture('valid/parsed-full.json') as NativePptxDeck
+    const element=deck.slides[0]!.elements.find(item=>item.kind==='text')!
+    if(element.kind!=='text')throw new Error('text missing')
+    element.transform={...element.transform,cx:3_000_000}
+    element.textBody={leftInsetEmu:0,rightInsetEmu:0,topInsetEmu:0,bottomInsetEmu:0,wrap:'square',verticalAnchor:'top',autoFit:'none',horizontalOverflow:'overflow',verticalOverflow:'overflow',columnCount:3,columnSpacingEmu:108_000}
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.text-columns-approximate',message:'Declared read-only approximation'}]}
+    expect(validateNativePptx(deck).ok).toBe(true)
+    // The autofit-scale disclosure alone never authorizes a column projection.
+    element.compatibility.diagnostics[0]!.code='pptx.autofit-authored-scale-approximate'
+    expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.diagnostics[0]!.code='pptx.text-columns-approximate'
+    element.compatibility.status='editable';expect(validateNativePptx(deck).ok).toBe(false)
+    element.compatibility.status='preserveOnly'
+    for(const count of [2,3,16]){element.textBody.columnCount=count;expect(validateNativePptx(deck).ok).toBe(true)}
+    for(const count of [0,1,17,-1,2.5]){element.textBody.columnCount=count;expect(validateNativePptx(deck).ok).toBe(false)}
+    element.textBody.columnCount=3
+    for(const spacing of [-1,51_206_401]){element.textBody.columnSpacingEmu=spacing;expect(validateNativePptx(deck).ok).toBe(false)}
+    // Count and spacing travel together, and gaps may not consume the frame.
+    element.textBody.columnSpacingEmu=108_000
+    delete element.textBody.columnSpacingEmu;expect(validateNativePptx(deck).ok).toBe(false)
+    element.textBody.columnSpacingEmu=108_000;delete element.textBody.columnCount;expect(validateNativePptx(deck).ok).toBe(false)
+    element.textBody.columnCount=3;element.textBody.columnSpacingEmu=1_500_000
+    expect(validateNativePptx(deck).ok).toBe(false)
+  })
+  it('refuses authored autofit reduction and column projections on a table cell text body', () => {
     const deck=fixture('valid/parsed-full.json') as NativePptxDeck
     const element=deck.slides[0]!.elements.find(item=>item.kind==='table')!
     if(element.kind!=='table')throw new Error('table missing')
@@ -73,6 +99,9 @@ describe('native PPTX contract', () => {
     const cell=element.table.rows[0]![0]!
     expect(validateNativePptx(deck).ok).toBe(true)
     cell.textBody!.lineSpacingReductionPercent1000=20_000
+    expect(validateNativePptx(deck).ok).toBe(false)
+    delete cell.textBody!.lineSpacingReductionPercent1000
+    cell.textBody!.columnCount=2;cell.textBody!.columnSpacingEmu=0
     expect(validateNativePptx(deck).ok).toBe(false)
   })
   it('accepts an inherited placeholder frame painted as a read-only rect shape', () => {

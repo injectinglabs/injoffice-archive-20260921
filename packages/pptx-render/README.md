@@ -254,9 +254,10 @@ even when `lineLayoutPolicy` is set. Opted-in bodies report
 `fidelity: 'approximateSourceFrame'` and a warning; they use the original frame
 without resizing and do not qualify Office-equivalent layout or editing rights.
 Under the same Go-side opt-in the extractor may also deliver run sizes already
-scaled by an authored `a:normAutofit` `fontScale`, and multi-column bodies as one
-column; those elements arrive with `textBody.autoFit: 'none'` plus the
-`pptx.autofit-authored-scale-approximate` / `pptx.text-columns-single-column-approximate`
+scaled by an authored `a:normAutofit` `fontScale`, plus the authored
+`lnSpcReduction` and `numCol`/`spcCol`; those elements arrive with
+`textBody.autoFit: 'none'` plus the
+`pptx.autofit-authored-scale-approximate` / `pptx.text-columns-approximate`
 compatibility warnings, which the renderer copies into its diagnostics and the
 preview worker gates behind `source_frame_autofit_preview`. For those elements
 only, an authored `textBody.lineSpacingReductionPercent1000` reduces the line
@@ -265,7 +266,17 @@ ECMA-376 21.1.2.1.3. Glyph sizes, ascents, line boxes and paragraph offsets are
 untouched (the authored `fontScale` already sized the runs), so measured lines
 sit closer together and later baselines rise; the first baseline never moves.
 This is a declared read-only approximation of PowerPoint's saved autofit pass,
-not an Office-equivalent line-spacing model. Under either
+not an Office-equivalent line-spacing model. For those elements an authored
+`textBody.columnCount` (2..16) with `textBody.columnSpacingEmu` flows the body
+through that many equal-width columns: column width is
+`(content width - (N-1)*spcCol) / N`, wrapping, alignment and indents are measured
+against one column, and lines fill a column top to bottom until the frame height
+is reached before continuing in the next one, left to right. `rtlCol` is not
+modeled, vertical and rotated-upright bodies refuse the projection with
+`text.textColumnsUnavailable`, vertical anchoring measures the tallest column,
+and overflow past the last column keeps the existing behaviour. Each such body
+reports one `text.authoredColumnsApproximate` warning; column balancing and line
+breaks are not Office-qualified. Under either
 approximate opt-in (`sourceFrameAutoFitPreview`, or `inheritedTextPreview` for a
 source-marked inherited element) a run wider than the text body with no Unicode
 break opportunity is broken at the last shaped cluster that fits, reported as

@@ -57,7 +57,7 @@ func TestNativeAuthoredNormAutofitScalesRunsReadOnly(t *testing.T) {
 			}
 		}
 		codes := nativeDiagnosticCodes(element)
-		if codes[nativeAuthoredAutoFitCode] != 1 || codes[nativeTextColumnsOmittedCode] != 0 {
+		if codes[nativeAuthoredAutoFitCode] != 1 || codes[nativeTextColumnsCode] != 0 {
 			t.Fatalf("expected one authored autofit disclosure: %+v", element.Compatibility.Diagnostics)
 		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
@@ -98,7 +98,7 @@ func TestNativeAuthoredNormAutofitWithoutValuesIsFullSize(t *testing.T) {
 	}
 }
 
-func TestNativeAuthoredTextColumnsPaintSingleColumnWithDisclosure(t *testing.T) {
+func TestNativeAuthoredTextColumnsProjectColumnFlowWithDisclosure(t *testing.T) {
 	options := nativeMutationExtractOptions()
 	options.AllowSourceFrameAutoFitPreview = true
 	deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="3" spcCol="108000"/>`), options)
@@ -107,11 +107,19 @@ func TestNativeAuthoredTextColumnsPaintSingleColumnWithDisclosure(t *testing.T) 
 	}
 	element := deck.Slides[0].Elements[0]
 	if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || element.Paragraphs == nil || len(*element.Paragraphs) != 1 {
-		t.Fatalf("columns were not painted as a disclosed single column: %+v", element)
+		t.Fatalf("columns were not painted as a disclosed projection: %+v", element)
+	}
+	if element.TextBody == nil || element.TextBody.ColumnCount == nil || *element.TextBody.ColumnCount != 3 || element.TextBody.ColumnSpacingEMU == nil || *element.TextBody.ColumnSpacingEMU != 108000 {
+		t.Fatalf("authored columns did not travel in the contract: %+v", element.TextBody)
 	}
 	codes := nativeDiagnosticCodes(element)
-	if codes[nativeTextColumnsOmittedCode] != 1 || codes[nativeAuthoredAutoFitCode] != 0 {
+	if codes[nativeTextColumnsCode] != 1 || codes[nativeAuthoredAutoFitCode] != 0 {
 		t.Fatalf("expected one column disclosure: %+v", element.Compatibility.Diagnostics)
+	}
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		if diagnostic.Code == nativeTextColumnsCode && (!strings.Contains(diagnostic.Message, "flows") || strings.Contains(diagnostic.Message, "as a single column")) {
+			t.Fatalf("disclosure still claims a single column: %s", diagnostic.Message)
+		}
 	}
 	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
 		t.Fatalf("invalid approximate contract: %+v", issues)
@@ -650,10 +658,129 @@ func TestNativeAuthoredLnSpcReductionContractRules(t *testing.T) {
 	deck = extract(t)
 	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
 		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeAuthoredAutoFitCode {
-			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeTextColumnsOmittedCode
+			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeTextColumnsCode
 		}
 	}
 	if len(ValidateNativePPTX(deck)) == 0 {
 		t.Fatal("the column disclosure authorized a line-pitch reduction")
+	}
+}
+
+func TestNativeAuthoredTextColumnsOnlyInTheApproximateTier(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	for _, body := range []string{`<a:bodyPr/>`, `<a:bodyPr numCol="1"/>`, `<a:bodyPr numCol="1" spcCol="108000"/>`} {
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, body), options)
+		if err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.TextBody == nil || element.TextBody.ColumnCount != nil || element.TextBody.ColumnSpacingEMU != nil {
+			t.Fatalf("%s emitted a column projection: %+v", body, element.TextBody)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("%s: invalid contract: %+v", body, issues)
+		}
+	}
+	// Strict extraction keeps refusing multiple columns outright.
+	strictDeck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="3" spcCol="108000"/>`), nativeMutationExtractOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if element := strictDeck.Slides[0].Elements[0]; element.Compatibility.Status != NativeCompatibilityStatusRefused || element.TextBody != nil {
+		t.Fatalf("strict extraction projected columns: %+v", element)
+	}
+}
+
+func TestNativeAuthoredTextColumnsFallBackToOneColumnWhenTheFrameIsTooNarrow(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	// 16 columns separated by 51206400 EMU gaps cannot fit any saved frame.
+	deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="16" spcCol="51206400"/>`), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.TextBody == nil || element.TextBody.ColumnCount != nil || element.TextBody.ColumnSpacingEMU != nil {
+		t.Fatalf("a frame with no positive column width still emitted a projection: %+v", element.TextBody)
+	}
+	if codes := nativeDiagnosticCodes(element); codes[nativeTextColumnsCode] != 1 {
+		t.Fatalf("expected one column disclosure: %+v", element.Compatibility.Diagnostics)
+	}
+	for _, diagnostic := range element.Compatibility.Diagnostics {
+		if diagnostic.Code == nativeTextColumnsCode && !strings.Contains(diagnostic.Message, "as a single column") {
+			t.Fatalf("narrow-frame fallback was not disclosed: %s", diagnostic.Message)
+		}
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("invalid contract: %+v", issues)
+	}
+}
+
+func TestNativeAuthoredTextColumnsContractRules(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	extract := func(t *testing.T) NativePPTXDeck {
+		t.Helper()
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr numCol="3" spcCol="108000"/>`), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return deck
+	}
+	for _, columns := range []int64{2, 3, 16} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.ColumnCount = int64Pointer(columns)
+		deck.Slides[0].Elements[0].TextBody.ColumnSpacingEMU = int64Pointer(0)
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("column count %d was rejected: %+v", columns, issues)
+		}
+	}
+	for _, columns := range []int64{0, 1, 17, -1} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.ColumnCount = int64Pointer(columns)
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatalf("column count %d validated", columns)
+		}
+	}
+	for _, spacing := range []int64{-1, 51206401} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.ColumnSpacingEMU = int64Pointer(spacing)
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatalf("column spacing %d validated", spacing)
+		}
+	}
+	// Count and spacing travel together.
+	deck := extract(t)
+	deck.Slides[0].Elements[0].TextBody.ColumnSpacingEMU = nil
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("a column count without spacing validated")
+	}
+	deck = extract(t)
+	deck.Slides[0].Elements[0].TextBody.ColumnCount = nil
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("column spacing without a count validated")
+	}
+	// Gaps may never consume the whole frame.
+	deck = extract(t)
+	deck.Slides[0].Elements[0].TextBody.ColumnSpacingEMU = int64Pointer(51206400)
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("columns with no positive width validated")
+	}
+	// The projection may not outlive its disclosure.
+	deck = extract(t)
+	deck.Slides[0].Elements[0].Compatibility.Diagnostics = nil
+	deck.Slides[0].Elements[0].Compatibility.Status = NativeCompatibilityStatusEditable
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("an editable element kept the authored column projection")
+	}
+	deck = extract(t)
+	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
+		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeTextColumnsCode {
+			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeAuthoredAutoFitCode
+		}
+	}
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("the autofit disclosure authorized a column projection")
 	}
 }

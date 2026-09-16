@@ -1667,11 +1667,42 @@ function reducedLinePitch(lineHeight: number, reductionPercent1000: number, path
   return pitch < 1 ? 1 : pitch
 }
 
+interface AuthoredColumnLayout {
+  readonly count: number
+  readonly spacingEmu: number
+  readonly widthEmu: number
+}
+
+// ECMA-376 21.1.2.1.1: a:bodyPr/@numCol and @spcCol divide the text body into
+// equal-width columns separated by the authored gap. The approximate lane gives
+// every column the same width, wraps at that width, fills a column top to bottom
+// until the frame height is reached and then continues in the next column, left
+// to right. rtlCol is never authored here (extraction refuses it), so column
+// order is always left to right. Only elements the contract marked as read-only
+// authored-frame approximations carry the projection.
+function authoredColumnLayout(context: TextContainerContext, state: CompileState): AuthoredColumnLayout | undefined {
+  if (!state.authoredFrameElements.has(context.elementId)) return undefined
+  const count = context.layout?.columnCount
+  if (count === undefined || count < 2) return undefined
+  const spacingEmu = context.layout?.columnSpacingEmu ?? 0
+  const content = context.bounds.cx - (count - 1) * spacingEmu
+  const widthEmu = Math.floor(content / count)
+  if (!Number.isSafeInteger(content) || !Number.isSafeInteger(widthEmu) || widthEmu <= 0) {
+    throw new TextBodyLayoutRefusal('text.textColumnsUnavailable', 'authored text columns and gaps leave no positive column width in the saved source frame')
+  }
+  return { count, spacingEmu, widthEmu }
+}
+
 async function compileParagraphs(paragraphs: readonly NativeParagraph[], context: TextContainerContext, state: CompileState): Promise<readonly RenderParagraphNode[]> {
   if (context.layout && !state.lineLayoutPolicy && context.layout.verticalAnchor !== 'top') {
     throw new TextBodyLayoutRefusal('text.verticalAnchorUnavailable', 'native center/bottom text anchoring requires an Office-qualified line-box rule')
   }
   const lineSpacingReduction = authoredLineSpacingReduction(context, state)
+  const columns = context.exactArea ? undefined : authoredColumnLayout(context, state)
+  // Wrapping, alignment and indents are measured against one column, not the frame.
+  const lineBoxWidth = columns ? columns.widthEmu : context.bounds.cx
+  let columnIndex = 0
+  let tallestColumnEmu = 0
   const result: RenderParagraphNode[] = []
   let y = 0
   for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
@@ -1684,8 +1715,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     const indent = measuredParagraph ? paragraph.indentEmu ?? 0 : 0
     if (measuredParagraph && (paragraph.align===undefined || paragraph.bullet===undefined || paragraph.level===undefined || (paragraph.level!==0&&(paragraph.marginLeftEmu===undefined||paragraph.indentEmu===undefined)))) throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','measured paragraphs need explicit alignment/list semantics and explicit offsets at nonzero levels')
     const firstTextOffset=margin+(paragraph.bullet?0:indent)
-    const firstWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,firstTextOffset,state.budget.affine):context.bounds.cx-firstTextOffset
-    const continuationWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,margin,state.budget.affine):context.bounds.cx-margin
+    const firstWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,firstTextOffset,state.budget.affine):lineBoxWidth-firstTextOffset
+    const continuationWidth=context.exactArea?exactTextLineWidth(context.exactArea.cx,margin,state.budget.affine):lineBoxWidth-margin
     if(measuredParagraph&&!context.exactArea&&(!Number.isSafeInteger(firstWidth)||!Number.isSafeInteger(continuationWidth)||(firstWidth as number)<=0||(continuationWidth as number)<=0))throw new TextBodyLayoutRefusal('text.paragraphSemanticsUnavailable','paragraph margins leave no positive text line width')
     if (context.layout && state.nativeTextInheritanceUnresolved && paragraph.runs.some(nativeRunLacksExplicitFont)) {
       throw new TextBodyLayoutRefusal('text.inheritanceUnavailable', 'native layout refuses runs that still need unresolved presentation/layout/master/theme fonts')
@@ -1795,7 +1826,11 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(lineHeight, path, state.budget, true)
       const align = paragraph.align ?? 'left'
       const textOffset=lineIndex===0?firstTextOffset:margin
-      const lineStart = textOffset+(context.exactArea?0:alignOffset(align, context.bounds.cx-textOffset, advance))
+      // A full column moves the remaining lines into the next one; the last
+      // column keeps the existing overflow behaviour.
+      if (columns && columnIndex < columns.count - 1 && y > 0 && y + lineHeight > context.bounds.cy) { columnIndex++; y = 0 }
+      const columnOffsetX = columns ? columnIndex * (columns.widthEmu + columns.spacingEmu) : 0
+      const lineStart = columnOffsetX+textOffset+(context.exactArea?0:alignOffset(align, lineBoxWidth-textOffset, advance))
       const lineTransform=context.exactArea?sourceRenderTransform(exactTextTranslation(exactTextAlignmentOffset(align,exactTextLineWidth(context.exactArea.cx,textOffset,state.budget.affine),advance,state.budget.affine),sourceAffineRational(0n),state.budget.maxCoordinateEmu,state.budget.affine),state.budget.affine):undefined
       let cursor = direction === 'rtl' ? lineStart + advance : lineStart
       const runs = lineShaped.map((item, fragmentIndex) => {
@@ -1821,7 +1856,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
         }]
       }
       let marker:RenderTextRunNode|undefined
-      if(lineIndex===0&&shapedMarker){takeTextFragment(state,`${path}.marker`);checkCoordinate(margin+indent,path,state.budget);marker={...shapedMarker.run,sourceRole:'paragraphBullet',x:margin+indent,baselineY:y+ascent}}
+      if(lineIndex===0&&shapedMarker){takeTextFragment(state,`${path}.marker`);checkCoordinate(columnOffsetX+margin+indent,path,state.budget);marker={...shapedMarker.run,sourceRole:'paragraphBullet',x:columnOffsetX+margin+indent,baselineY:y+ascent}}
       result.push({
         kind: 'paragraph', sourceElementId: context.elementId, paragraphIndex, lineIndex,
         align, direction, level: paragraph.level ?? 0, bullet: paragraph.bullet ?? false,
@@ -1841,6 +1876,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       if (runs.some((run) => run.decisions.some((decision) => decision.code === 'unsupported-direction'))) state.diagnostics.push({ severity: 'refusal', code: 'text.verticalUnsupported', message: 'vertical text is represented by a refusal placeholder until native vertical layout is modeled', slideId: state.slide.id, elementId: context.elementId })
       y += reducedLinePitch(lineHeight, lineSpacingReduction, path, state)
       checkCoordinate(y, path, state.budget)
+      if (y > tallestColumnEmu) tallestColumnEmu = y
       lineIndex++
     }
   }
@@ -1851,7 +1887,8 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
     return result.map(paragraph=>({...paragraph,transform:sourceRenderTransform(composeSourceAffines(placement,qualifiedRenderAffine(paragraph.transform!,state.budget),state.budget.affine),state.budget.affine)}))
   }
   const offsetX = context.bounds.x
-  const remainder = context.bounds.cy - y
+  // Anchoring measures the block, which for a column flow is its tallest column.
+  const remainder = context.bounds.cy - (columns ? tallestColumnEmu : y)
   if (!Number.isSafeInteger(remainder)) throw new RenderCompileError('render.textMetric', `$.elements.${context.elementId}.textBody`, 'text anchor remainder exceeds integer precision')
   // The named policy intentionally specifies floor for half-EMU centers and
   // signed offsets for overflowing blocks. No browser/Office heuristic enters.
@@ -1885,7 +1922,10 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     const approximateSourceFrame = context.layout?.autoFit === 'shape-source-frame'
     if (approximateSourceFrame && !state.sourceFrameAutoFitPreview) throw new TextBodyLayoutRefusal('text.sourceFrameAutoFitRequiresOptIn', 'Source-frame autofit is approximate and requires explicit preview opt-in.')
     if (approximateSourceFrame) state.diagnostics.push({ severity: 'warning', code: 'text.sourceFrameAutoFitApproximate', message: 'Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint.', slideId: state.slide.id, elementId: context.elementId })
+    const authoredColumns = state.authoredFrameElements.has(context.elementId) && (context.layout?.columnCount ?? 0) > 1
     const vertical = context.layout?.writingMode === 'vertical-clockwise'
+    if (authoredColumns && (vertical || context.exactArea)) throw new TextBodyLayoutRefusal('text.textColumnsUnavailable', 'authored text columns are not modeled for vertical or rotated-upright text bodies')
+    if (authoredColumns) state.diagnostics.push({ severity: 'warning', code: 'text.authoredColumnsApproximate', message: `Read-only approximate preview flows the shaped lines through ${context.layout!.columnCount} equal-width authored columns separated by the authored ${context.layout!.columnSpacingEmu ?? 0} EMU gap, wrapping at the column width and continuing left to right once the frame height is reached. Column balancing, line breaks and overflow are not Office-qualified.`, slideId: state.slide.id, elementId: context.elementId })
     if (vertical && paragraphs.some(paragraph=>paragraph.bullet!==false || paragraph.level!==0 || (paragraph.marginLeftEmu??0)!==0 || (paragraph.indentEmu??0)!==0 || paragraph.runs.some(run=>!run.text || !/^[\x20-\x7e]+$/.test(run.text)))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires nonempty ASCII Latin text and no bullets or paragraph offsets.')
     const verticalArea=context.exactArea?{x:sourceAffineRational(0n),y:sourceAffineRational(0n),cx:context.exactArea.cy,cy:context.exactArea.cx}:undefined
     const layoutContext = vertical ? {...context,bounds:{x:0,y:0,cx:context.bounds.cy,cy:context.bounds.cx},...(verticalArea?{exactArea:verticalArea}:{})} : context
@@ -2390,7 +2430,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
 	const collectInherited=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.source-inherited-text-approximate')){if(options.inheritedTextPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.inheritedTextPreview','source inherited text requires explicit read-only approximation opt-in');inheritedTextElements.add(element.id)}if(element.kind==='group')collectInherited(element.children)}}
 	collectInherited(nativeSlide.elements)
 	const authoredFrameElements=new Set<string>()
-	const collectAuthored=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.autofit-authored-scale-approximate'||d.code==='pptx.text-columns-single-column-approximate')){if(options.sourceFrameAutoFitPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.sourceFrameAutoFitPreview','authored autofit scale and column projections require explicit read-only source-frame preview opt-in');authoredFrameElements.add(element.id)}if(element.kind==='group')collectAuthored(element.children)}}
+	const collectAuthored=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.compatibility.diagnostics.some(d=>d.code==='pptx.autofit-authored-scale-approximate'||d.code==='pptx.text-columns-approximate')){if(options.sourceFrameAutoFitPreview!==true||element.compatibility.status==='editable')throw new RenderCompileError('render.invalidContract','$.options.sourceFrameAutoFitPreview','authored autofit scale and column projections require explicit read-only source-frame preview opt-in');authoredFrameElements.add(element.id)}if(element.kind==='group')collectAuthored(element.children)}}
 	collectAuthored(nativeSlide.elements)
   const budget: Budget = {
     affine: new SourceAffineBudget(),

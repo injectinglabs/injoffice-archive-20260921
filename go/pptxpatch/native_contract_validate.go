@@ -311,7 +311,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if diagnostic.Code == nativeBuiltinTableStylePreviewCode && (element.Kind != NativeElementKindTable || element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.tableStylePreview", "built-in table style preview requires a parsed source table with read-only status and explicit warning")
 		}
-		if (diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsOmittedCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+		if (diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.autofitApproximation", "authored autofit approximation requires parsed source and explicit read-only warning")
 		}
 	}
@@ -337,6 +337,19 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		}
 		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
 			v.add(p+".textBody.lineSpacingReductionPercent1000", "native.autofitApproximation", "the authored line-spacing reduction requires a parsed source, non-editable status and the authored autofit approximation warning")
+		}
+	}
+	// The authored column projection is a read-only approximation: it may only
+	// travel with the disclosure that names it.
+	if element.TextBody != nil && (element.TextBody.ColumnCount != nil || element.TextBody.ColumnSpacingEMU != nil) {
+		warning := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeTextColumnsCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warning = true
+			}
+		}
+		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
+			v.add(p+".textBody.columnCount", "native.autofitApproximation", "the authored column projection requires a parsed source, non-editable status and the authored text-column approximation warning")
 		}
 	}
 	if element.TextBody != nil && element.TextBody.WritingMode != nil && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
@@ -618,6 +631,21 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	if body.LineSpacingReductionPercent1000 != nil && (*body.LineSpacingReductionPercent1000 < 1 || *body.LineSpacingReductionPercent1000 > 99999) {
 		v.add(p+".lineSpacingReductionPercent1000", "schema.range", "must be a 0.001%-99.999% reduction in thousandths of a percent")
 	}
+	if body.ColumnCount != nil && (*body.ColumnCount < 2 || *body.ColumnCount > 16) {
+		v.add(p+".columnCount", "schema.range", "must be 2-16 authored text columns")
+	}
+	if body.ColumnSpacingEMU != nil && (*body.ColumnSpacingEMU < 0 || *body.ColumnSpacingEMU > 51206400) {
+		v.add(p+".columnSpacingEmu", "schema.range", "must be a nonnegative bounded EMU column gap")
+	}
+	if (body.ColumnCount == nil) != (body.ColumnSpacingEMU == nil) {
+		v.add(p+".columnSpacingEmu", "native.textColumns", "the authored column count and spacing must be supplied together")
+	}
+	if body.ColumnCount != nil && body.ColumnSpacingEMU != nil && *body.ColumnCount >= 2 && *body.ColumnCount <= 16 && *body.ColumnSpacingEMU >= 0 && transform.Cx != nil && body.LeftInsetEMU != nil && body.RightInsetEMU != nil {
+		content := *transform.Cx - *body.LeftInsetEMU - *body.RightInsetEMU - (*body.ColumnCount-1)**body.ColumnSpacingEMU
+		if content <= 0 || content / *body.ColumnCount <= 0 {
+			v.add(p, "native.textBodyBounds", "authored columns and gaps must leave a positive width for every column")
+		}
+	}
 	if body.WritingMode != nil && *body.WritingMode != "vertical-clockwise" {
 		v.add(p+".writingMode", "schema.enum", "must equal vertical-clockwise")
 	}
@@ -886,6 +914,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, so
 				}
 				if cell.TextBody.LineSpacingReductionPercent1000 != nil {
 					v.add(cp+".textBody.lineSpacingReductionPercent1000", "native.autofitApproximation", "table cell autofit preview is not supported")
+				}
+				if cell.TextBody.ColumnCount != nil || cell.TextBody.ColumnSpacingEMU != nil {
+					v.add(cp+".textBody.columnCount", "native.textColumns", "table cell text columns are not supported")
 				}
 				if cell.TextBody.WritingMode != nil {
 					v.add(cp+".textBody.writingMode", "native.verticalPreview", "vertical table cells are not supported")

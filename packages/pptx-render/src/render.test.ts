@@ -987,7 +987,7 @@ describe('native PPTX RenderTree', () => {
     }
     for (const [code, option, fidelity] of [
       ['pptx.autofit-authored-scale-approximate', 'sourceFrameAutoFitPreview', 'approximateSourceFrame'],
-      ['pptx.text-columns-single-column-approximate', 'sourceFrameAutoFitPreview', 'approximateSourceFrame'],
+      ['pptx.text-columns-approximate', 'sourceFrameAutoFitPreview', 'approximateSourceFrame'],
       ['pptx.source-inherited-text-approximate', 'inheritedTextPreview', 'approximateInheritedText'],
     ] as const) {
       const { deck, id } = marked(code)
@@ -1058,6 +1058,67 @@ describe('native PPTX RenderTree', () => {
     const mixedNatural = findNode(mixedTree, 'text', sibling.id).textBody
     expect(mixedReduced.paragraphs[1]!.y - mixedReduced.paragraphs[0]!.y).toBe(reducedPitch)
     expect(mixedNatural.paragraphs.map((line) => line.y)).toEqual(natural.paragraphs.map((line) => line.y))
+  })
+
+  it('flows approximate text bodies through the authored columns instead of one wide block', async () => {
+    const text = 'AA AA AA AA AA AA AA AA AA'
+    const spacingEmu = 20_000
+    const frame = { x: 0, y: 0, cx: 260_000, cy: 900_000 }
+    const laidOut = async (body: NativeTextBodyLayout, transform = frame) => {
+      const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+      if (element.kind !== 'text') throw new Error('text missing')
+      const authored = nativeTextElement(element.id, text, body, transform)
+      element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+      element.textBody = authored.textBody; element.transform = authored.transform
+      element.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.text-columns-approximate', message: 'Declared read-only approximation' }] }
+      deck.slides[0]!.elements = [element]
+      const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })
+      return { body: findNode(tree, 'text', element.id).textBody, tree, id: element.id }
+    }
+    const single = (await laidOut(nativeTextBody())).body
+    const three = await laidOut(nativeTextBody({ columnCount: 3, columnSpacingEmu: spacingEmu }))
+    expect(single.status).toBe('laidOut')
+    expect(three.body.status).toBe('laidOut')
+    const columnWidth = Math.floor((frame.cx - 2 * spacingEmu) / 3)
+    // Narrower columns wrap sooner, so the same text needs more lines.
+    expect(three.body.paragraphs.length).toBeGreaterThan(single.paragraphs.length)
+    for (const line of three.body.paragraphs) {
+      expect(line.widthEmu).toBeLessThanOrEqual(columnWidth)
+      const band = Math.round((line.x - frame.x) / (columnWidth + spacingEmu))
+      expect(band).toBeGreaterThanOrEqual(0)
+      expect(band).toBeLessThanOrEqual(2)
+      // Every line starts exactly on its column origin for left-aligned text.
+      expect(line.x).toBe(frame.x + band * (columnWidth + spacingEmu))
+      expect(line.runs[0]!.x).toBe(line.x)
+    }
+    // Columns fill left to right, top to bottom, and never exceed the frame height.
+    const bands = three.body.paragraphs.map((line) => Math.round((line.x - frame.x) / (columnWidth + spacingEmu)))
+    expect(bands).toEqual([...bands].sort((a, b) => a - b))
+    for (let index = 1; index < three.body.paragraphs.length; index++) {
+      const previous = three.body.paragraphs[index - 1]!, line = three.body.paragraphs[index]!
+      if (bands[index] === bands[index - 1]) expect(line.y).toBeGreaterThan(previous.y)
+      else expect(line.y).toBe(three.body.paragraphs[0]!.y)
+    }
+    expect(three.tree.diagnostics.filter((diagnostic) => diagnostic.code === 'text.authoredColumnsApproximate' && diagnostic.severity === 'warning' && diagnostic.elementId === three.id)).toHaveLength(1)
+
+    // A frame exactly two lines tall balances a four-line body across two columns.
+    const lineHeight = single.paragraphs[0]!.heightEmu
+    const balancedFrame = { x: 0, y: 0, cx: 260_000, cy: 2 * lineHeight }
+    const balanced = (await laidOut(nativeTextBody({ columnCount: 2, columnSpacingEmu: spacingEmu }), balancedFrame)).body
+    const balancedWidth = Math.floor((balancedFrame.cx - spacingEmu) / 2)
+    const balancedBands = balanced.paragraphs.map((line) => Math.round((line.x - balancedFrame.x) / (balancedWidth + spacingEmu)))
+    expect(balancedBands.filter((band) => band === 0)).toHaveLength(2)
+    expect(balancedBands.slice(0, 2)).toEqual([0, 0])
+    expect(balancedBands[2]).toBe(1)
+
+    // The exact lane never sees a column projection: the field needs its evidence.
+    const exactDeck = structuredClone(parsedFull), exact = exactDeck.slides[0]!.elements.find((item) => item.kind === 'text')!
+    if (exact.kind !== 'text') throw new Error('text missing')
+    const authored = nativeTextElement(exact.id, text, nativeTextBody({ columnCount: 3, columnSpacingEmu: spacingEmu }), frame)
+    exact.paragraphs = authored.paragraphs; exact.textBody = authored.textBody; exact.transform = authored.transform
+    exact.compatibility = { status: 'editable', diagnostics: [] }
+    exactDeck.slides[0]!.elements = [exact]
+    await expect(compileNativePptxSlide(exactDeck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })).rejects.toThrow('authored column projection')
   })
 
   it('refuses an overfull unbreakable shaped cluster visibly instead of splitting or approximating it', async () => {

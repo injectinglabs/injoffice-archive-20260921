@@ -99,6 +99,8 @@ export type RenderDiagnosticCode =
   | 'text.wrapUnavailable'
   | 'text.sourceFrameAutoFitApproximate'
   | 'text.emergencyBreakApproximate'
+  | 'text.authoredColumnsApproximate'
+  | 'text.textColumnsUnavailable'
   | 'text.paragraphSemanticsUnavailable'
   | 'text.inheritanceUnavailable'
   | 'text.providerBudget'
