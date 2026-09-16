@@ -57,7 +57,7 @@ describe('PPTX approximate preview policy', () => {
     expect(html).toContain('▪ ');expect(html).not.toContain('• ');expect(html).toContain('padding-left:12px');expect(html).toContain('text-indent:-4px');expect(html).toContain('font-family:DejaVu Sans');expect(html).toContain('font-weight:700');expect(html).toContain('font-style:italic')
   })
   it('refuses malformed source instead of hiding it through the geometry projection',async()=>{
-    const deck=validDeck([{kind:'shape',id:'invalid',provenance:'authored',transform:{x:0,y:0,cx:0,cy:100},preset:'rect',paragraphs:[],passthrough:[],compatibility:{status:'editable',diagnostics:[]}}])
+    const deck=validDeck([{kind:'shape',id:'invalid',provenance:'authored',transform:{x:0,y:0,cx:-1,cy:100},preset:'rect',paragraphs:[],passthrough:[],compatibility:{status:'editable',diagnostics:[]}}])
     await expect(compileFilePreviewGeometry(deck,0)).rejects.toThrow('validated')
   })
 })
