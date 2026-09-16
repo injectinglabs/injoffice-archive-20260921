@@ -18,6 +18,7 @@ import {
   DOCX_PAGE_PAINT_COMPILER_PROTOCOL,
   DOCX_PAGE_PAINT_COMPILER_VERSION,
   decodeNativeDocxApproximateDrawingShapesV1,
+  DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
@@ -3201,6 +3202,44 @@ describe('approximate DrawingML shapes', () => {
       expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('painted 1 of 1') && r.includes('theme fill style'))).toBe(true)
       expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
     }
+  }, 20000)
+
+  it('paints a group shape as its flattened children at their mapped offsets and leaves the strict lane byte-identical', async () => {
+    // The sidecar flattens a wpg:wgp into one anchored item per child, each
+    // already mapped out of the group's child coordinate space, so both children
+    // share the group's run and drawing anchors and differ only in placement.
+    const { input, eligibility, shapes, item } = shapeInput({
+      placement: 'anchored', preset: 'rect', fill_rgb: '4F81BD', line: { rgb: '28415F', width_emu: 25400, dash: 'solid' },
+      page_anchor: pageAnchor({ x_emu: 914400, y_emu: 1828800 }), wrap: 'none', width_emu: 1270000, height_emu: 635000,
+      notes: ["group shape child placed by mapping its child coordinates into the group's declared extent"],
+    })
+    shapes.items.push({
+      ...item, id: 'approximate-drawing-shape:test:2', width_emu: 635000, height_emu: 381000,
+      page_anchor: pageAnchor({ x_emu: 1549400, y_emu: 2209800 }),
+    } as never, {
+      id: 'approximate-drawing-shape:test:3', paragraph_id: item.paragraph_id, diagnostic_ids: item.diagnostic_ids, anchor: item.anchor, run_anchor: item.run_anchor,
+      status: 'omitted', reason: 'nested-group', width_emu: 0, height_emu: 0, rotation_degrees: 0, flip_horizontal: false, flip_vertical: false,
+    } as never)
+    const original = structuredClone(input)
+    const { compileNativeDocxPagePaintV1 } = await import('./nativePagePaintV1.js')
+    const strictBefore = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(structuredClone(original))).page_paint_request, outlineProvider(input))
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(input).toEqual(original)
+    const fills = paint.pages[0]!.commands.flatMap(c => c.kind === 'fill_table_cell' && c.table_id === 'docx.approximate-drawing-shape-preview-v1' ? [c] : [])
+    expect(fills.map(c => ({ row: c.row_id, x: c.x_millipoints, y: c.y_millipoints, w: c.width_millipoints, h: c.height_millipoints }))).toEqual([
+      { row: 'approximate-drawing-shape:test:1', x: 72_000, y: 144_000, w: 100_000, h: 50_000 },
+      { row: 'approximate-drawing-shape:test:2', x: 122_000, y: 174_000, w: 50_000, h: 30_000 },
+    ])
+    // Each child keeps its own outline, so the group reads as separate shapes.
+    expect(paint.pages[0]!.commands.filter(c => c.kind === 'stroke_table_border' && c.row_id === 'approximate-drawing-shape:test:2')).toHaveLength(4)
+    expect(paint.reasons).toContain(DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('painted 2 of 3') && r.includes("mapping its child coordinates into the group's declared extent"))).toBe(true)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('approximate-drawing-shape:test:3 (nested-group)'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+    // Strict paint of the same bytes is unchanged by the approximate group lane.
+    const strictAfter = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(structuredClone(original))).page_paint_request, outlineProvider(input))
+    expect(JSON.stringify(strictAfter)).toBe(JSON.stringify(strictBefore))
   }, 20000)
 
   it('reserves inline rectangles in the line, paints a line preset as one stroke, and keeps omitted shapes disclosed', async () => {
