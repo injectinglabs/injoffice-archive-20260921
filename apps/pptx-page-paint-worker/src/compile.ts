@@ -39,9 +39,15 @@ function fontProviders(path:string,allowSubstitution=false){
   const id=`font-${index}`, digest=f.sha256 as `sha256:${string}`
   if(manifest.faces.some(face=>face.family===f.family&&face.weight===f.weight&&face.style===f.style))throw new Error('Ambiguous operator face identity')
   const face:ResolvedFontFace={faceId:id,family:f.family,weight:Number(f.weight),style:f.style as 'normal'|'italic',stretch:100,sourceKind:'host',resourceId:id,contentDigest:digest,resolution:'exact',matchedFamily:f.family}
-  faces.push({faceId:id,family:face.family,weight:face.weight,style:face.style,stretch:100,source:{kind:'host',resourceId:id,contentDigest:digest}})
   const request={bytes,contentDigest:digest}
-  resources.set(id,{face,bytes,metrics:inspectHarfBuzzFontMetricsV1(request)})
+  let metrics
+  try {
+   metrics=inspectHarfBuzzFontMetricsV1(request)
+  } catch {
+   continue
+  }
+  faces.push({faceId:id,family:face.family,weight:face.weight,style:face.style,stretch:100,source:{kind:'host',resourceId:id,contentDigest:digest}})
+  resources.set(id,{face,bytes,metrics})
   outlines.set(id,createHarfBuzzOutlineProviderV1(request))
  }
  const resolver:NativeFontResolver={providerId:'injoffice.pptx.operator-fonts',providerRevision:hash(Buffer.from(JSON.stringify([manifest,allowSubstitution,policy??null]))),resolve({run,manifest:requested}){

@@ -176,6 +176,23 @@ describe('actual source-font native PPTX worker',()=>{
  it('compiles mixed metrics and anchored glyph outlines without mutating source',async()=>{const request=input(),before=JSON.stringify(request);const result=await compilePptxPreview(request);expect(result.font_digests).toEqual([digest]);expect(result.diagnostics.join(' ')).toContain('text.deterministicLayout');expect(JSON.stringify(result.nodes)).toContain('"kind":"path"');expect(JSON.stringify(request)).toBe(before);expect(decodePptxPreview(result)).toEqual(result)})
  it('refuses exact missing font faces instead of substitution',async()=>{const request=input();request.deck.slides[0].elements[0].paragraphs[0].runs[0].fontFamily='Missing Font';await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator font unavailable: Missing Font')})
  it('rejects wrong configured font digests',async()=>{const bad=resolve(scratch,'bad.json');writeFileSync(bad,JSON.stringify({version:1,faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:`sha256:${'0'.repeat(64)}`}]}));await expect(compilePptxPreview({...input(),font_manifest_path:bad})).rejects.toThrow('digest')})
+ it('skips an unusable unused host face instead of refusing the slide',async()=>{
+  const brokenPath=resolve(scratch,'broken.ttf')
+  const broken=Buffer.alloc(64)
+  writeFileSync(brokenPath,broken)
+  const brokenDigest=`sha256:${createHash('sha256').update(broken).digest('hex')}`
+  const mixed=resolve(scratch,'mixed-host-fonts.json')
+  writeFileSync(mixed,JSON.stringify({version:1,faces:[
+   {family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest},
+   {family:'Broken Host',weight:400,style:'normal',path:brokenPath,sha256:brokenDigest},
+  ]}))
+  const request=input();request.font_manifest_path=mixed
+  const painted=await compilePptxPreview(request)
+  expect(JSON.stringify(painted.nodes)).toContain('contentRun')
+  expect(painted.font_digests).toEqual([digest])
+  for(const run of request.deck.slides[0].elements[0].paragraphs[0].runs)run.fontFamily='Broken Host'
+  await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator font unavailable: Broken Host')
+ })
  it('rejects hostile or unbounded vector paths before mounting',async()=>{const result=await compilePptxPreview(input());for(const d of ['M1e999 0','M0','<script>','M0 0LInfinity 1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'path',d,fill:'000000'}]})).toThrow()})
 })
 
