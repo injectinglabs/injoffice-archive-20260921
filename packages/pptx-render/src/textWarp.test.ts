@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { warpGlyphRun, warpGlyphTransform, warpParabolaDip, warpPoint, type PresetTextWarpSpec } from './textWarp.js'
+import { textBodyWarp, warpGlyphRun, warpGlyphTransform, warpParabolaDip, warpPoint, type PresetTextWarpSpec } from './textWarp.js'
 import type { RenderTextRunNode } from './types.js'
 
 const bounds = { x: 100, y: 200, cx: 1_000, cy: 800 }
@@ -62,5 +62,6 @@ describe('preset text warp', () => {
     expect(warped[1]!.run.glyphs[0]!.glyphId).toBe(2)
     expect(warpGlyphRun({ ...run, status: 'refused' }, spec('textDeflate', 37_500))).toEqual([{ run: { ...run, status: 'refused' } }])
     expect(warpGlyphRun(run, undefined)).toEqual([{ run }])
+    expect(textBodyWarp({ bounds, presetTextWarp: 'textDeflate', presetTextWarpAdj: 37_500 })).toEqual(spec('textDeflate', 37_500))
   })
 })

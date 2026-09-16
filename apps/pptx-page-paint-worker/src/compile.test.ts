@@ -26,7 +26,7 @@ it('requires explicit source-frame opt-in and retains real glyph paint with a bo
  await expect(compilePptxPreview({...request,source_frame_autofit_preview:'true'})).rejects.toThrow('boolean')
 })
 it('gates Go-side authored autofit scale and single-column disclosures behind the same autofit opt-in',async()=>{
- for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate']){
+ for(const code of ['pptx.autofit-authored-scale-approximate','pptx.text-columns-approximate','pptx.text-warp-flattened-approximate','pptx.text-warp-approximate']){
   const request=input(),element=request.deck.slides[0].elements[0]
   element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code,message:'Authored frame layout approximation'}]}
   await expect(compilePptxPreview(request)).rejects.toThrow('Authored autofit scale requires explicit preview opt-in')
@@ -36,6 +36,17 @@ it('gates Go-side authored autofit scale and single-column disclosures behind th
   expect(result.diagnostics.join(' ')).toContain('native.compatibility: Authored frame layout approximation')
   expect(JSON.stringify(result.nodes)).toContain('contentRun')
  }
+})
+it('paints modeled preset text warp only with the source-frame autofit opt-in',async()=>{
+ const request=input(),element=request.deck.slides[0].elements[0]
+ element.textBody={...element.textBody,wrap:'none',verticalAnchor:'top',presetTextWarp:'textDeflate',presetTextWarpAdj:37_500}
+ element.compatibility={status:'preserveOnly',diagnostics:[{severity:'warning',code:'pptx.text-warp-approximate',message:'Authored text warp approximation'}]}
+ await expect(compilePptxPreview(request)).rejects.toThrow('Authored autofit scale requires explicit preview opt-in')
+ const result=await compilePptxPreview({...request,source_frame_autofit_preview:true})
+ expect(result.diagnostics.join(' ')).toContain('text.authoredWarpApproximate')
+ expect(JSON.stringify(result.nodes)).toContain('contentRun')
+ const walk=(nodes:PreviewNode[]):boolean=>nodes.some(node=>node.kind==='group'&&((node.transform[1]!==0||node.transform[2]!==0)||walk(node.children)))
+ expect(walk(result.nodes)).toBe(true)
 })
 function input(){
  const deck=JSON.parse(readFileSync(resolve(root,'go/pptxpatch/testdata/native-contract/valid/parsed-full.json'),'utf8'))

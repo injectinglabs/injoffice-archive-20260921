@@ -11,6 +11,7 @@ const (
 	nativeAuthoredAutoFitCode     = "pptx.autofit-authored-scale-approximate"
 	nativeTextColumnsCode         = "pptx.text-columns-approximate"
 	nativeTextWarpFlattenedCode   = "pptx.text-warp-flattened-approximate"
+	nativeTextWarpApproximateCode = "pptx.text-warp-approximate"
 	nativeAuthoredAutoFitFullSize = int64(100000)
 	nativeMaxTextColumns          = int64(16)
 )
@@ -231,7 +232,7 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 		}
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning,
-			Code:     nativeTextWarpFlattenedCode,
+			Code:     nativeTextWarpApproximateCode,
 			Message:  message,
 		})
 	} else if fit.warpFlattened {

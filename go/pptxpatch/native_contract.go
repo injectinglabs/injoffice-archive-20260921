@@ -157,7 +157,7 @@ type NativeTextBodyLayout struct {
 	// PresetTextWarp carries a modeled a:prstTxWarp/@prst the approximate
 	// preview lane warps along an InjOffice arch envelope. Unmodeled presets
 	// stay omitted and flattened. Present only on read-only approximate
-	// elements that also carry pptx.text-warp-flattened-approximate.
+	// elements that also carry pptx.text-warp-approximate.
 	PresetTextWarp    *string `json:"presetTextWarp,omitempty"`
 	PresetTextWarpAdj *int64  `json:"presetTextWarpAdj,omitempty"`
 

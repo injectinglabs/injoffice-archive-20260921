@@ -823,11 +823,11 @@ func TestNativeAuthoredPresetTextWarpTravelsOnlyInTheApproximateTier(t *testing.
 		if element.TextBody == nil || element.TextBody.PresetTextWarp == nil || *element.TextBody.PresetTextWarp != "textDeflate" || element.TextBody.PresetTextWarpAdj == nil || *element.TextBody.PresetTextWarpAdj != 37500 {
 			t.Fatalf("approximate extraction did not carry the modeled deflate warp: %+v", element.TextBody)
 		}
-		if codes := nativeDiagnosticCodes(element); codes[nativeTextWarpFlattenedCode] != 1 {
+		if codes := nativeDiagnosticCodes(element); codes[nativeTextWarpApproximateCode] != 1 || codes[nativeTextWarpFlattenedCode] != 0 {
 			t.Fatalf("modeled warp was not disclosed: %+v", element.Compatibility.Diagnostics)
 		}
 		for _, diagnostic := range element.Compatibility.Diagnostics {
-			if diagnostic.Code != nativeTextWarpFlattenedCode {
+			if diagnostic.Code != nativeTextWarpApproximateCode {
 				continue
 			}
 			if !strings.Contains(diagnostic.Message, "prst=textDeflate") || !strings.Contains(diagnostic.Message, "adj=37500") || !strings.Contains(diagnostic.Message, "not PowerPoint-equivalent") {
@@ -857,7 +857,7 @@ func TestNativeAuthoredPresetTextWarpTravelsOnlyInTheApproximateTier(t *testing.
 		if flatElement.TextBody == nil || flatElement.TextBody.PresetTextWarp != nil || flatElement.TextBody.PresetTextWarpAdj != nil {
 			t.Fatalf("unmodeled warp invented geometry: %+v", flatElement.TextBody)
 		}
-		if codes := nativeDiagnosticCodes(flatElement); codes[nativeTextWarpFlattenedCode] != 1 {
+		if codes := nativeDiagnosticCodes(flatElement); codes[nativeTextWarpFlattenedCode] != 1 || codes[nativeTextWarpApproximateCode] != 0 {
 			t.Fatalf("unmodeled warp was not disclosed as flattened: %+v", flatElement.Compatibility.Diagnostics)
 		}
 		for _, diagnostic := range flatElement.Compatibility.Diagnostics {
@@ -918,11 +918,20 @@ func TestNativeAuthoredPresetTextWarpContractRules(t *testing.T) {
 	}
 	deck = extract(t)
 	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
-		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeTextWarpFlattenedCode {
+		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeTextWarpApproximateCode {
 			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeAuthoredAutoFitCode
 		}
 	}
 	if len(ValidateNativePPTX(deck)) == 0 {
 		t.Fatal("the autofit disclosure authorized a warp projection")
+	}
+	deck = extract(t)
+	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
+		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeTextWarpApproximateCode {
+			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeTextWarpFlattenedCode
+		}
+	}
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("the flatten disclosure authorized a modeled warp projection")
 	}
 }

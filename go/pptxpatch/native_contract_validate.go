@@ -314,6 +314,9 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if (diagnostic.Code == nativeAuthoredAutoFitCode || diagnostic.Code == nativeTextColumnsCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.autofitApproximation", "authored autofit approximation requires parsed source and explicit read-only warning")
 		}
+		if (diagnostic.Code == nativeTextWarpFlattenedCode || diagnostic.Code == nativeTextWarpApproximateCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+			v.add(p+".compatibility", "native.textPreviewApproximation", "text warp approximations require parsed source and explicit read-only warning")
+		}
 		if diagnostic.Code == nativeParagraphSpacingCode && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.paragraphSpacingApproximation", "authored paragraph spacing approximation requires parsed source and explicit read-only warning")
 		}
@@ -371,7 +374,7 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 	if element.TextBody != nil && (element.TextBody.PresetTextWarp != nil || element.TextBody.PresetTextWarpAdj != nil) {
 		warning := false
 		for _, diagnostic := range element.Compatibility.Diagnostics {
-			if diagnostic.Code == nativeTextWarpFlattenedCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+			if diagnostic.Code == nativeTextWarpApproximateCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
 				warning = true
 			}
 		}

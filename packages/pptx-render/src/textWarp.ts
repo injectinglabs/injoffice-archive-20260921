@@ -17,8 +17,10 @@ export interface PresetTextWarpSpec {
   readonly bounds: RenderRect
 }
 
-export function textBodyWarp(textBody: Pick<RenderTextBodyNode, 'bounds' | 'presetTextWarp' | 'presetTextWarpAdj' | 'transform' | 'orientationTransform'>): PresetTextWarpSpec | undefined {
-  if (textBody.transform || textBody.orientationTransform || !isModeledPresetTextWarp(textBody.presetTextWarp)) return undefined
+export function textBodyWarp(textBody: Pick<RenderTextBodyNode, 'bounds' | 'presetTextWarp' | 'presetTextWarpAdj'>): PresetTextWarpSpec | undefined {
+  // Warp in the text body's local frame. Body/orientation transforms compose
+  // around that local paint; skipping here would advertise warp and paint flat.
+  if (!isModeledPresetTextWarp(textBody.presetTextWarp)) return undefined
   if (!Number.isSafeInteger(textBody.bounds.cx) || !Number.isSafeInteger(textBody.bounds.cy) || textBody.bounds.cx <= 0 || textBody.bounds.cy <= 0) return undefined
   const adj = textBody.presetTextWarpAdj
   if (adj !== undefined && (!Number.isSafeInteger(adj) || adj < 0 || adj > 100_000)) return undefined
