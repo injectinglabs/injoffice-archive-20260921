@@ -541,7 +541,14 @@ export async function paintNativeDocxApproximateNestedTablesV1(pages: NativeDocx
           first = false
           for (const shapedLine of paragraph.lines) {
             const lineTop = y + localY
-            const baseline = Math.round(lineTop + shapedLine.ascent_millipoints)
+            // Same seating rule as the body painter: a fixed (exact / at-least)
+            // line box taller than the natural line puts its surplus leading
+            // above the text, so the descent sits on the box bottom.
+            const naturalHeight = shapedLine.ascent_millipoints - shapedLine.descent_millipoints + shapedLine.line_gap_millipoints
+            const lineRule = resolvedParagraphs.get(paragraph.paragraph_id)?.properties?.line_rule
+            const baseline = Math.round((lineRule === 'exact' || lineRule === 'atLeast') && shapedLine.line_height_millipoints > naturalHeight
+              ? lineTop + shapedLine.line_height_millipoints + shapedLine.descent_millipoints
+              : lineTop + shapedLine.ascent_millipoints)
             let fragmentX = x + cell.content_x_millipoints - cell.x_millipoints + shapedLine.inline_offset_millipoints
             const highlights: NativeDocxFillTextHighlightCommandV1[] = [], underlines: NativeDocxStrokeTextUnderlineCommandV1[] = [], glyphs: NativeDocxFillGlyphPathCommandV1[] = []
             for (const sourceFragment of shapedLine.fragments) {

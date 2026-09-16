@@ -754,6 +754,50 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(projectNativeDocxAutomaticBordersV1(doc, input.resolved_layout).document.unsupported.map(d => d.code)).toEqual(['UNKNOWN_SOURCE'])
   })
 
+  // Measured against a genuine Microsoft Word 16.112.4 render of
+  // NumberedList.docx at 96 DPI: a fixed (exact / at-least) line box puts the
+  // surplus leading above the text and seats the descent on the box bottom,
+  // where an automatic (multiple) box keeps the ascent at the top.
+  it.each(['exact', 'atLeast'] as const)('seats an expanded %s line box on its bottom while strict still refuses it', async (rule) => {
+    const input = fixture(), resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const outlines = createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const provider = {providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:any){const outline=outlines.outline(request.glyph_id);return outline.path.length ? {status:'outlined' as const,...request,...outline} : {status:'empty' as const,...request,units_per_em:outline.units_per_em}}}
+    const naturalPrepared = await prepareNativeDocxPagePaintV1(fixture())
+    const {compileNativeDocxPagePaintV1} = await import('./nativePagePaintV1.js')
+    const natural = await compileNativeDocxPagePaintV1(naturalPrepared.page_paint_request,provider)
+    expect(natural.ok && natural.value.status).toBe('painted')
+    if (!natural.ok || natural.value.status !== 'painted') return
+    const naturalLine = natural.value.pages[0]!.lines[0]!
+    const shapedLine = naturalPrepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!
+    // Ask for a box a whole natural line taller than the shaped one.
+    const twips = Math.ceil(shapedLine.line_height_millipoints * 2 / 50)
+    const expanded = twips * 50
+    resolved.paragraphs[0]!.properties = {...resolved.paragraphs[0]!.properties, line_rule: rule, line: twips}
+    const original = structuredClone(input)
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const strict = await compileNativeDocxPagePaintV1(prepared.page_paint_request,provider)
+    expect(strict.ok && strict.value.status).toBe('refused')
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy layout'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:settings.package_sha256,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy layout approximation']}
+    const approximate = await renderNativeDocxApproximatePagePreviewV1(input,eligibility,provider)
+    expect(approximate.status).toBe('painted')
+    if (approximate.status !== 'painted') return
+    const painted = approximate.pages[0]!.lines[0]!
+    expect(painted.height_millipoints).toBe(expanded)
+    // Descent seated on the box bottom, not the ascent on the box top.
+    expect(painted.baseline_y_millipoints - painted.y_millipoints).toBe(expanded + shapedLine.descent_millipoints)
+    expect(painted.baseline_y_millipoints - painted.y_millipoints).toBeGreaterThan(naturalLine.baseline_y_millipoints - naturalLine.y_millipoints)
+    expect(approximate.reasons.some(reason=>reason.includes('seats the descent on the box bottom'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    expect(input.resolved_layout).toEqual(original.resolved_layout)
+    expect(input.document).toEqual(original.document)
+    // The strict lane is byte-identical whether or not the approximate lane ran.
+    const strictAfter = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(structuredClone(original))).page_paint_request,provider)
+    expect(JSON.stringify(strictAfter)).toBe(JSON.stringify(strict))
+  }, 30000)
+
   it.each([120, 480])('keeps strict line-box guards and discloses approximate expanded baseline placement (%s)', async (line) => {
     const input = fixture(), resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     resolved.paragraphs[0]!.properties = {...resolved.paragraphs[0]!.properties, line_rule:'auto', line}

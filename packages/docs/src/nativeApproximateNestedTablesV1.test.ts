@@ -292,4 +292,32 @@ describe('approximate nested tables', () => {
       expect(JSON.stringify(prepared.page_paint_request)).not.toContain(ITEM)
     }
   }, 30000)
+
+  // Measured against a genuine Microsoft Word 16.112.4 render of
+  // NumberedList.docx at 96 DPI: the inner table's header text sits at the
+  // BOTTOM of its fixed 14 pt line box, not under its top.
+  it('seats inner-cell text on the bottom of an expanded exact line box', async () => {
+    const glyphFloor = (paint: Awaited<ReturnType<typeof renderNativeDocxApproximatePagePreviewV1>>) => {
+      if (paint.status !== 'painted') throw new Error('nested fixture must paint')
+      const ys: number[] = []
+      for (const command of paint.pages[0]!.commands) {
+        if (command.kind !== 'fill_glyph_path' || !command.source_id.startsWith(`${ITEM}:r0c0`)) continue
+        for (const segment of command.path) for (const [key, value] of Object.entries(segment)) if (key.endsWith('y_millipoints')) ys.push(value as number)
+      }
+      const strokes = paint.pages[0]!.commands.filter((c): c is NativeDocxStrokeTableBorderCommandV1 => c.kind === 'stroke_table_border' && c.table_id === DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID)
+      return { top: Math.min(...ys), bottom: Math.max(...strokes.map(c => Math.max(c.y1_millipoints, c.y2_millipoints))) }
+    }
+    const base = fixture()
+    const natural = glyphFloor(await renderNativeDocxApproximatePagePreviewV1(base.input, base.eligibility, outlineProvider(base.input), { nestedTables: sidecar() }))
+    const tallSidecar = sidecar()
+    // 20 pt exact, comfortably taller than the natural DejaVu Sans 10 pt line.
+    tallSidecar.items[0]!.resolved_paragraphs![0]!.properties = { ...tallSidecar.items[0]!.resolved_paragraphs![0]!.properties, line: 400, line_rule: 'exact' }
+    const tallInput = fixture()
+    const tall = glyphFloor(await renderNativeDocxApproximatePagePreviewV1(tallInput.input, tallInput.eligibility, outlineProvider(tallInput.input), { nestedTables: tallSidecar }))
+    // The row grew by the surplus leading, and the glyphs moved down by exactly
+    // that much: the descent stays on the box bottom. Top anchoring would have
+    // grown the row and left the glyphs where they were.
+    expect(tall.bottom - natural.bottom).toBeGreaterThan(0)
+    expect(tall.top - natural.top).toBe(tall.bottom - natural.bottom)
+  }, 30000)
 })
