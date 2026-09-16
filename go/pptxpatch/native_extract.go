@@ -1614,7 +1614,7 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 					if rawErr != nil {
 						return NativeSlide{}, rawErr
 					}
-					if err := extractor.markSlideUnsupported(&slide, part, elementObjectID, nativeSHA256(raw), raw, "pptx.unsupported-shape", elementErr.Error()); err != nil {
+					if err := extractor.markSlideUnsupported(&slide, part, elementObjectID, nativeSHA256(raw), raw, "pptx.unsupported-shape", nativeDiscloseShapeRefusal(child, dialect, elementErr.Error())); err != nil {
 						return NativeSlide{}, err
 					}
 					continue
@@ -1657,7 +1657,7 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 				if rawErr != nil {
 					return NativeSlide{}, rawErr
 				}
-				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, refusal.message); err != nil {
+				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, nativeDiscloseShapeRefusal(child, dialect, refusal.message)); err != nil {
 					return NativeSlide{}, err
 				}
 				continue
@@ -1678,7 +1678,7 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 				if rawErr != nil {
 					return NativeSlide{}, rawErr
 				}
-				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, refusal.message); err != nil {
+				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, nativeDiscloseShapeRefusal(child, dialect, refusal.message)); err != nil {
 					return NativeSlide{}, err
 				}
 				continue
@@ -1730,7 +1730,12 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		}
 		if preview != nil {
 			resolved, placeholderPreview, inheritanceErr = previewNode, preview, nil
-			inheritedPlaceholder = &preview.kind
+			if !preview.frameOnly {
+				// A frame placeholder family (pic/clipArt) has no native v1
+				// placeholder value, so the element declares none rather than
+				// claiming a title/body binding it does not have.
+				inheritedPlaceholder = &preview.kind
+			}
 		}
 	}
 	if inheritanceErr != nil {
