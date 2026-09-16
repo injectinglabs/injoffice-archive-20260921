@@ -1430,12 +1430,21 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 	if len(chain) == 0 {
 		return resolved, nil
 	}
+	// Two independent questions. `simple` asks whether the table-level border and
+	// fill subset was fully parsable; `regionDependent` asks whether the style
+	// makes formatting depend on which table region a cell is in. Only the second
+	// can invalidate the style's paragraph and run cascade: an unparsable
+	// tblBorders or tblCellMar says nothing about w:spacing or w:jc in its pPr,
+	// so dropping the cascade over one silently loses authored paragraph
+	// formatting that has no table-level component at all.
 	simple := true
+	regionDependent := false
 	for _, layer := range chain {
 		if firstDirectNativeChild(layer.node, resolver.wordNS, "tblStylePr") != nil {
 			resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, layer.node, "Conditional table-style semantics require table-region evaluation and are not guessed")
 			resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, layer.node, "Table-style effects are preserved until table-region cascade support is implemented")
 			simple = false
+			regionDependent = true
 		}
 		for _, child := range layer.node.Children {
 			if child.Name.Space != resolver.wordNS {
@@ -1469,11 +1478,15 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 				if child.Name.Local != "tblStylePr" {
 					resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, child, "Table-style row effects are preserved until table-region cascade support is implemented")
 					simple = false
+					regionDependent = true
 				}
 			default:
 				if !nativeTableStyleAuthoringLocal(child.Name.Local) {
 					resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, child, "This table-style layer is preserved and not guessed")
 					simple = false
+					// An unrecognised layer is unknown in kind, so it may carry
+					// region-dependent formatting; keep refusing the cascade.
+					regionDependent = true
 				}
 			}
 		}
@@ -1482,10 +1495,10 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 		resolved.Borders = nil
 		resolved.CellShadingRGB = nil
 		resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
-		if resolved.AutomaticBorderPreview != nil {
-			return resolved, chain
+		if regionDependent {
+			return resolved, nil
 		}
-		return resolved, nil
+		return resolved, chain
 	}
 	resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
 	return resolved, chain
