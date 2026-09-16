@@ -154,9 +154,19 @@ func extractNativeTextBodyLayoutAuthoredValues(txBody *nativeXMLNode, dialect na
 		}
 	}
 	for _, name := range []string{"prstTxWarp", "scene3d", "sp3d", "flatTx", "extLst"} {
-		if child, _ := nativeSingleton(bodyPr, dialect.drawing, name, false); child != nil {
-			return nil, nil, unsupportedNativeTextLayout("%s is not representable", name)
+		child, _ := nativeSingleton(bodyPr, dialect.drawing, name, false)
+		if child == nil {
+			continue
 		}
+		// A preset text warp only distorts the glyph run; the text, its runs
+		// and the saved frame are all authored. The approximate tier paints
+		// the text unwarped in that frame and discloses the omission, rather
+		// than dropping authored text PowerPoint paints.
+		if name == "prstTxWarp" && allowSourceFrame {
+			fit.warpFlattened = true
+			continue
+		}
+		return nil, nil, unsupportedNativeTextLayout("%s is not representable", name)
 	}
 
 	left, err := optionalNativeTextInset(bodyPr, "lIns", nativeDefaultTextInsetHorizontalEMU)
@@ -279,6 +289,28 @@ func nativeMarkSourceFrameAutoFit(element *NativeElement) {
 	}
 	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
 	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.autofit-source-frame-approximate", Message: "Read-only approximate autofit preview uses the saved source frame without resizing; frame size, layout, and overflow or clipping may differ from PowerPoint."})
+}
+
+// nativeTextNonVisualPreviewCode labels a text box whose nonvisual
+// accessibility/hyperlink/extension metadata is preserved but not modeled.
+const nativeTextNonVisualPreviewCode = "pptx.text-nonvisual-preview"
+
+// approximateTextPreview reports whether either opt-in read-only text preview
+// is enabled. Exact extraction and every mutation extract leave both off.
+func (extractor *nativeExtractor) approximateTextPreview() bool {
+	return extractor.options.AllowSourceFrameAutoFitPreview || extractor.options.AllowInheritedTextPreview
+}
+
+func nativeMarkTextNonVisualPreview(element *NativeElement, preserved bool) {
+	if element == nil || !preserved {
+		return
+	}
+	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+	element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+		Severity: NativeDiagnosticSeverityWarning,
+		Code:     nativeTextNonVisualPreviewCode,
+		Message:  "text box accessibility, hyperlink, or extension metadata is preserved but not modeled in native PPTX v1; the target remains read-only",
+	})
 }
 
 func nativeMarkVerticalTextPreview(element *NativeElement) {
