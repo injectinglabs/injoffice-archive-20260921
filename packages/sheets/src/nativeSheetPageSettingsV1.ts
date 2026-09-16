@@ -13,11 +13,20 @@ export interface NativeSheetPageConfigV1 {
 export interface NativeSheetPageMarginsV1 {
  left_inches:number;right_inches:number;top_inches:number;bottom_inches:number;
 }
+/** ECMA-376 CT_PageSetup attributes whose schema default a source may omit. */
+export type NativeSheetPageDefaultedFactV1='paper'|'orientation'|'scale'
 export interface NativeSheetPageSettingsV1 {
  sheet_id:string;sheet_part:string;status:'available'|'margins-only'|'unavailable';
  settings?:NativeSheetPageConfigV1;
  /** Present only for 'margins-only': paper, orientation and scale are unauthored. */
  margins?:NativeSheetPageMarginsV1;
+ /**
+  * Facts in `settings` that came from the ECMA-376 §18.3.1.63 attribute default
+  * because the worksheet omitted the attribute, never from a printer. Present
+  * only for 'available', and only for the attributes actually omitted, so a
+  * consumer can label the geometry a host default rather than an authored one.
+  */
+ defaulted?:NativeSheetPageDefaultedFactV1[];
  warnings:string[];
 }
 /** A standalone bounded copy; package identity is joined by its enclosing object response. */
@@ -34,7 +43,8 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
  const ids=new Set<string>(),parts=new Set<string>()
  return value.map(v=>{
   const status=(v as Record<string,unknown>)?.status
-  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[]),...(status==='margins-only'?['margins']:[])])
+  const hasDefaulted=!!v&&typeof v==='object'&&Object.hasOwn(v,'defaulted')
+  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[]),...(status==='margins-only'?['margins']:[]),...(hasDefaulted?['defaulted']:[])])
   if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='margins-only'&&status!=='unavailable'))return fail()
   ids.add(o.sheet_id);parts.add(o.sheet_part)
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096))return fail()
@@ -58,6 +68,15 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
    for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof m[key]!=='number'||!Number.isFinite(m[key])||Number(m[key])<0||Number(m[key])>20)return fail()
    margins=m as unknown as NativeSheetPageMarginsV1
   }
-  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{}),...(margins?{margins}:{})}
+  let defaulted:NativeSheetPageDefaultedFactV1[]|undefined
+  if(hasDefaulted){
+   // A defaulted fact only means anything beside the settings it names, and a
+   // repeat would let one attribute be defaulted twice over.
+   const list=o.defaulted
+   if(status!=='available'||!Array.isArray(list)||list.length<1||list.length>3||new Set(list).size!==list.length)return fail()
+   if(list.some(fact=>fact!=='paper'&&fact!=='orientation'&&fact!=='scale'))return fail()
+   defaulted=list as NativeSheetPageDefaultedFactV1[]
+  }
+  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{}),...(margins?{margins}:{}),...(defaulted?{defaulted}:{})}
  })
 }

@@ -31,6 +31,14 @@ const APPROXIMATION='Read-only print-page preview at 96 CSS pixels per inch from
  */
 const HOST_DEFAULT_PAGE={paper:'Letter',orientation:'portrait',scale:100} as const
 const HOST_DEFAULT_DISCLOSURE='Paper, orientation and scale are a host default, not authored workbook settings: this worksheet declares page margins and no pageSetup element. Authored margins are used unchanged.'
+/**
+ * A pageSetup that omits an attribute states that attribute's ECMA-376
+ * §18.3.1.63 default, which Excel prints; the source tier supplies it and names
+ * it. That is still not an authored value, so the page reports host-default
+ * origin and says which facts came from the schema rather than the workbook.
+ */
+const defaultedFactDisclosure=(facts:readonly string[]):string=>
+ `Page ${facts.join(', ')} ${facts.length===1?'is an ECMA-376 CT_PageSetup attribute default':'are ECMA-376 CT_PageSetup attribute defaults'} supplied for an attribute this worksheet omits, not an authored workbook setting. Every authored page fact, including the margins, is used unchanged.`
 
 export interface NativeSheetPrintPageCssRectV1 {
  readonly x_css_px:number;readonly y_css_px:number;readonly width_css_px:number;readonly height_css_px:number
@@ -84,7 +92,7 @@ type NativeSheetPrintPagePreviewBaseV1={
  readonly sheet_id:string
  readonly source_revision:string
  readonly source_package_sha256:string
- /** 'host-default' when the worksheet authored margins but no pageSetup. */
+ /** 'host-default' when paper, orientation or scale came from the ECMA-376 attribute default rather than the workbook. */
  readonly settings_origin:'source'|'host-default'
  readonly warnings:readonly string[]
 }
@@ -153,7 +161,11 @@ function refuse(geometry:NativeSheetGeometryV2,reason:string,warnings:readonly s
  })
 }
 /** Either a refusal, or the host policy to paginate with (absent when the source authored its own). */
-type PageSettingsResolutionV1={readonly reason:string}|{readonly host_policy:NativeSheetHostPagePolicyV1|undefined}
+type PageSettingsResolutionV1={readonly reason:string}|{
+ readonly host_policy:NativeSheetHostPagePolicyV1|undefined
+ /** Source-tier settings whose value is a schema default rather than authored. */
+ readonly defaulted?:readonly string[]
+}
 function resolvePageSettings(source:NativeWorkbookObjectsV1,sheetId:string,part:string|undefined):PageSettingsResolutionV1{
  if(source.page_settings===undefined)return {reason:`Source page settings are missing. ${NO_INVENT} ${GRID_UNCHANGED}`}
  const candidates=source.page_settings.filter(s=>s.sheet_id===sheetId)
@@ -178,7 +190,7 @@ function resolvePageSettings(source:NativeWorkbookObjectsV1,sheetId:string,part:
   return {reason:`${detail} ${NO_INVENT} ${GRID_UNCHANGED}`}
  }
  if(page.settings.fit_to_page)return {reason:`Source page settings include fit-to-page. Print-page preview does not invent a fit scale and is not Excel fit-to-page qualification. ${GRID_UNCHANGED}`}
- return {host_policy:undefined}
+ return {host_policy:undefined,...(page.defaulted?{defaulted:page.defaulted}:{})}
 }
 function printAreaReason(source:NativeWorkbookObjectsV1,sheetId:string,part:string|undefined):string|undefined{
  const entry=source.print_area_sets!==undefined?source.print_area_sets.find(s=>s.sheet_id===sheetId):source.print_areas?.find(s=>s.sheet_id===sheetId)
@@ -232,6 +244,7 @@ export function compileNativeSheetPrintPagePreviewV1(
  const settings=resolvePageSettings(source,first.sheet_id,part)
  if('reason'in settings)return refuse(first,settings.reason,source.page_settings?.find(s=>s.sheet_id===first.sheet_id)?.warnings??[])
  const hostPolicy=settings.host_policy
+ const defaulted=settings.defaulted
  const areaRefusal=printAreaReason(source,first.sheet_id,part)
  if(areaRefusal)return refuse(first,areaRefusal)
  if(parsed.paint_plans){
@@ -263,11 +276,11 @@ export function compileNativeSheetPrintPagePreviewV1(
   protocol:NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL,version:1,fidelity:'approximate' as const,read_only:true as const,
   dpi:NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI,document_id:first.document_id,sheet_id:first.sheet_id,
   source_revision:first.source_revision,source_package_sha256:first.source_package_sha256,
-  settings_origin:hostPolicy?'host-default' as const:'source' as const,
+  settings_origin:hostPolicy||defaulted?'host-default' as const:'source' as const,
   status:'available' as const,pages:Object.freeze(pages),source_plan,
   warnings:Object.freeze([
    ...new Set(source_plan.areas.flatMap(area=>area.plan.warnings)),
-   ...(hostPolicy?[HOST_DEFAULT_DISCLOSURE]:[]),
+   ...(hostPolicy?[HOST_DEFAULT_DISCLOSURE]:defaulted?[defaultedFactDisclosure(defaulted)]:[]),
    APPROXIMATION,
    'Hosts map viewport-local paint with x * scale + translate, clip to each page source_clip, and raster isolated pages at 96 CSS pixels per inch. Fractional A4 CSS sizes are retained; paper size is not rounded.',
   ]),

@@ -156,3 +156,36 @@ describe('host-default paper for a worksheet that authors margins and no pageSet
   expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects)).toThrow('Invalid native worksheet page settings')
  })
 })
+
+// A pageSetup that omits paperSize, orientation or scale states that
+// attribute's ECMA-376 §18.3.1.63 default rather than nothing, so the page is
+// produced; it is still not an authored value, and the preview says so.
+describe('ECMA-376 attribute defaults inside an authored pageSetup',()=>{
+ it('paginates, reports host-default origin and names the defaulted facts',()=>{
+  const {objects,geometry,part}=fixture()
+  const authored=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  objects.page_settings=[{
+   sheet_id:'7',sheet_part:part,status:'available',warnings:['Source settings'],defaulted:['paper','scale'],
+   settings:{paper:'Letter',orientation:'portrait',scale:100,left_inches:1,right_inches:1,top_inches:1,bottom_inches:1},
+  }]
+  const preview=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  expect(preview.status).toBe('available')
+  if(preview.status!=='available'||authored.status!=='available')return
+  expect(preview.settings_origin).toBe('host-default')
+  expect(preview.warnings.some(w=>w.includes('paper, scale are ECMA-376 CT_PageSetup attribute defaults'))).toBe(true)
+  expect(preview.warnings.some(w=>w.includes('host default, not authored workbook settings'))).toBe(false)
+  expect(preview.pages.map(p=>[p.width_emu,p.height_emu])).toEqual(authored.pages.map(p=>[p.width_emu,p.height_emu]))
+ })
+ it('keeps an authored page labelled source, and rejects a malformed defaulted list',()=>{
+  const {objects,geometry,part}=fixture()
+  expect(compileNativeSheetPrintPagePreviewV1([geometry],objects).settings_origin).toBe('source')
+  const settings={paper:'Letter' as const,orientation:'portrait' as const,scale:100,left_inches:1,right_inches:1,top_inches:1,bottom_inches:1}
+  for(const defaulted of [[],['paper','paper'],['margins'],['paper','orientation','scale','paper']]){
+   objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'available',warnings:['Source settings'],defaulted,settings} as never]
+   expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects)).toThrow('Invalid native worksheet page settings')
+  }
+  // Only settings this tier actually produced can carry defaulted facts.
+  objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['Unsupported'],defaulted:['paper']} as never]
+  expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects)).toThrow('Invalid native worksheet page settings')
+ })
+})
