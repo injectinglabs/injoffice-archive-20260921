@@ -3199,6 +3199,11 @@
               "signature": "export declare function completeNativeDocxApproximateEquationStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[]; }, stage: NativeDocxApproximateEquationStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1; }, alsoRestored?: NativeDocxDocumentV1['unsupported']): NativeDocxApproximateEquationPaintResultV1"
             },
             {
+              "name": "completeNativeDocxApproximateNestedTableStageV1",
+              "kind": "function",
+              "signature": "export declare function completeNativeDocxApproximateNestedTableStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[]; }, stage: NativeDocxApproximateNestedTableStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1; }, runtime: { manifest: NativeFontManifest; outlineProvider: NativeDocxGlyphOutlineProviderV1; }, alsoRestored?: NativeDocxDocumentV1['unsupported']): Promise<NativeDocxApproximateNestedTablePaintResultV1>"
+            },
+            {
               "name": "completeNativeDocxPagePaintV1",
               "kind": "function",
               "signature": "export declare function completeNativeDocxPagePaintV1(input: NativeDocxPagePaintCompleteInputV1): Promise<NativeDocxPagePaintCompletedV1>"
@@ -3267,6 +3272,11 @@
               "name": "decodeNativeDocxApproximateEquationsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxApproximateEquationsV1(value: unknown, document: NativeDocxDocumentV1, mainPartSha256?: string): NativeDocxApproximateEquationsV1"
+            },
+            {
+              "name": "decodeNativeDocxApproximateNestedTablesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximateNestedTablesV1(value: unknown, document: NativeDocxDocumentV1, mainPartSha256?: string): NativeDocxApproximateNestedTablesV1"
             },
             {
               "name": "decodeNativeDocxApproximatePagePreviewV1",
@@ -3612,6 +3622,51 @@
               "name": "DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES: readonly ['Cambria Math', 'STIX Two Math', 'STIX Math', 'STIXGeneral', 'XITS Math', 'Latin Modern Math', 'Asana Math', 'Libertinus Math', 'TeX Gyre Termes Math', 'TeX Gyre Pagella Math', 'DejaVu Math TeX Gyre', 'Fira Math', 'Noto Sans Math']"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_CODE: 'docx.approximate-nested-table-preview'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE: 'docx.approximate-nested-table-substituted-font'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY: 'approximate-nested-table-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE: 'docx.approximate-nested-table-omitted'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_POLICY: 'docx.approximate-nested-table-preview-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED: \"docx.approximate-nested-table-omitted: nested-table evidence did not exact-join the source document and was not used; refused nested tables stay omitted\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID: \"docx.approximate-nested-table-preview-v1\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_WARNING: \"docx.approximate-nested-table-preview: tables nested one level inside a table cell are laid out inside the containing cell's content box (approximate-nested-table-v1): authored tblGrid/tcW columns are scaled proportionally to the cell when they exceed it, rows size from shaped content, table and cell borders and shading follow direct properties over the base table style, and the containing cell grows by the reserved extent through neighbouring paragraph spacing. Only the firstRow conditional table-style region is applied (when the table look selects it); other conditional regions are not, and deeper nesting and merged cells stay omitted. Source bytes and original diagnostics are unchanged.\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL: 'injoffice.docx.approximate-nested-tables'"
             },
             {
               "name": "DOCX_APPROXIMATE_PREVIEW_POLICY",
@@ -4157,6 +4212,41 @@
               "name": "NativeDocxApproximateMathRunV1",
               "kind": "type",
               "signature": "NativeDocxApproximateMathRunV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableFontSubstitutionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableFontSubstitutionV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablePaintResultV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablePaintResultV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablePreparedV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablePreparedV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableRuntimeV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableRuntimeV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableStageV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableStageV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablesV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablesV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableV1"
             },
             {
               "name": "NativeDocxApproximatePagePreviewV1",
@@ -5324,6 +5414,11 @@
               "signature": "export declare function paintNativeDocxApproximateEquationsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1, projection: NativeDocxApproximateEquationProjectionV1): NativeDocxApproximateEquationPaintResultV1"
             },
             {
+              "name": "paintNativeDocxApproximateNestedTablesV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateNestedTablesV1(pages: NativeDocxPaintPageV1[], stage: NativeDocxApproximateNestedTableStageV1, source: { shaped_lines: NativeDocxShapedLinesV1; }, runtime: { manifest: NativeFontManifest; outlineProvider: NativeDocxGlyphOutlineProviderV1; }): Promise<NativeDocxApproximateNestedTablePaintResultV1>"
+            },
+            {
               "name": "positionNativeDocxListMarkerV1",
               "kind": "function",
               "signature": "export declare function positionNativeDocxListMarkerV1(numbering: NativeDocxResolvedNumberingV1, direction: 'ltr' | 'rtl', markerAdvanceMilliPoints: number): NativeDocxListMarkerGeometryV1 | undefined"
@@ -5332,6 +5427,11 @@
               "name": "prepareNativeDocxApproximateEquationStageV1",
               "kind": "function",
               "signature": "export declare function prepareNativeDocxApproximateEquationStageV1(sidecar: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1, mainPartSha256?: string): Promise<NativeDocxApproximateEquationStageV1>"
+            },
+            {
+              "name": "prepareNativeDocxApproximateNestedTableStageV1",
+              "kind": "function",
+              "signature": "export declare function prepareNativeDocxApproximateNestedTableStageV1(sidecarValue: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateNestedTableRuntimeV1, mainPartSha256?: string): Promise<NativeDocxApproximateNestedTableStageV1>"
             },
             {
               "name": "prepareNativeDocxPagePaintMediaAssetsV1",
@@ -6131,6 +6231,11 @@
               "signature": "export declare function completeNativeDocxApproximateEquationStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[]; }, stage: NativeDocxApproximateEquationStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1; }, alsoRestored?: NativeDocxDocumentV1['unsupported']): NativeDocxApproximateEquationPaintResultV1"
             },
             {
+              "name": "completeNativeDocxApproximateNestedTableStageV1",
+              "kind": "function",
+              "signature": "export declare function completeNativeDocxApproximateNestedTableStageV1(result: NativeDocxApproximateOmissionsV1 & { reasons: string[]; status: 'painted' | 'refused'; pages: NativeDocxPaintPageV1[]; }, stage: NativeDocxApproximateNestedTableStageV1, source: { document: NativeDocxDocumentV1; resolved_layout: NativeDocxResolvedLayoutInputV1; shaped_lines: NativeDocxShapedLinesV1; }, runtime: { manifest: NativeFontManifest; outlineProvider: NativeDocxGlyphOutlineProviderV1; }, alsoRestored?: NativeDocxDocumentV1['unsupported']): Promise<NativeDocxApproximateNestedTablePaintResultV1>"
+            },
+            {
               "name": "completeNativeDocxPagePaintV1",
               "kind": "function",
               "signature": "export declare function completeNativeDocxPagePaintV1(input: NativeDocxPagePaintCompleteInputV1): Promise<NativeDocxPagePaintCompletedV1>"
@@ -6154,6 +6259,11 @@
               "name": "decodeNativeDocxApproximateEquationsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeDocxApproximateEquationsV1(value: unknown, document: NativeDocxDocumentV1, mainPartSha256?: string): NativeDocxApproximateEquationsV1"
+            },
+            {
+              "name": "decodeNativeDocxApproximateNestedTablesV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeDocxApproximateNestedTablesV1(value: unknown, document: NativeDocxDocumentV1, mainPartSha256?: string): NativeDocxApproximateNestedTablesV1"
             },
             {
               "name": "decodeNativeDocxApproximatePagePreviewV1",
@@ -6289,6 +6399,51 @@
               "name": "DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES: readonly ['Cambria Math', 'STIX Two Math', 'STIX Math', 'STIXGeneral', 'XITS Math', 'Latin Modern Math', 'Asana Math', 'Libertinus Math', 'TeX Gyre Termes Math', 'TeX Gyre Pagella Math', 'DejaVu Math TeX Gyre', 'Fira Math', 'Noto Sans Math']"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_CODE: 'docx.approximate-nested-table-preview'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE: 'docx.approximate-nested-table-substituted-font'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY: 'approximate-nested-table-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE: 'docx.approximate-nested-table-omitted'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_POLICY",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_POLICY: 'docx.approximate-nested-table-preview-v1'"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED: \"docx.approximate-nested-table-omitted: nested-table evidence did not exact-join the source document and was not used; refused nested tables stay omitted\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID: \"docx.approximate-nested-table-preview-v1\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLE_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLE_WARNING: \"docx.approximate-nested-table-preview: tables nested one level inside a table cell are laid out inside the containing cell's content box (approximate-nested-table-v1): authored tblGrid/tcW columns are scaled proportionally to the cell when they exceed it, rows size from shaped content, table and cell borders and shading follow direct properties over the base table style, and the containing cell grows by the reserved extent through neighbouring paragraph spacing. Only the firstRow conditional table-style region is applied (when the table look selects it); other conditional regions are not, and deeper nesting and merged cells stay omitted. Source bytes and original diagnostics are unchanged.\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL: 'injoffice.docx.approximate-nested-tables'"
             },
             {
               "name": "DOCX_APPROXIMATE_PREVIEW_POLICY",
@@ -6511,6 +6666,41 @@
               "signature": "NativeDocxApproximateMathRunV1"
             },
             {
+              "name": "NativeDocxApproximateNestedTableFontSubstitutionV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableFontSubstitutionV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablePaintResultV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablePaintResultV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablePreparedV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablePreparedV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableRuntimeV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableRuntimeV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableStageV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableStageV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTablesV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTablesV1"
+            },
+            {
+              "name": "NativeDocxApproximateNestedTableV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximateNestedTableV1"
+            },
+            {
               "name": "NativeDocxApproximatePagePreviewV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatePagePreviewV1"
@@ -6621,9 +6811,19 @@
               "signature": "export declare function paintNativeDocxApproximateEquationsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1, projection: NativeDocxApproximateEquationProjectionV1): NativeDocxApproximateEquationPaintResultV1"
             },
             {
+              "name": "paintNativeDocxApproximateNestedTablesV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateNestedTablesV1(pages: NativeDocxPaintPageV1[], stage: NativeDocxApproximateNestedTableStageV1, source: { shaped_lines: NativeDocxShapedLinesV1; }, runtime: { manifest: NativeFontManifest; outlineProvider: NativeDocxGlyphOutlineProviderV1; }): Promise<NativeDocxApproximateNestedTablePaintResultV1>"
+            },
+            {
               "name": "prepareNativeDocxApproximateEquationStageV1",
               "kind": "function",
               "signature": "export declare function prepareNativeDocxApproximateEquationStageV1(sidecar: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1, mainPartSha256?: string): Promise<NativeDocxApproximateEquationStageV1>"
+            },
+            {
+              "name": "prepareNativeDocxApproximateNestedTableStageV1",
+              "kind": "function",
+              "signature": "export declare function prepareNativeDocxApproximateNestedTableStageV1(sidecarValue: unknown, document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateNestedTableRuntimeV1, mainPartSha256?: string): Promise<NativeDocxApproximateNestedTableStageV1>"
             },
             {
               "name": "prepareNativeDocxPagePaintV1",
