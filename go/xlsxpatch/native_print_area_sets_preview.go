@@ -101,7 +101,15 @@ func previewNativeDimensionPrintArea(sheetRaw []byte) []NativePrintAreaRectV1 {
 	if cellReference(row, column) != start || cellReference(endRow, endColumn) != end {
 		return nil
 	}
-	return []NativePrintAreaRectV1{{Row: row, Column: column, EndRow: endRow, EndColumn: endColumn}}
+	// With no _xlnm.Print_Area the printed range is the used range, and Excel's
+	// used range always begins at A1: leading empty rows and columns are printed,
+	// not skipped, so a cell at D6 prints five rows down and three columns across.
+	// Anchoring here keeps the dimension's authored end while refusing to move the
+	// origin onto the first stored cell. Excel 16.112.4 references for TextColor
+	// (dimension D6), tdf117287_comment (C9), sortconditionref (B2:B4),
+	// cond_parent (C6) and conditional_fmt_origin (B1:G5) all paint at the
+	// authored cell position rather than at the top-left of the page body.
+	return []NativePrintAreaRectV1{{Row: 0, Column: 0, EndRow: endRow, EndColumn: endColumn}}
 }
 
 func parseNativePrintAreaSet(text, sheetName string) []NativePrintAreaRectV1 {

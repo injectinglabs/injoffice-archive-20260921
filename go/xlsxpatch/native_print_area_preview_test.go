@@ -166,3 +166,33 @@ func TestNativeDimensionPrintArea(t *testing.T) {
 		t.Fatal("malformed dimension")
 	}
 }
+
+// Excel prints the used range when _xlnm.Print_Area is absent, and the used range
+// always starts at A1: a workbook whose only stored cell is D6 still prints five
+// empty rows and three empty columns ahead of it. Anchoring the dimension
+// fallback at the dimension's own origin instead would paint D6 at the top-left
+// of the page body.
+func TestNativeDimensionPrintAreaAnchorsAtA1(t *testing.T) {
+	for _, testCase := range []struct {
+		name                      string
+		ref                       string
+		wantEndRow, wantEndColumn int
+	}{
+		{name: "single cell away from the origin", ref: "D6", wantEndRow: 5, wantEndColumn: 3},
+		{name: "range starting past column A", ref: "B1:G5", wantEndRow: 4, wantEndColumn: 6},
+		{name: "range starting past row 1", ref: "B2:B4", wantEndRow: 3, wantEndColumn: 1},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := previewNativeDimensionPrintArea([]byte(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="` + testCase.ref + `"/><sheetData/></worksheet>`))
+			if len(got) != 1 {
+				t.Fatalf("dimension %q produced %+v", testCase.ref, got)
+			}
+			if got[0].Row != 0 || got[0].Column != 0 {
+				t.Fatalf("dimension %q printed from %d,%d; Excel prints the used range from A1", testCase.ref, got[0].Row, got[0].Column)
+			}
+			if got[0].EndRow != testCase.wantEndRow || got[0].EndColumn != testCase.wantEndColumn {
+				t.Fatalf("dimension %q ended at %d,%d; want %d,%d", testCase.ref, got[0].EndRow, got[0].EndColumn, testCase.wantEndRow, testCase.wantEndColumn)
+			}
+		})
+	}
+}
