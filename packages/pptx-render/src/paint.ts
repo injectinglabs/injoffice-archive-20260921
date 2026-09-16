@@ -1,6 +1,7 @@
 import {renderTransformMatrix} from './sourceRenderTransform.js'
 import {SourceAffineBudget} from './sourceAffine.js'
 import {geometryPathFill} from './geometryFillPolicy.js'
+import {textBodyWarp, warpGlyphRun} from './textWarp.js'
 import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
 import type { NativePictureCrop,NativeArrowEnd } from '@injoffice/pptx-native'
@@ -57,7 +58,7 @@ export function createRecordingPaintSurface(maxCommands: number = PPTX_RENDER_LI
   }
 }
 
-function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: PaintSurface): void {
+function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: PaintSurface, warp?: ReturnType<typeof textBodyWarp>): void {
   for (const paragraph of paragraphs) {
     if(paragraph.transform){surface.push({kind:'save'});surface.push({kind:'transform',transform:paragraph.transform})}
     for (const run of paragraph.marker ? [paragraph.marker,...paragraph.runs] : paragraph.runs) {
@@ -68,7 +69,14 @@ function paintParagraphs(paragraphs: readonly RenderParagraphNode[], surface: Pa
           reason: 'textRefusal', label: 'Text shaping refused',
         })
       } else {
-        surface.push({ kind: 'glyphRun', sourceElementId: run.sourceElementId, run })
+        for (const painted of warpGlyphRun(run, warp)) {
+          if (painted.transform) {
+            surface.push({kind:'save'})
+            surface.push({kind:'transform',transform:painted.transform})
+          }
+          surface.push({ kind: 'glyphRun', sourceElementId: painted.run.sourceElementId, run: painted.run })
+          if (painted.transform) surface.push({kind:'restore'})
+        }
       }
     }
     if(paragraph.transform)surface.push({kind:'restore'})
@@ -88,7 +96,7 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
     surface.push({kind:'save'})
     surface.push({kind:'transform',transform:textBody.transform})
   }
-  paintParagraphs(textBody.paragraphs, surface)
+  paintParagraphs(textBody.paragraphs, surface, textBodyWarp(textBody))
   if (textBody.transform) surface.push({kind:'restore'})
   if (textBody.orientationTransform) surface.push({kind:'restore'})
 }

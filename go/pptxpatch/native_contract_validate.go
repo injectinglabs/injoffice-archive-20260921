@@ -368,6 +368,17 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 			v.add(p+".textBody.columnCount", "native.autofitApproximation", "the authored column projection requires a parsed source, non-editable status and the authored text-column approximation warning")
 		}
 	}
+	if element.TextBody != nil && (element.TextBody.PresetTextWarp != nil || element.TextBody.PresetTextWarpAdj != nil) {
+		warning := false
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeTextWarpFlattenedCode && diagnostic.Severity == NativeDiagnosticSeverityWarning {
+				warning = true
+			}
+		}
+		if element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || !warning {
+			v.add(p+".textBody.presetTextWarp", "native.textWarpApproximation", "the authored text-warp projection requires a parsed source, non-editable status and the authored text-warp approximation warning")
+		}
+	}
 	if element.TextBody != nil && element.TextBody.WritingMode != nil && element.Provenance == NativeProvenanceParsed && element.Compatibility.Status == NativeCompatibilityStatusEditable {
 		v.add(p+".textBody.writingMode", "native.verticalPreview", "parsed vertical text must remain read-only")
 	}
@@ -655,6 +666,15 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 	}
 	if (body.ColumnCount == nil) != (body.ColumnSpacingEMU == nil) {
 		v.add(p+".columnSpacingEmu", "native.textColumns", "the authored column count and spacing must be supplied together")
+	}
+	if body.PresetTextWarp != nil && !nativeModeledPresetTextWarp(*body.PresetTextWarp) {
+		v.add(p+".presetTextWarp", "schema.enum", "must be a modeled arch or deflate preset")
+	}
+	if body.PresetTextWarpAdj != nil && (*body.PresetTextWarpAdj < 0 || *body.PresetTextWarpAdj > 100000) {
+		v.add(p+".presetTextWarpAdj", "schema.range", "must be a 0-100000 authored warp adjustment")
+	}
+	if body.PresetTextWarpAdj != nil && body.PresetTextWarp == nil {
+		v.add(p+".presetTextWarpAdj", "native.textWarp", "the authored warp adjustment requires a modeled preset")
 	}
 	if body.ColumnCount != nil && body.ColumnSpacingEMU != nil && *body.ColumnCount >= 2 && *body.ColumnCount <= 16 && *body.ColumnSpacingEMU >= 0 && transform.Cx != nil && body.LeftInsetEMU != nil && body.RightInsetEMU != nil {
 		content := *transform.Cx - *body.LeftInsetEMU - *body.RightInsetEMU - (*body.ColumnCount-1)**body.ColumnSpacingEMU
@@ -950,6 +970,9 @@ func (v *nativeValidator) table(table NativeTable, transform NativeTransform, so
 				}
 				if cell.TextBody.ColumnCount != nil || cell.TextBody.ColumnSpacingEMU != nil {
 					v.add(cp+".textBody.columnCount", "native.textColumns", "table cell text columns are not supported")
+				}
+				if cell.TextBody.PresetTextWarp != nil || cell.TextBody.PresetTextWarpAdj != nil {
+					v.add(cp+".textBody.presetTextWarp", "native.textWarp", "table cell text warps are not supported")
 				}
 				if cell.TextBody.WritingMode != nil {
 					v.add(cp+".textBody.writingMode", "native.verticalPreview", "vertical table cells are not supported")

@@ -159,11 +159,13 @@ func extractNativeTextBodyLayoutAuthoredValues(txBody *nativeXMLNode, dialect na
 			continue
 		}
 		// A preset text warp only distorts the glyph run; the text, its runs
-		// and the saved frame are all authored. The approximate tier paints
-		// the text unwarped in that frame and discloses the omission, rather
-		// than dropping authored text PowerPoint paints.
+		// and the saved frame are all authored. Modeled arch/deflate presets
+		// travel on the approximate contract; unmodeled presets stay flattened
+		// in the saved frame rather than dropping authored text.
 		if name == "prstTxWarp" && allowSourceFrame {
-			fit.warpFlattened = true
+			if err := parseNativeAuthoredTextWarp(child, dialect, fit); err != nil {
+				return nil, nil, err
+			}
 			continue
 		}
 		return nil, nil, unsupportedNativeTextLayout("%s is not representable", name)

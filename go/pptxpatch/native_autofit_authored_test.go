@@ -799,3 +799,130 @@ func TestNativeAuthoredTextColumnsContractRules(t *testing.T) {
 		t.Fatal("the autofit disclosure authorized a column projection")
 	}
 }
+
+func TestNativeAuthoredPresetTextWarpTravelsOnlyInTheApproximateTier(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	deflate := `<a:bodyPr><a:prstTxWarp prst="textDeflate"><a:avLst><a:gd name="adj" fmla="val 37500"/></a:avLst></a:prstTxWarp></a:bodyPr>`
+	arch := `<a:bodyPr><a:prstTxWarp prst="textArchUp"><a:avLst/></a:prstTxWarp></a:bodyPr>`
+	unmodeled := `<a:bodyPr><a:prstTxWarp prst="textInflate"><a:avLst/></a:prstTxWarp></a:bodyPr>`
+	for _, strict := range []bool{false, true} {
+		strictDeck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, deflate), nativeMutationExtractOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if element := strictDeck.Slides[0].Elements[0]; element.Compatibility.Status != NativeCompatibilityStatusRefused || element.TextBody != nil {
+			t.Fatalf("strict extraction projected a warp: %+v", element)
+		}
+
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, deflate), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		element := deck.Slides[0].Elements[0]
+		if element.TextBody == nil || element.TextBody.PresetTextWarp == nil || *element.TextBody.PresetTextWarp != "textDeflate" || element.TextBody.PresetTextWarpAdj == nil || *element.TextBody.PresetTextWarpAdj != 37500 {
+			t.Fatalf("approximate extraction did not carry the modeled deflate warp: %+v", element.TextBody)
+		}
+		if codes := nativeDiagnosticCodes(element); codes[nativeTextWarpFlattenedCode] != 1 {
+			t.Fatalf("modeled warp was not disclosed: %+v", element.Compatibility.Diagnostics)
+		}
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code != nativeTextWarpFlattenedCode {
+				continue
+			}
+			if !strings.Contains(diagnostic.Message, "prst=textDeflate") || !strings.Contains(diagnostic.Message, "adj=37500") || !strings.Contains(diagnostic.Message, "not PowerPoint-equivalent") {
+				t.Fatalf("modeled warp disclosure is missing: %s", diagnostic.Message)
+			}
+			if strings.Contains(diagnostic.Message, "unwarped") {
+				t.Fatalf("modeled warp still claims flattened paint: %s", diagnostic.Message)
+			}
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("invalid modeled warp contract: %+v", issues)
+		}
+
+		archDeck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, arch), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body := archDeck.Slides[0].Elements[0].TextBody; body == nil || body.PresetTextWarp == nil || *body.PresetTextWarp != "textArchUp" || body.PresetTextWarpAdj != nil {
+			t.Fatalf("empty avLst arch did not travel without an adj: %+v", body)
+		}
+
+		flat, err := ExtractNativePPTX(nativeSourceFrameFixture(t, strict, unmodeled), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flatElement := flat.Slides[0].Elements[0]
+		if flatElement.TextBody == nil || flatElement.TextBody.PresetTextWarp != nil || flatElement.TextBody.PresetTextWarpAdj != nil {
+			t.Fatalf("unmodeled warp invented geometry: %+v", flatElement.TextBody)
+		}
+		if codes := nativeDiagnosticCodes(flatElement); codes[nativeTextWarpFlattenedCode] != 1 {
+			t.Fatalf("unmodeled warp was not disclosed as flattened: %+v", flatElement.Compatibility.Diagnostics)
+		}
+		for _, diagnostic := range flatElement.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeTextWarpFlattenedCode && !strings.Contains(diagnostic.Message, "unwarped") {
+				t.Fatalf("unmodeled warp lost the flatten disclosure: %s", diagnostic.Message)
+			}
+		}
+	}
+}
+
+func TestNativeAuthoredPresetTextWarpContractRules(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	extract := func(t *testing.T) NativePPTXDeck {
+		t.Helper()
+		deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, `<a:bodyPr><a:prstTxWarp prst="textDeflate"><a:avLst><a:gd name="adj" fmla="val 37500"/></a:avLst></a:prstTxWarp></a:bodyPr>`), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return deck
+	}
+	for _, preset := range []string{"textArchUp", "textArchDown", "textDeflate"} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.PresetTextWarp = stringPointer(preset)
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("preset %s was rejected: %+v", preset, issues)
+		}
+	}
+	deck := extract(t)
+	deck.Slides[0].Elements[0].TextBody.PresetTextWarp = stringPointer("textInflate")
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("an unmodeled warp preset validated")
+	}
+	for _, value := range []int64{0, 18750, 37500, 100000} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.PresetTextWarpAdj = int64Pointer(value)
+		if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+			t.Fatalf("adj %d was rejected: %+v", value, issues)
+		}
+	}
+	for _, value := range []int64{-1, 100001} {
+		deck := extract(t)
+		deck.Slides[0].Elements[0].TextBody.PresetTextWarpAdj = int64Pointer(value)
+		if len(ValidateNativePPTX(deck)) == 0 {
+			t.Fatalf("adj %d validated", value)
+		}
+	}
+	deck = extract(t)
+	deck.Slides[0].Elements[0].TextBody.PresetTextWarp = nil
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("a warp adj without a preset validated")
+	}
+	deck = extract(t)
+	deck.Slides[0].Elements[0].Compatibility.Diagnostics = nil
+	deck.Slides[0].Elements[0].Compatibility.Status = NativeCompatibilityStatusEditable
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("an editable element kept the authored warp projection")
+	}
+	deck = extract(t)
+	for index := range deck.Slides[0].Elements[0].Compatibility.Diagnostics {
+		if deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code == nativeTextWarpFlattenedCode {
+			deck.Slides[0].Elements[0].Compatibility.Diagnostics[index].Code = nativeAuthoredAutoFitCode
+		}
+	}
+	if len(ValidateNativePPTX(deck)) == 0 {
+		t.Fatal("the autofit disclosure authorized a warp projection")
+	}
+}

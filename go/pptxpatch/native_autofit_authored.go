@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -26,13 +27,21 @@ type nativeAuthoredAutoFit struct {
 	lnSpcReduction   int64
 	columns          int64
 	columnSpacingEMU int64
-	// warpFlattened records an a:prstTxWarp the approximate tier paints as
-	// unwarped text in the saved frame instead of refusing the text body.
+	// warpFlattened records an unmodeled a:prstTxWarp the approximate tier
+	// paints as unwarped text in the saved frame instead of refusing the body.
 	warpFlattened bool
+	// warpPreset is a modeled a:prstTxWarp/@prst (textArchUp/Down or
+	// textDeflate). The renderer warps along an InjOffice arch envelope.
+	warpPreset string
+	warpAdj    *int64
 }
 
 func (fit *nativeAuthoredAutoFit) approximate() bool {
-	return fit != nil && (fit.normAutofit || fit.columns > 1 || fit.columnSpacingEMU > 0 || fit.warpFlattened)
+	return fit != nil && (fit.normAutofit || fit.columns > 1 || fit.columnSpacingEMU > 0 || fit.warpFlattened || fit.warpPreset != "")
+}
+
+func nativeModeledPresetTextWarp(preset string) bool {
+	return preset == "textArchUp" || preset == "textArchDown" || preset == "textDeflate"
 }
 
 // parseNativeAuthoredNormAutofit validates a:normAutofit as a bounded exact
@@ -89,6 +98,68 @@ func parseNativeAuthoredTextColumns(bodyPr *nativeXMLNode, fit *nativeAuthoredAu
 		}
 		fit.columnSpacingEMU = spacing
 	}
+	return nil
+}
+
+// parseNativeAuthoredTextWarp reads a:prstTxWarp. Modeled arch/deflate presets
+// travel on the contract; every other well-formed preset stays flattened.
+// Unknown markup remains a layout refusal.
+func parseNativeAuthoredTextWarp(node *nativeXMLNode, dialect nativeExtractDialect, fit *nativeAuthoredAutoFit) error {
+	if node == nil || fit == nil {
+		return fmt.Errorf("pptxpatch: native extract: missing prstTxWarp")
+	}
+	if requireOnlyNativeAttrs(node, xml.Name{Local: "prst"}) != nil || duplicateNativeAttrs(node.Attrs) || !onlyNativeXMLSpace(node.Text) {
+		return unsupportedNativeTextLayout("a:prstTxWarp contains unsupported markup")
+	}
+	if err := requireOnlyNativeChildren(node, xml.Name{Space: dialect.drawing, Local: "avLst"}); err != nil {
+		return unsupportedNativeTextLayout("a:prstTxWarp contains unsupported markup")
+	}
+	preset, ok := exactNativeAttr(node, "", "prst")
+	if !ok || preset == "" {
+		return unsupportedNativeTextLayout("a:prstTxWarp is missing prst")
+	}
+	avLst, err := nativeSingleton(node, dialect.drawing, "avLst", false)
+	if err != nil {
+		return err
+	}
+	var adj *int64
+	if avLst != nil {
+		if requireOnlyNativeAttrs(avLst) != nil || !onlyNativeXMLSpace(avLst.Text) {
+			return unsupportedNativeTextLayout("a:prstTxWarp avLst contains unsupported markup")
+		}
+		if err := requireOnlyNativeChildren(avLst, xml.Name{Space: dialect.drawing, Local: "gd"}); err != nil {
+			return unsupportedNativeTextLayout("a:prstTxWarp avLst contains unsupported markup")
+		}
+		if len(avLst.Children) > 1 {
+			return unsupportedNativeTextLayout("a:prstTxWarp has more than one adjustment")
+		}
+		if len(avLst.Children) == 1 {
+			guide := avLst.Children[0]
+			if requireOnlyNativeAttrs(guide, xml.Name{Local: "name"}, xml.Name{Local: "fmla"}) != nil || requireOnlyNativeChildren(guide) != nil || !onlyNativeXMLSpace(guide.Text) || duplicateNativeAttrs(guide.Attrs) {
+				return unsupportedNativeTextLayout("a:prstTxWarp adjustment contains unsupported markup")
+			}
+			name, hasName := exactNativeAttr(guide, "", "name")
+			formula, hasFormula := exactNativeAttr(guide, "", "fmla")
+			if !hasName || name != "adj" || !hasFormula {
+				return unsupportedNativeTextLayout("a:prstTxWarp adjustment is not a canonical adj val")
+			}
+			fields := strings.Fields(formula)
+			if len(fields) != 2 || fields[0] != "val" {
+				return unsupportedNativeTextLayout("a:prstTxWarp adjustment is not a canonical adj val")
+			}
+			value, parseErr := parseCanonicalNativeInt(fields[1], -2147483648, 2147483647)
+			if parseErr != nil {
+				return unsupportedNativeTextLayout("a:prstTxWarp adj is not a canonical integer")
+			}
+			adj = int64Pointer(value)
+		}
+	}
+	if nativeModeledPresetTextWarp(preset) && (adj == nil || (*adj >= 0 && *adj <= 100000)) {
+		fit.warpPreset = preset
+		fit.warpAdj = adj
+		return nil
+	}
+	fit.warpFlattened = true
 	return nil
 }
 
@@ -149,7 +220,21 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 		return
 	}
 	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
-	if fit.warpFlattened {
+	if fit.warpPreset != "" {
+		if element.TextBody != nil {
+			element.TextBody.PresetTextWarp = stringPointer(fit.warpPreset)
+			element.TextBody.PresetTextWarpAdj = fit.warpAdj
+		}
+		message := "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " text along an InjOffice arch envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
+		if fit.warpAdj != nil {
+			message = "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " adj=" + strconv.FormatInt(*fit.warpAdj, 10) + " text along an InjOffice arch envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
+		}
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+			Severity: NativeDiagnosticSeverityWarning,
+			Code:     nativeTextWarpFlattenedCode,
+			Message:  message,
+		})
+	} else if fit.warpFlattened {
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning,
 			Code:     nativeTextWarpFlattenedCode,

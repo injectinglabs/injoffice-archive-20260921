@@ -311,6 +311,9 @@ function validateElement(
     if ((element.textBody?.columnCount !== undefined || element.textBody?.columnSpacingEmu !== undefined) && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.text-columns-approximate' && diagnostic.severity === 'warning'))) {
       add(issues, `${path}.textBody.columnCount`, 'native.autofitApproximation', 'the authored column projection requires a parsed source, non-editable status and the authored text-column approximation warning')
     }
+    if ((element.textBody?.presetTextWarp !== undefined || element.textBody?.presetTextWarpAdj !== undefined) && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.text-warp-flattened-approximate' && diagnostic.severity === 'warning'))) {
+      add(issues, `${path}.textBody.presetTextWarp`, 'native.textWarpApproximation', 'the authored text-warp projection requires a parsed source, non-editable status and the authored text-warp approximation warning')
+    }
     if (paragraphsCarrySpacing(element.paragraphs) && (element.provenance !== 'parsed' || !element.source || element.compatibility.status === 'editable' || !element.compatibility.diagnostics.some(diagnostic => diagnostic.code === 'pptx.paragraph-spacing-approximate' && diagnostic.severity === 'warning'))) {
       add(issues, `${path}.paragraphs`, 'native.paragraphSpacingApproximation', 'authored paragraph spacing requires a parsed source, non-editable status and the authored paragraph-spacing approximation warning')
     }
@@ -380,6 +383,7 @@ function validateElement(
           if (cell.textBody.autoFit !== 'none') add(issues, `${cellPath}.textBody.autoFit`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
           if (cell.textBody.lineSpacingReductionPercent1000 !== undefined) add(issues, `${cellPath}.textBody.lineSpacingReductionPercent1000`, 'native.autofitApproximation', 'table cell autofit preview is not supported')
           if (cell.textBody.columnCount !== undefined || cell.textBody.columnSpacingEmu !== undefined) add(issues, `${cellPath}.textBody.columnCount`, 'native.textColumns', 'table cell text columns are not supported')
+          if (cell.textBody.presetTextWarp !== undefined || cell.textBody.presetTextWarpAdj !== undefined) add(issues, `${cellPath}.textBody.presetTextWarp`, 'native.textWarp', 'table cell text warps are not supported')
           if (paragraphsCarrySpacing(cell.paragraphs)) add(issues, `${cellPath}.paragraphs`, 'native.paragraphSpacingApproximation', 'table cell authored paragraph spacing is not supported')
           if(cell.textBody.writingMode) add(issues,`${cellPath}.textBody.writingMode`,'native.verticalPreview','vertical table cells are not supported')
           if (width !== undefined && height !== undefined) validateTextBody(cell.textBody, { x: 0, y: 0, cx: width, cy: height }, `${cellPath}.textBody`, issues)
@@ -494,6 +498,7 @@ function validateTextBody(
   if (!Number.isSafeInteger(width) || width <= 0) add(issues, path, 'native.textBodyBounds', 'horizontal insets must leave a positive safe-integer text-body width')
   if (!Number.isSafeInteger(height) || height <= 0) add(issues, path, 'native.textBodyBounds', 'vertical insets must leave a positive safe-integer text-body height')
   if ((body.columnCount === undefined) !== (body.columnSpacingEmu === undefined)) add(issues, `${path}.columnSpacingEmu`, 'native.textColumns', 'the authored column count and spacing must be supplied together')
+  if (body.presetTextWarpAdj !== undefined && body.presetTextWarp === undefined) add(issues, `${path}.presetTextWarpAdj`, 'native.textWarp', 'the authored warp adjustment requires a modeled preset')
   if (body.columnCount !== undefined && body.columnSpacingEmu !== undefined) {
     const content = width - (body.columnCount - 1) * body.columnSpacingEmu
     if (!Number.isSafeInteger(content) || content <= 0 || Math.floor(content / body.columnCount) <= 0) {

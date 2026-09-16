@@ -1277,6 +1277,31 @@ describe('native PPTX RenderTree', () => {
     await expect(compileNativePptxSlide(exactDeck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })).rejects.toThrow('authored column projection')
   })
 
+  it('warps modeled preset text along the deflate envelope at paint time', async () => {
+    const text = 'First'
+    const frame = { x: 0, y: 0, cx: 2_000_000, cy: 800_000 }
+    const deck = structuredClone(parsedFull), element = deck.slides[0]!.elements.find((item) => item.kind === 'text')!
+    if (element.kind !== 'text') throw new Error('text missing')
+    const authored = nativeTextElement(element.id, text, nativeTextBody({ wrap: 'none', presetTextWarp: 'textDeflate', presetTextWarpAdj: 37_500 }), frame)
+    element.paragraphs = authored.paragraphs.map((paragraph) => ({ ...paragraph, runs: paragraph.runs.map((run) => ({ ...run, fontFamily: 'Fixture Sans' })) }))
+    element.textBody = authored.textBody
+    element.transform = authored.transform
+    element.compatibility = { status: 'preserveOnly', diagnostics: [{ severity: 'warning', code: 'pptx.text-warp-flattened-approximate', message: 'Declared read-only approximation' }] }
+    deck.slides[0]!.elements = [element]
+    const tree = await compileNativePptxSlide(deck, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })
+    const body = findNode(tree, 'text', element.id).textBody
+    expect(body).toMatchObject({ status: 'laidOut', presetTextWarp: 'textDeflate', presetTextWarpAdj: 37_500 })
+    expect(tree.diagnostics.some((diagnostic) => diagnostic.code === 'text.authoredWarpApproximate' && diagnostic.elementId === element.id)).toBe(true)
+    const surface = createRecordingPaintSurface()
+    paintSlideRenderTree(tree, surface)
+    const commands = surface.finish()
+    const glyphRuns = commands.filter((command) => command.kind === 'glyphRun')
+    expect(glyphRuns.length).toBeGreaterThan(0)
+    const warped = commands.some((command, index) => command.kind === 'transform' && (command.transform.bPpm !== 0 || command.transform.cPpm !== 0 || command.transform.tyEmu !== 0) && commands[index + 1]?.kind === 'glyphRun')
+    expect(warped).toBe(true)
+    await expect(compileNativePptxSlide({ ...deck, slides: [{ ...deck.slides[0]!, elements: [{ ...element, compatibility: { status: 'editable', diagnostics: [] } }] }] }, 0, { textLayout: textLayout(), lineLayoutPolicy: 'max-run-natural-v1', sourceFrameAutoFitPreview: true })).rejects.toThrow('authored text-warp')
+  })
+
   it('refuses an overfull unbreakable shaped cluster visibly instead of splitting or approximating it', async () => {
     const base = fixtureShaper()
     const ligatureShaper: NativeTextShaper = {

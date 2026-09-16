@@ -100,6 +100,7 @@ export type RenderDiagnosticCode =
   | 'text.sourceFrameAutoFitApproximate'
   | 'text.emergencyBreakApproximate'
   | 'text.authoredColumnsApproximate'
+  | 'text.authoredWarpApproximate'
   | 'text.authoredParagraphSpacingApproximate'
   | 'text.textColumnsUnavailable'
   | 'text.paragraphSemanticsUnavailable'
@@ -210,6 +211,9 @@ export interface RenderTextBodyNode {
   readonly autoFit?: 'none' | 'shape-source-frame'
   readonly horizontalOverflow?: 'overflow' | 'clip'
   readonly verticalOverflow?: 'overflow'
+  /** Modeled a:prstTxWarp; paint warps glyphs along an InjOffice arch envelope. */
+  readonly presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate'
+  readonly presetTextWarpAdj?: number
   readonly status: 'laidOut' | 'refused'
   readonly paragraphs: readonly RenderParagraphNode[]
   readonly refusalLabel?: string
