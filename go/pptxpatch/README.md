@@ -34,6 +34,21 @@ property handling is disclosed per element by the omissions code rather than by
 a new policy identity, because hosts and the preview server re-validate the v1
 string as the inherited-text contract.
 
+Without that opt-in, strict extraction still projects one narrower read-only
+lane: when `p:presentation/p:defaultTextStyle` is present and a non-placeholder
+shape's text is not self-contained, the presentation's explicit `lvlNpPr`
+levels are merged beneath the shape-local `a:lstStyle` levels (local wins) and
+the exact paragraph extractor runs on that owned projection. The element becomes
+preserve-only and carries `pptx.presentation-text-style-preview`; mutation is
+refused. Every layer is validated before precedence is applied: a `defPPr` in
+either layer, any unmodeled level attribute or child (for example `defTabSz`,
+`rtl`, `eaLnBrk`, `latinLnBrk`, `hangingPunct`, spacing), duplicate levels, and
+malformed values refuse the text instead of being merged by guesswork. Text that
+is already self-contained stays exact and editable; placeholders, whose chain
+runs through master `txStyles`, and the inherited preview lanes are untouched.
+This is a declared projection of explicit matching levels, not a qualification
+of PowerPoint's inheritance precedence.
+
 `NativePPTXExtractOptions.AllowSourceFrameAutoFitPreview` explicitly permits a
 read-only preview of otherwise supported `spAutoFit` text in its saved source
 frame. Its native `textBody.autoFit` is `shape-source-frame`, with a persistent
