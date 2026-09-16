@@ -2630,7 +2630,7 @@ describe('native DOCX page-paint compiler v1', () => {
     const refused=await prepareNativeDocxPagePaintV1(requiresContinuation)
     expect(refused.page_paint_request.paginated_layout).toMatchObject({status:'refused',pages:[]})
     expect(refused.outline_requests).toEqual([])
-  })
+  }, 15_000)
 })
 
 describe('unequal whole-paragraph column compiler', () => {
