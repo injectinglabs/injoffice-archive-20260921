@@ -80,3 +80,70 @@ func TestNativeWholeTableTextStyleKeepsUnsupportedEffectsExplicit(t *testing.T) 
 		}
 	}
 }
+
+// An unparsable table-level border or fill says nothing about the style's
+// paragraph and run cascade. Dropping the cascade over one silently loses
+// authored w:spacing / w:jc / rFonts that have no table-level component, which
+// is what made tdf118947_tableStyle.docx paginate 10 single-spaced lines onto
+// one page where Word produces two pages of 250% spaced lines.
+func TestNativeTableStyleKeepsCascadeWhenOnlyBordersAreUnparsable(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		tablePr       string
+		wantCascade   bool
+		wantEffects   bool
+	}{
+		{
+			name:        "auto-coloured borders keep the paragraph cascade",
+			// The duplicated tblCellMar side leaves table geometry unresolvable, which
+			// is what stops the automatic-border preview from qualifying and rescuing
+			// the chain. Both facts are taken from tdf118947_tableStyle.docx.
+			tablePr:     `<w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:color="auto"/></w:tblBorders><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:left w:w="400" w:type="dxa"/></w:tblCellMar></w:tblPr>`,
+			wantCascade: true, wantEffects: true,
+		},
+		{
+			name:        "region-dependent conditional formatting still drops it",
+			tablePr:     `<w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:left w:w="400" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr></w:tblStylePr>`,
+			wantCascade: false, wantEffects: true,
+		},
+		{
+			name:        "row-level effects still drop it",
+			tablePr:     `<w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:left w:w="400" w:type="dxa"/></w:tblCellMar></w:tblPr><w:trPr><w:tblHeader/></w:trPr>`,
+			wantCascade: false, wantEffects: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			styles := `<w:styles xmlns:w="` + wordMLTransitional + `"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="20"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:jc w:val="left"/></w:pPr></w:pPrDefault></w:docDefaults>` +
+				// basedOn keeps the automatic-border preview from qualifying, so the
+				// cascade decision is made solely by the border-parse outcome. Without
+				// it the preview rescues the chain and the case proves nothing.
+				`<w:style w:type="table" w:styleId="Base"><w:pPr><w:keepNext/></w:pPr></w:style>` +
+				`<w:style w:type="table" w:styleId="Table"><w:basedOn w:val="Base"/>` + test.tablePr + `<w:pPr><w:jc w:val="right"/><w:spacing w:line="600" w:lineRule="auto" w:before="200"/></w:pPr><w:rPr><w:sz w:val="28"/></w:rPr></w:style>` +
+				`<w:style w:type="paragraph" w:styleId="Normal" w:default="1"></w:style></w:styles>`
+			parts := resolvedStylesTestParts(styles)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr><w:tblStyle w:val="Table"/></w:tblPr><w:tr><w:tc><w:p><w:r><w:t>inside</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr/></w:body></w:document>`
+			resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(resolved.Paragraphs) != 1 {
+				t.Fatalf("unexpected content %#v", resolved.Paragraphs)
+			}
+			p, r := resolved.Paragraphs[0].Properties, resolved.Runs[0].Properties
+			gotCascade := p.Alignment != nil && *p.Alignment == "right" &&
+				p.Line != nil && *p.Line == 600 &&
+				p.SpacingBeforeTwips != nil && *p.SpacingBeforeTwips == 200 &&
+				r.FontSizeHalfPoint != nil && *r.FontSizeHalfPoint == 28
+			if gotCascade != test.wantCascade {
+				t.Fatalf("cascade applied %v want %v: p=%#v r=%#v", gotCascade, test.wantCascade, p, r)
+			}
+			if hasResolutionDiagnostic(resolved, "TABLE_STYLE_EFFECTS_PRESERVED") != test.wantEffects {
+				t.Fatalf("effects disclosure %v want %v", !test.wantEffects, test.wantEffects)
+			}
+			// The unparsable table-level evidence is still refused, never guessed.
+			if resolved.Tables[0].Borders != nil || resolved.Tables[0].CellShadingRGB != nil {
+				t.Fatalf("unparsable table-level evidence was applied: %#v", resolved.Tables[0])
+			}
+		})
+	}
+}
