@@ -331,7 +331,7 @@ func openNativeDOCXPackage(data []byte) (*nativePackage, error) {
 	if !ok {
 		return nil, fmt.Errorf("docxpatch: native extract: [Content_Types].xml is missing")
 	}
-	contentTypes, err := parseNativeContentTypes(contentXML, files, partByKey)
+	contentTypes, err := parseNativeContentTypes(contentXML, files)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func nativeASCIIEqual(left, right string) bool {
 	return nativeASCIIFold(left) == nativeASCIIFold(right)
 }
 
-func parseNativeContentTypes(data []byte, files map[string][]byte, partByKey map[string]string) (map[string]string, error) {
+func parseNativeContentTypes(data []byte, files map[string][]byte) (map[string]string, error) {
 	root, err := parseNativeXML("[Content_Types].xml", data)
 	if err != nil {
 		return nil, err
@@ -485,11 +485,13 @@ func parseNativeContentTypes(data []byte, files map[string][]byte, partByKey map
 		}
 		return nil, fmt.Errorf("docxpatch: native extract: part %q has no content type", name)
 	}
-	for key := range overrides {
-		if _, exists := partByKey[key]; !exists {
-			return nil, fmt.Errorf("docxpatch: native extract: content-type Override targets missing part %q", key)
-		}
-	}
+	// An Override naming a part the package does not store is inert. OPC gives
+	// [Content_Types].xml one job, mapping a stored part to its media type, and
+	// this mapping resolves each stored part above without consulting the rest
+	// of the table. Real writers leave such entries behind: a save that drops a
+	// header, footer or glossary part routinely leaves its Override in place,
+	// and Word and LibreOffice both open those packages. Refusing them refused
+	// the whole document over a line that names nothing we read.
 	return resolved, nil
 }
 
