@@ -13522,7 +13522,7 @@
             {
               "name": "compileNativeSheetGeometryV2",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetGeometryV2(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2): NativeSheetGeometryV2"
+              "signature": "export declare function compileNativeSheetGeometryV2(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2, objects?: NativeWorkbookObjectsV1): NativeSheetGeometryV2"
             },
             {
               "name": "compileNativeSheetPagePreviewV1",
@@ -13583,6 +13583,11 @@
               "name": "decodeNativeRichTextPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
+            },
+            {
+              "name": "decodeNativeSheetDimensionNeutralityV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetDimensionNeutralityV1(value: unknown): NativeSheetDimensionNeutralityV1[]"
             },
             {
               "name": "decodeNativeSheetPrintAreaSetsV1",
@@ -13783,6 +13788,16 @@
               "name": "NATIVE_SHEET_DECORATION_VERSION",
               "kind": "const",
               "signature": "export declare const NATIVE_SHEET_DECORATION_VERSION: 1"
+            },
+            {
+              "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
+            },
+            {
+              "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY: 'non-dimensional-worksheet-markup-v1'"
             },
             {
               "name": "NATIVE_SHEET_GEOMETRY_LIMITS",
@@ -14243,6 +14258,21 @@
               "name": "NativeSheetDecorationV2IssueCode",
               "kind": "type",
               "signature": "NativeSheetDecorationV2IssueCode"
+            },
+            {
+              "name": "nativeSheetDimensionNeutralityCodesV1",
+              "kind": "function",
+              "signature": "export declare function nativeSheetDimensionNeutralityCodesV1(entries: readonly NativeSheetDimensionNeutralityV1[] | undefined, sheetPart: string | undefined): ReadonlySet<string>"
+            },
+            {
+              "name": "NativeSheetDimensionNeutralityCodeV1",
+              "kind": "type",
+              "signature": "NativeSheetDimensionNeutralityCodeV1"
+            },
+            {
+              "name": "NativeSheetDimensionNeutralityV1",
+              "kind": "type",
+              "signature": "NativeSheetDimensionNeutralityV1"
             },
             {
               "name": "NativeSheetFillDecorationV1",
@@ -15163,7 +15193,7 @@
             {
               "name": "compileNativeSheetGeometryV2",
               "kind": "function",
-              "signature": "export declare function compileNativeSheetGeometryV2(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2): NativeSheetGeometryV2"
+              "signature": "export declare function compileNativeSheetGeometryV2(workbook: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, metricAuthority: NativeMaximumDigitWidthAuthorityV2, objects?: NativeWorkbookObjectsV1): NativeSheetGeometryV2"
             },
             {
               "name": "compileNativeSheetPagePreviewV1",
@@ -15199,6 +15229,11 @@
               "name": "decodeNativeRichTextPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
+            },
+            {
+              "name": "decodeNativeSheetDimensionNeutralityV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeSheetDimensionNeutralityV1(value: unknown): NativeSheetDimensionNeutralityV1[]"
             },
             {
               "name": "decodeNativeSheetPrintAreaSetsV1",
@@ -15254,6 +15289,16 @@
               "name": "layoutNativeDrawingObjectsV1",
               "kind": "function",
               "signature": "export declare function layoutNativeDrawingObjectsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedDrawingV1[]"
+            },
+            {
+              "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
+            },
+            {
+              "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY",
+              "kind": "const",
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY: 'non-dimensional-worksheet-markup-v1'"
             },
             {
               "name": "NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI",
@@ -15349,6 +15394,21 @@
               "name": "NativeSheetCellDisplayFormatResultV2",
               "kind": "type",
               "signature": "NativeSheetCellDisplayFormatResultV2"
+            },
+            {
+              "name": "nativeSheetDimensionNeutralityCodesV1",
+              "kind": "function",
+              "signature": "export declare function nativeSheetDimensionNeutralityCodesV1(entries: readonly NativeSheetDimensionNeutralityV1[] | undefined, sheetPart: string | undefined): ReadonlySet<string>"
+            },
+            {
+              "name": "NativeSheetDimensionNeutralityCodeV1",
+              "kind": "type",
+              "signature": "NativeSheetDimensionNeutralityCodeV1"
+            },
+            {
+              "name": "NativeSheetDimensionNeutralityV1",
+              "kind": "type",
+              "signature": "NativeSheetDimensionNeutralityV1"
             },
             {
               "name": "NativeSheetGeometryV2",
