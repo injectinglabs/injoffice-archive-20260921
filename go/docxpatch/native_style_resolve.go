@@ -2198,6 +2198,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", scopeID, partName, child, "Vertical alignment requires an exact baseline, subscript or superscript value")
 			}
 		default:
+			if nativeTrackedMarkRevision(child, resolver.wordNS) {
+				resolver.addDiagnostic("TRACKED_MARK_REVISION_PRESERVED", scopeID, partName, child, "A tracked-revision annotation on this mark states no formatting; the revision display it belongs to is preserved and not applied")
+				continue
+			}
 			resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "This run property is preserved and not guessed")
 		}
 	}

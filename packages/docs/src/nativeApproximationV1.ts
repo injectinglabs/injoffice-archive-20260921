@@ -45,6 +45,12 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'FIELD_SEMANTICS',
   'WRAPPED_RUN_MARKUP',
   'NUMBERING_STYLE_PRESERVED',
+  // Tracked-move markup that states no content and no formatting: a
+  // content-free range endpoint between table rows, and the CT_TrackChange
+  // annotation that names which revision a paragraph mark belongs to. The
+  // approximate tier already omits the w:ins/w:del run content they accompany.
+  'NON_VISUAL_RANGE_MARKER',
+  'TRACKED_MARK_REVISION_PRESERVED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal

@@ -1262,6 +1262,27 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('paints around a tracked-move marker that states no content or formatting', () => {
+    // A dragged table row leaves content-free range endpoints between rows and a
+    // CT_TrackChange annotation on each paragraph mark. Neither states content
+    // or formatting, so the approximate tier paints the paragraphs around them.
+    for (const code of ['NON_VISUAL_RANGE_MARKER', 'TRACKED_MARK_REVISION_PRESERVED'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'table-structure', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      const strict = paginateNativeDocxV1(request)
+      expect(strict, code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', scope_id: marked.id })]))
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+    }
+  })
+
   it('omits an unshaped empty-run sibling paragraph in approximate layout and keeps the sibling paragraph', () => {
     const request = fixture({ lineCounts: [1, 1] })
     const dropped = request.document.body.blocks[0]!.paragraph!
