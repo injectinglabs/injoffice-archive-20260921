@@ -25,6 +25,18 @@ const nativeApproximateTextboxParagraphLimit = 256
 const nativeApproximateTextboxTextLimit = 100000
 const nativeMarkupCompatibilityNS = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 
+// nativeApproximateWPG is the wordprocessingGroup namespace, which is both the
+// graphicData uri and the element namespace of a DrawingML group shape.
+const nativeApproximateWPG = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
+
+// nativeApproximateEMULimit bounds every EMU coordinate the sidecar reports, so
+// group child mapping cannot overflow int64 and stays inside the wire's range.
+const nativeApproximateEMULimit = 127000000
+
+func nativeApproximateWithinEMU(value int64) bool {
+	return value >= -nativeApproximateEMULimit && value <= nativeApproximateEMULimit
+}
+
 type NativeApproximateShapeLineV1 struct {
 	RGB      string `json:"rgb"`
 	WidthEMU int64  `json:"width_emu"`
@@ -159,11 +171,15 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 					// Charts belong to InspectNativeApproximateDrawingChartsV1.
 					continue
 				}
-				if len(out.Items) >= nativeApproximateDrawingShapeLimit {
-					out.OmittedCount++
-					continue
+				// A group shape describes one item per child, so the budget is
+				// spent per described shape rather than per drawing.
+				for _, described := range context.describe(p.ID, joined, run, drawing) {
+					if len(out.Items) >= nativeApproximateDrawingShapeLimit {
+						out.OmittedCount++
+						continue
+					}
+					out.Items = append(out.Items, described)
 				}
-				out.Items = append(out.Items, context.describe(p.ID, joined, run, drawing))
 			}
 		}
 	}
@@ -174,8 +190,8 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 }
 
 // drawingNode returns the w:drawing under a run child: either directly or the
-// wps Choice of a markup-compatibility alternate. VML-only fallbacks are not
-// read while a wps twin exists; a lone w:pict stays with its source refusal.
+// wps/wpg Choice of a markup-compatibility alternate. VML-only fallbacks are not
+// read while a DrawingML twin exists; a lone w:pict stays with its source refusal.
 func (context *nativeApproximateShapeContext) drawingNode(child *nativeXMLNode) *nativeXMLNode {
 	if child.Name == (xml.Name{Space: context.ns, Local: "drawing"}) {
 		return child
@@ -200,9 +216,11 @@ func (context *nativeApproximateShapeContext) drawingNode(child *nativeXMLNode) 
 	return nil
 }
 
+// nativeApproximateRequiresWPS admits the shape and group-shape alternates Word
+// writes; every other Choice keeps its source refusal untouched.
 func nativeApproximateRequiresWPS(requires string) bool {
 	for _, token := range strings.Fields(requires) {
-		if token == "wps" {
+		if token == "wps" || token == "wpg" {
 			return true
 		}
 	}
@@ -213,13 +231,21 @@ func (context *nativeApproximateShapeContext) anchor(n *nativeXMLNode) NativeSou
 	return nativeTextboxSourceAnchor(n, context.main, context.raw)
 }
 
-func (context *nativeApproximateShapeContext) describe(paragraphID string, diagnosticIDs []string, run, drawing *nativeXMLNode) NativeApproximateDrawingShapeV1 {
+// newItem allocates the deterministic id and the source joins every shape
+// described for one drawing shares. A group shape allocates one per child.
+func (context *nativeApproximateShapeContext) newItem(paragraphID string, diagnosticIDs []string, run, drawing *nativeXMLNode) NativeApproximateDrawingShapeV1 {
 	digest := strings.TrimPrefix(nativeSHA(context.raw[drawing.Start:drawing.End]), "sha256:")[:16]
 	context.shapeSeen[digest]++
-	item := NativeApproximateDrawingShapeV1{ID: fmt.Sprintf("approximate-drawing-shape:%s:%d", digest, context.shapeSeen[digest]), ParagraphID: paragraphID, DiagnosticIDs: diagnosticIDs, Anchor: context.anchor(drawing), RunAnchor: context.anchor(run), Status: "omitted"}
-	omit := func(reason string) NativeApproximateDrawingShapeV1 {
+	return NativeApproximateDrawingShapeV1{ID: fmt.Sprintf("approximate-drawing-shape:%s:%d", digest, context.shapeSeen[digest]), ParagraphID: paragraphID, DiagnosticIDs: diagnosticIDs, Anchor: context.anchor(drawing), RunAnchor: context.anchor(run), Status: "omitted"}
+}
+
+// describe returns every approximate shape one drawing contributes: exactly one
+// for a standalone wps:wsp, and one per child for a wpg:wgp group shape.
+func (context *nativeApproximateShapeContext) describe(paragraphID string, diagnosticIDs []string, run, drawing *nativeXMLNode) []NativeApproximateDrawingShapeV1 {
+	item := context.newItem(paragraphID, diagnosticIDs, run, drawing)
+	omit := func(reason string) []NativeApproximateDrawingShapeV1 {
 		item.Reason = reason
-		return item
+		return []NativeApproximateDrawingShapeV1{item}
 	}
 	// A run that also carries text (or anything but its properties) would leave
 	// modeled runs nested inside the shape's run anchor; only the drawing may
@@ -262,6 +288,9 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		return omit("missing-graphic-data")
 	}
 	uri, _ := nativeUnqualifiedAttr(graphicData, "uri")
+	if uri == nativeApproximateWPG {
+		return context.describeGroup(item, paragraphID, diagnosticIDs, run, drawing, container, graphicData)
+	}
 	if uri != nativeTextboxWPS {
 		local := "unknown"
 		if len(graphicData.Children) == 1 {
@@ -274,63 +303,8 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		return omit("unsupported-graphic:group-or-multiple")
 	}
 	shape := shapes[0]
-	spPr := firstDirectNativeChild(shape, nativeTextboxWPS, "spPr")
-	if spPr == nil {
-		return omit("missing-shape-properties")
-	}
-	style := firstDirectNativeChild(shape, nativeTextboxWPS, "style")
-	geometry := firstDirectNativeChild(spPr, a, "prstGeom")
-	if geometry == nil {
-		if firstDirectNativeChild(spPr, a, "custGeom") != nil {
-			return omit("custom-geometry")
-		}
-		return omit("missing-geometry")
-	}
-	preset, _ := nativeUnqualifiedAttr(geometry, "prst")
-	if preset != "rect" && preset != "line" {
-		return omit("unsupported-preset:" + preset)
-	}
-	for _, c := range geometry.Children {
-		if c.Name == (xml.Name{Space: a, Local: "avLst"}) && len(c.Children) > 0 {
-			return omit("adjust-values")
-		}
-	}
-	item.Preset = preset
-	if xfrm := firstDirectNativeChild(spPr, a, "xfrm"); xfrm != nil {
-		if rot, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok {
-			value, err := strconv.ParseInt(rot, 10, 64)
-			if err != nil || value < -21600000*100 || value > 21600000*100 {
-				return omit("invalid-rotation")
-			}
-			degrees := (value / 60000) % 360
-			if degrees < 0 {
-				degrees += 360
-			}
-			item.RotationDegrees = degrees
-		}
-		item.FlipHorizontal = nativeApproximateFlag(xfrm, "flipH")
-		item.FlipVertical = nativeApproximateFlag(xfrm, "flipV")
-	}
-	if preset == "rect" && item.RotationDegrees%90 != 0 {
-		return omit("rotation-unsupported")
-	}
-	if preset == "rect" && (item.RotationDegrees == 90 || item.RotationDegrees == 270) {
-		item.Notes = append(item.Notes, "quarter-turn rectangle painted as its rotated bounding box")
-	}
-	fill, fillNotes, fillOK := context.shapeFill(spPr, style)
-	if !fillOK {
-		return omit("unsupported-fill")
-	}
-	item.FillRGB = fill
-	item.Notes = append(item.Notes, fillNotes...)
-	line, lineNotes, lineOK := context.shapeLine(spPr, style)
-	if !lineOK {
-		return omit("unsupported-outline")
-	}
-	item.Line = line
-	item.Notes = append(item.Notes, lineNotes...)
-	if item.Line != nil && (item.Line.WidthEMU >= width && item.Line.WidthEMU >= height) {
-		return omit("outline-exceeds-shape")
+	if reason := context.describeShape(&item, shape); reason != "" {
+		return omit(reason)
 	}
 	if container.Name.Local == "inline" {
 		item.Placement = "inline"
@@ -352,7 +326,265 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		item.Textbox = textbox
 	}
 	item.Status = "supported"
-	return item
+	return []NativeApproximateDrawingShapeV1{item}
+}
+
+// describeShape reads one wps:wsp into an item whose WidthEMU/HeightEMU are
+// already its placed extent, and returns the omission reason or "".
+func (context *nativeApproximateShapeContext) describeShape(item *NativeApproximateDrawingShapeV1, shape *nativeXMLNode) string {
+	a := context.a
+	spPr := firstDirectNativeChild(shape, nativeTextboxWPS, "spPr")
+	if spPr == nil {
+		return "missing-shape-properties"
+	}
+	style := firstDirectNativeChild(shape, nativeTextboxWPS, "style")
+	geometry := firstDirectNativeChild(spPr, a, "prstGeom")
+	if geometry == nil {
+		if firstDirectNativeChild(spPr, a, "custGeom") != nil {
+			return "custom-geometry"
+		}
+		return "missing-geometry"
+	}
+	preset, _ := nativeUnqualifiedAttr(geometry, "prst")
+	if preset != "rect" && preset != "line" {
+		return "unsupported-preset:" + preset
+	}
+	for _, c := range geometry.Children {
+		if c.Name == (xml.Name{Space: a, Local: "avLst"}) && len(c.Children) > 0 {
+			return "adjust-values"
+		}
+	}
+	item.Preset = preset
+	if xfrm := firstDirectNativeChild(spPr, a, "xfrm"); xfrm != nil {
+		if rot, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok {
+			value, err := strconv.ParseInt(rot, 10, 64)
+			if err != nil || value < -21600000*100 || value > 21600000*100 {
+				return "invalid-rotation"
+			}
+			degrees := (value / 60000) % 360
+			if degrees < 0 {
+				degrees += 360
+			}
+			item.RotationDegrees = degrees
+		}
+		item.FlipHorizontal = nativeApproximateFlag(xfrm, "flipH")
+		item.FlipVertical = nativeApproximateFlag(xfrm, "flipV")
+	}
+	if preset == "rect" && item.RotationDegrees%90 != 0 {
+		return "rotation-unsupported"
+	}
+	if preset == "rect" && (item.RotationDegrees == 90 || item.RotationDegrees == 270) {
+		item.Notes = append(item.Notes, "quarter-turn rectangle painted as its rotated bounding box")
+	}
+	fill, fillNotes, fillOK := context.shapeFill(spPr, style)
+	if !fillOK {
+		return "unsupported-fill"
+	}
+	item.FillRGB = fill
+	item.Notes = append(item.Notes, fillNotes...)
+	line, lineNotes, lineOK := context.shapeLine(spPr, style)
+	if !lineOK {
+		return "unsupported-outline"
+	}
+	item.Line = line
+	item.Notes = append(item.Notes, lineNotes...)
+	if item.Line != nil && (item.Line.WidthEMU >= item.WidthEMU && item.Line.WidthEMU >= item.HeightEMU) {
+		return "outline-exceeds-shape"
+	}
+	return ""
+}
+
+// nativeApproximateScaleEMU maps a child coordinate onto the group's placed
+// extent: value * placed / span, rounded half away from zero. Inputs are bounded
+// to EMU page coordinates by the caller so the product cannot overflow int64.
+func nativeApproximateScaleEMU(value, placed, span int64) int64 {
+	if span <= 0 {
+		return 0
+	}
+	product := value * placed
+	if product < 0 {
+		return -((-product*2 + span) / (2 * span))
+	}
+	return (product*2 + span) / (2 * span)
+}
+
+// describeGroup maps every wps:wsp child of a wpg:wgp into the group's placed
+// extent and describes each as its own approximate anchored shape. The group's
+// a:xfrm defines the child coordinate space: a child's placed offset is
+// (a:off - a:chOff) scaled by a:ext / a:chExt, and its placed extent is a:ext
+// scaled the same way. Nested groups, children whose transform cannot be mapped
+// exactly, and group transforms this preview cannot reproduce stay omitted with
+// their own reason instead of being guessed.
+func (context *nativeApproximateShapeContext) describeGroup(base NativeApproximateDrawingShapeV1, paragraphID string, diagnosticIDs []string, run, drawing, container, graphicData *nativeXMLNode) []NativeApproximateDrawingShapeV1 {
+	a := context.a
+	omit := func(reason string) []NativeApproximateDrawingShapeV1 {
+		base.Reason = reason
+		return []NativeApproximateDrawingShapeV1{base}
+	}
+	groups := directNativeChildren(graphicData, nativeApproximateWPG, "wgp")
+	if len(groups) != 1 || len(graphicData.Children) != 1 {
+		return omit("unsupported-graphic:group-or-multiple")
+	}
+	group := groups[0]
+	if container.Name.Local != "anchor" {
+		// An inline group would have to reserve one line atom for the whole
+		// group; this preview only reserves per shape, so it stays omitted.
+		return omit("inline-group-unsupported")
+	}
+	anchor, wrap, reason := context.pageAnchor(container)
+	if reason != "" {
+		return omit(reason)
+	}
+	if anchor.HorizontalAlign != "" || anchor.VerticalAlign != "" {
+		// Alignment places the group's own extent, which the sidecar would have
+		// to resolve against the page before it could place children inside it.
+		return omit("aligned-group-position-unsupported")
+	}
+	properties := firstDirectNativeChild(group, nativeApproximateWPG, "grpSpPr")
+	if properties == nil {
+		return omit("missing-group-properties")
+	}
+	xfrm := firstDirectNativeChild(properties, a, "xfrm")
+	if xfrm == nil {
+		return omit("missing-child-coordinate-space")
+	}
+	if rot, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok && strings.TrimSpace(rot) != "0" {
+		return omit("group-rotation-unsupported")
+	}
+	if nativeApproximateFlag(xfrm, "flipH") || nativeApproximateFlag(xfrm, "flipV") {
+		return omit("group-flip-unsupported")
+	}
+	if offset := firstDirectNativeChild(xfrm, a, "off"); offset != nil {
+		// A top-level group is placed by wp:anchor; a non-zero a:off would move
+		// it again by an amount this preview does not model.
+		x, okX := nativeInt64Attr(offset, "", "x")
+		y, okY := nativeInt64Attr(offset, "", "y")
+		if !okX || !okY || x != 0 || y != 0 {
+			return omit("group-offset-unsupported")
+		}
+	}
+	extent, childExtent, childOffset := firstDirectNativeChild(xfrm, a, "ext"), firstDirectNativeChild(xfrm, a, "chExt"), firstDirectNativeChild(xfrm, a, "chOff")
+	if extent == nil || childExtent == nil || childOffset == nil {
+		return omit("missing-child-coordinate-space")
+	}
+	placedCX, okCX := nativePositiveInt64Attr(extent, "", "cx")
+	placedCY, okCY := nativePositiveInt64Attr(extent, "", "cy")
+	if !okCX || !okCY || placedCX != base.WidthEMU || placedCY != base.HeightEMU {
+		// wp:extent is the displayed size of the object; a group whose own
+		// extent disagrees cannot be mapped without choosing one of the two.
+		return omit("group-extent-mismatch")
+	}
+	spanCX, okSX := nativePositiveInt64Attr(childExtent, "", "cx")
+	spanCY, okSY := nativePositiveInt64Attr(childExtent, "", "cy")
+	originX, okOX := nativeInt64Attr(childOffset, "", "x")
+	originY, okOY := nativeInt64Attr(childOffset, "", "y")
+	if !okSX || !okSY || !okOX || !okOY || spanCX > nativeApproximateEMULimit || spanCY > nativeApproximateEMULimit || !nativeApproximateWithinEMU(originX) || !nativeApproximateWithinEMU(originY) {
+		return omit("invalid-child-coordinate-space")
+	}
+	scaled := placedCX != spanCX || placedCY != spanCY
+	pending := &base
+	nextItem := func() *NativeApproximateDrawingShapeV1 {
+		if pending != nil {
+			item := pending
+			pending = nil
+			item.WidthEMU, item.HeightEMU = 0, 0
+			return item
+		}
+		fresh := context.newItem(paragraphID, diagnosticIDs, run, drawing)
+		return &fresh
+	}
+	items := []NativeApproximateDrawingShapeV1{}
+	for _, child := range group.Children {
+		if child == properties || child.Name == (xml.Name{Space: nativeApproximateWPG, Local: "cNvGrpSpPr"}) {
+			continue
+		}
+		item := nextItem()
+		if child.Name == (xml.Name{Space: nativeApproximateWPG, Local: "grpSp"}) {
+			item.Reason = "nested-group"
+			items = append(items, *item)
+			continue
+		}
+		if child.Name != (xml.Name{Space: nativeTextboxWPS, Local: "wsp"}) {
+			item.Reason = "unsupported-group-child:" + child.Name.Local
+			items = append(items, *item)
+			continue
+		}
+		spPr := firstDirectNativeChild(child, nativeTextboxWPS, "spPr")
+		if spPr == nil {
+			item.Reason = "missing-shape-properties"
+			items = append(items, *item)
+			continue
+		}
+		childXfrm := firstDirectNativeChild(spPr, a, "xfrm")
+		var offset, size *nativeXMLNode
+		if childXfrm != nil {
+			offset, size = firstDirectNativeChild(childXfrm, a, "off"), firstDirectNativeChild(childXfrm, a, "ext")
+		}
+		if offset == nil || size == nil {
+			item.Reason = "missing-child-transform"
+			items = append(items, *item)
+			continue
+		}
+		if rot, ok := nativeUnqualifiedAttr(childXfrm, "rot"); ok && strings.TrimSpace(rot) != "0" {
+			// A child rotation composes with the group's own scale; the preview
+			// paints axis-aligned boxes, so a rotated child is not reproduced.
+			item.Reason = "child-rotation-unsupported"
+			items = append(items, *item)
+			continue
+		}
+		x, okX := nativeInt64Attr(offset, "", "x")
+		y, okY := nativeInt64Attr(offset, "", "y")
+		cx, okCX := nativePositiveInt64Attr(size, "", "cx")
+		cy, okCY := nativePositiveInt64Attr(size, "", "cy")
+		if !okX || !okY || !okCX || !okCY || !nativeApproximateWithinEMU(x) || !nativeApproximateWithinEMU(y) || cx > nativeApproximateEMULimit || cy > nativeApproximateEMULimit {
+			item.Reason = "invalid-child-transform"
+			items = append(items, *item)
+			continue
+		}
+		width, height := nativeApproximateScaleEMU(cx, placedCX, spanCX), nativeApproximateScaleEMU(cy, placedCY, spanCY)
+		placedX := anchor.XEMU + nativeApproximateScaleEMU(x-originX, placedCX, spanCX)
+		placedY := anchor.YEMU + nativeApproximateScaleEMU(y-originY, placedCY, spanCY)
+		if width <= 0 || height <= 0 {
+			item.Reason = "degenerate-child-extent"
+			items = append(items, *item)
+			continue
+		}
+		if !nativeApproximateWithinEMU(placedX) || !nativeApproximateWithinEMU(placedY) {
+			item.Reason = "child-outside-coordinate-range"
+			items = append(items, *item)
+			continue
+		}
+		item.WidthEMU, item.HeightEMU = width, height
+		if reason := context.describeShape(item, child); reason != "" {
+			item.Reason = reason
+			item.Preset, item.FillRGB, item.Line, item.Notes = "", nil, nil, nil
+			item.WidthEMU, item.HeightEMU, item.RotationDegrees, item.FlipHorizontal, item.FlipVertical = 0, 0, 0, false, false
+			items = append(items, *item)
+			continue
+		}
+		childAnchor := *anchor
+		childAnchor.XEMU, childAnchor.YEMU = placedX, placedY
+		item.Placement, item.PageAnchor, item.Wrap = "anchored", &childAnchor, wrap
+		if wrap != "none" {
+			item.Notes = append(item.Notes, "body text wrapping around the shape is not applied")
+		}
+		item.Notes = append(item.Notes, "group shape child placed by mapping its child coordinates into the group's declared extent")
+		if scaled {
+			item.Notes = append(item.Notes, "group child coordinates are scaled onto the group extent; text box insets and font sizes inside the group are not scaled")
+		}
+		textbox, reason := context.textbox(child, item.ID)
+		if reason != "" {
+			item.Notes = append(item.Notes, "textbox content omitted: "+reason)
+		} else {
+			item.Textbox = textbox
+		}
+		item.Status = "supported"
+		items = append(items, *item)
+	}
+	if len(items) == 0 {
+		return omit("empty-group")
+	}
+	return items
 }
 
 func nativeApproximateFlag(n *nativeXMLNode, local string) bool {

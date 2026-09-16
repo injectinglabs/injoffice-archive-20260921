@@ -147,7 +147,8 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 		{"ellipse", `prst="rect"`, `prst="ellipse"`, "unsupported-preset:ellipse"},
 		{"adjust values", `<a:avLst/>`, `<a:avLst><a:gd name="adj" fmla="val 1"/></a:avLst>`, "adjust-values"},
 		{"rotation", `<a:xfrm rot="0">`, `<a:xfrm rot="2700000">`, "rotation-unsupported"},
-		{"group", `uri="` + nativeTextboxWPS + `"`, `uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"`, "unsupported-graphic:wsp"},
+		// A group uri whose graphicData does not actually hold a wpg:wgp stays omitted.
+		{"group uri without a group shape", `uri="` + nativeTextboxWPS + `"`, `uri="` + nativeApproximateWPG + `"`, "unsupported-graphic:group-or-multiple"},
 		{"simple position", `simplePos="0"`, `simplePos="1"`, "simple-position-unsupported"},
 		{"line relative", `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`, `<wp:positionV relativeFrom="line"><wp:align>top</wp:align></wp:positionV>`, "unsupported-vertical-position"},
 		{"scheme color without theme", `<a:srgbClr val="112233"/>`, `<a:schemeClr val="accent1"/>`, "unsupported-fill"},
@@ -231,6 +232,193 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 		}
 		if out == nil || len(out.Items) != nativeApproximateDrawingShapeLimit || out.OmittedCount != 3 {
 			t.Fatalf("shape budget: %d items, %d omitted", len(out.Items), out.OmittedCount)
+		}
+	})
+}
+
+// nativeApproximateGroupDrawing wraps a wpg:wgp group shape in the container
+// Word writes. The group's placed extent is the container's wp:extent.
+func nativeApproximateGroupDrawing(container, closeTag, groupProperties, children string) string {
+	return `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `" xmlns:wpg="` + nativeApproximateWPG + `">` + container +
+		`<a:graphic><a:graphicData uri="` + nativeApproximateWPG + `"><wpg:wgp><wpg:cNvGrpSpPr/><wpg:grpSpPr>` + groupProperties + `</wpg:grpSpPr>` + children +
+		`</wpg:wgp></a:graphicData></a:graphic>` + closeTag + `</w:drawing>`
+}
+
+// The anchor helper declares a 2998800 x 2829600 wp:extent; halving it in the
+// child coordinate space makes the group scale exactly two on both axes.
+const nativeApproximateGroupTransform = `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/><a:chOff x="100000" y="200000"/><a:chExt cx="1499400" cy="1414800"/></a:xfrm>`
+
+func nativeApproximateGroupAnchor() string {
+	return nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>914400</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>457200</wp:posOffset></wp:positionV>`)
+}
+
+func nativeApproximateGroupChild(offset, extent, geometry, extra string) string {
+	return `<wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm><a:off x="` + offset + `"/><a:ext cx="` + extent + `"/>` + `</a:xfrm>` + geometry +
+		`<a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:ln w="12700"><a:solidFill><a:srgbClr val="445566"/></a:solidFill></a:ln></wps:spPr>` + extra + `<wps:bodyPr/></wps:wsp>`
+}
+
+const nativeApproximateRectGeometry = `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+
+// TestApproximateDrawingGroupShapeChildren pins the offset-and-scale mapping a
+// group shape child goes through, and the strict lane it must never touch.
+func TestApproximateDrawingGroupShapeChildren(t *testing.T) {
+	box := `<wps:txbx><w:txbxContent><w:p><w:r><w:t>inside the group</w:t></w:r></w:p></w:txbxContent></wps:txbx>`
+	children := nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, nativeApproximateRectGeometry, ``) +
+		nativeApproximateGroupChild(`350000" y="450000`, `400000" cy="250000`, nativeApproximateRectGeometry, box)
+	drawing := nativeApproximateGroupDrawing(nativeApproximateGroupAnchor(), `</wp:anchor>`, nativeApproximateGroupTransform, children)
+	source := nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil)
+	before := append([]byte(nil), source...)
+	strictBefore, err := ExtractNativeDocumentV1(append([]byte(nil), source...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := InspectNativeApproximateDrawingShapesV1(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out == nil || len(out.Items) != 2 || out.OmittedCount != 0 {
+		t.Fatalf("expected one item per group child: %#v", out)
+	}
+	// Child coordinates map as (a:off - a:chOff) * a:ext / a:chExt, offset from
+	// the group's own anchored position; extents scale the same way.
+	for index, want := range []struct {
+		width, height, x, y int64
+	}{{1000000, 600000, 914400, 457200}, {800000, 500000, 1414400, 957200}} {
+		item := out.Items[index]
+		if item.Status != "supported" || item.Placement != "anchored" || item.Preset != "rect" || item.WidthEMU != want.width || item.HeightEMU != want.height {
+			t.Fatalf("child %d extent: %#v", index, item)
+		}
+		if item.PageAnchor == nil || item.PageAnchor.XEMU != want.x || item.PageAnchor.YEMU != want.y || item.PageAnchor.HorizontalRelative != "page" || item.PageAnchor.VerticalRelative != "page" {
+			t.Fatalf("child %d position: %#v", index, item.PageAnchor)
+		}
+		if item.FillRGB == nil || *item.FillRGB != "112233" || item.Line == nil || item.Line.RGB != "445566" {
+			t.Fatalf("child %d style: %#v", index, item)
+		}
+		if !nativeApproximateHasNote(item, "group shape child placed by mapping its child coordinates into the group's declared extent") {
+			t.Fatalf("child %d must disclose the group mapping: %#v", index, item.Notes)
+		}
+	}
+	if out.Items[0].ID == out.Items[1].ID {
+		t.Fatal("group child ids must be unique")
+	}
+	if out.Items[0].Textbox != nil {
+		t.Fatalf("first child has no text box: %#v", out.Items[0].Textbox)
+	}
+	textbox := out.Items[1].Textbox
+	if textbox == nil || len(textbox.Paragraphs) != 1 || len(textbox.Paragraphs[0].Runs) != 1 || *textbox.Paragraphs[0].Runs[0].Text != "inside the group" {
+		t.Fatalf("group child text box not described: %#v", textbox)
+	}
+	// Strict extraction, and therefore strict pagination and paint, is byte
+	// identical whether or not the approximate group sidecar ran.
+	strictAfter, err := ExtractNativeDocumentV1(append([]byte(nil), source...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := json.Marshal(strictBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := json.Marshal(strictAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("strict extraction changed around the approximate group sidecar")
+	}
+	if !bytes.Equal(source, before) {
+		t.Fatal("source bytes changed")
+	}
+	paragraph := strictAfter.Body.Blocks[0].Paragraph
+	if paragraph == nil || len(paragraph.Runs) != 0 {
+		t.Fatalf("strict paragraph must stay empty: %#v", strictAfter.Body.Blocks[0])
+	}
+	// Every described child still joins a retained source refusal in its own run.
+	for _, item := range out.Items {
+		if item.ParagraphID != paragraph.ID || len(item.DiagnosticIDs) == 0 {
+			t.Fatalf("group child must name its body paragraph and refusals: %#v", item)
+		}
+		for _, id := range item.DiagnosticIDs {
+			joined := false
+			for _, d := range strictAfter.Unsupported {
+				if d.ID == id && d.ScopeID == paragraph.ID && d.Anchor != nil && *d.Anchor.StartByte >= *item.RunAnchor.StartByte && *d.Anchor.EndByte <= *item.RunAnchor.EndByte {
+					joined = true
+				}
+			}
+			if !joined {
+				t.Fatalf("group child refusal %q does not join the strict document", id)
+			}
+		}
+	}
+}
+
+func nativeApproximateHasNote(item NativeApproximateDrawingShapeV1, note string) bool {
+	for _, candidate := range item.Notes {
+		if candidate == note {
+			return true
+		}
+	}
+	return false
+}
+
+// TestApproximateDrawingGroupShapeOmissions keeps every group the preview
+// cannot map exactly omitted with its own declared reason.
+func TestApproximateDrawingGroupShapeOmissions(t *testing.T) {
+	rect := nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, nativeApproximateRectGeometry, ``)
+	t.Run("whole group", func(t *testing.T) {
+		for _, test := range []struct{ name, container, closeTag, properties, reason string }{
+			{"missing child coordinate space", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm>`, "missing-child-coordinate-space"},
+			{"missing group transform", nativeApproximateGroupAnchor(), `</wp:anchor>`, ``, "missing-child-coordinate-space"},
+			{"inline group", `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="2998800" cy="2829600"/><wp:docPr id="4" name="Group 4"/><wp:cNvGraphicFramePr/>`, `</wp:inline>`, nativeApproximateGroupTransform, "inline-group-unsupported"},
+			{"aligned group", nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>457200</wp:posOffset></wp:positionV>`), `</wp:anchor>`, nativeApproximateGroupTransform, "aligned-group-position-unsupported"},
+			{"rotated group", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm rot="2700000"><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/><a:chOff x="0" y="0"/><a:chExt cx="2998800" cy="2829600"/></a:xfrm>`, "group-rotation-unsupported"},
+			{"group extent disagrees with wp:extent", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="1499400" cy="1414800"/><a:chOff x="0" y="0"/><a:chExt cx="1499400" cy="1414800"/></a:xfrm>`, "group-extent-mismatch"},
+			{"group offset", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="12700" y="0"/><a:ext cx="2998800" cy="2829600"/><a:chOff x="0" y="0"/><a:chExt cx="2998800" cy="2829600"/></a:xfrm>`, "group-offset-unsupported"},
+			{"empty group", nativeApproximateGroupAnchor(), `</wp:anchor>`, nativeApproximateGroupTransform, "empty-group"},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				children := rect
+				if test.reason == "empty-group" {
+					children = ``
+				}
+				drawing := nativeApproximateGroupDrawing(test.container, test.closeTag, test.properties, children)
+				out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != test.reason || out.Items[0].PageAnchor != nil || out.Items[0].Textbox != nil {
+					t.Fatalf("expected the whole group omitted as %q: %#v", test.reason, out)
+				}
+			})
+		}
+	})
+	t.Run("individual children", func(t *testing.T) {
+		for _, test := range []struct{ name, child, reason string }{
+			{"nested group", `<wpg:grpSp><wpg:cNvGrpSpPr/><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></wpg:grpSpPr></wpg:grpSp>`, "nested-group"},
+			{"custom geometry", nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, `<a:custGeom><a:avLst/></a:custGeom>`, ``), "custom-geometry"},
+			{"unsupported preset", nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, `<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>`, ``), "unsupported-preset:ellipse"},
+			{"missing child transform", `<wps:wsp><wps:cNvSpPr/><wps:spPr>` + nativeApproximateRectGeometry + `</wps:spPr><wps:bodyPr/></wps:wsp>`, "missing-child-transform"},
+			{"rotated child", `<wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm rot="2700000"><a:off x="100000" y="200000"/><a:ext cx="500000" cy="300000"/></a:xfrm>` + nativeApproximateRectGeometry + `</wps:spPr><wps:bodyPr/></wps:wsp>`, "child-rotation-unsupported"},
+			{"unsupported group child", `<wpg:pic xmlns:pic="x"><a:xfrm/></wpg:pic>`, "unsupported-group-child:pic"},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				drawing := nativeApproximateGroupDrawing(nativeApproximateGroupAnchor(), `</wp:anchor>`, nativeApproximateGroupTransform, test.child+rect)
+				out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// The sibling this preview can map still paints; only the child
+				// it cannot map exactly is omitted, and it says why.
+				if out == nil || len(out.Items) != 2 {
+					t.Fatalf("expected one item per group child: %#v", out)
+				}
+				omitted, supported := out.Items[0], out.Items[1]
+				if omitted.Status != "omitted" || omitted.Reason != test.reason || omitted.PageAnchor != nil || omitted.Preset != "" || omitted.FillRGB != nil || omitted.Line != nil {
+					t.Fatalf("expected the child omitted as %q: %#v", test.reason, omitted)
+				}
+				if supported.Status != "supported" || supported.WidthEMU != 1000000 || supported.HeightEMU != 600000 || supported.PageAnchor == nil || supported.PageAnchor.XEMU != 914400 {
+					t.Fatalf("mappable sibling must still paint: %#v", supported)
+				}
+			})
 		}
 	})
 }
