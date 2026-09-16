@@ -9,6 +9,10 @@ import (
 
 const nativePlaceholderPreviewCode = "pptx.placeholder-inheritance-approximate"
 
+// nativePlaceholderPreviewHairlineWidthEmu paints an inherited outline that
+// declares no width (DrawingML "thinnest possible" line) as one 96 DPI pixel.
+const nativePlaceholderPreviewHairlineWidthEmu = 9525
+
 // nativePlaceholderPreview is the read-only projection of a slide placeholder
 // whose chain the exact title/body resolver did not qualify. It exists only
 // behind AllowInheritedTextPreview and is disclosed per element.
@@ -18,6 +22,11 @@ type nativePlaceholderPreview struct {
 	layers      []*nativeXMLNode
 	omitted     map[string]bool
 	hasTextBody bool
+	// Effective frame paint resolved master → layout → slide, nearest wins.
+	// Both stay nil when the chain declares no paint or only unmodeled paint.
+	fill     *string
+	stroke   *NativeStroke
+	hairline bool
 }
 
 func (preview *nativePlaceholderPreview) omit(name string) {
@@ -58,10 +67,10 @@ func nativePlaceholderFamily(kind string) (NativePlaceholderType, string, bool) 
 
 // resolveNativePlaceholderPreview resolves layout-by-index then master-by-
 // family for title, ctrTitle, subTitle, body and obj placeholders. Ancestor
-// geometry and body properties cascade; ancestor list styles and the master
-// title/body style become preview layers; ancestor prompt text, fill and
-// outline are never painted and are disclosed. The returned node is an owned
-// view retaining the raw source offsets of the slide shape.
+// geometry, body properties and solid frame paint cascade; ancestor list styles
+// and the master title/body style become preview layers; ancestor prompt text
+// is never painted and is disclosed. The returned node is an owned view
+// retaining the raw source offsets of the slide shape.
 func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXMLNode, dialect nativeExtractDialect) (*nativeXMLNode, *nativePlaceholderPreview, error) {
 	identity, err := nativePlaceholderMetadata(node, dialect)
 	if identity == nil || err != nil {
@@ -278,19 +287,21 @@ func (extractor *nativeExtractor) validateNativePlaceholderPreviewNonVisual(shap
 	return nil
 }
 
-// Ancestor fill, outline and effects are disclosed omissions: the preview
-// paints inherited text only. Slide-level paint on the placeholder itself is
-// still refused because the text-box subset requires a transparent frame.
+// Solid fill and solid outline resolve through the same chain as geometry:
+// each layer's declaration replaces the previous one, so a nearer a:noFill
+// paints nothing. Gradient, pattern and picture fills, effects and unmodeled
+// outline markup clear the inherited paint and are disclosed on ancestors;
+// on the slide placeholder itself they refuse as before.
 func (extractor *nativeExtractor) validateNativePlaceholderPreviewShapeProperties(properties *nativeXMLNode, ancestor bool, dialect nativeExtractDialect, preview *nativePlaceholderPreview) (*nativeXMLNode, error) {
 	if requireOnlyNativeAttrs(properties, xml.Name{Local: "bwMode"}) != nil || !onlyNativeXMLSpace(properties.Text) {
 		return nil, unsupportedNativePlaceholder("unmodeled placeholder shape properties")
 	}
-	allowed := []xml.Name{{Space: dialect.drawing, Local: "xfrm"}, {Space: dialect.drawing, Local: "prstGeom"}, {Space: dialect.drawing, Local: "noFill"}, {Space: dialect.drawing, Local: "ln"}}
+	allowed := []xml.Name{{Space: dialect.drawing, Local: "xfrm"}, {Space: dialect.drawing, Local: "prstGeom"}, {Space: dialect.drawing, Local: "noFill"}, {Space: dialect.drawing, Local: "solidFill"}, {Space: dialect.drawing, Local: "ln"}}
 	if ancestor {
-		allowed = append(allowed, xml.Name{Space: dialect.drawing, Local: "solidFill"}, xml.Name{Space: dialect.drawing, Local: "gradFill"}, xml.Name{Space: dialect.drawing, Local: "pattFill"}, xml.Name{Space: dialect.drawing, Local: "blipFill"}, xml.Name{Space: dialect.drawing, Local: "effectLst"}, xml.Name{Space: dialect.drawing, Local: "extLst"})
+		allowed = append(allowed, xml.Name{Space: dialect.drawing, Local: "gradFill"}, xml.Name{Space: dialect.drawing, Local: "pattFill"}, xml.Name{Space: dialect.drawing, Local: "blipFill"}, xml.Name{Space: dialect.drawing, Local: "effectLst"}, xml.Name{Space: dialect.drawing, Local: "extLst"})
 	}
 	if requireOnlyNativeChildren(properties, allowed...) != nil {
-		return nil, unsupportedNativePlaceholder("placeholder shape paint is outside the inherited text preview")
+		return nil, unsupportedNativePlaceholder("placeholder shape paint is outside the inherited frame preview")
 	}
 	for _, name := range allowed {
 		if _, err := nativeSingleton(properties, name.Space, name.Local, false); err != nil {
@@ -299,6 +310,20 @@ func (extractor *nativeExtractor) validateNativePlaceholderPreviewShapePropertie
 	}
 	if _, ok := exactNativeAttr(properties, "", "bwMode"); ok {
 		preview.omit("p:spPr@bwMode")
+	}
+	fills := 0
+	for _, child := range properties.Children {
+		switch child.Name.Local {
+		case "noFill", "solidFill", "gradFill", "pattFill", "blipFill":
+			fills++
+		}
+	}
+	if fills > 1 {
+		if !ancestor {
+			return nil, unsupportedNativePlaceholder("placeholder declares conflicting fills")
+		}
+		preview.fill = nil
+		preview.omit("ancestor conflicting fills")
 	}
 	var transform *nativeXMLNode
 	for _, child := range properties.Children {
@@ -324,26 +349,131 @@ func (extractor *nativeExtractor) validateNativePlaceholderPreviewShapePropertie
 			if adjustments != nil && requireEmptyNativeElement(adjustments) != nil {
 				return nil, unsupportedNativePlaceholder("placeholder geometry adjustments are unsupported")
 			}
-		case "noFill":
-			if requireEmptyNativeElement(child) != nil {
-				return nil, unsupportedNativePlaceholder("placeholder no-fill markup is not exact")
+		case "noFill", "solidFill", "gradFill", "pattFill", "blipFill":
+			if fills > 1 {
+				continue
 			}
-		case "ln":
-			lineFill, err := nativeSingleton(child, dialect.drawing, "noFill", false)
-			if err != nil {
+			if err := extractor.resolveNativePlaceholderPreviewFill(child, ancestor, dialect, preview); err != nil {
 				return nil, err
 			}
-			if !ancestor && (lineFill == nil || requireOnlyNativeChildren(child, xml.Name{Space: dialect.drawing, Local: "noFill"}) != nil) {
-				return nil, unsupportedNativePlaceholder("placeholder outline paint is outside the inherited text preview")
-			}
-			if ancestor && lineFill == nil {
-				preview.omit("ancestor a:ln")
+		case "ln":
+			if err := extractor.resolveNativePlaceholderPreviewOutline(child, ancestor, dialect, preview); err != nil {
+				return nil, err
 			}
 		default:
 			preview.omit("ancestor a:" + child.Name.Local)
 		}
 	}
 	return transform, nil
+}
+
+// resolveNativePlaceholderPreviewFill applies one layer's fill declaration.
+// Only an exact sRGB or documented theme solid color is painted; every other
+// declaration clears the inherited fill so a nearer unmodeled paint is never
+// replaced by a farther solid one.
+func (extractor *nativeExtractor) resolveNativePlaceholderPreviewFill(child *nativeXMLNode, ancestor bool, dialect nativeExtractDialect, preview *nativePlaceholderPreview) error {
+	switch child.Name.Local {
+	case "noFill":
+		if requireEmptyNativeElement(child) != nil {
+			return unsupportedNativePlaceholder("placeholder no-fill markup is not exact")
+		}
+		preview.fill = nil
+	case "solidFill":
+		color, err := exactNativeSolidColor(child, dialect, extractor.theme)
+		if err != nil {
+			if !ancestor {
+				return unsupportedNativePlaceholder("placeholder fill color is outside the inherited frame preview")
+			}
+			preview.fill = nil
+			preview.omit("ancestor a:solidFill (unresolved color)")
+			return nil
+		}
+		preview.fill = &color
+	default:
+		preview.fill = nil
+		preview.omit("ancestor a:" + child.Name.Local)
+	}
+	return nil
+}
+
+// resolveNativePlaceholderPreviewOutline applies one layer's a:ln. A solid
+// sRGB/theme line fill paints with its declared width, or a hairline when the
+// source declares none; a:noFill paints nothing; dashes, compound lines, caps,
+// joins and unmodeled markup are omitted with disclosure on ancestors and
+// refused on the slide placeholder itself.
+func (extractor *nativeExtractor) resolveNativePlaceholderPreviewOutline(line *nativeXMLNode, ancestor bool, dialect nativeExtractDialect, preview *nativePlaceholderPreview) error {
+	name := "p:spPr/a:ln"
+	if ancestor {
+		name = "ancestor a:ln"
+	}
+	unmodeled := func(reason string) error {
+		if !ancestor {
+			return unsupportedNativePlaceholder("placeholder outline " + reason + " is outside the inherited frame preview")
+		}
+		preview.stroke, preview.hairline = nil, false
+		preview.omit(name + " (" + reason + ")")
+		return nil
+	}
+	if requireOnlyNativeAttrs(line, xml.Name{Local: "w"}, xml.Name{Local: "cap"}, xml.Name{Local: "cmpd"}, xml.Name{Local: "algn"}) != nil || !onlyNativeXMLSpace(line.Text) {
+		return unmodeled("attributes")
+	}
+	children := []xml.Name{{Space: dialect.drawing, Local: "noFill"}, {Space: dialect.drawing, Local: "solidFill"}, {Space: dialect.drawing, Local: "prstDash"}, {Space: dialect.drawing, Local: "round"}, {Space: dialect.drawing, Local: "bevel"}, {Space: dialect.drawing, Local: "miter"}}
+	if requireOnlyNativeChildren(line, children...) != nil {
+		return unmodeled("markup")
+	}
+	for _, child := range children {
+		if _, err := nativeSingleton(line, child.Space, child.Local, false); err != nil {
+			return unmodeled("markup")
+		}
+	}
+	noFill := nativeChild(line, dialect.drawing, "noFill")
+	solidFill := nativeChild(line, dialect.drawing, "solidFill")
+	if noFill != nil && solidFill != nil {
+		return unmodeled("fill")
+	}
+	if noFill != nil {
+		if requireEmptyNativeElement(noFill) != nil {
+			return unmodeled("no-fill markup")
+		}
+		preview.stroke, preview.hairline = nil, false
+		return nil
+	}
+	if solidFill == nil {
+		// No line fill declared at this layer; the chain keeps the inherited one.
+		return nil
+	}
+	if dash := nativeChild(line, dialect.drawing, "prstDash"); dash != nil {
+		value, ok := exactNativeAttr(dash, "", "val")
+		if !ok || value != "solid" || requireOnlyNativeAttrs(dash, xml.Name{Local: "val"}) != nil || requireOnlyNativeChildren(dash) != nil {
+			return unmodeled("dash")
+		}
+	}
+	color, err := exactNativeSolidColor(solidFill, dialect, extractor.theme)
+	if err != nil {
+		return unmodeled("color")
+	}
+	width, hairline := int64(nativePlaceholderPreviewHairlineWidthEmu), true
+	if value, ok := exactNativeAttr(line, "", "w"); ok {
+		parsed, err := parseCanonicalNativeInt(value, 0, nativeMaxLineWidthEmu)
+		if err != nil {
+			return unmodeled("width")
+		}
+		if parsed > 0 {
+			width, hairline = parsed, false
+		}
+	}
+	for _, attr := range []string{"cap", "cmpd", "algn"} {
+		if _, ok := exactNativeAttr(line, "", attr); ok {
+			preview.omit(name + "@" + attr)
+		}
+	}
+	for _, join := range []string{"round", "bevel", "miter"} {
+		if nativeChild(line, dialect.drawing, join) != nil {
+			preview.omit(name + "/a:" + join)
+		}
+	}
+	preview.stroke, preview.hairline = &NativeStroke{Color: color, WidthEMU: int64Pointer(width)}, hairline
+	return nil
 }
 
 // Ancestor body properties are structurally validated here; the merged result
@@ -449,6 +579,28 @@ func nativeMarkPlaceholderPreview(element *NativeElement, preview *nativePlaceho
 	if !preview.hasTextBody {
 		message += " The slide placeholder has no text body; PowerPoint paints no prompt, so no text is invented."
 	}
+	if preview.fill != nil || preview.stroke != nil {
+		// The painted frame reuses the AutoShape fill/stroke contract, so the
+		// preview element is a rect preset shape; it stays preserve-only and
+		// every placeholder mutation refusal keys off this diagnostic.
+		preset := NativeShapePresetRect
+		element.Kind, element.Preset, element.Fill, element.Stroke = NativeElementKindShape, &preset, preview.fill, preview.stroke
+		var painted []string
+		if preview.fill != nil {
+			painted = append(painted, "solid fill "+*preview.fill)
+		}
+		if preview.stroke != nil {
+			outline := fmt.Sprintf("solid outline %s (%d EMU", preview.stroke.Color, *preview.stroke.WidthEMU)
+			if preview.hairline {
+				outline += ", a hairline default because the source declares no width"
+			}
+			painted = append(painted, outline+")")
+		}
+		message += " Frame " + strings.Join(painted, " and ") + " inherited from the slide/layout/master placeholder chain (nearest wins) and painted read-only as a rect preset."
+		if !nativeParagraphsHaveText(element.Paragraphs) {
+			message += " PowerPoint slideshow and export hide placeholders without text, so this painted frame is an approximation."
+		}
+	}
 	if names := preview.omissions(); len(names) != 0 {
 		message += " Not painted: " + strings.Join(names, ", ") + "."
 	}
@@ -458,4 +610,18 @@ func nativeMarkPlaceholderPreview(element *NativeElement, preview *nativePlaceho
 		Message:  message,
 		Scope:    &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &part},
 	})
+}
+
+func nativeParagraphsHaveText(paragraphs *[]NativeParagraph) bool {
+	if paragraphs == nil {
+		return false
+	}
+	for _, paragraph := range *paragraphs {
+		for _, run := range paragraph.Runs {
+			if run.Text != nil && strings.TrimSpace(*run.Text) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
