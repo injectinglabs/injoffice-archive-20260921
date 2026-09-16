@@ -84,11 +84,16 @@ func evaluateNativeGeometryWithIntermediateLimit(node *nativeXMLNode, ns string,
 			return nil, err
 		}
 	}
-	// Nonempty interactive handles/connections are not yet qualified. Retain the
-	// source as preserve-only instead of interpreting or dropping unknown clauses.
+	// a:ahLst (ECMA-376 Part 1 §20.1.9.1) and a:cxnLst (§20.1.9.11) are authoring
+	// affordances: adjust handles say where the interactive drag points sit and
+	// which existing guides they write, and connection sites say where a
+	// connector may attach. Neither contributes a segment to a:pathLst and
+	// neither is consulted when the shape is painted, so a populated list paints
+	// exactly what an empty one paints. Their contents are still structurally
+	// qualified so unknown markup inside them keeps refusing.
 	for _, name := range []string{"ahLst", "cxnLst"} {
 		if list := nativeChild(node, ns, name); list != nil {
-			if err := requireEmptyNativeElement(list); err != nil {
+			if err := qualifyNativeGeometryUnpaintedList(list, ns, name); err != nil {
 				return nil, err
 			}
 		}
@@ -333,4 +338,52 @@ func evaluateNativeGeometryPath(node *nativeXMLNode, ns string, g nativeGeometry
 	}
 	result.Commands = p.commands
 	return result, nil
+}
+
+// qualifyNativeGeometryUnpaintedList validates a custom-geometry clause that the
+// evaluator deliberately ignores because it paints nothing. Only the DrawingML
+// members of that clause and their documented attributes are tolerated; anything
+// else refuses the geometry, exactly as an unknown child of a:custGeom does.
+func qualifyNativeGeometryUnpaintedList(list *nativeXMLNode, ns, name string) error {
+	if err := requireOnlyNativeAttrs(list); err != nil {
+		return err
+	}
+	members := map[string][]string{
+		"ahXY":    {"gdRefX", "minX", "maxX", "gdRefY", "minY", "maxY"},
+		"ahPolar": {"gdRefAng", "minAng", "maxAng", "gdRefR", "minR", "maxR"},
+		"cxn":     {"ang"},
+	}
+	allowed := []xml.Name{}
+	for _, member := range map[string][]string{"ahLst": {"ahXY", "ahPolar"}, "cxnLst": {"cxn"}}[name] {
+		allowed = append(allowed, xml.Name{Space: ns, Local: member})
+	}
+	if err := requireOnlyNativeChildren(list, allowed...); err != nil {
+		return err
+	}
+	if len(list.Children) > nativeGeometryMaxGuides {
+		return fmt.Errorf("geometry %s budget exceeded", name)
+	}
+	for _, child := range list.Children {
+		attrs := []xml.Name{}
+		for _, local := range members[child.Name.Local] {
+			attrs = append(attrs, xml.Name{Local: local})
+		}
+		if err := requireOnlyNativeAttrs(child, attrs...); err != nil {
+			return err
+		}
+		if err := requireOnlyNativeChildren(child, xml.Name{Space: ns, Local: "pos"}); err != nil {
+			return err
+		}
+		position := nativeChild(child, ns, "pos")
+		if position == nil || len(nativeChildren(child, ns, "pos")) != 1 {
+			return fmt.Errorf("geometry %s entry requires one position", child.Name.Local)
+		}
+		if err := requireOnlyNativeAttrs(position, xml.Name{Local: "x"}, xml.Name{Local: "y"}); err != nil {
+			return err
+		}
+		if err := requireOnlyNativeChildren(position); err != nil {
+			return err
+		}
+	}
+	return nil
 }

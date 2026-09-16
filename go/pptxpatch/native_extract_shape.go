@@ -387,7 +387,12 @@ func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtract
 }
 
 func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
-	if err := requireOnlyNativeAttrs(node); err != nil {
+	// p:spPr/@bwMode (ECMA-376 Part 1 §19.3.1.44, ST_BlackWhiteMode) selects how
+	// the shape is rendered when the application is displaying black and white.
+	// "auto" and "clr" both keep the shape's own colors, which is what PowerPoint
+	// paints in normal view, so neither changes a pixel; the background extractor
+	// already accepts the same hint. Any restating mode keeps refusing.
+	if err := requireOnlyNativeAttrs(node, xml.Name{Local: "bwMode"}); err != nil || !nativeNeutralBlackWhiteMode(node) {
 		gaps.add("pptx.autoshape-properties-unavailable", "shape property attributes are not modeled in native PPTX v1", true)
 	}
 	allowed := []xml.Name{
@@ -459,6 +464,18 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 		}
 	}
 	return transform, preset, geometry, fill, stroke, nil
+}
+
+// nativeNeutralBlackWhiteMode reports whether a ST_BlackWhiteMode display hint
+// leaves normal color rendering untouched. Only the two modes that mean "paint
+// the object's own colors" qualify; gray, black, white, and hidden restate the
+// paint and stay outside the exact subset.
+func nativeNeutralBlackWhiteMode(node *nativeXMLNode) bool {
+	value, ok := exactNativeAttr(node, "", "bwMode")
+	if !ok {
+		return true
+	}
+	return value == "auto" || value == "clr"
 }
 
 func validateNativeAutoShapeTransform(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeShapeGapSet) (NativeTransform, error) {
@@ -632,20 +649,15 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 		{Space: dialect.drawing, Local: "bevel"},
 		{Space: dialect.drawing, Local: "miter"},
 	}
-	if allowLineEnds {
-		lineChildren = append(lineChildren,
-			xml.Name{Space: dialect.drawing, Local: "headEnd"},
-			xml.Name{Space: dialect.drawing, Local: "tailEnd"},
-		)
-	}
+	lineChildren = append(lineChildren,
+		xml.Name{Space: dialect.drawing, Local: "headEnd"},
+		xml.Name{Space: dialect.drawing, Local: "tailEnd"},
+	)
 	if err := requireOnlyNativeChildren(line, lineChildren...); err != nil {
 		gaps.add("pptx.autoshape-line-unavailable", "outline arrows, effects, or unknown markup are preserved but not approximated", true)
 		return nil, nil
 	}
 	for _, name := range []string{"noFill", "solidFill", "prstDash", "round", "bevel", "miter", "headEnd", "tailEnd"} {
-		if !allowLineEnds && (name == "headEnd" || name == "tailEnd") {
-			continue
-		}
 		if _, err := nativeSingleton(line, dialect.drawing, name, false); err != nil {
 			return nil, err
 		}
@@ -655,14 +667,32 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	if unpainted, err := nativeUnpaintedAutoShapeLine(line, dialect, widthOK, parseErr, gaps); unpainted || err != nil {
 		return nil, err
 	}
+	if !allowLineEnds && !nativeUnarrowedAutoShapeLine(line, dialect) {
+		gaps.add("pptx.autoshape-line-unavailable", "outline arrows, effects, or unknown markup are preserved but not approximated", true)
+		return nil, nil
+	}
 	if !widthOK || parseErr != nil {
 		gaps.add("pptx.autoshape-line-unavailable", "outline width is missing or non-canonical and is preserved without approximation", true)
 		return nil, nil
 	}
+	// ECMA-376 Part 1 §20.1.2.1.24 leaves cap, cmpd, and algn optional on
+	// a:ln. cmpd and algn carry the schema defaults "sng" and "ctr". cap has no
+	// schema default, but PowerPoint writes cap only for "rnd" and "sq" and omits
+	// it for flat ends, so the omitted cap is the flat cap PowerPoint paints.
 	capValue, capOK := exactNativeAttr(line, "", "cap")
+	if !capOK {
+		capValue = "flat"
+	}
 	compound, compoundOK := exactNativeAttr(line, "", "cmpd")
+	if !compoundOK {
+		compound = "sng"
+	}
 	alignment, alignmentOK := exactNativeAttr(line, "", "algn")
+	if !alignmentOK {
+		alignment = "ctr"
+	}
 	var cap NativeStrokeCap
+	capNative := true
 	switch capValue {
 	case "flat":
 		cap = NativeStrokeCapFlat
@@ -671,9 +701,9 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	case "sq":
 		cap = NativeStrokeCapSquare
 	default:
-		capOK = false
+		capNative = false
 	}
-	if !capOK || !compoundOK || compound != "sng" || !alignmentOK || alignment != "ctr" {
+	if !capNative || compound != "sng" || alignment != "ctr" {
 		gaps.add("pptx.autoshape-line-unavailable", "only explicit single centered outlines with a native cap are representable", true)
 		return nil, nil
 	}
@@ -683,12 +713,18 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 		gaps.add("pptx.autoshape-line-unavailable", "outline requires exactly one explicit no-fill or solid sRGB fill", true)
 		return nil, nil
 	}
+	// The a:prstDash / a:custDash choice is optional on a:ln. An outline with
+	// neither member is an unbroken line, the same stroke a "solid" preset dash
+	// describes, so an absent dash paints identically to the explicit one.
 	dashNode, _ := nativeSingleton(line, dialect.drawing, "prstDash", false)
-	if dashNode == nil || requireOnlyNativeAttrs(dashNode, xml.Name{Local: "val"}) != nil || requireOnlyNativeChildren(dashNode) != nil {
-		gaps.add("pptx.autoshape-line-unavailable", "outline dash semantics are not explicit", true)
-		return nil, nil
+	dashValue := "solid"
+	if dashNode != nil {
+		if requireOnlyNativeAttrs(dashNode, xml.Name{Local: "val"}) != nil || requireOnlyNativeChildren(dashNode) != nil {
+			gaps.add("pptx.autoshape-line-unavailable", "outline dash semantics are not explicit", true)
+			return nil, nil
+		}
+		dashValue, _ = exactNativeAttr(dashNode, "", "val")
 	}
-	dashValue, _ := exactNativeAttr(dashNode, "", "val")
 	if dashValue != "solid" {
 		gaps.add("pptx.autoshape-dash-unavailable", "dashed outlines are preserved but not approximated", true)
 		return nil, nil
@@ -746,6 +782,25 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	}
 	dash := NativeStrokeDashSolid
 	return &NativeStroke{Color: color, WidthEMU: int64Pointer(width), Cap: &cap, Join: &join, Dash: &dash, MiterLimit: miterLimit}, nil
+}
+
+// nativeUnarrowedAutoShapeLine reports whether an outline draws no line ends.
+// a:headEnd / a:tailEnd default to type="none" (ECMA-376 Part 1 §20.1.2.1.4 and
+// §20.1.2.1.5), so an absent, empty, or type="none" end paints nothing and the
+// arrowless native AutoShape stroke is an exact description of the source. A
+// named arrow type still refuses, because the AutoShape stroke cannot carry it.
+func nativeUnarrowedAutoShapeLine(line *nativeXMLNode, dialect nativeExtractDialect) bool {
+	for _, name := range []string{"headEnd", "tailEnd"} {
+		end, _ := nativeSingleton(line, dialect.drawing, name, false)
+		if end == nil {
+			continue
+		}
+		arrow, err := exactNativeConnectorArrow(end)
+		if err != nil || arrow {
+			return false
+		}
+	}
+	return true
 }
 
 // nativeUnpaintedAutoShapeLine recognizes an outline whose fill is explicitly
