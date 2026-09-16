@@ -285,7 +285,9 @@ breaks are not Office-qualified.
 
 For elements the contract marked with `pptx.paragraph-spacing-approximate`, a
 paragraph's authored `lineSpacingEmu` replaces the measured line pitch and
-`lineSpacingPercent1000` scales it. An authored `lineSpacingReductionPercent1000`
+`lineSpacingPercent1000` scales the *single-spaced line height*, which is
+`1.2 x` the largest font size on the line rather than the face's own
+`ascent - descent + lineGap` box. An authored `lineSpacingReductionPercent1000`
 is *subtracted* from that percentage — 90% reduced by 20% is 70%, not 72% — and
 only scales the pitch when the authored spacing is absolute, which has no
 percentage to subtract from. The two readings agree whenever no `a:lnSpc` is
@@ -295,12 +297,23 @@ spacing raises the baseline and an absolute spacing taller than the measured box
 adds its extra leading above the text. The reduction reaches the line spacing
 exactly once and never the paragraph gaps.
 
-Scaling the measured natural line box remains a declared approximation of the
-authored percentage, not a model of PowerPoint's line-spacing rule. Measured
-against the PowerPoint 16.112.4 exports of `font-scale.pptx` and `3columns.pptx`,
-the remaining pitch is 2%-5% wider than PowerPoint's, which implies a line height
-near 1.19 em where Calibri's `hhea` box is 1.2207 em. That residual is not
-derivable from ECMA-376 or the font metrics, so it is not modeled. `spaceBeforeEmu` and `spaceAfterEmu` are added
+The `1.2 x` base is read from the PowerPoint 16.112.4 PDF exports of
+`3columns.pptx` and `font-scale.pptx`, taken from their saved text matrices
+rather than from a raster. `3columns.pptx` (Calibri 15pt, `a:lnSpc` 90% less a
+20% `lnSpcReduction`) advances 188.88pt over 15 lines — 12.592pt per line
+against `1.2 x 15 x 70% = 12.6pt`, where Calibri's own 1.2207 em box predicts
+12.817pt. `font-scale.pptx` (Calibri 27pt after `fontScale`, `a:lnSpc` 100% less
+a 20% `lnSpcReduction`) advances 78.0pt over 3 lines against
+`1.2 x 27 x 80% = 25.92pt` per line, where the font box predicts 26.367pt. Both
+exports quantise baselines to 1/300in, which covers the whole residual on the
+`1.2` reading and none of it on the font-box reading. A body with no authored
+percentage and no reduction keeps the measured natural box, which is what
+ECMA-376 21.1.2.2.5 defines for an omitted `a:lnSpc`, and the face's box remains
+the line height used for overflow, column breaks and anchoring. PowerPoint's
+*omitted*-`a:lnSpc` line height is not 1.2 em either — the
+`bulletMarginAndIndent.pptx` export advances 21.12pt at Calibri 18pt, which is
+neither `1.2 x 18` nor the 1.2207 em box — so that path is left unmodeled.
+`spaceBeforeEmu` and `spaceAfterEmu` are added
 only between paragraphs — never above the first or below the last — so the
 measured block height and the vertical anchor are unchanged, and a column break
 resets the column origin so a gap never survives into the next column. Each such
