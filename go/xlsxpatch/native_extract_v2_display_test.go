@@ -172,3 +172,68 @@ func findNativeCellV2(t *testing.T, workbook *NativeWorkbookV2, sheet, ref strin
 	t.Fatalf("cell %s!%s not found", sheet, ref)
 	return NativeWorkbookCellV2{}
 }
+
+// A solid fill whose fgColor names a theme slot carries no RGB in the styles
+// table, so the styles registry refuses it. The display pass owns theme1.xml and
+// must resolve it exactly as it already resolves a theme font color; otherwise a
+// theme-filled cell projects with no fill at all and paints white.
+func TestExtractNativeWorkbookV2ResolvesThemeFillColors(t *testing.T) {
+	themePart := `<a:theme xmlns:a="` + drawingMLNamespace + `" name="Office"><a:themeElements><a:clrScheme name="Office">` +
+		`<a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+		`<a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>` +
+		`<a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>` +
+		`<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>` +
+		`<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>` +
+		`<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>` +
+		`</a:clrScheme></a:themeElements></a:theme>`
+	for _, testCase := range []struct{ name, fgColor, want string }{
+		{name: "plain theme slot", fgColor: `<fgColor theme="4"/>`, want: "#4472C4"},
+		{name: "tinted theme slot", fgColor: `<fgColor theme="4" tint="0.4"/>`, want: "#8FAADC"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			entries := nativeWorkbookFixture(false)
+			entries["Book/_rels/Workbook.xml.rels"] = strings.Replace(entries["Book/_rels/Workbook.xml.rels"], `</Relationships>`,
+				`<Relationship Id="rTheme" Type="`+relTypeThemeTransitional+`" Target="../theme/theme1.xml"/></Relationships>`, 1)
+			entries["[Content_Types].xml"] = strings.Replace(entries["[Content_Types].xml"], `</Types>`,
+				`<Override PartName="/theme/theme1.xml" ContentType="`+themePartContentType+`"/></Types>`, 1)
+			entries["theme/theme1.xml"] = themePart
+			entries["Meta/Styles.style"] = strings.Replace(entries["Meta/Styles.style"],
+				`<fgColor rgb="FFAABBCC"/>`, testCase.fgColor, 1)
+			workbook, err := ExtractNativeWorkbookV2(buildZip(t, entries))
+			if err != nil {
+				t.Fatal(err)
+			}
+			style := workbook.Styles[1].Effective
+			if containsNativeStyleUnsupported(style.Unsupported, "fill") {
+				t.Fatalf("theme fill stayed unsupported, so the cell paints with no fill: %#v", style)
+			}
+			if style.FillColor == nil || *style.FillColor != testCase.want {
+				t.Fatalf("theme fill color = %v; want %s", style.FillColor, testCase.want)
+			}
+			if style.Fill == nil || style.Fill.Origin != "styles-record" || style.Fill.Color == nil || *style.Fill.Color != testCase.want || style.Fill.FillID == nil || *style.Fill.FillID != 2 || style.Fill.RecordSHA256 == nil {
+				t.Fatalf("theme fill provenance does not join the styles record: %#v", style.Fill)
+			}
+		})
+	}
+}
+
+// A theme fgColor paired with a bgColor Excel does not write is still refused:
+// resolving the slot must not smuggle an unmodeled background past the guard.
+func TestExtractNativeWorkbookV2RefusesThemeFillWithUnmodeledBackground(t *testing.T) {
+	entries := nativeWorkbookFixture(false)
+	entries["Book/_rels/Workbook.xml.rels"] = strings.Replace(entries["Book/_rels/Workbook.xml.rels"], `</Relationships>`,
+		`<Relationship Id="rTheme" Type="`+relTypeThemeTransitional+`" Target="../theme/theme1.xml"/></Relationships>`, 1)
+	entries["[Content_Types].xml"] = strings.Replace(entries["[Content_Types].xml"], `</Types>`,
+		`<Override PartName="/theme/theme1.xml" ContentType="`+themePartContentType+`"/></Types>`, 1)
+	entries["theme/theme1.xml"] = `<a:theme xmlns:a="` + drawingMLNamespace + `"><a:themeElements><a:clrScheme><a:accent1><a:srgbClr val="4472C4"/></a:accent1></a:clrScheme></a:themeElements></a:theme>`
+	entries["Meta/Styles.style"] = strings.Replace(entries["Meta/Styles.style"],
+		`<fgColor rgb="FFAABBCC"/><bgColor indexed="64"/>`, `<fgColor theme="4"/><bgColor indexed="9"/>`, 1)
+	workbook, err := ExtractNativeWorkbookV2(buildZip(t, entries))
+	if err != nil {
+		t.Fatal(err)
+	}
+	style := workbook.Styles[1].Effective
+	if !containsNativeStyleUnsupported(style.Unsupported, "fill") || style.FillColor != nil || style.Fill != nil {
+		t.Fatalf("unmodeled bgColor was resolved anyway: %#v", style)
+	}
+}
