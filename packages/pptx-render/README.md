@@ -262,9 +262,14 @@ compatibility warnings, which the renderer copies into its diagnostics and the
 preview worker gates behind `source_frame_autofit_preview`. For those elements
 only, an authored `textBody.lineSpacingReductionPercent1000` reduces the line
 pitch — the advance between consecutive baselines — by that percentage, per
-ECMA-376 21.1.2.1.3. Glyph sizes, ascents, line boxes and paragraph offsets are
-untouched (the authored `fontScale` already sized the runs), so measured lines
-sit closer together and later baselines rise; the first baseline never moves.
+ECMA-376 21.1.2.1.3. Glyph sizes, measured line boxes and paragraph offsets are
+untouched (the authored `fontScale` already sized the runs). The leading a
+reduction removes comes off the **top** of each line box: the descent below the
+baseline is what the next line must clear, so it is preserved and the text rises
+inside its box by exactly the amount the box lost — the first baseline included.
+Measured against the PowerPoint 16.112.4 export of `font-scale.pptx`, whose
+first baseline sits one whole reduction above the natural ascent; leaving the
+first baseline pinned to the unreduced ascent pushed the whole block down.
 This is a declared read-only approximation of PowerPoint's saved autofit pass,
 not an Office-equivalent line-spacing model. For those elements an authored
 `textBody.columnCount` (2..16) with `textBody.columnSpacingEmu` flows the body
@@ -276,7 +281,30 @@ modeled, vertical and rotated-upright bodies refuse the projection with
 `text.textColumnsUnavailable`, vertical anchoring measures the tallest column,
 and overflow past the last column keeps the existing behaviour. Each such body
 reports one `text.authoredColumnsApproximate` warning; column balancing and line
-breaks are not Office-qualified. Under either
+breaks are not Office-qualified.
+
+For elements the contract marked with `pptx.paragraph-spacing-approximate`, a
+paragraph's authored `lineSpacingEmu` replaces the measured line pitch and
+`lineSpacingPercent1000` scales it. An authored `lineSpacingReductionPercent1000`
+is *subtracted* from that percentage — 90% reduced by 20% is 70%, not 72% — and
+only scales the pitch when the authored spacing is absolute, which has no
+percentage to subtract from. The two readings agree whenever no `a:lnSpc` is
+authored, which is every element the reduction alone was measured on. The
+resulting pitch is taken out of the top of the line box, so a tighter authored
+spacing raises the baseline and an absolute spacing taller than the measured box
+adds its extra leading above the text. The reduction reaches the line spacing
+exactly once and never the paragraph gaps.
+
+Scaling the measured natural line box remains a declared approximation of the
+authored percentage, not a model of PowerPoint's line-spacing rule. Measured
+against the PowerPoint 16.112.4 exports of `font-scale.pptx` and `3columns.pptx`,
+the remaining pitch is 2%-5% wider than PowerPoint's, which implies a line height
+near 1.19 em where Calibri's `hhea` box is 1.2207 em. That residual is not
+derivable from ECMA-376 or the font metrics, so it is not modeled. `spaceBeforeEmu` and `spaceAfterEmu` are added
+only between paragraphs — never above the first or below the last — so the
+measured block height and the vertical anchor are unchanged, and a column break
+resets the column origin so a gap never survives into the next column. Each such
+body reports one `text.authoredParagraphSpacingApproximate` warning. Under either
 approximate opt-in (`sourceFrameAutoFitPreview`, or `inheritedTextPreview` for a
 source-marked inherited element) a run wider than the text body with no Unicode
 break opportunity is broken at the last shaped cluster that fits, reported as

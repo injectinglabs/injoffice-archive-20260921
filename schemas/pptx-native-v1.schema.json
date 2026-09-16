@@ -299,7 +299,11 @@
         "bulletFontFamily": { "type": "string", "minLength": 1, "maxLength": 256 },
         "bulletFontEncoding": { "enum": ["windows-symbol-byte-v1"] },
         "marginLeftEmu": { "type": "integer", "minimum": 0, "maximum": 51206400 },
-        "indentEmu": { "type": "integer", "minimum": -51206400, "maximum": 51206400 }
+        "indentEmu": { "type": "integer", "minimum": -51206400, "maximum": 51206400 },
+        "lineSpacingPercent1000": { "type": "integer", "minimum": 1, "maximum": 13200000 },
+        "lineSpacingEmu": { "type": "integer", "minimum": 1, "maximum": 51206400 },
+        "spaceBeforeEmu": { "type": "integer", "minimum": 1, "maximum": 51206400 },
+        "spaceAfterEmu": { "type": "integer", "minimum": 1, "maximum": 51206400 }
       }
     },
     "textBodyLayout": {
