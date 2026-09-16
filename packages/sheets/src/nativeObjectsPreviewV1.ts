@@ -1,6 +1,7 @@
 import { decodeNativeRichTextPreviewV1, type NativeRichTextPreviewV1 } from "./nativeRichTextPreviewV1.js";
 import {decodeNativeConditionalFillPreviewsV1,type NativeConditionalFillPreviewV1} from './nativeConditionalFillPreviewV1.js';
 import { decodeNativeStoredRowGeometryV1, type NativeStoredRowGeometryV1 } from "./nativeStoredRowsPreviewV1.js";
+import { decodeNativeSheetDimensionNeutralityV1, type NativeSheetDimensionNeutralityV1 } from "./nativeSheetDimensionNeutralityV1.js";
 import { snapshotNativePlainData } from "./nativePlainData.js";
 import {decodeNativeSheetPageSettingsV1,type NativeSheetPageSettingsV1} from './nativeSheetPageSettingsV1.js';
 import {decodeNativeDrawingObjectsV1,type NativeDrawingObjectV1} from './nativeDrawingObjectsV1.js';
@@ -15,6 +16,7 @@ export interface NativeWorkbookObjectsV1 {
   tables: NativeTablePreviewV1[];
   charts: NativeChartPreviewV1[];
   row_geometry?: NativeStoredRowGeometryV1[];
+  dimension_neutrality?: NativeSheetDimensionNeutralityV1[];
   page_settings?: NativeSheetPageSettingsV1[];
   print_areas?: NativeSheetPrintAreaV1[];
   print_area_sets?: NativeSheetPrintAreaSetV1[];
@@ -116,6 +118,7 @@ export function decodeNativeWorkbookObjectsV1(
   const bit = (v: unknown) => (typeof v === "boolean" ? v : fail());
   const count = (v: unknown) => (v === 0 || v === 1 ? v : fail());
   const hasRows = !!input && typeof input === "object" && Object.hasOwn(input, "row_geometry");
+  const hasNeutrality = !!input && typeof input === "object" && Object.hasOwn(input, "dimension_neutrality");
   const hasPages = !!input && typeof input === "object" && Object.hasOwn(input, "page_settings");
   const hasPrintAreas = !!input && typeof input === "object" && Object.hasOwn(input, "print_areas");
   const hasPrintAreaSets = !!input && typeof input === "object" && Object.hasOwn(input, "print_area_sets");
@@ -130,6 +133,7 @@ export function decodeNativeWorkbookObjectsV1(
     "tables",
     "charts",
     ...(hasRows ? ["row_geometry"] : []),
+    ...(hasNeutrality ? ["dimension_neutrality"] : []),
     ...(hasPages ? ["page_settings"] : []),
     ...(hasPrintAreas ? ["print_areas"] : []),
     ...(hasPrintAreaSets ? ["print_area_sets"] : []),
@@ -344,6 +348,7 @@ export function decodeNativeWorkbookObjectsV1(
     tables,
     charts,
     ...(hasRows ? { row_geometry: decodeNativeStoredRowGeometryV1(value.row_geometry) } : {}),
+    ...(hasNeutrality ? { dimension_neutrality: decodeNativeSheetDimensionNeutralityV1(value.dimension_neutrality) } : {}),
     ...(hasPages ? { page_settings: decodeNativeSheetPageSettingsV1(value.page_settings) } : {}),
     ...(hasPrintAreas ? { print_areas: decodeNativeSheetPrintAreasV1(value.print_areas) } : {}),
     ...(hasPrintAreaSets ? { print_area_sets: decodeNativeSheetPrintAreaSetsV1(value.print_area_sets) } : {}),

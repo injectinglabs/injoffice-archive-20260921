@@ -68,6 +68,8 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
   const savedArea = objects.print_areas?.find(area => area.sheet_id === sheet.id && area.sheet_part === sheet.part_name)
   const savedSet = objects.print_area_sets?.find(area => area.sheet_id === sheet.id && area.sheet_part === sheet.part_name)
   const savedRanges = savedSet?.status === 'available' ? savedSet.areas : !objects.print_area_sets && savedArea?.status === 'available' ? [savedArea.area] : []
+  const neutrality = objects.dimension_neutrality?.filter(entry => entry.sheet_part === sheet.part_name) ?? []
+  const neutralCodes = neutrality.length === 1 ? neutrality[0]!.codes : []
   useEffect(() => () => {
     generation.current++
     if (installed.current) document.fonts.delete(installed.current)
@@ -96,7 +98,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (geometryViewport.end_row - geometryViewport.row + 1 > 32 || geometryViewport.end_column - geometryViewport.column + 1 > 26) throw new Error('The selected range and saved headings together exceed this demo’s 32-row or 26-column geometry limit. No areas were previewed.')
       return useStoredRows
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, geometryViewport, authority, objects)
-        : compileNativeSheetGeometryV2(model, sheet.id, geometryViewport, authority)
+        : compileNativeSheetGeometryV2(model, sheet.id, geometryViewport, authority, objects)
       })
       if (!sourcePrintPage && !useSource && Object.values(margins).some(value => !value.trim())) throw new Error('Enter all four preview margins. Use 0 for a zero margin.')
       const host: NativeSheetHostPagePolicyV1 | undefined = useSource || sourcePrintPage ? undefined : {
@@ -177,6 +179,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     </div>
     <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
     {(usePrintArea || printPagePreview) && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
+    <p className="ds-muted" aria-label="Unmodeled worksheet markup">{neutralCodes.length
+      ? `Unmodeled worksheet markup cleared as non-dimensional for this sheet: ${neutralCodes.join(', ')}. ${neutrality[0]!.warnings.join(' ')}`
+      : 'No unmodeled worksheet markup was cleared as non-dimensional for this sheet. Dimension refusals stand.'}</p>
     <label><input type="checkbox" checked={richRuns} onChange={event => { invalidate(); setRichRuns(event.target.checked) }}/> Preview supported rich-text runs</label>
     {richRuns && <>
       {richError && <p role="alert">{richError} Run styling omitted; plain source text retained.</p>}
