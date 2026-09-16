@@ -1774,17 +1774,26 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err := requireEmptyNativeElement(nvPr); err != nil {
 		return NativeElement{}, fmt.Errorf("pptxpatch: native extract: placeholder/inheritance metadata is unsupported: %w", err)
 	}
-	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil {
-		return NativeElement{}, err
-	}
-	if err := requireOnlyNativeChildren(cNvPr); err != nil {
-		return NativeElement{}, err
-	}
-	if err := requireOnlyNativeAttrs(cNvSpPr, xml.Name{Local: "txBox"}); err != nil {
-		return NativeElement{}, err
-	}
-	if err := requireOnlyNativeChildren(cNvSpPr); err != nil {
-		return NativeElement{}, err
+	// Accessibility, hyperlink and extension metadata on the text box's
+	// nonvisual properties (a16:creationId is written by PowerPoint on every
+	// authored shape) is not modeled. The exact tier keeps refusing the whole
+	// shape; the read-only approximate tiers paint it and disclose the gap,
+	// the way the picture and AutoShape extractors already do.
+	nonVisualPreserved := false
+	for _, check := range []func() error{
+		func() error {
+			return requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"})
+		},
+		func() error { return requireOnlyNativeChildren(cNvPr) },
+		func() error { return requireOnlyNativeAttrs(cNvSpPr, xml.Name{Local: "txBox"}) },
+		func() error { return requireOnlyNativeChildren(cNvSpPr) },
+	} {
+		if err := check(); err != nil {
+			if !extractor.approximateTextPreview() {
+				return NativeElement{}, err
+			}
+			nonVisualPreserved = true
+		}
 	}
 	nativeObjectID, err := canonicalNativeUnsignedID(cNvPr, "", "id", 1)
 	if err != nil {
@@ -1966,6 +1975,7 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.inherited-placeholder-preview", Message: "title/body placeholder geometry and styles resolve through the exact layout/master relationship chain; inherited targets remain preserve-only", Scope: &NativeDiagnosticScope{SlideID: &slideID, ElementID: &elementID, PartName: &part}})
 	}
 	nativeMarkPlaceholderPreview(&element, placeholderPreview, slideID, elementID, part)
+	nativeMarkTextNonVisualPreview(&element, nonVisualPreserved)
 	if name != "" {
 		element.Name = stringPointer(name)
 	}

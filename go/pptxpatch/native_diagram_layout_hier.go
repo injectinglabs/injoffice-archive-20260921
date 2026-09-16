@@ -20,7 +20,9 @@ import (
 //     root, left/right edge offset by alignOff x root width. This is declared
 //     in the group diagnostic;
 //   - hierChild lays out its child subtrees along linDir separated by sibSp,
-//     or in two hanging columns around a trunk line (secLinDir/secChAlign);
+//     packing horizontal siblings against each other's painted contours
+//     rather than their whole envelopes, or in two hanging columns around a
+//     trunk line (secLinDir/secChAlign);
 //   - the finished tree is scaled uniformly to fit the frame and centered;
 //   - conn routes bCtr/tCtr/midL/midR sites as straight or right-angle bend
 //     polylines, honoring bendPt, bendDist, begPad and endPad;
@@ -219,6 +221,40 @@ func (node *nativeDiagramPresNode) layoutHierRoot(width, height float64) error {
 	return nil
 }
 
+// appendPaintedRects collects the rectangles this subtree actually paints, in
+// the subtree's own coordinates. The predicate matches the one the element
+// writer uses, so container blocks (hierRoot, hierChild), hidden geometry and
+// connectors never contribute to sibling spacing.
+func (node *nativeDiagramPresNode) appendPaintedRects(into []nativeDiagramRect) []nativeDiagramRect {
+	if node.hasShape && node.shapeType != "" && !node.hideGeom && node.laidOut && !node.isConnector() && node.rect.w > 0 && node.rect.h > 0 {
+		into = append(into, node.rect)
+	}
+	for _, child := range node.children {
+		into = child.appendPaintedRects(into)
+	}
+	return into
+}
+
+// nativeDiagramContourLeft returns the smallest horizontal offset at or above
+// floor at which none of shapes (given in subtree coordinates, to be drawn at
+// vertical offset top) comes within sibSp of an already placed rectangle it
+// overlaps vertically.
+func nativeDiagramContourLeft(placed, shapes []nativeDiagramRect, top, sibSp, floor float64) float64 {
+	left := floor
+	for _, shape := range shapes {
+		shapeTop, shapeBottom := shape.y+top, shape.y+top+shape.h
+		for _, rect := range placed {
+			if shapeBottom <= rect.y || rect.bottom() <= shapeTop {
+				continue
+			}
+			if required := rect.right() + sibSp - shape.x; required > left {
+				left = required
+			}
+		}
+	}
+	return left
+}
+
 func (node *nativeDiagramPresNode) leadsWithAssistant() bool {
 	for _, child := range node.children {
 		if !child.isConnector() {
@@ -313,12 +349,25 @@ func (node *nativeDiagramPresNode) layoutHierChild(width, height float64) error 
 			}
 		}
 		left := 0.0
-		for _, item := range ordered {
+		placed := []nativeDiagramRect{}
+		for index, item := range ordered {
 			top := 0.0
 			if chAlign == "b" {
 				top = rowHeight - item.blockH
 			}
+			shapes := item.appendPaintedRects(nil)
+			if index > 0 {
+				// Contour packing: sibling subtrees only have to clear each
+				// other where they actually meet, so a shallow subtree tucks
+				// under a deeper sibling's overhang instead of being pushed
+				// past its whole envelope. Never looser than envelope
+				// packing, and every painted pair still clears by sibSp.
+				left = math.Min(left, nativeDiagramContourLeft(placed, shapes, top, sibSp, ordered[index-1].rect.x))
+			}
 			extend(item, left, top)
+			for _, rect := range shapes {
+				placed = append(placed, nativeDiagramRect{rect.x + left, rect.y + top, rect.w, rect.h})
+			}
 			left += item.blockW + sibSp
 		}
 		// Ch-style alignment centers the row of child shapes, not the whole

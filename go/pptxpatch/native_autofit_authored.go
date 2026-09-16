@@ -9,6 +9,7 @@ import (
 const (
 	nativeAuthoredAutoFitCode     = "pptx.autofit-authored-scale-approximate"
 	nativeTextColumnsCode         = "pptx.text-columns-approximate"
+	nativeTextWarpFlattenedCode   = "pptx.text-warp-flattened-approximate"
 	nativeAuthoredAutoFitFullSize = int64(100000)
 	nativeMaxTextColumns          = int64(16)
 )
@@ -25,10 +26,13 @@ type nativeAuthoredAutoFit struct {
 	lnSpcReduction   int64
 	columns          int64
 	columnSpacingEMU int64
+	// warpFlattened records an a:prstTxWarp the approximate tier paints as
+	// unwarped text in the saved frame instead of refusing the text body.
+	warpFlattened bool
 }
 
 func (fit *nativeAuthoredAutoFit) approximate() bool {
-	return fit != nil && (fit.normAutofit || fit.columns > 1 || fit.columnSpacingEMU > 0)
+	return fit != nil && (fit.normAutofit || fit.columns > 1 || fit.columnSpacingEMU > 0 || fit.warpFlattened)
 }
 
 // parseNativeAuthoredNormAutofit validates a:normAutofit as a bounded exact
@@ -145,6 +149,13 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 		return
 	}
 	element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+	if fit.warpFlattened {
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+			Severity: NativeDiagnosticSeverityWarning,
+			Code:     nativeTextWarpFlattenedCode,
+			Message:  "Read-only approximate preview paints the authored a:prstTxWarp text unwarped in its saved frame; the warp geometry, and any wrapping and overflow it causes, differ from PowerPoint.",
+		})
+	}
 	if fit.normAutofit {
 		reduction := ", and the authored lnSpcReduction=" + nativeFormatPercent(fit.lnSpcReduction) + " leaves line pitch at the measured natural line height"
 		if fit.lnSpcReduction > 0 {

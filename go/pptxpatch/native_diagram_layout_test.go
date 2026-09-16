@@ -288,7 +288,10 @@ func TestExtractNativePPTXDiagramLayoutApproximatesOrgChart(t *testing.T) {
 					if child.Geometry == nil || child.Preset != nil || child.Fill == nil || *child.Fill != "2F6FED" || child.Stroke == nil || child.Stroke.Color != "FFFFFF" || *child.Stroke.WidthEMU != 25_400 {
 						t.Fatalf("shape %d paint was not resolved from quick style, colors and theme: %#v", index, child)
 					}
-					if *child.Transform.Cx != 2**child.Transform.Cy {
+					// The uniform fit scale is not a whole number of EMU, so the
+					// file's h = 0.5 w constraint is honored down to the EMU
+					// grid (1 EMU = 1/914400 inch), not below it.
+					if ratio := *child.Transform.Cx - 2**child.Transform.Cy; ratio < -1 || ratio > 1 {
 						t.Fatalf("shape %d does not honor the h = 0.5 w constraint: %#v", index, child.Transform)
 					}
 					if !strings.Contains(nativeDiagramLayoutCodes(child), nativeInheritedTextPreviewCode) || child.TextBody == nil || child.TextBody.VerticalAnchor != NativeTextVerticalAnchorCenter {
@@ -309,22 +312,26 @@ func TestExtractNativePPTXDiagramLayoutApproximatesOrgChart(t *testing.T) {
 				}
 			}
 			// Sizes follow the constraint ratios: box 10 x 5 units, spacing 2.1
-			// units, whole chart 34.2 x 19.2 units fitted to the 6096000 EMU
-			// frame width and centered vertically.
-			unit := 6_096_000.0 / 34.2
+			// units. Manager2 has no descendants, so contour packing only has
+			// to clear the manager box on the root row (10 + 2.1 units past the
+			// manager's left edge) instead of the whole first subtree; the
+			// chart is 28.15 x 19.2 units, fitted to the 4064000 EMU frame
+			// height and centered horizontally.
+			unit := 4_064_000.0 / 19.2
+			originX := (6_096_000 - 28.15*unit) / 2
 			near := func(name string, got int64, want float64) {
 				if diff := float64(got) - want; diff < -1.5 || diff > 1.5 {
 					t.Fatalf("%s = %d, want %.0f", name, got, want)
 				}
 			}
 			near("box width", *manager.Transform.Cx, 10*unit)
-			near("manager x", *manager.Transform.X, 6.05*unit)
-			near("manager y", *manager.Transform.Y, (4_064_000-19.2*unit)/2)
-			near("manager2 x", *manager2.Transform.X, 24.2*unit)
-			near("employee x", *employee.Transform.X, 0)
-			near("employee2 x", *employee2.Transform.X, 12.1*unit)
-			near("employee y", *employee.Transform.Y, (4_064_000-19.2*unit)/2+14.2*unit)
-			near("assistant y", *assistant.Transform.Y, (4_064_000-19.2*unit)/2+7.1*unit)
+			near("manager x", *manager.Transform.X, originX+6.05*unit)
+			near("manager y", *manager.Transform.Y, 0)
+			near("manager2 x", *manager2.Transform.X, originX+18.15*unit)
+			near("employee x", *employee.Transform.X, originX)
+			near("employee2 x", *employee2.Transform.X, originX+12.1*unit)
+			near("employee y", *employee.Transform.Y, 14.2*unit)
+			near("assistant y", *assistant.Transform.Y, 7.1*unit)
 			if *manager2.Transform.Y != *manager.Transform.Y || *employee2.Transform.Y != *employee.Transform.Y {
 				t.Fatalf("hierarchy rows are not aligned: %#v %#v", manager.Transform, employee.Transform)
 			}
@@ -335,6 +342,23 @@ func TestExtractNativePPTXDiagramLayoutApproximatesOrgChart(t *testing.T) {
 			childrenCenter := (*employee.Transform.X + *employee2.Transform.X + *employee2.Transform.Cx) / 2
 			if childrenCenter < managerCenter-1 || childrenCenter > managerCenter+1 {
 				t.Fatalf("children row is not centered under the manager: %d vs %d", childrenCenter, managerCenter)
+			}
+			// Contour packing: the childless second root only clears the root
+			// row, so it starts left of the first root's own envelope, yet no
+			// two painted boxes overlap anywhere.
+			if *manager2.Transform.X >= *employee2.Transform.X+*employee2.Transform.Cx {
+				t.Fatalf("second root was pushed past the first subtree envelope instead of packing against its contour: %d", *manager2.Transform.X)
+			}
+			for _, left := range shapes {
+				for _, right := range shapes {
+					if left.ID == right.ID {
+						continue
+					}
+					if *left.Transform.X < *right.Transform.X+*right.Transform.Cx && *right.Transform.X < *left.Transform.X+*left.Transform.Cx &&
+						*left.Transform.Y < *right.Transform.Y+*right.Transform.Cy && *right.Transform.Y < *left.Transform.Y+*left.Transform.Cy {
+						t.Fatalf("contour packing overlapped two painted boxes: %#v %#v", left.Transform, right.Transform)
+					}
+				}
 			}
 			// Connector 1: Manager bottom center -> bend -> Employee top center,
 			// with the horizontal bar half a spacing above the children.
@@ -359,7 +383,11 @@ func TestExtractNativePPTXDiagramLayoutApproximatesOrgChart(t *testing.T) {
 			if len(third.Geometry.Paths[0].Commands) != 3 {
 				t.Fatalf("assistant connector must be a two-segment bend: %#v", third.Geometry.Paths[0].Commands)
 			}
-			if x, y := absolute(third, 2); x != *assistant.Transform.X+*assistant.Transform.Cx || y != *assistant.Transform.Y+*assistant.Transform.Cy/2 {
+			// Connector ends and shape edges are rounded to EMU from the same
+			// unrounded layout, so they agree on the EMU grid (1 EMU =
+			// 1/914400 inch) rather than below it.
+			onGrid := func(got, want int64) bool { return got-want >= -1 && got-want <= 1 }
+			if x, y := absolute(third, 2); !onGrid(x, *assistant.Transform.X+*assistant.Transform.Cx) || !onGrid(y, *assistant.Transform.Y+*assistant.Transform.Cy/2) {
 				t.Fatalf("assistant connector does not end at the assistant middle right: %d,%d", x, y)
 			}
 			// tx: one fitted size shared by the primFontSz equalization group,
