@@ -404,7 +404,9 @@ func assertNativeDiagramRefused(t *testing.T, options nativeDiagramFixtureOption
 			found = true
 		}
 	}
-	if !found || slide.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || len(slide.Passthrough) == 0 {
+	// The frame keeps an empty region, so the slide reports the refusal it
+	// contains rather than reporting the frame as merely preserved.
+	if !found || slide.Compatibility.Status != NativeCompatibilityStatusRefused || len(slide.Passthrough) == 0 {
 		codes := []string{}
 		for _, diagnostic := range slide.Compatibility.Diagnostics {
 			codes = append(codes, diagnostic.Code)
@@ -412,8 +414,12 @@ func assertNativeDiagramRefused(t *testing.T, options nativeDiagramFixtureOption
 		t.Fatalf("diagram frame was not refused with %s and preserved: %v passthrough=%d", code, codes, len(slide.Passthrough))
 	}
 	// The text box next to the frame must keep painting: refusal is per element.
-	if len(slide.Elements) != 1 || slide.Elements[0].Kind != NativeElementKindText {
+	if len(slide.Elements) != 2 || slide.Elements[0].Kind != NativeElementKindText {
 		t.Fatalf("sibling text element was lost by the diagram refusal: %#v", slide.Elements)
+	}
+	// The refused frame still occupies its box, as a refused AutoShape does.
+	if regions := nativeRefusedFrameRegions(t, slide.Elements, code); len(regions) != 1 {
+		t.Fatalf("refused diagram frame did not keep an empty region: %#v", slide.Elements)
 	}
 	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
 		t.Fatalf("invalid refused diagram deck: %#v", issues)

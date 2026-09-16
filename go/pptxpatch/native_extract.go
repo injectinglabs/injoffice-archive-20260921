@@ -1675,8 +1675,17 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 				if rawErr != nil {
 					return NativeSlide{}, rawErr
 				}
-				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, nativeDiscloseShapeRefusal(child, dialect, refusal.message)); err != nil {
+				disclosure := nativeDiscloseShapeRefusal(child, dialect, refusal.message)
+				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, disclosure); err != nil {
 					return NativeSlide{}, err
+				}
+				// A refused frame keeps its place in the shape set, exactly as a
+				// refused AutoShape does, so z-order and the frame's box survive
+				// the refusal instead of silently leaving the slide.
+				if region, ok := extractor.refusedGraphicFrameRegion(child, part, slideID, objectIDs[child], nativeSHA256(raw), refusal.code, disclosure, dialect); ok {
+					slide.Elements = append(slide.Elements, region)
+					slide.Compatibility.Status = worseNativeStatus(slide.Compatibility.Status, region.Compatibility.Status)
+					slide.Compatibility.Diagnostics = append(slide.Compatibility.Diagnostics, region.Compatibility.Diagnostics...)
 				}
 				continue
 			}

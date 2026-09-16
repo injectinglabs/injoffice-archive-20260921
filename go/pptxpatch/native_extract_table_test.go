@@ -110,6 +110,9 @@ func TestExtractNativePPTXTableGapsAreOpaqueAndExactPreserved(t *testing.T) {
 		name     string
 		mutate   func(string) string
 		wantCode string
+		// noBox marks a frame that no longer states its own box, so the refusal
+		// leaves no region behind rather than inventing an extent.
+		noBox bool
 	}{
 		{name: "merge", mutate: func(value string) string { return strings.Replace(value, `<a:tc>`, `<a:tc gridSpan="2">`, 1) }, wantCode: "pptx.table-merge-unavailable"},
 		{name: "table-style", mutate: func(value string) string {
@@ -120,7 +123,7 @@ func TestExtractNativePPTXTableGapsAreOpaqueAndExactPreserved(t *testing.T) {
 		}, wantCode: "pptx.table-style-unavailable"},
 		{name: "omitted-transform-offset", mutate: func(value string) string {
 			return strings.Replace(value, `<a:off x="300000" y="150000"/>`, ``, 1)
-		}, wantCode: "pptx.table-transform-unavailable"},
+		}, wantCode: "pptx.table-transform-unavailable", noBox: true},
 		{name: "omitted-cell-properties", mutate: func(value string) string {
 			return removeFirstNativeTableXMLSpan(value, `<a:tcPr`, `</a:tcPr>`)
 		}, wantCode: "pptx.table-cell-layout-unavailable"},
@@ -180,8 +183,19 @@ func TestExtractNativePPTXTableGapsAreOpaqueAndExactPreserved(t *testing.T) {
 					t.Fatalf("unsupported table leaked a partial projection: %#v", element)
 				}
 			}
-			if deck.Slides[0].Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+			// The frame keeps an empty region at its authored box, so the slide
+			// reports the refusal it holds instead of only preserving it. A frame
+			// that states no box keeps the older preserve-only shape set.
+			wantStatus := NativeCompatibilityStatusRefused
+			wantRegions := 1
+			if test.noBox {
+				wantStatus, wantRegions = NativeCompatibilityStatusPreserveOnly, 0
+			}
+			if deck.Slides[0].Compatibility.Status != wantStatus {
 				t.Fatalf("unsupported table did not preserve the slide: %#v", deck.Slides[0].Compatibility)
+			}
+			if regions := nativeRefusedFrameRegions(t, deck.Slides[0].Elements, test.wantCode); len(regions) != wantRegions {
+				t.Fatalf("refused table frame kept %d regions, want %d: %#v", len(regions), wantRegions, deck.Slides[0].Elements)
 			}
 			foundDiagnostic := false
 			for _, diagnostic := range deck.Slides[0].Compatibility.Diagnostics {
@@ -427,8 +441,11 @@ func TestExtractNativePPTXTableStyleWithUntypedLeftoverStillEmitsSlide(t *testin
 	if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.table-style-unavailable") {
 		t.Fatalf("table style was not refused: %+v", deck.Slides[0].Compatibility)
 	}
-	if len(deck.Slides[0].Elements) != 1 || deck.Slides[0].Elements[0].Kind != NativeElementKindText {
+	if len(deck.Slides[0].Elements) != 2 || deck.Slides[0].Elements[0].Kind != NativeElementKindText {
 		t.Fatalf("remaining slide shape was dropped: %+v", deck.Slides[0].Elements)
+	}
+	if regions := nativeRefusedFrameRegions(t, deck.Slides[0].Elements, "pptx.table-style-unavailable"); len(regions) != 1 {
+		t.Fatalf("refused styled table did not keep an empty region: %+v", deck.Slides[0].Elements)
 	}
 }
 
