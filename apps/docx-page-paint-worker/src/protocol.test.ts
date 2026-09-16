@@ -120,6 +120,22 @@ describe('approximate drawing shape sidecar', () => {
   })
 })
 
+describe('approximate nested-table sidecar', () => {
+  it('accepts the sidecar only on render-approximate and refuses malformed evidence without partial results', async () => {
+    for (const [op, input] of [
+      ['render-auto-borders', { prepare: {}, legacy_eligibility: {}, nested_tables: {} }],
+      ['render-font-substitution', { prepare: {}, nested_tables: {} }],
+      ['render-textbox-pages', { prepare: {}, evidence: {}, nested_tables: {} }],
+      ['render-approximate', { prepare: {}, eligibility: {}, nested_tables: { protocol: 'injoffice.docx.approximate-nested-tables', version: 1, items: 'not-an-array' } }],
+      ['render-approximate', { prepare: {}, eligibility: {}, nested_tables: null }],
+    ] as const) {
+      const response = await dispatchNativeDocxPagePaintWorkerRequestV1({ protocol: DOCX_PAGE_PAINT_WORKER_PROTOCOL, version: 1, id: 'nested-tables:refusal', op, input })
+      expect(response).toMatchObject({ ok: false, error: { code: 'COMPILATION_REFUSED' } })
+      expect(response).not.toHaveProperty('result')
+    }
+  })
+})
+
 describe('approximate equation sidecar', () => {
   it('accepts the sidecar only on render-approximate and refuses malformed evidence without partial results', async () => {
     for (const [op, input] of [

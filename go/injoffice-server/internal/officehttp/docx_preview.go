@@ -310,6 +310,15 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 			if charts != nil {
 				workerInput["drawing_charts"] = charts
 			}
+			// Same-bytes read-only nested-table sidecar; the compiler re-validates its joins.
+			nested, nestedErr := docxpatch.InspectNativeApproximateNestedTablesV1(data)
+			if nestedErr != nil {
+				xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, nestedErr)
+				return
+			}
+			if nested != nil {
+				workerInput["nested_tables"] = nested
+			}
 		}
 		result, err = compilePreviewWorkerOperation(ctx, options.WorkerPath, "injoffice.docx.page-paint-worker", operation, workerInput, 192*1024*1024, 64*1024*1024, args...)
 	} else {

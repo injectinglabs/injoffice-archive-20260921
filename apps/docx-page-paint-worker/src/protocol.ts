@@ -187,6 +187,10 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       // Server-inspected chart sidecar for the same bytes; same operation gate.
       const drawingCharts = value.op === 'render-approximate' && 'drawing_charts' in value.input ? value.input.drawing_charts : undefined
       if (drawingCharts !== undefined) fields.push('drawing_charts')
+      // Server-inspected nested-table sidecar for the same bytes; only the
+      // current-layout approximate operation accepts it.
+      const nestedTables = value.op === 'render-approximate' && 'nested_tables' in value.input ? value.input.nested_tables : undefined
+      if (nestedTables !== undefined) fields.push('nested_tables')
       if (!exactFieldSet(value.input, fields)) throw new TypeError('approximate render requires exact prepare and eligibility fields')
       const fontSizePolicy = value.input.font_size_policy
       if((fontOnly||textbox)&&fontSizePolicy!==undefined)throw new TypeError('Font-only preview cannot combine other approximate policies')
@@ -230,7 +234,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
           : await renderNativeDocxTextboxPagesPreviewV2(input,evidence,textboxFonts,outlineProvider,{fonts})
         return {...base,ok:true,result:{document:input.document,evidence,font_inventory_json:input.font_inventory_json,preview}}
       }
-      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}), ...(equations !== undefined ? { equations } : {}), ...(drawingCharts !== undefined ? { drawingCharts } : {}) }
+      const runtime = { createShaper: workerShaper, fonts, fontSizePolicy, ...(drawingShapes !== undefined ? { drawingShapes } : {}), ...(equations !== undefined ? { equations } : {}), ...(drawingCharts !== undefined ? { drawingCharts } : {}), ...(nestedTables !== undefined ? { nestedTables } : {}) }
       const result = fontOnly?await renderNativeDocxFontSubstitutionPreviewV1(input,outlineProvider,{createShaper:workerShaper,fonts:fonts!,...('composition' in value.input?{composition:value.input.composition}:{})}):automatic
         ? await renderNativeDocxAutomaticBorderPreviewV1(input, outlineProvider, runtime, value.input.legacy_eligibility)
         : await renderNativeDocxApproximatePagePreviewV1(input, value.input.eligibility, outlineProvider, runtime)

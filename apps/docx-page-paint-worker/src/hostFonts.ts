@@ -27,7 +27,7 @@ function file(path:string,max:number):Uint8Array {
 
 export type HostFontLoadMode=boolean|'approximate'
 /** Additional exact face identity a same-bytes sidecar asks the host to load (never a substitution). */
-export interface HostFontReference {family:string;weight:400|700;style:'normal'|'italic'}
+export interface HostFontReference {family:string;weight:number;style:'normal'|'italic'}
 export type NativeDocxLoadedHostFontsV1=NativeDocxHostFontsV1 & {resources:Map<string,FontResource>;approximateSubstitutions?:NativeDocxHostFontApproximateSubstitutionV1[]}
 
 function admitConfiguredFace(index:number,f:{family:string,weight:number,style:'normal'|'italic',sha256:`sha256:${string}`,path:string},faces:NativeFontManifest['faces'][number][],resources:Map<string,FontResource>,occupied:Set<string>,total:number):number{
