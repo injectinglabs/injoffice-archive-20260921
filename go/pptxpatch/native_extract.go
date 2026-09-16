@@ -1481,7 +1481,7 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 	if err != nil {
 		return NativeSlide{}, err
 	}
-	theme, err := resolveNativeTheme(graph, dialect)
+	theme, err := resolveNativeThemeForSlide(graph, root, dialect)
 	if err != nil {
 		return NativeSlide{}, err
 	}
@@ -1529,7 +1529,16 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 		switch child.Name {
 		case xml.Name{Space: dialect.presentation, Local: "spTree"}:
 		case xml.Name{Space: dialect.presentation, Local: "bg"}:
+			// The strict path accepts only bgPr/solidFill/srgbClr with no
+			// attributes. Fall back to the inheritance-aware resolver, which also
+			// handles schemeClr, bgRef and PowerPoint's bwMode/empty effectLst,
+			// before declaring the authored background unrepresentable.
 			background, backgroundErr := extractNativeSlideBackground(child, dialect)
+			if backgroundErr != nil {
+				if widened := nativeBackgroundNodeColor(child, dialect, extractor.theme); widened != "" {
+					background, backgroundErr = widened, nil
+				}
+			}
 			if backgroundErr != nil {
 				unsupported, unsupportedErr := makeNativeUnsupportedSource(payload, child, part, sourceObjectID+"-background", "pptx.unsupported-background", backgroundErr.Error())
 				if unsupportedErr != nil {
@@ -1549,6 +1558,15 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 			if err := extractor.markSlideUnsupported(&slide, unsupported.part, unsupported.objectID, unsupported.fingerprint, unsupported.payload, unsupported.code, unsupported.message); err != nil {
 				return NativeSlide{}, err
 			}
+		}
+	}
+	// No representable p:bg on the slide: inherit from the layout, then the
+	// master, then the implicit default (schemeClr bg1 through the slide's
+	// effective colour map). Leaving this unresolved painted every such deck
+	// white, including decks whose entire design is a master background.
+	if slide.Background == nil {
+		if inherited := resolveNativeInheritedBackground(graph, root, dialect, extractor.theme); inherited != "" {
+			slide.Background = &inherited
 		}
 	}
 	spTree, err := nativeSingleton(cSld, dialect.presentation, "spTree", true)
