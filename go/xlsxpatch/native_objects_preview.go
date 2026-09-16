@@ -208,7 +208,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 		if areas := previewNativeDimensionPrintArea(pkg.files[workbook.Sheets[i].PartName]); len(areas) == 1 {
 			result.PrintAreaSets[i].Status = "available"
 			result.PrintAreaSets[i].Areas = areas
-			result.PrintAreaSets[i].Warnings = []string{"Read-only print area from the worksheet dimension element. ECMA-376 prints the used range when _xlnm.Print_Area is absent. Not Excel printer calibration."}
+			result.PrintAreaSets[i].Warnings = []string{"Read-only print area from the worksheet dimension element, anchored at A1. ECMA-376 prints the used range when _xlnm.Print_Area is absent, and the used range starts at A1: leading empty rows and columns are printed, not skipped. Not Excel printer calibration."}
 		}
 	}
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)

@@ -36,7 +36,13 @@ type styleFill struct {
 	color          *string
 	supported      bool
 	background64   bool
-	key            string
+	// Theme foreground of an otherwise supported solid fill. The record stays
+	// unsupported here because the styles table alone cannot name a colour; the
+	// v2 display pass resolves it against theme1.xml exactly as it already does
+	// for a theme font colour.
+	themeIndex *int
+	themeTint  *float64
+	key        string
 }
 
 type styleBorderSide struct {
@@ -405,9 +411,12 @@ func parseStyleFill(data []byte, entry styleTableEntry, namespace string) (style
 		return styleFill{}, err
 	}
 	color, safe := supportedRGBStyleColor(pattern.children[0].start)
+	themeIndex, themeTint := (*int)(nil), (*float64)(nil)
 	if !safe || color == nil {
-		fill.key = "unsupported:" + string(fill.raw)
-		return fill, nil
+		if themeIndex, themeTint = exactThemeColor(pattern.children[0].start); themeIndex == nil {
+			fill.key = "unsupported:" + string(fill.raw)
+			return fill, nil
+		}
 	}
 	if len(pattern.children) == 2 {
 		background := pattern.children[1]
@@ -424,12 +433,20 @@ func parseStyleFill(data []byte, entry styleTableEntry, namespace string) (style
 		}
 		backgroundColor, backgroundSafe := supportedRGBStyleColor(background.start)
 		indexed64 := indexedFound && indexed == "64" && styleAttributesOnly(background.start, "indexed")
-		sameOpaqueRGB := backgroundSafe && backgroundColor != nil && *backgroundColor == *color
+		sameOpaqueRGB := backgroundSafe && backgroundColor != nil && color != nil && *backgroundColor == *color
 		if !indexed64 && !sameOpaqueRGB {
 			fill.key = "unsupported:" + string(fill.raw)
 			return fill, nil
 		}
 		fill.background64 = indexed64
+	}
+	if color == nil {
+		// Theme foreground: the styles table names a slot, not a colour, so the
+		// record stays unsupported for mutation and keeps its raw identity key.
+		// Only the read-only display pass, which has theme1.xml, can resolve it.
+		fill.themeIndex, fill.themeTint = themeIndex, themeTint
+		fill.key = "unsupported:" + string(fill.raw)
+		return fill, nil
 	}
 	fill.color, fill.supported = color, true
 	fill.key = fillSemanticKey(fill.rootStart, color)

@@ -481,6 +481,7 @@ func enrichNativeWorkbookV2Styles(workbook *NativeWorkbookV2, registry *styleReg
 		source := registry.cellXfs[index]
 		base := effectiveCellStyleXF(registry.styleXfs[source.xfID])
 		fontID := effectiveStyleComponent(source.fontID, base.fontID, source.applyFont)
+		fillID := effectiveStyleComponent(source.fillID, base.fillID, source.applyFill)
 		alignment := effectiveStyleAlignment(source, base)
 		font := registry.fonts[fontID]
 		changed := false
@@ -495,6 +496,25 @@ func enrichNativeWorkbookV2Styles(workbook *NativeWorkbookV2, registry *styleReg
 				style.Effective.FontColor = nativeWorkbookString(rgb)
 				style.Effective.Unsupported = removeNativeStyleUnsupported(style.Effective.Unsupported, "font-color")
 				changed = true
+			}
+		}
+		// A solid fill whose fgColor names a theme slot is projected the same way a
+		// theme font colour is: the styles table alone cannot name the colour, so
+		// the record is refused there, and only this pass, which holds theme1.xml,
+		// resolves it. Without this, a theme-filled cell paints as no fill at all.
+		if containsNativeStyleUnsupported(style.Effective.Unsupported, "fill") && fillID >= 0 && fillID < len(registry.fills) {
+			fill := registry.fills[fillID]
+			if fill.themeIndex != nil {
+				if rgb, ok := theme.resolve(*fill.themeIndex, fill.themeTint); ok {
+					fillIDValue := uint32(fillID)
+					fillDigest := nativeWorkbookDigest(fill.raw)
+					style.Effective.FillColor = nativeWorkbookString(rgb)
+					style.Effective.Fill = &NativeWorkbookFillV2{
+						Origin: "styles-record", FillID: &fillIDValue, RecordSHA256: &fillDigest, Color: nativeWorkbookString(rgb),
+					}
+					style.Effective.Unsupported = removeNativeStyleUnsupported(style.Effective.Unsupported, "fill")
+					changed = true
+				}
 			}
 		}
 		if containsNativeStyleUnsupported(style.Effective.Unsupported, "alignment-extended") && alignment.otherAttrsExceptPaintExact == "" {
@@ -607,7 +627,7 @@ func filterNativeWorkbookUnsupportedV2(items []NativeWorkbookUnsupportedV2, work
 	}
 	out := items[:0]
 	for _, item := range items {
-		if strings.HasPrefix(item.Code, "STYLE_") && (item.Code == "STYLE_FONT_COLOR" || item.Code == "STYLE_ALIGNMENT_EXTENDED") {
+		if item.Code == "STYLE_FONT_COLOR" || item.Code == "STYLE_FILL" || item.Code == "STYLE_ALIGNMENT_EXTENDED" {
 			if !needed[item.Code+"\x00"+item.ScopeID] {
 				continue
 			}
