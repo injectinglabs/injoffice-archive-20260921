@@ -510,3 +510,66 @@ func TestNativeApproximationNeverChangesStrictSettingsProjection(t *testing.T) {
 		}
 	}
 }
+
+// TestNativeApproximationEligibilityNamesTheDiagnosticThatBlockedIt covers the
+// two refusals that returned an unnamed or misnamed cause: a strict settings
+// diagnostic outside the admitted set returned "ineligible" with nothing in
+// Reasons distinguishing it from the admitted disclosures beside it, and the
+// bounded-fact refusal still quoted the bound of 8 it was raised away from.
+func TestNativeApproximationEligibilityNamesTheDiagnosticThatBlockedIt(t *testing.T) {
+	legacyFlags := make([]string, 0, len(nativeApproximateLegacyCompatFlags))
+	for name := range nativeApproximateLegacyCompatFlags {
+		legacyFlags = append(legacyFlags, "<w:"+name+"/>")
+	}
+	sort.Strings(legacyFlags)
+	if len(legacyFlags) <= nativeApproximationMaxFacts {
+		t.Fatalf("fixture needs more than %d recorded legacy compat flags, have %d", nativeApproximationMaxFacts, len(legacyFlags))
+	}
+	for _, test := range []struct {
+		name, markup, want string
+	}{
+		{
+			// A LibreOffice save registers the reserved separator stories as ids 0 and
+			// 1 instead of Word's -1 and 0, which strict diagnoses as
+			// INVALID_SETTINGS_STRUCTURE: a code the current-layout policy does not
+			// admit. The attestation must say so instead of leaving the caller to
+			// guess among the PAGINATION_SETTING_UNSUPPORTED disclosures.
+			"non-admitted diagnostic",
+			`<w:footnotePr><w:footnote w:id="0"/><w:footnote w:id="1"/></w:footnotePr>`,
+			"Approximate eligibility refused: strict settings diagnostic INVALID_SETTINGS_STRUCTURE at /w:settings[1]/w:footnotePr[1] is outside the current-layout admitted set",
+		},
+		{
+			"bounded typed facts",
+			"<w:compat>" + strings.Join(legacyFlags, "") + "</w:compat>",
+			"Approximate eligibility refused: more than 64 typed settings facts would be required",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := buildNativeDOCX(t, nativeEntries(nativePaginationSettingsParts(`<w:settings xmlns:w="`+wordMLTransitional+`">`+test.markup+`</w:settings>`)))
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if eligibility.Status != "ineligible" || len(eligibility.ApproximatedSettings) != 0 {
+				t.Fatalf("expected an ineligible attestation carrying no typed facts: %#v", eligibility)
+			}
+			if !slices.Contains(eligibility.Reasons, test.want) {
+				t.Fatalf("attestation does not name its blocking cause %q: %#v", test.want, eligibility.Reasons)
+			}
+			for _, reason := range eligibility.Reasons {
+				if strings.Contains(reason, "more than 8 typed settings facts") {
+					t.Fatalf("refusal quotes a bound the policy no longer applies: %q", reason)
+				}
+			}
+			named := 0
+			for _, reason := range eligibility.Reasons {
+				if strings.HasPrefix(reason, "Approximate eligibility refused: ") {
+					named++
+				}
+			}
+			if named != 1 {
+				t.Fatalf("an ineligible attestation must name exactly one blocking cause, got %d: %#v", named, eligibility.Reasons)
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package docxpatch
 
 import (
 	"encoding/xml"
+	"strconv"
 	"strings"
 )
 
@@ -51,8 +52,10 @@ var nativeApproximationAdmittedDiagnostics = map[string]bool{
 // ECMA-376 w:compat legacy options and Microsoft compatSetting flags (recorded,
 // not applied), authoring-only settings.xml children, and duplicate settings
 // that repeat their first occurrence or are authoring-only. Malformed settings,
-// disagreeing duplicates, unknown compat markup, and more than eight facts remain
-// ineligible. Remaining PAGINATION_SETTING_UNSUPPORTED and UNKNOWN_SETTINGS_ELEMENT
+// disagreeing duplicates, unknown compat markup, and more typed facts than the
+// bounded disclosure vector holds remain ineligible; every one of those refusals
+// names its own cause in Reasons, because the vector also carries admitted facts
+// that did not block. Remaining PAGINATION_SETTING_UNSUPPORTED and UNKNOWN_SETTINGS_ELEMENT
 // diagnostics are retained verbatim as reasons. This does not qualify unsupported
 // document content such as math or legacy VML shapes for strict paint.
 func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApproximationEligibilityV1, error) {
@@ -70,6 +73,10 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 	}
 	for _, diagnostic := range settings.Diagnostics {
 		if !nativeApproximationAdmittedDiagnostics[diagnostic.Code] {
+			// Reasons already restates every strict settings diagnostic, admitted or
+			// not, so returning here without naming the one that blocked leaves the
+			// caller a list of disclosures with no way to tell which refused.
+			result.Reasons = append(result.Reasons, "Approximate eligibility refused: strict settings diagnostic "+diagnostic.Code+" at "+diagnostic.Path+" is outside the current-layout admitted set")
 			return result, nil
 		}
 	}
@@ -164,7 +171,7 @@ func (b *nativeApproximationBuilder) add(fact NativeDocxApproximatedSettingV1) b
 		return b.refuse("typed fact " + fact.Kind + " at " + fact.Path + " repeats an already recorded kind or path")
 	}
 	if len(b.result.ApproximatedSettings) >= nativeApproximationMaxFacts {
-		return b.refuse("more than 8 typed settings facts would be required")
+		return b.refuse("more than " + strconv.Itoa(nativeApproximationMaxFacts) + " typed settings facts would be required")
 	}
 	b.kinds[fact.Kind], b.paths[fact.Path] = true, true
 	b.result.ApproximatedSettings = append(b.result.ApproximatedSettings, fact)
