@@ -1083,6 +1083,43 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  // A paragraph vanishes from shaped lines because a blocking resolved-layout
+  // diagnostic made shaping drop it. Reporting only the absence discards the
+  // cause and makes the refusal unactionable.
+  it('names the resolved-layout cause when a paragraph is missing from shaped lines', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [{
+      code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: droppedID,
+      source_diagnostic_code: 'VERTICAL_ALIGNMENT_UNSUPPORTED',
+      source_diagnostic_message: 'Vertical alignment requires a future paginator',
+      message: 'Resolved layout diagnostic VERTICAL_ALIGNMENT_UNSUPPORTED blocks native shaping',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'shaped-paragraph-missing',
+      scope_id: droppedID,
+      source_code: 'VERTICAL_ALIGNMENT_UNSUPPORTED',
+      source_message: 'Vertical alignment requires a future paginator',
+    })]))
+  })
+
+  // With no shaping diagnostic to attribute it to, the refusal stays as it was.
+  it('still refuses an unexplained missing shaped paragraph without inventing a cause', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toBeDefined()
+    expect(entry).not.toHaveProperty('source_code')
+  })
+
   it.each([
     ['section width mismatch', (value: any) => { value.document.sections[0].page.margins.right_twips += 1 }, 'section-width-mismatch'],
     ['unsupported settings semantics', (value: any) => {
