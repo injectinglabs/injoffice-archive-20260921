@@ -1679,6 +1679,11 @@ function approximateInertNoteSeparators(document: NativeDocxDocumentV1): boolean
  */
 function unshapedParagraphCause(context: PaginationContext, paragraphID: string): { code: string; message: string } | undefined {
   for (const diagnostic of context.request.shaped_lines.diagnostics) {
+    // Only 'unresolved-layout-diagnostic' records a diagnostic that actually
+    // blocked shaping. 'paint-diagnostic-preserved' carries a source code too,
+    // but it is emitted for paint-only codes that explicitly do not change
+    // shaping advances, so attributing a refusal to one names an innocent code.
+    if (diagnostic.code !== 'unresolved-layout-diagnostic') continue
     if (diagnostic.scope_id !== paragraphID || diagnostic.source_diagnostic_code === undefined) continue
     return { code: diagnostic.source_diagnostic_code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
   }
