@@ -10,7 +10,7 @@ import type {NativeFontManifest,NativeFontResolver,ResolvedFontFace,FontResource
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1,EXPLICIT_FONT_POLICY_V1} from '@injoffice/font-metrics/layout'
 import {decodePptxPreview,type PreviewNode,type PptxPreview,type PreviewStroke} from './contract.js'
 import {prepareNativeRasterResourceV1,type NativeDocxPagePaintMediaAssetV1} from '@injoffice/docs/native-raster'
-import {previewArrow} from './arrows.js'
+import {previewArrow,previewArrowStrokeBase} from './arrows.js'
 import {previewConnectorShaft} from './connectorShaft.js'
 
 const previewColor=(color:string)=>/^#[0-9A-F]{6}$/.test(color)?color.slice(1):color
@@ -125,10 +125,11 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
      // cannot be qualified paints this element as a placeholder and never
      // rejects the rest of the slide.
      try{
-      shaft=(command.headEnd||command.tailEnd)&&stroke?previewConnectorShaft(command.path,command.headEnd,command.tailEnd,stroke.widthEmu):undefined
+      const arrowWidth=stroke?previewArrowStrokeBase(stroke.widthEmu):0
+      shaft=(command.headEnd||command.tailEnd)&&stroke?previewConnectorShaft(command.path,command.headEnd,command.tailEnd,arrowWidth):undefined
       if(typed){
        if(!shaft||!stroke)throw new Error('Typed arrows require a source-bound stroked connector')
-       for(const [end,terminal] of [[command.headEnd,shaft.head],[command.tailEnd,shaft.tail]] as const){if(!end)continue;const arrow=previewArrow(end,terminal.tip,terminal.direction,stroke.widthEmu,stroke.color);if(arrow)arrows.push(arrow)}
+       for(const [end,terminal] of [[command.headEnd,shaft.head],[command.tailEnd,shaft.tail]] as const){if(!end)continue;const arrow=previewArrow(end,terminal.tip,terminal.direction,arrowWidth,stroke.color);if(arrow)arrows.push(arrow)}
       }
      }catch(error){
       diagnostics.push(`connector.arrowUnavailable: ${error instanceof Error?error.message:'arrow-v1 endpoint geometry unavailable'}; element painted as a placeholder`)
@@ -138,7 +139,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
      if(shaft)d=shaft.d
      current.children.push({kind:'path',d,...paint},...arrows)
      if(typed&&shaft){
-      diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × stroke; omitted = medium), not Office-equivalent geometry')
+      diagnostics.push('arrow.deterministicGeometry: InjOffice arrow-v1 uses source type and named widths/lengths (2/3/5 × max(stroke, 2pt hairline); omitted = medium), not Office-equivalent geometry')
       if(!shaft.straight)diagnostics.push('connector.presetShaftPreview: arrow-v1 endpoints follow the terminal tangents of the evaluated connector-preset path (pptx.connector-preset-preview); not Office-equivalent geometry')
      }
      if(shaft?.skippedInsets.length)diagnostics.push(`connector.shaftInsetSkipped: ${shaft.skippedInsets.join('/')} terminal segment shorter than the arrow-v1 inset; shaft left untrimmed under the arrowhead`)
