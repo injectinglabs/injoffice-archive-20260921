@@ -3327,6 +3327,37 @@ describe('approximate DrawingML shapes', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
 
+  it('paints an in-front shape fill under its own text box glyphs and still over the body line it anchors to', async () => {
+    // A front shape replays after the body lines, but its own text box glyphs
+    // replay with them, so an opaque fill in that layer would erase the box text.
+    const paragraphs = [{
+      id: 'approximate-drawing-shape:test:1:p0', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:txbx[1]/w:txbxContent[1]/w:p[1]', RUN_ANCHOR_START + 3, RUN_ANCHOR_START + 4),
+      edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'APPROXIMATE_TEXTBOX_PREVIEW', message: 'read-only', preservation: 'refuse-mutation' as const } }, properties: {},
+      runs: [{ kind: 'text' as const, id: 'approximate-drawing-shape:test:1:p0:r0', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:txbx[1]/w:txbxContent[1]/w:p[1]/w:r[1]', RUN_ANCHOR_START + 3, RUN_ANCHOR_START + 4), text: 'Anchored TextBox' }],
+    }]
+    const textbox = {
+      link_seq: 0, insets_emu: [91440, 45720, 91440, 45720], vertical_anchor: 't', wrap: 'square', paragraphs,
+      resolved_paragraphs: paragraphs.map(p => ({ paragraph_id: p.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'DejaVu Sans', font_size_half_points: 20 } })),
+      resolved_runs: paragraphs.map(p => ({ run_id: p.runs[0]!.id, paragraph_id: p.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'DejaVu Sans', font_size_half_points: 20, color: '000000' } })),
+      omitted_runs: 0, omitted_blocks: 0,
+    }
+    const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'rect', fill_rgb: 'FFFFFF', page_anchor: pageAnchor({ stacking: { behind_doc: false, relative_height: 3 } }), wrap: 'none', textbox, width_emu: 2743200, height_emu: 914400 })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const commands = paint.pages[0]!.commands
+    const fillIndex = commands.findIndex(c => c.kind === 'fill_table_cell' && c.row_id === 'approximate-drawing-shape:test:1')
+    const boxGlyphIndexes = commands.flatMap((c, index) => c.kind === 'fill_glyph_path' && c.source_id === 'approximate-drawing-shape:test:1:p0:r0' ? [index] : [])
+    const bodyGlyphIndexes = commands.flatMap((c, index) => c.kind === 'fill_glyph_path' && !c.source_id.startsWith('approximate-drawing-shape:') ? [index] : [])
+    expect(fillIndex).toBeGreaterThanOrEqual(0)
+    expect(boxGlyphIndexes.length).toBeGreaterThan(10)
+    expect(bodyGlyphIndexes.length).toBeGreaterThan(0)
+    // The opaque fill must sit under every glyph of its own box ...
+    expect(Math.min(...boxGlyphIndexes)).toBeGreaterThan(fillIndex)
+    // ... and still over the body text of the line it anchors to.
+    expect(Math.max(...bodyGlyphIndexes)).toBeLessThan(fillIndex)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
   // The fixture section is 12240 twips wide with 1440 twip side margins, so the
   // single column is 9360 twips = 468_000 millipoints = 5_943_600 EMU.
   const COLUMN_MILLIPOINTS = 468_000, PAGE_MILLIPOINTS = 612_000, MARGIN_MILLIPOINTS = 72_000
