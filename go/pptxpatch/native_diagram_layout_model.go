@@ -758,7 +758,7 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateBody(children []*nativeXM
 			hide, _ := exactNativeAttr(child, "", "hideGeom")
 			pres.hideGeom = hide == "1" || hide == "true"
 			if rotation, ok := exactNativeAttr(child, "", "rot"); ok && rotation != "" && rotation != "0" {
-				return nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram rotated layout shapes are not modeled")
+				return nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram layout shape "+nativeDiagramShapeLabel(pres.shapeType)+" declares dgm:shape@rot="+rotation+"; rotated layout shapes are not modeled")
 			}
 			// Blips are checked by local name: the relationship namespace differs
 			// between transitional and strict packages.
@@ -773,7 +773,7 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateBody(children []*nativeXM
 			}
 			for _, adjLst := range nativeChildren(child, evaluator.ns, "adjLst") {
 				if len(adjLst.Children) != 0 {
-					return nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram shape adjust values are not modeled")
+					return nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram layout shape "+nativeDiagramShapeLabel(pres.shapeType)+" declares "+nativeDiagramAdjustLabel(adjLst)+"; preset adjust values are not modeled")
 				}
 			}
 		case "presOf":

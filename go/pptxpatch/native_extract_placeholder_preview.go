@@ -27,6 +27,24 @@ type nativePlaceholderPreview struct {
 	fill     *string
 	stroke   *NativeStroke
 	hairline bool
+	// frameOnly marks a placeholder family that inherits a painted frame but no
+	// text: PowerPoint paints the layout picture placeholder's own geometry and
+	// fill on a slide that fills in no picture, and inherits no master text
+	// style for it. Such an element carries no native placeholder binding.
+	frameOnly bool
+	// Nearest-wins inherited a:prstGeom/a:custGeom for a frameOnly placeholder,
+	// and its evaluation. Text placeholders keep the unadjusted-rect contract.
+	geometryNode  *nativeXMLNode
+	geometry      *NativeEvaluatedGeometry
+	geometryLabel string
+}
+
+// nativePlaceholderFrameFamily reports the placeholder kinds whose inheritance
+// is a painted frame rather than a text chain. A picture placeholder left
+// empty on the slide still inherits the layout placeholder's geometry, fill
+// and outline, which is the only thing PowerPoint paints for it.
+func nativePlaceholderFrameFamily(kind string) bool {
+	return kind == "pic" || kind == "clipArt"
 }
 
 func (preview *nativePlaceholderPreview) omit(name string) {
@@ -77,12 +95,18 @@ func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXM
 		return node, nil, err
 	}
 	kind, family, ok := nativePlaceholderFamily(identity.kind)
+	frameOnly := false
 	if !ok {
-		return nil, nil, unsupportedNativePlaceholder("placeholder type " + identity.kind + " is outside the read-only title/body inheritance families")
+		if !nativePlaceholderFrameFamily(identity.kind) {
+			return nil, nil, unsupportedNativePlaceholder("placeholder type " + identity.kind + " is outside the read-only title/body inheritance families and inherits no painted frame")
+		}
+		// A picture placeholder inherits a frame, not a text chain: no master
+		// family placeholder and no master txStyles participate.
+		frameOnly, family = true, identity.kind
 	}
 	// Same bottom layer as the non-placeholder preview: presentation
 	// defaultTextStyle, then the master title/body style and placeholder chain.
-	preview := &nativePlaceholderPreview{kind: kind, sourceKind: identity.kind, layers: []*nativeXMLNode{extractor.presentationTextPreviewStyle}}
+	preview := &nativePlaceholderPreview{kind: kind, sourceKind: identity.kind, frameOnly: frameOnly, layers: []*nativeXMLNode{extractor.presentationTextPreviewStyle}}
 	layout, layoutIdentity, err := nativeMatchingPlaceholder(extractor.slideDependencies.layoutRoot, *identity, true, dialect)
 	if err != nil && identity.kind != "" {
 		layout, layoutIdentity, err = nativeMatchingPlaceholder(extractor.slideDependencies.layoutRoot, *identity, false, dialect)
@@ -90,16 +114,22 @@ func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXM
 	if err != nil {
 		return nil, nil, unsupportedNativePlaceholder("placeholder has no unambiguous layout match: " + err.Error())
 	}
-	_, layoutFamily, ok := nativePlaceholderFamily(layoutIdentity.kind)
-	if !ok || layoutFamily != family {
-		return nil, nil, unsupportedNativePlaceholder("placeholder type conflicts with its layout placeholder family")
-	}
-	if identity.kind == "" {
-		preview.kind, _, _ = nativePlaceholderFamily(layoutIdentity.kind)
-		preview.sourceKind = layoutIdentity.kind
+	if frameOnly {
+		if layoutIdentity.kind != identity.kind {
+			return nil, nil, unsupportedNativePlaceholder("placeholder type " + identity.kind + " conflicts with its layout placeholder type " + layoutIdentity.kind)
+		}
+	} else {
+		_, layoutFamily, ok := nativePlaceholderFamily(layoutIdentity.kind)
+		if !ok || layoutFamily != family {
+			return nil, nil, unsupportedNativePlaceholder("placeholder type conflicts with its layout placeholder family")
+		}
+		if identity.kind == "" {
+			preview.kind, _, _ = nativePlaceholderFamily(layoutIdentity.kind)
+			preview.sourceKind = layoutIdentity.kind
+		}
 	}
 	var master *nativeXMLNode
-	if extractor.slideDependencies.masterRoot != nil {
+	if !frameOnly && extractor.slideDependencies.masterRoot != nil {
 		master, _, err = nativeMatchingPlaceholder(extractor.slideDependencies.masterRoot, nativePlaceholderIdentity{kind: family}, false, dialect)
 		if err != nil {
 			master = nil
@@ -190,6 +220,11 @@ func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXM
 	if transform == nil {
 		return nil, nil, unsupportedNativePlaceholder("placeholder geometry remains unresolved through the layout/master chain")
 	}
+	if frameOnly {
+		if err := extractor.evaluateNativePlaceholderFrameGeometry(transform, dialect, preview); err != nil {
+			return nil, nil, err
+		}
+	}
 	if bodyProperties == nil {
 		bodyProperties = &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "bodyPr"}}
 	}
@@ -233,6 +268,44 @@ func (extractor *nativeExtractor) resolveNativePlaceholderPreview(node *nativeXM
 		result.Children = append(result.Children, &nativeXMLNode{Name: xml.Name{Space: dialect.presentation, Local: "txBody"}, Children: []*nativeXMLNode{bodyProperties, {Name: xml.Name{Space: dialect.drawing, Local: "lstStyle"}}}})
 	}
 	return &result, preview, nil
+}
+
+// evaluateNativePlaceholderFrameGeometry evaluates the nearest inherited
+// geometry of a frame placeholder in the inherited frame's own extent, through
+// the same source evaluators the AutoShape extractor uses. A geometry outside
+// the evaluated profile refuses the shape naming the construct, so the slide
+// never silently loses the frame it was meant to paint.
+func (extractor *nativeExtractor) evaluateNativePlaceholderFrameGeometry(transform *nativeXMLNode, dialect nativeExtractDialect, preview *nativePlaceholderPreview) error {
+	if preview.geometryNode == nil {
+		preview.omit("inherited frame geometry (none declared in the chain)")
+		return nil
+	}
+	gaps := nativeShapeGapSet{}
+	resolved, err := validateNativeAutoShapeTransform(transform, dialect, &gaps)
+	if err != nil {
+		return err
+	}
+	if gaps.refused() || resolved.Cx == nil || resolved.Cy == nil {
+		return unsupportedNativePlaceholder("inherited placeholder frame transform is outside the exact subset")
+	}
+	label := "a:" + preview.geometryNode.Name.Local
+	var evaluated *NativeEvaluatedGeometry
+	switch preview.geometryNode.Name.Local {
+	case "custGeom":
+		evaluated, err = evaluateNativeCustomGeometry(preview.geometryNode, dialect.drawing, *resolved.Cx, *resolved.Cy)
+	case "prstGeom":
+		if preset, ok := exactNativeAttr(preview.geometryNode, "", "prst"); ok {
+			label += " prst=" + preset
+		}
+		evaluated, err = evaluateNativePresetSource(preview.geometryNode, dialect.drawing, *resolved.Cx, *resolved.Cy)
+	default:
+		return unsupportedNativePlaceholder("inherited placeholder frame geometry " + label + " is not a modeled DrawingML geometry")
+	}
+	if err != nil {
+		return unsupportedNativePlaceholder("inherited placeholder frame geometry " + label + " is outside the evaluated geometry profile: " + err.Error())
+	}
+	preview.geometry, preview.geometryLabel = evaluated, label
+	return nil
 }
 
 func (extractor *nativeExtractor) validateNativePlaceholderPreviewNonVisual(shape *nativeXMLNode, ancestor bool, dialect nativeExtractDialect, preview *nativePlaceholderPreview) error {
@@ -297,6 +370,11 @@ func (extractor *nativeExtractor) validateNativePlaceholderPreviewShapePropertie
 		return nil, unsupportedNativePlaceholder("unmodeled placeholder shape properties")
 	}
 	allowed := []xml.Name{{Space: dialect.drawing, Local: "xfrm"}, {Space: dialect.drawing, Local: "prstGeom"}, {Space: dialect.drawing, Local: "noFill"}, {Space: dialect.drawing, Local: "solidFill"}, {Space: dialect.drawing, Local: "ln"}}
+	if preview.frameOnly {
+		// A frame placeholder inherits its outline shape, so custom paths and
+		// adjusted presets are carried rather than flattened to a rectangle.
+		allowed = append(allowed, xml.Name{Space: dialect.drawing, Local: "custGeom"})
+	}
 	if ancestor {
 		allowed = append(allowed, xml.Name{Space: dialect.drawing, Local: "gradFill"}, xml.Name{Space: dialect.drawing, Local: "pattFill"}, xml.Name{Space: dialect.drawing, Local: "blipFill"}, xml.Name{Space: dialect.drawing, Local: "effectLst"}, xml.Name{Space: dialect.drawing, Local: "extLst"})
 	}
@@ -337,7 +415,13 @@ func (extractor *nativeExtractor) validateNativePlaceholderPreviewShapePropertie
 				return nil, unsupportedNativePlaceholder("placeholder transform is outside the exact subset")
 			}
 			transform = child
+		case "custGeom":
+			preview.geometryNode = child
 		case "prstGeom":
+			if preview.frameOnly {
+				preview.geometryNode = child
+				continue
+			}
 			preset, ok := exactNativeAttr(child, "", "prst")
 			if !ok || preset != "rect" || requireOnlyNativeAttrs(child, xml.Name{Local: "prst"}) != nil || requireOnlyNativeChildren(child, xml.Name{Space: dialect.drawing, Local: "avLst"}) != nil || !onlyNativeXMLSpace(child.Text) {
 				return nil, unsupportedNativePlaceholder("placeholder geometry must be an unadjusted rectangle")
@@ -575,17 +659,35 @@ func nativeMarkPlaceholderPreview(element *NativeElement, preview *nativePlaceho
 	if preview.kind == NativePlaceholderTypeTitle || preview.kind == NativePlaceholderTypeCtrTitle {
 		family = "title"
 	}
-	message := fmt.Sprintf("Read-only approximate placeholder inheritance: %s placeholder resolved through the layout-by-index and master-by-%s-family chain with master %sStyle, ancestor list styles and body properties as declared preview layers.", preview.sourceKind, family, family)
-	if !preview.hasTextBody {
-		message += " The slide placeholder has no text body; PowerPoint paints no prompt, so no text is invented."
+	var message string
+	if preview.frameOnly {
+		message = fmt.Sprintf("Read-only approximate placeholder inheritance: %s placeholder resolved through the layout-by-index chain as a painted frame. This family inherits geometry, fill and outline only; no master text style participates and the element carries no native placeholder binding.", preview.sourceKind)
+		if !preview.hasTextBody {
+			message += " The slide placeholder fills in no content and has no text body, so no text is invented."
+		}
+	} else {
+		message = fmt.Sprintf("Read-only approximate placeholder inheritance: %s placeholder resolved through the layout-by-index and master-by-%s-family chain with master %sStyle, ancestor list styles and body properties as declared preview layers.", preview.sourceKind, family, family)
+		if !preview.hasTextBody {
+			message += " The slide placeholder has no text body; PowerPoint paints no prompt, so no text is invented."
+		}
 	}
 	if preview.fill != nil || preview.stroke != nil {
 		// The painted frame reuses the AutoShape fill/stroke contract, so the
-		// preview element is a rect preset shape; it stays preserve-only and
-		// every placeholder mutation refusal keys off this diagnostic.
-		preset := NativeShapePresetRect
-		element.Kind, element.Preset, element.Fill, element.Stroke = NativeElementKindShape, &preset, preview.fill, preview.stroke
+		// preview element is a shape; it stays preserve-only and every
+		// placeholder mutation refusal keys off this diagnostic. A frame
+		// placeholder paints the geometry it inherited; every other preview
+		// frame stays the rect preset it has always been.
+		element.Kind, element.Fill, element.Stroke = NativeElementKindShape, preview.fill, preview.stroke
+		if preview.geometry != nil {
+			element.Preset, element.Geometry = nil, preview.geometry
+		} else {
+			preset := NativeShapePresetRect
+			element.Preset, element.Geometry = &preset, nil
+		}
 		var painted []string
+		if preview.geometry != nil {
+			painted = append(painted, fmt.Sprintf("geometry %s evaluated from source (%d path(s))", preview.geometryLabel, len(preview.geometry.Paths)))
+		}
 		if preview.fill != nil {
 			painted = append(painted, "solid fill "+*preview.fill)
 		}
@@ -596,8 +698,12 @@ func nativeMarkPlaceholderPreview(element *NativeElement, preview *nativePlaceho
 			}
 			painted = append(painted, outline+")")
 		}
-		message += " Frame " + strings.Join(painted, " and ") + " inherited from the slide/layout/master placeholder chain (nearest wins) and painted read-only as a rect preset."
-		if !nativeParagraphsHaveText(element.Paragraphs) {
+		shape := "a rect preset"
+		if preview.geometry != nil {
+			shape = "the inherited source geometry"
+		}
+		message += " Frame " + strings.Join(painted, " and ") + " inherited from the slide/layout/master placeholder chain (nearest wins) and painted read-only as " + shape + "."
+		if !preview.frameOnly && !nativeParagraphsHaveText(element.Paragraphs) {
 			message += " PowerPoint slideshow and export hide placeholders without text, so this painted frame is an approximation."
 		}
 	}
