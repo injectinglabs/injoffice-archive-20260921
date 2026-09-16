@@ -1,9 +1,12 @@
-/** Approximate DrawingML rectangles, lines and text boxes for the read-only
- * approximate page preview.
+/** Approximate DrawingML rectangles, lines, text boxes and group shapes for the
+ * read-only approximate page preview.
  *
  * The strict extractor keeps refusing wps:wsp shapes. The Go sidecar
  * (`InspectNativeApproximateDrawingShapesV1`) joins those refusals to their
- * source nodes and describes a bounded subset. This module validates that
+ * source nodes and describes a bounded subset. A `wpg:wgp` group shape arrives
+ * already flattened: the sidecar maps each child out of the group's child
+ * coordinate space into the group's placed extent and describes it as its own
+ * anchored shape, so this module needs no group-specific placement. This module validates that
  * sidecar against the current document, reserves inline shapes as glyphless
  * textbox atoms in the internal body copy, and appends approximate paint
  * commands after body pagination: fills and strokes reuse the existing
@@ -31,7 +34,7 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order. Original drawing restrictions and source bytes are unchanged.` as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
