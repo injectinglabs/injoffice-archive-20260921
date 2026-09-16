@@ -2196,8 +2196,8 @@ func nativeExactResolvedParagraphIndent(node *nativeXMLNode, wordNS string) bool
 			return false
 		}
 	}
-	for _, name := range []string{"leftChars", "rightChars", "startChars", "endChars", "firstLineChars", "hangingChars"} {
-		if _, present := nativeAttr(node, wordNS, name); present {
+	for _, pair := range nativeCharacterIndentPairs {
+		if present, founded, _ := nativeCharacterIndentResolution(node, wordNS, pair.characters, pair.absolute); present && !founded {
 			return false
 		}
 	}
