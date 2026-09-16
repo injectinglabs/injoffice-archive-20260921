@@ -32,6 +32,11 @@ type nativeResolvedTheme struct {
 	fonts  nativeThemeFonts
 	colors map[string]string
 	clrMap map[string]string
+	// a:fmtScheme/a:bgFillStyleLst entries, in document order. A p:bgRef with
+	// idx >= 1001 selects one of these by 1-based index and substitutes its own
+	// colour for every a:phClr inside. Only entries this tier can resolve are
+	// kept; an unsupported entry is stored as nil so the indices stay correct.
+	bgFillStyles []*nativeXMLNode
 }
 
 func (theme nativeResolvedTheme) resolveTypeface(value string) (string, error) {
@@ -88,7 +93,12 @@ func firstNonEmptyNativeTypeface(values ...string) string {
 	return ""
 }
 
-func resolveNativeTheme(graph nativeSlideDependencyGraph, dialect nativeExtractDialect) (nativeResolvedTheme, error) {
+// resolveNativeTheme builds the theme for a slide. The colour map is layered
+// master -> layout -> slide, because a slide's effective map is what resolves
+// every schemeClr reference on that slide, including ones inherited from a
+// layout or master part. Resolving an inherited reference under the map of the
+// part it was authored in paints the wrong colour whenever an override exists.
+func resolveNativeThemeForSlide(graph nativeSlideDependencyGraph, slideRoot *nativeXMLNode, dialect nativeExtractDialect) (nativeResolvedTheme, error) {
 	theme := nativeResolvedTheme{
 		colors: map[string]string{},
 		clrMap: map[string]string{},
@@ -103,7 +113,56 @@ func resolveNativeTheme(graph nativeSlideDependencyGraph, dialect nativeExtractD
 			return nativeResolvedTheme{}, err
 		}
 	}
+	// ECMA-376 CT_ColorMappingOverride: a:masterClrMapping inherits the parent's
+	// effective map, a:overrideClrMapping replaces it outright. Layout first, then
+	// slide, so the nearest override wins.
+	for _, root := range []*nativeXMLNode{graph.layoutRoot, slideRoot} {
+		if root == nil {
+			continue
+		}
+		if err := parseNativeColorMapOverride(root, dialect, &theme); err != nil {
+			return nativeResolvedTheme{}, err
+		}
+	}
 	return theme, nil
+}
+
+// resolveNativeTheme keeps the master-only colour map for callers that have no
+// slide in hand.
+func resolveNativeTheme(graph nativeSlideDependencyGraph, dialect nativeExtractDialect) (nativeResolvedTheme, error) {
+	return resolveNativeThemeForSlide(graph, nil, dialect)
+}
+
+// parseNativeColorMapOverride applies a part's p:clrMapOvr to the effective map.
+// Anything outside the exact a:overrideClrMapping form is left alone rather than
+// guessed, so the map simply stays as inherited.
+func parseNativeColorMapOverride(root *nativeXMLNode, dialect nativeExtractDialect, theme *nativeResolvedTheme) error {
+	override, err := nativeSingleton(root, dialect.presentation, "clrMapOvr", false)
+	if err != nil || override == nil {
+		return err
+	}
+	mapping, err := nativeSingleton(override, dialect.drawing, "overrideClrMapping", false)
+	if err != nil || mapping == nil {
+		// a:masterClrMapping, or a form we do not model: inherit unchanged.
+		return err
+	}
+	allowed := make([]xml.Name, 0, len(nativeThemeColorMapSlots))
+	for _, slot := range nativeThemeColorMapSlots {
+		allowed = append(allowed, xml.Name{Local: slot})
+	}
+	if requireOnlyNativeAttrs(mapping, allowed...) != nil || requireOnlyNativeChildren(mapping) != nil {
+		return nil
+	}
+	clrMap := map[string]string{}
+	for _, slot := range nativeThemeColorMapSlots {
+		value, ok := exactNativeAttr(mapping, "", slot)
+		if !ok || value == "" {
+			return nil
+		}
+		clrMap[slot] = value
+	}
+	theme.clrMap = clrMap
+	return nil
 }
 
 func parseNativeThemeElements(root *nativeXMLNode, dialect nativeExtractDialect, theme *nativeResolvedTheme) error {
@@ -124,6 +183,23 @@ func parseNativeThemeElements(root *nativeXMLNode, dialect nativeExtractDialect,
 	fonts, err := nativeSingleton(elements, dialect.drawing, "fontScheme", false)
 	if err != nil {
 		return err
+	}
+	format, err := nativeSingleton(elements, dialect.drawing, "fmtScheme", false)
+	if err != nil {
+		return err
+	}
+	if format != nil {
+		if styles, listErr := nativeSingleton(format, dialect.drawing, "bgFillStyleLst", false); listErr == nil && styles != nil {
+			for _, entry := range styles.Children {
+				if entry.Name.Space == dialect.drawing && entry.Name.Local == "solidFill" {
+					theme.bgFillStyles = append(theme.bgFillStyles, entry)
+					continue
+				}
+				// gradFill / blipFill / pattFill are not approximated; keep the slot
+				// so idx arithmetic stays right and refuse it when selected.
+				theme.bgFillStyles = append(theme.bgFillStyles, nil)
+			}
+		}
 	}
 	if scheme != nil {
 		if parseErr := parseNativeThemeColorScheme(scheme, dialect, theme); parseErr != nil {
