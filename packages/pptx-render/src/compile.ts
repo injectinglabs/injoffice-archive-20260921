@@ -1699,8 +1699,8 @@ function authoredColumnLayout(context: TextContainerContext, state: CompileState
 // carry the authored paragraph spacing. The Go extractor resolved the style
 // cascade and converted every a:spcPts to EMU exactly, so only two decisions
 // remain here: an absolute line pitch replaces the measured one, and a
-// percentage scales it. The percentage form is a declared approximation of the
-// renderer's measured natural line box, not PowerPoint's line-spacing model.
+// percentage scales the single-spaced line height of 1.2 x the largest font
+// size on the line (see singleSpacedLineHeight).
 // The gaps are already EMU and are applied only between paragraphs. Only
 // elements the contract marked as read-only paragraph-spacing approximations
 // carry any of it.
@@ -1720,16 +1720,49 @@ function authoredParagraphSpacing(paragraph: NativeParagraph, context: TextConta
 // reading fits both with one line-height constant. An absolute a:lnSpc has no
 // percentage to subtract from, so there the reduction scales. Either way the
 // reduction reaches the line spacing exactly once and never the paragraph gaps.
-function authoredLinePitch(lineHeight: number, spacing: NativeParagraph | undefined, reductionPercent1000: number, path: string, state: CompileState): number {
+function authoredLinePitch(lineHeight: number, singleSpaced: number, spacing: NativeParagraph | undefined, reductionPercent1000: number, path: string, state: CompileState): number {
   if (spacing?.lineSpacingEmu !== undefined) return reducedLinePitch(spacing.lineSpacingEmu, reductionPercent1000, path, state)
   const authored = spacing?.lineSpacingPercent1000
-  if (authored === undefined) return reducedLinePitch(lineHeight, reductionPercent1000, path, state)
+  // No authored percentage and no reduction: nothing scales the line, so
+  // ECMA-376 21.1.2.2.5's omitted-a:lnSpc rule stands and the measured natural
+  // box is the pitch, byte-identically to before.
+  if (authored === undefined) return reducedLinePitch(reductionPercent1000 <= 0 ? lineHeight : singleSpaced, reductionPercent1000, path, state)
   const effective = authored - reductionPercent1000
   // A reduction at least as large as the authored spacing must still advance.
   if (effective < 1) return 1
-  const pitch = Number((BigInt(lineHeight) * BigInt(effective)) / 100000n)
+  const pitch = Number((BigInt(singleSpaced) * BigInt(effective)) / 100000n)
   if (!Number.isSafeInteger(pitch)) throw new RenderCompileError('render.textMetric', path, 'authored line pitch exceeds integer precision')
   return pitch < 1 ? 1 : pitch
+}
+
+// ECMA-376 21.1.2.2.5 defines the omitted a:lnSpc case as "the spacing between
+// two lines of text should be determined by the point size of the largest piece
+// of text within a line", and 21.1.2.2.11 defines a:spcPct as a percentage "of
+// the text size" rather than of the font's own ascent/descent box. PowerPoint's
+// single-spaced line for that percentage is 1.2 x the largest font size on the
+// line, not the face's ascent - descent + lineGap. Two PowerPoint 16.112.4 PDF
+// exports pin the constant, each read from the saved text matrices rather than
+// from a raster: 3columns.pptx (Calibri 15pt, a:lnSpc 90% less a 20%
+// lnSpcReduction) advances 188.88pt over 15 lines, which is 12.592pt per line
+// against 1.2 x 15 x 70% = 12.6pt and against Calibri's own box of
+// 1.2207em x 15 x 70% = 12.817pt (14/300in too tall over that run); font-scale
+// .pptx (Calibri 27pt after fontScale, a:lnSpc 100% less a 20% lnSpcReduction)
+// advances 78.0pt over 3 lines against 1.2 x 27 x 80% = 25.92pt/line and
+// Calibri's box at 26.367pt/line. Both exports quantise baselines to 1/300in,
+// which is the whole residual on the 1.2 reading and nowhere near the residual
+// on the font-box reading. The face's own box therefore stays the line box for
+// height, overflow and anchoring; only the percentage is taken against this.
+function singleSpacedLineHeight(metricRuns: readonly ShapedRunResult[], fallback: number, path: string): number {
+  let largestMilliPoints = 0
+  for (const item of metricRuns) {
+    if (item.run.fontSizeMilliPoints > largestMilliPoints) largestMilliPoints = item.run.fontSizeMilliPoints
+  }
+  if (largestMilliPoints < 1) return fallback
+  // 1.2 x the size, half-up in exact integer milli-points.
+  const milliPoints = Math.floor((largestMilliPoints * 12 + 5) / 10)
+  if (!Number.isSafeInteger(milliPoints)) throw new RenderCompileError('render.textMetric', path, 'single-spaced line height exceeds integer precision')
+  const emu = milliPointsToEmu(milliPoints, path)
+  return emu < 1 ? fallback : emu
 }
 
 // A line whose pitch is smaller than its measured natural box has had leading
@@ -1885,7 +1918,7 @@ async function compileParagraphs(paragraphs: readonly NativeParagraph[], context
       checkCoordinate(milliPointsToEmu(-descentMilliPoints, path), path, state.budget)
       checkCoordinate(milliPointsToEmu(lineGapMilliPoints, path), path, state.budget)
       checkCoordinate(lineHeight, path, state.budget, true)
-      const pitch = authoredLinePitch(lineHeight, spacing, lineSpacingReduction, path, state)
+      const pitch = authoredLinePitch(lineHeight, singleSpacedLineHeight(metricRuns, lineHeight, path), spacing, lineSpacingReduction, path, state)
       const baselineAscent = compressedLineAscent(ascent, lineHeight, pitch)
       checkCoordinate(baselineAscent, path, state.budget)
       const align = paragraph.align ?? 'left'
@@ -1996,7 +2029,7 @@ async function compileTextBody(paragraphs: readonly NativeParagraph[], context: 
     const vertical = context.layout?.writingMode === 'vertical-clockwise'
     if (authoredColumns && (vertical || context.exactArea)) throw new TextBodyLayoutRefusal('text.textColumnsUnavailable', 'authored text columns are not modeled for vertical or rotated-upright text bodies')
     if (state.paragraphSpacingElements.has(context.elementId) && paragraphs.some((paragraph) => paragraph.lineSpacingPercent1000 !== undefined || paragraph.lineSpacingEmu !== undefined || paragraph.spaceBeforeEmu !== undefined || paragraph.spaceAfterEmu !== undefined)) {
-      state.diagnostics.push({ severity: 'warning', code: 'text.authoredParagraphSpacingApproximate', message: 'Read-only approximate preview applies the authored paragraph spacing the extractor resolved from the style cascade: an absolute a:lnSpc replaces the measured line pitch and a percentage a:lnSpc scales it, which approximates the authored spacing against this renderer\'s measured natural line box rather than modeling PowerPoint\'s line spacing. The authored a:spcBef and a:spcAft gaps appear only between paragraphs, never above the first or below the last, and an authored normAutofit lnSpcReduction still reduces only the resulting line pitch. Line positions, wrapping and overflow are not Office-qualified.', slideId: state.slide.id, elementId: context.elementId })
+      state.diagnostics.push({ severity: 'warning', code: 'text.authoredParagraphSpacingApproximate', message: 'Read-only approximate preview applies the authored paragraph spacing the extractor resolved from the style cascade: an absolute a:lnSpc replaces the measured line pitch, and a percentage a:lnSpc scales the single-spaced line height of 1.2 x the largest font size on the line, which is the base two PowerPoint 16.112.4 PDF exports measure rather than the face\'s own ascent/descent box. That box still sets the line height used for overflow and anchoring. The authored a:spcBef and a:spcAft gaps appear only between paragraphs, never above the first or below the last, and an authored normAutofit lnSpcReduction still reduces only the resulting line pitch. Line positions, wrapping and overflow are not Office-qualified.', slideId: state.slide.id, elementId: context.elementId })
     }
     if (authoredColumns) state.diagnostics.push({ severity: 'warning', code: 'text.authoredColumnsApproximate', message: `Read-only approximate preview flows the shaped lines through ${context.layout!.columnCount} equal-width authored columns separated by the authored ${context.layout!.columnSpacingEmu ?? 0} EMU gap, wrapping at the column width and continuing left to right once the frame height is reached. Column balancing, line breaks and overflow are not Office-qualified.`, slideId: state.slide.id, elementId: context.elementId })
     if (vertical && paragraphs.some(paragraph=>paragraph.bullet!==false || paragraph.level!==0 || (paragraph.marginLeftEmu??0)!==0 || (paragraph.indentEmu??0)!==0 || paragraph.runs.some(run=>!run.text || !/^[\x20-\x7e]+$/.test(run.text)))) throw new TextBodyLayoutRefusal('text.verticalUnsupported','Clockwise vertical preview requires nonempty ASCII Latin text and no bullets or paragraph offsets.')
