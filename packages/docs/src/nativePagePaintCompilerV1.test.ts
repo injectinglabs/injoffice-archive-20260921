@@ -2338,9 +2338,13 @@ describe('native DOCX page-paint compiler v1', () => {
     const tampered=structuredClone(completed.page_paint_output)
     tampered.provenance.table_projection.sha256='sha256:'+'0'.repeat(64)
     expect(decodeNativeDocxPagePaintForRequestV1(tampered,completed.page_paint_request,completed.page_paint_request.outline_provider).ok).toBe(false)
-    for(const change of ['missing','conflicting','explicit-table','section-overflow','content-overflow'] as const){
+    // A cell that states no absolute preferred width states nothing to
+    // conflict with (ECMA-376 17.4.72), so the authored grid still governs.
+    const omitted=structuredClone(document);delete omitted.body.blocks[0]!.table!.rows[0]!.cells[1]!.width_twips
+    const omittedQualified=qualifyNativeDocxTablesV1(omitted,resolved,shaped)
+    expect(omittedQualified).toMatchObject({status:'qualified',tables:[{width_millipoints:250000,grid_widths_millipoints:[100000,150000],width_policy:{name:'source-preferred-nonconflicting-v1',source_cell_widths_twips:[[2000,null]]}}]})
+    for(const change of ['conflicting','explicit-table','section-overflow','content-overflow'] as const){
       const d=structuredClone(document),r=structuredClone(resolved),s=structuredClone(shaped),t=d.body.blocks[0]!.table!
-      if(change==='missing')delete t.rows[0]!.cells[1]!.width_twips
       if(change==='conflicting')t.rows[0]!.cells[1]!.width_twips=2999
       if(change==='explicit-table')t.width_twips=5000
       if(change==='section-overflow'){t.grid_widths_twips=[10000,10000];for(const cell of t.rows[0]!.cells)cell.width_twips=10000}
@@ -2349,6 +2353,45 @@ describe('native DOCX page-paint compiler v1', () => {
       if(fallback.status==='qualified'){expect(fallback.tables[0]!.width_policy?.name).toBe('shaped-content-minmax-v1');expect(fallback.sha256).not.toBe(q.sha256)}
     }
   },15000)
+  /** tdf117297_tableStyle.docx and tdf118812_tableStyles-comprehensive.docx.
+   * The intrinsic-width probe used to refuse the whole document over any
+   * shaping diagnostic at all. A paint-only resolved-layout diagnostic is
+   * propagated under its own code precisely because it does not change a
+   * shaping advance, so it cannot change an intrinsic width; and a measurement
+   * the approximate lane cannot take selects its declared authored-grid policy
+   * instead of discarding every other block on the page. */
+  it.each(['paint-only','blocking'] as const)('measures intrinsic table widths through a %s resolved diagnostic outside the table', async (kind) => {
+    const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const table = document.body.blocks[0]!.table!
+    table.layout = 'autofit'; delete table.width_twips
+    const paragraph = structuredClone(table.rows[0]!.cells[0]!.paragraphs[0]!), oldParagraph = paragraph.id, oldRun = paragraph.runs[0]!.id
+    paragraph.id = 'paragraph:beside-autofit'; paragraph.runs[0]!.id = 'run:beside-autofit'
+    document.body.blocks.push({ kind: 'paragraph', id: paragraph.id, paragraph })
+    resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs.find((entry) => entry.paragraph_id === oldParagraph)!), paragraph_id: paragraph.id })
+    resolved.runs.push({ ...structuredClone(resolved.runs.find((entry) => entry.run_id === oldRun)!), paragraph_id: paragraph.id, run_id: paragraph.runs[0]!.id })
+    rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids.push(paragraph.id, paragraph.runs[0]!.id); inventory.references[0]!.scope_ids.sort() })
+    resolved.diagnostics.push({
+      code: kind === 'paint-only' ? 'THEME_COLOR_PRESERVED' : 'SCRIPT_FONT_PRESERVED', severity: 'unsupported', scope_id: paragraph.runs[0]!.id,
+      part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]', preservation: 'preserve-verbatim', message: 'Preserved for a future painter',
+    })
+    const before = JSON.stringify(document)
+    // A paint-only diagnostic is propagated by shaping under a code that states
+    // it does not change an advance, so the intrinsic probe stays usable and
+    // the table keeps its authored grid. A blocking one really does leave the
+    // paragraph unshaped, and strict paint still owes the caller that refusal.
+    if (kind === 'blocking') {
+      await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow('Content autofit measurement refused')
+      expect(JSON.stringify(document)).toBe(before)
+      return
+    }
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    expect(prepared.page_paint_request.paginated_layout.status).toBe('paginated')
+    expect(qualifyNativeDocxTablesV1(document, resolved, prepared.page_paint_request.pagination_request.shaped_lines)).toMatchObject({
+      status: 'qualified', tables: [{ width_millipoints: 9_360 * 50, width_policy: { name: 'source-preferred-nonconflicting-v1' } }],
+    })
+    expect(JSON.stringify(document)).toBe(before)
+  }, 15000)
+
   it('composes content autofit with a pagination-dependent body field without changing either source', async () => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     const table = document.body.blocks[0]!.table!

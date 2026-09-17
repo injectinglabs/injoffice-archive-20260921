@@ -270,7 +270,11 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   if (sourceTables.length === 0) return { status: 'qualified', tables: [], paragraph_widths: new Map(), sha256: nativeDocxTableProjectionSha256V1([]) }
   const fail = (scope_id: string, message: string): NativeDocxQualifiedTablesV1 => ({ status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'unsupported-table-source', scope_id, message }] })
   if (resolved.document_id !== document.document_id || resolved.revision !== document.revision) return fail(document.document_id, 'Resolved table geometry must exact-join the source document and revision')
-  if (sourceTables.some(table => table.layout === 'autofit') && (!shaped || shaped.document_id !== document.document_id || shaped.revision !== document.revision || resolved.document_id !== document.document_id || resolved.revision !== document.revision)) return fail(document.document_id, 'Autofit measurements must exact-join the source document and revision')
+  // Content autofit may only read measurements that exact-join this source. The
+  // approximate lane may also be handed no measurements at all: its declared
+  // authored-grid policy sizes an auto-width table without them, so an absent
+  // measurement selects that policy instead of refusing the whole body.
+  if (sourceTables.some(table => table.layout === 'autofit') && (!shaped ? !approximate : shaped.document_id !== document.document_id || shaped.revision !== document.revision || resolved.document_id !== document.document_id || resolved.revision !== document.revision)) return fail(document.document_id, 'Autofit measurements must exact-join the source document and revision')
   if (sourceTables.length > DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables) return { status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'table-resource-limit', scope_id: document.document_id, message: `Tables exceed ${DOCX_TABLE_PAGE_PAINT_LIMITS.maxTables}` }] }
   const resolvedParagraphs = new Map(resolved.paragraphs.map((entry) => [entry.paragraph_id, entry]))
   const autofitIndexes = shaped ? { paragraphs: new Map(shaped.paragraphs.map(entry => [entry.paragraph_id, entry])), properties: resolvedParagraphs } : undefined
@@ -330,8 +334,20 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     if (table.layout === 'autofit') {
       const container = tableContainers.get(table.id)
       const projected = container ? resolveNativeDocxTableAutofitV1(table, container.width, container.sectionID, resolved, shaped, autofitIndexes) : undefined
-      if (!projected) return fail(table.id, 'Content autofit requires bounded source-joined natural text measurements, unmerged LTR cells and satisfiable min/max widths in one section column')
-      table = projected.table; widthPolicy = projected.policy
+      // Strict paint has only this one way to size an auto-width table, so an
+      // unmeasurable one refuses. The approximate lane already declares a
+      // second, coarser policy for exactly this shape -- the authored tblGrid,
+      // fitted to the text column -- and applies it to every auto-width table
+      // whose resolved geometry is absent. A table whose cells the intrinsic
+      // probe cannot measure is not a different document; when the source does
+      // state a usable grid it takes that same declared policy below rather
+      // than discarding the whole body. A table that states no grid either has
+      // no second policy to fall back on and keeps this exact refusal.
+      const authoredGridSum = table.grid_widths_twips?.reduce((total, width) => total + width, 0)
+      const authoredGridAvailable = approximate === true && (table.width_twips === undefined || table.width_twips === 0)
+        && table.grid_widths_twips !== undefined && table.grid_widths_twips.length > 0 && Number.isSafeInteger(authoredGridSum) && authoredGridSum! > 0
+      if (!projected && !authoredGridAvailable) return fail(table.id, 'Content autofit requires bounded source-joined natural text measurements, unmerged LTR cells and satisfiable min/max widths in one section column')
+      if (projected) { table = projected.table; widthPolicy = projected.policy }
     }
     if (table.width_percent_fiftieths !== undefined) {
       const container = tableContainers.get(table.id)
