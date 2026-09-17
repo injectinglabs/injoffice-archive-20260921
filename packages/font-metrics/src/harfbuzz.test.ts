@@ -353,6 +353,35 @@ describe('canonical HarfBuzz text shaper v1', () => {
     expect(refusalCode(shape('abc', {}, { ...font, face: { ...face, sourceKind: 'system' } }))).toBe('unsupported-font-format')
   })
 
+  it('copies and hashes a face once per cached face, not once per shaped run', () => {
+    // `Uint8Array.from` copies through the source's iterator, so a counting
+    // subclass records exactly how many times the provider takes an owned copy
+    // of the caller's font bytes — the same copies it hashes.
+    let copies = 0
+    class CountedBytes extends Uint8Array {}
+    Object.defineProperty(CountedBytes.prototype, Symbol.iterator, {
+      value(this: Uint8Array) {
+        copies += 1
+        return Uint8Array.prototype[Symbol.iterator].call(this)
+      },
+      writable: true,
+      configurable: true,
+    })
+    const bytes = new CountedBytes(FONT_BYTES.byteLength)
+    bytes.set(FONT_BYTES)
+    const resource: FontResource = { ...font, bytes }
+    const shaper = createHarfBuzzTextShaperV1({ sourceRevision: 'git:test-suite' })
+    const shapeOnce = (text: string) => shaper.shape({ run: run(text), startUtf16: 0, endUtf16: text.length, font: resource })
+
+    for (const text of ['alpha', 'beta', 'gamma', 'delta']) expect(refusalCode(shapeOnce(text))).toBeUndefined()
+    expect(copies).toBe(1)
+
+    // The time-of-check/time-of-use guard still holds against a cached face.
+    bytes[bytes.byteLength - 1] = bytes[bytes.byteLength - 1]! ^ 0xff
+    expect(refusalCode(shapeOnce('epsilon'))).toBe('font-digest-mismatch')
+    expect(copies).toBe(1)
+  })
+
   it('rejects digest mismatches, fabricated metrics, collection confusion, and malformed sfnt bytes before HarfBuzz', () => {
     const digestMismatch: FontResource = { ...font, face: { ...face, contentDigest: `sha256:${'0'.repeat(64)}` } }
     expect(refusalCode(shape('abc', {}, digestMismatch))).toBe('font-digest-mismatch')
