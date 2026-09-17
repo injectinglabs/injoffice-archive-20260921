@@ -2385,14 +2385,33 @@ func (resolver *nativeLayoutResolver) parseIndent(node *nativeXMLNode, scopeID, 
 			resolver.addDiagnostic("INVALID_PARAGRAPH_INDENT", scopeID, partName, node, "Invalid paragraph indentation is preserved and ignored")
 		}
 	}
+	// Character-unit measures supersede their absolute companion in Word, so
+	// they are applied after the absolute loop above and before the
+	// first-line/hanging conflict rule sees the resulting measures.
+	targets := map[string]**int64{
+		"left":      &properties.indentLeft,
+		"right":     &properties.indentRight,
+		"start":     &properties.indentStart,
+		"end":       &properties.indentEnd,
+		"firstLine": &properties.firstLine,
+		"hanging":   &properties.hanging,
+	}
+	for _, pair := range nativeCharacterIndentPairs {
+		present, founded, zero := nativeCharacterIndentResolution(node, resolver.wordNS, pair.characters, pair.absolute)
+		if !present {
+			continue
+		}
+		if !founded {
+			resolver.addDiagnostic("CHARACTER_INDENT_PRESERVED", scopeID, partName, node, "Character-unit indentation requires font metrics and is not guessed")
+			continue
+		}
+		if zero {
+			*targets[pair.absolute] = nativeInt64(0)
+		}
+	}
 	if properties.firstLine != nil && properties.hanging != nil {
 		properties.firstLine, properties.hanging = nil, nil
 		resolver.addDiagnostic("CONFLICTING_PARAGRAPH_INDENT", scopeID, partName, node, "Conflicting first-line and hanging indents are preserved and neither is guessed")
-	}
-	for _, name := range []string{"leftChars", "rightChars", "startChars", "endChars", "firstLineChars", "hangingChars"} {
-		if _, present := nativeAttr(node, resolver.wordNS, name); present {
-			resolver.addDiagnostic("CHARACTER_INDENT_PRESERVED", scopeID, partName, node, "Character-unit indentation requires font metrics and is not guessed")
-		}
 	}
 }
 
