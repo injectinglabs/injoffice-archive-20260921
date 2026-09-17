@@ -48,7 +48,7 @@ import {
   type NativeDocxDocumentV1,
   type NativeDocxValidationIssue,
 } from './nativeContract.js'
-import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
+import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1, type NativeDocxResolvedRunPropertiesV1 } from './nativeResolvedLayout.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1,shapeNativeDocxFontPreviewLinesV1 } from './nativeShapingLines.js'
 import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
 import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
@@ -701,14 +701,20 @@ function shapingParagraphWidths(
 
 function resolvedFontReferences(resolved: NativeDocxResolvedLayoutInputV1): NativeDOCXFontInventoryV1['references'] {
   const references = new Map<string, { family: string; weight: 400 | 700; style: 'normal' | 'italic'; scopes: Set<string> }>()
-  const add = (properties: { font_family?: string; bold?: boolean; italic?: boolean }, scope: string) => {
-    if (!properties.font_family) return
+  const addFamily = (family: string | undefined, properties: { bold?: boolean; italic?: boolean }, scope: string) => {
+    if (!family) return
     const weight = properties.bold === true ? 700 : 400
     const style = properties.italic === true ? 'italic' : 'normal'
-    const key = `${asciiLowerNative(properties.font_family)}\u0000${weight}\u0000${style}`
+    const key = `${asciiLowerNative(family)}\u0000${weight}\u0000${style}`
     let entry = references.get(key)
-    if (!entry) { entry = { family: properties.font_family, weight, style, scopes: new Set() }; references.set(key, entry) }
+    if (!entry) { entry = { family, weight, style, scopes: new Set() }; references.set(key, entry) }
     entry.scopes.add(scope)
+  }
+  // The East-Asian slot is carried only by text that reaches it, so its face is
+  // a font the document genuinely needs, exactly like font_family.
+  const add = (properties: NativeDocxResolvedRunPropertiesV1, scope: string) => {
+    addFamily(properties.font_family, properties, scope)
+    addFamily(properties.east_asia_font_family, properties, scope)
   }
   for (const run of resolved.runs) add(run.properties, run.run_id)
   for (const paragraph of resolved.paragraphs) {

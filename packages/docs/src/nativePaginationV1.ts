@@ -1850,7 +1850,17 @@ function unshapedParagraphCause(context: PaginationContext, paragraphID: string)
     // explicitly do not change shaping advances, so attributing a refusal to one
     // names an innocent code. A blocker with no source code is still a blocker:
     // report it under its own shaping code rather than discarding the message.
-    if (diagnostic.code !== 'unresolved-layout-diagnostic' && diagnostic.code !== 'table-layout-unsupported') continue
+    // A provider refusal (an unsupported script, a .notdef glyph, an
+    // unadvertised feature) blocks the paragraph just as surely as a resolved
+    // layout diagnostic, and it is the only record of why. Dropping it left
+    // exactly the font-side refusals reporting a causeless symptom.
+    if (diagnostic.code !== 'unresolved-layout-diagnostic' && diagnostic.code !== 'table-layout-unsupported'
+      && diagnostic.code !== 'provider-refusal' && diagnostic.code !== 'provider-decision' && diagnostic.code !== 'provider-failure'
+      && diagnostic.code !== 'missing-run-font'
+      && diagnostic.code !== 'unsupported-numbering-format' && diagnostic.code !== 'unsupported-numbering-text'
+      && diagnostic.code !== 'list-marker-alignment-deferred' && diagnostic.code !== 'list-marker-tab-deferred'
+      && diagnostic.code !== 'numbering-state-invalidated' && diagnostic.code !== 'empty-line-metrics-unresolved'
+      && diagnostic.code !== 'justification-unsupported' && diagnostic.code !== 'cluster-overflow') continue
     const cause = { code: diagnostic.source_diagnostic_code ?? diagnostic.code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
     if (diagnostic.code === 'table-layout-unsupported') {
       if (tableID !== undefined && diagnostic.scope_id === tableID && (tableCause === undefined || !tableCauseCarriesSource && diagnostic.source_diagnostic_code !== undefined)) {

@@ -1095,27 +1095,20 @@ func nativeExactThemeSrgbSlot(slot *nativeXMLNode, drawingNS string) (string, bo
 type nativeThemeLatinFonts struct {
 	major string
 	minor string
+	// East-Asian slots, already answered through the fontScheme script table
+	// when <a:ea typeface=""/> is empty. See native_east_asian_theme.go.
+	majorEastAsia nativeThemeSlot
+	minorEastAsia nativeThemeSlot
 }
 
-func nativeExactThemeLatinTypeface(fontSet *nativeXMLNode, drawingNS string) (string, bool) {
-	if fontSet == nil {
-		return "", false
-	}
-	latin := nativeUniqueThemeFontChild(fontSet, drawingNS, "latin")
-	if latin == nil || !nativeExactLeaf(latin,
-		xml.Name{Local: "typeface"}, xml.Name{Space: drawingNS, Local: "typeface"},
-		xml.Name{Local: "panose"}, xml.Name{Space: drawingNS, Local: "panose"},
-	) {
-		return "", false
-	}
-	value, ok := nativeDrawingAttr(latin, drawingNS, "typeface")
-	if !ok || value == "" || !nativeBoundedResolvedString(value, 256) {
-		return "", false
-	}
-	return value, true
+// A theme font slot: authored says the slot is exactly readable, typeface is
+// its answer, which may be empty when nothing answered it.
+type nativeThemeSlot struct {
+	typeface string
+	authored bool
 }
 
-func nativeParseThemeLatinFonts(root *nativeXMLNode, drawingNS string) nativeThemeLatinFonts {
+func nativeParseThemeLatinFonts(root *nativeXMLNode, drawingNS, eastAsiaScript string) nativeThemeLatinFonts {
 	fonts := nativeThemeLatinFonts{}
 	if root == nil {
 		return fonts
@@ -1128,13 +1121,23 @@ func nativeParseThemeLatinFonts(root *nativeXMLNode, drawingNS string) nativeThe
 	if scheme == nil {
 		return fonts
 	}
-	if major := nativeUniqueThemeFontChild(scheme, drawingNS, "majorFont"); major != nil {
-		fonts.major, _ = nativeExactThemeLatinTypeface(major, drawingNS)
-	}
-	if minor := nativeUniqueThemeFontChild(scheme, drawingNS, "minorFont"); minor != nil {
-		fonts.minor, _ = nativeExactThemeLatinTypeface(minor, drawingNS)
-	}
+	fonts.major, fonts.majorEastAsia = nativeParseThemeFontSet(nativeUniqueThemeFontChild(scheme, drawingNS, "majorFont"), drawingNS, eastAsiaScript)
+	fonts.minor, fonts.minorEastAsia = nativeParseThemeFontSet(nativeUniqueThemeFontChild(scheme, drawingNS, "minorFont"), drawingNS, eastAsiaScript)
 	return fonts
+}
+
+// One <a:majorFont>/<a:minorFont>: its latin typeface, and its East-Asian slot
+// already answered through the script table when <a:ea> states no typeface.
+func nativeParseThemeFontSet(fontSet *nativeXMLNode, drawingNS, eastAsiaScript string) (string, nativeThemeSlot) {
+	if fontSet == nil {
+		return "", nativeThemeSlot{}
+	}
+	latin, _ := nativeExactThemeTypeface(fontSet, drawingNS, "latin")
+	typeface, authored := nativeExactThemeTypeface(fontSet, drawingNS, "ea")
+	if authored && typeface == "" {
+		typeface = nativeThemeScriptTypeface(fontSet, drawingNS, eastAsiaScript)
+	}
+	return latin, nativeThemeSlot{typeface: typeface, authored: authored}
 }
 
 // A duplicated or namespace-spoofed font branch has no single authored answer.

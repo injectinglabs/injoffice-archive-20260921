@@ -14,7 +14,9 @@ func TestNativeDirectScriptSlotsRemainContextQualified(t *testing.T) {
 			safe, blocked            bool
 		}{
 			{"latin", "Hello", "", base, true, false},
-			{"cjk", "A漢", "", base, true, true},
+			// The stated w:eastAsia face resolves the slot this text reaches,
+			// so neither the font nor the complex-script size defers any more.
+			{"cjk", "A漢", "", base, true, false},
 			// ECMA-376 17.3.2.30: run-level w:rtl selects the complex-script
 			// slot; paragraph-level w:bidi (17.3.1.6) only orders the line.
 			{"paragraph-bidi", "Hello", `<w:bidi/>`, base, true, false},
@@ -65,6 +67,12 @@ func TestNativeDirectScriptSlotsRemainContextQualified(t *testing.T) {
 				}
 				if tc.safe && hasResolutionDiagnostic(layout, "COMPLEX_SCRIPT_SIZE_PRESERVED") != tc.blocked {
 					t.Fatalf("size context lost: %#v", layout.Diagnostics)
+				}
+				if tc.name == "cjk" {
+					run := layout.Runs[0].Properties
+					if run.EastAsiaFontFamily == nil || *run.EastAsiaFontFamily != "CJK Face" || run.FontFamily == nil || *run.FontFamily != "Arial" {
+						t.Fatalf("east-asian slot did not resolve beside the latin slot: %#v", run)
+					}
 				}
 			})
 		}
