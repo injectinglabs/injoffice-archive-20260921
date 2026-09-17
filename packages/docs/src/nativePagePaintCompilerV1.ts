@@ -931,17 +931,32 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
     const measured = await shapeLines({ protocol: 'injoffice.docx.shaping-request', version: 1, document: probeDocument, resolved_layout: resolved.value, font_manifest: manifest.value, available_width_millipoints: dimensions.width, tab_interval_millipoints: dimensions.tab }, { resolver, shaper }, shapingParagraphWidths(document.value, probeWidths))
     if (!measured.ok) failIssues('autofit measurement failed validation', measured.issues)
     // Page controls are consumed by the final source-bound paginator, not by
-    // intrinsic text measurement. Every other diagnostic remains a refusal.
+    // intrinsic text measurement. A paint-only resolved-layout diagnostic is
+    // propagated by shaping under its own code precisely because it does not
+    // change a shaping advance (see propagateAllowedResolutionDiagnostics), so
+    // it cannot change an intrinsic width either. Every other diagnostic still
+    // disqualifies the measurement.
     if(!fontPolicy&&measured.value.font_substitutions?.length)throw new TypeError('Strict preparation does not accept substituted fonts')
     const measuredFonts=fontPolicy?qualifyNativeDocxFontSubstitutionsV1(measured.value,resolved.value,manifest.value,fontPolicy,document.value,descriptors):[]
-    const measurementIssues = measured.value.diagnostics.filter(diagnostic => !isQualifiedNativeDocxFontDiagnosticV1(diagnostic,measuredFonts)&&(diagnostic.code !== 'page-control-deferred' || diagnostic.severity !== 'deferred'))
-    if (measurementIssues.length) throw new TypeError(`Content autofit measurement refused unqualified source text or exceeded its budget: ${measurementIssues.map(diagnostic => diagnostic.code).join(', ')}`)
-    measuredTables = measured.value
-    layoutFragmentWork += measured.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
-    if (bodyFields.length && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Body-field layout probe exceeds cumulative shaping fragment budget')
+    const measurementIssues = measured.value.diagnostics.filter(diagnostic => !isQualifiedNativeDocxFontDiagnosticV1(diagnostic,measuredFonts)&&(diagnostic.code !== 'page-control-deferred' || diagnostic.severity !== 'deferred')&&diagnostic.code !== 'paint-diagnostic-preserved')
+    // Strict paint has no other way to size an auto-width table, so a
+    // disqualified measurement refuses. The approximate lane declares a second,
+    // coarser policy for the same tables -- the authored tblGrid fitted to the
+    // text column -- and already applies it whenever resolved table geometry is
+    // absent. Withholding the measurement selects that declared policy instead
+    // of discarding a body the rest of the pipeline can still lay out.
+    if (measurementIssues.length && approximateEligibility === undefined) throw new TypeError(`Content autofit measurement refused unqualified source text or exceeded its budget: ${measurementIssues.map(diagnostic => diagnostic.code).join(', ')}`)
+    if (measurementIssues.length === 0) {
+      measuredTables = measured.value
+      layoutFragmentWork += measured.value.paragraphs.reduce((n, paragraph) => n + paragraph.lines.reduce((m, line) => m + line.fragments.length, 0), 0)
+      if (bodyFields.length && layoutFragmentWork > DOCX_PAGE_FIELD_LIMITS.maxFragments) throw new RangeError('Body-field layout probe exceeds cumulative shaping fragment budget')
+    }
   }
   const qualifiedTables = approximateEligibility===undefined?qualifyNativeDocxTablesV1(document.value,resolved.value,measuredTables):qualifyApproximateLegacyTables(document.value,resolved.value,measuredTables,decodeNativeDocxApproximationEligibilityV1(approximateEligibility,settings.value))
-  if (measuredTables && qualifiedTables.status !== 'qualified') throw new TypeError('Content autofit refused unsupported source geometry or unsatisfied intrinsic widths')
+  // Same division as the measurement above: strict paint owes the caller the
+  // refusal, while the approximate lane hands a table it cannot qualify to the
+  // paginator, which records it against that table instead of the document.
+  if (measuredTables && qualifiedTables.status !== 'qualified' && approximateEligibility === undefined) throw new TypeError('Content autofit refused unsupported source geometry or unsatisfied intrinsic widths')
   if (document.value.body.blocks.some((block) => block.table !== undefined) && document.value.sections.some((section) => section.page.columns > 1)) {
     throw new TypeError('native page-paint compiler refuses table content when any section uses multi-column flow')
   }
