@@ -279,9 +279,12 @@ func nativeSettingsNeutralWordElement(result *NativePaginationSettingsV1, node *
 
 func nativeSettingsNeutralForeignElement(result *NativePaginationSettingsV1, node *nativeXMLNode) bool {
 	switch {
-	case node.Name == (xml.Name{Space: nativeWord14Namespace, Local: "docId"}):
-		val := xml.Name{Space: nativeWord14Namespace, Local: "val"}
-		return nativeSettingsExactLeaf(result, node, val) && func() bool { _, ok := nativeAttr(node, nativeWord14Namespace, "val"); return ok }()
+	// Both Word extension docId elements are a package identity GUID used to match
+	// copies of one document while co-authoring or merging. Identity only: no
+	// layout input is derived from it.
+	case node.Name == (xml.Name{Space: nativeWord14Namespace, Local: "docId"}), node.Name == (xml.Name{Space: nativeWord15Namespace, Local: "docId"}):
+		val := xml.Name{Space: node.Name.Space, Local: "val"}
+		return nativeSettingsExactLeaf(result, node, val) && func() bool { _, ok := nativeAttr(node, node.Name.Space, "val"); return ok }()
 	case node.Name == (xml.Name{Space: nativeWord15Namespace, Local: "chartTrackingRefBased"}):
 		val := xml.Name{Space: nativeWord15Namespace, Local: "val"}
 		if !nativeSettingsExactLeaf(result, node, val) {
@@ -332,7 +335,10 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 			continue
 		}
 		local := child.Name.Local
-		if seen[local] {
+		// ECMA-376 17.15.1.1 declares w:activeWritingStyle maxOccurs="unbounded":
+		// one proofing registration per language. A repeat is the schema's own
+		// shape, not the ambiguity the duplicate rule exists to refuse.
+		if seen[local] && local != "activeWritingStyle" {
 			result.addDiagnostic("DUPLICATE_SETTINGS_PROPERTY", child, "Duplicate settings property is ambiguous")
 			continue
 		}
@@ -416,7 +422,13 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 				}
 			}
 			if extra {
-				if !nativeSettingsExactNode(result, child, map[xml.Name]bool{
+				// ECMA-376 17.15.1.83: every one of these bits selects which style
+				// categories the Word Styles task pane lists. It is task-pane chrome:
+				// no style is added, removed or re-resolved, so no run property, font
+				// or box changes. The bounded attribute set below still fails closed.
+				// An unexpected attribute or nested content is still not this subset,
+				// and nativeSettingsExactNode records that structure diagnostic.
+				nativeSettingsExactNode(result, child, map[xml.Name]bool{
 					{Space: wordNS, Local: "val"}:                          true,
 					{Space: wordNS, Local: "allStyles"}:                    true,
 					{Space: wordNS, Local: "customStyles"}:                 true,
@@ -433,10 +445,7 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 					{Space: wordNS, Local: "top3HeadingStyles"}:            true,
 					{Space: wordNS, Local: "visibleStyles"}:                true,
 					{Space: wordNS, Local: "alternateStyleNames"}:          true,
-				}, false) {
-					continue
-				}
-				result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Style pane format filter extra bits are UI chrome and do not change native pagination geometry")
+				}, false)
 				continue
 			}
 			if !nativeSettingsNeutralWordElement(result, child, wordNS) {
@@ -558,7 +567,12 @@ func rejectNativeSettingsNamespaceSpoofing(root *nativeXMLNode, wordNS string) e
 		"settings": true, "defaultTabStop": true, "mirrorMargins": true, "gutterAtTop": true,
 		"evenAndOddHeaders": true, "compat": true, "compatSetting": true, "noColumnBalance": true,
 		"characterSpacingControl": true, "decimalSymbol": true, "listSeparator": true,
-		"themeFontLang": true, "shapeDefaults": true,
+		"themeFontLang": true, "shapeDefaults": true, "hdrShapeDefaults": true,
+		"activeWritingStyle": true, "stylePaneFormatFilter": true, "removeDateAndTime": true,
+		"uiCompat97To2003": true, "bordersDoNotSurroundHeader": true, "bordersDoNotSurroundFooter": true,
+		"doNotUseMarginsForDrawingGridOrigin": true, "displayHorizontalDrawingGridEvery": true,
+		"displayVerticalDrawingGridEvery": true, "drawingGridHorizontalSpacing": true,
+		"drawingGridVerticalSpacing": true, "drawingGridHorizontalOrigin": true, "drawingGridVerticalOrigin": true,
 	}
 	return rejectNativeKnownLocalSpoofing(root, wordNS, known)
 }
