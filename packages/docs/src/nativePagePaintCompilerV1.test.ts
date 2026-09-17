@@ -41,6 +41,8 @@ import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } fro
 import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, decodeNativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
 import { DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING, DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING } from './nativePaginationV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1 } from './nativeLatinFontFallbackV1.js'
+import { DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING } from './nativeApproximateImageExtentV1.js'
+import { compileNativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -852,6 +854,71 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(approximate.status).toBe('painted')
     expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path')).toBe(true)
   })
+
+  it('paints an off-lattice picture in the approximate lane, discloses the rounding, and keeps strict refusing', async () => {
+    // FigureAsLabelPicture.docx / graphic-object-fliph.docx / lvlPicBulletId.docx:
+    // the authored extent is not a whole number of milli-points, so the exact
+    // slice declines the picture over at most 0.005 pt and the page paints
+    // around it. The approximate lane paints it at the nearest milli-point.
+    const input = imageFixture()
+    const document = input.document as NativeDocxDocumentV1
+    const drawing = document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    drawing.width_emu = 2_751_151
+    drawing.height_emu = 2_063_363
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy layout' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 12 as const, reasons: ['Legacy layout approximation'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const outline = outlines.outline(request.glyph_id); return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em } } }
+    const original = structuredClone(input)
+    // Strict: the picture is unqualified, so no page exists at all.
+    expect(qualifyNativeDocxInlineImageV1(document, 'run:image', drawing).ok).toBe(false)
+    const strict = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(structuredClone(input))).page_paint_request, provider)
+    expect(strict.ok && strict.value.status).toBe('refused')
+    const approximate = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(approximate.status).toBe('painted')
+    const painted = approximate.pages[0]!.commands.find(command => command.kind === 'paint_inline_image')
+    if (!painted || painted.kind !== 'paint_inline_image') throw new Error('Expected the picture to paint')
+    expect(painted.width_millipoints).toBe(216_630)
+    expect(painted.height_millipoints).toBe(162_470)
+    // The asset the command names is the authored one, byte for byte.
+    expect(approximate.resources).toMatchObject([{ part_name: 'word/media/image.png', content_digest: PNG_DIGEST, byte_length: PNG_BYTES.byteLength }])
+    expect(painted.asset_id).toBe(approximate.resources[0]!.id)
+    // Recorded, never silent.
+    expect(approximate.approximated_image_extents).toEqual([
+      { run_id: 'run:image', drawing_id: 'drawing:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', field: 'width_emu', source_emu: 2_751_151, painted_emu: 2_751_201 },
+      { run_id: 'run:image', drawing_id: 'drawing:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]', field: 'height_emu', source_emu: 2_063_363, painted_emu: 2_063_369 },
+    ])
+    expect(approximate.reasons).toContain(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    // Neither half of the disclosure may be dropped.
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, reasons: approximate.reasons.filter(reason => reason !== DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING) }).ok).toBe(false)
+    const { approximated_image_extents: _dropped, ...withoutFacts } = approximate
+    expect(decodeNativeDocxApproximatePagePreviewV1(withoutFacts).ok).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, approximated_image_extents: [{ ...approximate.approximated_image_extents![0]!, painted_emu: 2_751_151 }] }).ok).toBe(false)
+    // The caller's input, and the strict lane reading it, are untouched.
+    expect(input).toEqual(original)
+    const strictAfter = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(structuredClone(original))).page_paint_request, provider)
+    expect(JSON.stringify(strictAfter)).toBe(JSON.stringify(strict))
+  }, 20000)
+
+  it('leaves an exact picture extent unrounded and undisclosed', async () => {
+    const input = imageFixture()
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy layout' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 12 as const, reasons: ['Legacy layout approximation'] }
+    const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+    const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const outline = outlines.outline(request.glyph_id); return outline.path.length ? { status: 'outlined' as const, ...request, ...outline } : { status: 'empty' as const, ...request, units_per_em: outline.units_per_em } } }
+    const approximate = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+    expect(approximate.status).toBe('painted')
+    expect(approximate.approximated_image_extents).toBeUndefined()
+    expect(approximate.reasons).not.toContain(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)
+    expect(approximate.pages[0]!.commands.some(command => command.kind === 'paint_inline_image')).toBe(true)
+  }, 20000)
 
   it('joins automatic-border whole-part hashes to exactly one preserved source part when available', () => {
     const input = autoBorderFixture()

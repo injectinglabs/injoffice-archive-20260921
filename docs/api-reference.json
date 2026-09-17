@@ -3609,6 +3609,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING: 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.'"
             },
             {
+              "name": "DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING: 'Approximate read-only preview: picture extents that are not a whole number of milli-points are painted at the nearest milli-point, moving each edge by at most 63 EMU (0.005 pt, under one device pixel at 96 DPI); the source EMU values are retained as facts and Word geometry differs by that rounding.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING: 'Approximate read-only preview: indented table-cell lines are placed inside the qualified cell content width instead of requiring an exact full-width line box.'"
@@ -3622,6 +3627,11 @@
               "name": "DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES: readonly ['Cambria Math', 'STIX Two Math', 'STIX Math', 'STIXGeneral', 'XITS Math', 'Latin Modern Math', 'Asana Math', 'Libertinus Math', 'TeX Gyre Termes Math', 'TeX Gyre Pagella Math', 'DejaVu Math TeX Gyre', 'Fira Math', 'Noto Sans Math']"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS = 2048"
             },
             {
               "name": "DOCX_APPROXIMATE_NESTED_TABLE_CODE",
@@ -4122,6 +4132,16 @@
               "name": "NativeDocxApproximatedFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximatedImageExtentFieldV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedImageExtentFieldV1"
+            },
+            {
+              "name": "NativeDocxApproximatedImageExtentV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedImageExtentV1"
             },
             {
               "name": "NativeDocxApproximateDrawingChartsV1",
@@ -5359,6 +5379,11 @@
               "signature": "export interface NativeTextboxRelativeAnchorV2 extends Omit<NativeTextboxPageAnchorV1, 'policy'>"
             },
             {
+              "name": "nearestNativeDocxMilliPointEmuV1",
+              "kind": "function",
+              "signature": "export declare function nearestNativeDocxMilliPointEmuV1(value: number): number | undefined"
+            },
+            {
               "name": "newCommentEntry",
               "kind": "function",
               "signature": "export declare function newCommentEntry(author: string, text: string, parentId?: string): CommentEntry"
@@ -5494,6 +5519,11 @@
               "signature": "export declare function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1): NativeDocxApproximateEquationProjectionV1"
             },
             {
+              "name": "projectNativeDocxApproximateImageExtentsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxApproximateImageExtentsV1(documentValue: unknown):"
+            },
+            {
               "name": "projectNativeDocxApproximateInlineChartsV1",
               "kind": "function",
               "signature": "export declare function projectNativeDocxApproximateInlineChartsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, charts: NativeDocxApproximateDrawingChartsV1): NativeDocxApproximateInlineChartProjectionV1"
@@ -5607,6 +5637,11 @@
               "name": "validNativeDocxApproximatedFontFacesV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedFontFacesV1(value: unknown, source: readonly NativeDocxLatinFontFallbackV1[], packageSHA256: string): value is NativeDocxLatinFontFallbackV1[]"
+            },
+            {
+              "name": "validNativeDocxApproximatedImageExtentsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
             },
             {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
@@ -6441,9 +6476,19 @@
               "signature": "export declare const DOCX_APPROXIMATE_EQUATIONS_PROTOCOL: 'injoffice.docx.approximate-equations'"
             },
             {
+              "name": "DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING: 'Approximate read-only preview: picture extents that are not a whole number of milli-points are painted at the nearest milli-point, moving each edge by at most 63 EMU (0.005 pt, under one device pixel at 96 DPI); the source EMU values are retained as facts and Word geometry differs by that rounding.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_MATH_SUBSTITUTE_FAMILIES: readonly ['Cambria Math', 'STIX Two Math', 'STIX Math', 'STIXGeneral', 'XITS Math', 'Latin Modern Math', 'Asana Math', 'Libertinus Math', 'TeX Gyre Termes Math', 'TeX Gyre Pagella Math', 'DejaVu Math TeX Gyre', 'Fira Math', 'Noto Sans Math']"
+            },
+            {
+              "name": "DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS = 2048"
             },
             {
               "name": "DOCX_APPROXIMATE_NESTED_TABLE_CODE",
@@ -6624,6 +6669,16 @@
               "name": "NativeDocxApproximatedFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatedFontSizeV1 extends NativeDocxAbsentFontSizeV1"
+            },
+            {
+              "name": "NativeDocxApproximatedImageExtentFieldV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedImageExtentFieldV1"
+            },
+            {
+              "name": "NativeDocxApproximatedImageExtentV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedImageExtentV1"
             },
             {
               "name": "NativeDocxApproximateDrawingChartsV1",
@@ -6876,6 +6931,11 @@
               "signature": "export declare class NativeDocxPreviewRefusalV1 extends TypeError"
             },
             {
+              "name": "nearestNativeDocxMilliPointEmuV1",
+              "kind": "function",
+              "signature": "export declare function nearestNativeDocxMilliPointEmuV1(value: number): number | undefined"
+            },
+            {
               "name": "paintNativeDocxApproximateDrawingChartsV1",
               "kind": "function",
               "signature": "export declare function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, charts: NativeDocxApproximateDrawingChartsV1, projection: NativeDocxApproximateInlineChartProjectionV1, runtime: NativeDocxApproximateChartPaintRuntimeV1): Promise<NativeDocxApproximateChartPaintResultV1>"
@@ -6916,6 +6976,11 @@
               "signature": "export declare function projectNativeDocxApproximateEquationsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, equations: NativeDocxApproximateEquationsV1, layouts: NativeDocxApproximateEquationLayoutsV1): NativeDocxApproximateEquationProjectionV1"
             },
             {
+              "name": "projectNativeDocxApproximateImageExtentsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxApproximateImageExtentsV1(documentValue: unknown):"
+            },
+            {
               "name": "projectNativeDocxApproximateInlineChartsV1",
               "kind": "function",
               "signature": "export declare function projectNativeDocxApproximateInlineChartsV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, charts: NativeDocxApproximateDrawingChartsV1): NativeDocxApproximateInlineChartProjectionV1"
@@ -6944,6 +7009,11 @@
               "name": "selectNativeDocxApproximateMathFaceV1",
               "kind": "function",
               "signature": "export declare function selectNativeDocxApproximateMathFaceV1(manifest: NativeFontManifest, requested: NativeDocxApproximateEquationFontV1, textFamily: string | undefined): NativeDocxApproximateMathFaceChoiceV1 | undefined"
+            },
+            {
+              "name": "validNativeDocxApproximatedImageExtentsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
             },
             {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
