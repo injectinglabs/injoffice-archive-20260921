@@ -2598,20 +2598,20 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	if container.Name.Local == "inline" && !nativeExactInlinePictureContainer(container, wpNS, aNS) {
 		return refuse("INLINE_DRAWING_SEMANTICS_PRESERVED", "Inline pictures with unmodeled container attributes or children remain preserve-only", container)
 	}
-	var inlineEffects *NativeDrawingCropV1
+	// wp:effectExtent states how far the drawing's rendered result reaches past
+	// wp:extent. It is judged only once the graphic inside it has been proven to
+	// be a picture that carries no effect at all: a drawing whose payload is not
+	// a modeled picture is refused as that, not as an unqualified effect, and a
+	// picture with effect markup is refused by the transform/blip qualification
+	// below. What is left on a qualified picture can only be the envelope its own
+	// rotation needs, which is a wrap-box fact and never moves the painted image.
+	var effectExtent *nativeXMLNode
 	if effects := directNativeChildren(container, wpNS, "effectExtent"); len(effects) > 0 {
 		if len(effects) != 1 {
 			return refuse("DRAWING_EFFECTS_PRESERVED", "Ambiguous drawing effect extents", container)
 		}
 		if !nativeZeroExtent(effects[0]) {
-			if container.Name.Local != "inline" {
-				return refuse("DRAWING_EFFECTS_PRESERVED", "Floating drawing effect extents remain unqualified", container)
-			}
-			var valid bool
-			inlineEffects, valid = nativeInlineEffectExtents(effects[0])
-			if !valid {
-				return refuse("DRAWING_EFFECTS_PRESERVED", "Inline effect extents must be exact bounded nonnegative EMUs", container)
-			}
+			effectExtent = effects[0]
 		}
 	}
 	// A floating anchor projects its horizontal wrap distances; every other
@@ -2672,7 +2672,19 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		return refuse("PICTURE_NONVISUAL_PRESERVED", "Picture nonvisual properties with missing, hidden, or unmodeled semantics remain preserve-only", picture)
 	}
 	if !nativePictureBoundedTransform(picture, aNS, picNS, width, height) {
-		return refuse("PICTURE_TRANSFORM_PRESERVED", "Only flips and quarter turns with exact rotated DrawingML/inline extents are projected", picture)
+		return refuse("PICTURE_TRANSFORM_PRESERVED", "Only flips and rotations with exact DrawingML/inline extents on an effect-free picture shape are projected", picture)
+	}
+	var inlineEffects, floatingEffects *NativeDrawingCropV1
+	if effectExtent != nil {
+		extents, valid := nativeInlineEffectExtents(effectExtent)
+		if !valid {
+			return refuse("DRAWING_EFFECTS_PRESERVED", "Effect extents must be exact bounded nonnegative EMUs", container)
+		}
+		if container.Name.Local == "inline" {
+			inlineEffects = extents
+		} else {
+			floatingEffects = extents
+		}
 	}
 	blips := nativeDescendants(picture, aNS, "blip")
 	if len(blips) != 1 || !nativeInertBlipExtensions(blips[0], aNS) || !nativeExactContainer(blips[0], xml.Name{Space: extractor.relNS, Local: "embed"}, xml.Name{Local: "cstate"}) {
@@ -2693,15 +2705,23 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		ID: extractor.objectID("drawing", partName, node, ""), Anchor: extractor.anchor(partName, node),
 		RelationshipID: nativeString(relID), MediaPart: nativeString(mediaPart), ContentType: nativeString(contentType),
 		Placement: "inline", WidthEMU: nativeInt64(width), HeightEMU: nativeInt64(height),
-		SourceCrop:            crop,
-		InlineEffectExtentEMU: inlineEffects,
-		EditPolicy:            nativeReadOnlyPolicy("EXTRACT_ONLY", "Native picture extraction does not yet expose guarded drawing replacement"),
+		SourceCrop:              crop,
+		InlineEffectExtentEMU:   inlineEffects,
+		FloatingEffectExtentEMU: floatingEffects,
+		EditPolicy:              nativeReadOnlyPolicy("EXTRACT_ONLY", "Native picture extraction does not yet expose guarded drawing replacement"),
 	}
 	xfrm := firstDirectNativeChild(firstDirectNativeChild(picture, picNS, "spPr"), aNS, "xfrm")
 	if rotation, ok := nativeUnqualifiedAttr(xfrm, "rot"); ok {
 		angle, _ := strconv.ParseInt(rotation, 10, 64) // bounded lexical values qualified above
-		degrees := angle / 60000
-		drawing.RotationDegrees = nativeInt64(degrees)
+		// Only a quarter turn has an exact whole-degree projection every consumer
+		// of this contract already models; every other angle is carried in the
+		// source's own 60000ths so nothing rounds an oblique rotation to a degree.
+		if angle%5400000 == 0 {
+			drawing.RotationDegrees = nativeInt64(angle / 60000)
+		}
+		if angle != 0 {
+			drawing.RotationAngle60000ths = nativeInt64(angle)
+		}
 	}
 	if flip, ok := nativeUnqualifiedAttr(xfrm, "flipH"); ok {
 		value := flip == "1" || flip == "true"
@@ -2929,12 +2949,25 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 		return false
 	}
 	spPr := firstDirectNativeChild(picture, picNS, "spPr")
-	if spPr == nil || !nativeExactContainer(spPr) {
+	// a:bwMode="auto" is ST_BlackWhiteMode's "render normally" value, so it states
+	// the colour treatment this painter already performs; every other mode
+	// recolours the picture and stays preserve-only.
+	if spPr == nil || !nativeExactContainer(spPr, xml.Name{Local: "bwMode"}) {
+		return false
+	}
+	if mode, present := nativeUnqualifiedAttr(spPr, "bwMode"); present && mode != "auto" {
 		return false
 	}
 	xfrms := directNativeChildren(spPr, aNS, "xfrm")
 	geometries := directNativeChildren(spPr, aNS, "prstGeom")
-	if len(spPr.Children) != 2 || len(xfrms) != 1 || len(geometries) != 1 {
+	// a:noFill is the shape fill behind a picture that already covers its whole
+	// frame with a stretched blip: it paints nothing and can carry no effect.
+	// Any other fill, line or effect child keeps the picture preserve-only.
+	fills := directNativeChildren(spPr, aNS, "noFill")
+	if len(fills) > 1 || len(fills) == 1 && !nativeExactLeaf(fills[0]) {
+		return false
+	}
+	if len(spPr.Children) != 2+len(fills) || len(xfrms) != 1 || len(geometries) != 1 {
 		return false
 	}
 	geometry := geometries[0]
@@ -2951,7 +2984,7 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 			return false
 		}
 		seenTransformAttrs[attr.Name.Local] = true
-		if attr.Name.Local == "rot" && attr.Value != "0" && attr.Value != "5400000" && attr.Value != "10800000" && attr.Value != "16200000" || (attr.Name.Local == "flipH" || attr.Name.Local == "flipV") && attr.Value != "0" && attr.Value != "false" && attr.Value != "1" && attr.Value != "true" {
+		if attr.Name.Local == "rot" && !nativePositiveFixedAngle(attr.Value) || (attr.Name.Local == "flipH" || attr.Name.Local == "flipV") && attr.Value != "0" && attr.Value != "false" && attr.Value != "1" && attr.Value != "true" {
 			return false
 		}
 	}
@@ -2959,9 +2992,14 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 		return false
 	}
 	rotation, _ := nativeUnqualifiedAttr(xfrm, "rot")
-	quarterTurn := rotation == "5400000" || rotation == "16200000"
+	angle, _ := strconv.ParseInt(rotation, 10, 64) // lexically qualified above; absent reads 0
+	quarterTurn := angle == 5400000 || angle == 16200000
+	oblique := angle%5400000 != 0
 	if len(xfrm.Children) == 0 {
-		return !quarterTurn // a quarter turn needs explicit original extents
+		// A quarter turn needs explicit original extents to prove which way the
+		// frame turned, and an oblique rotation needs them to prove wp:extent is
+		// the unrotated box rather than the rotated envelope.
+		return !quarterTurn && !oblique
 	}
 	if len(xfrm.Children) != 2 {
 		return false
@@ -2983,7 +3021,32 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 	if quarterTurn {
 		return okX && okY && x == 0 && y == 0 && okCX && okCY && cy == width && cx == height
 	}
+	// An oblique rotation leaves wp:extent stating the unrotated box and moves the
+	// rotated envelope into wp:effectExtent, so the shape extent must be that same
+	// box on both axes; anything else describes a frame this projection cannot map.
+	if oblique {
+		return okX && okY && x == 0 && y == 0 && okCX && okCY && cx == width && cy == height
+	}
 	return okX && okY && x == 0 && y == 0 && okCX && okCY
+}
+
+// nativePositiveFixedAngle qualifies ECMA-376 20.1.10.3 ST_PositiveFixedAngle in
+// its canonical lexical form: 60000ths of a degree, no sign, no leading zero, in
+// [0, 21600000). Word writes exactly this for a:xfrm/@rot.
+func nativePositiveFixedAngle(value string) bool {
+	if value == "0" {
+		return true
+	}
+	if value == "" || value[0] < '1' || value[0] > '9' || len(value) > 8 {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	angle, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && angle < 21600000
 }
 
 func nativeInt64Attr(node *nativeXMLNode, namespace, local string) (int64, bool) {

@@ -86,34 +86,36 @@ type NativeDrawingCropV1 struct {
 }
 
 type NativeDrawingV1 struct {
-	ID                     string               `json:"id"`
-	Anchor                 NativeSourceAnchorV1 `json:"anchor"`
-	RelationshipID         *string              `json:"relationship_id,omitempty"`
-	MediaPart              *string              `json:"media_part,omitempty"`
-	ContentType            *string              `json:"content_type,omitempty"`
-	Name                   *string              `json:"name,omitempty"`
-	AltText                *string              `json:"alt_text,omitempty"`
-	Placement              string               `json:"placement"`
-	WidthEMU               *int64               `json:"width_emu"`
-	HeightEMU              *int64               `json:"height_emu"`
-	RotationDegrees        *int64               `json:"rotation_degrees,omitempty"`
-	FlipHorizontal         *bool                `json:"flip_horizontal,omitempty"`
-	FlipVertical           *bool                `json:"flip_vertical,omitempty"`
-	SourceCrop             *NativeDrawingCropV1 `json:"source_crop,omitempty"`
-	InlineEffectExtentEMU  *NativeDrawingCropV1 `json:"inline_effect_extent_emu,omitempty"`
-	XEMU                   *int64               `json:"x_emu,omitempty"`
-	YEMU                   *int64               `json:"y_emu,omitempty"`
-	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
-	VerticalRelativeFrom   *string              `json:"vertical_relative_from,omitempty"`
-	Wrap                   *string              `json:"wrap,omitempty"`
-	WrapDistanceLeftEMU    *int64               `json:"wrap_distance_left_emu,omitempty"`
-	WrapDistanceRightEMU   *int64               `json:"wrap_distance_right_emu,omitempty"`
-	TextboxText            *string              `json:"textbox_text,omitempty"`
-	TextboxFillRGB         *string              `json:"textbox_fill_rgb,omitempty"`
-	TextboxLineRGB         *string              `json:"textbox_line_rgb,omitempty"`
-	FloatingLayer          *string              `json:"floating_layer,omitempty"`
-	StackingOrder          *int64               `json:"stacking_order,omitempty"`
-	EditPolicy             NativeEditPolicyV1   `json:"edit_policy"`
+	ID                      string               `json:"id"`
+	Anchor                  NativeSourceAnchorV1 `json:"anchor"`
+	RelationshipID          *string              `json:"relationship_id,omitempty"`
+	MediaPart               *string              `json:"media_part,omitempty"`
+	ContentType             *string              `json:"content_type,omitempty"`
+	Name                    *string              `json:"name,omitempty"`
+	AltText                 *string              `json:"alt_text,omitempty"`
+	Placement               string               `json:"placement"`
+	WidthEMU                *int64               `json:"width_emu"`
+	HeightEMU               *int64               `json:"height_emu"`
+	RotationDegrees         *int64               `json:"rotation_degrees,omitempty"`
+	RotationAngle60000ths   *int64               `json:"rotation_60000ths,omitempty"`
+	FlipHorizontal          *bool                `json:"flip_horizontal,omitempty"`
+	FlipVertical            *bool                `json:"flip_vertical,omitempty"`
+	SourceCrop              *NativeDrawingCropV1 `json:"source_crop,omitempty"`
+	InlineEffectExtentEMU   *NativeDrawingCropV1 `json:"inline_effect_extent_emu,omitempty"`
+	FloatingEffectExtentEMU *NativeDrawingCropV1 `json:"floating_effect_extent_emu,omitempty"`
+	XEMU                    *int64               `json:"x_emu,omitempty"`
+	YEMU                    *int64               `json:"y_emu,omitempty"`
+	HorizontalRelativeFrom  *string              `json:"horizontal_relative_from,omitempty"`
+	VerticalRelativeFrom    *string              `json:"vertical_relative_from,omitempty"`
+	Wrap                    *string              `json:"wrap,omitempty"`
+	WrapDistanceLeftEMU     *int64               `json:"wrap_distance_left_emu,omitempty"`
+	WrapDistanceRightEMU    *int64               `json:"wrap_distance_right_emu,omitempty"`
+	TextboxText             *string              `json:"textbox_text,omitempty"`
+	TextboxFillRGB          *string              `json:"textbox_fill_rgb,omitempty"`
+	TextboxLineRGB          *string              `json:"textbox_line_rgb,omitempty"`
+	FloatingLayer           *string              `json:"floating_layer,omitempty"`
+	StackingOrder           *int64               `json:"stacking_order,omitempty"`
+	EditPolicy              NativeEditPolicyV1   `json:"edit_policy"`
 }
 
 type NativeReferenceV1 struct {
@@ -1070,8 +1072,34 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 			}
 		}
 	}
+	if effect := drawing.FloatingEffectExtentEMU; effect != nil {
+		if drawing.Placement != "floating" {
+			v.add("INVALID_VALUE", path+"/floating_effect_extent_emu", "floating effect extent projection is anchor-only")
+		}
+		for _, field := range []struct {
+			name  string
+			value *int64
+		}{{"left", effect.Left}, {"top", effect.Top}, {"right", effect.Right}, {"bottom", effect.Bottom}} {
+			v.nonnegative(field.value, path+"/floating_effect_extent_emu/"+field.name)
+			if field.value != nil && *field.value > 91440000 {
+				v.add("OUT_OF_RANGE", path+"/floating_effect_extent_emu/"+field.name, "effect extent exceeds 100 inches")
+			}
+		}
+	}
 	if drawing.RotationDegrees != nil && *drawing.RotationDegrees != 0 && *drawing.RotationDegrees != 90 && *drawing.RotationDegrees != 180 && *drawing.RotationDegrees != 270 {
-		v.add("INVALID_VALUE", path+"/rotation_degrees", "bounded inline transforms support only quarter turns")
+		v.add("INVALID_VALUE", path+"/rotation_degrees", "the whole-degree projection carries only quarter turns; every other angle is stated in 60000ths")
+	}
+	// ECMA-376 20.1.10.3 ST_PositiveFixedAngle: 60000ths of a degree in [0, 360).
+	if angle := drawing.RotationAngle60000ths; angle != nil {
+		if *angle < 0 || *angle >= 21600000 {
+			v.add("OUT_OF_RANGE", path+"/rotation_60000ths", "picture rotation must be a positive fixed angle below one full turn")
+		}
+		if drawing.RotationDegrees != nil && *angle != *drawing.RotationDegrees*60000 {
+			v.add("INVALID_VALUE", path+"/rotation_60000ths", "the exact angle and the whole-degree projection must state the same rotation")
+		}
+		if drawing.RotationDegrees == nil && *angle%5400000 == 0 {
+			v.add("INVALID_VALUE", path+"/rotation_60000ths", "a quarter turn must also state its whole-degree projection")
+		}
 	}
 	if crop := drawing.SourceCrop; crop != nil {
 		for _, field := range []struct {

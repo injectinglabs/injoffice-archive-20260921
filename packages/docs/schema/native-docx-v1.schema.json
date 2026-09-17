@@ -131,10 +131,17 @@
         "width_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "height_emu": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
         "rotation_degrees": { "type": "integer", "enum": [0, 90, 180, 270] },
+        "rotation_60000ths": { "type": "integer", "minimum": 0, "maximum": 21599999 },
         "flip_horizontal": { "type": "boolean" },
         "flip_vertical": { "type": "boolean" },
         "source_crop": { "$ref": "#/$defs/DrawingCropV1" },
         "inline_effect_extent_emu": { "type": "object", "additionalProperties": false, "required": ["left", "top", "right", "bottom"], "properties": {
+          "left": { "type": "integer", "minimum": 0, "maximum": 91440000 },
+          "top": { "type": "integer", "minimum": 0, "maximum": 91440000 },
+          "right": { "type": "integer", "minimum": 0, "maximum": 91440000 },
+          "bottom": { "type": "integer", "minimum": 0, "maximum": 91440000 }
+        } },
+        "floating_effect_extent_emu": { "type": "object", "additionalProperties": false, "required": ["left", "top", "right", "bottom"], "properties": {
           "left": { "type": "integer", "minimum": 0, "maximum": 91440000 },
           "top": { "type": "integer", "minimum": 0, "maximum": 91440000 },
           "right": { "type": "integer", "minimum": 0, "maximum": 91440000 },
