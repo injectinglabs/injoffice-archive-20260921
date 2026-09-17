@@ -1308,7 +1308,13 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
     // A continuous break is Word's way of changing the column division part-way
     // down a page, so for that break the division alone may differ; the shared
     // physical page and its header/footer references still have to agree.
-    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && previousSection.page.columns !== section.page.columns
+    //
+    // The new section opens a band whenever either side of the break has more
+    // than one column, including when the two agree on the count: the preceding
+    // fragment was balanced, so where it stopped is the deepest of its columns
+    // and not the one the cursor happens to sit in. Only a single column
+    // continuing into a single column can carry that cursor straight across.
+    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && (previousSection.page.columns > 1 || section.page.columns > 1)
     if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition })) {
       refuse(context, 'section-geometry-invalid', section.id, `${section.break_type} requires identical page, column, margin, and header/footer geometry across the shared physical page`)
       return
@@ -1343,10 +1349,6 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
         return
       }
       if (!ensurePageSectionColumns(context, section)) return
-      if (section.page.columns !== 1) {
-        refuse(context, 'column-balance-ambiguous', section.id, 'Continuous multi-column transition requires a unique preceding-section balance plan outside the bounded v1 slice')
-        return
-      }
       context.currentColumnOrdinal = priorColumn
       context.sections.at(-1)!.page_ids.push(context.currentPage.id)
       context.sectionPageOrdinal = 1
