@@ -75,6 +75,34 @@ function paragraph(id: string, index: number): NativeDocxParagraphV1 {
   }
 }
 
+/**
+ * A body table whose source geometry table qualification refuses, holding one
+ * cell paragraph that shaping consequently never produced. Everything outside
+ * the table stays shaped, so a cause attached to the cell paragraph can only
+ * have come from the containing table.
+ */
+function tableCellFixture(): NativeDocxPaginationRequestV1 {
+  const request = fixture({}) as any
+  const cell = paragraph('paragraph:cell', 5)
+  const cellPath = '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]'
+  cell.anchor = anchor(`${cellPath}/w:p[1]`, 930, 960)
+  cell.runs[0]!.anchor = anchor(`${cellPath}/w:p[1]/w:r[1]`, 940, 950)
+  request.document.body.blocks.push({
+    kind: 'table', id: 'table:cells', table: {
+      id: 'table:cells', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]', 900, 990),
+      edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'NATIVE_READ_ONLY', message: 'Table placement unavailable.', preservation: 'refuse-mutation' } },
+      rows: [{
+        id: 'row:1', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]', 910, 980), repeat_header: false,
+        cells: [{ id: 'cell:1', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]', 920, 970), grid_span: 1, vertical_merge: 'none', paragraphs: [cell] }],
+      }],
+    },
+  })
+  request.resolved_layout.paragraphs.push({ paragraph_id: cell.id, applied_styles: [], properties: {}, paragraph_mark_properties: structuredClone(request.resolved_layout.paragraphs[0].paragraph_mark_properties) })
+  request.resolved_layout.runs.push({ run_id: cell.runs[0]!.id, paragraph_id: cell.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+  request.resolved_layout.tables.push({ table_id: 'table:cells' })
+  return request as NativeDocxPaginationRequestV1
+}
+
 /** Turns a fixture paragraph's own first run into a w:br of the given kind. */
 function leadFlowBreak(paragraph: any, control: 'page-break' | 'column-break'): void {
   const run = paragraph.runs[0]
@@ -1224,6 +1252,78 @@ describe('native DOCX pagination v1', () => {
     const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
     expect(entry).toBeDefined()
     expect(entry).not.toHaveProperty('source_code')
+  })
+
+  /**
+   * Table qualification refuses the whole table set atomically and the call site
+   * consumed only its (then empty) paragraph_widths map. Shaping therefore found
+   * no exact cell-content width for any cell paragraph and dropped it, and the
+   * resulting 'shaped-paragraph-missing' named nothing at all: the qualification
+   * reason is scoped to the containing TABLE, which neither the paragraph nor the
+   * document scope matches.
+   */
+  it('names the table qualification cause for a cell paragraph missing from shaped lines', () => {
+    const request = tableCellFixture()
+    const result = paginateNativeDocxV1(request as any)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === 'paragraph:cell')
+    expect(entry).toBeDefined()
+    expect(entry).toMatchObject({ source_code: 'unsupported-table-source' })
+    expect(entry!.source_message).toMatch(/Table requires explicit fixed dxa width/)
+  })
+
+  // The table's reason is the cell paragraph's reason only. A body paragraph
+  // outside the table was dropped for its own reasons and must not borrow it.
+  it('does not attribute the table cause to a paragraph outside the table', () => {
+    const request = tableCellFixture() as any
+    request.shaped_lines.paragraphs = []
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const outside = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === 'paragraph:1')
+    expect(outside).toBeDefined()
+    expect(outside).not.toHaveProperty('source_code')
+  })
+
+  // A paragraph-scoped blocker still names the specific paragraph's own problem
+  // rather than the containing table's set-wide refusal.
+  it('prefers a paragraph-scoped cause over the containing table cause', () => {
+    const request = tableCellFixture() as any
+    request.shaped_lines.diagnostics = [{
+      code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: 'paragraph:cell',
+      source_diagnostic_code: 'UNSUPPORTED_NUMBER_FORMAT',
+      source_diagnostic_message: 'Numbering format is not modelled',
+      message: 'Resolved layout diagnostic UNSUPPORTED_NUMBER_FORMAT blocks native shaping',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === 'paragraph:cell')
+    expect(entry).toMatchObject({ source_code: 'UNSUPPORTED_NUMBER_FORMAT' })
+  })
+
+  /**
+   * Shaping records some blockers under their own code with no source code at
+   * all — script-sized paragraph marks are one. Requiring a source code threw
+   * those away and left the refusal causeless exactly as the table case did.
+   */
+  it('names a shaping blocker that carries no source diagnostic code', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [{
+      code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: droppedID,
+      message: 'Script-sized paragraph marks require a separate blank-line metric policy',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toMatchObject({
+      source_code: 'unresolved-layout-diagnostic',
+      source_message: 'Script-sized paragraph marks require a separate blank-line metric policy',
+    })
   })
 
   // With no shaping diagnostic to attribute it to, the refusal stays as it was.

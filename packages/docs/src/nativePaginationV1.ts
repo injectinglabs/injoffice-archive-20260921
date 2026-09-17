@@ -324,6 +324,8 @@ interface PaginationContext {
   sliceCount: number
   linePlacementCount: number
   qualifiedTables?: Map<string, NativeDocxQualifiedTableV1>
+  tableQualificationCauses?: Map<string, { code: string; message: string }>
+  containingTableIDs?: Map<string, string>
   lastSliceLocation: Map<string, { pageOrdinal: number; columnOrdinal: number }>
 }
 
@@ -896,7 +898,17 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     refuse(context, 'default-tab-stop-mismatch', document.document_id, `Shaped tab interval ${shaped.tab_interval_millipoints} does not match the attested Word default tab stop ${settings.default_tab_stop_twips} twips`)
   }
   const qualified = qualifyApproximateLegacyTables(document, context.request.resolved_layout, shaped,context.approximateLegacySettings||undefined)
-  if (qualified.status === 'refused') for (const diagnostic of qualified.diagnostics) refuse(context, 'body-table-unsupported', diagnostic.scope_id, diagnostic.message)
+  if (qualified.status === 'refused') {
+    // Table qualification refuses the whole table set atomically, so every cell
+    // paragraph loses its exact shaping width and shaping drops it. Keep the
+    // reason addressable by scope so the resulting 'shaped-paragraph-missing'
+    // refusals can name it instead of reporting a causeless symptom.
+    context.tableQualificationCauses = new Map()
+    for (const diagnostic of qualified.diagnostics) {
+      refuse(context, 'body-table-unsupported', diagnostic.scope_id, diagnostic.message)
+      if (!context.tableQualificationCauses.has(diagnostic.scope_id)) context.tableQualificationCauses.set(diagnostic.scope_id, { code: diagnostic.code, message: diagnostic.message })
+    }
+  }
   else context.qualifiedTables = new Map(qualified.tables.map((table) => [table.table.id, table]))
   for (const entry of document.unsupported) {
     if (context.columnFlow && entry.code === 'UNEQUAL_SECTION_COLUMNS') continue
@@ -1732,21 +1744,55 @@ function approximateInertNoteSeparators(document: NativeDocxDocumentV1): boolean
  * named no cause at all for exactly the blockers that stop the whole body, so
  * fall back to the document-scoped record. A paragraph-scoped cause still wins,
  * since it names the specific paragraph's own blocker.
+ *
+ * A cell paragraph is a third scope again. Table qualification refuses the whole
+ * table set atomically; shaping then finds no exact cell-content width for any
+ * cell paragraph and drops it, recording 'table-layout-unsupported' under the
+ * containing TABLE id. Neither the paragraph nor the document scope matches, so
+ * every cell paragraph reported a causeless symptom while the actual geometry
+ * refusal sat one scope away. Resolve the containing table and prefer the
+ * qualification diagnostic pagination itself recorded, which names the exact
+ * unsupported source geometry rather than shaping's generic missing-width note.
  */
+function containingTableID(context: PaginationContext, paragraphID: string): string | undefined {
+  if (!context.containingTableIDs) {
+    const index = new Map<string, string>()
+    for (const block of context.request.document.body.blocks) {
+      if (!block.table) continue
+      for (const row of block.table.rows) for (const cell of row.cells) for (const paragraph of cell.paragraphs) index.set(paragraph.id, block.table.id)
+    }
+    context.containingTableIDs = index
+  }
+  return context.containingTableIDs.get(paragraphID)
+}
+
 function unshapedParagraphCause(context: PaginationContext, paragraphID: string): { code: string; message: string } | undefined {
   const documentID = context.request.document.document_id
+  const tableID = containingTableID(context, paragraphID)
   let documentCause: { code: string; message: string } | undefined
+  let tableCause: { code: string; message: string } | undefined
+  let tableCauseCarriesSource = false
   for (const diagnostic of context.request.shaped_lines.diagnostics) {
-    // Only 'unresolved-layout-diagnostic' records a diagnostic that actually
-    // blocked shaping. 'paint-diagnostic-preserved' carries a source code too,
-    // but it is emitted for paint-only codes that explicitly do not change
-    // shaping advances, so attributing a refusal to one names an innocent code.
-    if (diagnostic.code !== 'unresolved-layout-diagnostic' || diagnostic.source_diagnostic_code === undefined) continue
-    const cause = { code: diagnostic.source_diagnostic_code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+    // Only 'unresolved-layout-diagnostic' and 'table-layout-unsupported' record a
+    // diagnostic that actually blocked shaping. 'paint-diagnostic-preserved'
+    // carries a source code too, but it is emitted for paint-only codes that
+    // explicitly do not change shaping advances, so attributing a refusal to one
+    // names an innocent code. A blocker with no source code is still a blocker:
+    // report it under its own shaping code rather than discarding the message.
+    if (diagnostic.code !== 'unresolved-layout-diagnostic' && diagnostic.code !== 'table-layout-unsupported') continue
+    const cause = { code: diagnostic.source_diagnostic_code ?? diagnostic.code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+    if (diagnostic.code === 'table-layout-unsupported') {
+      if (tableID !== undefined && diagnostic.scope_id === tableID && (tableCause === undefined || !tableCauseCarriesSource && diagnostic.source_diagnostic_code !== undefined)) {
+        tableCause = cause
+        tableCauseCarriesSource = diagnostic.source_diagnostic_code !== undefined
+      }
+      continue
+    }
     if (diagnostic.scope_id === paragraphID) return cause
     if (diagnostic.scope_id === documentID && documentCause === undefined) documentCause = cause
   }
-  return documentCause
+  const qualification = tableID === undefined ? undefined : context.tableQualificationCauses?.get(tableID) ?? context.tableQualificationCauses?.get(documentID)
+  return qualification ?? tableCause ?? documentCause
 }
 
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {
