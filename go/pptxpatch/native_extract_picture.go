@@ -8,6 +8,24 @@ import (
 	"strings"
 )
 
+// nativePictureProjectionRefusal identifies a structurally readable p:pic the
+// bounded native projection cannot represent, as distinct from a malformed
+// package. The deck is not at fault, so the caller refuses this one picture and
+// keeps the slide, exactly as a refused AutoShape (#259) or graphic frame
+// (#271) does.
+type nativePictureProjectionRefusal struct {
+	code    string
+	message string
+}
+
+func (refusal nativePictureProjectionRefusal) Error() string {
+	return "pptxpatch: native extract: " + refusal.message
+}
+
+func refuseNativePicture(code, message string) error {
+	return nativePictureProjectionRefusal{code: code, message: message}
+}
+
 type nativePictureGap struct {
 	code    string
 	message string
@@ -232,7 +250,14 @@ func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDia
 	embed, embedOK := exactNativeAttr(blip, dialect.rels, "embed")
 	link, linkOK := exactNativeAttr(blip, dialect.rels, "link")
 	if !embedOK || embed == "" || !nativeIDPattern.MatchString(embed) {
-		return "", "", fmt.Errorf("pptxpatch: native extract: picture requires one valid embedded image relationship")
+		// a:blip may carry r:link instead of r:embed (ECMA-376 §20.1.8.13): the
+		// image lives outside the package, at a URL or a file path this reader
+		// must not fetch. There is nothing to project and nothing malformed
+		// about the deck, so the picture is refused and the slide survives.
+		if linkOK {
+			return "", "", refuseNativePicture("pptx.unsupported-picture", "picture is an externally linked image; native PPTX v1 projects only images stored in the package")
+		}
+		return "", "", refuseNativePicture("pptx.unsupported-picture", "picture has no valid embedded image relationship")
 	}
 	if linkOK {
 		if link == "" || !nativeIDPattern.MatchString(link) {
@@ -306,6 +331,13 @@ func validateNativePictureShapeProperties(node *nativeXMLNode, dialect nativeExt
 	}
 	xfrm, err := nativeSingleton(node, dialect.drawing, "xfrm", true)
 	if err != nil {
+		// A picture that fills a layout placeholder authors an empty p:spPr and
+		// inherits its box from the placeholder (ECMA-376 §19.3.1.36). Native
+		// PPTX v1 does not resolve inherited placeholder geometry, so there is
+		// no box to project — but that is this picture's limit, not the deck's.
+		if nativeChild(node, dialect.drawing, "xfrm") == nil {
+			return NativeTransform{}, refuseNativePicture("pptx.unsupported-picture", "picture has no explicit transform; an inherited placeholder box is not resolved by native PPTX v1")
+		}
 		return NativeTransform{}, err
 	}
 	geometry, err := nativeSingleton(node, dialect.drawing, "prstGeom", false)
