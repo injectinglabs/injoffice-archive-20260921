@@ -3800,22 +3800,66 @@ func (extractor *nativeExtractor) extractTableRow(partName, tableID string, node
 		if child.Name == (xml.Name{Space: extractor.wordNS, Local: "trPr"}) {
 			continue
 		}
+		cellNodes := []*nativeXMLNode{child}
 		if child.Name != (xml.Name{Space: extractor.wordNS, Local: "tc"}) {
+			wrapped := extractor.structuredTagRowCells(child)
+			if wrapped == nil {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_ROW_CONTENT", "table-structure", tableID, partName, child, "Row content outside direct cells is preserved verbatim")
+				continue
+			}
+			// A w:sdt around a row's cells is a content control: ECMA-376
+			// 17.5.2.31 puts the same w:tc elements inside w:sdtContent without
+			// adding a grid column or any geometry of its own, so the cells it
+			// holds are the row's cells and reading through it moves nothing.
+			// The control keeps its own preserve-only record, which leaves the
+			// table read-only for mutation.
 			unsafe = true
-			extractor.addUnsupported("UNMODELED_ROW_CONTENT", "table-structure", tableID, partName, child, "Row content outside direct cells is preserved verbatim")
-			continue
+			extractor.addUnsupported("WRAPPED_ROW_CELLS", "table-structure", tableID, partName, child, "Row cells wrapped in a content control are laid out; the control itself is preserved verbatim")
+			cellNodes = wrapped
 		}
-		cell, cellUnsafe, err := extractor.extractTableCell(partName, tableID, child)
-		if err != nil {
-			return NativeTableRowV1{}, false, err
-		}
-		row.Cells = append(row.Cells, cell)
-		unsafe = unsafe || cellUnsafe
-		if len(row.Cells) > NativeDOCXMaxCollectionItems {
-			return NativeTableRowV1{}, false, fmt.Errorf("docxpatch: native extract: row %q exceeds %d cells", id, NativeDOCXMaxCollectionItems)
+		for _, cellNode := range cellNodes {
+			cell, cellUnsafe, err := extractor.extractTableCell(partName, tableID, cellNode)
+			if err != nil {
+				return NativeTableRowV1{}, false, err
+			}
+			row.Cells = append(row.Cells, cell)
+			unsafe = unsafe || cellUnsafe
+			if len(row.Cells) > NativeDOCXMaxCollectionItems {
+				return NativeTableRowV1{}, false, fmt.Errorf("docxpatch: native extract: row %q exceeds %d cells", id, NativeDOCXMaxCollectionItems)
+			}
 		}
 	}
 	return row, unsafe, nil
+}
+
+// structuredTagRowCells returns the cells of a content control whose entire
+// content is direct w:tc children, or nil for anything else. Requiring the
+// control to hold nothing but cells is what makes reading through it lossless:
+// any other child would be row content this extractor would silently drop.
+func (extractor *nativeExtractor) structuredTagRowCells(node *nativeXMLNode) []*nativeXMLNode {
+	if node.Name != (xml.Name{Space: extractor.wordNS, Local: "sdt"}) || !nativeExactContainer(node) {
+		return nil
+	}
+	for _, child := range node.Children {
+		if child.Name.Space != extractor.wordNS {
+			return nil
+		}
+		switch child.Name.Local {
+		case "sdtPr", "sdtEndPr", "sdtContent":
+		default:
+			return nil
+		}
+	}
+	contents := directNativeChildren(node, extractor.wordNS, "sdtContent")
+	if len(contents) != 1 || !nativeExactContainer(contents[0]) {
+		return nil
+	}
+	cells := directNativeChildren(contents[0], extractor.wordNS, "tc")
+	if len(cells) == 0 || len(cells) != len(contents[0].Children) {
+		return nil
+	}
+	return cells
 }
 
 func (extractor *nativeExtractor) extractTableCell(partName, tableID string, node *nativeXMLNode) (NativeTableCellV1, bool, error) {

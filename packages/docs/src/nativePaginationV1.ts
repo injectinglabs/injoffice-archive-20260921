@@ -295,6 +295,12 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   'INVALID_NATIVE_PARAGRAPH_ID',
   'HYPERLINK_SEMANTICS',
   'UNMODELED_COMMENT_MARKUP',
+  // A content control around a table row's cells, read through the same way a
+  // hyperlink's runs are. The extractor emits this code only when the control
+  // holds nothing but w:tc children, so every cell of the row reaches the
+  // table projection and the wrapper contributes no grid column, no width and
+  // no advance of its own.
+  'WRAPPED_ROW_CELLS',
 ])
 
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
@@ -925,7 +931,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
       addDiagnostic(context, {
         code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
         source_code: entry.code, source_message: entry.message,
-        message: `Native preserve-only record is identity-, relationship-, or detached-story-only and does not alter current body advances: ${entry.code}: ${entry.message}`,
+        message: `Native preserve-only record is identity-, relationship-, wrapper-, or detached-story-only and does not alter current body advances: ${entry.code}: ${entry.message}`,
       })
       continue
     }
