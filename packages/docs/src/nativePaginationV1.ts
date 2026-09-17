@@ -288,6 +288,7 @@ const SETTINGS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wor
 const RELATIONSHIPS_CONTENT_TYPE = 'application/vnd.openxmlformats-package.relationships+xml'
 const PAGINATION_AFFECTING_CAPABILITIES = new Set(['sections', 'body-structure', 'pagination', 'page-layout'])
 const UNSUPPORTED_CONTROLS = new Set(['page-break', 'column-break', 'soft-hyphen'])
+const FLOW_BREAK_CONTROLS = new Set(['page-break', 'column-break'])
 const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   'DUPLICATE_NATIVE_PARAGRAPH_ID',
   'INVALID_NATIVE_PARAGRAPH_ID',
@@ -306,6 +307,7 @@ interface PaginationContext {
   reservationPages?: Map<number, { reference_run_ids: string[]; height_millipoints: number }>
   columnFlow?: NativeDocxColumnParagraphFlowV1
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
+  flowBreaks: Map<string, NativeDocxFlowBreakControlV1>
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
   diagnostics: NativeDocxPaginationDiagnosticV1[]
@@ -823,6 +825,32 @@ function bodyParagraphs(document: NativeDocxDocumentV1): NativeDocxParagraphV1[]
     : block.kind === 'table' && block.table ? block.table.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs)) : [])
 }
 
+type NativeDocxFlowBreakControlV1 = 'page-break' | 'column-break'
+
+/**
+ * A w:br of type page or column is a flow control, not shaped text: the shaper
+ * drops it and records page-control-deferred, so no shaped line marks where it
+ * falls. Pagination can honour one only where the source by itself proves the
+ * position, which is a break that opens its own top-level body paragraph.
+ * Nothing in that paragraph is shaped ahead of it, so every one of its lines
+ * belongs after the break and the whole paragraph moves to the next page or
+ * column. A break that follows content in the same paragraph would have to cut
+ * that paragraph's shaped lines where the shaper never marked a boundary, a
+ * second break in the same paragraph has no single position, and a break inside
+ * a table cell has no modeled cell-local flow, so those keep refusing.
+ */
+function bodyFlowBreaks(document: NativeDocxDocumentV1): Map<string, NativeDocxFlowBreakControlV1> {
+  const breaks = new Map<string, NativeDocxFlowBreakControlV1>()
+  for (const block of document.body.blocks) {
+    const paragraph = block.kind === 'paragraph' ? block.paragraph : undefined
+    const leading = paragraph?.runs[0]?.control
+    if (!paragraph || leading === undefined || !FLOW_BREAK_CONTROLS.has(leading)) continue
+    if (paragraph.runs.some((run, index) => index > 0 && run.control !== undefined && FLOW_BREAK_CONTROLS.has(run.control))) continue
+    breaks.set(paragraph.id, leading as NativeDocxFlowBreakControlV1)
+  }
+  return breaks
+}
+
 function blockParagraphs(block: NativeDocxBlockV1): NativeDocxParagraphV1[] {
   return block.paragraph ? [block.paragraph] : block.table ? block.table.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs)) : []
 }
@@ -922,7 +950,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     }
   }
   for (const paragraph of bodyParagraphs(document)) for (const run of paragraph.runs) {
-    if (run.control && UNSUPPORTED_CONTROLS.has(run.control)) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
+    if (run.control && UNSUPPORTED_CONTROLS.has(run.control) && context.flowBreaks.get(paragraph.id) !== run.control) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
     if (run.drawing) {
       const image = qualifyNativeDocxInlineImageV1(document, run.id, run.drawing)
       if (!image.ok) {
@@ -1319,6 +1347,10 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   if (!context.currentPage || context.refused) return
   if (resolved.properties.page_break_before && pageHasContent(context)) startNextContentPage(context)
   if (!context.currentPage || context.refused) return
+  const flowBreak = context.flowBreaks.get(paragraph.paragraph_id)
+  if (flowBreak === 'page-break' && pageHasContent(context)) startNextContentPage(context)
+  else if (flowBreak === 'column-break' && columnHasContent(context)) startNextFlowColumn(context)
+  if (!context.currentPage || context.refused) return
   const totalHeight = sumLineHeights(paragraph.lines)
   if (totalHeight === undefined) {
     refuse(context, 'resource-limit', paragraph.paragraph_id, 'Paragraph line-height sum exceeds the bounded integer range')
@@ -1608,7 +1640,7 @@ interface KeepChainPlan {
 // One reverse pass makes every keep-chain query O(1). Each paragraph and
 // shaped line contributes to at most one planning step, so a maximal hostile
 // keep_next chain cannot trigger the former quadratic forward rescans.
-function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: Map<string, NativeDocxResolvedParagraphV1>, shaped: Map<string, NativeDocxShapedParagraphV1>): KeepChainPlan {
+function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: Map<string, NativeDocxResolvedParagraphV1>, shaped: Map<string, NativeDocxShapedParagraphV1>, flowBreaks: ReadonlyMap<string, NativeDocxFlowBreakControlV1>): KeepChainPlan {
   const ends = new Array<number>(paragraphs.length)
   const contentHeights = new Array<number | undefined>(paragraphs.length)
   const pageBreakConflicts = new Array<number | undefined>(paragraphs.length)
@@ -1628,7 +1660,7 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
       continue
     }
     ends[index] = ends[index + 1]!
-    pageBreakConflicts[index] = resolved.get(paragraphs[index + 1]!.id)?.properties.page_break_before === true ? index + 1 : pageBreakConflicts[index + 1]
+    pageBreakConflicts[index] = resolved.get(paragraphs[index + 1]!.id)?.properties.page_break_before === true || flowBreaks.has(paragraphs[index + 1]!.id) ? index + 1 : pageBreakConflicts[index + 1]
     atomic[index] = ((shaped.get(paragraphs[index]!.id)?.lines.length ?? 0) === 1 || resolved.get(paragraphs[index]!.id)?.properties.keep_lines === true) && atomic[index + 1] === true
     const paragraph = shaped.get(paragraphs[index]!.id)
     const nextParagraph = shaped.get(paragraphs[index + 1]!.id)
@@ -1776,7 +1808,8 @@ function paginateExactlyBalancedGroup(
   const exact = lineHeight !== undefined && lineHeight > 0 && entries.every((entry) =>
     entry.shaped.lines.length > 0 && entry.shaped.lines.every((line) => line.line_height_millipoints === lineHeight) &&
     entry.shaped.spacing_before_millipoints === 0 && entry.shaped.spacing_after_millipoints === 0 &&
-    entry.resolved.properties.keep_next !== true && entry.resolved.properties.page_break_before !== true)
+    entry.resolved.properties.keep_next !== true && entry.resolved.properties.page_break_before !== true &&
+    !context.flowBreaks.has(entry.native.id))
   const column = currentColumn(context)
   const capacity = lineHeight === undefined || !column ? 0 : Math.floor(column.height_millipoints / lineHeight)
   if (!exact || capacity < 1) {
@@ -1822,6 +1855,14 @@ function paginateExactlyBalancedGroup(
 }
 
 function paginateGroups(context: PaginationContext, groups: readonly SectionGroup[], resolved: Map<string, NativeDocxResolvedParagraphV1>, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
+  // The footnote-flow, footnote-reservation and unequal-column placements each
+  // replay body paragraphs from a plan measured before pagination, and none of
+  // those plans carries a flow break. Refuse instead of dropping the break.
+  const [unplanned] = context.flowBreaks
+  if (unplanned && (context.footnoteFlow || context.footnoteReservation || context.columnFlow)) {
+    refuse(context, 'source-control-unsupported', unplanned[0], `Native ${unplanned[1]} is not represented by the shaped-lines v1 pagination input`)
+    return
+  }
   for (const [groupIndex, group] of groups.entries()) {
     sectionBodyBox(context, group.section)
     if (context.refused) return
@@ -1926,7 +1967,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
         if (context.approximateLegacySettings && !shaped.get(native.id) && approximateOmittedUnshapedParagraph(native, context.request.document)) continue
         run.push(native)
       }
-      const keepPlan = planKeepChains(run, resolved, shaped)
+      const keepPlan = planKeepChains(run, resolved, shaped, context.flowBreaks)
       for (let index = 0; index < run.length && !context.refused; index += 1) {
         const nativeParagraph = run[index]!
         const resolvedParagraph = resolved.get(nativeParagraph.id)
@@ -2007,6 +2048,7 @@ function expectedSectionGeometry(section: NativeDocxSectionV1): { width: number;
 function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, approximateLegacySettings:NativeDocxApproximationEligibilityV1|false = false): NativeDocxPaginatedLayoutV1 {
   const context: PaginationContext = {
     approximateLegacySettings,
+    flowBreaks: bodyFlowBreaks(request.document),
     ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     request,
     provenance: provenance(request),
@@ -2125,6 +2167,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
   const semanticContext: PaginationContext = {
     ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     approximateLegacySettings,
+    flowBreaks: bodyFlowBreaks(request.document),
     request, provenance: provenance(request), diagnostics: [], diagnosticKeys: new Set(), refused: false,
     pages: [], sections: [], cursorY: 0, previousAfter: 0, sectionPageOrdinal: 0, currentColumnOrdinal: 0,
     sliceCount: 0, linePlacementCount: 0, sliceCountForParagraph: new Map(), lastSliceLocation: new Map(),
