@@ -1,4 +1,4 @@
-import { decodeNativeDocxDocument } from "./nativeContract.js";
+import { decodeNativeDocxDocument, nativeDocxSeparatorStoryProjectionV1 } from "./nativeContract.js";
 import { decodeNativeDocxResolvedLayout } from "./nativeResolvedLayout.js";
 
 /** The single definition of the read-only host default size, one value per
@@ -173,11 +173,12 @@ export function projectNativeDocxAbsentFontSizesV1(
     ...document.value.headers.flatMap((s) => s.blocks),
     ...document.value.footers.flatMap((s) => s.blocks),
     // Raw sentinel qualification is performed by the source producer. Retain
-    // the decoded reserved identity, empty content and clean-part boundaries.
+    // the decoded reserved identity, its projected shape and clean-part
+    // boundaries, reading that shape from the one shared definition rather
+    // than restating it here.
     ...document.value.notes.filter((s) =>
       (s.note_role === "separator" || s.note_role === "continuation-separator") &&
-      s.blocks.length === 1 &&
-      s.blocks[0]?.paragraph?.runs.length === 0 &&
+      nativeDocxSeparatorStoryProjectionV1(s) &&
       !document.value.unsupported.some((d) => d.scope_id === s.id || d.anchor?.part_name === s.part_name)
     ).flatMap((s) => s.blocks),
   ].flatMap((block) =>
