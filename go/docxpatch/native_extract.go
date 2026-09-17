@@ -2070,9 +2070,19 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			// this projection cannot round-trip spacing, the paragraph remains
 			// preservation-only even when the source shape is exact.
 			preserveOnly = true
-			if !nativeExactResolvedParagraphSpacing(child, extractor.wordNS) {
+			switch nativeResolvedParagraphSpacingShape(child, extractor.wordNS) {
+			case nativeParagraphSpacingExact:
+			case nativeParagraphSpacingAutomatic:
+				// An explicit automatic before/after flag is an exact source
+				// shape whose value Word determines. The resolved-layout
+				// projection owns that value and records the same code, so the
+				// paragraph stays preservation-only and carries the automatic
+				// fact rather than being reported as unknown spacing structure.
 				unsafe = true
-				extractor.addUnsupported("UNMODELED_PARAGRAPH_SPACING", "paragraph-properties", paragraphID, partName, child, "Paragraph spacing is invalid, automatic, line-unit based, or has structure outside the exact resolved-layout subset")
+				extractor.addUnsupported("AUTO_PARAGRAPH_SPACING_PRESERVED", "paragraph-properties", paragraphID, partName, child, "Automatic paragraph spacing is preserved; its value is determined by the resolved-layout projection and not guessed")
+			default:
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_PARAGRAPH_SPACING", "paragraph-properties", paragraphID, partName, child, "Paragraph spacing is invalid, line-unit based, or has structure outside the exact resolved-layout subset")
 			}
 		case "rPr":
 			// Paragraph-mark metrics are owned by the resolved-layout projection,
@@ -2186,42 +2196,58 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 	return true
 }
 
-func nativeExactResolvedParagraphSpacing(node *nativeXMLNode, wordNS string) bool {
+// nativeParagraphSpacingShape names how far a w:spacing element is from the
+// exact resolved-layout subset: an exact shape, an otherwise exact shape whose
+// before or after measurement is explicitly automatic, or anything else.
+type nativeParagraphSpacingShape int
+
+const (
+	nativeParagraphSpacingUnmodeled nativeParagraphSpacingShape = iota
+	nativeParagraphSpacingExact
+	nativeParagraphSpacingAutomatic
+)
+
+func nativeResolvedParagraphSpacingShape(node *nativeXMLNode, wordNS string) nativeParagraphSpacingShape {
 	if !nativeExactLeaf(node,
 		xml.Name{Space: wordNS, Local: "before"}, xml.Name{Space: wordNS, Local: "after"},
 		xml.Name{Space: wordNS, Local: "line"}, xml.Name{Space: wordNS, Local: "lineRule"},
 		xml.Name{Space: wordNS, Local: "beforeAutospacing"}, xml.Name{Space: wordNS, Local: "afterAutospacing"},
 		xml.Name{Space: wordNS, Local: "beforeLines"}, xml.Name{Space: wordNS, Local: "afterLines"}) {
-		return false
+		return nativeParagraphSpacingUnmodeled
 	}
 	for _, name := range []string{"before", "after", "line"} {
 		if _, present := nativeAttr(node, wordNS, name); present {
 			if _, valid := nativeNonnegativeInt64Attr(node, wordNS, name); !valid {
-				return false
+				return nativeParagraphSpacingUnmodeled
 			}
 		}
 	}
+	automatic := false
 	for _, name := range []string{"beforeAutospacing", "afterAutospacing"} {
 		if raw, present := nativeAttr(node, wordNS, name); present {
 			value, valid := nativeLexicalOnOff(raw)
-			if !valid || value {
-				return false
+			if !valid {
+				return nativeParagraphSpacingUnmodeled
 			}
+			automatic = automatic || value
 		}
 	}
 	if _, present := nativeAttr(node, wordNS, "beforeLines"); present {
-		return false
+		return nativeParagraphSpacingUnmodeled
 	}
 	if _, present := nativeAttr(node, wordNS, "afterLines"); present {
-		return false
+		return nativeParagraphSpacingUnmodeled
 	}
 	if rule, present := nativeAttr(node, wordNS, "lineRule"); present {
 		_, linePresent := nativeAttr(node, wordNS, "line")
 		if !linePresent || (rule != "auto" && rule != "exact" && rule != "atLeast") {
-			return false
+			return nativeParagraphSpacingUnmodeled
 		}
 	}
-	return true
+	if automatic {
+		return nativeParagraphSpacingAutomatic
+	}
+	return nativeParagraphSpacingExact
 }
 
 func nativeExactResolvedParagraphIndent(node *nativeXMLNode, wordNS string) bool {
