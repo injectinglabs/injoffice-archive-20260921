@@ -3884,6 +3884,21 @@
               "signature": "export declare const DOCX_PARTIAL_CONTENT_POLICY: 'source-text-with-omissions-v1'"
             },
             {
+              "name": "DOCX_PREVIEW_REFUSAL_CODES",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_CODES: readonly ["
+            },
+            {
+              "name": "DOCX_PREVIEW_REFUSAL_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_PROTOCOL: 'injoffice.docx.preview-refusal'"
+            },
+            {
+              "name": "DOCX_PREVIEW_REFUSAL_VERSION",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_VERSION: 1"
+            },
+            {
               "name": "DOCX_PROSEMIRROR_PROJECTION_SCHEMA",
               "kind": "const",
               "signature": "export declare const DOCX_PROSEMIRROR_PROJECTION_SCHEMA = \"injoffice.docx.prosemirror-text\""
@@ -4882,6 +4897,26 @@
               "name": "NativeDocxPositionedGlyphV1",
               "kind": "type",
               "signature": "export interface NativeDocxPositionedGlyphV1"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalCodeV1",
+              "kind": "type",
+              "signature": "NativeDocxPreviewRefusalCodeV1"
+            },
+            {
+              "name": "nativeDocxPreviewRefusalRecordV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxPreviewRefusalRecordV1(value: unknown): NativeDocxPreviewRefusalRecordV1 | undefined"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalRecordV1",
+              "kind": "type",
+              "signature": "NativeDocxPreviewRefusalRecordV1"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalV1",
+              "kind": "class",
+              "signature": "export declare class NativeDocxPreviewRefusalV1 extends TypeError"
             },
             {
               "name": "NativeDocxProseMirrorDocumentProjectionV1",
@@ -6506,6 +6541,21 @@
               "signature": "export declare const DOCX_PAGE_PAINT_COMPILER_VERSION: 1"
             },
             {
+              "name": "DOCX_PREVIEW_REFUSAL_CODES",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_CODES: readonly ["
+            },
+            {
+              "name": "DOCX_PREVIEW_REFUSAL_PROTOCOL",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_PROTOCOL: 'injoffice.docx.preview-refusal'"
+            },
+            {
+              "name": "DOCX_PREVIEW_REFUSAL_VERSION",
+              "kind": "const",
+              "signature": "export declare const DOCX_PREVIEW_REFUSAL_VERSION: 1"
+            },
+            {
               "name": "layoutNativeDocxApproximateEquationsV1",
               "kind": "function",
               "signature": "export declare function layoutNativeDocxApproximateEquationsV1(equations: NativeDocxApproximateEquationsV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1): Promise<NativeDocxApproximateEquationLayoutsV1>"
@@ -6794,6 +6844,26 @@
               "name": "NativeDocxPagePaintPrepareInputV1",
               "kind": "interface",
               "signature": "export interface NativeDocxPagePaintPrepareInputV1"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalCodeV1",
+              "kind": "type",
+              "signature": "NativeDocxPreviewRefusalCodeV1"
+            },
+            {
+              "name": "nativeDocxPreviewRefusalRecordV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxPreviewRefusalRecordV1(value: unknown): NativeDocxPreviewRefusalRecordV1 | undefined"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalRecordV1",
+              "kind": "type",
+              "signature": "NativeDocxPreviewRefusalRecordV1"
+            },
+            {
+              "name": "NativeDocxPreviewRefusalV1",
+              "kind": "class",
+              "signature": "export declare class NativeDocxPreviewRefusalV1 extends TypeError"
             },
             {
               "name": "paintNativeDocxApproximateDrawingChartsV1",

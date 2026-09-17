@@ -34,6 +34,7 @@ import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequest
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
 import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
 import { renderNativeDocxAutomaticBorderPreviewV1 } from './nativePagePaintCompilerV1.js'
+import { NativeDocxPreviewRefusalV1, nativeDocxPreviewRefusalRecordV1, DOCX_PREVIEW_REFUSAL_PROTOCOL, DOCX_PREVIEW_REFUSAL_VERSION } from './nativePreviewRefusalV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
 import { DOCX_AUTO_BORDER_POLICY, DOCX_AUTO_BORDER_WARNING } from './nativeAutomaticBorderEvidenceV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } from './nativeAbsentFontSizeV1.js'
@@ -995,6 +996,33 @@ describe('native DOCX page-paint compiler v1', () => {
     delete forgedResolved.source_parts.font_table_part
     rewriteInventory(forged.input, (inventory) => { delete inventory.font_table })
     await expect(prepareNativeDocxPagePaintV1(forged.input, { fonts: forged.fonts })).rejects.toThrow('font families require a font-table binding')
+  })
+
+  // Every body paragraph is shaped once, at one width, so sections that
+  // disagree on that width are a capability the preview does not implement.
+  // Refusing is right; doing it with an unstructured message a caller cannot
+  // branch on is not, and neither is failing to say which section disagrees.
+  it('refuses sections that disagree on the shaping width with a typed, scoped refusal', async () => {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const wide = structuredClone(document.sections[0]!)
+    wide.id = 'section:2'
+    wide.anchor = anchor('/w:document[1]/w:body[1]/w:sectPr[2]', 2_200, 2_290)
+    wide.page.width_twips = 15_840
+    wide.page.height_twips = 15_840
+    wide.page.column_definitions = [{ id: 'column:section:2:0', ordinal: 0 }]
+    document.sections.push(wide)
+    const refusal = await prepareNativeDocxPagePaintV1(input).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toBeInstanceOf(NativeDocxPreviewRefusalV1)
+    expect(nativeDocxPreviewRefusalRecordV1(refusal)).toEqual({
+      protocol: DOCX_PREVIEW_REFUSAL_PROTOCOL,
+      version: DOCX_PREVIEW_REFUSAL_VERSION,
+      code: 'SECTION_SHAPING_WIDTHS_UNSUPPORTED',
+      scope_id: 'section:2',
+      message: expect.stringContaining('section:2 column 0 is'),
+    })
+    // A plain failure stays untyped: only a named source fact gets a code.
+    expect(nativeDocxPreviewRefusalRecordV1(new TypeError('unrelated'))).toBeUndefined()
   })
 
   it('refuses approximate pagination policies in the font-substitution legacy preview instead of applying them undisclosed', async () => {
