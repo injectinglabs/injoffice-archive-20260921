@@ -1061,10 +1061,38 @@ function sectionGroups(context: PaginationContext): SectionGroup[] {
     }
     starts.push(start)
   }
+  const marks = sectionBreakMarkParagraphIDs(context.request.document)
   return sections.map((section, index) => ({
     section,
-    blocks: blocks.slice(starts[index], starts[index + 1] ?? blocks.length),
+    blocks: blocks.slice(starts[index], starts[index + 1] ?? blocks.length).filter((block) => block.paragraph === undefined || !marks.has(block.paragraph.id)),
   }))
+}
+
+/**
+ * Word writes a section break as an empty paragraph whose `w:pPr` carries the
+ * `w:sectPr`, and that paragraph mark is the break itself: it paints no glyph
+ * and occupies no height in a printed page. The section anchor names the
+ * `w:sectPr` element, so the paragraph that carries it is the one whose own
+ * anchor is that element's paragraph ancestor, and `runs` being empty is what
+ * proves the paragraph states nothing but the break.
+ *
+ * Word's own exports measure it. In
+ * `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` the four-column
+ * index band opens one line below the single line above it, not two, so the
+ * empty paragraph holding that section's `w:sectPr` took no height; the same
+ * page then balances six index lines 2/2/2 rather than the seven a painted mark
+ * would have balanced. `multi-column-line-separator-SAVED.pdf` and
+ * `floating-table-section-columns.pdf` agree. A paragraph that carries a
+ * `w:sectPr` and also carries runs is ordinary content and is painted.
+ */
+function sectionBreakMarkParagraphIDs(document: NativeDocxDocumentV1): Set<string> {
+  const marks = new Set<string>()
+  for (const block of document.body.blocks) {
+    const anchor = block.paragraph?.anchor
+    if (!block.paragraph || !anchor || block.paragraph.runs.length > 0) continue
+    if (document.sections.some((section) => section.anchor.part_name === anchor.part_name && section.anchor.path.startsWith(`${anchor.path}/w:pPr`))) marks.add(block.paragraph.id)
+  }
+  return marks
 }
 
 /**
@@ -1141,24 +1169,53 @@ function sectionBodyBox(context: PaginationContext, section: NativeDocxSectionV1
   }
 }
 
-function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSectionV1): NativeDocxPageColumnV1[] | undefined {
+function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSectionV1, bandTop?: number): NativeDocxPageColumnV1[] | undefined {
   const qualified = qualifyNativeDocxSectionColumnsV1(section, context.columnFlow ? { allowUnequalWidths: true } : undefined)
   if (!qualified.ok) {
     refuse(context, qualified.code === 'section-geometry-invalid' ? 'section-geometry-invalid' : 'column-geometry-invalid', section.id, qualified.message)
     return undefined
   }
-  return qualified.value.columns.map((column) => ({ ...column, section_id: section.id }))
+  const columns = qualified.value.columns.map((column) => ({ ...column, section_id: section.id }))
+  if (bandTop === undefined) return columns
+  // A continuous break part-way down a page opens a band: the section's columns
+  // all start at the point the previous section stopped and end where the body
+  // box ends, so a later column starts level with the first rather than at the
+  // top of the page. Word paints exactly that — in
+  // `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` the four-column
+  // index band's second and third columns start on the same baseline as its
+  // first, one line below the single-column paragraph above it.
+  const banded = columns.map((column) => ({ ...column, y_millipoints: bandTop, height_millipoints: column.y_millipoints + column.height_millipoints - bandTop }))
+  if (banded.some((column) => column.height_millipoints <= 0)) return undefined
+  return banded
 }
 
-function ensurePageSectionColumns(context: PaginationContext, section: NativeDocxSectionV1): boolean {
+function ensurePageSectionColumns(context: PaginationContext, section: NativeDocxSectionV1, bandTop?: number): boolean {
   const page = context.currentPage
   if (!page) return false
   if (!page.section_ids.includes(section.id)) page.section_ids.push(section.id)
   if (page.columns.some((column) => column.section_id === section.id)) return true
-  const columns = qualifiedPageColumns(context, section)
+  const columns = qualifiedPageColumns(context, section, bandTop)
   if (!columns) return false
   page.columns.push(...columns)
   return true
+}
+
+/** The lowest point the section has already painted on this page, in page coordinates. */
+function sectionContentBottom(context: PaginationContext, section: NativeDocxSectionV1): number | undefined {
+  const page = context.currentPage
+  if (!page) return undefined
+  const columns = page.columns.filter((column) => column.section_id === section.id)
+  if (columns.length === 0) return undefined
+  let bottom = Math.min(...columns.map((column) => column.y_millipoints))
+  for (const line of page.lines) {
+    if (line.section_id !== section.id) continue
+    bottom = Math.max(bottom, line.y_millipoints + line.height_millipoints)
+  }
+  for (const row of page.table_rows ?? []) {
+    if (row.section_id !== section.id) continue
+    bottom = Math.max(bottom, row.y_millipoints + row.height_millipoints)
+  }
+  return bottom
 }
 
 function newPage(context: PaginationContext, section: NativeDocxSectionV1, kind: NativeDocxPaginatedPageV1['kind'], parityReason?: NativeDocxPaginatedPageV1['parity_reason'], parityBeforeSectionID?: string): NativeDocxPaginatedPageV1 | undefined {
@@ -1226,7 +1283,7 @@ function remainingHeight(context: PaginationContext): number {
   return (currentColumn(context)?.height_millipoints ?? 0) - context.cursorY - (context.reservedBottomHeight ?? 0)
 }
 
-function startSection(context: PaginationContext, section: NativeDocxSectionV1, first: boolean): void {
+function startSection(context: PaginationContext, section: NativeDocxSectionV1, first: boolean, leadingSpacingBefore: number): void {
   const previousSection = context.currentSection
   if (!first && (section.break_type === 'odd-page' || section.break_type === 'even-page')) {
     const nextPageNumber = context.pages.length + 1
@@ -1241,7 +1298,11 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
       refuse(context, 'section-geometry-invalid', section.id, `${section.break_type} with title-page headers or footers has no unambiguous first-page selection on a shared physical page`)
       return
     }
-    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section)) {
+    // A continuous break is Word's way of changing the column division part-way
+    // down a page, so for that break the division alone may differ; the shared
+    // physical page and its header/footer references still have to agree.
+    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && previousSection.page.columns !== section.page.columns
+    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition })) {
       refuse(context, 'section-geometry-invalid', section.id, `${section.break_type} requires identical page, column, margin, and header/footer geometry across the shared physical page`)
       return
     }
@@ -1253,6 +1314,25 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
         context.currentPage = undefined
         context.currentColumnOrdinal = 0
         if (!context.refused) newPage(context, section, 'content')
+        return
+      }
+      if (bandTransition) {
+        // The band opens below the previous section's last line, plus the gap
+        // that would separate two ordinary paragraphs. The gap belongs to the
+        // band, not to its first column: Word starts every column of the band
+        // on the same baseline, which is what the four-column index band of
+        // `alphabeticalIndex_MultipleColumns.pdf` paints.
+        const bottom = sectionContentBottom(context, previousSection)
+        const bandTop = bottom === undefined ? undefined : bottom + Math.max(context.previousAfter, leadingSpacingBefore)
+        if (bandTop === undefined || !ensurePageSectionColumns(context, section, bandTop)) {
+          refuse(context, 'section-geometry-invalid', section.id, 'Continuous column-division change has no room left on the shared physical page')
+          return
+        }
+        context.currentColumnOrdinal = 0
+        context.cursorY = 0
+        context.previousAfter = 0
+        context.sections.at(-1)!.page_ids.push(context.currentPage.id)
+        context.sectionPageOrdinal = 1
         return
       }
       if (!ensurePageSectionColumns(context, section)) return
@@ -1946,12 +2026,62 @@ function validateAndIndexParagraphs(context: PaginationContext, groups: readonly
   return { resolved, shaped }
 }
 
+/** One shaped line of a balanced fragment, with the gap it needs when it does
+ * not open a column. A column head drops that gap exactly as paragraphGap does. */
+interface BalanceUnit {
+  entryIndex: number
+  lineIndex: number
+  height: number
+  gap: number
+}
+
 /**
- * Word normally balances a section's terminal multi-column fragment. V1 only
- * accepts uniform-height, zero-spacing lines when the ideal quotient/remainder
- * distribution also satisfies paragraph keep/widow constraints. Earlier columns
- * receive at most one extra line. A constrained split that would need a different
- * balance plan is refused rather than moving lines heuristically.
+ * Fill `columns` columns greedily to the height `limit`, in order, and report
+ * how many units each column took. Undefined means a single unit is taller than
+ * the limit, which no column height can accommodate.
+ */
+function fillBalancedColumns(units: readonly BalanceUnit[], start: number, columns: number, limit: number, openingGap: number): { counts: number[]; consumed: number } | undefined {
+  const counts = new Array<number>(columns).fill(0)
+  let column = 0
+  let used = 0
+  let index = start
+  while (index < units.length && column < columns) {
+    const unit = units[index]!
+    const gap = counts[column] === 0 ? (column === 0 && index === start ? openingGap : 0) : unit.gap
+    if (used + gap + unit.height > limit) {
+      if (counts[column] === 0) return undefined
+      column += 1
+      used = 0
+      continue
+    }
+    used += gap + unit.height
+    counts[column] += 1
+    index += 1
+  }
+  return { counts, consumed: index - start }
+}
+
+/**
+ * Word balances a section's terminal multi-column fragment: it takes the
+ * smallest column height that still fits the fragment in the section's columns
+ * and fills each column to that height in order, so a trailing column can stay
+ * short or stay empty. It does not spread the remainder one line per column.
+ *
+ * `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` is the oracle. Its
+ * four-column index band holds six index lines, and Word paints them two to a
+ * column at the column origins 72 pt, 198 pt and 324 pt with the 450 pt column
+ * left empty. An even quotient/remainder spread would have painted 2/2/1/1
+ * across all four columns, and a fill-to-capacity pass would have painted 6/0/0/0.
+ * `multi-column-line-separator-SAVED.pdf` (one line per column at 50.4 pt and
+ * 324 pt) and `floating-table-section-columns.pdf` (two per column at 36 pt and
+ * 324 pt) agree.
+ *
+ * The balance height is searched, not guessed: feasibility is monotone in the
+ * height, so a bisection over the column height finds the one height Word's
+ * rule names. Pages before the last one fill to the column height, which is the
+ * same fill with the search skipped. A split that would violate keep_lines or
+ * widow_control, and any paragraph carrying a keep_next, an explicit page break
+ * or a flow break, still refuse rather than move lines heuristically.
  */
 function paginateExactlyBalancedGroup(
   context: PaginationContext,
@@ -1966,51 +2096,70 @@ function paginateExactlyBalancedGroup(
     if (!shapedParagraph || !resolvedParagraph) return []
     return [{ native: block.paragraph, resolved: resolvedParagraph, shaped: shapedParagraph }]
   })
-  const lineHeight = entries[0]?.shaped.lines[0]?.line_height_millipoints
-  const exact = lineHeight !== undefined && lineHeight > 0 && entries.every((entry) =>
-    entry.shaped.lines.length > 0 && entry.shaped.lines.every((line) => line.line_height_millipoints === lineHeight) &&
-    entry.shaped.spacing_before_millipoints === 0 && entry.shaped.spacing_after_millipoints === 0 &&
-    entry.resolved.properties.keep_next !== true && entry.resolved.properties.page_break_before !== true &&
-    !context.flowBreaks.has(entry.native.id))
-  const column = currentColumn(context)
-  const capacity = lineHeight === undefined || !column ? 0 : Math.floor(column.height_millipoints / lineHeight)
-  if (!exact || capacity < 1) {
-    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing requires uniform-height, zero-spacing lines without cross-paragraph break constraints')
+  if (entries.some((entry) => entry.shaped.lines.length === 0 || entry.resolved.properties.keep_next === true ||
+    entry.resolved.properties.page_break_before === true || context.flowBreaks.has(entry.native.id))) {
+    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing has no single fill plan across a keep_next, an explicit page break or a flow break')
     return
   }
+  const units: BalanceUnit[] = []
+  for (const [entryIndex, entry] of entries.entries()) {
+    for (const [lineIndex, line] of entry.shaped.lines.entries()) {
+      units.push({
+        entryIndex, lineIndex, height: line.line_height_millipoints,
+        gap: lineIndex > 0 ? 0 : Math.max(entries[entryIndex - 1]?.shaped.spacing_after_millipoints ?? 0, entry.shaped.spacing_before_millipoints),
+      })
+    }
+  }
   const columns = group.section.page.columns
-  const firstColumns = columns - context.currentColumnOrdinal
   let index = 0
   let sourceLine = 0
-  let remainingLines = entries.reduce((total, entry) => total + entry.shaped.lines.length, 0)
+  let consumedUnits = 0
   let firstPage = true
-  while (remainingLines > 0 && !context.refused) {
-    const participating = firstPage ? firstColumns : columns
-    const pageLines = Math.min(remainingLines, participating * capacity)
-    const baseQuota = Math.floor(pageLines / participating)
-    const extraColumns = pageLines % participating
-    for (let columnIndex = 0; columnIndex < participating && remainingLines > 0; columnIndex += 1) {
-      let quota = baseQuota + (columnIndex < extraColumns ? 1 : 0)
+  while (consumedUnits < units.length && !context.refused) {
+    const participating = firstPage ? columns - context.currentColumnOrdinal : columns
+    const height = currentColumn(context)?.height_millipoints ?? 0
+    const openingGap = firstPage && consumedUnits === 0 && entries[0] ? paragraphGap(context, entries[0].shaped, false) : 0
+    const full = fillBalancedColumns(units, consumedUnits, participating, height, openingGap)
+    if (!full || participating < 1) {
+      refuse(context, 'column-balance-ambiguous', group.section.id, 'A shaped line of the balanced fragment is taller than the section column it would open')
+      return
+    }
+    let counts = full.counts
+    if (full.consumed === units.length - consumedUnits) {
+      // The fragment ends on this page, so Word balances it. Feasibility only
+      // improves with height, so bisect for the smallest height that still fits.
+      let low = 1
+      let high = height
+      while (low < high) {
+        const middle = low + Math.floor((high - low) / 2)
+        const plan = fillBalancedColumns(units, consumedUnits, participating, middle, openingGap)
+        if (plan && plan.consumed === units.length - consumedUnits) high = middle
+        else low = middle + 1
+      }
+      counts = fillBalancedColumns(units, consumedUnits, participating, low, openingGap)!.counts
+    }
+    for (let columnIndex = 0; columnIndex < participating && consumedUnits < units.length; columnIndex += 1) {
+      let quota = counts[columnIndex]!
       while (quota > 0 && !context.refused) {
         const entry = entries[index]!
         const count = Math.min(quota, entry.shaped.lines.length - sourceLine)
         const split = sourceLine > 0 || count < entry.shaped.lines.length
         if (split && (entry.resolved.properties.keep_lines === true ||
           ((entry.resolved.properties.widow_control ?? true) && count < 2))) {
-          refuse(context, 'column-balance-ambiguous', entry.native.id, 'Ideal equal-column balance would violate paragraph keep_lines or widow_control; constrained rebalancing is outside the bounded slice')
+          refuse(context, 'column-balance-ambiguous', entry.native.id, 'The balanced column height would violate paragraph keep_lines or widow_control; constrained rebalancing is outside the bounded slice')
           return
         }
-        placeSlice(context, entry.shaped, sourceLine, count, 0)
-        context.previousAfter = 0
+        placeSlice(context, entry.shaped, sourceLine, count, paragraphGap(context, entry.shaped, sourceLine > 0))
+        context.previousAfter = entry.shaped.spacing_after_millipoints
         sourceLine += count
-        remainingLines -= count
+        consumedUnits += count
         quota -= count
         if (sourceLine === entry.shaped.lines.length) {
           index += 1
           sourceLine = 0
         }
       }
-      if (remainingLines > 0 && !context.refused) startNextFlowColumn(context)
+      if (consumedUnits < units.length && !context.refused) startNextFlowColumn(context)
     }
     firstPage = false
   }
@@ -2033,7 +2182,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
       refuse(context, 'keep-chain-conflict', finalParagraph.id, 'keep_next crosses a modeled section transition; v1 refuses rather than guessing whether Word moves content across the break')
       return
     }
-    startSection(context, group.section, groupIndex === 0)
+    startSection(context, group.section, groupIndex === 0, shaped.get(group.blocks.find((block) => block.paragraph !== undefined)?.paragraph?.id ?? '')?.spacing_before_millipoints ?? 0)
     if (context.refused) return
     if (context.footnoteFlow) {
       for (const [ordinal, page] of context.footnoteFlow.pages.entries()) {
@@ -2380,8 +2529,11 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
   }
   for (const paragraph of request.shaped_lines.paragraphs) if (paragraph.story_kind === 'body' && !nativeIDs.has(paragraph.paragraph_id)) add('BROKEN_REFERENCE', '/shaped_lines/paragraphs', `shaped body paragraph ${paragraph.paragraph_id} is outside the paginated native body sequence`)
 
+  // A section-break mark paints nothing, so its shaped line is not expected on
+  // a page; every other shaped body line still has to be placed exactly once.
+  const breakMarks = sectionBreakMarkParagraphIDs(request.document)
   const expectedLines = nativeParagraphs.flatMap((paragraph) => {
-    const shapedParagraph = shaped.get(paragraph.id)
+    const shapedParagraph = breakMarks.has(paragraph.id) ? undefined : shaped.get(paragraph.id)
     return shapedParagraph ? shapedParagraph.lines.map((line) => ({ paragraph, line, sectionID: paragraphSections.get(paragraph.id) })) : []
   })
   // Exact replay above validates every repeated placement. The independent
