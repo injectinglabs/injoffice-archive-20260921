@@ -431,11 +431,11 @@ func parseNativeConnectorFrame(node *nativeXMLNode, dialect nativeExtractDialect
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	cx, err := requiredCanonicalNativeConnectorInt(ext, "cx", 1, nativeMaxSafeInteger)
+	cx, err := requiredCanonicalNativeConnectorInt(ext, "cx", 0, nativeMaxSafeInteger)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	cy, err := requiredCanonicalNativeConnectorInt(ext, "cy", 1, nativeMaxSafeInteger)
+	cy, err := requiredCanonicalNativeConnectorInt(ext, "cy", 0, nativeMaxSafeInteger)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}

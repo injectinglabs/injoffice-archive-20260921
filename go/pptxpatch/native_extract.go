@@ -2588,6 +2588,14 @@ func requiredNativeInt64(node *nativeXMLNode, space, local string) (int64, error
 	return parsed, nil
 }
 
+func requiredNativeNonnegativeInt64(node *nativeXMLNode, space, local string) (int64, error) {
+	value, err := requiredNativeInt64(node, space, local)
+	if err != nil || value < 0 {
+		return 0, fmt.Errorf("pptxpatch: native extract: %s must not be negative", local)
+	}
+	return value, nil
+}
+
 func requiredNativePositiveInt64(node *nativeXMLNode, space, local string) (int64, error) {
 	value, err := requiredNativeInt64(node, space, local)
 	if err != nil || value <= 0 {
