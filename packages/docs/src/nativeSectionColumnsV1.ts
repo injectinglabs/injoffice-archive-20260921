@@ -57,7 +57,9 @@ export function qualifyNativeDocxSectionColumnsV1(section: NativeDocxSectionV1, 
   if ((section.page.orientation === 'portrait' && pageWidth! > pageHeight!) || (section.page.orientation === 'landscape' && pageWidth! < pageHeight!)) {
     return { ok: false, code: 'section-geometry-invalid', message: 'Section dimensions contradict the declared orientation' }
   }
-  const bodyX = checkedSum(left!, gutter!)
+  // ECMA-376 17.6.19: rtlGutter binds on the right, so the gutter is taken out
+  // of the right margin and the body box starts at the plain left margin.
+  const bodyX = section.page.rtl_gutter === true ? left! : checkedSum(left!, gutter!)
   const bodyWidth = checkedSum(pageWidth!, -left!, -right!, -gutter!)
   const bodyHeight = checkedSum(pageHeight!, -top!, -bottom!)
   if (bodyX === undefined || bodyWidth === undefined || bodyHeight === undefined || bodyWidth <= 0 || bodyHeight <= 0) {

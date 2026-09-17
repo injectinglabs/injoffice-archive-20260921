@@ -1694,9 +1694,11 @@ function resolvedLineHeight(natural: number, properties: NativeDocxResolvedParag
 function alignmentOffset(alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', available: number, advance: number): number {
   const remaining = Math.max(0, available - advance)
   if (alignment === 'center') return Math.round(remaining / 2)
-  if (alignment === 'left' || alignment === 'both' || alignment === 'distribute') return 0
-  if (alignment === 'right') return remaining
-  if (alignment === 'start') return direction === 'ltr' ? 0 : remaining
+  if (alignment === 'both' || alignment === 'distribute') return 0
+  // ECMA-376 17.18.44 ST_Jc: left/right are the legacy aliases of start/end, so
+  // they follow paragraph direction. In an RTL paragraph Word lays out
+  // w:jc="left" against the right edge, which is where its own raster puts it.
+  if (alignment === 'start' || alignment === 'left') return direction === 'ltr' ? 0 : remaining
   return direction === 'ltr' ? remaining : 0
 }
 
