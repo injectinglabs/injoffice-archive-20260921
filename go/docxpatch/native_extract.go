@@ -75,6 +75,10 @@ type nativeRelationship struct {
 	// every allocated id, and PartName stays empty so no reader can resolve
 	// through it; readers treat the related part as absent.
 	Dangling bool
+	// UntypedTarget marks a Dangling relationship whose target the package does
+	// store, under a name no content type maps. The item is not a part, so the
+	// relationship still resolves to nothing.
+	UntypedTarget bool
 }
 
 type nativeXMLNode struct {
@@ -498,7 +502,19 @@ func parseNativeContentTypes(data []byte, files map[string][]byte) (map[string]s
 			resolved[name] = value
 			continue
 		}
-		return nil, fmt.Errorf("docxpatch: native extract: part %q has no content type", name)
+		// A stored item that neither an Override nor a Default maps is left out
+		// of the resolved table, and every reader below treats it as absent. It
+		// is not a part: ECMA-376 Part 2 6.2.3 makes a media type constitutive
+		// of one ("Each part shall have a MIME media type"), and 7.2.3.2.1
+		// requires the Media Types stream to name a Default or an Override for
+		// every part, so nothing here can be read as a part of any type. Such a
+		// package is syntactically defective, but 4 states OPC conformance
+		// purely as a property of packages and puts no obligation on a
+		// consumer, so what to do with the leftover is a reader's choice. These
+		// are editor leftovers a real save left behind -- "word/styles.xml~"
+		// backups, a stray "8980.xml" that is not even XML -- and Word and
+		// LibreOffice both open the documents around them. Refusing cost us
+		// packages whose every declared part is intact.
 	}
 	// An Override naming a part the package does not store is inert. OPC gives
 	// [Content_Types].xml one job, mapping a stored part to its media type, and
@@ -550,6 +566,18 @@ func (pkg *nativePackage) loadRelationships() error {
 				return keyErr
 			}
 			actual, exists := pkg.partByKey[key]
+			if exists && pkg.contentTypes[actual] == "" {
+				// The ZIP stores this item, and no content type maps it, so it
+				// is not a part (parseNativeContentTypes). A relationship
+				// resolves to a part or to nothing; reading bytes of a kind the
+				// package never declared would be inventing the one fact that
+				// decides how they are parsed, so the reference resolves to
+				// nothing and the related part is absent. Recorded separately
+				// from an unstored target so a caller that requires this exact
+				// part can say which defect it hit.
+				rels[index].Dangling, rels[index].UntypedTarget = true, true
+				continue
+			}
 			if !exists {
 				// A relationship whose target part is not stored resolves to
 				// nothing. OPC calls that a package defect, but every real
@@ -727,6 +755,9 @@ func (pkg *nativePackage) officeDocumentPart() (string, bool, error) {
 			continue
 		}
 		if rel.Dangling {
+			if rel.UntypedTarget {
+				return "", false, fmt.Errorf("docxpatch: native extract: officeDocument relationship %q targets %q, which the package stores with no declared content type", rel.ID, rel.Target)
+			}
 			return "", false, fmt.Errorf("docxpatch: native extract: officeDocument relationship %q targets part %q, which the package does not store", rel.ID, rel.Target)
 		}
 		if rel.External || rel.PartName == "" {
@@ -1734,7 +1765,11 @@ func (extractor *nativeExtractor) previousPathCandidate(kind, partKey string, no
 func (extractor *nativeExtractor) passthroughParts() []NativePassthroughPartV1 {
 	names := make([]string, 0, len(extractor.pkg.files))
 	for name := range extractor.pkg.files {
-		if name != "[Content_Types].xml" && !extractor.modeledParts[name] {
+		// Only parts are preserved verbatim. The Media Types stream is not a
+		// part (ECMA-376 Part 2 7.2.3.1), and neither is a stored item no
+		// content type maps, which is also why the contract requires a content
+		// type on every passthrough part.
+		if name != "[Content_Types].xml" && !extractor.modeledParts[name] && extractor.pkg.contentTypes[name] != "" {
 			names = append(names, name)
 		}
 	}
