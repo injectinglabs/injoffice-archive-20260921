@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -788,5 +789,126 @@ func TestNativeNumberingEnclosedCircleFormat(t *testing.T) {
 		if nativeOrdinaryNumberFormat(format) {
 			t.Fatalf("%s is not attested by any reference but was admitted as ordinary", format)
 		}
+	}
+}
+
+// TestNativeNumberingLegalLevelsAndDecimalZero pins w:isLgl (ECMA-376 17.9.10)
+// and the decimalZero format against Microsoft Word's own export of the
+// benchmark document listWithLgl.docx. That package numbers two chapters at
+// level zero with upperRoman and lvlText "CH %1", and one section under each at
+// level one with decimalZero, w:isLgl and lvlText "Sect %1.%2". Word's PDF for
+// that page prints, in order:
+//
+//	CH I / Sect 1.01 / CH II / Sect 2.01
+//
+// Two facts follow and neither is derivable from the element names. isLgl
+// re-renders the INHERITED parent counter as plain decimal -- "I" becomes "1",
+// "II" becomes "2" -- and leaves the level's own format alone, which is why the
+// second component stays decimalZero's "01" rather than becoming "1".
+// decimalZero itself pads to two digits below ten.
+//
+// The fixture below is listWithLgl's numbering with one change: the two levels
+// are given hanging indents. The source declares w:ind left="0" firstLine="N",
+// which states no hanging label region and is refused separately by
+// UNSUPPORTED_NUMBERING_GEOMETRY; the indent does not enter the counter text.
+func TestNativeNumberingLegalLevelsAndDecimalZero(t *testing.T) {
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/><w:name w:val="CustomList"/>` +
+		`<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="upperRoman"/><w:suff w:val="nothing"/><w:lvlText w:val="CH %1"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr></w:lvl>` +
+		`<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimalZero"/><w:isLgl/><w:lvlText w:val="Sect %1.%2"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2160" w:hanging="1440"/></w:pPr></w:lvl>` +
+		`</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	paragraphs := numberedParagraph("1", 0, "") + numberedParagraph("1", 1, "Foo") + numberedParagraph("1", 0, "") + numberedParagraph("1", 1, "Bar")
+	result := resolveNumberingFixture(t, numbering, paragraphs)
+	for _, code := range []string{"UNMODELED_ABSTRACT_NUMBERING", "UNMODELED_NUMBERING_LEVEL", "UNSUPPORTED_NUMBER_FORMAT", "UNSUPPORTED_NUMBERING_GEOMETRY"} {
+		if hasResolutionDiagnostic(result, code) {
+			t.Fatalf("modeled numbering still reports %s", code)
+		}
+	}
+	for index, want := range []string{"CH I", "Sect 1.01", "CH II", "Sect 2.01"} {
+		marker := result.Paragraphs[index].Numbering
+		if marker == nil {
+			t.Fatalf("paragraph %d resolved no marker", index)
+		}
+		if marker.ResolvedText != want {
+			t.Fatalf("paragraph %d marker = %q; want %q", index, marker.ResolvedText, want)
+		}
+	}
+
+	// The inherited counter is recorded as the decimal it was rendered as, and
+	// the level's own counter keeps the format the level declares.
+	section := result.Paragraphs[1].Numbering
+	if section.Format != "decimalZero" || len(section.CounterValues) != 2 {
+		t.Fatalf("section counter values = %#v", section.CounterValues)
+	}
+	if section.CounterValues[0].Format != "decimal" || section.CounterValues[1].Format != "decimalZero" {
+		t.Fatalf("isLgl recorded counter formats %q and %q", section.CounterValues[0].Format, section.CounterValues[1].Format)
+	}
+
+	// Without isLgl the same lvlText prints the parent in its own upperRoman.
+	plain := resolveNumberingFixture(t, strings.Replace(numbering, "<w:isLgl/>", "", 1), paragraphs)
+	if marker := plain.Paragraphs[1].Numbering; marker == nil || marker.ResolvedText != "Sect I.01" {
+		t.Fatalf("without isLgl the section marker = %#v; want \"Sect I.01\"", marker)
+	}
+	// An explicitly disabled w:isLgl is the same as its absence, and is not a
+	// preserved unknown.
+	disabled := resolveNumberingFixture(t, strings.Replace(numbering, "<w:isLgl/>", `<w:isLgl w:val="false"/>`, 1), paragraphs)
+	if hasResolutionDiagnostic(disabled, "UNMODELED_NUMBERING_LEVEL") {
+		t.Fatal("a disabled isLgl was preserved as an unknown level semantic")
+	}
+	if marker := disabled.Paragraphs[1].Numbering; marker == nil || marker.ResolvedText != "Sect I.01" {
+		t.Fatalf("with isLgl disabled the section marker = %#v; want \"Sect I.01\"", marker)
+	}
+	// w:legacy still states layout this tier does not model.
+	legacy := resolveNumberingFixture(t, strings.Replace(numbering, "<w:isLgl/>", `<w:legacy w:legacy="1" w:legacySpace="0" w:legacyIndent="0"/>`, 1), paragraphs)
+	if !hasResolutionDiagnostic(legacy, "UNMODELED_NUMBERING_LEVEL") {
+		t.Fatal("w:legacy is not modeled but was admitted")
+	}
+
+	for _, test := range []struct {
+		value int
+		want  string
+		ok    bool
+	}{
+		{0, "00", true},
+		{1, "01", true},
+		{9, "09", true},
+		{10, "10", true},
+		{100, "100", true},
+		{-1, "", false},
+	} {
+		got, ok := nativeFormatNumberingCounter(test.value, "decimalZero")
+		if got != test.want || ok != test.ok {
+			t.Fatalf("decimalZero %d = %q, %v; want %q, %v", test.value, got, ok, test.want, test.ok)
+		}
+	}
+}
+
+// TestNativeNumberingNameIsAuthoringMetadata pins ECMA-376 17.9.11 w:name: it
+// is the label Word shows for a list in its own gallery, and it selects no
+// counter, format, text or geometry. Unknown abstractNum metadata stays
+// preserved and refused.
+func TestNativeNumberingNameIsAuthoringMetadata(t *testing.T) {
+	level := `<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>`
+	build := func(extra string) string {
+		return `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1">` + extra + level + `</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	}
+	paragraphs := numberedParagraph("1", 0, "one")
+	named := resolveNumberingFixture(t, build(`<w:name w:val="CustomList"/>`), paragraphs)
+	if hasResolutionDiagnostic(named, "UNMODELED_ABSTRACT_NUMBERING") {
+		t.Fatal("w:name selects no numbering semantic but was preserved as unmodeled metadata")
+	}
+	bare := resolveNumberingFixture(t, build(""), paragraphs)
+	if named.Paragraphs[0].Numbering == nil || bare.Paragraphs[0].Numbering == nil {
+		t.Fatal("the fixture resolved no marker")
+	}
+	// The definition digest attests the numbering bytes, which do differ; every
+	// other field of the marker must not.
+	withName, withoutName := *named.Paragraphs[0].Numbering, *bare.Paragraphs[0].Numbering
+	withName.DefinitionSHA256, withoutName.DefinitionSHA256 = "", ""
+	if !reflect.DeepEqual(withName, withoutName) {
+		t.Fatalf("w:name changed the resolved marker: %#v vs %#v", withName, withoutName)
+	}
+	unknown := resolveNumberingFixture(t, build(`<w:numStyleLink w:val="Other"/>`), paragraphs)
+	if !hasResolutionDiagnostic(unknown, "UNMODELED_ABSTRACT_NUMBERING") {
+		t.Fatal("unknown abstract numbering metadata is not modeled but was admitted")
 	}
 }
