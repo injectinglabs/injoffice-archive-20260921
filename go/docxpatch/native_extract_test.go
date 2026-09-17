@@ -701,6 +701,44 @@ func TestExtractNativeDocumentToleratesDanglingRelationship(t *testing.T) {
 	})
 }
 
+// A LibreOffice save can end the last paragraph with its own w:sectPr and then
+// write the body-level w:sectPr after it, as multi-column-line-separator-SAVED
+// .docx does. The final section then governs no block: it holds no paragraph
+// and no table, so its geometry, header/footer references and page numbering
+// reach no page. Word and LibreOffice both open such a document.
+func TestExtractNativeDocumentOmitsAnEmptyTrailingSection(t *testing.T) {
+	parts := cloneNativeParts(transitionalNativeParts())
+	parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"],
+		`<w:p w14:paraId="44556677"><w:r>`,
+		`<w:p w14:paraId="44556677"><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:pPr><w:r>`, 1)
+	doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatalf("an empty trailing section must not refuse the package: %v", err)
+	}
+	if len(doc.Sections) != 2 {
+		t.Fatalf("only the sections that hold blocks are modeled: %d", len(doc.Sections))
+	}
+	for _, section := range doc.Sections {
+		if section.StartsAtBlockID == "" {
+			t.Fatalf("every modeled section starts at a real block: %#v", section)
+		}
+	}
+	var omitted *NativeUnsupportedCapabilityV1
+	for index := range doc.Unsupported {
+		if doc.Unsupported[index].Code == "EMPTY_TRAILING_SECTION_OMITTED" {
+			omitted = &doc.Unsupported[index]
+		}
+	}
+	if omitted == nil || omitted.Capability != "sections" || omitted.ScopeID != doc.Body.ID || omitted.Anchor == nil || omitted.Anchor.Path != "/w:document[1]/w:body[1]/w:sectPr[1]" {
+		t.Fatalf("the omitted section must be disclosed at its own element: %#v", omitted)
+	}
+	for _, section := range doc.Sections {
+		if section.Anchor.Path == omitted.Anchor.Path {
+			t.Fatalf("the omitted element must not also be a modeled section: %#v", section)
+		}
+	}
+}
+
 func TestExtractNativeDocumentRejectsAdversarialPackages(t *testing.T) {
 	base := transitionalNativeParts()
 	tests := []struct {

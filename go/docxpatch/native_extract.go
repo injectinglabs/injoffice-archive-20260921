@@ -1814,7 +1814,21 @@ func (extractor *nativeExtractor) extractBody() (NativeStoryV1, []NativeSectionV
 		markers = append(markers, nativeSectionMarker{node: extractor.bodyNode, startBlock: sectionStart, synthetic: true})
 	}
 	sections := make([]NativeSectionV1, 0, len(markers))
-	for _, marker := range markers {
+	for index, marker := range markers {
+		// The body-level w:sectPr governs the blocks after the last
+		// paragraph-level one. When the last paragraph carries its own
+		// w:sectPr - what a LibreOffice save writes, as in
+		// multi-column-line-separator-SAVED.docx - that range is empty: the
+		// final section holds no paragraph and no table, so its page geometry,
+		// its header/footer references and its page numbering govern nothing
+		// and paint nothing. Word and LibreOffice both open such a document and
+		// neither paints a page for the empty section. It is omitted from the
+		// section list, which needs every section to start at a real block,
+		// and disclosed; the element itself stays in the preserved main part.
+		if marker.startBlock == len(blocks) && index == len(markers)-1 && len(sections) > 0 {
+			extractor.addUnsupported("EMPTY_TRAILING_SECTION_OMITTED", "sections", extractor.bodyID, extractor.mainPart, marker.node, "The final section properties govern no block; they paint nothing and are preserved verbatim")
+			continue
+		}
 		if marker.startBlock < 0 || marker.startBlock >= len(blocks) {
 			return NativeStoryV1{}, nil, fmt.Errorf("docxpatch: native extract: empty trailing section at %s is not safely representable", marker.node.Path)
 		}
