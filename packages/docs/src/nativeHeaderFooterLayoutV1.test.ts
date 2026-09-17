@@ -200,6 +200,17 @@ describe('approximate header/footer placement policy', () => {
     expect(layoutNativeDocxHeadersFootersV1(modeled)).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-shape' })]) }))
   })
 
+  it('paints a footer whose hyperlink text is exposed while its relationship stays preserve-only', () => {
+    const hyperlink = { id: 'unsupported:hyperlink', code: 'HYPERLINK_SEMANTICS', capability: 'hyperlinks', scope_id: 'paragraph:footer-default', preservation: 'preserve-verbatim', message: 'Visible hyperlink text is exposed, while relationship and field semantics remain preserve-only' }
+    const strict = fixture(); strict.document.unsupported.push(hyperlink as never)
+    expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-unsupported', scope_id: 'paragraph:footer-default' })]) }))
+    expect(NONBLOCKING.has('HYPERLINK_SEMANTICS')).toBe(true)
+    const tolerated = approximate(fixture()); tolerated.document.unsupported.push(hyperlink as never)
+    const placed = layoutNativeDocxHeadersFootersV1(tolerated)
+    expect(placed.status).toBe('placed')
+    expect(placed.pages.some((page) => page.lines.some((line) => line.paragraph_id === 'paragraph:footer-default'))).toBe(true)
+  })
+
   it('accepts an expanded line box under the declared line-box policy and still refuses a compressed one', () => {
     const expanded = approximate(fixture()); footerLine(expanded).line_height_millipoints = 14_000
     const value = layoutNativeDocxHeadersFootersV1(expanded)
