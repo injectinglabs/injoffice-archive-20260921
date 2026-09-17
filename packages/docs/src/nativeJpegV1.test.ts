@@ -60,9 +60,17 @@ describe('bounded native baseline JFIF', () => {
     expect(nativeBaselineJpegDimensions(JPEG)).toEqual({ width: 16, height: 8 })
     expect(JPEG).toEqual(before)
   })
-  it('refuses truncation and data after the end marker', () => {
+  it('refuses truncation, and refuses data after the end marker only when it is a second picture', () => {
     for (let length = 0; length < JPEG.length; length++) expect(nativeBaselineJpegDimensions(JPEG.subarray(0,length))).toBeUndefined()
-    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, 0]))).toBeUndefined()
+    // T.81 B.2 ends the compressed image data at EOI and every decoder stops
+    // there, so unreachable trailing bytes leave one complete baseline picture.
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, 0]))).toEqual({ width: 16, height: 8 })
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, ...PNG.subarray(8)]))).toEqual({ width: 16, height: 8 })
+    // A second SOI does not: the byte string is then two pictures.
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, ...JPEG]))).toBeUndefined()
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, 0, 0xff, 0xd8]))).toBeUndefined()
+    // Trailing bytes never excuse a frame that never reached its EOI.
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG.subarray(0, JPEG.length - 2), 0, 0, 0, 0]))).toBeUndefined()
   })
   it('refuses ambiguous metadata, progressive coding and non-YCbCr component IDs', () => {
     for (const app of [0xe1, 0xe2, 0xee]) {
@@ -139,12 +147,15 @@ describe('bounded native baseline JFIF', () => {
     expect(() => prepareNativeRasterResourceV1('ppt/media/image1.png', 'image/gif' as 'image/png', PNG)).toThrow('identity or byte budget is invalid')
 
     // Reading the format from the signature is not a licence to read the rest
-    // loosely. customxml.pptx's own ppt/media/image1.png still refuses on both
-    // counts it fails independently of its name: a zero JFIF density pair, and
-    // 264 bytes trailing its EOI marker.
+    // loosely: the frame's own structure still decides. customxml.pptx's
+    // ppt/media/image1.png states a 0/0 JFIF density pair and trails 264 bytes
+    // of an unreachable PNG tail past its EOI, and neither can change a pixel.
     const zeroDensity = JPEG.slice(); zeroDensity.fill(0, 14, 18)
-    expect(nativeBaselineJpegDimensions(zeroDensity)).toBeUndefined()
-    expect(nativeBaselineJpegDimensions(Uint8Array.from([...JPEG, 0x10, 0x08, 0x04, 0x02]))).toBeUndefined()
+    expect(nativeBaselineJpegDimensions(zeroDensity)).toEqual({ width: 16, height: 8 })
+    expect(nativeBaselineJpegDimensions(Uint8Array.from([...zeroDensity, 0x10, 0x08, 0x04, 0x02]))).toEqual({ width: 16, height: 8 })
+    expect(prepareNativeRasterResourceV1('ppt/media/image1.png', 'image/png', Uint8Array.from([...zeroDensity, 0x10, 0x08, 0x04, 0x02]))).toMatchObject({ content_type: 'image/jpeg', width_px: 16, height_px: 8, byte_length: zeroDensity.length + 4 })
+    // A density pair that is zero on one axis alone still contradicts itself.
+    for (const at of [14, 16]) { const half = JPEG.slice(); half.fill(0, at, at + 2); expect(nativeBaselineJpegDimensions(half), `density at ${at}`).toBeUndefined() }
   })
   it('refuses missing quantization/Huffman tables, extra scans and invalid dimensions', () => {
     for (const [at,value] of [[marker(0xda)+6,0x33], [marker(0xc0)+12,3], [marker(0xc0)+8,0], [marker(0xda)+12,1]]) {
