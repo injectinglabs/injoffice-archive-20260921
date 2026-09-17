@@ -515,9 +515,15 @@ replay; strict rendering and source bytes remain unchanged. The approximate
 envelope declares this policy alongside its other fidelity warnings.
 
 The same current-layout approximation can accept an explicit host-selected
-`fontSizePolicy: { kind: 'host-default-size-v1', half_points: 22 }` only for
+`fontSizePolicy: { kind: 'host-default-size-v1', half_points }` only for
 native-source-attested missing sizes (`absent_font_sizes` eligibility facts).
-This is an 11 pt consumer choice, not an authored or Microsoft default.
+It is a consumer choice, not an authored size, and it is not one value: the
+eligibility also names which source shape proved the absence in
+`absent_font_size_shape`, and the policy must carry the half-points
+`DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1` declares for that shape — 24 (12 pt)
+when the package carries no `w:docDefaults` record at all, 20 (10 pt) when the
+record exists and states no `w:sz`. Both numbers were read out of the `Tf`
+operators of Microsoft Word 16.112's own PDF exports of such packages.
 The output retains the source omissions, chosen sizes and a visible warning;
 existing sizes and malformed/unsupported source diagnostics are never replaced.
 Strict rendering continues to refuse missing required font metrics.

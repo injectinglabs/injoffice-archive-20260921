@@ -406,8 +406,8 @@ func docxFontPreviewComposition(input map[string]any, data []byte) (map[string]a
 			return nil, errors.New("font composition legacy settings ineligible")
 		}
 		composition["legacy_eligibility"] = legacy
-		if len(legacy.AbsentFontSizes) > 0 {
-			composition["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
+		if halfPoints, ok := docxpatch.NativeDocxHostDefaultSizeHalfPointsV1(legacy.AbsentFontSizeShape); ok && len(legacy.AbsentFontSizes) > 0 {
+			composition["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": halfPoints}
 		}
 		if len(legacy.AbsentFontFamilies) > 0 {
 			composition["font_family_policy"] = map[string]any{"kind": "host-default-family-v1", "family": "Aptos"}
@@ -427,8 +427,12 @@ func docxFontPreviewComposition(input map[string]any, data []byte) (map[string]a
 func docxApproximateWorkerInput(input map[string]any, eligibility *docxpatch.NativeDocxApproximationEligibilityV1) (string, map[string]any) {
 	addFontPolicy := func(request map[string]any) map[string]any {
 		if eligibility != nil && eligibility.Status == "eligible" && len(eligibility.AbsentFontSizes) > 0 {
-			// A declared preview-host choice, never an authored or Word default.
-			request["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
+			// A declared preview-host choice. Its value is not invented: it is
+			// the size Microsoft Word 16.112 itself writes into the Tf operator
+			// for this source shape, so the two shapes select different sizes.
+			if halfPoints, ok := docxpatch.NativeDocxHostDefaultSizeHalfPointsV1(eligibility.AbsentFontSizeShape); ok {
+				request["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": halfPoints}
+			}
 		}
 		if eligibility != nil && eligibility.Status == "eligible" && len(eligibility.AbsentFontFamilies) > 0 {
 			// Likewise declared, never an authored face: the value was measured

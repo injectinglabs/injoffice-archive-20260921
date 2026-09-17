@@ -319,7 +319,7 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   let applied: NativeDocxApproximatedFontSizeV1[] = []
   if (runtime?.fontSizePolicy !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Host size policy requires independently eligible approximate settings')
-    const projected = projectNativeDocxAbsentFontSizesV1(input.document, input.resolved_layout, eligibility.absent_font_sizes ?? [], runtime.fontSizePolicy)
+    const projected = projectNativeDocxAbsentFontSizesV1(input.document, input.resolved_layout, eligibility.absent_font_sizes ?? [], runtime.fontSizePolicy, eligibility.absent_font_size_shape)
     input = { ...input, resolved_layout: projected.resolved }
     applied = projected.applied
   }

@@ -2,6 +2,37 @@ package docxpatch
 
 import "encoding/xml"
 
+// NativeDocxAbsentDefaultSizeShapeV1 names which source shape proved the
+// package states no default run size. The two shapes are not interchangeable:
+// Microsoft Word 16.112 resolves them to different sizes, so a consumer that
+// declares one host default per shape needs the shape as a source fact.
+const (
+	// NativeDocxAbsentDocumentDefaultsV1 is a package carrying no w:docDefaults
+	// record at all, whether because it has no styles part or because its
+	// styles part declares none (ECMA-376 17.7.2 makes both optional).
+	NativeDocxAbsentDocumentDefaultsV1 = "absent-document-defaults"
+	// NativeDocxSizelessDocumentDefaultsV1 is a package whose w:docDefaults
+	// record exists and states no w:sz.
+	NativeDocxSizelessDocumentDefaultsV1 = "sizeless-document-defaults"
+)
+
+// NativeDocxHostDefaultSizeHalfPointsV1 is the single definition of the
+// read-only host default size per proven source shape. Both values were read
+// directly out of the Tf operators of Microsoft Word 16.112's own PDF exports
+// of corpus packages that state no size (Word writes text on a 1/300 in grid,
+// so 50 units == 12 pt and 42 units == 10 pt): a package carrying no
+// w:docDefaults record is laid out at 12 pt, and one whose w:docDefaults states
+// no w:sz at 10 pt. Nothing else may spell these numbers.
+func NativeDocxHostDefaultSizeHalfPointsV1(shape string) (int, bool) {
+	switch shape {
+	case NativeDocxAbsentDocumentDefaultsV1:
+		return 24, true
+	case NativeDocxSizelessDocumentDefaultsV1:
+		return 20, true
+	}
+	return 0, false
+}
+
 // Source absence is not a size recommendation. A read-only consumer may choose
 // its own declared default under ECMA-376 17.3.2.38; strict layout stays absent.
 type NativeDocxAbsentFontSizeV1 struct {
@@ -12,17 +43,18 @@ type NativeDocxAbsentFontSizeV1 struct {
 	PackageSHA256 string `json:"package_sha256"`
 }
 
-func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, error) {
+func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, string, error) {
 	r, err := newNativeLayoutResolver(data, NativeExtractionOptions{})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	layout, err := r.resolve()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if !r.absentDefaultSize() {
-		return nil, nil
+	shape := r.absentDefaultSizeShape()
+	if shape == "" {
+		return nil, "", nil
 	}
 	paragraphs := map[string]NativeResolvedParagraphV1{}
 	runs := map[string]NativeResolvedRunV1{}
@@ -118,64 +150,70 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, error) {
 			}
 		}
 	}
-	if len(facts) > 1000 {
-		return nil, nil
+	if len(facts) > 1000 || len(facts) == 0 {
+		return nil, "", nil
 	}
-	return facts, nil
+	return facts, shape, nil
 }
 
-func (r *nativeLayoutResolver) absentDefaultSize() bool {
+func (r *nativeLayoutResolver) absentDefaultSizeShape() string {
 	// A package with no styles part carries no w:docDefaults at all, which is
 	// strictly stronger evidence of an absent default size than a styles part
 	// whose docDefaults happen to state none. ECMA-376 17.7.2 makes the part
 	// optional, so its absence is a source fact, not an unread default.
 	if r.parts.StylesPart == nil {
-		return len(r.styles) == 0
+		if len(r.styles) == 0 {
+			return NativeDocxAbsentDocumentDefaultsV1
+		}
+		return ""
 	}
 	root, err := parseNativeXML(*r.parts.StylesPart, r.pkg.files[*r.parts.StylesPart])
 	// mc:Ignorable only declares ignorable namespaces, exactly as the main
 	// part extractor already accepts on part roots; it carries no size.
 	if err != nil || root.Name != (xml.Name{Space: r.wordNS, Local: "styles"}) || !nativeExactContainer(root, xml.Name{Space: nativeMCNamespace, Local: "Ignorable"}) {
-		return false
+		return ""
 	}
 	defaults := directNativeChildren(root, r.wordNS, "docDefaults")
 	if len(defaults) > 1 {
-		return false
+		return ""
 	}
 	if len(defaults) == 0 {
-		return true
+		return NativeDocxAbsentDocumentDefaultsV1
 	}
 	if !nativeExactContainer(defaults[0]) {
-		return false
+		return ""
 	}
 	for _, child := range defaults[0].Children {
 		if child.Name.Space != r.wordNS || child.Name.Local != "rPrDefault" && child.Name.Local != "pPrDefault" {
-			return false
+			return ""
 		}
 		if child.Name.Local == "pPrDefault" {
 			for _, ppr := range directNativeChildren(child, r.wordNS, "pPr") {
 				if len(directNativeChildren(ppr, r.wordNS, "rPr")) > 0 {
-					return false
+					return ""
 				}
 			}
 		}
 	}
 	rprs := directNativeChildren(defaults[0], r.wordNS, "rPrDefault")
 	if len(rprs) > 1 {
-		return false
+		return ""
 	}
 	if len(rprs) == 0 {
-		return true
+		return NativeDocxSizelessDocumentDefaultsV1
 	}
 	if !nativeExactContainer(rprs[0]) {
-		return false
+		return ""
 	}
 	for _, child := range rprs[0].Children {
 		if child.Name != (xml.Name{Space: r.wordNS, Local: "rPr"}) {
-			return false
+			return ""
 		}
 	}
-	return r.absentOwnerRunSize(rprs[0])
+	if !r.absentOwnerRunSize(rprs[0]) {
+		return ""
+	}
+	return NativeDocxSizelessDocumentDefaultsV1
 }
 
 func (r *nativeLayoutResolver) absentStyleSize(ids []string, kind string) bool {

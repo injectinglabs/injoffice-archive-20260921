@@ -20,9 +20,13 @@ type NativeDocxApproximationEligibilityV1 struct {
 	Reasons                 []string                          `json:"reasons"`
 	ApproximatedSettings    []NativeDocxApproximatedSettingV1 `json:"approximated_settings,omitempty"`
 	AbsentFontSizes         []NativeDocxAbsentFontSizeV1      `json:"absent_font_sizes,omitempty"`
-	AbsentFontFamilies      []NativeDocxAbsentFontFamilyV1    `json:"absent_font_families,omitempty"`
-	LatinFontFallbacks      []NativeDocxLatinFontFallbackV1   `json:"latin_font_fallbacks,omitempty"`
-	LegacyTableOrigins      []NativeDocxLegacyTableOriginV1   `json:"legacy_table_origins,omitempty"`
+	// AbsentFontSizeShape names which source shape proved the absence, because
+	// Microsoft Word resolves the two shapes to different sizes. Present
+	// exactly when AbsentFontSizes is non-empty.
+	AbsentFontSizeShape string                          `json:"absent_font_size_shape,omitempty"`
+	AbsentFontFamilies  []NativeDocxAbsentFontFamilyV1  `json:"absent_font_families,omitempty"`
+	LatinFontFallbacks  []NativeDocxLatinFontFallbackV1 `json:"latin_font_fallbacks,omitempty"`
+	LegacyTableOrigins  []NativeDocxLegacyTableOriginV1 `json:"legacy_table_origins,omitempty"`
 }
 
 const nativeApproximationCompatSettingURI = "http://schemas.microsoft.com/office/word"
@@ -107,7 +111,7 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 	result.Status = "eligible"
 	result.LegacyCompatibilityMode = &mode
 	result.Reasons = append(result.Reasons, "Read-only approximation uses InjOffice current layout policy, not legacy Microsoft Word layout semantics; page breaks and spacing may differ")
-	result.AbsentFontSizes, err = nativeAbsentFontSizes(data)
+	result.AbsentFontSizes, result.AbsentFontSizeShape, err = nativeAbsentFontSizes(data)
 	if err != nil {
 		return nil, err
 	}

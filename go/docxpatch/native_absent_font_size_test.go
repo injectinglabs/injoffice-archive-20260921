@@ -21,9 +21,12 @@ func TestAbsentFontSizeReservedNotesOnly(t *testing.T) {
 		}
 		data := buildNativeDOCX(t, nativeEntries(parts))
 		before := bytes.Clone(data)
-		facts, err := nativeAbsentFontSizes(data)
+		facts, shape, err := nativeAbsentFontSizes(data)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(facts) > 0 && shape != NativeDocxAbsentDocumentDefaultsV1 {
+			t.Fatalf("styles part without docDefaults must prove the absent-defaults shape, got %q", shape)
 		}
 		count := 0
 		for _, fact := range facts {
@@ -108,6 +111,21 @@ func TestAbsentFontSizeEvidenceRequiresRealSourceAbsence(t *testing.T) {
 				}
 				if len(eligibility.AbsentFontSizes) != tc.want {
 					t.Fatalf("got%d want%d: %#v", len(eligibility.AbsentFontSizes), tc.want, eligibility.AbsentFontSizes)
+				}
+				// The shape is what selects the host default, so it must be
+				// present exactly when there is evidence, and must name the
+				// shape this fixture actually has: a w:docDefaults record that
+				// states no w:sz. Microsoft Word 16.112 lays that out at 10 pt,
+				// not at the 12 pt it uses when there is no record at all.
+				wantShape := NativeDocxSizelessDocumentDefaultsV1
+				if tc.want == 0 || tc.defaults != "" {
+					wantShape = ""
+				}
+				if eligibility.AbsentFontSizeShape != wantShape {
+					t.Fatalf("shape=%q want %q", eligibility.AbsentFontSizeShape, wantShape)
+				}
+				if halfPoints, ok := NativeDocxHostDefaultSizeHalfPointsV1(eligibility.AbsentFontSizeShape); ok && halfPoints != 20 {
+					t.Fatalf("sizeless docDefaults must select Word's 10 pt, got %d half-points", halfPoints)
 				}
 				for _, f := range eligibility.AbsentFontSizes {
 					if f.PackageSHA256 != eligibility.PackageSHA256 || f.PartName != "word/document.xml" || f.ScopeID == "" || !strings.HasPrefix(f.Path, "/w:document[1]/w:body[1]/w:p[1]") {
