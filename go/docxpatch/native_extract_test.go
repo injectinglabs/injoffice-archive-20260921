@@ -739,6 +739,49 @@ func TestExtractNativeDocumentOmitsAnEmptyTrailingSection(t *testing.T) {
 	}
 }
 
+// A picture linked to a Windows path a save from disk wrote - the shape
+// FileWithInvalidImageLink.docx carries - spells its external target with
+// backslashes, which is not a URI this reader will vet. It is also never
+// dereferenced: the picture is simply unresolved, as it is in Word and in
+// LibreOffice, and the rest of the document is readable.
+func TestExtractNativeDocumentToleratesAnUnvettedExternalTarget(t *testing.T) {
+	parts := cloneNativeParts(transitionalNativeParts())
+	parts["Custom/_RELS/Main.XML.RELS"] = strings.Replace(parts["Custom/_RELS/Main.XML.RELS"],
+		`<Relationship Id="rImage" Type="`+relBaseTransitional+`image" Target="media/image.png"/>`,
+		`<Relationship Id="rImage" Type="`+relBaseTransitional+`image" Target="file:///F:\ISUW\Vector%20Spaces_pliki\ole9.gif" TargetMode="External"/>`, 1)
+	doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatalf("an unvetted external image target must not refuse the package: %v", err)
+	}
+	var text strings.Builder
+	for _, run := range doc.Body.Blocks[0].Paragraph.Runs {
+		if run.Drawing != nil && run.Drawing.MediaPart != nil {
+			t.Fatalf("an unvetted external target must not resolve: %q", *run.Drawing.MediaPart)
+		}
+		if run.Text != nil {
+			text.WriteString(*run.Text)
+		}
+	}
+	if !strings.Contains(text.String(), "Hello") {
+		t.Fatalf("the rest of the paragraph must survive: %q", text.String())
+	}
+	// The unvetted string reaches nothing the reader emits.
+	encoded, err := EncodeNativeDocumentV1(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "ole9.gif") {
+		t.Fatal("the unvetted external target must not be carried into the contract")
+	}
+	// A part this reader would otherwise load still refuses an external
+	// relationship, unvetted spelling or not.
+	unreadable := cloneNativeParts(transitionalNativeParts())
+	unreadable["_rels/.rels"] = strings.Replace(unreadable["_rels/.rels"], `Target="custom/MAIN.xml"`, `Target="file:///F:\unsafe\document.xml" TargetMode="External"`, 1)
+	if _, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(unreadable))); err == nil || !strings.Contains(err.Error(), "must be internal") {
+		t.Fatalf("an external office-document relationship must still refuse: %v", err)
+	}
+}
+
 func TestExtractNativeDocumentRejectsAdversarialPackages(t *testing.T) {
 	base := transitionalNativeParts()
 	tests := []struct {

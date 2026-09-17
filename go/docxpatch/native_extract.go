@@ -634,10 +634,22 @@ func parseNativeRelationships(partName, owner string, data []byte) ([]nativeRela
 			}
 		}
 		if external && !nativeSafeExternalTarget(target) {
-			if typeURI == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" || typeURI == "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate" {
-				continue
-			}
-			return nil, fmt.Errorf("docxpatch: native extract: relationship %q has unsafe external target", id)
+			// This reader never dereferences an external target, so a target it
+			// will not vet is one that resolves to nothing - and refusing the
+			// whole package over it threw away readable documents.
+			// FileWithInvalidImageLink.docx links a picture to
+			// file:///F:\ISUW\...\ole9.gif, the Windows path a save from disk
+			// writes; the backslashes are what this check rejects. Word and
+			// LibreOffice both open that document with the picture unresolved.
+			// The relationship is kept so the writer still sees the id, and the
+			// unvetted target is dropped rather than carried into any model the
+			// reader emits or any relationship the writer rewrites. It stays
+			// external, so every part this reader would otherwise load - the
+			// office document, settings, styles, numbering, the font table, the
+			// related stories - still refuses it for being external, exactly as
+			// a safely-spelled external target of those kinds always has.
+			rels = append(rels, nativeRelationship{ID: id, Type: typeURI, External: true})
+			continue
 		}
 		rels = append(rels, nativeRelationship{ID: id, Type: typeURI, Target: target, External: external})
 	}
