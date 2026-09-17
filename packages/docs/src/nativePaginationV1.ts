@@ -8,6 +8,7 @@
  */
 
 import { decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
+import { nativeDocxScriptTransformEligibleRunV1 } from './nativeScriptLayoutV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {
@@ -555,7 +556,7 @@ function validateAuthoritativeParagraphBidi(
       }
       let paragraphStart: number = runStart
       const scriptKind = resolved.properties.vertical_alignment
-      if ((scriptKind && scriptKind !== 'baseline' ? scriptKind : undefined) !== fragment.script_transform?.kind || fragment.script_transform && nativeRun.kind !== 'text') issues.push(issue('BROKEN_REFERENCE', `${basePath}/lines/${lineIndex}/fragments/${visualIndex}/script_transform`, 'script transform must exactly match authored vertical alignment on a text run'))
+      if ((scriptKind && scriptKind !== 'baseline' ? scriptKind : undefined) !== fragment.script_transform?.kind || fragment.script_transform && !nativeDocxScriptTransformEligibleRunV1(nativeRun)) issues.push(issue('BROKEN_REFERENCE', `${basePath}/lines/${lineIndex}/fragments/${visualIndex}/script_transform`, 'script transform must exactly match authored vertical alignment on a shaped text or note-mark run'))
       let coveredLength = 0
       let exact = false
       if (nativeRun.kind === 'drawing') {
