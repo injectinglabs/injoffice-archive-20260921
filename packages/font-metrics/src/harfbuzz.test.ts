@@ -27,6 +27,8 @@ const require = createRequire(import.meta.url)
 const FONT_PATH = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')
 const FONT_BYTES = new Uint8Array(readFileSync(FONT_PATH))
 const FONT_DIGEST = 'sha256:7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954' as const
+/** A minimal well-formed STAT v1.1 header: no design axes, no axis values, elidedFallbackNameID 2. */
+const STAT_AXIS_VALUE_ONLY = new Uint8Array([0, 1, 0, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2])
 
 function digest(bytes: Uint8Array): `sha256:${string}` {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`
@@ -73,6 +75,48 @@ function oneFaceTtc(): FontResource {
     writeU32(bytes, record + 8, readU32(bytes, record + 8) + 16)
   }
   return { ...font, bytes, face: { ...face, collectionIndex: 0, contentDigest: digest(bytes) } }
+}
+
+/** Rebuilds the fixture with extra top-level tables, keeping every sfnt invariant the preflight checks. */
+function resourceWithTables(extra: ReadonlyArray<readonly [string, Uint8Array]>): FontResource {
+  const count = readU16(FONT_BYTES, 4)
+  const existing = [...Array(count).keys()].map((index) => {
+    const record = 12 + index * 16
+    return {
+      tag: String.fromCharCode(...FONT_BYTES.subarray(record, record + 4)),
+      offset: readU32(FONT_BYTES, record + 8),
+      length: readU32(FONT_BYTES, record + 12),
+    }
+  })
+  const laidOut = [...existing.map((table) => ({ ...table, source: FONT_BYTES.subarray(table.offset, table.offset + table.length) })), ...extra.map(([tag, payload]) => ({ tag, offset: 0, length: payload.byteLength, source: payload }))]
+    .sort((left, right) => (left.tag < right.tag ? -1 : left.tag > right.tag ? 1 : 0))
+  const directoryEnd = 12 + laidOut.length * 16
+  let cursor = directoryEnd + ((4 - (directoryEnd % 4)) % 4)
+  for (const table of laidOut) {
+    table.offset = cursor
+    cursor += table.length + ((4 - (table.length % 4)) % 4)
+  }
+  const bytes = new Uint8Array(cursor)
+  bytes.set(FONT_BYTES.subarray(0, 12))
+  writeU32(bytes, 4, (laidOut.length << 16) | (readU32(FONT_BYTES, 4) & 0xffff))
+  laidOut.forEach((table, index) => {
+    const record = 12 + index * 16
+    for (let byte = 0; byte < 4; byte++) bytes[record + byte] = table.tag.charCodeAt(byte)
+    bytes.set(table.source, table.offset)
+    writeU32(bytes, record + 8, table.offset)
+    writeU32(bytes, record + 12, table.length)
+    let checksum = 0
+    for (let relative = 0; relative < table.length; relative += 4) {
+      let word = 0
+      for (let byte = 0; byte < 4; byte++) {
+        const tableIndex = relative + byte
+        word = (word * 256 + (tableIndex < table.length && !(table.tag === 'head' && tableIndex >= 8 && tableIndex < 12) ? bytes[table.offset + tableIndex]! : 0)) >>> 0
+      }
+      checksum = (checksum + word) >>> 0
+    }
+    writeU32(bytes, record + 4, checksum)
+  })
+  return { ...font, bytes, face: { ...face, contentDigest: digest(bytes) } }
 }
 
 const face: ResolvedFontFace = Object.freeze({
@@ -380,6 +424,34 @@ describe('canonical HarfBuzz text shaper v1', () => {
     })
     expect(refusalCode(shape('office', {}, emptyHead))).toBe('unsupported-font-format')
     expect(() => inspectHarfBuzzFontMetricsV1({ bytes: emptyHead.bytes, contentDigest: emptyHead.face.contentDigest })).toThrow(/empty or outside/)
+  })
+
+  it('admits a static face that declares STAT without fvar, and shapes it identically', () => {
+    // Every Aptos face Word 16 ships (Aptos.ttf, Aptos-Narrow.ttf, Aptos-Light.ttf, ...) is a
+    // static glyf/loca instance that carries STAT and no fvar. STAT names where a face sits in
+    // its family's design space; it binds no outline, advance or line metric to an axis, so the
+    // face is as fully determined as one without it.
+    const withStat = resourceWithTables([['STAT', STAT_AXIS_VALUE_ONLY]])
+    expect(inspectHarfBuzzFontMetricsV1({ bytes: withStat.bytes, contentDigest: withStat.face.contentDigest })).toEqual(font.metrics)
+    const result = shape('office', {}, withStat)
+    expect('status' in result).toBe(false)
+    if ('status' in result) return
+    expect(result.glyphs.map((glyph) => glyph.glyphId)).toEqual([82, 5_044, 70, 72])
+    expect(result.advanceInlineMilliPoints).toBe((shape('office') as ShapedSegment).advanceInlineMilliPoints)
+  })
+
+  it('still refuses a genuinely variable face, whose metrics need an axis position the contract never carries', () => {
+    for (const variationTable of ['avar', 'cvar', 'fvar', 'gvar', 'HVAR', 'MVAR', 'VVAR']) {
+      const variable = resourceWithTables([[variationTable, new Uint8Array(32)]])
+      expect(refusalCode(shape('office', {}, variable))).toBe('unsupported-font-format')
+      expect(() => inspectHarfBuzzFontMetricsV1({ bytes: variable.bytes, contentDigest: variable.face.contentDigest })).toThrow(/variable-font table .* is outside the fixed-font v1 contract/)
+    }
+  })
+
+  it('refuses a face that declares STAT alongside fvar, so STAT is never a bypass', () => {
+    const variable = resourceWithTables([['STAT', STAT_AXIS_VALUE_ONLY], ['fvar', new Uint8Array(32)]])
+    expect(refusalCode(shape('office', {}, variable))).toBe('unsupported-font-format')
+    expect(() => inspectHarfBuzzFontMetricsV1({ bytes: variable.bytes, contentDigest: variable.face.contentDigest })).toThrow(/fvar/)
   })
 
   it('selects an explicit face from deterministic TTC bytes', () => {
