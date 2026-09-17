@@ -12,7 +12,7 @@ const testMC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 // nativeApproximateShapeFixture wraps a wps shape in the markup-compatibility
 // alternate Word writes, with a VML fallback that must never be read.
 func nativeApproximateShapeFixture(container, shapeProperties, extra string) string {
-	return `<mc:AlternateContent xmlns:mc="` + testMC + `"><mc:Choice Requires="wps"><w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` + container +
+	return `<mc:AlternateContent xmlns:mc="` + testMC + `"><mc:Choice xmlns:wps="` + nativeTextboxWPS + `" Requires="wps"><w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` + container +
 		`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr>` + shapeProperties + `</wps:spPr>` + extra + `<wps:bodyPr rot="0" vert="horz" wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"><a:noAutofit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic>` +
 		strings.TrimSuffix(strings.TrimPrefix(container, `<wp:anchor`), "") + `</w:drawing></mc:Choice><mc:Fallback><w:pict><v:rect xmlns:v="` + nativeTextboxVML + `" style="position:absolute;width:100pt;height:50pt" fillcolor="#ff0000"/></w:pict></mc:Fallback></mc:AlternateContent>`
 }
@@ -31,7 +31,7 @@ func nativeApproximateShapeSource(t *testing.T, body string, parts func(map[stri
 
 func TestApproximateDrawingShapesAnchoredRect(t *testing.T) {
 	// The anchor container closes after the graphic; build it explicitly.
-	drawing := `<mc:AlternateContent xmlns:mc="` + testMC + `"><mc:Choice Requires="wps"><w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
+	drawing := `<mc:AlternateContent xmlns:mc="` + testMC + `"><mc:Choice xmlns:wps="` + nativeTextboxWPS + `" Requires="wps"><w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
 		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>`, `<wp:positionV relativeFrom="paragraph"><wp:posOffset>609600</wp:posOffset></wp:positionV>`) +
 		`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="4f81bd"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="243F60"/></a:solidFill><a:prstDash val="dash"/></a:ln></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice>` +
 		`<mc:Fallback><w:pict><v:rect xmlns:v="` + nativeTextboxVML + `" style="position:absolute;width:100pt;height:50pt" fillcolor="#ff0000"/></w:pict></mc:Fallback></mc:AlternateContent>`

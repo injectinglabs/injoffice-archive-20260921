@@ -1566,6 +1566,35 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('omits the vertical rule w:cols w:sep asks for and paints the columns around it', () => {
+    // Measured on Word 16.112.4's own export of
+    // multi-column-separator-with-line.docx: the separator is a filled bar from
+    // x=305.52 pt to x=306.48 pt, centred on 306.0 pt, which is exactly the
+    // centre of the gap between the two columns. The column text origins are
+    // 50.4 pt and 324.0 pt - value-for-value the equal-width boxes derived from
+    // pgSz 12240x15840, pgMar left/right 1008 and cols space 720 with w:sep
+    // ignored. So w:sep adds ink in the gutter and moves no column box; the
+    // approximate tier paints the columns and discloses the dropped rule, and
+    // the strict tier keeps refusing it. Another section property that does
+    // move geometry still refuses on both tiers.
+    for (const code of ['COLUMN_SEPARATOR_UNSUPPORTED', 'AMBIGUOUS_COLUMN_SPACING'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'sections', scope_id: 'section:1', preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'AMBIGUOUS_COLUMN_SPACING') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2'])
+    }
+  })
+
   it('paints a paragraph whose spacing Word determines automatically', () => {
     // w:beforeAutospacing/w:afterAutospacing is an exact source shape whose
     // measurement Word determines; the resolved layout owns that value and the
@@ -1954,6 +1983,47 @@ describe('native DOCX pagination v1', () => {
     expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(2)
   })
 
+  // An empty <w:sectPr/> states no page size and no page margins, so Word lays
+  // the section out on its own default page box - the same page a body with no
+  // w:sectPr at all gets. Word's own PDF export of listWithLgl.docx confirms
+  // it: MediaBox [0 0 612 792] is Letter, and the two list-marker origins land
+  // on exactly 72 pt and 108 pt with a w:firstLine of 720 twips, so the left
+  // margin is 1440 twips. The exemption holds only while the exposed geometry
+  // is value-for-value that default.
+  it('defers absent schema-optional page size and page margins only at the Word default geometry', () => {
+    const defaultPage = () => ({
+      width_twips: 12_240, height_twips: 15_840, orientation: 'portrait' as const, columns: 1, column_spacing_twips: 720, column_layout: 'equal-width' as const,
+      column_definitions: [{ id: 'column:section:1:0', ordinal: 0 }],
+      margins: { top_twips: 1_440, right_twips: 1_440, bottom_twips: 1_440, left_twips: 1_440, header_twips: 720, footer_twips: 720, gutter_twips: 0 },
+    })
+    const absent = (request: ReturnType<typeof fixture>) => {
+      request.document.sections[0]!.page = defaultPage()
+      request.shaped_lines.available_width_millipoints = 468_000
+      for (const line of request.shaped_lines.paragraphs[0]!.lines) line.available_width_millipoints = 468_000
+      request.document.unsupported.push({
+        id: 'unsupported:missing-page-size', code: 'MISSING_PAGE_SIZE', capability: 'sections', scope_id: 'section:1',
+        preservation: 'refuse-mutation', message: 'A present section-properties element requires explicit page size for exact pagination geometry',
+      })
+      request.document.unsupported.push({
+        id: 'unsupported:missing-page-margins', code: 'MISSING_PAGE_MARGINS', capability: 'sections', scope_id: 'section:1',
+        preservation: 'refuse-mutation', message: 'A present section-properties element requires explicit page margins for exact pagination geometry',
+      })
+      return request
+    }
+    const value = paginated(absent(fixture()))
+    expect(value.pages[0]!.body_box).toEqual(expect.objectContaining({ width_millipoints: 468_000, height_millipoints: 648_000 }))
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic' && (entry.source_code === 'MISSING_PAGE_SIZE' || entry.source_code === 'MISSING_PAGE_MARGINS'))).toHaveLength(2)
+
+    // Negative: geometry that is not the Word default must keep refusing, so a
+    // derived or partially authored page box can never ride in on the record.
+    const wrongSize = absent(fixture())
+    wrongSize.document.sections[0]!.page.height_twips = 16_840
+    expect(paginateNativeDocxV1(wrongSize)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'MISSING_PAGE_SIZE' })]) }) }))
+    const wrongMargins = absent(fixture())
+    wrongMargins.document.sections[0]!.page.margins.right_twips = 1_008
+    expect(paginateNativeDocxV1(wrongMargins)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'MISSING_PAGE_MARGINS' })]) }) }))
+  })
+
   // A content control around a table row's cells: the extractor reads the same
   // w:tc elements through it, so the wrapper itself adds no column and no
   // advance. Anything else in the row keeps refusing.
@@ -2122,6 +2192,26 @@ describe('native DOCX pagination v1', () => {
     const before = plain.pages[0]!.note_stories!.find((entry) => entry.note_role === 'separator')!
     const instruction = plainRequest.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!
     expect(placed.height_millipoints).toBe(before.height_millipoints + instruction.lines[0]!.line_height_millipoints)
+  })
+
+  it('names the resolved-layout diagnostic, and the note scope carrying it, when note layout is unresolvable', () => {
+    // This gate used to refuse with the document id and one fixed sentence for
+    // any resolved-layout diagnostic in any note scope, so a caller could not
+    // tell which note failed or what the resolver actually said about it.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    request.resolved_layout.diagnostics.push({
+      code: 'UNMODELED_PARAGRAPH_CONTENT', severity: 'unsupported', scope_id: 'paragraph:footnote:1',
+      part_name: 'word/footnotes.xml', path: '/w:footnotes[1]/w:footnote[2]/w:p[1]/w:permStart[1]',
+      preservation: 'preserve-verbatim', message: 'permission range',
+    })
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(output.status).toBe('refused')
+    expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'note-structure-unsupported', scope_id: 'paragraph:footnote:1',
+      message: 'Unsupported note layout semantics: UNMODELED_PARAGRAPH_CONTENT: permission range',
+    })]))
   })
 
   it('refuses a separator story whose carried paragraph has no shaped projection', () => {

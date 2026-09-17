@@ -82,16 +82,6 @@ func inspectNativeEquationContext(data []byte, doc *NativeDocumentV1, resolved *
 		notice := NativeEquationContextNoticeV1{PackageSHA256: doc.Source.PackageSHA256, PartSHA256: nativeSHA(pkg.files[part]), Anchor: NativeSourceAnchorV1{PartName: part, Path: n.Path, StartByte: nativeInt64(n.Start), EndByte: nativeInt64(n.End), XMLSHA256: nativeSHA(pkg.files[part][n.Start:n.End])}, DiagnosticOrigin: origin, DiagnosticID: id, Code: code, ScopeID: scope}
 		val := xml.Name{Space: ns, Local: "val"}
 		switch {
-		case origin == "document" && code == "UNMODELED_SECTION_PROPERTY" && n.Name.Local == "textDirection" && part == doc.Source.MainPart:
-			if n.parent.Name != (xml.Name{Space: ns, Local: "sectPr"}) || !nativeExactContainer(n.parent) || !nativeExactLeaf(n, val) {
-				return nil
-			}
-			v, ok := nativeAttr(n, ns, "val")
-			if !ok || v != "lrTb" {
-				return nil
-			}
-			notice.Kind = "horizontal-section"
-			notice.Value = v
 		case origin == "resolved" && code == "UNMODELED_FONT_METADATA" && scope == doc.DocumentID && resolved.SourceParts.FontTablePart != nil && part == *resolved.SourceParts.FontTablePart && n.Name.Local == "charset":
 			font := n.parent
 			if font.Name != (xml.Name{Space: ns, Local: "font"}) || font.parent == nil || font.parent.Name != (xml.Name{Space: ns, Local: "fonts"}) || font.parent.parent != nil || !nativeExactContainer(font.parent) || !nativeExactContainer(font, xml.Name{Space: ns, Local: "name"}) || !nativeExactLeaf(n, val, xml.Name{Space: ns, Local: "characterSet"}) {

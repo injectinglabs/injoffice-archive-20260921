@@ -7,6 +7,7 @@ import {
   DOCX_NATIVE_V1_BINDING_FIELDS,
   NativeDocxValidationError,
   decodeNativeDocxDocument,
+  nativeDocxSeparatorStoryProjectionV1,
   decodeNativeDocxJson,
   encodeNativeDocxDocument,
   type NativeDocxDocumentV1,
@@ -297,5 +298,25 @@ describe('native DOCX contract v1', () => {
     expect(schema.$defs.PartName.pattern).toEqual(expect.stringContaining('2E|2F'))
     expect(schema.$defs.PartName.pattern).toEqual(expect.stringContaining('5C'))
     expect(schema.$defs.PartName.pattern).toEqual(expect.stringContaining('\\.(?:/|$)'))
+  })
+})
+
+/**
+ * The one definition of the reserved-separator projection every consumer
+ * mirrors: a first paragraph the instruction left with no runs, and ordinary
+ * paragraphs after it. Word writes a trailing empty paragraph itself and an
+ * author can put visible text in one, so both qualify; anything that is not a
+ * paragraph, and a first paragraph that still projects runs, do not.
+ */
+describe('reserved note separator projection', () => {
+  const para = (runs: number, key: string) => ({ kind: 'paragraph' as const, id: `block:${key}`, paragraph: { id: `paragraph:${key}`, runs: Array.from({ length: runs }, (_, i) => ({ id: `run:${key}:${i}` })) } })
+  const table = { kind: 'table' as const, id: 'block:table' }
+  it('admits the instruction paragraph and the paragraphs carried after it', () => {
+    for (const blocks of [[para(0, 'a')], [para(0, 'a'), para(0, 'b')], [para(0, 'a'), para(3, 'b')], [para(0, 'a'), para(1, 'b'), para(0, 'c')]])
+      expect(nativeDocxSeparatorStoryProjectionV1({ blocks } as never), JSON.stringify(blocks.map((b) => b.paragraph.runs.length))).toBe(true)
+  })
+  it('refuses an empty story, a first paragraph with runs, and a block that is not a paragraph', () => {
+    for (const blocks of [[], [para(1, 'a')], [para(1, 'a'), para(0, 'b')], [para(0, 'a'), table], [table]])
+      expect(nativeDocxSeparatorStoryProjectionV1({ blocks } as never), JSON.stringify(blocks.map((b) => b.kind))).toBe(false)
   })
 })

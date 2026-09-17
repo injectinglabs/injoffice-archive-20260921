@@ -38,8 +38,10 @@ func TestEquationContextExactSourceNotices(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("source diagnostics changed")
 	}
-	if len(notices) != 4 {
-		t.Fatalf("expected4 bounded notices, got %#v", notices)
+	// The sectPr's default-valued w:textDirection is admitted at extraction, so
+	// it raises no diagnostic for this inspector to qualify.
+	if len(notices) != 3 {
+		t.Fatalf("expected3 bounded notices, got %#v", notices)
 	}
 	for _, n := range notices {
 		raw := []byte(parts[n.Anchor.PartName])
@@ -50,9 +52,6 @@ func TestEquationContextExactSourceNotices(t *testing.T) {
 }
 func TestEquationContextRejectsUnqualifiedLeaves(t *testing.T) {
 	cases := []struct{ part, old, new, kind string }{
-		{"word/document.xml", `w:val="lrTb"`, `w:val="tbRl"`, "horizontal-section"},
-		{"word/document.xml", `<w:textDirection w:val="lrTb"/>`, `<w:textDirection w:val="lrTb"/><w:textDirection w:val="lrTb"/>`, "horizontal-section"},
-		{"word/document.xml", `<w:textDirection w:val="lrTb"/>`, `<x:textDirection xmlns:x="urn:foreign" w:val="lrTb"/>`, "horizontal-section"},
 		{"word/styles.xml", `w:val="true"`, `w:val="false"`, "disabled-paragraph-hyphenation"},
 		{"word/styles.xml", `<w:suppressAutoHyphens w:val="true"/>`, `<w:suppressAutoHyphens w:val="true"><w:vanish/></w:suppressAutoHyphens>`, "disabled-paragraph-hyphenation"},
 		{"word/styles.xml", `<w:tab w:val="left" w:pos="709" w:leader="none"/>`, ``, "unused-paragraph-tab-stops"},
