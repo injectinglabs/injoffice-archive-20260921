@@ -3,6 +3,9 @@
  * or external tables. One Exif attribute segment is read far enough to prove it
  * states no orientation but the identity; a rotating orientation is refused,
  * because a browser applies it and a rotated paint is not the source page.
+ * The frame must be structurally complete through its EOI marker; what the
+ * byte string carries past that marker is unreachable to any decoder and is
+ * refused only when it would make the string two pictures instead of one.
  * Pixels remain the browser's job.
  */
 /** True only for an APP1 payload that is a structurally complete Exif TIFF
@@ -46,7 +49,13 @@ export function nativeBaselineJpegDimensions(bytes: Uint8Array): { width: number
     const start = offset + 2, end = offset + length
     if (!jfif && marker !== 0xe0) return undefined
     if (marker === 0xe0) {
-      if (jfif || length !== 16 || String.fromCharCode(...bytes.subarray(start, start + 5)) !== 'JFIF\0' || bytes[start + 5] !== 1 || bytes[start + 6]! > 2 || bytes[start + 7]! > 2 || word(start + 8) === 0 || word(start + 10) === 0 || bytes[start + 12] !== 0 || bytes[start + 13] !== 0) return undefined
+      // T.871 asks both densities to be nonzero, but density is display
+      // metadata no decoder turns into pixels and this module never reads:
+      // the picture is sized by its DrawingML extent. libgd's encoder has
+      // long written the 0/0 pair, so a whole page is not worth that. A
+      // half-zero pair still refuses: it states an aspect ratio and then
+      // contradicts it.
+      if (jfif || length !== 16 || String.fromCharCode(...bytes.subarray(start, start + 5)) !== 'JFIF\0' || bytes[start + 5] !== 1 || bytes[start + 6]! > 2 || bytes[start + 7]! > 2 || (word(start + 8) === 0) !== (word(start + 10) === 0) || bytes[start + 12] !== 0 || bytes[start + 13] !== 0) return undefined
       jfif = true
     } else if (marker === 0xe1) {
       // T.871 places Exif attributes in APP1. One segment, before the frame
@@ -108,7 +117,14 @@ export function nativeBaselineJpegDimensions(bytes: Uint8Array): { width: number
         const code = bytes[at++]!
         if (code === 0) { entropy++; continue }
         if (code >= 0xd0 && code <= 0xd7) { if (!restartInterval || code !== 0xd0 + nextRestart) return undefined; nextRestart = (nextRestart + 1) % 8; continue }
-        return code === 0xd9 && entropy > 0 && at === bytes.length ? { width, height } : undefined
+        if (code !== 0xd9 || entropy === 0) return undefined
+        // T.81 B.2: EOI terminates the compressed image data. Every decoder
+        // stops there, and sniffing reads the SOI at offset 0, so bytes after
+        // it are unreachable and cannot change the picture this byte string
+        // is. A second SOI can: that string is two pictures, and choosing one
+        // is not this module's call.
+        for (let tail = at; tail + 1 < bytes.length; tail += 1) if (bytes[tail] === 0xff && bytes[tail + 1] === 0xd8) return undefined
+        return { width, height }
       }
       return undefined
     } else if (marker !== 0xfe) return undefined
