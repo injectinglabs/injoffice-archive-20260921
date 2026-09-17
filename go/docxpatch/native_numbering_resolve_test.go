@@ -622,3 +622,32 @@ func TestNativeNumberingEmptyLevelTextDrawsNoLabel(t *testing.T) {
 		t.Fatalf("an empty label under a hanging indent was guessed or silent: %#v", hanging)
 	}
 }
+
+// TestNativeZeroCharacterIndentKeepsInheritedAbsoluteIndent pins the cjklist
+// benchmark documents, where a List Paragraph style carries both
+// w:leftChars="200" and w:left="480" and the paragraph carries only
+// w:leftChars="0". Word keeps the absolute indent and renders the marker at
+// the text margin; cancelling the character channel must not cancel the
+// indent, or the numbered paragraph loses its whole label region.
+func TestNativeZeroCharacterIndentKeepsInheritedAbsoluteIndent(t *testing.T) {
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="480" w:hanging="480"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	parts := resolvedNumberingTestParts(numbering)
+	parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`, 1)
+	parts["word/_rels/document.xml.rels"] = strings.Replace(parts["word/_rels/document.xml.rels"], `</Relationships>`, `<Relationship Id="styles" Type="`+relBaseTransitional+`styles" Target="styles.xml"/></Relationships>`, 1)
+	parts["word/styles.xml"] = `<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:pPr><w:ind w:leftChars="200" w:left="480"/></w:pPr></w:style></w:styles>`
+	parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr><w:ind w:leftChars="0"/></w:pPr><w:r><w:t>item</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+	result, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasResolutionDiagnostic(result, "UNSUPPORTED_NUMBERING_GEOMETRY") {
+		t.Fatal("a zero character indent cancelled the inherited absolute indent and destroyed the label region")
+	}
+	marker := result.Paragraphs[0].Numbering
+	if marker == nil || marker.LabelStartTwips != 0 || marker.LabelEndTwips != 480 || marker.TextStartTwips != 480 {
+		t.Fatalf("resolved label geometry = %#v", marker)
+	}
+	if properties := result.Paragraphs[0].Properties; properties.IndentLeftTwips == nil || *properties.IndentLeftTwips != 480 {
+		t.Fatalf("resolved left indent = %#v", properties.IndentLeftTwips)
+	}
+}
