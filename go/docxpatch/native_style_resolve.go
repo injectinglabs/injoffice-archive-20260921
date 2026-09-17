@@ -2210,6 +2210,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			if !nativeNeutralSourceProperty(child, node, resolver.wordNS) {
 				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
 			}
+		case "webHidden":
+			if nativeWebLayoutHiddenRun(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("WEB_LAYOUT_HIDDEN_RUN_PRESERVED", scopeID, partName, child, "Web Layout view hiding is preserved and not applied; paginated layout draws this run, so it moves no line and no page")
+			} else {
+				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
+			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)
 			if ok {
