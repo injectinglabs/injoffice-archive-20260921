@@ -24,6 +24,23 @@ func nativeNeutralSourceProperty(node, owner *nativeXMLNode, ns string) bool {
 	return false
 }
 
+// w:webHidden hides a run in Word's Web Layout view only. Paginated layout
+// draws it like any other run, so it selects no glyph, no advance and no break
+// here; this tier models no Web Layout view, and records that as its own code
+// rather than guessing that the run should be dropped. Only the exact CT_OnOff
+// leaf qualifies: malformed, repeated or decorated markup states something this
+// reading does not cover and stays refused.
+func nativeWebLayoutHiddenRun(node, owner *nativeXMLNode, ns string) bool {
+	if node.Name != (xml.Name{Space: ns, Local: "webHidden"}) || len(directNativeChildren(owner, ns, "webHidden")) != 1 {
+		return false
+	}
+	if !nativeExactLeaf(node, xml.Name{Space: ns, Local: "val"}) {
+		return false
+	}
+	_, valid := nativeOnOff(node, ns)
+	return valid
+}
+
 // The Word 2010 extension namespace that carries w14:ligatures.
 const nativeWordML2010 = "http://schemas.microsoft.com/office/word/2010/wordml"
 

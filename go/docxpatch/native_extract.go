@@ -3228,6 +3228,14 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
 			}
+		case "webHidden":
+			preserveOnly = true
+			if nativeWebLayoutHiddenRun(child, node, extractor.wordNS) {
+				extractor.addUnsupported("WEB_LAYOUT_HIDDEN_RUN_PRESERVED", "run-properties", paragraphID, partName, child, "Web Layout view hiding is preserved and not applied; paginated layout draws this run, so it moves no line and no page")
+			} else {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
+			}
 		case "vertAlign":
 			preserveOnly = true
 			value, ok := nativeVerticalAlignmentValue(child, extractor.wordNS)

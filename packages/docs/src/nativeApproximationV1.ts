@@ -58,6 +58,10 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // performs and cannot move an advance; every other ligature mode stays
   // foreign markup.
   'LIGATURE_MODE_MATCHES_SHAPER',
+  // w:webHidden hides a run in Word's Web Layout view only. Paginated layout
+  // draws it like any other run, so the fact is recorded and the run is
+  // painted; it cannot move a line or a page here.
+  'WEB_LAYOUT_HIDDEN_RUN_PRESERVED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal
