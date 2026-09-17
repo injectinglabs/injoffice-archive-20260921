@@ -1090,7 +1090,7 @@ describe('native DOCX pagination v1', () => {
     expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
   })
 
-  it('refuses a continuous transition that changes the shared page itself, and one that keeps an ambiguous column count', () => {
+  it('refuses a continuous transition that changes the shared page itself', () => {
     const differentPage = fixture({ lineCounts: [1, 1], sections: [
       { start: 0, breakType: 'next-page', bodyHeight: 40_000 },
       { start: 1, breakType: 'continuous', bodyHeight: 30_000, columns: 2 },
@@ -1099,15 +1099,33 @@ describe('native DOCX pagination v1', () => {
     expect(paginateNativeDocxV1(differentPage)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
       status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]),
     }) }))
+  })
 
-    const sameColumns = fixture({ lineCounts: [1, 1], bodyHeight: 40_000, sections: [
+  /**
+   * Two multi-column sections that agree on the count still need a band. The
+   * preceding fragment was balanced, so where it stopped is the deepest of its
+   * columns, not the one the cursor happens to sit in.
+   * `office-hard-v2/pdf/multi-column-separator-with-line.pdf` balances two
+   * two-column sections that way: one line per column at 50.4 pt and 324 pt,
+   * and the next section's own band opening below both of them.
+   */
+  it('opens a band for a continuous transition between two sections of the same column count', () => {
+    const request = fixture({ lineCounts: [1, 1, 1], bodyHeight: 40_000, sections: [
       { start: 0, breakType: 'next-page' },
-      { start: 1, breakType: 'continuous' },
+      { start: 2, breakType: 'continuous' },
     ] })
-    setEqualColumns(sameColumns, 2)
-    expect(paginateNativeDocxV1(sameColumns)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
-      status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]),
-    }) }))
+    const columnWidth = setEqualColumns(request, 2)
+    const output = paginated(request)
+    expect(output.pages).toHaveLength(1)
+    expect(output.pages[0]!.columns.map((column) => [column.section_id, column.ordinal, column.y_millipoints, column.height_millipoints])).toEqual([
+      ['section:1', 0, 5_000, 40_000], ['section:1', 1, 5_000, 40_000],
+      ['section:2', 0, 15_000, 30_000], ['section:2', 1, 15_000, 30_000],
+    ])
+    expect(output.pages[0]!.lines.map((line) => [line.section_id, line.column_ordinal, line.x_millipoints, line.y_millipoints])).toEqual([
+      ['section:1', 0, 5_000, 5_000], ['section:1', 1, 5_000 + columnWidth + 5_000, 5_000],
+      ['section:2', 0, 5_000, 15_000],
+    ])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
   })
 
   /**
