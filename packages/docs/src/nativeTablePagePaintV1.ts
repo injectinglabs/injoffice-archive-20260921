@@ -339,7 +339,13 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
       if (!projected) return fail(table.id, 'Percentage table width requires one exact section column, matching source grid/cell preferences and integral proportional twip geometry (no content autofit)')
       table = projected.table; widthPolicy = projected.policy
     }
-    if (approximate && table.layout !== 'fixed') {
+    // A table states no preferred width when w:tblW is absent or auto. Its
+    // authored w:tblGrid is then the only width the source gives, whether
+    // w:tblLayout says fixed or the cascade default leaves it autofit
+    // (ECMA-376 17.4.53, 17.4.64): a fixed-layout table sizes its columns from
+    // the grid, and its width is their sum. The approximate lane takes that
+    // sum rather than refusing a table whose width the source does state.
+    if (approximate && (table.layout !== 'fixed' || table.width_twips === undefined || table.width_twips === 0)) {
       const grid = table.grid_widths_twips
       const sum = grid?.reduce((total, width) => total + width, 0)
       if (grid?.length && Number.isSafeInteger(sum) && sum! > 0 && (table.width_twips === undefined || table.width_twips === 0)) {
