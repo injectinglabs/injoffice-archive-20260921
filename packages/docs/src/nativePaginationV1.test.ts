@@ -1481,13 +1481,14 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
-  it('paints every paragraph under a document-scoped ligature mode the shaper already applies', () => {
-    // w14:ligatures w14:val="standardContextual" sits in styles.xml docDefaults,
-    // so its record is scoped to the document and withholding it blocks every
-    // paragraph. The declared HarfBuzz shaping defaults already apply the
-    // standard and contextual ligature sets, so the approximate tier paints on;
-    // the foreign markup this value used to be recorded as still refuses.
-    for (const code of ['LIGATURE_MODE_MATCHES_SHAPER', 'FOREIGN_RUN_PROPERTY'] as const) {
+  it('paints every paragraph under a document-scoped feature request the shaper already applies', () => {
+    // w14:ligatures w14:val="standardContextual" and an enabled w14:cntxtAlts
+    // sit in styles.xml docDefaults, so their record is scoped to the document
+    // and withholding it blocks every paragraph. The declared HarfBuzz shaping
+    // defaults already apply the standard and contextual ligature sets and
+    // calt, so the approximate tier paints on; the foreign markup these values
+    // used to be recorded as still refuses.
+    for (const code of ['LIGATURE_MODE_MATCHES_SHAPER', 'CONTEXTUAL_ALTERNATES_MATCH_SHAPER', 'FOREIGN_RUN_PROPERTY'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const documentID = request.document.document_id
       request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: documentID, preservation: 'refuse-mutation', message: code })

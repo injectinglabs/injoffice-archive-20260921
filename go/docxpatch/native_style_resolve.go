@@ -2024,6 +2024,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("LIGATURE_MODE_MATCHES_SHAPER", scopeID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
 				continue
 			}
+			if nativeShaperDefaultContextualAlternates(child, node) {
+				resolver.addDiagnostic("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", scopeID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
+				continue
+			}
 			resolver.addDiagnostic("FOREIGN_RUN_PROPERTY", scopeID, partName, child, "Foreign run-property markup is preserved verbatim")
 			continue
 		}
