@@ -31,7 +31,7 @@ export type {
 } from './nativeContractV2.generated.js'
 export { formatNativeSheetCellDisplayV2 } from './nativeCellDisplayV2.js'
 export {projectNativeWorkbookV2} from './nativeRenderModelV2.js'
-export {createNativeMaximumDigitWidthAuthorityV2} from './nativeMaximumDigitWidthV2.js'
+export {createNativeMaximumDigitWidthAuthorityV2,nativeNormalFontDescentEmV1} from './nativeMaximumDigitWidthV2.js'
 export {compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeStoredRowSheetGeometryV1} from './nativeSheetGeometryV2.js'
 export type {NativeSheetGeometryV2,NativeStoredRowSheetGeometryV1,NativeSheetViewportV2} from './nativeSheetGeometryV2.js'
 export {selectNativeSheetPrintTitleViewportV1} from './nativeSheetPrintTitleViewportV1.js'

@@ -1,7 +1,7 @@
 import { NativeRichTextSpans, NativeRichTextDetails } from './NativeRichTextSpans'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import {
-  projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2,
+  projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2, nativeNormalFontDescentEmV1,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
@@ -30,7 +30,7 @@ const MAX_FONT_BYTES = 32 * 1024 * 1024
 const MAX_PREVIEW_ROWS = 64
 const MAX_PREVIEW_COLUMNS = 40
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; descentEm?: number; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -93,6 +93,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       const model = projectNativeWorkbookV2(workbook)
       const authority = createNativeMaximumDigitWidthAuthorityV2(model, bytes)
+      const descentEm = nativeNormalFontDescentEmV1(bytes)
       const sourcePrintPage = printPagePreview
       const viewports = usePrintArea || sourcePrintPage ? selectNativeSheetPrintAreaSetV1(model, sheet.id, objects) : [{
         row: 0, column: 0, end_row: Number(rangeRows) - 1, end_column: Number(rangeColumns) - 1,
@@ -140,7 +141,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       if (generation.current !== token) return
       if (installed.current) document.fonts.delete(installed.current)
       document.fonts.add(loaded); installed.current = loaded
-      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, compactGeneral, conditionalFills, richRuns, rangeOrigin: usePrintArea || sourcePrintPage ? 'source-print-area' : 'explicit-host', ...(usePrintArea || sourcePrintPage ? { areaIndex: index } : {}), ...(printPage ? { printPage } : {}) })))
+      setResult(layouts.map((layout, index) => ({ ...layout, fontFamily, descentEm, compactGeneral, conditionalFills, richRuns, rangeOrigin: usePrintArea || sourcePrintPage ? 'source-print-area' : 'explicit-host', ...(usePrintArea || sourcePrintPage ? { areaIndex: index } : {}), ...(printPage ? { printPage } : {}) })))
       setMessage(`${plans.reduce((total, plan) => total + plan.pages.length, 0)} preview pages${sourcePrintPage ? ' at 96 DPI' : ''}. Read-only; the workbook is unchanged.`)
     } catch (error) {
       if (generation.current === token) setMessage(error instanceof Error ? error.message : 'Page preview unavailable.')
@@ -220,7 +221,7 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, descentEm, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   let conditional: NativeConditionalFillPreviewV1 | undefined
@@ -251,6 +252,15 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     const rect = merge?.rect ?? { x_emu: column.x_emu, y_emu: row.y_emu, width_emu: column.width_emu, height_emu: row.height_emu }
     return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals, conditionalMatch }]
   }))
+  // Excel prints a bottom-aligned cell with the first baseline sitting the
+  // font's own descent above the row's bottom edge, not a fixed inset: in Excel
+  // 16.112.4's PDF export of the hard-v2 corpus the gap is 3 pt for Calibri 11
+  // and Aptos Narrow 11 and 2 pt for Arial 10 and Times New Roman 10, which is
+  // each face's hhea descent at that size. A constant makes every face wrong by
+  // a different amount and grows with the font size. Without loaded font bytes
+  // there is no descent to read, so the previous 2 px inset stays the fallback
+  // rather than a guessed ratio.
+  const descentPx = (size: number) => descentEm === undefined ? 2 : size * descentEm
   const disclosures = cells.filter(cell => cell.display.cached || cell.display.warnings.length || cell.display.truncated || cell.display.compacted)
   const address = cellAddress
   return <div className="native-sheet-page-list">
@@ -281,7 +291,7 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
               <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined}/>
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
-              <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - 2} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{richRuns && richCells.get(address(cell.row, cell.column))?.status === 'available' ? <NativeRichTextSpans entry={richCells.get(address(cell.row, cell.column))!} base={cell.style ?? {}} normal={workbook.normal_style} loadedFont={fontFamily}/> : cell.display.text.slice(0, 2048)}</text>
+              <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - descentPx(size)} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{richRuns && richCells.get(address(cell.row, cell.column))?.status === 'available' ? <NativeRichTextSpans entry={richCells.get(address(cell.row, cell.column))!} base={cell.style ?? {}} normal={workbook.normal_style} loadedFont={fontFamily}/> : cell.display.text.slice(0, 2048)}</text>
             </g>
           })}
           {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {

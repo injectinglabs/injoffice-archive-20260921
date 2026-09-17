@@ -10,6 +10,7 @@ import {
   characterWidthToPixels,
   compileNativeSheetGeometryV2,
   createNativeMaximumDigitWidthAuthorityV2,
+  nativeNormalFontDescentEmV1,
   createNativeSheetGeometryRecordingSurfaceV2,
   emitNativeSheetGeometryCommandsV2,
   paddedBaseColumnWidth,
@@ -233,5 +234,20 @@ describe('native XLSX deterministic sheet geometry', () => {
     const recording = createNativeSheetGeometryRecordingSurfaceV2(2)
     expect(() => emitNativeSheetGeometryCommandsV2(geometry, recording)).toThrowError(expect.objectContaining({ code: 'geometry.commandBudget' }))
     expect(recording.commands).toEqual([])
+  })
+})
+
+describe('normal font descent', () => {
+  it('reads the hhea descent as a fraction of the em square from the same qualified font bytes', () => {
+    // DejaVu Sans states unitsPerEm 2048 and hhea descender -483. Excel places a
+    // bottom-aligned baseline exactly this far above the row's bottom edge, so
+    // the preview needs the face's own number rather than a constant inset.
+    expect(nativeNormalFontDescentEmV1(FONT_BYTES)).toBeCloseTo(483 / 2048, 12)
+  })
+
+  it('refuses font bytes it cannot qualify rather than guessing a descent', () => {
+    expect(() => nativeNormalFontDescentEmV1(new Uint8Array(8))).toThrow(NativeSheetGeometryV2Error)
+    expect(() => nativeNormalFontDescentEmV1(FONT_BYTES.subarray(0, 4096))).toThrow(NativeSheetGeometryV2Error)
+    expect(() => nativeNormalFontDescentEmV1(new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf'))).fill(0, 0, 4))).toThrow(NativeSheetGeometryV2Error)
   })
 })
