@@ -190,6 +190,53 @@ func TestDOCXPreviewWorkerRejectsMalformedFramesAndEnvelopes(t *testing.T) {
 	}
 }
 
+// A refusal the compiler named travels as a typed record, so the 422 body
+// states the cause and the scope it is about instead of only an English
+// sentence. An untyped compilation refusal keeps the body it always had.
+func TestDOCXPreviewSurfacesTypedRefusalRecord(t *testing.T) {
+	frame := func(payload string) string {
+		return `const data=Buffer.from(JSON.stringify(` + payload + `)); const header=Buffer.alloc(4); header.writeUInt32BE(data.length); process.stdout.write(Buffer.concat([header,data]));`
+	}
+	typed := frame(`{protocol:'injoffice.docx.page-paint-worker',version:1,id:'preview',ok:false,error:{code:'SECTION_SHAPING_WIDTHS_UNSUPPORTED',scope_id:'section:2',message:'sections disagree on the shaping width'}}`)
+	_, err := compileDOCXPreview(context.Background(), previewFixtureWorker(t, typed), map[string]any{})
+	var refusal *docxPreviewRefusal
+	if !errors.As(err, &refusal) || refusal.Code != "SECTION_SHAPING_WIDTHS_UNSUPPORTED" || refusal.ScopeID != "section:2" || refusal.Message != "sections disagree on the shaping width" {
+		t.Fatalf("typed worker refusal did not reach the handler: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+	writeDOCXPreviewError(recorder, err)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	var body struct {
+		Error   string `json:"error"`
+		Refusal struct {
+			Protocol string `json:"protocol"`
+			Version  int    `json:"version"`
+			Code     string `json:"code"`
+			ScopeID  string `json:"scope_id"`
+			Message  string `json:"message"`
+		} `json:"refusal"`
+	}
+	if jsonErr := json.Unmarshal(recorder.Body.Bytes(), &body); jsonErr != nil {
+		t.Fatal(jsonErr)
+	}
+	if body.Error != "sections disagree on the shaping width" || body.Refusal.Protocol != "injoffice.docx.preview-refusal" || body.Refusal.Version != 1 || body.Refusal.Code != "SECTION_SHAPING_WIDTHS_UNSUPPORTED" || body.Refusal.ScopeID != "section:2" || body.Refusal.Message != body.Error {
+		t.Fatalf("typed refusal body = %s", recorder.Body.String())
+	}
+
+	untyped := frame(`{protocol:'injoffice.docx.page-paint-worker',version:1,id:'preview',ok:false,error:{code:'COMPILATION_REFUSED',message:'qualified fixture refusal'}}`)
+	_, plainErr := compileDOCXPreview(context.Background(), previewFixtureWorker(t, untyped), map[string]any{})
+	if plainErr == nil || errors.As(plainErr, &refusal) || plainErr.Error() != "qualified fixture refusal" {
+		t.Fatalf("an untyped compilation refusal must stay untyped: %v", plainErr)
+	}
+	plain := httptest.NewRecorder()
+	writeDOCXPreviewError(plain, plainErr)
+	if plain.Code != http.StatusUnprocessableEntity || strings.Contains(plain.Body.String(), `"refusal"`) || !strings.Contains(plain.Body.String(), "qualified fixture refusal") {
+		t.Fatalf("untyped refusal body = %s", plain.Body.String())
+	}
+}
+
 func TestDOCXPreviewWorkerParentDeadlineStopsOpenPipe(t *testing.T) {
 	worker := previewFixtureWorker(t, "setInterval(() => {}, 1000);")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

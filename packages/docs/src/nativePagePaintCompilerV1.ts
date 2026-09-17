@@ -1,4 +1,7 @@
 import { qualifyNativeDocxColumnParagraphProfileV1, planNativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
+import { NativeDocxPreviewRefusalV1 } from './nativePreviewRefusalV1.js'
+export { NativeDocxPreviewRefusalV1, nativeDocxPreviewRefusalRecordV1, DOCX_PREVIEW_REFUSAL_CODES, DOCX_PREVIEW_REFUSAL_PROTOCOL, DOCX_PREVIEW_REFUSAL_VERSION } from './nativePreviewRefusalV1.js'
+export type { NativeDocxPreviewRefusalCodeV1, NativeDocxPreviewRefusalRecordV1 } from './nativePreviewRefusalV1.js'
 /**
  * Canonical server-side join for the qualified native DOCX page-paint slice.
  *
@@ -591,9 +594,19 @@ function shapingDimensions(document: NativeDocxDocumentV1, settings: NativeDocxP
   if (document.sections.length === 0) throw new TypeError('native document has no section geometry')
   const geometries = document.sections.map((section) => qualifyNativeDocxSectionColumnsV1(section))
   if (geometries.some((entry) => !entry.ok)) throw new TypeError('native section column geometry is not exactly representable')
-  const widths = geometries.flatMap((entry) => entry.ok ? entry.value.columns.map((column) => column.width_millipoints) : [])
-  const width = widths[0] ?? 0
-  if (widths.some((candidate) => candidate !== width)) throw new TypeError('native sections require more than one shaping width')
+  const widths = geometries.flatMap((entry, index) => entry.ok ? entry.value.columns.map((column, ordinal) => ({ width: column.width_millipoints, section: document.sections[index]!.id, ordinal })) : [])
+  const width = widths[0]?.width ?? 0
+  // Every body paragraph is shaped once, at one available width. A document
+  // whose sections disagree on that width - a two-column section beside a
+  // single-column one, or two sections with different margins - would need one
+  // shaping pass per width, which this preview does not implement. The refusal
+  // is correct; it names which section and which column disagree so the caller
+  // can act on it, instead of restating the limitation as an opaque sentence.
+  const divergent = widths.find((candidate) => candidate.width !== width)
+  if (divergent) {
+    throw new NativeDocxPreviewRefusalV1('SECTION_SHAPING_WIDTHS_UNSUPPORTED', divergent.section,
+      `Native preview shapes every body paragraph at one width; section ${widths[0]!.section} column ${widths[0]!.ordinal} is ${width} milli-points and section ${divergent.section} column ${divergent.ordinal} is ${divergent.width}`)
+  }
   const tab = twips(settings.default_tab_stop_twips)
   if (width <= 0 || tab <= 0) throw new RangeError('native page width or default tab stop is non-positive')
   return { width, tab }
@@ -785,7 +798,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   if (!resolved.ok) failIssues('resolved layout is invalid', resolved.issues)
   const settings = decodeNativeDocxPaginationSettings(input.pagination_settings)
   if (!settings.ok) failIssues('pagination settings are invalid', settings.issues)
-  if (approximateEligibility !== undefined && decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value).status !== 'eligible') throw new TypeError('Source settings are ineligible for approximate body-field layout')
+  if (approximateEligibility !== undefined && decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value).status !== 'eligible') throw new NativeDocxPreviewRefusalV1('APPROXIMATE_SETTINGS_INELIGIBLE', settings.value.document_id, 'Source settings are ineligible for approximate body-field layout')
   const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
   if (inventory.document_id !== document.value.document_id || inventory.revision !== document.value.revision || inventory.package_sha256 !== document.value.source.package_sha256 || inventory.main_part !== document.value.source.main_part
     || inventory.document_id !== resolved.value.document_id || inventory.revision !== resolved.value.revision || inventory.main_part !== resolved.value.source_parts.main_part
