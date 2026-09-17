@@ -148,8 +148,8 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 				continue
 			}
 			for _, child := range run.Children {
-				drawing := context.drawingNode(child)
-				if drawing == nil {
+				drawing, alternateReason := context.drawingAlternate(child)
+				if drawing == nil && alternateReason == "" {
 					continue
 				}
 				joined := []string{}
@@ -165,6 +165,18 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 				}
 				if len(joined) == 0 {
 					// Modeled or otherwise owned content is never re-described here.
+					continue
+				}
+				if drawing == nil {
+					// The alternate selected no readable branch. Describe the
+					// omission so the dropped source content is disclosed.
+					item := context.newItem(p.ID, joined, run, child)
+					item.Reason = alternateReason
+					if len(out.Items) >= nativeApproximateDrawingShapeLimit {
+						out.OmittedCount++
+						continue
+					}
+					out.Items = append(out.Items, item)
 					continue
 				}
 				if uri := nativeApproximateGraphicURI(drawing, wp, a); uri == nativeChartNSTransitional || uri == nativeChartNSStrict {
@@ -189,42 +201,61 @@ func InspectNativeApproximateDrawingShapesV1(data []byte) (*NativeApproximateDra
 	return out, nil
 }
 
-// drawingNode returns the w:drawing under a run child: either directly or the
-// wps/wpg Choice of a markup-compatibility alternate. VML-only fallbacks are not
-// read while a DrawingML twin exists; a lone w:pict stays with its source refusal.
-func (context *nativeApproximateShapeContext) drawingNode(child *nativeXMLNode) *nativeXMLNode {
-	if child.Name == (xml.Name{Space: context.ns, Local: "drawing"}) {
-		return child
-	}
-	if child.Name != (xml.Name{Space: nativeMarkupCompatibilityNS, Local: "AlternateContent"}) {
-		return nil
-	}
-	for _, choice := range child.Children {
-		if choice.Name != (xml.Name{Space: nativeMarkupCompatibilityNS, Local: "Choice"}) {
-			continue
-		}
-		requires, _ := nativeUnqualifiedAttr(choice, "Requires")
-		if !nativeApproximateRequiresWPS(requires) {
-			continue
-		}
-		drawings := directNativeChildren(choice, context.ns, "drawing")
-		if len(drawings) == 1 && len(choice.Children) == 1 {
-			return drawings[0]
-		}
-		return nil
-	}
-	return nil
+// nativeApproximateUnderstoodNamespaces names every namespace this preview can
+// actually read out of a markup-compatibility branch: the DrawingML shape and
+// group-shape vocabularies. A mc:Choice requiring anything else — wp14 relative
+// positioning, a14 drawing extensions, VML — is not understood, so the Part 3
+// rule sends the reader to the mc:Fallback instead.
+var nativeApproximateUnderstoodNamespaces = map[string]bool{
+	nativeTextboxWPS:     true,
+	nativeApproximateWPG: true,
 }
 
-// nativeApproximateRequiresWPS admits the shape and group-shape alternates Word
-// writes; every other Choice keeps its source refusal untouched.
-func nativeApproximateRequiresWPS(requires string) bool {
-	for _, token := range strings.Fields(requires) {
-		if token == "wps" || token == "wpg" {
-			return true
-		}
+// drawingNode is the chart sidecar's view of drawingAlternate: the w:drawing a
+// run child contributes, without the reason an alternate contributed none.
+func (context *nativeApproximateShapeContext) drawingNode(child *nativeXMLNode) *nativeXMLNode {
+	drawing, _ := context.drawingAlternate(child)
+	return drawing
+}
+
+// drawingAlternate returns the w:drawing a run child contributes: either
+// directly, or through the markup-compatibility alternate Word writes around a
+// wps/wpg shape and its VML twin. The branch is selected by the Part 3 rule, so
+// a Fallback is read only when no Choice named an understood namespace, and a
+// VML-only fallback yields no drawing.
+//
+// A nil drawing with an empty reason means the child is not drawing markup at
+// all and keeps its own source refusal. A nil drawing with a reason means an
+// alternate WAS present and contributed no shape; that must be disclosed.
+func (context *nativeApproximateShapeContext) drawingAlternate(child *nativeXMLNode) (*nativeXMLNode, string) {
+	if child.Name == (xml.Name{Space: context.ns, Local: "drawing"}) {
+		return child, ""
 	}
-	return false
+	if !nativeMCIsAlternate(child) {
+		return nil, ""
+	}
+	branch, outcome := nativeMCSelectAlternate(child, nativeApproximateUnderstoodNamespaces)
+	switch outcome {
+	case nativeMCInvalid:
+		return nil, nativeMCReasonInvalid
+	case nativeMCUnselected:
+		return nil, nativeMCReasonUnselected
+	}
+	selected, reason := nativeMCResolvedChildren(branch, nativeApproximateUnderstoodNamespaces)
+	if len(selected) == 0 {
+		// A branch that contributes no element drops source content. It is
+		// disclosed, never treated as "nothing to draw".
+		if reason == "" {
+			reason = nativeMCReasonEmptyBranch
+		}
+		return nil, reason
+	}
+	if len(selected) != 1 || selected[0].Name != (xml.Name{Space: context.ns, Local: "drawing"}) {
+		// A fallback's w:pict, or any branch this preview cannot read, keeps
+		// the source refusal it already carries.
+		return nil, ""
+	}
+	return selected[0], ""
 }
 
 func (context *nativeApproximateShapeContext) anchor(n *nativeXMLNode) NativeSourceAnchorV1 {
@@ -257,8 +288,12 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		return omit("shared-run")
 	}
 	wp, a := context.wp, context.a
+	drawingChildren, reason := nativeMCResolvedChildren(drawing, nativeApproximateUnderstoodNamespaces)
+	if reason != "" {
+		return omit(reason)
+	}
 	var container *nativeXMLNode
-	for _, c := range drawing.Children {
+	for _, c := range drawingChildren {
 		if c.Name.Space == wp && (c.Name.Local == "inline" || c.Name.Local == "anchor") {
 			if container != nil {
 				return omit("ambiguous-drawing-container")
@@ -269,7 +304,13 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 	if container == nil {
 		return omit("missing-drawing-container")
 	}
-	extent := firstDirectNativeChild(container, wp, "extent")
+	// A markup-compatibility alternate can wrap the container's own children,
+	// so resolve them before reading the extent and the graphic out of them.
+	containerChildren, reason := nativeMCResolvedChildren(container, nativeApproximateUnderstoodNamespaces)
+	if reason != "" {
+		return omit(reason)
+	}
+	extent := nativeMCFirstChild(containerChildren, wp, "extent")
 	if extent == nil {
 		return omit("missing-extent")
 	}
@@ -279,7 +320,7 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		return omit("invalid-extent")
 	}
 	item.WidthEMU, item.HeightEMU = width, height
-	graphic := firstDirectNativeChild(container, a, "graphic")
+	graphic := nativeMCFirstChild(containerChildren, a, "graphic")
 	if graphic == nil {
 		return omit("missing-graphic")
 	}
@@ -310,18 +351,18 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 		item.Placement = "inline"
 	} else {
 		item.Placement = "anchored"
-		pageAnchor, wrap, reason := context.pageAnchor(container)
-		if reason != "" {
-			return omit(reason)
+		pageAnchor, wrap, anchorReason := context.pageAnchor(container)
+		if anchorReason != "" {
+			return omit(anchorReason)
 		}
 		item.PageAnchor, item.Wrap = pageAnchor, wrap
 		if wrap != "none" {
 			item.Notes = append(item.Notes, "body text wrapping around the shape is not applied")
 		}
 	}
-	textbox, reason := context.textbox(shape, item.ID)
-	if reason != "" {
-		item.Notes = append(item.Notes, "textbox content omitted: "+reason)
+	textbox, textboxReason := context.textbox(shape, item.ID)
+	if textboxReason != "" {
+		item.Notes = append(item.Notes, "textbox content omitted: "+textboxReason)
 	} else {
 		item.Textbox = textbox
 	}
@@ -599,8 +640,15 @@ func (context *nativeApproximateShapeContext) pageAnchor(container *nativeXMLNod
 	if nativeApproximateFlag(container, "simplePos") {
 		return nil, "", "simple-position-unsupported"
 	}
-	positionH := firstDirectNativeChild(container, wp, "positionH")
-	positionV := firstDirectNativeChild(container, wp, "positionV")
+	// Word writes wp14 relative positioning as a markup-compatibility alternate
+	// around wp:positionH/wp:positionV. wp14 is not understood here, so the
+	// Part 3 rule reads the mc:Fallback's plain wp:posOffset placement instead.
+	children, reason := nativeMCResolvedChildren(container, nativeApproximateUnderstoodNamespaces)
+	if reason != "" {
+		return nil, "", reason
+	}
+	positionH := nativeMCFirstChild(children, wp, "positionH")
+	positionV := nativeMCFirstChild(children, wp, "positionV")
 	if positionH == nil || positionV == nil {
 		return nil, "", "missing-position"
 	}
@@ -628,7 +676,7 @@ func (context *nativeApproximateShapeContext) pageAnchor(container *nativeXMLNod
 	}
 	wraps := map[string]string{"wrapNone": "none", "wrapSquare": "square", "wrapTight": "tight", "wrapThrough": "through", "wrapTopAndBottom": "top-and-bottom"}
 	wrap := "none"
-	for _, child := range container.Children {
+	for _, child := range children {
 		if value, ok := wraps[child.Name.Local]; ok && child.Name.Space == wp {
 			wrap = value
 		}
