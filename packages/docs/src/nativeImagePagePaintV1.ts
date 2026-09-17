@@ -302,14 +302,32 @@ export function collectNativeDocxQualifiedInlineImagesV1(document: NativeDocxDoc
   }))
 }
 
+/** The raster format a byte string actually is, read from its signature. Every
+ * structural rule of the format it claims still applies; only the choice of
+ * which rules to apply comes from the bytes. */
+function staticRasterFormat(bytes: Uint8Array): { content_type: 'image/png' | 'image/jpeg'; width: number; height: number } | undefined {
+  if (PNG_SIGNATURE.every((value, index) => bytes[index] === value)) {
+    const png = pngDimensions(bytes)
+    return png ? { content_type: 'image/png', ...png } : undefined
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    const jpeg = nativeBaselineJpegDimensions(bytes)
+    return jpeg ? { content_type: 'image/jpeg', ...jpeg } : undefined
+  }
+  return undefined
+}
+
 /** Prepare a source-part-bound static raster for native replay, without a DOCX model. */
 export function prepareNativeRasterResourceV1(partName: string, contentType: 'image/png' | 'image/jpeg', bytes: Uint8Array): NativeDocxPagePaintMediaAssetV1 {
-  if (!validPartName(partName) || !(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes) throw new RangeError('Native raster identity or byte budget is invalid')
+  if (!validPartName(partName) || !['image/png', 'image/jpeg'].includes(contentType) || !(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes) throw new RangeError('Native raster identity or byte budget is invalid')
   const owned = Uint8Array.from(bytes)
-  const dimensions = contentType === 'image/png' ? pngDimensions(owned) : contentType === 'image/jpeg' ? nativeBaselineJpegDimensions(owned) : undefined
+  // A package's declared media type is a label its author chose; it names a
+  // JPEG "image1.png" often enough that it cannot select the decoder. The
+  // signature does, and the emitted content type is the one the bytes prove.
+  const dimensions = staticRasterFormat(owned)
   if (!dimensions) throw new TypeError('Native raster must be a complete static PNG or baseline JFIF JPEG')
   const contentDigest = digest(owned)
-  return decodeNativeDocxPagePaintResourceListV1([{id: imageAssetID(contentDigest, partName), part_name: partName, content_type: contentType, content_digest: contentDigest, byte_length: owned.byteLength, width_px: dimensions.width, height_px: dimensions.height, bytes_base64: base64(owned)}])[0]!
+  return decodeNativeDocxPagePaintResourceListV1([{id: imageAssetID(contentDigest, partName), part_name: partName, content_type: dimensions.content_type, content_digest: contentDigest, byte_length: owned.byteLength, width_px: dimensions.width, height_px: dimensions.height, bytes_base64: base64(owned)}])[0]!
 }
 
 export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocumentV1, values: readonly NativeDocxAuthoritativeMediaAssetV1[]): NativeDocxPagePaintMediaAssetV1[] {
