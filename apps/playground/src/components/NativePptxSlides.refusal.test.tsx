@@ -24,3 +24,26 @@ describe('refused shape chrome',()=>{
   expect(markup).toMatch(/width="72"[^>]*height="72"|height="72"[^>]*width="72"/)
  })
 })
+
+// The chrome must be identifiable without reading pixels. A reader that tells
+// refusal chrome from source paint by colour cannot: the dashed #777 stroke and
+// its #777 label are the only dark pixels on a slide that painted nothing, and
+// grey source content is the same colour. Mark the region instead of moving or
+// recolouring it — moving it would hide the refusal, and recolouring it would
+// make an empty slide read as painted.
+describe('refused shape chrome is machine-identifiable',()=>{
+ const preview=decodePptxPreview({version:1,package_sha256:'b'.repeat(64),slide_index:0,slide_count:1,width:914400,height:914400,background:'FFFFFF',policy:'max-run-natural-v1',diagnostics:[],font_digests:[],resources:[],nodes:[{kind:'rect',radius:0,rect:{x:0,y:0,cx:457200,cy:457200},fill:'777777'},{kind:'placeholder',rect:{x:457200,y:457200,cx:457200,cy:457200},label:'Unsupported shape'}]})
+ it('marks the refused region and its label, and marks nothing else',()=>{
+  const markup=renderToStaticMarkup(<NativePptxVector preview={preview}/>)
+  const group=markup.match(/<g data-native-placeholder="refused-region">.*?<\/g>/)
+  expect(group).not.toBeNull()
+  expect(group![0]).toContain('data-native-placeholder-outline')
+  expect(group![0]).toContain('data-native-placeholder-label')
+  expect(group![0]).toContain('Unsupported shape')
+  // Same-coloured source paint is not chrome and must stay unmarked.
+  expect(markup.match(/data-native-placeholder="refused-region"/g)).toHaveLength(1)
+  const painted=markup.replace(/<g data-native-placeholder="refused-region">.*?<\/g>/,'')
+  expect(painted).toContain('fill="#777777"')
+  expect(painted).not.toContain('data-native-placeholder')
+ })
+})
