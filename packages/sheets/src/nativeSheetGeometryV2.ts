@@ -198,6 +198,24 @@ export function compileNativeSheetGeometryV2(
 ): NativeSheetGeometryV2 {
  return compileGeometry(workbook,sheetId,viewport,metricAuthority,undefined,objects)
 }
+/**
+ * Whether every row the viewport asks for states its own height, so no
+ * sheet-level default row height is read.
+ *
+ * Stored-row evidence is deliberately not consulted: it answers the same
+ * question the row records do, and this predicate decides whether the sheet is
+ * compilable at all rather than which height wins.
+ */
+function nativeSheetStatesEveryRowHeight(sheet: NativeSheetRenderModelV2, viewport: NativeSheetViewportV2): boolean {
+  let cursor = 0
+  for (let row = viewport.row; row <= viewport.end_row; row++) {
+    while (cursor < sheet.rows.length && sheet.rows[cursor]!.row < row) cursor++
+    const stored = sheet.rows[cursor]?.row === row ? sheet.rows[cursor] : undefined
+    if (stored?.height_points === undefined) return false
+  }
+  return true
+}
+
 function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,viewport:NativeSheetViewportV2,metricAuthority:NativeMaximumDigitWidthAuthorityV2,storedRows?:NativeStoredRowGeometryV1,objects?:NativeWorkbookObjectsV1):NativeSheetGeometryV2 {
   if (!isProjectedNativeWorkbookV2(workbook)) throw new NativeSheetGeometryV2Error('geometry.sourceUnsupported', '$.workbook', 'workbook must be the branded frozen result of projectNativeWorkbookV2')
   const safeViewport = snapshotViewport(viewport)
@@ -207,8 +225,16 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   const sheet = workbook.sheets.find((candidate) => candidate.id === sheetId)
   if (!sheet) throw new NativeSheetGeometryV2Error('geometry.sheetMissing', '$.sheetId', `sheet ${JSON.stringify(sheetId)} is absent`)
   const format = sheet.sheet_format
-  if (!format) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format', 'source worksheet has no authoritative sheetFormatPr geometry')
-  if (format.zero_height) throw new NativeSheetGeometryV2Error('geometry.zeroHeightUnavailable', '$.sheet.sheet_format.zero_height', 'zeroHeight needs explicit-row visibility provenance not available in native v2')
+  // sheetFormatPr is optional in CT_Worksheet (ECMA-376 §18.3.1.99) and real
+  // writers omit it, so its absence is not a defect. What is absent with it is
+  // defaultRowHeight, which the element declares required (§18.3.1.81) and
+  // which therefore has no value to fall back on. A worksheet that also states
+  // every row's own ht never consults that default, and is compiled below from
+  // its stored heights alone; one that would consult it still refuses here.
+  if (!format && !nativeSheetStatesEveryRowHeight(sheet, safeViewport)) {
+    throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format', 'source worksheet has no authoritative sheetFormatPr geometry')
+  }
+  if (format?.zero_height) throw new NativeSheetGeometryV2Error('geometry.zeroHeightUnavailable', '$.sheet.sheet_format.zero_height', 'zeroHeight needs explicit-row visibility provenance not available in native v2')
   const neutral = objects === undefined
     ? new Set<string>()
     : nativeSheetDimensionNeutralityCodesV1(
@@ -222,7 +248,10 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   if (dimensionIssue) throw new NativeSheetGeometryV2Error('geometry.sourceUnsupported', '$.sheet', `source dimension semantics ${dimensionIssue.code} are not projected exactly`)
   validateMetricAuthority(workbook, safeMetricAuthority)
 
-  const defaultColumnWidth = format.default_column_width ?? paddedBaseColumnWidth(format.base_column_width ?? 8, safeMetricAuthority.maximum_digit_width_pixels)
+  // baseColWidth does have a declared default of 8 characters (§18.3.1.81), so
+  // a column with no stored width is padded from it whether or not the element
+  // that would have restated it is present.
+  const defaultColumnWidth = format?.default_column_width ?? paddedBaseColumnWidth(format?.base_column_width ?? 8, safeMetricAuthority.maximum_digit_width_pixels)
   const rows: NativeSheetRowBandV2[] = []
   const columns: NativeSheetColumnBandV2[] = []
   let y = 0
@@ -230,7 +259,8 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   for (let row = safeViewport.row; row <= safeViewport.end_row; row++) {
     while (rowCursor < sheet.rows.length && sheet.rows[rowCursor]!.row < row) rowCursor++
     const override = sheet.rows[rowCursor]?.row === row ? sheet.rows[rowCursor] : undefined
-    const points = storedRows?.rows[row]?.height_points ?? override?.height_points ?? format.default_row_height_points
+    const points = storedRows?.rows[row]?.height_points ?? override?.height_points ?? format?.default_row_height_points
+    if (points === undefined) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', `$.rows[${rows.length}].height_emu`, 'source worksheet has no authoritative sheetFormatPr geometry')
     const hidden = (storedRows?.rows[row]?.hidden ?? override?.hidden ?? false) || points === 0
     const height = hidden ? 0 : checkedInteger(Math.round(points * EMU_PER_POINT), `$.rows[${rows.length}].height_emu`)
     rows.push({ row, y_emu: y, height_emu: height, hidden, source: override ? 'row-override' : 'sheet-default' })
