@@ -66,6 +66,34 @@ describe('source-preferred TableGrid autofit', () => {
     expect(JSON.stringify(table)).toBe(original)
   })
 
+  // A w:tcW of w:type="auto" states no absolute preference at all, so it cannot
+  // conflict with the authored grid. Word agrees: Table_cell_auto_width_fdo69656
+  // authors a 400/800/1200/222/2000 grid whose fourth cell states auto, and
+  // Word 16.112.4 paints the vertical borders of that table at x = 66.48,
+  // 86.64, 126.72, 186.72, 197.76 and 297.60 pt -- column widths of 20.16,
+  // 40.08, 60.00, 11.04 and 99.84 pt, the authored grid unscaled to within the
+  // 0.24 pt device lattice its PDF rounds to.
+  it('keeps the authored grid when a cell states no absolute width preference', () => {
+    const { table, resolved, shaped } = tableGrid()
+    table.grid_widths_twips = [400, 800, 1_200, 222, 2_000]
+    const [first, second] = [table.rows[0]!.cells[0]!, table.rows[0]!.cells[1]!]
+    first.width_twips = 400
+    delete second.width_twips
+    for (const [index, width] of [1_200, 222, 2_000].entries()) {
+      const extra = structuredClone(second)
+      extra.id = `cell:extra:${index}`
+      extra.width_twips = width
+      extra.paragraphs[0]!.id = `${extra.id}:p`
+      table.rows[0]!.cells.push(extra)
+      resolved.paragraphs.push({ paragraph_id: extra.paragraphs[0]!.id, applied_styles: [], properties: {}, paragraph_mark_properties: {} })
+      shaped.paragraphs.push(shapedParagraph(extra.paragraphs[0]!.id))
+    }
+    expect(resolveNativeDocxTableAutofitV1(table, 9_072, 'section:1', resolved, shaped)).toMatchObject({
+      policy: { name: 'source-preferred-nonconflicting-v1', source_cell_widths_twips: [[400, null, 1_200, 222, 2_000]] },
+      table: { layout: 'fixed', width_twips: 4_622, grid_widths_twips: [400, 800, 1_200, 222, 2_000] },
+    })
+  })
+
   it('refuses merges, percent widths, mixed-space fragments, and unsatisfied minima', () => {
     for (const mode of ['merge', 'percent', 'space', 'wide'] as const) {
       const { table, resolved, shaped } = tableGrid()

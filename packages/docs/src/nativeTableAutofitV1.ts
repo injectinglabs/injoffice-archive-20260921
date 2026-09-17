@@ -1,4 +1,5 @@
 /** Bounded content-based table sizing. No browser metrics or source rewriting. */
+import { nativeDocxCellWidthAgreesWithGridV1 } from './nativeContract.js'
 import type { NativeDocxTableV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
@@ -64,9 +65,14 @@ export function resolveNativeDocxTableAutofitV1(table: NativeDocxTableV1, contai
   const minimum = min.reduce((a,b) => a+b,0), maximum = max.reduce((a,b) => a+b,0)
   if (minimum > available || maximum > LIMIT || available <= 0) return undefined
   // Auto width is not permission to discard consistent authored preferences.
-  // Qualify only the non-conflicting case: every cell repeats its grid width,
+  // Qualify only the non-conflicting case: no cell contradicts its grid width,
   // all unwrapped content fits that preference, and the complete grid fits the
-  // section. Empty cells contribute only padding; they do not invent column
+  // section. A w:tcW of w:type="auto" states no absolute preference at all
+  // (ECMA-376 17.4.72), so it cannot conflict with the grid; the shared
+  // predicate that fixed-grid qualification already uses decides that here.
+  // Word agrees: in Table_cell_auto_width_fdo69656, whose fourth cell states
+  // auto, Word 16.112.4 paints the authored 400/800/1200/222/2000 grid
+  // unscaled. Empty cells contribute only padding; they do not invent column
   // widths or shrink a fitting authored grid. This is not a general Word autofit
   // algorithm or a fixed-grid override: explicit table widths and
   // conflicting/wrapping preferences keep the existing content policy below.
@@ -76,7 +82,7 @@ export function resolveNativeDocxTableAutofitV1(table: NativeDocxTableV1, contai
   const preservePreferences = table.width_twips === undefined
     && preferredGridWidth <= available
     && grid.every((width,index) => max[index]! <= width)
-    && table.rows.every(row => row.cells.every((cell,index) => cell.width_twips === grid[index]))
+    && table.rows.every(row => row.cells.every((cell,index) => nativeDocxCellWidthAgreesWithGridV1(cell, grid[index]!)))
   if (preservePreferences) {
     const policy: NativeDocxTableAutofitPolicyV1 = { name:'source-preferred-nonconflicting-v1', section_id:sectionID, container_width_twips:containerWidth, source_grid_widths_twips:[...grid], source_cell_widths_twips:table.rows.map(row=>row.cells.map(cell=>cell.width_twips??null)), preferred_width_twips:null, minimum_widths_twips:min, maximum_widths_twips:max }
     return { policy, table:{ ...table, layout:'fixed', width_twips:preferredGridWidth, grid_widths_twips:[...grid], rows:table.rows.map(row=>({ ...row,cells:row.cells.map((cell,index)=>({...cell,width_twips:grid[index]!})) })) } }

@@ -203,6 +203,33 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(fallback.status === 'qualified' ? fallback.tables[0]!.width_policy?.name : fallback.status).not.toBe('approximate-authored-grid-fitted-v1')
   })
 
+  /** fdo80800b_tableStyle.docx and tdf118812_tableStyles-comprehensive.docx:
+   * auto-width TableGrid tables whose cells content autofit cannot measure. The
+   * approximate lane already sizes an auto-width table from its authored grid
+   * whenever no resolved geometry is published; an unmeasurable one is not a
+   * different document, so it takes that same declared policy instead of
+   * discarding every other block on the page. Strict paint still refuses. */
+  it('approximate preview falls back to the authored grid when content autofit cannot measure', () => {
+    const unmeasurable = autoGridFixture([4_000, 4_000])
+    unmeasurable.document.body.blocks[0]!.table!.rows[0]!.cells[0]!.vertical_merge = 'restart'
+    const strict = qualifyNativeDocxTablesV1(unmeasurable.document, unmeasurable.resolved_layout, unmeasurable.shaped_lines)
+    expect(strict).toMatchObject({ status: 'refused', diagnostics: [{ message: expect.stringContaining('Content autofit requires') }] })
+    const approximate = qualifyApproximateLegacyTables(unmeasurable.document, unmeasurable.resolved_layout, unmeasurable.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.width_policy).toBeUndefined()
+    expect(approximate.tables[0]!.width_millipoints).toBe(8_000 * 50)
+    expect(approximate.tables[0]!.grid_widths_millipoints).toEqual([4_000 * 50, 4_000 * 50])
+    // Withheld measurements select the same policy; strict still needs them.
+    const withheld = autoGridFixture([4_000, 4_000])
+    expect(qualifyNativeDocxTablesV1(withheld.document, withheld.resolved_layout).status).toBe('refused')
+    const unmeasured = qualifyApproximateLegacyTables(withheld.document, withheld.resolved_layout, undefined, { legacy_compatibility_mode: 14 })
+    expect(unmeasured.status).toBe('qualified')
+    expect(unmeasured.tables[0]!.width_millipoints).toBe(8_000 * 50)
+    // A measurement that does not join this source is still an integrity
+    // failure, not a licence to guess, on either lane.
+    expect(qualifyApproximateLegacyTables(withheld.document, withheld.resolved_layout, { ...withheld.shaped_lines, revision: 'stale' }, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+  })
+
   /** table-rtl.docx and conditionalstyles-tbllook.docx: w:tblW auto with no
    * w:tblLayout element at all, so no resolved table geometry is published and
    * the authored grid is 216 twips (two default cell margins) wider than the
