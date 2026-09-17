@@ -24,6 +24,7 @@ import {
   type NativeDocxResolvedLayoutInputV1,
 } from './nativeResolvedLayout.js'
 import {
+  DOCX_SHAPED_LINES_LIMITS,
   DOCX_SHAPED_LINES_PROTOCOL,
   DOCX_SHAPED_LINES_VERSION,
   twipsToMilliPoints,
@@ -2787,13 +2788,38 @@ describe('joint body and continued footnote flow',()=>{
   const output=coverage(input(8,3))
   expect(output.pages.flatMap(p=>p.note_stories?.filter(n=>n.note_role==='content').map(n=>n.number)??[])).toEqual([1,1,1,2,3])
  })
- it('handles large reference groups and retains the existing request traversal budget',()=>{
+ it('measures a pagination request against the composite budget, not the gateway per-structure one',()=>{
+  // Shaped lines dominate a pagination request: a text document with a small source
+  // model produces a shaped-lines value many times larger than the document contract.
+  // Applying the gateway's single-structure DOCX_NATIVE_LIMITS.maxNodes to the union
+  // refused documents the collection limits declare legal, so the request carries its
+  // own budget and each part keeps its own.
+  expect(DOCX_PAGINATION_LIMITS.maxRequestNodes).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(DOCX_SHAPED_LINES_LIMITS.maxNodes).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  const count=(v:unknown):number=>{let n=1;if(Array.isArray(v))for(const e of v)n+=count(e);else if(v&&typeof v==='object')for(const k of Object.keys(v as object))n+=count((v as Record<string,unknown>)[k]);return n}
+  const request=fixture({lineCounts:Array.from({length:100},()=>100),bodyHeight:200_000_000,lineHeight:10_000})
+  expect(count(request.document)).toBeLessThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(count(request.shaped_lines)).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(count(request)).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(decodeNativeDocxShapedLines(request.shaped_lines).ok).toBe(true)
+  const output=paginateNativeDocxV1(request)
+  expect(output.ok).toBe(true)
+  expect(output.ok&&output.value.status).toBe('paginated')
+  expect(output.ok&&output.value.pages[0]!.lines).toHaveLength(10_000)
+ })
+ it('handles large reference groups under the composite request budget, not the gateway per-structure one',()=>{
   const make=(count:number)=>{const r=fixture({lineCounts:Array.from({length:count},()=>1),bodyHeight:20_000_000});for(let i=1;i<=count;i++)addFootnote(r,String(i),String(i));return r}
   const output=paginated(make(200))
   expect(output.pages).toHaveLength(1)
   expect(output.pages[0]!.lines).toHaveLength(200)
   expect(output.pages[0]!.note_stories!.slice(1).map(n=>n.number)).toEqual(Array.from({length:200},(_,i)=>i+1))
-  expect(paginateNativeDocxV1(make(1000))).toMatchObject({ok:false,issues:expect.arrayContaining([expect.objectContaining({code:'LIMIT_EXCEEDED'})])})
+  // 1,000 references traverse ~201,000 request values. That is past the gateway's
+  // 100,000 per-structure budget and inside the composite request budget, so the
+  // request no longer refuses a note count the contract declares legal (10,000).
+  expect(paginateNativeDocxV1(make(1000)).ok).toBe(true)
+  // The component budgets still apply: the document contract's own unchanged
+  // traversal budget refuses first, under its own path.
+  expect(paginateNativeDocxV1(make(2000))).toMatchObject({ok:false,issues:expect.arrayContaining([expect.objectContaining({code:'LIMIT_EXCEEDED',message:`document traversal exceeds ${DOCX_NATIVE_LIMITS.maxNodes} values`})])})
  })
  it('splits later body text while keeping every paragraph slice in source order',()=>{
   const output=coverage(continuedFootnoteFixture(6))
