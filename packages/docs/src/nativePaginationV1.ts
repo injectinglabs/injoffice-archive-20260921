@@ -957,6 +957,30 @@ function refuseUnsupportedSource(context: PaginationContext): void {
         continue
       }
     }
+    // ECMA-376 17.6.13 and 17.6.11 make w:pgSz and w:pgMar optional children of
+    // w:sectPr. A section-properties element that omits one states no override
+    // for it, so Word lays the section out on its own default page box exactly
+    // as it does for a body that carries no w:sectPr at all - the case this
+    // pipeline already admits above as DEFAULT_SECTION_INFERRED. The two forms
+    // say the same thing, so admit them on the same terms: only while the
+    // extractor's exposed geometry is value-for-value the Word default it
+    // exposes when nothing was authored. Anything else still refuses, so the
+    // exemption can never let derived or partially authored geometry through.
+    if ((entry.code === 'MISSING_PAGE_SIZE' || entry.code === 'MISSING_PAGE_MARGINS') && entry.capability === 'sections') {
+      const section = document.sections.find((candidate) => candidate.id === entry.scope_id)
+      const page = section?.page
+      const margins = page?.margins
+      const defaultSize = page?.width_twips === 12_240 && page.height_twips === 15_840 && page.orientation === 'portrait'
+      const defaultMargins = margins?.top_twips === 1_440 && margins.right_twips === 1_440 && margins.bottom_twips === 1_440 && margins.left_twips === 1_440 && margins.header_twips === 720 && margins.footer_twips === 720 && margins.gutter_twips === 0
+      if (section && (entry.code === 'MISSING_PAGE_SIZE' ? defaultSize : defaultMargins)) {
+        addDiagnostic(context, {
+          code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
+          source_code: entry.code, source_message: entry.message,
+          message: `Schema-optional section geometry is absent; pagination uses the extractor’s explicit Word default geometry without guessing: ${entry.code}`,
+        })
+        continue
+      }
+    }
     // A body-level w:sectPr that governs no block paints nothing: no paragraph
     // and no table falls in its range, so its page geometry, its header and
     // footer references and its page numbering reach no page. The extractor
