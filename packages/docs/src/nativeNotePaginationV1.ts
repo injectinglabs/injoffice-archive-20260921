@@ -253,8 +253,18 @@ function shapedRunTextIndex(shaped: NativeDocxShapedLinesV1): Map<string, string
   return result
 }
 
+/**
+ * A reserved separator story is an ordinary story whose first paragraph
+ * carries the separator instruction and projects no runs; the rule is derived
+ * from that one paragraph's placed line. ECMA-376 17.11.14 lets further
+ * paragraphs follow it, and Word paints them above the notes — it writes a
+ * trailing empty paragraph itself, and an author can put visible text there.
+ * Those paragraphs are laid out and measured like any other note paragraph, so
+ * they only have to be paragraphs, never nested tables.
+ */
 function exactInstructionSentinelProjection(story: NativeDocxStoryV1): boolean {
-  return story.blocks.length === 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
+  return story.blocks.length >= 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
+    && story.blocks.every((block) => block.kind === 'paragraph' && block.paragraph !== undefined)
 }
 
 function measureNoteGroup(
@@ -367,7 +377,10 @@ function continueNote(
     scope_id: continuation.id, code: 'note-continuation-shaping-required', message: 'Note continuation requires activated separator shaping',
   }
   for (const sentinel of [separator, continuation]) {
-    const paragraph = shapedByParagraph.get(sentinel.blocks[0]!.id)
+    // Continuation reserves the separator's height from a one-line probe, so a
+    // separator that carries paragraphs beyond its instruction has no bounded
+    // continuation geometry here and keeps refusing.
+    const paragraph = sentinel.blocks.length === 1 ? shapedByParagraph.get(sentinel.blocks[0]!.id) : undefined
     if (!paragraph || paragraph.lines.length !== 1 || paragraph.lines[0]!.fragments.length !== 0 ||
       paragraph.spacing_before_millipoints !== 0 || paragraph.spacing_after_millipoints !== 0) {
       return { scope_id: sentinel.id, code: 'note-separator-unsupported', message: 'Continued notes require exact one-line, zero-spacing instruction separators' }
