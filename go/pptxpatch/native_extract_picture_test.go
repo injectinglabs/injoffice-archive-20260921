@@ -670,3 +670,88 @@ func nativeFixturePicture(t *testing.T, slide NativeSlide) NativeElement {
 	t.Fatalf("slide has no native picture: %#v", slide)
 	return NativeElement{}
 }
+
+// A p:pic the bounded projection cannot represent refuses that picture, not
+// the deck. Refusing the package threw away every other shape on every other
+// slide over one image, which is the outcome PRs #259 (AutoShapes) and #271
+// (graphic frames) already rejected for their element kinds.
+func TestExtractNativePPTXRefusesUnprojectablePictureWithoutTheDeck(t *testing.T) {
+	t.Parallel()
+
+	const imagePart = "relocated/media/image1.png"
+	tests := []struct {
+		name    string
+		picture string
+		// extra slide relationships and package parts the picture needs
+		relationships string
+		withImage     bool
+	}{
+		{
+			// Placeholder pictures author an empty p:spPr and inherit the box
+			// from the layout (ECMA-376 §19.3.1.36).
+			// customshape-bitmapfill-srcrect.pptx is exactly this.
+			name:          "inherited placeholder box",
+			picture:       `<p:pic><p:nvPicPr><p:cNvPr id="3" name="Content Placeholder 5"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip xmlns:r="` + nsOfficeRelsTransitional + `" r:embed="rIdImage"/><a:stretch/></p:blipFill><p:spPr/></p:pic>`,
+			relationships: `<Relationship Id="rIdImage" Type="` + relImageTransitional + `" Target="../media/image1.png"/>`,
+			withImage:     true,
+		},
+		{
+			// a:blip may name the image with r:link instead of r:embed
+			// (§20.1.8.13): the bytes live outside the package. customxml.pptx
+			// carries one such picture beside an ordinary embedded one.
+			name:          "externally linked image",
+			picture:       `<p:pic><p:nvPicPr><p:cNvPr id="3" name="Picture 2"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip xmlns:r="` + nsOfficeRelsTransitional + `" r:link="rIdLink"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="12700" y="12700"/><a:ext cx="12700" cy="12700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`,
+			relationships: `<Relationship Id="rIdLink" Type="` + relImageTransitional + `" Target="https://example.invalid/linked.png" TargetMode="External"/>`,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			options := nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+				parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, test.picture+`</p:spTree>`, 1)
+				parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `</Relationships>`, test.relationships+`</Relationships>`, 1)
+				if test.withImage {
+					parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/`+imagePart+`" ContentType="image/png"/></Types>`, 1)
+				}
+			}}
+			if test.withImage {
+				options.extraParts = []nativeExtractZipPart{{name: imagePart, data: "\x89PNG\r\n\x1a\nfixture"}}
+			}
+			deck, err := ExtractNativePPTX(nativeExtractFixture(t, options), nativeAtomicTestExtractOptions())
+			if err != nil {
+				t.Fatalf("one unprojectable picture refused the whole deck: %v", err)
+			}
+			if len(deck.Slides) != 1 {
+				t.Fatalf("deck lost its slide: %#v", deck.Slides)
+			}
+			// The slide keeps everything else it had; the picture does not
+			// become an element, and the refusal names it.
+			if len(deck.Slides[0].Elements) != 1 || deck.Slides[0].Elements[0].Kind != NativeElementKindText {
+				t.Fatalf("refused picture took the rest of the slide with it: %#v", deck.Slides[0].Elements)
+			}
+			if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.unsupported-picture") {
+				t.Fatalf("refused picture was not diagnosed: %#v", deck.Slides[0].Compatibility)
+			}
+			if deck.Slides[0].Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+				t.Fatalf("refused picture left the slide editable: %q", deck.Slides[0].Compatibility.Status)
+			}
+			if len(deck.Slides[0].Passthrough) == 0 {
+				t.Fatal("refused picture was dropped instead of preserved exactly")
+			}
+		})
+	}
+}
+
+// A malformed package is still a malformed package. Only a picture the
+// projection cannot represent is refused per element.
+func TestExtractNativePPTXStillRefusesTheDeckForBrokenPictureRelationships(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{omitImagePart: true}), nativeTestExtractOptions()); err == nil {
+		t.Fatal("picture relationship targeting no stored part was accepted")
+	}
+	if _, err := ExtractNativePPTX(nativePictureFixture(t, nativePictureFixtureOptions{duplicateRelationshipID: true}), nativeTestExtractOptions()); err == nil {
+		t.Fatal("ambiguous picture relationship id was accepted")
+	}
+}

@@ -241,6 +241,12 @@ func (extractor *nativeExtractor) extractNativeGroup(
 		case xml.Name{Space: dialect.presentation, Local: "pic"}:
 			element, err = extractor.extractPicture(child, slidePart, slideID, relationships, dialect)
 			if err != nil {
+				var refusal nativePictureProjectionRefusal
+				if errors.As(err, &refusal) {
+					// A group is projected atomically, so one unprojectable
+					// picture refuses its group and no more than that.
+					return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-child-refused-unavailable", refusal.message)
+				}
 				return nativeGroupExtractResult{}, err
 			}
 			if element.Source != nil && element.Source.RelationshipID != nil {

@@ -1639,7 +1639,18 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 		case xml.Name{Space: dialect.presentation, Local: "pic"}:
 			element, elementErr := extractor.extractPicture(child, part, slideID, graph.relationships, dialect)
 			if elementErr != nil {
-				return NativeSlide{}, elementErr
+				var refusal nativePictureProjectionRefusal
+				if !errors.As(elementErr, &refusal) {
+					return NativeSlide{}, elementErr
+				}
+				raw, rawErr := rawNativeNode(payload, child)
+				if rawErr != nil {
+					return NativeSlide{}, rawErr
+				}
+				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, nativeDiscloseShapeRefusal(child, dialect, refusal.message)); err != nil {
+					return NativeSlide{}, err
+				}
+				continue
 			}
 			usedPictureRelationships[*element.Source.RelationshipID] = true
 			slide.Elements = append(slide.Elements, element)
