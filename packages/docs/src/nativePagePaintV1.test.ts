@@ -609,6 +609,18 @@ describe('native DOCX page-paint v1', () => {
     expect(unknown.ok && unknown.value.status).toBe('refused')
   })
 
+  it('retains a repeated font-table entry without blocking paint', async () => {
+    const request = fixture(), resolved = request.pagination_request.resolved_layout
+    resolved.source_parts.font_table_part = 'word/fontTable.xml'
+    resolved.diagnostics.push({ code: 'DUPLICATE_FONT_TABLE_ENTRY', severity: 'unsupported', scope_id: resolved.document_id, part_name: 'word/fontTable.xml', path: '/w:fonts[1]/w:font[4]', preservation: 'preserve-verbatim', message: 'A repeated font-table entry for this family is preserved' })
+    const result = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(result.ok && result.value.status).toBe('painted')
+    expect(resolved.diagnostics).toHaveLength(1)
+    resolved.diagnostics[0]!.path = '/w:fonts[1]/w:font[4]/w:panose1[1]'
+    const elsewhere = await compileNativeDocxPagePaintV1(request, new FixtureProvider())
+    expect(elsewhere.ok && elsewhere.value.status).toBe('refused')
+  })
+
   it('bounds paginated-layout hashing and keeps object-key order irrelevant', () => {
     const layout = fixture().paginated_layout
     const reordered = Object.fromEntries(Object.entries(structuredClone(layout)).reverse()) as typeof layout

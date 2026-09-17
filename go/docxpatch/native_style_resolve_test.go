@@ -559,6 +559,49 @@ func TestResolveNativeDocumentLayoutV1LeavesDuplicateSingletonsUnresolved(t *tes
 	}
 }
 
+// A second w:font for a family the table already describes selects nothing:
+// it carries only the matching metadata this tier never consults. Word and
+// LibreOffice keep the first description and render the document, so a real
+// save such as TextEffects_StylisticSets_CntxtAlts.docx, which lists "Noto
+// Sans" twice with different panose1 and sig values, must not refuse.
+func TestResolveNativeDocumentLayoutV1KeepsTheFirstOfDuplicateFontTableEntries(t *testing.T) {
+	fontTable := func(body string) map[string]string {
+		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+		parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/word/fonts.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/></Types>`, 1)
+		parts["word/_rels/document.xml.rels"] = strings.Replace(parts["word/_rels/document.xml.rels"], `</Relationships>`, `<Relationship Id="fonts" Type="`+relBaseTransitional+`fontTable" Target="fonts.xml"/></Relationships>`, 1)
+		parts["word/fonts.xml"] = `<w:fonts xmlns:w="` + wordMLTransitional + `">` + body + `</w:fonts>`
+		return parts
+	}
+	t.Run("descriptive repeat resolves once", func(t *testing.T) {
+		parts := fontTable(`<w:font w:name="Noto Sans"><w:panose1 w:val="020F0302020204030204"/></w:font><w:font w:name="Noto Sans"><w:panose1 w:val="020B0504020000000003"/><w:altName w:val="Ignored"/></w:font>`)
+		data := buildNativeDOCX(t, nativeEntries(parts))
+		resolved, err := ResolveNativeDocumentLayoutV1(data)
+		if err != nil {
+			t.Fatalf("a repeated descriptive font entry must not refuse resolution: %v", err)
+		}
+		if len(resolved.Fonts) != 1 || resolved.Fonts[0].Name != "Noto Sans" || resolved.Fonts[0].AltName != nil {
+			t.Fatalf("the first description must resolve the family: %#v", resolved.Fonts)
+		}
+		if !hasResolutionDiagnostic(resolved, "DUPLICATE_FONT_TABLE_ENTRY") {
+			t.Fatalf("the repeat must be disclosed: %#v", resolved.Diagnostics)
+		}
+		inventory, err := ExtractNativeDOCXFontInventoryV1(data)
+		if err != nil {
+			t.Fatalf("a repeated descriptive font entry must not refuse the inventory: %v", err)
+		}
+		if len(inventory.Families) != 1 || inventory.Families[0].Name != "Noto Sans" {
+			t.Fatalf("the inventory must identify the family once: %#v", inventory.Families)
+		}
+	})
+	t.Run("repeat binding an embedded face refuses", func(t *testing.T) {
+		parts := fontTable(`<w:font w:name="Noto Sans"><w:panose1 w:val="020F0302020204030204"/></w:font><w:font w:name="Noto Sans"><w:embedRegular r:id="rFont" xmlns:r="` + relNSTransitional + `"/></w:font>`)
+		_, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+		if err == nil || !strings.Contains(err.Error(), "binds an embedded face") {
+			t.Fatalf("two faces claiming one family name must refuse: %v", err)
+		}
+	})
+}
+
 func TestResolveNativeDocumentLayoutV1PreservesPictureBullets(t *testing.T) {
 	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:numPicBullet w:numPicBulletId="1"><w:pict/></w:numPicBullet><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlPicBulletId w:val="1"/></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
 	parts := resolvedNumberingTestParts(numbering)

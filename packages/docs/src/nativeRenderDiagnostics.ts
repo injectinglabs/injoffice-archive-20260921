@@ -14,6 +14,17 @@ export function isRenderNeutralLayoutDiagnostic(
     && diagnostic.severity === 'unsupported' && diagnostic.preservation === 'preserve-verbatim'
     && diagnostic.part_name !== undefined && diagnostic.part_name === resolved.source_parts.styles_part
     && /^\/w:styles\[1\]\/w:style\[[1-9][0-9]*\]$/.test(diagnostic.path ?? '')
+  // A repeated w:font for a family the table already describes selects
+  // nothing: the resolver keeps the first description, and the repeat carries
+  // only the matching metadata this tier never consults. It is disclosed at the
+  // exact w:font element so the source fact stays visible, and it is neutral to
+  // every advance, so it does not block shaping.
+  if (diagnostic.code === 'DUPLICATE_FONT_TABLE_ENTRY') return diagnostic.scope_id === resolved.document_id
+    && diagnostic.severity === 'unsupported'
+    && diagnostic.preservation === 'preserve-verbatim'
+    && diagnostic.part_name !== undefined
+    && diagnostic.part_name === resolved.source_parts.font_table_part
+    && /^\/w:fonts\[1\]\/w:font\[[1-9][0-9]*\]$/.test(diagnostic.path ?? '')
   if (diagnostic.code === 'FONT_MATCHING_METADATA_PRESERVED') return diagnostic.scope_id === resolved.document_id
     && diagnostic.severity === 'unsupported'
     && diagnostic.preservation === 'preserve-verbatim'
