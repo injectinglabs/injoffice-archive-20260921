@@ -40,8 +40,11 @@ invent a CSS integer paper.
 The preview is available only when all of the following already exist:
 
 - Source page settings `status: 'available'` joined to the worksheet part, with
-  explicit Letter or A4 paper, orientation, four body margins, and a percentage
-  scale from 10 through 400.
+  explicit Letter or A4 paper, orientation, the six authored `pageMargins`
+  values, and a percentage scale from 10 through 400. All six are measured from
+  the paper edge (ECMA-376 Part 1 §18.3.1.62), so the body is reserved between
+  `max(top, header)` and `max(bottom, footer)` as Excel reserves it; header and
+  footer text itself is still not painted.
 - A saved print area or print-area set `status: 'available'` joined to the same
   part. Used-range and A1 fallbacks are refused.
 - Compiled geometry whose viewport matches that saved area (and saved titles

@@ -4,6 +4,14 @@ import {snapshotNativePlainData} from './nativePlainData.js'
 export interface NativeSheetPageConfigV1 {
  paper:'Letter'|'A4'; orientation:'portrait'|'landscape'; scale:number;
  left_inches:number;right_inches:number;top_inches:number;bottom_inches:number;
+ /**
+  * Authored header and footer margins, measured from the paper edge like the
+  * other four (ECMA-376 §18.3.1.62), not added to them. Excel prints the body
+  * between max(top, header) and max(bottom, footer). Omission reserves no
+  * header or footer band, which is what an explicit host choice that states
+  * neither means; a source-projected setting always states both.
+  */
+ header_inches?:number;footer_inches?:number;
  /** Omission retains down-then-over ordering. */
  page_order?:'downThenOver'|'overThenDown';
  /** Read-only shrink-to-fit target; zero leaves that dimension unconstrained. */
@@ -12,6 +20,8 @@ export interface NativeSheetPageConfigV1 {
 /** Authored margins for a worksheet that declares no pageSetup at all. */
 export interface NativeSheetPageMarginsV1 {
  left_inches:number;right_inches:number;top_inches:number;bottom_inches:number;
+ /** Edge-measured header and footer margins; see NativeSheetPageConfigV1. */
+ header_inches?:number;footer_inches?:number;
 }
 /** ECMA-376 CT_PageSetup attributes whose schema default a source may omit. */
 export type NativeSheetPageDefaultedFactV1='paper'|'orientation'|'scale'
@@ -50,22 +60,23 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096))return fail()
   let settings:NativeSheetPageConfigV1|undefined
   if(status==='available'){
-   const hasOrder=!!o.settings&&typeof o.settings==='object'&&Object.hasOwn(o.settings,'page_order')
-   const hasFit=!!o.settings&&typeof o.settings==='object'&&Object.hasOwn(o.settings,'fit_to_page')
-   const s=exact(o.settings,['paper','orientation','scale','left_inches','right_inches','top_inches','bottom_inches',...(hasOrder?['page_order']:[]),...(hasFit?['fit_to_page']:[])])
+   const has=(key:string)=>!!o.settings&&typeof o.settings==='object'&&Object.hasOwn(o.settings,key)
+   const hasOrder=has('page_order'),hasFit=has('fit_to_page'),hasBands=['header_inches','footer_inches'].filter(has)
+   const s=exact(o.settings,['paper','orientation','scale','left_inches','right_inches','top_inches','bottom_inches',...hasBands,...(hasOrder?['page_order']:[]),...(hasFit?['fit_to_page']:[])])
    if(hasFit){
     const fit=exact(s.fit_to_page,['width','height'])
     if(['width','height'].some(k=>!Number.isInteger(fit[k])||Object.is(fit[k],-0)||Number(fit[k])<0||Number(fit[k])>100)||!(Number(fit.width)>0||Number(fit.height)>0))return fail()
    }
    if(hasOrder&&s.page_order!=='downThenOver'&&s.page_order!=='overThenDown')return fail()
    if((s.paper!=='Letter'&&s.paper!=='A4')||(s.orientation!=='portrait'&&s.orientation!=='landscape')||!Number.isInteger(s.scale)||Number(s.scale)<10||Number(s.scale)>400)return fail()
-   for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof s[key]!=='number'||!Number.isFinite(s[key])||Number(s[key])<0||Number(s[key])>20)return fail()
+   for(const key of ['left_inches','right_inches','top_inches','bottom_inches',...hasBands])if(typeof s[key]!=='number'||!Number.isFinite(s[key])||Number(s[key])<0||Number(s[key])>20)return fail()
    settings=s as unknown as NativeSheetPageConfigV1
   }
   let margins:NativeSheetPageMarginsV1|undefined
   if(status==='margins-only'){
-   const m=exact(o.margins,['left_inches','right_inches','top_inches','bottom_inches'])
-   for(const key of ['left_inches','right_inches','top_inches','bottom_inches'])if(typeof m[key]!=='number'||!Number.isFinite(m[key])||Number(m[key])<0||Number(m[key])>20)return fail()
+   const hasBands=['header_inches','footer_inches'].filter(key=>!!o.margins&&typeof o.margins==='object'&&Object.hasOwn(o.margins,key))
+   const m=exact(o.margins,['left_inches','right_inches','top_inches','bottom_inches',...hasBands])
+   for(const key of ['left_inches','right_inches','top_inches','bottom_inches',...hasBands])if(typeof m[key]!=='number'||!Number.isFinite(m[key])||Number(m[key])<0||Number(m[key])>20)return fail()
    margins=m as unknown as NativeSheetPageMarginsV1
   }
   let defaulted:NativeSheetPageDefaultedFactV1[]|undefined
