@@ -75,6 +75,26 @@ function paragraph(id: string, index: number): NativeDocxParagraphV1 {
   }
 }
 
+/** Turns a fixture paragraph's own first run into a w:br of the given kind. */
+function leadFlowBreak(paragraph: any, control: 'page-break' | 'column-break'): void {
+  const run = paragraph.runs[0]
+  delete run.text
+  run.kind = 'control'
+  run.control = control
+}
+
+/** Appends a w:br of the given kind after every existing run of a body paragraph. */
+function appendFlowBreak(request: any, blockIndex: number, control: 'page-break' | 'column-break'): void {
+  const paragraph = request.document.body.blocks[blockIndex].paragraph
+  const previous = paragraph.runs[paragraph.runs.length - 1]
+  const id = `${previous.id}:break:${paragraph.runs.length}`
+  paragraph.runs.push({
+    kind: 'control', control, id,
+    anchor: { ...previous.anchor, path: `${previous.anchor.path}/w:br[1]`, start_byte: previous.anchor.end_byte + 1, end_byte: previous.anchor.end_byte + 2 },
+  })
+  request.resolved_layout.runs.push({ run_id: id, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+}
+
 interface FixtureOptions {
   lineCounts?: number[]
   lineHeight?: number
@@ -1176,7 +1196,8 @@ describe('native DOCX pagination v1', () => {
         diagnostics: [{ code: 'MIRROR_MARGINS_UNSUPPORTED', severity: 'unsupported', part_name: 'word/settings.xml', path: '/w:settings[1]/w:mirrorMargins[1]', preservation: 'preserve-verbatim', message: 'Mirror margins alter page geometry.' }],
       }
     }, 'settings-attestation-unsupported'],
-    ['unsupported source control', (value: any) => { const run = value.document.body.blocks[0].paragraph.runs[0]; delete run.text; run.kind = 'control'; run.control = 'page-break' }, 'source-control-unsupported'],
+    ['a page break that follows shaped content in its own paragraph', (value: any) => { appendFlowBreak(value, 0, 'page-break') }, 'source-control-unsupported'],
+    ['a second flow break in one paragraph', (value: any) => { leadFlowBreak(value.document.body.blocks[0].paragraph, 'page-break'); appendFlowBreak(value, 0, 'page-break') }, 'source-control-unsupported'],
     ['missing shaped paragraph', (value: any) => { value.shaped_lines.paragraphs = [] }, 'shaped-paragraph-missing'],
     ['keep-next across section', (value: any) => { value.resolved_layout.paragraphs[0].properties.keep_next = true }, 'keep-chain-conflict'],
   ])('refuses %s rather than approximating', (_name, mutate, code) => {
@@ -1187,11 +1208,57 @@ describe('native DOCX pagination v1', () => {
     ] } : {}) as any
     mutate(request)
     const result = paginateNativeDocxV1(request)
-    expect(result.ok).toBe(true)
+    expect(result.ok, JSON.stringify((result as any).issues)).toBe(true)
     if (!result.ok) return
     expect(result.value.status).toBe('refused')
     expect(result.value.pages).toEqual([])
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code })]))
+  })
+
+  it('breaks the page at a w:br page break that opens its own body paragraph', () => {
+    const flowing = paginated(fixture({ lineCounts: [1, 1] }))
+    expect(flowing.pages).toHaveLength(1)
+    const request = fixture({ lineCounts: [1, 1] })
+    leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'page-break')
+    const broken = paginated(request)
+    expect(broken.pages).toHaveLength(2)
+    expect(broken.pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([['paragraph:1'], ['paragraph:2']])
+  })
+
+  it('breaks the column at a w:br column break that opens its own body paragraph', () => {
+    const options: FixtureOptions = { lineCounts: [1, 1, 1], sections: [
+      { start: 0, breakType: 'next-page' },
+      { start: 2, breakType: 'next-column' },
+    ] }
+    const flowing = fixture(options)
+    setEqualColumns(flowing, 2)
+    expect(paginated(flowing).pages[0]!.lines.map((line) => line.column_ordinal)).toEqual([0, 0, 1])
+    const request = fixture(options)
+    setEqualColumns(request, 2)
+    leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'column-break')
+    const broken = paginated(request)
+    expect(broken.pages[0]!.lines.map((line) => [line.paragraph_id, line.column_ordinal])).toEqual([['paragraph:1', 0], ['paragraph:2', 1]])
+  })
+
+  it('keeps a leading page break from crossing an incoming keep_next chain', () => {
+    const request = fixture({ lineCounts: [1, 1], properties: [{ keep_next: true }, {}] })
+    leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'page-break')
+    const result = paginateNativeDocxV1(request)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.status).toBe('refused')
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'keep-chain-conflict' })]))
+  })
+
+  it('refuses a leading flow break inside a balanced multi-column group', () => {
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 40_000 })
+    setEqualColumns(request, 2)
+    leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'page-break')
+    const result = paginateNativeDocxV1(request)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.status).toBe('refused')
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]))
   })
 
   it('omits an unshaped comment/drawing paragraph in approximate layout and keeps the sibling paragraph', () => {
@@ -1675,7 +1742,7 @@ describe('native DOCX pagination v1', () => {
       properties: [{ widow_control: false }],
     })
     const result = paginateNativeDocxV1(request)
-    expect(result.ok).toBe(true)
+    expect(result.ok, JSON.stringify((result as any).issues)).toBe(true)
     if (!result.ok) return
     expect(result.value.status).toBe('refused')
     expect(result.value.pages).toEqual([])
