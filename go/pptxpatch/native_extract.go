@@ -518,7 +518,7 @@ func openNativeExtractPackage(data []byte) (nativeExtractPackage, error) {
 	if !ok {
 		return nativeExtractPackage{}, fmt.Errorf("pptxpatch: native extract OPC: missing [Content_Types].xml")
 	}
-	contentTypes, err := parseNativeContentTypes(parts[contentTypesPart], aliases)
+	contentTypes, err := parseNativeContentTypes(parts[contentTypesPart])
 	if err != nil {
 		return nativeExtractPackage{}, err
 	}
@@ -623,7 +623,7 @@ func (types nativeExtractContentTypes) forPart(part string) string {
 	return types.defaults[extension]
 }
 
-func parseNativeContentTypes(data []byte, packageAliases map[string]string) (nativeExtractContentTypes, error) {
+func parseNativeContentTypes(data []byte) (nativeExtractContentTypes, error) {
 	root, err := parseNativeXML(data, "[Content_Types].xml")
 	if err != nil {
 		return nativeExtractContentTypes{}, err
@@ -672,27 +672,20 @@ func parseNativeContentTypes(data []byte, packageAliases map[string]string) (nat
 			if previous, exists := overrideAliases[alias]; exists {
 				return nativeExtractContentTypes{}, fmt.Errorf("pptxpatch: native extract OPC: content-type override aliases %q and %q", previous, part)
 			}
-			if _, exists := packageAliases[alias]; !exists {
-				return nativeExtractContentTypes{}, fmt.Errorf("pptxpatch: native extract OPC: content-type override targets missing part %q", part)
-			}
+			// An Override naming a part the package does not store is inert.
+			// OPC gives [Content_Types].xml one job, mapping a stored part to
+			// its media type, and forPart resolves each stored part without
+			// consulting the rest of the table. An Override that names nothing
+			// is read by nothing.
 			overrideAliases[alias] = part
 			result.overrides[alias] = contentType
 		default:
 			return nativeExtractContentTypes{}, fmt.Errorf("pptxpatch: native extract OPC: unknown content-types element %s", child.Name.Local)
 		}
 	}
-	for extension := range result.defaults {
-		used := false
-		for _, actualPart := range packageAliases {
-			if asciiEqualFoldNative(strings.TrimPrefix(path.Ext(actualPart), "."), extension) {
-				used = true
-				break
-			}
-		}
-		if !used {
-			return nativeExtractContentTypes{}, fmt.Errorf("pptxpatch: native extract OPC: dangling content-type default for %q", extension)
-		}
-	}
+	// A Default for an extension no stored part uses is inert for the same
+	// reason: nothing resolves a content type through it. Real writers leave
+	// both kinds of entry behind when a save drops the last part of a kind.
 	return result, nil
 }
 
