@@ -47,6 +47,21 @@ describe('source-qualified geometry-only table text context',()=>{
   const {document,resolved,contexts}=fixture();contexts.push(structuredClone(contexts[0]!));expect(()=>decode(document,resolved,contexts)).toThrow();expect(()=>decode(document,undefined,contexts)).toThrow()
   contexts.pop();resolved.diagnostics=[];expect(()=>decode(document,resolved,contexts)).toThrow('original resolved diagnostic')
  })
+ // The producer omits look_diagnostic_id exactly when the extractor proved the
+ // conditional selection inactive, so there is no diagnostic left to name. The
+ // element bytes are the same evidence and the decoder must admit that form --
+ // but only when the document really states no such diagnostic.
+ it('admits an inert look that names no diagnostic and rejects one that hides a stated diagnostic',()=>{
+  const {document,resolved,contexts}=fixture()
+  delete contexts[0]!.look_diagnostic_id
+  expect(()=>decode(document,resolved,contexts)).toThrow('omits a look diagnostic')
+  document.unsupported=[]
+  expect(decode(document,resolved,contexts)[0]!.look_diagnostic_id).toBeUndefined()
+  const out=project(document,options,resolved,undefined,contexts)
+  expect(JSON.stringify(out.blocks)).toContain('Summary');expect(out.retained_nontext_diagnostic_ids).not.toContain('look:1')
+  contexts[0]!.look_anchor.start_byte=0
+  expect(()=>decode(document,resolved,contexts)).toThrow('exact source look')
+ })
  it('preserves missing styles and continuation omissions and bounds evidence',()=>{
   const {document,resolved,contexts,table}=fixture()
   table.rows[0]!.cells[0]!.vertical_merge='continue';expect(JSON.stringify(project(document,options,resolved,undefined,contexts).blocks)).not.toContain('Summary')

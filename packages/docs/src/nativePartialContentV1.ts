@@ -54,7 +54,7 @@ export function createNativeDocxPartialContentPreviewV1(value:unknown,options:{p
   if(!layout.ok||layout.value.document_id!==document.document_id||layout.value.revision!==document.revision||layout.value.source_parts.main_part!==document.source.main_part)throw new TypeError('Partial content requires an exact native layout identity join')
   resolved=structuredClone(layout.value)
  }
- const tableContexts=decodeNativeDocxPartialTableTextContextsV1(document,resolved,tableTextEvidence),tableLookIDs=new Set(tableContexts.map(t=>t.look_diagnostic_id))
+ const tableContexts=decodeNativeDocxPartialTableTextContextsV1(document,resolved,tableTextEvidence),tableLookIDs=new Set(tableContexts.flatMap(t=>t.look_diagnostic_id===undefined?[]:[t.look_diagnostic_id]))
  const sources=new Map<string,NativeDocxSourceAnchorV1>()
  const put=(id:string,anchor:NativeDocxSourceAnchorV1)=>sources.set(id,anchor)
  const putRun=(run:NativeDocxRunV1)=>{put(run.id,run.anchor);if(run.drawing)put(run.drawing.id,run.drawing.anchor)}
