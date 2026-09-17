@@ -14150,6 +14150,11 @@
               "signature": "NativeMaximumDigitWidthAuthorityV2"
             },
             {
+              "name": "nativeNormalFontDescentEmV1",
+              "kind": "function",
+              "signature": "export declare function nativeNormalFontDescentEmV1(fontBytes: Uint8Array): number"
+            },
+            {
               "name": "NativeOOXMLCellType",
               "kind": "type",
               "signature": "NativeOOXMLCellType"
@@ -15514,6 +15519,11 @@
               "name": "NativeDrawingObjectV1",
               "kind": "type",
               "signature": "export interface NativeDrawingObjectV1"
+            },
+            {
+              "name": "nativeNormalFontDescentEmV1",
+              "kind": "function",
+              "signature": "export declare function nativeNormalFontDescentEmV1(fontBytes: Uint8Array): number"
             },
             {
               "name": "NativePositionedDrawingV1",
