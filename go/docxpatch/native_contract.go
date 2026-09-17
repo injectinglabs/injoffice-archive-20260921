@@ -365,11 +365,16 @@ func (e *NativeValidationError) Error() string {
 var (
 	nativeIDPattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$`)
 	nativeNoteIDPattern = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
-	nativeSHA256        = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	nativeColor         = regexp.MustCompile(`^(?:auto|[0-9A-F]{6})$`)
-	nativePartSegment   = regexp.MustCompile(`^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$`)
-	nativeNegativeZero  = regexp.MustCompile(`^-0(?:\.0*)?(?:[eE][+-]?[0-9]+)?$`)
-	nativeOperations    = map[string]bool{
+	// Reserved separator stories carry a producer-chosen id, not a fixed literal:
+	// Word writes -1/0 while LibreOffice writes 0/1. The role is attested by
+	// w:type in the note part itself, so the id is only an identity here. It
+	// stays a bounded signed integer with no leading zero.
+	nativeNoteSentinelIDPattern = regexp.MustCompile(`^(?:0|-?[1-9][0-9]{0,18})$`)
+	nativeSHA256                = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	nativeColor                 = regexp.MustCompile(`^(?:auto|[0-9A-F]{6})$`)
+	nativePartSegment           = regexp.MustCompile(`^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$`)
+	nativeNegativeZero          = regexp.MustCompile(`^-0(?:\.0*)?(?:[eE][+-]?[0-9]+)?$`)
+	nativeOperations            = map[string]bool{
 		"text.replace": true, "properties.patch": true, "block.insert_after": true,
 		"block.delete": true, "drawing.replace": true,
 	}
@@ -789,9 +794,9 @@ func (v *nativeValidator) story(story *NativeStoryV1, path string, kinds map[str
 		if story.NativeStoryID == nil {
 			v.add("REQUIRED", path+"/native_story_id", story.Kind+" stories require their native OOXML id")
 		} else {
-			valid := story.NoteRole == "content" && nativeNoteIDPattern.MatchString(*story.NativeStoryID) || story.NoteRole == "separator" && *story.NativeStoryID == "-1" || story.NoteRole == "continuation-separator" && *story.NativeStoryID == "0"
+			valid := story.NoteRole == "content" && nativeNoteIDPattern.MatchString(*story.NativeStoryID) || story.NoteRole != "content" && nativeNoteSentinelIDPattern.MatchString(*story.NativeStoryID)
 			if !valid {
-				v.add("INVALID_VALUE", path+"/native_story_id", "native note id must exactly match its content or separator role")
+				v.add("INVALID_VALUE", path+"/native_story_id", "native note id must be a content id or a reserved separator identity")
 			}
 			key := story.Kind + ":" + *story.NativeStoryID
 			if v.noteNativeIDs[key] {

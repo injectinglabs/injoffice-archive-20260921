@@ -71,7 +71,9 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, string, e
 	stories := append([]NativeStoryV1{r.doc.Body}, r.doc.Headers...)
 	stories = append(stories, r.doc.Footers...)
 	for _, note := range r.doc.Notes {
-		if note.Anchor == nil || note.NativeStoryID == nil || !(note.NoteRole == "separator" && *note.NativeStoryID == "-1" || note.NoteRole == "continuation-separator" && *note.NativeStoryID == "0") {
+		// The reserved role is attested by w:type in the note part, not by the id
+		// literal: Word writes -1/0 where LibreOffice writes 0/1 for the same pair.
+		if note.Anchor == nil || note.NativeStoryID == nil || note.NoteRole == "" || note.NoteRole == "content" {
 			continue
 		}
 		node := r.nodeForAnchor(*note.Anchor)

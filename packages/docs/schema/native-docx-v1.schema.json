@@ -323,7 +323,7 @@
         "id": { "$ref": "#/$defs/Identifier" },
         "kind": { "enum": ["body", "header", "footer", "footnote", "endnote", "comment"] },
         "part_name": { "$ref": "#/$defs/PartName" },
-        "native_story_id": { "type": "string", "pattern": "^(?:-1|[A-Za-z0-9][A-Za-z0-9._:-]{0,255})$" },
+        "native_story_id": { "type": "string", "pattern": "^(?:-[1-9][0-9]{0,18}|[A-Za-z0-9][A-Za-z0-9._:-]{0,255})$" },
         "relationship_id": { "$ref": "#/$defs/Identifier" },
         "note_role": { "enum": ["content", "separator", "continuation-separator"] },
         "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
@@ -336,8 +336,8 @@
             "required": ["native_story_id", "relationship_id", "note_role"],
             "oneOf": [
               { "properties": { "note_role": { "const": "content" }, "native_story_id": { "pattern": "^[1-9][0-9]{0,18}$" } } },
-              { "properties": { "note_role": { "const": "separator" }, "native_story_id": { "const": "-1" } } },
-              { "properties": { "note_role": { "const": "continuation-separator" }, "native_story_id": { "const": "0" } } }
+              { "properties": { "note_role": { "const": "separator" }, "native_story_id": { "pattern": "^(?:0|-?[1-9][0-9]{0,18})$" } } },
+              { "properties": { "note_role": { "const": "continuation-separator" }, "native_story_id": { "pattern": "^(?:0|-?[1-9][0-9]{0,18})$" } } }
             ]
           },
           "else": {

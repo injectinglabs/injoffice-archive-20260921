@@ -1424,7 +1424,10 @@ func (extractor *nativeExtractor) extractNotes(partName, kind, relationshipID st
 				continue
 			}
 		}
-		validID := ok && (noteRole == "content" && !hasType && nativeNoteIDPattern.MatchString(nativeID) || noteRole == "separator" && hasType && nativeID == "-1" || noteRole == "continuation-separator" && hasType && nativeID == "0")
+		// w:type is the only attestation of a reserved separator story. Word writes
+		// the -1/0 ids and LibreOffice writes 0/1; both are the same feature, so the
+		// id is validated as an identity and the role is never inferred from it.
+		validID := ok && (noteRole == "content" && !hasType && nativeNoteIDPattern.MatchString(nativeID) || noteRole != "content" && hasType && nativeNoteSentinelIDPattern.MatchString(nativeID))
 		if !validID {
 			extractor.addUnsupported("SPECIAL_NOTE_STORY", "notes", extractor.bodyID, partName, node, "Invalid native note story identity/type pairing is preserved but not modeled")
 			continue
