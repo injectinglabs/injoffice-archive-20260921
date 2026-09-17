@@ -33,6 +33,7 @@ import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1, decodeNativeDocxApproximateComputedPagePaintV1, nativeDocxPagePaintPaginatedLayoutSha256V1 } from './nativePagePaintV1.js'
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
 import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
+import {nativeDocxFloatingAnchorOriginsV1, resolveNativeDocxFloatingAnchorV1} from './nativeFloatingAnchorV1.js'
 import { renderNativeDocxAutomaticBorderPreviewV1 } from './nativePagePaintCompilerV1.js'
 import { NativeDocxPreviewRefusalV1, nativeDocxPreviewRefusalRecordV1, DOCX_PREVIEW_REFUSAL_PROTOCOL, DOCX_PREVIEW_REFUSAL_VERSION } from './nativePreviewRefusalV1.js'
 import { projectNativeDocxAutomaticBordersV1, decodeNativeDocxAutomaticBorderPreviewV1 } from './nativeAutomaticBorderPreviewV1.js'
@@ -423,6 +424,15 @@ function combinedNoteImageTableHeaderFixture(): NativeDocxPagePaintPrepareInputV
   })
   return input
 }
+
+/** The qualified floating record for one drawing, or a loud failure. */
+function qualifiedFloating(document: NativeDocxDocumentV1, drawing: NativeDocxDocumentV1['body']['blocks'][number]['paragraph'] extends undefined ? never : NonNullable<NativeDocxDocumentV1['body']['blocks'][number]['paragraph']>['runs'][number]['drawing']) {
+  const run = document.body.blocks.flatMap(block => block.paragraph?.runs ?? []).find(candidate => candidate.drawing === drawing)
+  const qualified = qualifyNativeDocxInlineImageV1(document, run!.id, drawing!)
+  if (!qualified.ok || !qualified.value.floating) throw new Error(`floating anchor did not qualify: ${qualified.ok ? 'not floating' : qualified.message}`)
+  return qualified.value.floating
+}
+
 describe('native DOCX page-paint compiler v1', () => {
   it.each([true,false])('replays border reservation in glyphs, following paragraphs and page breaks, cant_split %s',async(cantSplit)=>{
     const input=tableFixture(),document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1
@@ -1632,6 +1642,44 @@ describe('native DOCX page-paint compiler v1', () => {
     d.x_emu=914400;d.width_emu=5943600
     expect(deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)['paragraph:1']![0]!.end_millipoints).toBeGreaterThan(0)
   })
+  it('resolves a column/paragraph-relative square anchor and needs its wrap distances to do it', async () => {
+    // The Word fixture this mirrors (anchor-position.docx) puts a picture 0.089"
+    // inside the column with 0.09" wrap distance on each side. The bare picture
+    // box is an interior island; the box widened by distL/distR touches the body
+    // edge, which is the single interval Word actually lays out.
+    const input=imageFixture(),source=input.document as NativeDocxDocumentV1,drawing=source.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    Object.assign(drawing,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'none',floating_layer:'front',stacking_order:7})
+    const prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request,p=request.pagination_request
+    const d=p.document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    const body=request.paginated_layout.pages[0]!.body_box,paragraphTop=request.paginated_layout.pages[0]!.lines[0]!.y_millipoints
+    Object.assign(d,{wrap:'square',horizontal_relative_from:'column',vertical_relative_from:'paragraph',x_emu:81280,y_emu:-4445,wrap_distance_left_emu:114300,wrap_distance_right_emu:114300})
+    // x resolves against the body box, y against the anchoring paragraph, and the
+    // interval starts at the picture's right edge plus distR.
+    const resolvedX=body.x_millipoints+6400,resolvedRight=resolvedX+100000+9000
+    expect(deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)['paragraph:1']![0])
+      .toEqual({start_millipoints:resolvedRight-body.x_millipoints,width_millipoints:body.x_millipoints+body.width_millipoints-resolvedRight})
+    expect(resolveNativeDocxFloatingAnchorV1(qualifiedFloating(p.document,d),100000,request.paginated_layout.pages[0]!,nativeDocxFloatingAnchorOriginsV1(request.paginated_layout).get('paragraph:1')!))
+      .toEqual({x_millipoints:resolvedX,y_millipoints:paragraphTop-350,exclusion_left_millipoints:resolvedX-9000,exclusion_right_millipoints:resolvedRight})
+    // Drop only the wrap distances and the very same anchor becomes an island.
+    delete d.wrap_distance_left_emu;delete d.wrap_distance_right_emu
+    expect(()=>deriveNativeSquareWrapPlanV1(p.document,p.resolved_layout,p.shaped_lines,request.paginated_layout)).toThrow('two text intervals')
+  })
+  it('refuses a resolved anchor whose paragraph is not placed once on a single-column page', async () => {
+    const input=imageFixture(),source=input.document as NativeDocxDocumentV1,drawing=source.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    Object.assign(drawing,{placement:'floating',x_emu:914400,y_emu:914400,width_emu:1270000,height_emu:635000,horizontal_relative_from:'page',vertical_relative_from:'page',wrap:'none',floating_layer:'front',stacking_order:7})
+    const prepared=await prepareNativeDocxPagePaintV1(input),request=prepared.page_paint_request,p=request.pagination_request
+    const d=p.document.body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    Object.assign(d,{wrap:'square',horizontal_relative_from:'column',vertical_relative_from:'paragraph',x_emu:0,y_emu:0,wrap_distance_left_emu:114300,wrap_distance_right_emu:114300})
+    const page=request.paginated_layout.pages[0]!,origins=nativeDocxFloatingAnchorOriginsV1(request.paginated_layout)
+    const floating=qualifiedFloating(p.document,d)
+    // A paragraph split across pages has no single origin and is not indexed.
+    if(request.paginated_layout.status!=='paginated')throw new Error('fixture must paginate')
+    const straddled={...request.paginated_layout,pages:[page,{...page,id:'page:2',lines:page.lines.map(line=>({...line,id:`${line.id}:2`}))}]}
+    expect(nativeDocxFloatingAnchorOriginsV1(straddled).has('paragraph:1')).toBe(false)
+    // Multi-column bodies have no single column origin to resolve against.
+    expect(()=>resolveNativeDocxFloatingAnchorV1(floating,100000,{...page,columns:[page.columns[0]!,page.columns[0]!]},origins.get('paragraph:1')!)).toThrow('single-column')
+    expect(()=>resolveNativeDocxFloatingAnchorV1(floating,100000,{...page,id:'page:other'},origins.get('paragraph:1')!)).toThrow('does not own its paragraph')
+  })
   it('explicitly refuses square wrapping combined with fixed or autofit table flow', async () => {
     for(const layout of ['fixed','autofit'] as const){
       const input=combinedImageTableFixture(),document=input.document as NativeDocxDocumentV1
@@ -1654,7 +1702,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(qualifyNativeDocxInlineImageV1(document,run.id,paragraph.runs[0]!.drawing!)).toMatchObject({ ok: false, code: 'resource-limit' })
   })
   it('refuses floating wrapping, unqualified positioning, missing layering and off-page extents', async () => {
-    for (const mutation of [ { wrap: 'tight' }, { horizontal_relative_from: 'column' }, { floating_layer: undefined }, { x_emu: -127 }, { x_emu: 1 }, { y_emu: 127000000 } ]) {
+    for (const mutation of [ { wrap: 'tight' }, { horizontal_relative_from: 'leftMargin' }, { vertical_relative_from: 'line' }, { horizontal_relative_from: 'paragraph' }, { vertical_relative_from: 'column' }, { floating_layer: undefined }, { x_emu: -127 }, { x_emu: 1 }, { y_emu: 127000000 } ]) {
       const input = imageFixture()
       Object.assign((input.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!, { placement: 'floating', x_emu: 914400, y_emu: 1270000, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'none', floating_layer: 'front', stacking_order: 7 },mutation)
       let outcome = 'unknown'

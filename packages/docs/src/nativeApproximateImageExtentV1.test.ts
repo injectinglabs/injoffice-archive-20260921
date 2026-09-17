@@ -129,10 +129,10 @@ describe('approximate picture extent rounding', () => {
     expect(projected.applied.map(fact => fact.field)).toEqual(['width_emu', 'height_emu', 'x_emu', 'y_emu'])
     const qualified = qualifyNativeDocxInlineImageV1(projected.document, 'run:image', onlyDrawing(projected.document))
     if (!qualified.ok) throw new Error(qualified.message)
-    expect(qualified.value.floating).toMatchObject({ x_millipoints: 72_000, y_millipoints: 72_000 })
+    expect(qualified.value.floating).toMatchObject({ offset_x_millipoints: 72_000, offset_y_millipoints: 72_000, horizontal_origin: 'page', vertical_origin: 'page' })
     // A floating picture that stays unqualified for a source reason of its own
     // keeps its authored geometry and its refusal.
-    const unanchored = documentWith({ ...{ placement: 'floating', width_emu: 650_296, height_emu: 650_296, x_emu: 914_401, y_emu: 914_401, wrap: 'none', floating_layer: 'front', stacking_order: 0 }, horizontal_relative_from: 'margin', vertical_relative_from: 'page' })
+    const unanchored = documentWith({ ...{ placement: 'floating', width_emu: 650_296, height_emu: 650_296, x_emu: 914_401, y_emu: 914_401, wrap: 'none', floating_layer: 'front', stacking_order: 0 }, horizontal_relative_from: 'leftMargin', vertical_relative_from: 'page' })
     const refused = projectNativeDocxApproximateImageExtentsV1(unanchored)
     expect(refused.applied).toEqual([])
     expect(refused.document).toEqual(unanchored)

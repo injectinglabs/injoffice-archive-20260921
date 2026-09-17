@@ -45,7 +45,19 @@ export interface NativeDocxPagePaintMediaAssetV1 {
 }
 
 export interface NativeDocxQualifiedInlineImageV1 {
-  floating?: { x_millipoints: number; y_millipoints: number; layer: 'behind' | 'front'; stacking_order: number; wrap?: 'square' }
+  /** Offsets are relative to `horizontal_origin`/`vertical_origin`, not the page.
+   * Only `resolveNativeDocxFloatingAnchorV1` turns them into page coordinates. */
+  floating?: {
+    offset_x_millipoints: number
+    offset_y_millipoints: number
+    horizontal_origin: 'page' | 'column' | 'margin'
+    vertical_origin: 'page' | 'paragraph'
+    wrap_distance_left_millipoints: number
+    wrap_distance_right_millipoints: number
+    layer: 'behind' | 'front'
+    stacking_order: number
+    wrap?: 'square'
+  }
   drawing_id: string
   run_id: string
   asset_id: string
@@ -199,6 +211,14 @@ function emuToMilliPoints(value: number): number | undefined {
   return Number.isSafeInteger(output) && output <= DOCX_INLINE_IMAGE_LIMITS.maxGeometryMilliPoints ? output : undefined
 }
 
+/** Extents are positive; a column/paragraph-relative anchor offset is signed,
+ * and Word routinely writes a small negative one. Same exact 10/127 ratio. */
+function emuOffsetToMilliPoints(value: number): number | undefined {
+  if (!Number.isSafeInteger(value) || Math.abs(value) % 127 !== 0) return undefined
+  const output = (value / 127) * 10
+  return Number.isSafeInteger(output) && Math.abs(output) <= DOCX_INLINE_IMAGE_LIMITS.maxGeometryMilliPoints ? output : undefined
+}
+
 function imageAssetID(contentDigest: string, partName: string): string {
   const partDigest = bytesToHex(sha256(new TextEncoder().encode(canonicalPart(partName))))
   return `image:${contentDigest.slice('sha256:'.length)}:${partDigest}`
@@ -231,12 +251,22 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       if (run.id === runID && run.drawing.id === drawing.id) bodyParagraph = true
       if (run.drawing.floating_layer === drawing.floating_layer && run.drawing.stacking_order === drawing.stacking_order) sameOrder += 1
     }
-    const x = drawing.x_emu === 0 ? 0 : emuToMilliPoints(drawing.x_emu!)
-    const y = drawing.y_emu === 0 ? 0 : emuToMilliPoints(drawing.y_emu!)
-    if (!bodyParagraph || drawing.horizontal_relative_from !== 'page' || drawing.vertical_relative_from !== 'page' || !['none','square'].includes(drawing.wrap!) || x === undefined || y === undefined || !['behind', 'front'].includes(drawing.floating_layer!) || !Number.isSafeInteger(drawing.stacking_order) || drawing.stacking_order! < 0 || drawing.stacking_order! > 0xffffffff) return { ok: false, code: 'unsupported-image', message: 'Floating images require a body paragraph, exact non-negative page offsets, wrapNone/wrapSquare and explicit source layering' }
-    floating = { x_millipoints: x, y_millipoints: y, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order!, ...(drawing.wrap==='square'?{wrap:'square' as const}:{}) }
+    const x = emuOffsetToMilliPoints(drawing.x_emu!)
+    const y = emuOffsetToMilliPoints(drawing.y_emu!)
+    const horizontal = drawing.horizontal_relative_from, vertical = drawing.vertical_relative_from
+    if (!bodyParagraph || !['page','column','margin'].includes(horizontal!) || !['page','paragraph'].includes(vertical!) || !['none','square'].includes(drawing.wrap!) || x === undefined || y === undefined || !['behind', 'front'].includes(drawing.floating_layer!) || !Number.isSafeInteger(drawing.stacking_order) || drawing.stacking_order! < 0 || drawing.stacking_order! > 0xffffffff) return { ok: false, code: 'unsupported-image', message: 'Floating images require a body paragraph, an exact page/column/margin and page/paragraph origin, wrapNone/wrapSquare and explicit source layering' }
+    // A page origin is an absolute page coordinate and stays non-negative; a
+    // column/margin/paragraph origin is a signed displacement layout resolves.
+    if (horizontal === 'page' && x < 0 || vertical === 'page' && y < 0) return { ok: false, code: 'unsupported-image', message: 'Page-relative floating offsets must be non-negative' }
+    const distances: number[] = []
+    for (const value of [drawing.wrap_distance_left_emu ?? 0, drawing.wrap_distance_right_emu ?? 0]) {
+      const converted = value === 0 ? 0 : emuToMilliPoints(value)
+      if (converted === undefined || value < 0 || value > 91_440_000) return { ok: false, code: 'unsupported-image', message: 'Floating wrap distances are not exact bounded non-negative milli-points' }
+      distances.push(converted)
+    }
+    floating = { offset_x_millipoints: x, offset_y_millipoints: y, horizontal_origin: horizontal as 'page' | 'column' | 'margin', vertical_origin: vertical as 'page' | 'paragraph', wrap_distance_left_millipoints: distances[0]!, wrap_distance_right_millipoints: distances[1]!, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order!, ...(drawing.wrap==='square'?{wrap:'square' as const}:{}) }
     if (sameOrder !== 1) return { ok: false, code: 'unsupported-image', message: 'Floating image stacking orders must be unique within each layer' }
-  } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined) {
+  } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined || drawing.wrap_distance_left_emu !== undefined || drawing.wrap_distance_right_emu !== undefined) {
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }
   }
   if (!drawing.relationship_id || !drawing.media_part || !drawing.content_type) return { ok: false, code: 'invalid-image', message: 'Inline picture lacks an exact embedded relationship/media identity' }
