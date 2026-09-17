@@ -15,7 +15,10 @@ func TestNativeScriptPropertiesResolveAtActualRunScript(t *testing.T) {
 		}{
 			{"Basic Latin", "Plain text 123!", "", false},
 			{"Arabic", "مرحبا", "", true},
-			{"CJK", "你好", "", true},
+			// The East-Asian slot this metadata states is resolved, so CJK text
+			// no longer defers: it selects that face and the complex-script
+			// properties beside it state formatting for text that is not here.
+			{"CJK", "你好", "", false},
 			{"mixed scripts", "Latin العربية", "", true},
 			// MS-OI29500 17.3.2.26 resolves Latin-1 Supplement, Latin Extended and
 			// General Punctuation through the ascii/hAnsi slots, not cs/eastAsia,
@@ -52,6 +55,14 @@ func TestNativeScriptPropertiesResolveAtActualRunScript(t *testing.T) {
 					run := resolved.Runs[0].Properties
 					if run.FontFamily == nil || *run.FontFamily != "Exact Latin" || run.FontSizeHalfPoint == nil || *run.FontSizeHalfPoint != 24 || run.Bold != nil || run.Italic != nil || run.Language == nil || *run.Language != "en-US" {
 						t.Fatalf("inactive script fields altered Latin formatting %#v", run)
+					}
+					// The East-Asian slot is carried only by text that reaches it.
+					eastAsian := strings.ContainsRune(test.text, '你')
+					if (run.EastAsiaFontFamily != nil) != eastAsian || (run.EastAsiaLanguage != nil) != eastAsian {
+						t.Fatalf("east-asian slot was not carried by its own text %#v", run)
+					}
+					if eastAsian && (*run.EastAsiaFontFamily != "Unneeded CJK" || *run.EastAsiaLanguage != "zh-CN") {
+						t.Fatalf("east-asian slot resolved to the wrong face/language %#v", run)
 					}
 				}
 				if !bytes.Equal(before, data) {

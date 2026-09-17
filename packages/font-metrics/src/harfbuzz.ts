@@ -61,7 +61,14 @@ export const HARFBUZZ_SHAPER_LIMITS = Object.freeze({
 const SOURCE_REVISION_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 const DIGEST_RE = /^sha256:[a-f0-9]{64}$/
-const SUPPORTED_SCRIPTS = Object.freeze(['Latn', 'Arab', 'Hebr', 'Zyyy'] as const)
+// Hang/Hani/Kana join the qualified set because they need no reordering,
+// joining or mark attachment: every cluster is one scalar mapped through cmap
+// and positioned by its own advance, which is exactly what this canonical
+// provider already validates for Latn. They are the East-Asian script names
+// the pinned Unicode 13 classifier actually emits (it folds Hiragana into
+// Kana). The scalar check below holds them to the same declared-script rule as
+// Latn, and .notdef still refuses.
+const SUPPORTED_SCRIPTS = Object.freeze(['Hang', 'Hani', 'Hebr', 'Kana', 'Latn', 'Arab', 'Zyyy'] as const)
 const SUPPORTED_SCRIPT_SET = new Set<string>(SUPPORTED_SCRIPTS)
 const QUALIFIED_FEATURES = Object.freeze(['kern', 'liga'] as const)
 const QUALIFIED_FEATURE_SET = new Set<string>(QUALIFIED_FEATURES)
@@ -114,7 +121,7 @@ export interface HarfBuzzShaperProvenanceV1 {
   cluster_level: 'monotone-graphemes'
   buffer_flags: readonly ['bot', 'eot', 'produce-unsafe-to-concat']
   default_feature_policy: 'harfbuzz-14.3.0-shape-defaults'
-  feature_policy: 'explicit-qualified-and-font-advertised-kern-liga-only'
+  feature_policy: 'explicit-qualified-kern-liga-only-applied-where-advertised'
   variation_policy: 'refuse'
   spacing_policy: 'zero-only'
   font_policy: 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1'
@@ -537,7 +544,7 @@ function isQualifiedIgnorableClusterScalar(codePoint: number): boolean {
 
 function validateQualifiedScalars(text: string, script: string): string | undefined {
   if (!UNICODE_13_TABLES_RUNTIME_MATCH) return 'pinned Unicode 13 classification tables failed their runtime digest'
-  const scriptScalar = script === 'Latn' || script === 'Arab' || script === 'Hebr' ? script : undefined
+  const scriptScalar = script !== 'Zyyy' && SUPPORTED_SCRIPT_SET.has(script) ? script : undefined
   let canInherit = false
   for (const character of text) {
     const codePoint = character.codePointAt(0)!
@@ -589,13 +596,23 @@ function canonicalFeatures(run: ShapeProviderRequest['run'], advertised: Readonl
     || (left.startUtf16 ?? -1) - (right.startUtf16 ?? -1)
     || (left.endUtf16 ?? -1) - (right.endUtf16 ?? -1)
     || left.value - right.value)
+  const applied: typeof features = []
   for (const feature of features) {
     if (!QUALIFIED_FEATURE_SET.has(feature.tag)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is outside the qualified explicit feature set`, faceId, feature.startUtf16, feature.endUtf16)
-    // Disabling kerning is safe even without advertised GPOS kern: it also
-    // suppresses legacy kern-table defaults and cannot invent glyph behavior.
-    if (!advertised.has(feature.tag) && !(feature.tag === 'kern' && feature.value === 0)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is not advertised by this exact font face`, faceId, feature.startUtf16, feature.endUtf16)
+    if (!advertised.has(feature.tag)) {
+      // Enabling a feature this exact face does not advertise cannot change a
+      // glyph or an advance: there is no lookup for HarfBuzz to run, and the
+      // shaped result is identical to not asking. Refusing it instead turned
+      // an inherited w:kern into "this document cannot be painted" for every
+      // face without GSUB/GPOS kern - which is most CJK faces. Disabling
+      // kerning is still passed through, because 'kern' also suppresses the
+      // legacy kern-table default HarfBuzz would otherwise apply.
+      if (feature.tag === 'kern' && feature.value === 0) applied.push(feature)
+      continue
+    }
+    applied.push(feature)
   }
-  return features.map((feature) => new hb.Feature(feature.tag, feature.value, feature.startUtf16 ?? hb.Feature.GLOBAL_START, feature.endUtf16 ?? hb.Feature.GLOBAL_END))
+  return applied.map((feature) => new hb.Feature(feature.tag, feature.value, feature.startUtf16 ?? hb.Feature.GLOBAL_START, feature.endUtf16 ?? hb.Feature.GLOBAL_END))
 }
 
 function runPolicyRefusal(run: ShapeProviderRequest['run'], faceId: string): NativeTextRefusal | undefined {
@@ -763,7 +780,9 @@ export function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): Ha
     cluster_level: 'monotone-graphemes',
     buffer_flags: BUFFER_FLAG_NAMES,
     default_feature_policy: 'harfbuzz-14.3.0-shape-defaults',
-    feature_policy: 'explicit-qualified-and-font-advertised-kern-liga-only',
+    // A qualified feature is applied only where the exact face advertises it;
+    // elsewhere it is a no-op, not a refusal, because there is no lookup to run.
+    feature_policy: 'explicit-qualified-kern-liga-only-applied-where-advertised',
     variation_policy: 'refuse',
     spacing_policy: 'zero-only',
     font_policy: 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1',
@@ -880,7 +899,7 @@ export function isCanonicalHarfBuzzTextShaperV1(value: unknown, sourceRevision: 
     && provenance.cluster_level === 'monotone-graphemes'
     && Array.isArray(provenance.buffer_flags) && JSON.stringify(provenance.buffer_flags) === JSON.stringify(BUFFER_FLAG_NAMES)
     && provenance.default_feature_policy === 'harfbuzz-14.3.0-shape-defaults'
-    && provenance.feature_policy === 'explicit-qualified-and-font-advertised-kern-liga-only'
+    && provenance.feature_policy === 'explicit-qualified-kern-liga-only-applied-where-advertised'
     && provenance.variation_policy === 'refuse'
     && provenance.spacing_policy === 'zero-only'
     && provenance.font_policy === 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1'

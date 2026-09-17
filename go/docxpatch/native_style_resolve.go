@@ -42,6 +42,9 @@ type NativeResolvedSourcePartsV1 struct {
 	NumberingPart *string `json:"numbering_part,omitempty"`
 	ThemePart     *string `json:"theme_part,omitempty"`
 	FontTablePart *string `json:"font_table_part,omitempty"`
+	// The settings part is attested here because w:themeFontLang selects the
+	// East-Asian theme font, which changes resolved layout.
+	SettingsPart *string `json:"settings_part,omitempty"`
 }
 
 // NativeResolvedNumberingSourceV1 attests the exact OPC relationship closure
@@ -109,6 +112,7 @@ type NativeResolvedParagraphPropertiesV1 struct {
 type NativeResolvedRunPropertiesV1 struct {
 	KerningMinSizeHalfPoints *int    `json:"kerning_min_size_half_points,omitempty"`
 	FontFamily               *string `json:"font_family,omitempty"`
+	EastAsiaFontFamily       *string `json:"east_asia_font_family,omitempty"`
 	FontSizeHalfPoint        *int    `json:"font_size_half_points,omitempty"`
 	Bold                     *bool   `json:"bold,omitempty"`
 	Italic                   *bool   `json:"italic,omitempty"`
@@ -117,6 +121,7 @@ type NativeResolvedRunPropertiesV1 struct {
 	Color                    *string `json:"color,omitempty"`
 	Highlight                *string `json:"highlight,omitempty"`
 	Language                 *string `json:"language,omitempty"`
+	EastAsiaLanguage         *string `json:"east_asia_language,omitempty"`
 	RTL                      *bool   `json:"rtl,omitempty"`
 	Hidden                   *bool   `json:"hidden,omitempty"`
 }
@@ -276,6 +281,7 @@ type nativeLayoutResolver struct {
 	autoBorderWhite          bool
 	themeSrgb                map[string]string
 	themeLatinFonts          nativeThemeLatinFonts
+	themeEastAsiaScript      string
 }
 
 type nativeDeferredNumberingDiagnostic struct {
@@ -345,6 +351,8 @@ type nativeRunProperties struct {
 	fontFamily        *string
 	asciiFamily       *string
 	hAnsiFamily       *string
+	eastAsiaFamily    *string
+	eastAsiaLanguage  *string
 	fontSize          *int
 	bold              nativeBoolProperty
 	italic            nativeBoolProperty
@@ -395,6 +403,7 @@ func (resolver *nativeLayoutResolver) loadParts() error {
 		{"numbering", &resolver.parts.NumberingPart},
 		{"theme", &resolver.parts.ThemePart},
 		{"fontTable", &resolver.parts.FontTablePart},
+		{"settings", &resolver.parts.SettingsPart},
 	}
 	for _, partKind := range partKinds {
 		part, err := resolver.singletonRelatedPart(partKind.kind)
@@ -425,7 +434,13 @@ func (resolver *nativeLayoutResolver) loadParts() error {
 		}
 	}
 	// Style/default and numbering properties resolve theme references while
-	// parsing, so the validated related theme must be available first.
+	// parsing, so the validated related theme must be available first, and the
+	// East-Asian theme slot needs settings' w:themeFontLang before the theme.
+	if resolver.parts.SettingsPart != nil {
+		if err := resolver.loadSettingsThemeFontLang(*resolver.parts.SettingsPart); err != nil {
+			return err
+		}
+	}
 	if resolver.parts.ThemePart != nil {
 		if err := resolver.loadTheme(*resolver.parts.ThemePart); err != nil {
 			return err
@@ -474,6 +489,7 @@ func (resolver *nativeLayoutResolver) validateRelatedPartContentType(kind, partN
 		"numbering": "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
 		"theme":     "application/vnd.openxmlformats-officedocument.theme+xml",
 		"fontTable": "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml",
+		"settings":  "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
 	}[kind]
 	if got := resolver.pkg.contentTypes[partName]; !nativeASCIIEqual(got, want) {
 		return fmt.Errorf("docxpatch: native style resolution: %s part %q has content type %q; expected %q", kind, partName, got, want)
@@ -904,7 +920,7 @@ func (resolver *nativeLayoutResolver) loadTheme(partName string) error {
 	// schemeClr, tint/shade, and other DrawingML transforms stay unresolved
 	// and are diagnosed at the referencing w:color.
 	resolver.themeSrgb = nativeParseThemeSrgbColors(root, drawingNS)
-	resolver.themeLatinFonts = nativeParseThemeLatinFonts(root, drawingNS)
+	resolver.themeLatinFonts = nativeParseThemeLatinFonts(root, drawingNS, resolver.themeEastAsiaScript)
 	return nil
 }
 
@@ -1678,18 +1694,13 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 	// slot per run; paragraph-level w:bidi (17.3.1.6) only orders the line. The
 	// mark's own w:rtl is already honoured by resolveLatinRunFont, so a bidi
 	// paragraph of plain Latin text needs no script-uncertainty flush.
-	markScriptUncertain := false
+	markScriptUse := nativeScriptSlotUse{}
 	for _, run := range paragraph.Runs {
 		if run.Text != nil {
-			for _, character := range *run.Text {
-				if nativeRequiresScriptShaping(character) {
-					markScriptUncertain = true
-					break
-				}
-			}
+			markScriptUse = markScriptUse.merge(nativeClassifyScriptSlots(*run.Text))
 		}
 	}
-	resolver.resolveLatinRunFont(&paragraphMark, "\r", paragraph.ID, paragraph.Anchor.PartName, markScriptUncertain)
+	resolver.resolveLatinRunFont(&paragraphMark, "\r", paragraph.ID, paragraph.Anchor.PartName, markScriptUse)
 	resolvedParagraph := NativeResolvedParagraphV1{
 		ParagraphID: paragraph.ID, AppliedStyles: applied,
 		Properties:              nativeExportParagraphProperties(p),
@@ -1964,29 +1975,87 @@ func nativeRequiresScriptShaping(character rune) bool {
 	}
 }
 
-func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string, scriptContextUncertain ...bool) {
+// flushScriptProperties reports the run-property layers that were deferred
+// until the run's own text said which font slots it uses.
+//
+// A deferred property is keyed by the slot it belongs to. A property of a slot
+// the text never reaches states formatting for text that is not there, so it
+// blocks nothing - that is how ordinary Latin text has always passed an
+// inherited w:szCs or w:lang/@w:bidi. The East-Asian slot now joins that set:
+// text in it resolves through nativeEastAsiaSlotKey when the theme or an
+// explicit w:eastAsia named a face. Any rune this tier assigns to no slot
+// keeps every deferred property blocking exactly as before.
+func (resolver *nativeLayoutResolver) flushScriptProperties(properties *nativeRunProperties, use nativeScriptSlotUse, scopeID string) {
+	keys := make([]string, 0, len(properties.scriptProperties))
+	for key := range properties.scriptProperties {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !use.unmodelled {
+			switch nativeScriptSlotOfKey(key) {
+			case nativeEastAsiaSlotKey:
+				if !use.eastAsia || properties.eastAsiaFamily != nil {
+					continue
+				}
+			case nativeComplexSlotKey:
+				continue
+			case nativeHintSlotKey:
+				// w:hint decides the slot only for the ambiguous ranges. It
+				// changes nothing for Basic Latin or for a rune this tier
+				// already assigns to the East-Asian slot on its own.
+				if !use.eastAsia || !use.hintBound {
+					continue
+				}
+			default:
+				if !use.eastAsia {
+					continue
+				}
+			}
+		}
+		diagnostic := properties.scriptProperties[key]
+		resolver.addDiagnostic(diagnostic.code, scopeID, diagnostic.partName, diagnostic.node, diagnostic.message)
+	}
+}
+
+const (
+	nativeEastAsiaSlotKey = "ea"
+	nativeComplexSlotKey  = "cs"
+	nativeHintSlotKey     = "hint"
+)
+
+func nativeScriptSlotOfKey(key string) string {
+	if index := strings.IndexByte(key, ':'); index > 0 {
+		return key[:index]
+	}
+	return ""
+}
+
+func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunProperties, text, scopeID, partName string, contextUse ...nativeScriptSlotUse) {
 	// MS-OI29500 17.3.2.26 assigns Basic Latin to ascii regardless of
 	// inactive East-Asia/complex-script slots. Forced cs remains an unmodeled
 	// run property; rtl and non-Basic-Latin text still require script shaping.
-	basicLatin := !properties.rtl.value
-	if len(scriptContextUncertain) > 0 && scriptContextUncertain[0] {
-		basicLatin = false
+	use := nativeClassifyScriptSlots(text)
+	for _, extra := range contextUse {
+		use = use.merge(extra)
 	}
-	for _, character := range text {
-		if nativeRequiresScriptShaping(character) {
-			basicLatin = false
-			break
-		}
+	if properties.rtl.value {
+		// A forced complex-script run leaves no slot this tier resolves.
+		use.unmodelled = true
 	}
-	if !basicLatin {
-		keys := make([]string, 0, len(properties.scriptProperties))
-		for key := range properties.scriptProperties {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			diagnostic := properties.scriptProperties[key]
-			resolver.addDiagnostic(diagnostic.code, scopeID, diagnostic.partName, diagnostic.node, diagnostic.message)
+	// The East-Asian slot is carried only for text that actually uses it, so a
+	// document that merely inherits an eastAsiaTheme from w:docDefaults asks
+	// for no East-Asian face and its font inventory is unchanged.
+	if !use.eastAsia || use.unmodelled {
+		properties.eastAsiaFamily, properties.eastAsiaLanguage = nil, nil
+	}
+	resolver.flushScriptProperties(properties, use, scopeID)
+	// Text in the East-Asian slot with nothing in that slot has no font at all.
+	// A stated slot already carries its own anchored refusal above; an unstated
+	// one is refused here rather than painted in the ascii face.
+	if use.eastAsia && !use.unmodelled && properties.eastAsiaFamily == nil {
+		if _, stated := properties.scriptProperties[nativeEastAsiaSlotKey+":fonts"]; !stated {
+			resolver.addDiagnostic("SCRIPT_FONT_PRESERVED", scopeID, partName, nil, "East-Asian text has no East-Asian font slot to resolve and is not guessed")
 		}
 	}
 	ascii, hAnsi := properties.asciiFamily, properties.hAnsiFamily
@@ -2069,8 +2138,8 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			hAnsi, hasHAnsi := nativeAttr(child, resolver.wordNS, "hAnsi")
 			asciiTheme, hasAsciiTheme := nativeAttr(child, resolver.wordNS, "asciiTheme")
 			hAnsiTheme, hasHAnsiTheme := nativeAttr(child, resolver.wordNS, "hAnsiTheme")
-			_, eastAsia := nativeAttr(child, resolver.wordNS, "eastAsia")
-			_, eastAsiaTheme := nativeAttr(child, resolver.wordNS, "eastAsiaTheme")
+			eastAsiaValue, eastAsia := nativeAttr(child, resolver.wordNS, "eastAsia")
+			eastAsiaTheme, hasEastAsiaTheme := nativeAttr(child, resolver.wordNS, "eastAsiaTheme")
 			_, cs := nativeAttr(child, resolver.wordNS, "cs")
 			_, csTheme := nativeAttr(child, resolver.wordNS, "cstheme")
 			hintValue, hint := nativeAttr(child, resolver.wordNS, "hint")
@@ -2099,11 +2168,32 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("UNMODELED_FONT_SELECTION", scopeID, partName, child, "Invalid script font slot or hint is preserved and not resolved")
 				continue
 			}
-			if eastAsia || eastAsiaTheme || cs || csTheme {
-				properties.deferScriptProperty("fonts", "SCRIPT_FONT_PRESERVED", partName, child, "East-Asia/complex-script font selection requires script shaping and is not guessed")
+			// ECMA-376 17.3.2.26: the East-Asian slot names a face directly
+			// (w:eastAsia) or through a theme slot (w:eastAsiaTheme). A slot
+			// that resolves is carried on the run; one that does not keeps its
+			// refusal for text that actually reaches the slot.
+			eastAsiaFace := ""
+			if hasEastAsiaTheme {
+				if face, ok := resolver.resolveEastAsiaThemeTypeface(eastAsiaTheme); ok {
+					eastAsiaFace = face
+				}
+			} else if eastAsia && eastAsiaValue != "" && nativeBoundedResolvedString(eastAsiaValue, 256) {
+				eastAsiaFace = eastAsiaValue
+			}
+			if eastAsiaFace != "" {
+				properties.eastAsiaFamily = nativeString(eastAsiaFace)
+			}
+			if eastAsia || hasEastAsiaTheme {
+				// Deferred even when the slot resolved: the resolution holds
+				// only for text that actually reaches the East-Asian slot, and
+				// flushScriptProperties is where that is known.
+				properties.deferScriptProperty(nativeEastAsiaSlotKey+":fonts", "SCRIPT_FONT_PRESERVED", partName, child, "East-Asian font selection requires script shaping and is not guessed")
+			}
+			if cs || csTheme {
+				properties.deferScriptProperty(nativeComplexSlotKey+":fonts", "SCRIPT_FONT_PRESERVED", partName, child, "Complex-script font selection requires script shaping and is not guessed")
 			}
 			if hint {
-				properties.deferScriptProperty("hint", "FONT_HINT_PRESERVED", partName, child, "Font hint selection is preserved for a future script-aware shaper")
+				properties.deferScriptProperty(nativeHintSlotKey+":hint", "FONT_HINT_PRESERVED", partName, child, "Font hint selection is preserved for a future script-aware shaper")
 			}
 			validASCII := !hasASCII || nativeBoundedResolvedString(ascii, 256)
 			validHAnsi := !hasHAnsi || nativeBoundedResolvedString(hAnsi, 256)
@@ -2155,7 +2245,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); !ok || value > 3276 || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
 				resolver.addDiagnostic("INVALID_FONT_SIZE", scopeID, partName, child, "Invalid complex-script size is preserved and not resolved")
 			} else {
-				properties.deferScriptProperty("size", "COMPLEX_SCRIPT_SIZE_PRESERVED", partName, child, "Complex-script font size is preserved for a future shaper")
+				properties.deferScriptProperty(nativeComplexSlotKey+":size", "COMPLEX_SCRIPT_SIZE_PRESERVED", partName, child, "Complex-script font size is preserved for a future shaper")
 			}
 		case "b", "i", "rtl", "vanish":
 			value, ok := nativeOnOff(child, resolver.wordNS)
@@ -2178,7 +2268,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			if _, ok := nativeOnOff(child, resolver.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
 				resolver.addDiagnostic("INVALID_ON_OFF_PROPERTY", scopeID, partName, child, "Invalid complex-script toggle is preserved and not resolved")
 			} else {
-				properties.deferScriptProperty(child.Name.Local, "COMPLEX_SCRIPT_TOGGLE_PRESERVED", partName, child, "Complex-script toggles are preserved for a future shaper")
+				properties.deferScriptProperty(nativeComplexSlotKey+":"+child.Name.Local, "COMPLEX_SCRIPT_TOGGLE_PRESERVED", partName, child, "Complex-script toggles are preserved for a future shaper")
 			}
 		case "u":
 			value, ok := nativeAttr(child, resolver.wordNS, "val")
@@ -2229,7 +2319,18 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				if !valid {
 					resolver.addDiagnostic("INVALID_LANGUAGE", scopeID, partName, child, "Invalid script language is preserved and not resolved")
 				} else {
-					properties.deferScriptProperty("language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "East-Asia/bidi language metadata is preserved for script shaping")
+					// ECMA-376 17.3.2.20: w:eastAsia is the East-Asian slot's
+					// language and w:bidi the complex-script slot's. Each is
+					// carried or deferred with the slot it belongs to.
+					if value, present := nativeAttr(child, resolver.wordNS, "eastAsia"); present {
+						properties.eastAsiaLanguage = nativeString(value)
+						// Symmetric with the font slot: carried only for text
+						// that reaches the East-Asian slot, deferred otherwise.
+						properties.deferScriptProperty(nativeEastAsiaSlotKey+":language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "East-Asian language metadata is preserved for script shaping")
+					}
+					if bidi {
+						properties.deferScriptProperty(nativeComplexSlotKey+":language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "Complex-script language metadata is preserved for script shaping")
+					}
 				}
 			}
 		case "noProof":
@@ -2683,6 +2784,12 @@ func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProper
 	if layer.hAnsiFamily != nil {
 		target.hAnsiFamily = nativeString(*layer.hAnsiFamily)
 	}
+	if layer.eastAsiaFamily != nil {
+		target.eastAsiaFamily = nativeString(*layer.eastAsiaFamily)
+	}
+	if layer.eastAsiaLanguage != nil {
+		target.eastAsiaLanguage = nativeString(*layer.eastAsiaLanguage)
+	}
 	if layer.fontSize != nil {
 		target.fontSize = nativeInt(*layer.fontSize)
 	}
@@ -2746,9 +2853,9 @@ func nativeExportParagraphProperties(properties nativeParagraphProperties) Nativ
 func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRunPropertiesV1 {
 	result := NativeResolvedRunPropertiesV1{
 		KerningMinSizeHalfPoints: properties.kerningMinSize,
-		FontFamily:               properties.fontFamily, FontSizeHalfPoint: properties.fontSize,
+		FontFamily:               properties.fontFamily, EastAsiaFontFamily: properties.eastAsiaFamily, FontSizeHalfPoint: properties.fontSize,
 		Underline: properties.underline, VerticalAlignment: properties.verticalAlignment, Color: properties.color, Highlight: properties.highlight,
-		Language: properties.language,
+		Language: properties.language, EastAsiaLanguage: properties.eastAsiaLanguage,
 	}
 	if properties.bold.present {
 		result.Bold = nativeBool(properties.bold.value)
@@ -2884,7 +2991,7 @@ func ValidateNativeResolvedLayoutInputV1(input *NativeResolvedLayoutInputV1) err
 	if !nativeIDPattern.MatchString(input.DocumentID) || !nativeIDPattern.MatchString(input.Revision) || input.SourceParts.MainPart == "" {
 		return fmt.Errorf("invalid resolved layout identity/source")
 	}
-	parts := []*string{nativeString(input.SourceParts.MainPart), input.SourceParts.StylesPart, input.SourceParts.NumberingPart, input.SourceParts.ThemePart, input.SourceParts.FontTablePart}
+	parts := []*string{nativeString(input.SourceParts.MainPart), input.SourceParts.StylesPart, input.SourceParts.NumberingPart, input.SourceParts.ThemePart, input.SourceParts.FontTablePart, input.SourceParts.SettingsPart}
 	seenParts := map[string]bool{}
 	for _, partName := range parts {
 		if partName == nil {
@@ -3133,6 +3240,12 @@ func validateNativeResolvedRunProperties(properties NativeResolvedRunPropertiesV
 	}
 	if properties.Language != nil && !nativeBoundedResolvedString(*properties.Language, 256) {
 		return fmt.Errorf("invalid language")
+	}
+	if properties.EastAsiaFontFamily != nil && !nativeBoundedResolvedString(*properties.EastAsiaFontFamily, 256) {
+		return fmt.Errorf("invalid east-asian font family")
+	}
+	if properties.EastAsiaLanguage != nil && !nativeScriptLanguageTag(*properties.EastAsiaLanguage) {
+		return fmt.Errorf("invalid east-asian language")
 	}
 	return nil
 }

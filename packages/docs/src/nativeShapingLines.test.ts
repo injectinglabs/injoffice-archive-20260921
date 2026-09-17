@@ -492,6 +492,58 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(result.issues.some((issue) => issue.code === 'BROKEN_REFERENCE')).toBe(true)
   })
 
+  it('shapes each span through its own font slot, not one font per run', async () => {
+    // MS-OI29500 17.3.2.26 assigns a slot per character range, so one run can
+    // need two faces. Unicode script cannot stand in for the slot: the
+    // ideographic full stop is script Zyyy exactly like '.', yet it belongs to
+    // the East-Asian slot while '.' belongs to ascii.
+    const eastAsianFace: ResolvedFontFace = { ...face, faceId: 'pmingliu.regular', family: 'PMingLiU', resourceId: 'fonts/pmingliu.ttc', matchedFamily: 'PMingLiU' }
+    const document = nativeDocument()
+    makeTextOnly(document, '\u7532\u3002A.')
+    const resolved = resolvedLayout(document)
+    for (const run of resolved.runs) Object.assign(run.properties, { east_asia_font_family: 'PMingLiU', east_asia_language: 'zh-TW' })
+    const shapingRequest = request(document, resolved)
+    shapingRequest.font_manifest = { ...manifest, faces: [...manifest.faces, { faceId: eastAsianFace.faceId, family: eastAsianFace.family, weight: 400, style: 'normal', stretch: 100, source: { kind: 'bundled', resourceId: eastAsianFace.resourceId, contentDigest: digest } }] }
+    const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+    const languages: string[] = []
+    const providers = fakeProviders(calls)
+    const resolve = providers.resolver.resolve.bind(providers.resolver)
+    const load = providers.resolver.load.bind(providers.resolver)
+    const shape = providers.shaper.shape.bind(providers.shaper)
+    const selected = (family: string) => family === 'PMingLiU' ? eastAsianFace : face
+    providers.resolver.resolve = (input) => {
+      languages.push(input.run.language)
+      resolve(input)
+      const chosen = selected(input.run.font.families[0]!)
+      return { status: 'resolved', face: chosen, attemptedFaceIds: [chosen.faceId], decisions: [] }
+    }
+    providers.resolver.load = async (requested) => ({ ...await load(requested), face: requested }) as FontResource
+    providers.shaper.shape = async (input) => ({ ...await shape(input), face: input.font.face }) as ShapedSegment
+    const result = await shapeNativeDocxLinesV1(shapingRequest, providers)
+    expect(result.ok).toBe(true)
+    expect(calls.filter((call) => call.text !== '').map((call) => [call.text, call.family, call.script])).toEqual([
+      ['\u7532', 'PMingLiU', 'Hani'],
+      ['\u3002', 'PMingLiU', 'Zyyy'],
+      ['A', 'Carlito', 'Latn'],
+      ['.', 'Carlito', 'Zyyy'],
+    ])
+    // The East-Asian slot carries its own w:lang/@w:eastAsia language.
+    expect(languages.filter((_value, index) => calls[index]!.text !== '')).toEqual(['zh-TW', 'zh-TW', 'en-US', 'en-US'])
+  })
+
+  it('refuses a span in the East-Asian slot that the resolved layout left without a face', async () => {
+    const document = nativeDocument()
+    makeTextOnly(document, '\u7532')
+    const resolved = resolvedLayout(document)
+    const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+    const result = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders(calls))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // The ascii face is never a stand-in for the slot: that span is not shaped.
+    expect(calls.some((call) => call.text === '\u7532')).toBe(false)
+    expect(result.value.diagnostics.some((diagnostic) => diagnostic.code === 'missing-run-font')).toBe(true)
+  })
+
   it('rejects unstable provider identities before invoking provider code', async () => {
     const document = nativeDocument()
     const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
