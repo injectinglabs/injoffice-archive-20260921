@@ -3502,6 +3502,10 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 		}
 		if child.Name != (xml.Name{Space: extractor.wordNS, Local: "tr"}) {
 			unsafe = true
+			if nativeNonVisualRangeMarker(child, extractor.wordNS) {
+				extractor.addUnsupported("NON_VISUAL_RANGE_MARKER", "table-structure", id, partName, child, "A content-free bookmark, revision-range, comment-range or permission endpoint between rows paints nothing and is preserved verbatim")
+				continue
+			}
 			extractor.addUnsupported("UNMODELED_TABLE_CONTENT", "table-structure", id, partName, child, "Table content outside direct rows is preserved verbatim")
 			continue
 		}
