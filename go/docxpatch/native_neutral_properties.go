@@ -23,3 +23,32 @@ func nativeNeutralSourceProperty(node, owner *nativeXMLNode, ns string) bool {
 	}
 	return false
 }
+
+// The Word 2010 extension namespace that carries w14:ligatures.
+const nativeWordML2010 = "http://schemas.microsoft.com/office/word/2010/wordml"
+
+// w14:ligatures w14:val="standardContextual" asks for the standard and
+// contextual ligature sets and nothing else. The v1 shaper declares
+// default_feature_policy 'harfbuzz-14.3.0-shape-defaults', under which
+// HarfBuzz already applies liga, clig and calt to every run, so this one value
+// selects exactly the shaping this tier already performs and moves no advance.
+// Every other value (none, all, historical, discretional) names a feature set
+// v1 has no input for, and stays refused as foreign markup.
+func nativeShaperDefaultLigatureMode(node, owner *nativeXMLNode) bool {
+	name := xml.Name{Space: nativeWordML2010, Local: "ligatures"}
+	if node.Name != name || len(directNativeChildren(owner, nativeWordML2010, "ligatures")) != 1 {
+		return false
+	}
+	value := xml.Name{Space: nativeWordML2010, Local: "val"}
+	if !nativeExactLeaf(node, value) {
+		return false
+	}
+	count, mode := 0, ""
+	for _, attr := range node.Attrs {
+		if attr.Name == value {
+			count++
+			mode = attr.Value
+		}
+	}
+	return count == 1 && mode == "standardContextual"
+}
