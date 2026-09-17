@@ -109,8 +109,11 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('disabled=""')
     expect(html).toContain('not drawn here')
     expect(html).not.toContain('<svg')
-    expect(html).toContain('max="26"')
-    expect(html).toContain('max="32"')
+    // The demo's own responsiveness bound, not a library one: 64 rows and 40
+    // columns clear the largest saved print area in the hard-v2 corpus
+    // (34 rows, 28 columns), which the library already paginated.
+    expect(html).toContain('max="64"')
+    expect(html).toContain('max="40"')
     expect(html).toContain('Compact General numbers (host preview)')
     expect(html).not.toContain('checked=""/> Compact General')
   })
