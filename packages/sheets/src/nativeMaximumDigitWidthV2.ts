@@ -47,9 +47,32 @@ export function isNativeMaximumDigitWidthAuthorityV2(value: unknown): value is N
   return typeof value === 'object' && value !== null && metricAuthorities.has(value)
 }
 
+/**
+ * The font's own descent, as a fraction of its em square, read from the same
+ * qualified sfnt bytes the maximum digit width comes from.
+ *
+ * Excel prints a bottom-aligned cell by sitting the first baseline exactly the
+ * font's descent above the row's bottom edge, so the descent — not a constant —
+ * is what a bottom-aligned preview has to subtract. Measured against Excel
+ * 16.112.4's own PDF export of the local hard-v2 corpus: Calibri 11 (hhea
+ * descender 550/2048) lands the baseline 3 pt above the row bottom, and Arial 10
+ * and Times New Roman 10 (434/2048 and 443/2048) land it 2 pt above.
+ *
+ * `hhea` is the table already read for the horizontal metrics, and its descender
+ * is signed downward (§ OpenType hhea), so the magnitude is the descent.
+ */
+export function nativeNormalFontDescentEmV1(fontBytes: Uint8Array): number {
+  if (!(fontBytes instanceof Uint8Array) || Object.getPrototypeOf(fontBytes) !== Uint8Array.prototype || fontBytes.byteLength < 12 || fontBytes.byteLength > maximumFontBytes) throw metricError('$.font_bytes', 'font bytes must be a bounded direct Uint8Array')
+  let bytes: Uint8Array
+  try { bytes = fontBytes.slice() } catch { throw metricError('$.font_bytes', 'Proxy font bytes are refused') }
+  const descentEm = parseSfntDigitMetrics(bytes).descentEm
+  if (!(descentEm > 0) || descentEm >= 1) throw metricError('$.font_bytes', 'sfnt hhea descent is outside the qualified fraction of the em square')
+  return descentEm
+}
+
 type Table = { offset: number; length: number; checksum: number }
 
-function parseSfntDigitMetrics(bytes: Uint8Array): { unitsPerEm: number; maximumAdvance: number; names: string[]; bold: boolean; italic: boolean } {
+function parseSfntDigitMetrics(bytes: Uint8Array): { unitsPerEm: number; maximumAdvance: number; descentEm: number; names: string[]; bold: boolean; italic: boolean } {
   if (u32(bytes, 0) !== 0x00010000 && u32(bytes, 0) !== 0x74727565) throw metricError('$.font_bytes', 'only standalone fixed TrueType sfnt fonts are qualified')
   const count = u16(bytes, 4)
   if (count < 1 || count > 64 || !range(bytes, 12, count * 16)) throw metricError('$.font_bytes', 'sfnt table directory is malformed or oversized')
@@ -76,7 +99,7 @@ function parseSfntDigitMetrics(bytes: Uint8Array): { unitsPerEm: number; maximum
   if (names.length === 0) throw metricError('$.font_bytes', 'font has no qualified family name')
   const os2 = tables.get('OS/2'), selection = os2 && os2.length >= 64 ? u16(bytes, os2.offset + 62) : undefined
   const macStyle = u16(bytes, head.offset + 44)
-  return { unitsPerEm, maximumAdvance: Math.max(...advances), names, bold: selection === undefined ? (macStyle & 1) !== 0 : (selection & 0x20) !== 0, italic: selection === undefined ? (macStyle & 2) !== 0 : (selection & 1) !== 0 }
+  return { unitsPerEm, maximumAdvance: Math.max(...advances), descentEm: Math.abs(i16(bytes, hhea.offset + 6)) / unitsPerEm, names, bold: selection === undefined ? (macStyle & 1) !== 0 : (selection & 0x20) !== 0, italic: selection === undefined ? (macStyle & 2) !== 0 : (selection & 1) !== 0 }
 }
 
 function cmapGlyph(bytes: Uint8Array, cmap: Table, codePoint: number): number | undefined {
