@@ -522,6 +522,20 @@ The output retains the source omissions, chosen sizes and a visible warning;
 existing sizes and malformed/unsupported source diagnostics are never replaced.
 Strict rendering continues to refuse missing required font metrics.
 
+The same preview can also accept an explicit host-selected
+`fontFamilyPolicy: { kind: 'host-default-family-v1', family: 'Aptos' }`, and only
+for a package that selects no font anywhere: no `w:rFonts` in the main document,
+its style/numbering/theme/font-table parts or any header, footer, note or comment
+story, and consequently no resolved family in any scope
+(`absent_font_families` eligibility facts). The glossary document is a separate
+document and is not part of that test. The `Aptos` value is a consumer choice
+measured against Microsoft Word 16.112.4 references, not an authored face and not
+a documented Microsoft default; a package that states a family keeps using it.
+The family is applied only where the explicitly supplied host manifest attests
+that exact family, weight and style, so an unattested scope stays unshaped. The
+output retains the source omissions, the chosen family and a visible warning, and
+the strict font inventory still joins the layout with the projection removed.
+
 `renderNativeDocxAutomaticBorderPreviewV1` is a separate opt-in read-only
 contrast policy for native-source-qualified automatic table borders. It uses
 black only on a proven white preview surface with absent or exact white
