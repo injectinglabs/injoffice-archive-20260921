@@ -128,6 +128,7 @@ type nativeExtractor struct {
 	themeSrgbLoaded     bool
 	tableLookLoaded     bool
 	tableLookStyles     map[string]*nativeXMLNode
+	noTblStylePrProven  bool
 	noEndnotesChecked   bool
 	noEndnotesProven    bool
 }

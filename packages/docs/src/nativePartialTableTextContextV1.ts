@@ -1,9 +1,11 @@
 import {decodeNativeDocxDocument,type NativeDocxSourceAnchorV1} from './nativeContract.js'
 import {decodeNativeDocxResolvedLayout} from './nativeResolvedLayout.js'
-export interface NativeDocxPartialTableTextContextV1 {package_sha256:string;table_id:string;look_diagnostic_id:string;look_anchor:NativeDocxSourceAnchorV1;styles_part:string;styles_sha256:string;style_chain:Array<{style_id:string;anchor:NativeDocxSourceAnchorV1}>;resolved_diagnostics:Array<{code:'TABLE_STYLE_EFFECTS_PRESERVED';scope_id:string;part_name:string;path:string}>}
-function record(value:unknown,keys:string[]):Record<string,unknown>{
- if(!value||typeof value!=='object'||Object.getPrototypeOf(value)!==Object.prototype||Reflect.ownKeys(value).some(k=>typeof k!=='string')||Object.keys(value).sort().join(',')!==[...keys].sort().join(','))throw new TypeError('Invalid table text context record')
- const out:Record<string,unknown>={};for(const key of keys){const d=Object.getOwnPropertyDescriptor(value,key);if(!d||!('value'in d))throw new TypeError('Table context accessors are forbidden');out[key]=d.value}return out
+export interface NativeDocxPartialTableTextContextV1 {package_sha256:string;table_id:string;look_diagnostic_id?:string;look_anchor:NativeDocxSourceAnchorV1;styles_part:string;styles_sha256:string;style_chain:Array<{style_id:string;anchor:NativeDocxSourceAnchorV1}>;resolved_diagnostics:Array<{code:'TABLE_STYLE_EFFECTS_PRESERVED';scope_id:string;part_name:string;path:string}>}
+function record(value:unknown,keys:string[],optional:string[]=[]):Record<string,unknown>{
+ if(!value||typeof value!=='object'||Object.getPrototypeOf(value)!==Object.prototype||Reflect.ownKeys(value).some(k=>typeof k!=='string'))throw new TypeError('Invalid table text context record')
+ const present=Object.keys(value).sort(),allowed=[...keys,...optional]
+ if(present.some(k=>!allowed.includes(k))||keys.some(k=>!present.includes(k)))throw new TypeError('Invalid table text context record')
+ const out:Record<string,unknown>={};for(const key of present){const d=Object.getOwnPropertyDescriptor(value,key);if(!d||!('value'in d))throw new TypeError('Table context accessors are forbidden');out[key]=d.value}return out
 }
 function array(value:unknown,max:number):unknown[]{
  if(!Array.isArray(value)||Object.getPrototypeOf(value)!==Array.prototype||value.length>max||Reflect.ownKeys(value).length!==value.length+1)throw new TypeError('Invalid table context array')
@@ -20,11 +22,23 @@ export function decodeNativeDocxPartialTableTextContextsV1(source:unknown,resolv
  if(!layout.ok||layout.value.document_id!==d.document_id||layout.value.revision!==d.revision||layout.value.source_parts.main_part!==d.source.main_part)throw new TypeError('Table text context requires exact resolved identity')
  const result:NativeDocxPartialTableTextContextV1[]=[],seen=new Set<string>()
  for(const raw of array(input,64)){
-  const v=record(raw,['package_sha256','table_id','look_diagnostic_id','look_anchor','styles_part','styles_sha256','style_chain','resolved_diagnostics']),look=record(v.look_anchor,anchorKeys)
-  if(v.package_sha256!==d.source.package_sha256||typeof v.table_id!=='string'||seen.has(v.table_id)||typeof v.look_diagnostic_id!=='string'||v.styles_part!==layout.value.source_parts.styles_part)throw new TypeError('Invalid table text source identity')
+  const v=record(raw,['package_sha256','table_id','look_anchor','styles_part','styles_sha256','style_chain','resolved_diagnostics'],['look_diagnostic_id']),look=record(v.look_anchor,anchorKeys)
+  const diagnosed='look_diagnostic_id'in v
+  if(v.package_sha256!==d.source.package_sha256||typeof v.table_id!=='string'||seen.has(v.table_id)||diagnosed&&typeof v.look_diagnostic_id!=='string'||v.styles_part!==layout.value.source_parts.styles_part)throw new TypeError('Invalid table text source identity')
   const table=d.body.blocks.find(b=>b.table?.id===v.table_id)?.table,parts=d.passthrough_parts.filter(p=>p.part_name===v.styles_part),part=parts[0]
-  const diagnostics=d.unsupported.filter(x=>x.id===v.look_diagnostic_id),diag=diagnostics[0]
-  if(!table?.table_style_id||parts.length!==1||!part||part.sha256!==v.styles_sha256||diagnostics.length!==1||!diag?.anchor||diag.scope_id!==table.id||diag.code!=='UNMODELED_TABLE_PROPERTY'||diag.capability!=='table-properties'||diag.preservation!=='refuse-mutation'||Object.entries(diag.anchor).some(([k,x])=>look[k]!==x)||look.part_name!==d.source.main_part||look.path!==table.anchor.path+'/w:tblPr[1]/w:tblLook[1]'||Number(look.start_byte)<table.anchor.start_byte||Number(look.end_byte)>table.anchor.end_byte)throw new TypeError('Table text context does not join exact source look')
+  if(!table?.table_style_id||parts.length!==1||!part||part.sha256!==v.styles_sha256||look.part_name!==d.source.main_part||look.path!==table.anchor.path+'/w:tblPr[1]/w:tblLook[1]'||typeof look.xml_sha256!=='string'||!/^sha256:[0-9a-f]{64}$/.test(look.xml_sha256)||!Number.isSafeInteger(look.start_byte)||!Number.isSafeInteger(look.end_byte)||Number(look.end_byte)<=Number(look.start_byte)||Number(look.start_byte)<table.anchor.start_byte||Number(look.end_byte)>table.anchor.end_byte)throw new TypeError('Table text context does not join exact source look')
+  // The producer omits the diagnostic id exactly when the extractor proved the
+  // look inactive, which leaves no diagnostic on that element to name. Either
+  // state is source-bound evidence about the same bytes and neither authorizes
+  // mutation, so the undiagnosed form is admitted only when the document really
+  // carries no unmodeled-property diagnostic for this table's look.
+  const anchored=d.unsupported.filter(x=>x.code==='UNMODELED_TABLE_PROPERTY'&&x.scope_id===table.id&&x.anchor!==undefined&&x.anchor.part_name===look.part_name&&x.anchor.path===look.path)
+  if(!diagnosed){
+   if(anchored.length!==0)throw new TypeError('Table text context omits a look diagnostic the source states')
+  }else{
+   const diagnostics=d.unsupported.filter(x=>x.id===v.look_diagnostic_id),diag=diagnostics[0]
+   if(diagnostics.length!==1||!diag?.anchor||diag.scope_id!==table.id||diag.code!=='UNMODELED_TABLE_PROPERTY'||diag.capability!=='table-properties'||diag.preservation!=='refuse-mutation'||Object.entries(diag.anchor).some(([k,x])=>look[k]!==x))throw new TypeError('Table text context does not join exact source look')
+  }
   const chain:NativeDocxPartialTableTextContextV1['style_chain']=[],styleIDs=new Set<string>(),paths=new Set<string>()
   for(const rawStyle of array(v.style_chain,16)){
    const style=record(rawStyle,['style_id','anchor']),a=record(style.anchor,anchorKeys)
