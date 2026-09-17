@@ -11,6 +11,7 @@ import {
   type NativeDocxHeaderFooterLayoutInputV1,
   type NativeDocxHeaderFooterLayoutSuccessV1,
 } from './nativeHeaderFooterLayoutV1.js'
+import { DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, nativeDocxOmittedContentCategoryV1 } from './nativeApproximateOmittedContentV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 
@@ -166,12 +167,37 @@ describe('approximate header/footer placement policy', () => {
     expect(placed.status).toBe('placed')
     expect(placed.approximations).toBeUndefined()
     expect(placed.pages.some((page) => page.lines.some((line) => line.paragraph_id === 'paragraph:footer-default'))).toBe(true)
-    for (const [code, expected] of [['FIELD_SEMANTICS', 'selected-story-field'], ['UNMODELED_DRAWING', 'selected-story-unsupported'], ['PICTURE_GRAPHIC_REQUIRED', 'selected-story-unsupported'], ['UNMODELED_SECTION_PROPERTY', 'selected-story-unsupported'], ['NESTED_TABLE_OR_CELL_MARKUP', 'selected-story-unsupported']] as const) {
+    for (const [code, expected] of [['FIELD_SEMANTICS', 'selected-story-field'], ['UNMODELED_SECTION_PROPERTY', 'selected-story-unsupported'], ['NESTED_TABLE_OR_CELL_MARKUP', 'selected-story-unsupported']] as const) {
       expect(NONBLOCKING.has(code)).toBe(false)
       const blocking = approximate(fixture())
       blocking.document.unsupported.push({ ...framePr, id: `unsupported:${code}`, code } as never)
       expect(layoutNativeDocxHeadersFootersV1(blocking)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: expected, scope_id: 'paragraph:footer-default' })]) }))
     }
+  })
+
+  it('paints a header/footer whose drawing the extractor dropped, and keeps refusing a modeled one', () => {
+    // Both codes are only ever recorded when the extractor refused the drawing and left
+    // no RunV1.drawing behind, so the object is absent from the model rather than
+    // painted wrongly. Each is admitted here only because the approximate
+    // omitted-content discloser reports it, so the drop is never silent.
+    for (const code of ['UNMODELED_DRAWING', 'PICTURE_GRAPHIC_REQUIRED'] as const) {
+      expect(NONBLOCKING.has(code)).toBe(true)
+      expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code)).toBe(true)
+      expect(nativeDocxOmittedContentCategoryV1(code, undefined)).toBe('drawing')
+      const dropped = { id: `unsupported:${code}`, code, capability: 'drawings', scope_id: 'paragraph:footer-default', preservation: 'refuse-mutation', message: 'Drawing payload is preserved verbatim' }
+      const strict = fixture(); strict.document.unsupported.push(dropped as never)
+      expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-unsupported', scope_id: 'paragraph:footer-default' })]) }))
+      const tolerated = approximate(fixture()); tolerated.document.unsupported.push(dropped as never)
+      const placed = layoutNativeDocxHeadersFootersV1(tolerated)
+      expect(placed.status).toBe('placed')
+      expect(placed.diagnostics).toEqual([])
+      expect(placed.pages.some((page) => page.lines.some((line) => line.paragraph_id === 'paragraph:footer-default'))).toBe(true)
+    }
+    // A drawing the extractor DID model but that is outside the exact inline raster
+    // subset is a different fact: it would be silently dropped, so it still refuses.
+    const modeled = approximate(fixture())
+    ;(modeled.document.footers.find((entry) => entry.id === 'story:footer-default')!.blocks[0]!.paragraph!.runs as any[]).push({ kind: 'drawing', id: 'run:footer-drawing', drawing: { id: 'drawing:1' } })
+    expect(layoutNativeDocxHeadersFootersV1(modeled)).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-shape' })]) }))
   })
 
   it('accepts an expanded line box under the declared line-box policy and still refuses a compressed one', () => {
