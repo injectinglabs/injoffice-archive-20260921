@@ -423,6 +423,10 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
 const NOTE_CONTENT_ID = /^[1-9][0-9]{0,18}$/
+/** Reserved separator stories carry a producer-chosen id, not a fixed literal:
+ * Word writes -1/0 and LibreOffice writes 0/1 for the same two w:type roles. The
+ * role is attested by w:type in the note part, so the id is only an identity. */
+const NOTE_SENTINEL_ID = /^(?:0|-?[1-9][0-9]{0,18})$/
 const PART_SEGMENT = /^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$/
 const SHA256 = /^sha256:[0-9a-f]{64}$/
 const COLOR = /^(?:auto|[0-9A-F]{6})$/
@@ -870,8 +874,8 @@ function validateStory(value: unknown, path: string, expectedKinds: readonly Nat
   let relationshipId: string | undefined
   if (kind === 'footnote' || kind === 'endnote') {
     if (noteRole === undefined) add(issues, 'REQUIRED', `${path}/note_role`, 'note stories require an explicit content or separator role')
-    const expected = noteRole === 'separator' ? '-1' : noteRole === 'continuation-separator' ? '0' : undefined
-    if (typeof entry.native_story_id !== 'string' || (expected === undefined ? !NOTE_CONTENT_ID.test(entry.native_story_id) : entry.native_story_id !== expected)) add(issues, 'INVALID_VALUE', `${path}/native_story_id`, 'native note id must exactly match its content or separator role')
+    const pattern = noteRole === 'separator' || noteRole === 'continuation-separator' ? NOTE_SENTINEL_ID : NOTE_CONTENT_ID
+    if (typeof entry.native_story_id !== 'string' || !pattern.test(entry.native_story_id)) add(issues, 'INVALID_VALUE', `${path}/native_story_id`, 'native note id must be a content id or a reserved separator identity')
     else nativeStoryId = entry.native_story_id
     if (entry.relationship_id === undefined) add(issues, 'REQUIRED', `${path}/relationship_id`, 'note stories require their resolved main-document relationship')
     else relationshipId = optionalString(entry.relationship_id, `${path}/relationship_id`, issues, ID)

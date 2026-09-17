@@ -116,7 +116,7 @@ func ExtractNativePaginationSettingsV1WithOptions(data []byte, options NativeExt
 		hash := nativeSHA(pkg.files[settingsPart])
 		result.SettingsSHA256 = &hash
 		result.Profile = "word-modern-default"
-		parseNativePaginationSettings(result, root, wordNS)
+		parseNativePaginationSettings(result, root, wordNS, nativeNoteSentinelIDsByKind(doc))
 		if result.CompatibilityMode == nil {
 			result.addDiagnostic("COMPATIBILITY_SETTING_UNSUPPORTED", root, "The settings part does not explicitly attest Word compatibilityMode=15; omitted compatibilityMode defaults to an older layout mode")
 		}
@@ -303,7 +303,7 @@ func nativeSettingsNeutralForeignElement(result *NativePaginationSettingsV1, nod
 	}
 }
 
-func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nativeXMLNode, wordNS string) {
+func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nativeXMLNode, wordNS string, sentinels map[string]nativeNoteSentinelRegistry) {
 	seen := map[string]bool{}
 	// An absent autoHyphenation element means no automatic hyphenation. Its
 	// zone, cap and consecutive-line options then have no line-layout effect.
@@ -409,7 +409,7 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 			}
 			parseNativeModernCompatibility(result, child, wordNS)
 		case "footnotePr", "endnotePr":
-			parseNativeNoteSentinelRegistrations(result, child, wordNS)
+			parseNativeNoteSentinelRegistrations(result, child, wordNS, sentinels)
 		case "stylePaneFormatFilter":
 			extra := false
 			for _, attr := range child.Attrs {
@@ -467,7 +467,40 @@ func parseNativePaginationSettings(result *NativePaginationSettingsV1, root *nat
 	}
 }
 
-func parseNativeNoteSentinelRegistrations(result *NativePaginationSettingsV1, property *nativeXMLNode, wordNS string) {
+// nativeNoteSentinelRegistry indexes, per note kind, the reserved separator
+// stories the note part itself attested with w:type, plus whether that kind has
+// any modeled story at all. The note part is the only authority for which
+// registered settings id is a separator: settings.xml carries no role, and the
+// special-footnote list may name a CONTENT note (Word's custom separator),
+// which must keep refusing.
+type nativeNoteSentinelRegistry struct {
+	roles   map[string]string
+	modeled bool
+}
+
+func nativeNoteSentinelIDsByKind(doc *NativeDocumentV1) map[string]nativeNoteSentinelRegistry {
+	registry := map[string]nativeNoteSentinelRegistry{"footnote": {roles: map[string]string{}}, "endnote": {roles: map[string]string{}}}
+	for i := range doc.Notes {
+		story := doc.Notes[i]
+		kind, ok := registry[story.Kind]
+		if !ok {
+			continue
+		}
+		kind.modeled = true
+		if story.NativeStoryID != nil && story.NoteRole != "content" {
+			kind.roles[*story.NativeStoryID] = story.NoteRole
+		}
+		registry[story.Kind] = kind
+	}
+	return registry
+}
+
+// wordReservedNoteSentinelIDs is Word's own separator/continuation-separator
+// pair. It is the admitted set only when the package models no story of that
+// kind, where there is nothing to cross-check a registration against.
+var wordReservedNoteSentinelIDs = map[string]string{"-1": "separator", "0": "continuation-separator"}
+
+func parseNativeNoteSentinelRegistrations(result *NativePaginationSettingsV1, property *nativeXMLNode, wordNS string, sentinels map[string]nativeNoteSentinelRegistry) {
 	if !nativeSettingsExactNode(result, property, map[xml.Name]bool{}, true) {
 		return
 	}
@@ -475,14 +508,23 @@ func parseNativeNoteSentinelRegistrations(result *NativePaginationSettingsV1, pr
 	if property.Name.Local == "endnotePr" {
 		wantChild = "endnote"
 	}
+	attested := wordReservedNoteSentinelIDs
+	if registry := sentinels[wantChild]; registry.modeled {
+		attested = registry.roles
+	}
 	seen := map[string]bool{}
+	roles := map[string]bool{}
 	for _, child := range property.Children {
 		if child.Name != (xml.Name{Space: wordNS, Local: wantChild}) || !nativeSettingsExactLeaf(result, child, xml.Name{Space: wordNS, Local: "id"}) {
 			result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Note settings may contain only exact reserved separator sentinel registrations")
 			continue
 		}
 		id, ok := nativeAttr(child, wordNS, "id")
-		if !ok || id != "-1" && id != "0" {
+		role := ""
+		if ok {
+			role = attested[id]
+		}
+		if role == "" {
 			result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", child, "Note settings numbering, placement, restart, custom, and non-sentinel registrations are unsupported")
 			continue
 		}
@@ -491,9 +533,10 @@ func parseNativeNoteSentinelRegistrations(result *NativePaginationSettingsV1, pr
 			continue
 		}
 		seen[id] = true
+		roles[role] = true
 	}
-	if !seen["-1"] || !seen["0"] {
-		result.addDiagnostic("INVALID_SETTINGS_STRUCTURE", property, "Note settings must register exactly the -1 separator and 0 continuation-separator sentinels")
+	if len(seen) != len(attested) || !roles["separator"] || !roles["continuation-separator"] {
+		result.addDiagnostic("INVALID_SETTINGS_STRUCTURE", property, "Note settings must register exactly the reserved separator and continuation-separator stories")
 		result.addDiagnostic("PAGINATION_SETTING_UNSUPPORTED", property, "Empty or incomplete note properties are not the sentinel-registration-only subset")
 	}
 }

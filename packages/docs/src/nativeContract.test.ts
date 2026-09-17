@@ -187,6 +187,33 @@ describe('native DOCX contract v1', () => {
     }
   })
 
+  it('accepts a producer-chosen reserved separator id and still rejects a content id that is not one', () => {
+    // Word writes the separator/continuation-separator pair as -1/0 and
+    // LibreOffice writes 0/1. Both attest the role with w:type in the note part,
+    // so the id is only an identity and neither pair may be refused for its value.
+    for (const [role, id] of [['separator', '-1'], ['continuation-separator', '0'], ['separator', '0'], ['continuation-separator', '1']] as const) {
+      const value = structuredClone(fixture) as any
+      value.notes[0].note_role = role
+      value.notes[0].native_story_id = id
+      value.notes[0].blocks = []
+      expect(decodeNativeDocxDocument(value).ok).toBe(true)
+    }
+    // A content story keeps the content id pattern: '0' and '-1' are not content ids.
+    for (const id of ['0', '-1', '01', 'abc', '']) {
+      const value = structuredClone(fixture) as any
+      value.notes[0].native_story_id = id
+      expect(decodeNativeDocxDocument(value)).toEqual(expect.objectContaining({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ path: '/notes/0/native_story_id' })]) }))
+    }
+    // A reserved role still needs an integer identity, never arbitrary text.
+    for (const id of ['abc', '00', '-0', '1.5', '']) {
+      const value = structuredClone(fixture) as any
+      value.notes[0].note_role = 'separator'
+      value.notes[0].native_story_id = id
+      value.notes[0].blocks = []
+      expect(decodeNativeDocxDocument(value)).toEqual(expect.objectContaining({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ path: '/notes/0/native_story_id' })]) }))
+    }
+  })
+
   it('rejects malformed anchors and fingerprints', () => {
     const value = structuredClone(fixture) as unknown as Record<string, any>
     value.source.package_sha256 = 'not-a-hash'
