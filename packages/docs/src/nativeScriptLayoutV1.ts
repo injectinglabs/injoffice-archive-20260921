@@ -51,8 +51,32 @@ export function nativeDocxScriptScaleV1(value: number, transform: NativeDocxScri
   return scaleFontUnits(value,transform.units_per_em,axis==='x'?transform.x_size:transform.y_size)
 }
 
+/**
+ * Word does not follow the font's `OS/2.ySuperscriptYOffset` when it raises a
+ * superscript; measured against the Word 16.112 reference exports it raises the
+ * baseline by exactly the amount the script size took away, so the reduced em
+ * box sits flush with the top of the run's own em box:
+ *
+ *   raise = fontSize - ySuperscriptYSize/unitsPerEm * fontSize
+ *
+ * Confirmed on every superscript in the Office reference corpus whose own font
+ * size is known (Word writes its PDF baselines on a 1/300in grid, and `raise`
+ * is the exact difference of the two grid-snapped sizes in each case):
+ *   24pt Arial     15.60pt script, 8.40pt raise   (tdf82173_footnoteStyle/_endnoteStyle)
+ *   12pt Arial      7.92pt script, 4.08pt raise   (tdf123262_textFootnoteSeparators)
+ *   11pt Calibri    6.96pt script, 4.08pt raise   (footnote, floatingtbl_with_formula)
+ *   10pt Arial      6.48pt script, 3.60pt raise   (four footnote-area markers)
+ * `ySuperscriptYOffset` would raise 11pt Calibri by 5.24pt instead of 3.85pt,
+ * pushing the script ink above the run's ascent and growing the line box.
+ *
+ * The subscript drop keeps the font-authored `ySubscriptYOffset`: the corpus
+ * holds exactly one subscript (floatingtbl_with_formula, which produces no page
+ * here), so there is no second reference to move it against.
+ */
 export function nativeDocxScriptShiftV1(fontSize: number, transform: NativeDocxScriptTransformV1, axis: 'x'|'y'): number {
-  return scaleFontUnits(axis==='x'?transform.x_offset:transform.y_offset,transform.units_per_em,fontSize)*(axis==='y'&&transform.kind==='subscript'?-1:1)
+  if (axis==='x') return scaleFontUnits(transform.x_offset,transform.units_per_em,fontSize)
+  if (transform.kind==='subscript') return -scaleFontUnits(transform.y_offset,transform.units_per_em,fontSize)
+  return fontSize-nativeDocxScriptScaleV1(fontSize,transform,'y')
 }
 
 /**
