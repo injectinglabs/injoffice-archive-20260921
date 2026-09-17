@@ -166,6 +166,74 @@ func nativeFormatRoman(value int, upper bool) (string, bool) {
 	return result, true
 }
 
+// The ideographic numbering systems this tier models. Each row was read off
+// Word's own rendering of the benchmark documents rather than inferred from
+// the format name.
+//
+//   - cycle is a fixed sequence: the Heavenly Stems and the Earthly Branches.
+//     Word exhausts the sequence once and then falls back to decimal instead
+//     of restarting it, so its length is a real boundary, not a modulus.
+//   - digits with a unit is a counting system: a tens unit sits between two
+//     digits. leadingUnit keeps the explicit "one" before that unit, as the
+//     legal/financial numerals require (ten is one-ten) and the plain counting
+//     numerals forbid (ten is ten). Hundreds and above need the
+//     zero-insertion rules, which these documents do not attest, so the
+//     modelled range stops at ninety-nine.
+//   - digits without a unit is a positional system: every decimal digit maps
+//     to one ideograph and no unit appears at all (ten is one-zero).
+//
+// Every ideograph below is in U+0800..U+FFFF, so it occupies exactly three
+// UTF-8 bytes and the tables are indexed by byte triple rather than decoded.
+var nativeIdeographicNumberSystems = [...]struct {
+	format, cycle, digits, unit string
+	leadingUnit                 bool
+}{
+	{format: "ideographTraditional", cycle: "\u7532\u4e59\u4e19\u4e01\u620a\u5df1\u5e9a\u8f9b\u58ec\u7678"},
+	{format: "ideographZodiac", cycle: "\u5b50\u4e11\u5bc5\u536f\u8fb0\u5df3\u5348\u672a\u7533\u9149\u620c\u4ea5"},
+	{format: "taiwaneseCountingThousand", digits: "\u3007\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d", unit: "\u5341"},
+	{format: "ideographLegalTraditional", digits: "\u96f6\u58f9\u8cb3\u53c3\u8086\u4f0d\u9678\u67d2\u634c\u7396", unit: "\u62fe", leadingUnit: true},
+	{format: "koreanDigital2", digits: "\u96f6\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d"},
+}
+
+func nativeFormatIdeographicCounter(value int, format string) (string, bool) {
+	for _, system := range nativeIdeographicNumberSystems {
+		if system.format != format {
+			continue
+		}
+		if value < 1 {
+			return "", false
+		}
+		if system.cycle != "" {
+			if value*3 > len(system.cycle) {
+				return strconv.Itoa(value), true
+			}
+			return system.cycle[(value-1)*3 : value*3], true
+		}
+		if system.unit == "" {
+			output := ""
+			for _, digit := range strconv.Itoa(value) {
+				output += system.digits[(digit-'0')*3 : (digit-'0')*3+3]
+			}
+			return output, true
+		}
+		if value > 99 {
+			return "", false
+		}
+		tens, units, output := value/10, value%10, ""
+		if tens > 0 {
+			if tens > 1 || system.leadingUnit {
+				output = system.digits[tens*3 : tens*3+3]
+			}
+			output += system.unit
+		}
+		if units > 0 || tens == 0 {
+			output += system.digits[units*3 : units*3+3]
+		}
+		return output, true
+	}
+	return "", false
+}
+
 func nativeFormatNumberingCounter(value int, format string) (string, bool) {
 	switch format {
 	case "decimal":
@@ -179,7 +247,7 @@ func nativeFormatNumberingCounter(value int, format string) (string, bool) {
 	case "upperRoman":
 		return nativeFormatRoman(value, true)
 	default:
-		return "", false
+		return nativeFormatIdeographicCounter(value, format)
 	}
 }
 
@@ -261,7 +329,7 @@ func (resolver *nativeLayoutResolver) materializeNativeNumbering(instance *nativ
 		start = *override.start
 	}
 	if !nativeOrdinaryNumberFormat(format) {
-		resolver.addDiagnostic("UNSUPPORTED_NUMBER_FORMAT", scopeID, level.partName, level.node, "This numbering format is outside the bounded decimal/letter/Roman/bullet set")
+		resolver.addDiagnostic("UNSUPPORTED_NUMBER_FORMAT", scopeID, level.partName, level.node, "This numbering format is outside the bounded decimal/letter/Roman/bullet/ideographic set")
 		return nil
 	}
 	if level.picture {

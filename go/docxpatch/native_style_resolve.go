@@ -1873,7 +1873,10 @@ func nativeOrdinaryNumberFormat(value string) bool {
 	case "decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman":
 		return true
 	default:
-		return false
+		// The ideographic systems share one table with the counter formatter;
+		// a first counter always renders when the system is modelled.
+		_, ok := nativeFormatIdeographicCounter(1, value)
+		return ok
 	}
 }
 

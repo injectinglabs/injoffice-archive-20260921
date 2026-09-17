@@ -229,8 +229,9 @@ The bounded core preserves authored whitespace, paragraph-content-relative
 tabs, OOXML line breaks, supplementary Unicode clusters, non-breaking spaces,
 and safe cluster boundaries. It applies resolved physical/logical indents,
 first-line/hanging offsets, alignment, before/after spacing, and Word
-auto/exact/at-least line heights. Ordinary decimal/letter/Roman/bullet markers
-consume the resolver's source-ordered counter vector, final text, and hanging
+auto/exact/at-least line heights. Ordinary decimal/letter/Roman/bullet markers,
+plus the ideographic stem, branch, counting and positional systems read off
+Word's own rendering, consume the resolver's source-ordered counter vector, final text, and hanging
 geometry; TypeScript never reconstructs list state. An empty w:lvlText is a
 label with no text: the counter advances and, where no hanging indent reserves
 a label region, no marker reaches the wire at all. A skipped table in a
