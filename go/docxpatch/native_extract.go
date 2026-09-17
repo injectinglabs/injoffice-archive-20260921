@@ -1459,9 +1459,17 @@ func nativeExactNoteSentinel(node *nativeXMLNode, wordNS, role string) bool {
 		instruction = "continuationSeparator"
 	}
 	paragraphs := directNativeChildren(node, wordNS, "p")
+	// ECMA-376 17.11.14 makes a reserved separator story an ordinary story:
+	// its first paragraph carries the separator instruction, and Word paints
+	// whatever further paragraphs follow it above the notes. Word itself
+	// writes a trailing empty paragraph here, and an author can put visible
+	// text in one. Require the instruction paragraph to be exact and require
+	// every remaining block to be an ordinary paragraph, which the story
+	// extraction below reads and note placement lays out like any other.
+	//
 	// Word records revision-session identifiers on otherwise exact reserved
 	// separators. These source-preserved hex IDs do not alter separator layout.
-	if len(node.Children) != 1 || len(paragraphs) != 1 || !nativeExactRevisionContainer(paragraphs[0], wordNS, "rsidR", "rsidRDefault", "rsidP") {
+	if len(paragraphs) == 0 || len(node.Children) != len(paragraphs) || !nativeExactRevisionContainer(paragraphs[0], wordNS, "rsidR", "rsidRDefault", "rsidP") {
 		return false
 	}
 	runs := directNativeChildren(paragraphs[0], wordNS, "r")
