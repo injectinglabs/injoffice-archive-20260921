@@ -869,11 +869,14 @@ function checkedWorldAffine(
     const [a,b,c,d,tx,ty]=qualified.values
     return {a,b,c,d,tx,ty,precise:qualified}
   }
-  const scale=local.bPpm===0&&local.cPpm===0&&local.aPpm>0&&local.dPpm>0
-  const half=local.bPpm===0&&local.cPpm===0&&local.aPpm===-1000000&&local.dPpm===-1000000
+  // A DrawingML flipH/flipV is a sign change on a diagonal matrix, so a
+  // single-axis reflection composes exactly like a positive scale and like the
+  // two-axis flip (a half turn) this already accepted. Admitting only the
+  // two-axis case refused whole slides over one mirrored connector.
+  const diagonal=local.bPpm===0&&local.cPpm===0&&local.aPpm!==0&&local.dPpm!==0
   const quarter=local.aPpm===0&&local.dPpm===0&&local.bPpm===-local.cPpm&&Math.abs(local.bPpm)===1000000
-  if (!scale&&!half&&!quarter) {
-    throw new RenderCompileError('render.worldTransform', `${path}.transform`, 'only exact scale/translation and source quarter turns are supported')
+  if (!diagonal&&!quarter) {
+    throw new RenderCompileError('render.worldTransform', `${path}.transform`, 'only exact axis-aligned scale or reflection, translation, and source quarter turns are supported')
   }
   const localScale = (value: number, componentPath: string): ExactRational => {
     if (!Number.isSafeInteger(value) || Math.abs(value) > PPTX_RENDER_LIMITS.maxAffinePpm) {
