@@ -1,14 +1,12 @@
 name: Main audit
 
 # Slow and audit-style checks that used to run inside the required PR job.
-# They still run on every push to main (and on demand) so each deployable SHA
-# receives a complete result; PRs run the fast gates in test.yml and are
-# expected to run these locally (see CONTRIBUTING.md, "Rendering and browser
-# qualification"). Nothing here was removed from the repository, only moved.
+# Auto-runs on push to main are paused; dispatch this workflow on demand.
+# PRs still run the fast gates in test.yml and are expected to run these
+# locally (see CONTRIBUTING.md, "Rendering and browser qualification").
+# Nothing here was removed from the repository.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +14,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Main runs are kept so every SHA receives a complete audit result.
+  # Dispatched runs are kept so a manual audit is not cancelled mid-job.
   cancel-in-progress: false
 
 jobs:
