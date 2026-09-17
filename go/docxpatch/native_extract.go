@@ -49,6 +49,10 @@ const (
 	wordDrawing2010   = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
 	drawingML2010     = "http://schemas.microsoft.com/office/drawing/2010/main"
 	useLocalDpiExtURI = "{28A0092B-C50C-407E-A947-70E740481C1C}"
+	// 100 inches. A floating offset or wrap distance beyond this cannot land on
+	// any page Word can author, and keeps resolved coordinates far inside the
+	// exact milli-point geometry bound.
+	nativeMaxDrawingOffsetEMU = int64(91440000)
 )
 
 type nativePackage struct {
@@ -2610,10 +2614,26 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 			}
 		}
 	}
+	// A floating anchor projects its horizontal wrap distances; every other
+	// distance, and every inline distance, stays preserve-only.
+	projected := map[string]bool{}
+	if container.Name.Local == "anchor" {
+		projected["distL"], projected["distR"] = true, true
+	}
+	wrapDistance := map[string]int64{}
 	for _, attrName := range []string{"distT", "distB", "distL", "distR"} {
-		if raw, present := nativeUnqualifiedAttr(container, attrName); present && raw != "0" {
+		raw, present := nativeUnqualifiedAttr(container, attrName)
+		if !present || raw == "0" {
+			continue
+		}
+		if !projected[attrName] {
 			return refuse("DRAWING_DISTANCE_PRESERVED", "Non-zero picture wrap distances are preserved but not projected", container)
 		}
+		value, ok := nativeNonnegativeInt64Attr(container, "", attrName)
+		if !ok || value > nativeMaxDrawingOffsetEMU {
+			return refuse("DRAWING_DISTANCE_PRESERVED", "Picture wrap distances must be exact bounded non-negative EMUs", container)
+		}
+		wrapDistance[attrName] = value
 	}
 	docPr := firstDirectNativeChild(container, wpNS, "docPr")
 	if docPr == nil {
@@ -2730,6 +2750,12 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 			return refuse("DRAWING_WRAP_PRESERVED", "Floating picture wrap geometry is ambiguous or unsupported", container)
 		}
 		drawing.Wrap = nativeString(wrap)
+		if value, present := wrapDistance["distL"]; present {
+			drawing.WrapDistanceLeftEMU = nativeInt64(value)
+		}
+		if value, present := wrapDistance["distR"]; present {
+			drawing.WrapDistanceRightEMU = nativeInt64(value)
+		}
 	}
 	return drawing, true
 }
@@ -3013,8 +3039,19 @@ func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
 	if !nativeExactDrawingIdentity(node) || !nativeExactContainer(node, nativeAnchorDrawingAttrs...) {
 		return false
 	}
-	for _, name := range []string{"distT", "distB", "distL", "distR"} {
+	// distT/distB shift which lines a wrap region covers vertically, and nothing
+	// downstream models that yet. distL/distR only widen the region horizontally,
+	// which the square-wrap interval reproduces exactly, so they are projected.
+	for _, name := range []string{"distT", "distB"} {
 		if value, present := nativeUnqualifiedAttr(node, name); present && value != "0" {
+			return false
+		}
+	}
+	for _, name := range []string{"distL", "distR"} {
+		if _, present := nativeUnqualifiedAttr(node, name); !present {
+			continue
+		}
+		if value, ok := nativeNonnegativeInt64Attr(node, "", name); !ok || value > nativeMaxDrawingOffsetEMU {
 			return false
 		}
 	}
@@ -3056,7 +3093,17 @@ func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
 				}
 			case "positionH", "positionV":
 				value, relative, ok := nativeDrawingPosition(child, wpNS)
-				if !ok || relative != "page" || value < 0 {
+				if !ok || !nativeExactDrawingOrigin(child.Name.Local, relative) {
+					return false
+				}
+				// A page origin is an absolute page coordinate, so it stays
+				// non-negative. A column/margin/paragraph origin is a signed
+				// displacement from a box layout resolves later, and Word writes
+				// small negative offsets there routinely.
+				if relative == "page" && value < 0 {
+					return false
+				}
+				if value < -nativeMaxDrawingOffsetEMU || value > nativeMaxDrawingOffsetEMU {
 					return false
 				}
 			case "wrapNone":
@@ -3072,11 +3119,54 @@ func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
 					return false
 				}
 			}
+		} else if child.Name.Space == wordDrawing2010 && (child.Name.Local == "sizeRelH" || child.Name.Local == "sizeRelV") {
+			// Percentage-relative sizing that resolves to zero percent leaves
+			// wp:extent as the only extent, exactly like the absent element.
+			// Any non-zero percentage really would resize the drawing, so it
+			// stays preserve-only.
+			if seen[child.Name.Local] || !nativeInertRelativeSize(child, child.Name.Local) {
+				return false
+			}
+			seen[child.Name.Local] = true
 		} else {
 			projection.Children = append(projection.Children, child)
 		}
 	}
-	return len(seen) == 4 && nativeExactInlinePictureContainer(&projection, wpNS, aNS)
+	// Exactly one wrap mode, exactly one of each placement child. sizeRelH/V stay
+	// optional because their zero-percent spelling means the same as their absence.
+	if !seen["simplePos"] || !seen["positionH"] || !seen["positionV"] || seen["wrapNone"] == seen["wrapSquare"] {
+		return false
+	}
+	return nativeExactInlinePictureContainer(&projection, wpNS, aNS)
+}
+
+// wp14:sizeRelH/sizeRelV carry one percentage child. Zero percent is Word's
+// "no relative sizing" spelling, which every Word build writes next to an
+// absolute wp:extent; it cannot move a line or a page.
+func nativeInertRelativeSize(node *nativeXMLNode, local string) bool {
+	child := "pctWidth"
+	if local == "sizeRelV" {
+		child = "pctHeight"
+	}
+	if !nativeExactContainer(node, xml.Name{Local: "relativeFrom"}) || len(node.Children) != 1 {
+		return false
+	}
+	percentage := node.Children[0]
+	if percentage.Name != (xml.Name{Space: wordDrawing2010, Local: child}) || len(percentage.Attrs) != 0 || len(percentage.Children) != 0 {
+		return false
+	}
+	return strings.TrimSpace(percentage.Text) == "0"
+}
+
+// MS-DOCX positions a floating drawing against one of several boxes. Only the
+// origins layout can resolve exactly are projected: a page origin needs nothing,
+// and column/margin/paragraph origins are resolved against the paginated body
+// box and the anchoring paragraph. Alignment keywords stay preserve-only.
+func nativeExactDrawingOrigin(axis, relativeFrom string) bool {
+	if axis == "positionH" {
+		return relativeFrom == "page" || relativeFrom == "column" || relativeFrom == "margin"
+	}
+	return relativeFrom == "page" || relativeFrom == "paragraph"
 }
 
 func nativeDrawingPosition(node *nativeXMLNode, wpNS string) (int64, string, bool) {

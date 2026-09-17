@@ -106,6 +106,8 @@ type NativeDrawingV1 struct {
 	HorizontalRelativeFrom *string              `json:"horizontal_relative_from,omitempty"`
 	VerticalRelativeFrom   *string              `json:"vertical_relative_from,omitempty"`
 	Wrap                   *string              `json:"wrap,omitempty"`
+	WrapDistanceLeftEMU    *int64               `json:"wrap_distance_left_emu,omitempty"`
+	WrapDistanceRightEMU   *int64               `json:"wrap_distance_right_emu,omitempty"`
 	TextboxText            *string              `json:"textbox_text,omitempty"`
 	TextboxFillRGB         *string              `json:"textbox_fill_rgb,omitempty"`
 	TextboxLineRGB         *string              `json:"textbox_line_rgb,omitempty"`
@@ -1095,6 +1097,20 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 	}
 	v.optionalString(drawing.HorizontalRelativeFrom, path+"/horizontal_relative_from")
 	v.optionalString(drawing.VerticalRelativeFrom, path+"/vertical_relative_from")
+	for _, distance := range []struct {
+		value *int64
+		path  string
+	}{{drawing.WrapDistanceLeftEMU, path + "/wrap_distance_left_emu"}, {drawing.WrapDistanceRightEMU, path + "/wrap_distance_right_emu"}} {
+		if distance.value == nil {
+			continue
+		}
+		if drawing.Placement != "floating" {
+			v.add("INVALID_VALUE", distance.path, "inline drawings cannot carry floating wrap distances")
+		}
+		if *distance.value < 0 || *distance.value > nativeMaxDrawingOffsetEMU {
+			v.add("OUT_OF_RANGE", distance.path, fmt.Sprintf("must be an integer from 0 through %d", nativeMaxDrawingOffsetEMU))
+		}
+	}
 	if drawing.FloatingLayer != nil {
 		v.oneOf(*drawing.FloatingLayer, path+"/floating_layer", "behind", "front")
 	}

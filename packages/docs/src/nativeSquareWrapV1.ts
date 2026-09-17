@@ -3,6 +3,7 @@ import type {NativeDocxResolvedLayoutInputV1} from './nativeResolvedLayout.js'
 import type {NativeDocxShapedLinesV1,NativeDocxLineIntervalPlanV1} from './nativeShapingLines.js'
 import type {NativeDocxPaginatedLayoutV1} from './nativePaginationV1.js'
 import {qualifyNativeDocxInlineImageV1} from './nativeImagePagePaintV1.js'
+import {nativeDocxFloatingAnchorOriginsV1,resolveNativeDocxFloatingAnchorV1} from './nativeFloatingAnchorV1.js'
 
 export function hasNativeSquareWrapV1(document:NativeDocxDocumentV1):boolean {
  return document.body.blocks.some(block=>block.paragraph?.runs.some(run=>run.drawing?.placement==='floating'&&run.drawing.wrap==='square'))
@@ -27,12 +28,20 @@ export function deriveNativeSquareWrapPlanV1(document:NativeDocxDocumentV1,resol
   for(const fragment of line.fragments)if(fragment.source_kind==='image'){if(owners.has(fragment.source_id))throw new Error('Floating anchor was placed more than once');owners.set(fragment.source_id,page.id)}
  }
  const images=new Map<string,Array<{x:number;y:number;width:number;height:number}>>()
+ const anchorOrigins=nativeDocxFloatingAnchorOriginsV1(layout)
  for(const block of document.body.blocks)for(const run of block.paragraph?.runs??[]){
   if(run.drawing?.placement!=='floating'||run.drawing.wrap!=='square')continue
   const qualified=qualifyNativeDocxInlineImageV1(document,run.id,run.drawing),page=layout.pages.find(p=>p.id===owners.get(run.id))
   if(!qualified.ok||!qualified.value.floating||!page)throw new Error('Square image lacks a qualified source-bound anchor page')
-  const image=qualified.value,f=image.floating!,rect={x:f.x_millipoints,y:f.y_millipoints,width:image.width_millipoints,height:image.height_millipoints},body=page.body_box
-  if(rect.x+rect.width>page.width_millipoints||rect.y+rect.height>page.height_millipoints)throw new Error('Square image exceeds its anchor page')
+  const origin=block.paragraph?anchorOrigins.get(block.paragraph.id):undefined
+  if(!origin)throw new Error('Square image anchoring paragraph was not placed exactly once on one page')
+  const image=qualified.value,f=image.floating!
+  const anchor=resolveNativeDocxFloatingAnchorV1(f,image.width_millipoints,page,origin),body=page.body_box
+  // The painted box must fit the page; the wrap region is that box widened by
+  // distL/distR, and only the region decides which text intervals a line has.
+  const drawn={x:anchor.x_millipoints,y:anchor.y_millipoints,width:image.width_millipoints,height:image.height_millipoints}
+  if(drawn.x<0||drawn.y<0||drawn.x+drawn.width>page.width_millipoints||drawn.y+drawn.height>page.height_millipoints)throw new Error('Square image exceeds its anchor page')
+  const rect={x:anchor.exclusion_left_millipoints,y:drawn.y,width:anchor.exclusion_right_millipoints-anchor.exclusion_left_millipoints,height:drawn.height}
   if(rect.x>body.x_millipoints&&rect.x+rect.width<body.x_millipoints+body.width_millipoints)throw new Error('Square image creates two text intervals; middle-image wrapping remains unsupported')
   const onPage=images.get(page.id)??[];onPage.push(rect);images.set(page.id,onPage)
  }

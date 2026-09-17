@@ -20,6 +20,7 @@ import { validateNativeDocxBodyPageFieldSourceV1 } from './nativeBodyPageFieldsV
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
 import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import {deriveNativeSquareWrapPlanV1, hasNativeSquareWrapV1} from './nativeSquareWrapV1.js'
+import {nativeDocxFloatingAnchorOriginsV1, resolveNativeDocxFloatingAnchorV1} from './nativeFloatingAnchorV1.js'
 import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
 import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
@@ -1012,6 +1013,9 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
   if (qualifiedTables.status !== 'qualified') return { ok: true, value: refusal(provenance, 'unsupported-source', qualifiedTables.diagnostics[0]!.scope_id, qualifiedTables.diagnostics[0]!.message) }
   const tableCommandsIndex = tableCommandsByPage(request, layout.pages, qualifiedTables.tables)
   if (!tableCommandsIndex) return { ok: true, value: refusal(provenance, 'resource-limit', documentID, 'Table paint indexing exceeded its bounded work or geometry contract') }
+  // A column/margin/paragraph-relative anchor becomes a page coordinate only
+  // once pagination has placed its paragraph, so index that placement first.
+  const anchorOrigins = nativeDocxFloatingAnchorOriginsV1(layout)
 
   const faces = new Map(request.font_manifest.faces.map((face) => [face.faceId, face]))
   const resolvedRuns = new Map(pagination.resolved_layout.runs.map((run) => [run.run_id, run]))
@@ -1131,9 +1135,15 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             const asset = mediaAssets.get(image.asset_id)
             if (!asset || asset.part_name !== image.part_name || asset.content_type !== image.content_type || asset.content_digest !== image.content_digest) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment does not exact-join one canonical content-addressed media asset') }
             if (fragment.advance_inline_millipoints !== (image.floating ? 0 : image.layout_width_millipoints) || fragment.ascent_millipoints !== (image.floating ? 0 : image.layout_ascent_millipoints) || fragment.descent_millipoints !== (image.floating ? 0 : image.layout_descent_millipoints) || fragment.line_gap_millipoints !== 0) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Image fragment geometry changed after exact EMU projection') }
-            const y = image.floating?.y_millipoints ?? baselineY - image.height_millipoints
-            const x = image.floating?.x_millipoints ?? fragmentX + image.content_offset_x_millipoints
-            if (image.floating && (x + image.width_millipoints > page.width_millipoints || y + image.height_millipoints > page.height_millipoints)) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.id, 'Floating image must fit entirely inside its anchor paragraph page') }
+            let anchored: { x_millipoints: number; y_millipoints: number } | undefined
+            if (image.floating) {
+              const origin = anchorOrigins.get(placed.paragraph_id)
+              if (!origin || origin.page_id !== page.id || page.columns.length !== 1) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.id, 'Floating anchor requires a single-column page and an anchoring paragraph placed once on this page') }
+              anchored = resolveNativeDocxFloatingAnchorV1(image.floating, image.width_millipoints, page, origin)
+            }
+            const y = anchored?.y_millipoints ?? baselineY - image.height_millipoints
+            const x = anchored?.x_millipoints ?? fragmentX + image.content_offset_x_millipoints
+            if (image.floating && (x < 0 || x + image.width_millipoints > page.width_millipoints || y + image.height_millipoints > page.height_millipoints)) return { ok: true, value: refusal(provenance, 'unsupported-source', fragment.id, 'Floating image must fit entirely inside its anchor paragraph page') }
             if (!Number.isSafeInteger(y) || y < 0) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Image placement exceeds bounded non-negative page coordinates') }
             contentCommands.push({
               ...(image.floating ? { kind: 'paint_floating_image' as const, layer: image.floating.layer, stacking_order: image.floating.stacking_order } : { kind: 'paint_inline_image' as const }), id: paintImageCommandID(placed.id, fragment.id), line_id: line.id, fragment_id: fragment.id, source_id: fragment.source_id,
@@ -1381,6 +1391,9 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
       if (!expectedTableByPageID) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'table paint source could not be bounded and indexed for replay')
       const sourceLinesByPageID = new Map<string, Array<NativeDocxPlacedHeaderFooterLineV1 | NativeDocxPlacedLineV1>>()
       const noteStoryByPageLineID = new Map<string, Map<string, NativeDocxPlacedNoteStoryV1>>()
+      // Replay resolves anchors from the paginated source independently, so a
+      // paint command that invented its own page coordinate cannot pass.
+      const replayAnchorOrigins = nativeDocxFloatingAnchorOriginsV1(request.value.paginated_layout)
       request.value.paginated_layout.pages.forEach((page, pageIndex) => {
         const shapedParagraphs = new Map((request.value.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? request.value.pagination_request.shaped_lines).paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
         const headerFooterPage = headerFooterByPageID.get(page.id)
@@ -1423,7 +1436,12 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
             if (fragment.source_kind === 'image') {
               const run = nativeRuns.get(fragment.source_id)
               const qualified = run?.drawing ? qualifyNativeDocxInlineImageV1(request.value.pagination_request.document, run.id, run.drawing) : undefined
-              if (qualified?.ok) expectedImages.push({ floating: qualified.value.floating, pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: qualified.value.floating?.x_millipoints ?? fragmentX + qualified.value.content_offset_x_millipoints, y: qualified.value.floating?.y_millipoints ?? placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
+              const replayOrigin = qualified?.ok && qualified.value.floating ? replayAnchorOrigins.get(placed.paragraph_id) : undefined
+              const replayAnchor = qualified?.ok && qualified.value.floating && replayOrigin && replayOrigin.page_id === page.id && page.columns.length === 1
+                ? resolveNativeDocxFloatingAnchorV1(qualified.value.floating, qualified.value.width_millipoints, page, replayOrigin)
+                : undefined
+              if (qualified?.ok && qualified.value.floating && !replayAnchor) add(issues, 'BROKEN_REFERENCE', '/output/pages', 'floating image anchor could not be independently resolved from the paginated source')
+              if (qualified?.ok) expectedImages.push({ floating: qualified.value.floating, pageIndex, pageID: page.id, placedLineID: placed.id, lineID: line.id, fragmentID: fragment.id, sourceID: fragment.source_id, drawingID: qualified.value.drawing_id, assetID: qualified.value.asset_id, x: replayAnchor?.x_millipoints ?? fragmentX + qualified.value.content_offset_x_millipoints, y: replayAnchor?.y_millipoints ?? placed.y_millipoints + line.ascent_millipoints - qualified.value.height_millipoints, width: qualified.value.width_millipoints, height: qualified.value.height_millipoints, transform: qualified.value.transform, crop: qualified.value.source_crop })
             }
             fragmentX += fragment.advance_inline_millipoints
           })

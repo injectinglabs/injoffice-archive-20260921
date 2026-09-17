@@ -883,8 +883,9 @@ func nativeDOCXTopologyInventory(doc *NativeDocumentV1) []string {
 					RelationshipID, MediaPart, ContentType, Name, AltText *string
 					WidthEMU, HeightEMU, XEMU, YEMU                       *int64
 					HorizontalRelativeFrom, VerticalRelativeFrom, Wrap    *string
+					WrapDistanceLeftEMU, WrapDistanceRightEMU             *int64
 					EditPolicy                                            NativeEditPolicyV1
-				}{drawing.RelationshipID, drawing.MediaPart, drawing.ContentType, drawing.Name, drawing.AltText, drawing.WidthEMU, drawing.HeightEMU, drawing.XEMU, drawing.YEMU, drawing.HorizontalRelativeFrom, drawing.VerticalRelativeFrom, drawing.Wrap, drawing.EditPolicy}))
+				}{drawing.RelationshipID, drawing.MediaPart, drawing.ContentType, drawing.Name, drawing.AltText, drawing.WidthEMU, drawing.HeightEMU, drawing.XEMU, drawing.YEMU, drawing.HorizontalRelativeFrom, drawing.VerticalRelativeFrom, drawing.Wrap, drawing.WrapDistanceLeftEMU, drawing.WrapDistanceRightEMU, drawing.EditPolicy}))
 			}
 		}
 	}
