@@ -12,7 +12,8 @@ export interface NativeDocxFloatingAnchorOriginV1 {
 export interface NativeDocxResolvedFloatingAnchorV1 {
   x_millipoints: number
   y_millipoints: number
-  /** The wrap region: the drawing box widened by distL/distR. */
+  /** The wrap region: the drawing box widened by its rotation envelope and then
+   * by distL/distR. */
   exclusion_left_millipoints: number
   exclusion_right_millipoints: number
 }
@@ -38,11 +39,15 @@ export function resolveNativeDocxFloatingAnchorV1(
   const x = horizontal + floating.offset_x_millipoints
   const y = vertical + floating.offset_y_millipoints
   if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) throw new Error('Resolved floating anchor is not an exact milli-point coordinate')
+  // wp:effectExtent states how far the drawing's rendered result reaches past
+  // wp:extent — for a rotated picture, the envelope its own rotation needs. Word
+  // excludes that envelope and then distL/distR, so the wrap region grows by
+  // both while the painted box stays exactly where wp:extent put it.
   return {
     x_millipoints: x,
     y_millipoints: y,
-    exclusion_left_millipoints: x - floating.wrap_distance_left_millipoints,
-    exclusion_right_millipoints: x + widthMilliPoints + floating.wrap_distance_right_millipoints,
+    exclusion_left_millipoints: x - floating.effect_extent_left_millipoints - floating.wrap_distance_left_millipoints,
+    exclusion_right_millipoints: x + widthMilliPoints + floating.effect_extent_right_millipoints + floating.wrap_distance_right_millipoints,
   }
 }
 

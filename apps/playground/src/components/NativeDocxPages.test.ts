@@ -109,6 +109,25 @@ describe('native document page viewer', () => {
       }
     }
   })
+  // crop-pixel.docx, measured off Word's own PDF export of it. Word clips the
+  // picture to a quadrilateral whose corners are these four points (converted
+  // from the PDF's y-up page space to the painter's y-down page space); the
+  // painted box is wp:extent and the turn is about its centre.
+  it("places an obliquely rotated picture on the corners Word's own export puts it on", () => {
+    const geometry = nativeDocxImageOrientation({ x_millipoints: 442_050, y_millipoints: 169_250, width_millipoints: 118_500, height_millipoints: 183_300, transform: { rotation_degrees: 0, rotation_60000ths: 641_099, flip_horizontal: false, flip_vertical: false } } as Parameters<typeof nativeDocxImageOrientation>[0])
+    const [a,b,c,d,e,f] = geometry.matrix as [number, number, number, number, number, number]
+    const corners = [[442_050, 169_250], [560_550, 169_250], [560_550, 352_550], [442_050, 352_550]]
+    const word = [[460_070, 159_854], [576_516, 181_825], [542_530, 361_946], [426_085, 339_975]]
+    expect(geometry).toMatchObject({ width: 118_500, height: 183_300 })
+    corners.forEach(([x, y], index) => {
+      expect(a*x!+c*y!+e).toBeCloseTo(word[index]![0]!, -1)
+      expect(b*x!+d*y!+f).toBeCloseTo(word[index]![1]!, -1)
+    })
+  })
+  it('leaves quarter turns and unrotated pictures on their exact integer matrices', () => {
+    const geometry = nativeDocxImageOrientation({ x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, transform: { rotation_degrees: 0, flip_horizontal: false, flip_vertical: false } } as Parameters<typeof nativeDocxImageOrientation>[0])
+    expect(geometry.matrix).toEqual([1, 0, 0, 1, 0, 0])
+  })
   it('clips the original source rectangle before applying image orientation', () => {
     const markup = renderToStaticMarkup(createElement(NativeDocxImage, { command: { kind: 'paint_inline_image', id: 'image:1', line_id: 'line:1', fragment_id: 'fragment:1', source_id: 'run:1', drawing_id: 'drawing:1', asset_id: 'asset:1', x_millipoints: 10, y_millipoints: 20, width_millipoints: 200, height_millipoints: 100, source_crop: { left: 50000, top: 0, right: 0, bottom: 0, unit: 'one-hundred-thousandth' }, transform: { rotation_degrees: 90, flip_horizontal: false, flip_vertical: false } }, base64: 'AA==' }))
     expect(markup).toContain('viewBox="50000 0 50000 100000"')
