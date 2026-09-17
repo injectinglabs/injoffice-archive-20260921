@@ -1614,6 +1614,25 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  // ECMA-376 17.6.19 rtlGutter binds on the right, so the gutter comes out of
+  // the right margin and the body box starts at the plain left margin. The
+  // body width is the same either way, so only the origin moves.
+  it('places the binding gutter on the right edge for a right-gutter section', () => {
+    const rightGutter = fixture()
+    rightGutter.document.sections[0]!.page = {
+      width_twips: 2_000, height_twips: 1_500, orientation: 'landscape', columns: 1, column_spacing_twips: 100, column_layout: 'equal-width', column_definitions: [{ id: 'column:section:1:0', ordinal: 0 }],
+      margins: { top_twips: 100, right_twips: 300, bottom_twips: 200, left_twips: 200, header_twips: 50, footer_twips: 50, gutter_twips: 100 },
+      rtl_gutter: true,
+    }
+    rightGutter.shaped_lines.available_width_millipoints = 70_000
+    rightGutter.shaped_lines.paragraphs[0]!.lines[0]!.available_width_millipoints = 70_000
+    const placed = paginated(rightGutter)
+    expect(placed.pages[0]).toEqual(expect.objectContaining({
+      body_box: { x_millipoints: 10_000, y_millipoints: 5_000, width_millipoints: 70_000, height_millipoints: 60_000 },
+    }))
+    expect(placed.pages[0]!.columns[0]).toEqual(expect.objectContaining({ x_millipoints: 10_000, width_millipoints: 70_000 }))
+  })
+
   it('rejects malformed request keys and cross-contract identity drift', () => {
     const unknown = { ...fixture(), css_width: 10 }
     expect(paginateNativeDocxV1(unknown)).toEqual(expect.objectContaining({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ code: 'UNKNOWN_FIELD' })]) }))
