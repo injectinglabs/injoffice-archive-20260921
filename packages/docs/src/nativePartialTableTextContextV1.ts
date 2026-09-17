@@ -32,7 +32,7 @@ export function decodeNativeDocxPartialTableTextContextsV1(source:unknown,resolv
   // state is source-bound evidence about the same bytes and neither authorizes
   // mutation, so the undiagnosed form is admitted only when the document really
   // carries no unmodeled-property diagnostic for this table's look.
-  const anchored=d.unsupported.filter(x=>x.code==='UNMODELED_TABLE_PROPERTY'&&x.scope_id===table.id&&x.anchor?.part_name===look.part_name&&x.anchor.path===look.path)
+  const anchored=d.unsupported.filter(x=>x.code==='UNMODELED_TABLE_PROPERTY'&&x.scope_id===table.id&&x.anchor!==undefined&&x.anchor.part_name===look.part_name&&x.anchor.path===look.path)
   if(!diagnosed){
    if(anchored.length!==0)throw new TypeError('Table text context omits a look diagnostic the source states')
   }else{
