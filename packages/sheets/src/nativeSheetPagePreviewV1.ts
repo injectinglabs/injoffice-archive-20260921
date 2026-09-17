@@ -61,7 +61,7 @@ export function compileNativeSheetPagePreviewV1(
  if(hostPolicy!==undefined){
   hostPolicy=snapshotNativePlainData(hostPolicy,{maxDepth:4,maxNodes:64}) as NativeSheetHostPagePolicyV1
   const copy=Object.getOwnPropertyDescriptors(hostPolicy)
-  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==8+Number(Object.hasOwn(copy,'page_order'))+Number(Object.hasOwn(copy,'fit_to_page'))||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
+  if(!copy.kind||!('value'in copy.kind)||copy.kind.value!=='explicit-host-page-policy-v1'||Object.keys(copy).length!==8+['header_inches','footer_inches','page_order','fit_to_page'].filter(key=>Object.hasOwn(copy,key)).length||Object.values(copy).some(d=>!('value'in d)))throw new TypeError('Host page choices must be explicit plain data')
   const {kind:_,...config}=hostPolicy
   settings=decodeNativeSheetPageSettingsV1([{sheet_id:pageSettings.sheet_id,sheet_part:pageSettings.sheet_part,status:'available',settings:config,warnings:['Explicit host choices']}])[0]!.settings!
  }else{
@@ -72,7 +72,14 @@ export function compileNativeSheetPagePreviewV1(
  const size=settings.paper==='A4'?[7560000,10692000]:[7772400,10058400]
  const [width,height]=settings.orientation==='landscape'?[size[1]!,size[0]!]:[size[0]!,size[1]!]
  const inch=(n:number)=>Math.round(n*914400)
- const left=inch(settings.left_inches),right=inch(settings.right_inches),top=inch(settings.top_inches),bottom=inch(settings.bottom_inches)
+ // ECMA-376 §18.3.1.62 measures every margin from the paper edge, so the header
+ // and footer bands overlap the top and bottom margins rather than adding to
+ // them: Excel's body runs from max(top, header) to max(bottom, footer). A
+ // header margin deeper than the top margin therefore takes body height away,
+ // and ignoring it silently prints more rows per page than Excel does.
+ const left=inch(settings.left_inches),right=inch(settings.right_inches)
+ const top=Math.max(inch(settings.top_inches),inch(settings.header_inches??0))
+ const bottom=Math.max(inch(settings.bottom_inches),inch(settings.footer_inches??0))
  const cw=width-left-right,ch=height-top-bottom
  let scale=settings.scale/100
  if(cw<=0||ch<=0)throw new RangeError('Page margins leave no printable area')

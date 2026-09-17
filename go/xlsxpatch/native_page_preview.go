@@ -35,11 +35,20 @@ type NativeSheetPageSettingsV1 struct {
 }
 
 // Authored page margins for a worksheet that declares no pageSetup.
+//
+// Header and footer are the authored distances from the paper edge to the
+// header and footer bands, not additions to Top and Bottom. ECMA-376 Part 1
+// §18.3.1.62 measures all six from the edge, and Excel prints the body between
+// max(Top, Header) and max(Bottom, Footer), so a header margin deeper than the
+// top margin takes body height away. They are carried here so a consumer can
+// apply that rule instead of silently printing a taller body than Excel does.
 type NativeSheetPageMarginsV1 struct {
 	Left   float64 `json:"left_inches"`
 	Right  float64 `json:"right_inches"`
 	Top    float64 `json:"top_inches"`
 	Bottom float64 `json:"bottom_inches"`
+	Header float64 `json:"header_inches"`
+	Footer float64 `json:"footer_inches"`
 }
 type NativeSheetPageConfigV1 struct {
 	Paper       string  `json:"paper"`
@@ -49,7 +58,11 @@ type NativeSheetPageConfigV1 struct {
 	Right       float64 `json:"right_inches"`
 	Top         float64 `json:"top_inches"`
 	Bottom      float64 `json:"bottom_inches"`
-	PageOrder   string  `json:"page_order,omitempty"`
+	// Authored header/footer margins, measured from the paper edge like the
+	// other four. See NativeSheetPageMarginsV1 for the body-height rule.
+	Header    float64 `json:"header_inches"`
+	Footer    float64 `json:"footer_inches"`
+	PageOrder string  `json:"page_order,omitempty"`
 	// Scale remains a compatibility value; fit mode ignores it.
 	FitToPage *NativeSheetFitToPageV1 `json:"fit_to_page,omitempty"`
 }
@@ -61,7 +74,7 @@ type NativeSheetFitToPageV1 struct {
 
 const (
 	nativePageDefaultsDisclosure     = "Paper, orientation or scale is an ECMA-376 CT_PageSetup attribute default rather than an authored workbook value; the source omits the attribute and Excel prints the same default. Authored facts and authored margins are used unchanged."
-	nativePageHeaderFooterNotPainted = "Worksheet declares headerFooter content. Header and footer text is not painted, and an overlong header that Excel would grow the top or bottom margin for is not reproduced; the authored margins are used as-is."
+	nativePageHeaderFooterNotPainted = "Worksheet declares headerFooter content. Header and footer text is not painted. The authored header and footer margins are reserved as Excel reserves them, so the body starts below max(top, header) and ends above max(bottom, footer); an overlong header that Excel would grow that reservation for is not reproduced."
 	nativePageGridlinesNotPainted    = "Worksheet declares printOptions. Printed gridlines are not painted; printed row and column headings and page centering are not defaulted and still refuse."
 	nativePagePrinterFactsIgnored    = "Printer-directed page setup attributes are not resolved: there is no printer, so printer defaults, copies, draft, black-and-white and printer DPI are ignored and 96 CSS px/in is the preview raster."
 )
@@ -95,8 +108,10 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 			return result
 		case "headerFooter":
 			// Header and footer content sits inside the header/footer margin,
-			// which ECMA-376 measures separately from the body margins, so its
-			// presence does not change the body rectangle this tier paints.
+			// which ECMA-376 measures from the paper edge like the body
+			// margins. The authored header and footer margins are reported
+			// either way, so the presence of text does not change the body
+			// rectangle beyond the reservation those margins already make.
 			headerFooterCount++
 			if headerFooterCount > 1 || child.name.Space != root.name.Space {
 				return result
@@ -194,7 +209,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 			return result
 		}
 		result.Status = "margins-only"
-		result.Margins = &NativeSheetPageMarginsV1{Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"]}
+		result.Margins = &NativeSheetPageMarginsV1{Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], Header: values["header"], Footer: values["footer"]}
 		result.Warnings = []string{"Worksheet declares authored page margins and no pageSetup element, so no paper size, orientation or scale is authored. Page geometry requires a host paper choice; this tier does not select one."}
 		if headerFooterCount == 1 {
 			result.Warnings = append(result.Warnings, nativePageHeaderFooterNotPainted)
@@ -260,7 +275,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	}
 	result.Status = "available"
 	result.Defaults = defaults
-	result.Settings = &NativeSheetPageConfigV1{Paper: paper, Orientation: orientation, Scale: scale, Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], PageOrder: order, FitToPage: fit}
+	result.Settings = &NativeSheetPageConfigV1{Paper: paper, Orientation: orientation, Scale: scale, Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], Header: values["header"], Footer: values["footer"], PageOrder: order, FitToPage: fit}
 	result.Warnings = []string{"Read-only selected-range page geometry approximation. Page settings do not select a range; repeated titles, chart paint, headers and printer behavior are not reproduced by page settings alone. No Excel fidelity claim."}
 	if fit != nil {
 		result.Warnings = append(result.Warnings, "Explicit fit-to-page dimensions apply to the selected preview range. A zero dimension is unconstrained. Percentage scale is ignored in fit mode; absent source scale is represented as 100 for compatibility.")
