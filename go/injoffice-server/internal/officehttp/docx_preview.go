@@ -409,6 +409,9 @@ func docxFontPreviewComposition(input map[string]any, data []byte) (map[string]a
 		if len(legacy.AbsentFontSizes) > 0 {
 			composition["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
 		}
+		if len(legacy.AbsentFontFamilies) > 0 {
+			composition["font_family_policy"] = map[string]any{"kind": "host-default-family-v1", "family": "Aptos"}
+		}
 	}
 	layout, _ := input["resolved_layout"].(*docxpatch.NativeResolvedLayoutInputV1)
 	if layout != nil {
@@ -426,6 +429,12 @@ func docxApproximateWorkerInput(input map[string]any, eligibility *docxpatch.Nat
 		if eligibility != nil && eligibility.Status == "eligible" && len(eligibility.AbsentFontSizes) > 0 {
 			// A declared preview-host choice, never an authored or Word default.
 			request["font_size_policy"] = map[string]any{"kind": "host-default-size-v1", "half_points": 22}
+		}
+		if eligibility != nil && eligibility.Status == "eligible" && len(eligibility.AbsentFontFamilies) > 0 {
+			// Likewise declared, never an authored face: the value was measured
+			// against Microsoft Word 16.112.4 references for packages that
+			// select no font anywhere.
+			request["font_family_policy"] = map[string]any{"kind": "host-default-family-v1", "family": "Aptos"}
 		}
 		return request
 	}

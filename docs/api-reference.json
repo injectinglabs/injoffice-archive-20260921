@@ -3484,6 +3484,16 @@
               "signature": "export declare const DEFAULT_PAGINATION_OPTIONS: PaginationOptions"
             },
             {
+              "name": "DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT",
+              "kind": "export",
+              "signature": "DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT"
+            },
+            {
+              "name": "DOCX_ABSENT_FONT_FAMILY_WARNING",
+              "kind": "export",
+              "signature": "DOCX_ABSENT_FONT_FAMILY_WARNING"
+            },
+            {
               "name": "DOCX_APPROXIMATE_CHART_FONT_CODE",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
@@ -4079,6 +4089,11 @@
               "signature": "export declare const NATIVE_DOCX_FONT_INVENTORY_VERSION: 1"
             },
             {
+              "name": "NativeDocxAbsentFontFamilyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxAbsentFontFamilyV1"
+            },
+            {
               "name": "NativeDocxAbsentFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxAbsentFontSizeV1"
@@ -4127,6 +4142,11 @@
               "name": "NativeDocxApproximateChartTitleV1",
               "kind": "type",
               "signature": "NativeDocxApproximateChartTitleV1"
+            },
+            {
+              "name": "NativeDocxApproximatedFontFamilyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxApproximatedFontFamilyV1 extends NativeDocxAbsentFontFamilyV1"
             },
             {
               "name": "NativeDocxApproximatedFontSizeV1",
@@ -4547,6 +4567,11 @@
               "name": "NativeDocxHeaderFooterRegionV1",
               "kind": "type",
               "signature": "export type NativeDocxHeaderFooterRegionV1 = 'header' | 'footer'"
+            },
+            {
+              "name": "NativeDocxHostDefaultFamilyPolicyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxHostDefaultFamilyPolicyV1"
             },
             {
               "name": "NativeDocxHostDefaultSizePolicyV1",
@@ -5634,14 +5659,29 @@
               "signature": "export declare function validateNativeDocxPaginatedLayoutSourceV1(output: NativeDocxPaginatedLayoutV1, request: NativeDocxPaginationRequestV1): NativeDocxValidationIssue[]"
             },
             {
+              "name": "validNativeDocxAbsentFontFamiliesV1",
+              "kind": "export",
+              "signature": "validNativeDocxAbsentFontFamiliesV1"
+            },
+            {
               "name": "validNativeDocxApproximatedFontFacesV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedFontFacesV1(value: unknown, source: readonly NativeDocxLatinFontFallbackV1[], packageSHA256: string): value is NativeDocxLatinFontFallbackV1[]"
             },
             {
+              "name": "validNativeDocxApproximatedFontFamiliesV1",
+              "kind": "export",
+              "signature": "validNativeDocxApproximatedFontFamiliesV1"
+            },
+            {
               "name": "validNativeDocxApproximatedImageExtentsV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
+            },
+            {
+              "name": "validNativeDocxHostDefaultFamilyPolicyV1",
+              "kind": "export",
+              "signature": "validNativeDocxHostDefaultFamilyPolicyV1"
             },
             {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
@@ -6366,6 +6406,16 @@
               "signature": "export declare function decodeNativeDocxFontSubstitutionPreviewV1(value: unknown): NativeDocxFontSubstitutionPreviewV1"
             },
             {
+              "name": "DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT",
+              "kind": "export",
+              "signature": "DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT"
+            },
+            {
+              "name": "DOCX_ABSENT_FONT_FAMILY_WARNING",
+              "kind": "export",
+              "signature": "DOCX_ABSENT_FONT_FAMILY_WARNING"
+            },
+            {
               "name": "DOCX_APPROXIMATE_CHART_FONT_CODE",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
@@ -6616,6 +6666,11 @@
               "signature": "export declare function layoutNativeDocxApproximateEquationsV1(equations: NativeDocxApproximateEquationsV1, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateEquationRuntimeV1): Promise<NativeDocxApproximateEquationLayoutsV1>"
             },
             {
+              "name": "NativeDocxAbsentFontFamilyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxAbsentFontFamilyV1"
+            },
+            {
               "name": "NativeDocxAbsentFontSizeV1",
               "kind": "type",
               "signature": "export interface NativeDocxAbsentFontSizeV1"
@@ -6664,6 +6719,11 @@
               "name": "NativeDocxApproximateChartTitleV1",
               "kind": "type",
               "signature": "NativeDocxApproximateChartTitleV1"
+            },
+            {
+              "name": "NativeDocxApproximatedFontFamilyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxApproximatedFontFamilyV1 extends NativeDocxAbsentFontFamilyV1"
             },
             {
               "name": "NativeDocxApproximatedFontSizeV1",
@@ -6881,6 +6941,11 @@
               "signature": "NativeDocxFontSubstitutionPreviewV1"
             },
             {
+              "name": "NativeDocxHostDefaultFamilyPolicyV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxHostDefaultFamilyPolicyV1"
+            },
+            {
               "name": "NativeDocxHostDefaultSizePolicyV1",
               "kind": "type",
               "signature": "export interface NativeDocxHostDefaultSizePolicyV1"
@@ -7011,9 +7076,24 @@
               "signature": "export declare function selectNativeDocxApproximateMathFaceV1(manifest: NativeFontManifest, requested: NativeDocxApproximateEquationFontV1, textFamily: string | undefined): NativeDocxApproximateMathFaceChoiceV1 | undefined"
             },
             {
+              "name": "validNativeDocxAbsentFontFamiliesV1",
+              "kind": "export",
+              "signature": "validNativeDocxAbsentFontFamiliesV1"
+            },
+            {
+              "name": "validNativeDocxApproximatedFontFamiliesV1",
+              "kind": "export",
+              "signature": "validNativeDocxApproximatedFontFamiliesV1"
+            },
+            {
               "name": "validNativeDocxApproximatedImageExtentsV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
+            },
+            {
+              "name": "validNativeDocxHostDefaultFamilyPolicyV1",
+              "kind": "export",
+              "signature": "validNativeDocxHostDefaultFamilyPolicyV1"
             },
             {
               "name": "validNativeDocxHostDefaultSizePolicyV1",
