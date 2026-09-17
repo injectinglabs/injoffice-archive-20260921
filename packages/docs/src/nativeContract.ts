@@ -259,6 +259,22 @@ export interface NativeDocxStoryV1 {
   blocks: NativeDocxBlockV1[]
 }
 
+/**
+ * Whether a story projects the shape the extractor qualifies as a reserved
+ * note separator. ECMA-376 17.11.14 makes such a story an ordinary story: its
+ * first paragraph carries the `w:separator`/`w:continuationSeparator`
+ * instruction, which the extractor consumes, so that paragraph projects no
+ * runs; Word paints whatever paragraphs follow it above the notes and writes a
+ * trailing empty one itself. Nothing but paragraphs is read there.
+ *
+ * Every consumer that has to mirror the extractor's qualification reads this
+ * one definition, so the projection cannot drift between them.
+ */
+export function nativeDocxSeparatorStoryProjectionV1(story: Pick<NativeDocxStoryV1, 'blocks'>): boolean {
+  return story.blocks.length >= 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
+    && story.blocks.every((block) => block.kind === 'paragraph' && block.paragraph !== undefined)
+}
+
 export interface NativeDocxHeaderFooterReferenceV1 {
   kind: 'default' | 'first' | 'even'
   story_id: string

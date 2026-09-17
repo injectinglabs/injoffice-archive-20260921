@@ -1,4 +1,4 @@
-import { decodeNativeDocxDocument } from "./nativeContract.js";
+import { decodeNativeDocxDocument, nativeDocxSeparatorStoryProjectionV1 } from "./nativeContract.js";
 import { decodeNativeDocxResolvedLayout } from "./nativeResolvedLayout.js";
 
 /** The single definition of the read-only host default size, one value per
@@ -173,12 +173,15 @@ export function projectNativeDocxAbsentFontSizesV1(
     ...document.value.headers.flatMap((s) => s.blocks),
     ...document.value.footers.flatMap((s) => s.blocks),
     // Raw sentinel qualification is performed by the source producer. Retain
-    // the decoded reserved identity, empty content and clean-part boundaries.
+    // the decoded reserved identity, empty instruction content and clean-part
+    // boundaries. The producer accepts paragraphs carried after the
+    // instruction one (Word writes a trailing empty paragraph itself), so this
+    // mirror admits exactly the same shape: a first paragraph with no runs and
+    // ordinary paragraphs after it.
     ...document.value.notes.filter((s) =>
       ((s.note_role === "separator" && s.native_story_id === "-1") ||
         (s.note_role === "continuation-separator" && s.native_story_id === "0")) &&
-      s.blocks.length === 1 &&
-      s.blocks[0]?.paragraph?.runs.length === 0 &&
+      nativeDocxSeparatorStoryProjectionV1(s) &&
       !document.value.unsupported.some((d) => d.scope_id === s.id || d.anchor?.part_name === s.part_name)
     ).flatMap((s) => s.blocks),
   ].flatMap((block) =>
