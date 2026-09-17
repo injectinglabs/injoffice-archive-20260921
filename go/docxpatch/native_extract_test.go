@@ -1206,3 +1206,44 @@ func TestExtractNativeDocumentModelsRightBindingGutter(t *testing.T) {
 		})
 	}
 }
+
+// HYPERLINK_SEMANTICS declares that the relationship is preserve-only, not that
+// content is missing, and the approximate omitted-content discloser does not
+// read it. A hyperlink child this extractor cannot turn into a run therefore
+// needs a code of its own, or it would disappear with nothing said about it.
+func TestExtractNativeDocumentV1DeclaresHyperlinkContentItCannotExtract(t *testing.T) {
+	parts := cloneNativeParts(transitionalNativeParts())
+	parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"],
+		`<w:hyperlink r:id="rLink"><w:r><w:t>relative link</w:t></w:r></w:hyperlink>`,
+		`<w:hyperlink r:id="rLink"><w:bookmarkStart w:id="9" w:name="anchor"/><w:bookmarkEnd w:id="9"/><w:r><w:t>relative link</w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>7</w:t></w:r></w:fldSimple></w:hyperlink>`, 1)
+	doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	text := strings.Builder{}
+	for _, run := range doc.Body.Blocks[0].Paragraph.Runs {
+		if run.Text != nil {
+			text.WriteString(*run.Text)
+		}
+	}
+	if !strings.Contains(text.String(), "relative link") {
+		t.Fatalf("hyperlink runs must still be extracted: %q", text.String())
+	}
+	if strings.Contains(text.String(), "7") {
+		t.Fatalf("a field inside a hyperlink is not modeled and must not be painted: %q", text.String())
+	}
+	if !hasUnsupportedCode(doc, "HYPERLINK_SEMANTICS") || !hasUnsupportedCode(doc, "UNMODELED_PARAGRAPH_CONTENT") {
+		t.Fatalf("dropped hyperlink content was not declared: %#v", doc.Unsupported)
+	}
+	dropped := 0
+	for _, unsupported := range doc.Unsupported {
+		if unsupported.Code == "UNMODELED_PARAGRAPH_CONTENT" {
+			dropped++
+		}
+	}
+	// Exactly the fldSimple: the closed empty bookmark pair paints nothing and
+	// drops nothing, so it must not raise an omission of its own.
+	if dropped != 1 {
+		t.Fatalf("UNMODELED_PARAGRAPH_CONTENT count = %d, want 1: %#v", dropped, doc.Unsupported)
+	}
+}

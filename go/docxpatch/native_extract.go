@@ -2364,12 +2364,26 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "hyperlink"}):
 			unsafe = true
 			extractor.addUnsupported("HYPERLINK_SEMANTICS", "hyperlinks", paragraphID, partName, child, "Visible hyperlink text is exposed, while relationship and field semantics remain preserve-only")
-			for _, nested := range directNativeChildren(child, extractor.wordNS, "r") {
-				extracted, _, err := extractor.extractRunNode(partName, paragraphID, nested)
-				if err != nil {
-					return nil, false, err
+			for nestedIndex := 0; nestedIndex < len(child.Children); nestedIndex++ {
+				nested := child.Children[nestedIndex]
+				switch {
+				case nested.Name == (xml.Name{Space: extractor.wordNS, Local: "bookmarkStart"}) && nativeExactEmptyBookmark(child.Children[nestedIndex:], extractor.wordNS):
+					// A closed, empty bookmark paints nothing and drops nothing.
+					nestedIndex++
+				case nested.Name == (xml.Name{Space: extractor.wordNS, Local: "r"}):
+					extracted, _, err := extractor.extractRunNode(partName, paragraphID, nested)
+					if err != nil {
+						return nil, false, err
+					}
+					runs = append(runs, extracted...)
+				default:
+					// HYPERLINK_SEMANTICS says the relationship is preserve-only; it does
+					// not say content is missing. A child this loop cannot turn into a run
+					// IS dropped, so it is declared under the code the approximate
+					// omitted-content discloser reports rather than left to the hyperlink
+					// diagnostic, which that discloser does not read.
+					extractor.addUnsupported("UNMODELED_PARAGRAPH_CONTENT", "run-structure", paragraphID, partName, nested, "Hyperlink content outside the v1 run subset is preserved verbatim")
 				}
-				runs = append(runs, extracted...)
 			}
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "commentRangeStart"}), child.Name == (xml.Name{Space: extractor.wordNS, Local: "commentRangeEnd"}):
 			nativeID, ok := nativeAttr(child, extractor.wordNS, "id")
