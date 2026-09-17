@@ -41,6 +41,14 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'PARTIAL_PARAGRAPH_PROPERTIES',
   'PARTIAL_RUN_PROPERTIES',
   'PICTURE_GRAPHIC_REQUIRED',
+  // A picture the extractor refuses at the transform gate is a drawing this
+  // tier does not model, exactly like PICTURE_GRAPHIC_REQUIRED and
+  // UNMODELED_DRAWING: the run carries no drawing, nothing in the document
+  // model represents the picture, and there is no image to paint. Omitting it
+  // and painting the paragraph's remaining runs is the same decision already
+  // taken for every other unmodelled drawing; refusing the whole page instead
+  // produced no preview at all.
+  'PICTURE_TRANSFORM_PRESERVED',
   'UNMODELED_DRAWING',
   'UNRESOLVED_COMMENT_RANGE',
   'UNRESOLVED_COMMENT_REFERENCE',
