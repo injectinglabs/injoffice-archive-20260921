@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { NativeFontManifest } from '@injoffice/font-metrics/layout'
@@ -58,8 +59,11 @@ import {
 } from './nativePagePaintV1.js'
 import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_PAINT_REFUSED_WARNING, nativeDocxApproximatePaintRefusalReason } from './nativeApproximationV1.js'
 import { DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
+import { prepareNativeDocxPagePaintMediaAssetsV1 } from './nativeImagePagePaintV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}` as `sha256:${string}`
+const PNG_BYTES = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'))
+const PNG_DIGEST = `sha256:${createHash('sha256').update(PNG_BYTES).digest('hex')}` as `sha256:${string}`
 const RELATIONSHIPS_HASH = `sha256:${'b'.repeat(64)}`
 const SETTINGS_PART = 'word/settings.xml'
 const RELATIONSHIPS_PART = 'word/_rels/document.xml.rels'
@@ -468,6 +472,86 @@ describe('native DOCX page-paint v1', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
     expect(decodeNativeDocxApproximatePagePreviewV1({ ...approximate, content_status: 'complete', omitted_content: [], omitted_content_total: 0, unpainted_pages: [], reasons: approximate.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING) }).ok).toBe(false)
     expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused' } })
+  })
+  it('paints a shaped paragraph whose unqualified drawing the approximate lane omitted, and still refuses strict', async () => {
+    // FigureAsLabelPicture.docx / graphic-object-fliph.docx: a caption paragraph whose
+    // picture the exact inline-image slice refuses (cx=2751151 EMU is not an exact
+    // milli-point extent), so shaping drops the run and pagination defers it. The
+    // remaining glyphs must still paint, with the drop disclosed.
+    const request = fixture()
+    const pagination = request.pagination_request
+    const settings = pagination.pagination_settings
+    const paragraph = pagination.document.body.blocks[0]!.paragraph!
+    const drawingRun = { kind: 'drawing' as const, id: 'run:picture', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', 181, 189), drawing: { id: 'drawing:picture', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]', 182, 188), placement: 'inline' as const, width_emu: 2_751_151, height_emu: 2_751_151, relationship_id: 'rId7', media_part: 'word/media/image1.png', content_type: 'image/png', edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'DRAWING_EFFECTS_UNSUPPORTED', message: 'Preserve the original drawing.', preservation: 'refuse-mutation' as const } } } }
+    paragraph.runs = [...paragraph.runs, drawingRun]
+    pagination.document.passthrough_parts = [...pagination.document.passthrough_parts, { part_name: 'word/media/image1.png', content_type: 'image/png', byte_length: 16, sha256: HASH, policy: 'preserve-verbatim' }]
+    pagination.resolved_layout.runs = [...pagination.resolved_layout.runs, { run_id: drawingRun.id, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } }]
+    // The drawing run has no shaped fragment: nativeShapingLines dropped it here.
+    pagination.shaped_lines.diagnostics = [{ code: 'drawing-layout-unsupported', severity: 'unsupported', scope_id: paragraph.id, source_id: drawingRun.id, message: 'Picture EMU extent is not exactly representable in integer milli-points within the geometry bound' }]
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(pagination.shaped_lines)
+    const strictLayout = paginateNativeDocxV1(pagination)
+    expect(strictLayout).toMatchObject({ ok: true, value: { status: 'refused' } })
+    request.paginated_layout = strictLayout.ok ? strictLayout.value : request.paginated_layout
+    request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(request.paginated_layout)
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const approximate = await compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    expect(approximate).toMatchObject({ status: 'painted', fidelity: 'approximate', content_status: 'partial' })
+    expect(approximate.pages).toHaveLength(1)
+    expect(approximate.pages[0]!.commands.some(command => command.kind === 'fill_glyph_path')).toBe(true)
+    expect(approximate.omitted_content).toContainEqual(expect.objectContaining({ code: 'drawing-layout-unsupported', origin: 'shaping', category: 'drawing', scope_id: drawingRun.id, count: 1 }))
+    expect(approximate.reasons).toContain(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    // The exemption is the approximate lane's alone.
+    expect(await compileNativeDocxPagePaintV1(request, new FixtureProvider())).toMatchObject({ ok: true, value: { status: 'refused', pages: [] } })
+  })
+  it('still refuses an approximate coverage gap on a drawing it could have painted', async () => {
+    // The exemption is not "a drawing may go missing in approximate mode": it is
+    // only the drop the approximate lane itself makes. A picture or inline textbox
+    // this build can paint must still cover exactly one visual fragment.
+    const approximatePaint = async (extra: unknown[]) => {
+      const request = fixture()
+      const pagination = request.pagination_request
+      const settings = pagination.pagination_settings
+      const paragraph = pagination.document.body.blocks[0]!.paragraph!
+      paragraph.runs = [...paragraph.runs, ...extra as typeof paragraph.runs]
+      pagination.document.passthrough_parts = [...pagination.document.passthrough_parts, { part_name: 'word/media/image1.png', content_type: 'image/png', byte_length: PNG_BYTES.byteLength, sha256: PNG_DIGEST, policy: 'preserve-verbatim' }]
+      request.media_assets = prepareNativeDocxPagePaintMediaAssetsV1(pagination.document, [{ part_name: 'word/media/image1.png', content_type: 'image/png', content_digest: PNG_DIGEST, bytes: PNG_BYTES }])
+      request.integrity.media_assets_sha256 = nativeDocxPagePaintMediaAssetsSha256V1(request.media_assets)
+      pagination.resolved_layout.runs = [...pagination.resolved_layout.runs, ...(extra as Array<{ id: string }>).map(run => ({ run_id: run.id, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } }))]
+      settings.profile = 'unsupported'
+      delete settings.compatibility_mode
+      settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      request.integrity.shaped_lines_sha256 = nativeDocxPagePaintShapedLinesSha256V1(pagination.shaped_lines)
+      const strictLayout = paginateNativeDocxV1(pagination)
+      request.paginated_layout = strictLayout.ok ? strictLayout.value : request.paginated_layout
+      request.integrity.paginated_layout_sha256 = nativeDocxPagePaintPaginatedLayoutSha256V1(request.paginated_layout)
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      return compileNativeDocxApproximatePagePreviewV1(request, eligibility, new FixtureProvider())
+    }
+    const policy = { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'DRAWING_EFFECTS_UNSUPPORTED', message: 'Preserve the original drawing.', preservation: 'refuse-mutation' as const } }
+    // cx=2751151 EMU is not an exact milli-point extent, so this picture is omitted and
+    // its paragraph is not bidi-replayable - which is what lets the qualified picture
+    // beside it reach the paint coverage gate with no fragment of its own.
+    const unqualified = { kind: 'drawing' as const, id: 'run:omitted', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]', 181, 185), drawing: { id: 'drawing:omitted', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:drawing[1]', 182, 184), placement: 'inline' as const, width_emu: 2_751_151, height_emu: 2_751_151, relationship_id: 'rId7', media_part: 'word/media/image1.png', content_type: 'image/png', edit_policy: policy } }
+    const qualified = { kind: 'drawing' as const, id: 'run:picture', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]', 186, 189), drawing: { id: 'drawing:picture', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:drawing[1]', 187, 188), placement: 'inline' as const, width_emu: 914_400, height_emu: 914_400, relationship_id: 'rId7', media_part: 'word/media/image1.png', content_type: 'image/png', edit_policy: policy } }
+    const textbox = { kind: 'drawing' as const, id: 'run:textbox', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]', 186, 189), drawing: { id: 'drawing:textbox', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:drawing[1]', 187, 188), placement: 'inline' as const, width_emu: 914_400, height_emu: 914_400, textbox_text: 'Box', edit_policy: policy } }
+    const picture = await approximatePaint([unqualified, qualified])
+    expect(picture.status).toBe('refused')
+    expect(picture.diagnostics.map(entry => entry.message).join(' ')).toContain('A painted native image must have exactly one visual fragment')
+    const box = await approximatePaint([textbox])
+    expect(box.status).toBe('refused')
+    expect(box.diagnostics.map(entry => entry.message).join(' ')).toContain('A painted native image must have exactly one visual fragment')
+    // A qualified picture that lost its fragment is also rejected one layer earlier:
+    // its paragraph stays bidi-replayable, so the pagination request never validates.
+    const alone = fixture()
+    const soleParagraph = alone.pagination_request.document.body.blocks[0]!.paragraph!
+    soleParagraph.runs = [...soleParagraph.runs, qualified]
+    alone.pagination_request.document.passthrough_parts = [...alone.pagination_request.document.passthrough_parts, { part_name: 'word/media/image1.png', content_type: 'image/png', byte_length: 16, sha256: HASH, policy: 'preserve-verbatim' }]
+    alone.pagination_request.resolved_layout.runs = [...alone.pagination_request.resolved_layout.runs, { run_id: qualified.id, paragraph_id: soleParagraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } }]
+    expect(paginateNativeDocxV1(alone.pagination_request)).toMatchObject({ ok: false, issues: [expect.objectContaining({ message: 'fragments must cover every visible native control and U+FFFC image source atom exactly once' })] })
   })
   it('omits a comment/drawing paragraph that failed shaping and still paints a sibling paragraph', async () => {
     const request = fixture()
