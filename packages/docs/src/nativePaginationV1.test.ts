@@ -1954,6 +1954,47 @@ describe('native DOCX pagination v1', () => {
     expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(2)
   })
 
+  // An empty <w:sectPr/> states no page size and no page margins, so Word lays
+  // the section out on its own default page box - the same page a body with no
+  // w:sectPr at all gets. Word's own PDF export of listWithLgl.docx confirms
+  // it: MediaBox [0 0 612 792] is Letter, and the two list-marker origins land
+  // on exactly 72 pt and 108 pt with a w:firstLine of 720 twips, so the left
+  // margin is 1440 twips. The exemption holds only while the exposed geometry
+  // is value-for-value that default.
+  it('defers absent schema-optional page size and page margins only at the Word default geometry', () => {
+    const defaultPage = () => ({
+      width_twips: 12_240, height_twips: 15_840, orientation: 'portrait' as const, columns: 1, column_spacing_twips: 720, column_layout: 'equal-width' as const,
+      column_definitions: [{ id: 'column:section:1:0', ordinal: 0 }],
+      margins: { top_twips: 1_440, right_twips: 1_440, bottom_twips: 1_440, left_twips: 1_440, header_twips: 720, footer_twips: 720, gutter_twips: 0 },
+    })
+    const absent = (request: ReturnType<typeof fixture>) => {
+      request.document.sections[0]!.page = defaultPage()
+      request.shaped_lines.available_width_millipoints = 468_000
+      for (const line of request.shaped_lines.paragraphs[0]!.lines) line.available_width_millipoints = 468_000
+      request.document.unsupported.push({
+        id: 'unsupported:missing-page-size', code: 'MISSING_PAGE_SIZE', capability: 'sections', scope_id: 'section:1',
+        preservation: 'refuse-mutation', message: 'A present section-properties element requires explicit page size for exact pagination geometry',
+      })
+      request.document.unsupported.push({
+        id: 'unsupported:missing-page-margins', code: 'MISSING_PAGE_MARGINS', capability: 'sections', scope_id: 'section:1',
+        preservation: 'refuse-mutation', message: 'A present section-properties element requires explicit page margins for exact pagination geometry',
+      })
+      return request
+    }
+    const value = paginated(absent(fixture()))
+    expect(value.pages[0]!.body_box).toEqual(expect.objectContaining({ width_millipoints: 468_000, height_millipoints: 648_000 }))
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic' && (entry.source_code === 'MISSING_PAGE_SIZE' || entry.source_code === 'MISSING_PAGE_MARGINS'))).toHaveLength(2)
+
+    // Negative: geometry that is not the Word default must keep refusing, so a
+    // derived or partially authored page box can never ride in on the record.
+    const wrongSize = absent(fixture())
+    wrongSize.document.sections[0]!.page.height_twips = 16_840
+    expect(paginateNativeDocxV1(wrongSize)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'MISSING_PAGE_SIZE' })]) }) }))
+    const wrongMargins = absent(fixture())
+    wrongMargins.document.sections[0]!.page.margins.right_twips = 1_008
+    expect(paginateNativeDocxV1(wrongMargins)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'MISSING_PAGE_MARGINS' })]) }) }))
+  })
+
   // A content control around a table row's cells: the extractor reads the same
   // w:tc elements through it, so the wrapper itself adds no column and no
   // advance. Anything else in the row keeps refusing.
