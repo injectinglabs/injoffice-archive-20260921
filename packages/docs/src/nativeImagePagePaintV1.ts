@@ -316,15 +316,23 @@ export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocu
   if (!Array.isArray(values) || values.length > DOCX_INLINE_IMAGE_LIMITS.maxAssets) throw new RangeError(`authoritative media assets exceed ${DOCX_INLINE_IMAGE_LIMITS.maxAssets} entries`)
   const qualified = collectNativeDocxQualifiedInlineImagesV1(document).flatMap((entry) => entry.ok ? [entry.value] : [])
   const required = new Map(qualified.map((entry) => [canonicalPart(entry.part_name), entry]))
-  if (values.length !== required.size) throw new TypeError('authoritative media assets must exactly cover every qualified unique inline picture part')
   const output: NativeDocxPagePaintMediaAssetV1[] = []
+  const supplied = new Set<string>()
   const seen = new Set<string>()
   let total = 0
   for (const value of values) {
     if (!value || typeof value !== 'object' || typeof value.part_name !== 'string' || typeof value.content_type !== 'string' || !(value.bytes instanceof Uint8Array) || !SHA256.test(value.content_digest)) throw new TypeError('authoritative media asset is malformed')
     const key = canonicalPart(value.part_name)
+    if (supplied.has(key)) throw new TypeError('authoritative media asset part is supplied more than once')
+    supplied.add(key)
     const image = required.get(key)
-    if (!image || seen.has(key) || value.part_name !== image.part_name || asciiLower(value.content_type) !== image.content_type || value.content_digest !== image.content_digest || value.bytes.byteLength !== image.byte_length) throw new TypeError('authoritative media asset does not exact-join one qualified native picture')
+    // A supplier reads raster parts off the package, not off this module's
+    // qualification predicate, so it legitimately offers parts no qualified
+    // inline picture names — a numbering picture bullet, or a drawing this
+    // module refuses. Those parts paint nothing and are dropped here; only the
+    // qualified ones are joined and emitted. Coverage is still exact.
+    if (!image) continue
+    if (value.part_name !== image.part_name || asciiLower(value.content_type) !== image.content_type || value.content_digest !== image.content_digest || value.bytes.byteLength !== image.byte_length) throw new TypeError('authoritative media asset does not exact-join one qualified native picture')
     if (value.bytes.byteLength === 0 || value.bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxAssetBytes || total + value.bytes.byteLength > DOCX_INLINE_IMAGE_LIMITS.maxTotalBytes) throw new RangeError('authoritative media bytes exceed the bounded page-paint budget')
     const owned = Uint8Array.from(value.bytes)
     if (digest(owned) !== value.content_digest) throw new TypeError('authoritative media bytes do not match their content digest')
@@ -344,6 +352,7 @@ export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocu
     seen.add(key)
     total += owned.byteLength
   }
+  if (seen.size !== required.size) throw new TypeError('authoritative media assets must cover every qualified unique inline picture part')
   return output.sort((left, right) => compareNativeCodeUnits(canonicalPart(left.part_name), canonicalPart(right.part_name)))
 }
 
