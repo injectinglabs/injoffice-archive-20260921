@@ -52,7 +52,7 @@ describe('source body rotation',()=>{
   })
   it('refuses malformed angles, frames and exhausted request budgets',()=>{
     for(const angle of [-0,0.5,NaN,Infinity,2147483648,-2147483649])expect(()=>sourceBodyRotation(frame,[],angle,new SourceAffineBudget())).toThrow()
-    expect(()=>sourceBodyRotation({...frame,cx:0},[],0,new SourceAffineBudget())).toThrow()
+    expect(()=>sourceBodyRotation({...frame,cx:-1},[],0,new SourceAffineBudget())).toThrow()
     const budget=new SourceAffineBudget();budget.charge(1_000_000)
     expect(()=>sourceBodyRotation(frame,[],0,budget)).toThrow(/budget/)
   })

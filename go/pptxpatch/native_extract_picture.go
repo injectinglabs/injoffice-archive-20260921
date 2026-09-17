@@ -362,11 +362,11 @@ func validateNativePictureTransform(node *nativeXMLNode, dialect nativeExtractDi
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	cx, err := requiredNativePositiveInt64(ext, "", "cx")
+	cx, err := requiredNativeNonnegativeInt64(ext, "", "cx")
 	if err != nil {
 		return NativeTransform{}, err
 	}
-	cy, err := requiredNativePositiveInt64(ext, "", "cy")
+	cy, err := requiredNativeNonnegativeInt64(ext, "", "cy")
 	if err != nil {
 		return NativeTransform{}, err
 	}

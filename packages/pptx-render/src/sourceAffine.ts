@@ -53,7 +53,10 @@ export function identitySourceAffine():QualifiedSourceAffine{return matrix([term
 export function sourceAffine(frame:SourceAffineFrame,child?:Pick<SourceAffineFrame,'x'|'y'|'cx'|'cy'>,budget=new SourceAffineBudget()):QualifiedSourceAffine {
  budget.charge(256)
  for(const value of [frame.x,frame.y,frame.cx,frame.cy,...(child?[child.x,child.y,child.cx,child.cy]:[])])integer(value)
- if(frame.cx<=0||frame.cy<=0||child&&(child.cx<=0||child.cy<=0))throw new RangeError('Affine extents must be positive')
+ // A leaf frame may be degenerate: ST_PositiveCoordinate admits 0, and a
+ // cx="0" or cy="0" box is how DrawingML authors a straight line. Only a
+ // child coordinate space is a divisor, so only it must stay positive.
+ if(frame.cx<0||frame.cy<0||child&&(child.cx<=0||child.cy<=0))throw new RangeError('Affine extents must be nonnegative and child extents positive')
  const angle=frame.rotation??0
  if(!Number.isInteger(angle)||angle<0||angle>=21600000)throw new RangeError('Affine rotation must be canonical DrawingML angle')
  if(frame.flipH!==undefined&&typeof frame.flipH!=='boolean'||frame.flipV!==undefined&&typeof frame.flipV!=='boolean')throw new TypeError('Affine flips must be boolean')

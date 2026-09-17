@@ -274,6 +274,15 @@ function checkCoordinate(value: number, path: string, budget: Budget, positive =
   }
 }
 
+// ST_PositiveCoordinate is minInclusive 0, so a degenerate extent is valid
+// DrawingML: a cy="0" straight connector is how a horizontal line is authored.
+// A zero extent bounds an empty region; it never widens what may be painted.
+function checkExtent(value: number, path: string, budget: Budget): void {
+  if (!Number.isSafeInteger(value) || value < 0 || value > budget.maxCoordinateEmu) {
+    throw new RenderCompileError('render.coordinateBudget', path, `extent must be within 0..${budget.maxCoordinateEmu} EMU`)
+  }
+}
+
 function boundedStroke(
   stroke: Readonly<{ color: string; widthEmu: number; cap?: 'flat' | 'round' | 'square'; join?: 'round' | 'bevel' | 'miter'; dash?: 'solid'; miterLimit?: number }>,
   path: string,
@@ -724,8 +733,8 @@ function elementBase(element: NativeElement, zIndex: number, budget: Budget, cli
   const { x, y, cx, cy } = element.transform
   checkCoordinate(x, `$.elements.${element.id}.transform.x`, budget)
   checkCoordinate(y, `$.elements.${element.id}.transform.y`, budget)
-  checkCoordinate(cx, `$.elements.${element.id}.transform.cx`, budget, true)
-  checkCoordinate(cy, `$.elements.${element.id}.transform.cy`, budget, true)
+  checkExtent(cx, `$.elements.${element.id}.transform.cx`, budget)
+  checkExtent(cy, `$.elements.${element.id}.transform.cy`, budget)
   return {
     sourceElementId: element.id,
     sourceKind: element.kind,
