@@ -69,6 +69,8 @@ const BUFFER_FLAG_NAMES = Object.freeze(['bot', 'eot', 'produce-unsafe-to-concat
 const BUFFER_FLAGS = hb.BufferFlag.BOT | hb.BufferFlag.EOT | hb.BufferFlag.PRODUCE_UNSAFE_TO_CONCAT
 const REQUIRED_TABLES = ['cmap', 'head', 'hhea', 'hmtx', 'maxp'] as const
 const NONEMPTY_TABLES = new Set<string>([...REQUIRED_TABLES, 'glyf', 'loca'])
+/** Tables that bind outlines or metrics to a variation axis position. `STAT` is deliberately absent: see preflightSfnt. */
+const VARIABLE_ONLY_TABLES = ['avar', 'cvar', 'fvar', 'gvar', 'HVAR', 'MVAR', 'VVAR'] as const
 const PROVIDER_ID = 'injoffice.harfbuzzjs'
 const EXPECTED_WASM_BYTES = 421_964
 const MAX_ABS_DESIGN_VALUE = 1_000_000_000
@@ -303,7 +305,13 @@ function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | und
   for (const required of REQUIRED_TABLES) if (!tables.has(required)) return `required sfnt table ${required} is missing`
   const hasGlyf = tables.has('glyf') && tables.has('loca')
   if (!hasGlyf || tables.has('CFF ') || tables.has('CFF2')) return 'font does not contain the qualified TrueType glyf/loca outline flavor'
-  for (const variationTable of ['avar', 'cvar', 'fvar', 'gvar', 'HVAR', 'MVAR', 'STAT', 'VVAR']) {
+  // Variation tables make a face's outlines and metrics depend on an axis position the
+  // v1 contract never carries, so they stay refused. `STAT` is not one of them: it is the
+  // style-attributes table, it names where a face sits in its family's design space, and it
+  // is shipped on static faces that are members of a variable family (every Word 16 Aptos
+  // face carries `STAT` and no `fvar`). It contributes no outlines, no advances and no
+  // line metrics, so a `STAT`-only face is fully determined by its `glyf`/`hmtx`/`hhea`.
+  for (const variationTable of VARIABLE_ONLY_TABLES) {
     if (tables.has(variationTable)) return `variable-font table ${variationTable} is outside the fixed-font v1 contract`
   }
   const head = tables.get('head')!
