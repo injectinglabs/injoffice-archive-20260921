@@ -185,31 +185,36 @@ func TestNativeApproximationRecordsAuthoringOnlySettingsAsOneGroupedFact(t *test
 		t.Fatalf("Word 2010 authoring extras must be approximately eligible: %#v", approx)
 	}
 	group := nativeApproximationFact(approx.ApproximatedSettings, "authoringSettings")
-	if group == nil || group.Path != "/w:settings[1]/w:removePersonalInformation[1]" || len(group.Values) != 12 {
+	// The drawing-grid, header-shape, proofing and style-pane members of this
+	// markup are strict-neutral now, so they carry no diagnostic to join and are
+	// not disregarded facts. Only settings strict still refuses stay in the group.
+	if group == nil || group.Path != "/w:settings[1]/w:removePersonalInformation[1]" || len(group.Values) != 5 {
 		t.Fatalf("authoring settings must be one grouped fact anchored at the first diagnosed member: %#v", approx.ApproximatedSettings)
 	}
+	for _, neutral := range []string{"activeWritingStyle", "hdrShapeDefaults", "displayHorizontalDrawingGridEvery", "removeDateAndTime", "stylePaneFormatFilter"} {
+		if _, present := group.Values["/w:settings[1]/w:"+neutral+"[1]"]; present {
+			t.Fatalf("strict-neutral %s must not be disclosed as disregarded: %#v", neutral, group.Values)
+		}
+	}
 	for path, expected := range map[string]string{
-		"/w:settings[1]/w:attachedTemplate[1]":                  `r:id="rId1"`,
-		"/w:settings[1]/w:activeWritingStyle[1]":                `w:appName="MSWord" w:checkStyle="1" w:dllVersion="131078" w:lang="en-US" w:nlCheck="1" w:vendorID="64"`,
-		"/w:settings[1]/w:hdrShapeDefaults[1]":                  ``,
-		"/w:settings[1]/w:displayHorizontalDrawingGridEvery[1]": `w:val="0"`,
+		"/w:settings[1]/w:attachedTemplate[1]":          `r:id="rId1"`,
+		"/w:settings[1]/w:removePersonalInformation[1]": ``,
+		"/w:settings[1]/w:noPunctuationKerning[1]":      ``,
 	} {
 		if group.Values[path] != expected {
 			t.Fatalf("member %s retained %q, want %q", path, group.Values[path], expected)
 		}
 	}
-	if _, present := group.Values["/w:settings[1]/w:activeWritingStyle[2]"]; present {
-		t.Fatal("the duplicate writing style belongs to the duplicate group, not the authoring group")
-	}
-	duplicates := nativeApproximationFact(approx.ApproximatedSettings, "duplicateSettings")
-	if duplicates == nil || duplicates.Path != "/w:settings[1]/w:activeWritingStyle[2]" || len(duplicates.Values) != 1 {
-		t.Fatalf("authoring-only duplicates must be one grouped fact: %#v", approx.ApproximatedSettings)
+	// The repeated w:activeWritingStyle is the schema's own per-language shape,
+	// so strict no longer calls it a duplicate and there is nothing to group.
+	if nativeApproximationFact(approx.ApproximatedSettings, "duplicateSettings") != nil {
+		t.Fatalf("schema-repeatable proofing registrations are not duplicates: %#v", approx.ApproximatedSettings)
 	}
 	if fact := nativeApproximationFact(approx.ApproximatedSettings, "applyBreakingRules"); fact == nil || fact.Path != "/w:settings[1]/w:compat[1]/w:applyBreakingRules[1]" || len(fact.Values) != 0 {
 		t.Fatalf("legacy compat options must be typed not-applied facts: %#v", approx.ApproximatedSettings)
 	}
-	if len(approx.ApproximatedSettings) != 6 {
-		t.Fatalf("expected authoring, duplicate, applyBreakingRules and three flag facts: %#v", approx.ApproximatedSettings)
+	if len(approx.ApproximatedSettings) != 5 {
+		t.Fatalf("expected authoring, applyBreakingRules and three flag facts: %#v", approx.ApproximatedSettings)
 	}
 }
 
@@ -224,7 +229,7 @@ func TestNativeApproximationDuplicateSettingsMustAgreeOrBeAuthoringOnly(t *testi
 		{"agreeing rsidRoot", `<w:rsids><w:rsidRoot w:val="00C1654B"/><w:rsidRoot w:val="00C1654B"/></w:rsids>`, true},
 		{"disagreeing rsidRoot", `<w:rsids><w:rsidRoot w:val="00C1654B"/><w:rsidRoot w:val="00C1654C"/></w:rsids>`, false},
 		{"agreeing note sentinel", `<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/><w:footnote w:id="0"/></w:footnotePr>`, true},
-		{"disagreeing writing style", `<w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="64" w:dllVersion="1" w:checkStyle="1"/><w:activeWritingStyle w:appName="MSWord" w:lang="fr-FR" w:vendorID="8" w:dllVersion="1" w:checkStyle="1"/>`, true},
+		{"disagreeing authoring-only setting", `<w:noPunctuationKerning/><w:noPunctuationKerning w:val="0"/>`, true},
 		{"disagreeing container", `<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr><w:footnotePr><w:footnote w:id="-1"/></w:footnotePr>`, false},
 		{"repeated compat", `<w:compat/>`, false},
 	} {
@@ -413,8 +418,7 @@ func TestNativeApproximationKeepsGenuinelyUnsupportedSettingsRefused(t *testing.
 // so a fact at [2] would turn a disclosed refusal into a decode error.
 func TestNativeApproximationDuplicatedKnownExtrasNeverBecomeIndexedFacts(t *testing.T) {
 	compat := `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`
-	markup := `<w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="64" w:dllVersion="1" w:checkStyle="1"/><w:activeWritingStyle w:appName="MSWord" w:lang="en-US" w:vendorID="8" w:dllVersion="1" w:checkStyle="1"/>` +
-		`<w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>` + compat
+	markup := `<w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:themeFontLang w:val="en-CA" w:eastAsia=""/><w:decimalSymbol w:val="."/><w:decimalSymbol w:val="."/>` + compat
 	_, approx := requireNativeApproximationDisclosure(t, nativeApproximationTestDOCX(t, markup))
 	if approx.Status != "eligible" {
 		t.Fatalf("agreeing duplicates of known extras must stay eligible: %#v", approx)
@@ -431,10 +435,10 @@ func TestNativeApproximationDuplicatedKnownExtrasNeverBecomeIndexedFacts(t *test
 		t.Fatalf("a strict-neutral first decimalSymbol has no diagnostic and no fact: %#v", approx.ApproximatedSettings)
 	}
 	group := nativeApproximationFact(approx.ApproximatedSettings, "duplicateSettings")
-	if group == nil || len(group.Values) != 3 {
-		t.Fatalf("all three duplicates belong to the duplicate group: %#v", approx.ApproximatedSettings)
+	if group == nil || len(group.Values) != 2 {
+		t.Fatalf("both duplicates belong to the duplicate group: %#v", approx.ApproximatedSettings)
 	}
-	for _, path := range []string{"/w:settings[1]/w:activeWritingStyle[2]", "/w:settings[1]/w:themeFontLang[2]", "/w:settings[1]/w:decimalSymbol[2]"} {
+	for _, path := range []string{"/w:settings[1]/w:themeFontLang[2]", "/w:settings[1]/w:decimalSymbol[2]"} {
 		if _, present := group.Values[path]; !present {
 			t.Fatalf("duplicate %s missing from the group: %#v", path, group.Values)
 		}
