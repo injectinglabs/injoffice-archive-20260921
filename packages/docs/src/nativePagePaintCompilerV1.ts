@@ -98,7 +98,7 @@ import {
 } from './nativeImagePagePaintV1.js'
 export { DOCX_INLINE_IMAGE_LIMITS } from './nativeImagePagePaintV1.js'
 export type { NativeDocxAuthoritativeMediaAssetV1 } from './nativeImagePagePaintV1.js'
-import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
+import { qualifyNativeDocxSectionColumnsV1, type NativeDocxQualifiedSectionGeometryV1 } from './nativeSectionColumnsV1.js'
 
 export const DOCX_PAGE_PAINT_COMPILER_PROTOCOL = 'injoffice.docx.page-paint-compiler'
 export const DOCX_PAGE_PAINT_COMPILER_VERSION = 1 as const
@@ -629,45 +629,72 @@ function twips(value: number): number {
   return value * 50
 }
 
+function sectionColumnGeometries(document: NativeDocxDocumentV1): Array<NativeDocxQualifiedSectionGeometryV1 | undefined> {
+  return document.sections.map((section) => {
+    const qualified = qualifyNativeDocxSectionColumnsV1(section)
+    return qualified.ok ? qualified.value : undefined
+  })
+}
+
 function shapingDimensions(document: NativeDocxDocumentV1, settings: NativeDocxPaginationSettingsV1): { width: number; tab: number } {
   if (document.sections.length === 0) throw new TypeError('native document has no section geometry')
-  const geometries = document.sections.map((section) => qualifyNativeDocxSectionColumnsV1(section))
-  if (geometries.some((entry) => !entry.ok)) throw new TypeError('native section column geometry is not exactly representable')
-  const widths = geometries.flatMap((entry, index) => entry.ok ? entry.value.columns.map((column, ordinal) => ({ width: column.width_millipoints, section: document.sections[index]!.id, ordinal })) : [])
-  const width = widths[0]?.width ?? 0
-  // Every body paragraph is shaped once, at one available width. A document
-  // whose sections disagree on that width - a two-column section beside a
-  // single-column one, or two sections with different margins - would need one
-  // shaping pass per width, which this preview does not implement. The refusal
-  // is correct; it names which section and which column disagree so the caller
-  // can act on it, instead of restating the limitation as an opaque sentence.
-  const divergent = widths.find((candidate) => candidate.width !== width)
-  if (divergent) {
-    throw new NativeDocxPreviewRefusalV1('SECTION_SHAPING_WIDTHS_UNSUPPORTED', divergent.section,
-      `Native preview shapes every body paragraph at one width; section ${widths[0]!.section} column ${widths[0]!.ordinal} is ${width} milli-points and section ${divergent.section} column ${divergent.ordinal} is ${divergent.width}`)
-  }
+  const geometries = sectionColumnGeometries(document)
+  if (geometries.some((entry) => entry === undefined)) throw new TypeError('native section column geometry is not exactly representable')
+  // Every story is shaped against one request-level width. That width is the
+  // first section's column, which is what an unmapped paragraph - a table cell
+  // measured at its own intrinsic width, a note separator, a story no section
+  // references - falls back to. Sections that disagree no longer refuse: each
+  // of their body paragraphs is mapped to its own section's column width below,
+  // and pagination independently re-derives that width from the shaped record.
+  const width = geometries[0]!.columns[0]!.width_millipoints
   const tab = twips(settings.default_tab_stop_twips)
   if (width <= 0 || tab <= 0) throw new RangeError('native page width or default tab stop is non-positive')
   return { width, tab }
 }
 
+/**
+ * Word wraps a body paragraph at the column width of the section that owns it,
+ * and a header/footer story at the body width of the sections that reference
+ * it. Both are per-paragraph shaping widths, which the line core already takes.
+ * A section whose geometry is not exactly representable contributes nothing, so
+ * its paragraphs keep the request-level width and pagination refuses the
+ * geometry itself rather than silently shaping at a width it cannot state.
+ */
 function shapingParagraphWidths(
   document: NativeDocxDocumentV1,
   tableWidths: ReadonlyMap<string, number>,
 ): Map<string, number> {
-  const widths = new Map(tableWidths)
+  const widths = new Map<string, number>()
+  const geometries = sectionColumnGeometries(document)
+  const indexes = new Map(document.body.blocks.map((block, index) => [block.id, index]))
+  document.sections.forEach((section, index) => {
+    const geometry = geometries[index]
+    const start = indexes.get(section.starts_at_block_id)
+    const end = document.sections[index + 1] ? indexes.get(document.sections[index + 1]!.starts_at_block_id) : document.body.blocks.length
+    if (!geometry || start === undefined || end === undefined) return
+    for (const block of document.body.blocks.slice(start, end)) if (block.paragraph) widths.set(block.paragraph.id, geometry.columns[0]!.width_millipoints)
+  })
+  // A table cell's intrinsic width is measured against the cell, not the column.
+  for (const [paragraphID, width] of tableWidths) widths.set(paragraphID, width)
   const relatedStories = [...document.headers, ...document.footers]
   if (relatedStories.length === 0) return widths
-  const bodyWidths = document.sections.map((section) => {
-    const qualified = qualifyNativeDocxSectionColumnsV1(section)
-    if (!qualified.ok) throw new TypeError(`native section ${section.id} has no exact header/footer body geometry`)
-    return qualified.value.body_width_millipoints
+  const bodyWidths = document.sections.map((section, index) => {
+    const geometry = geometries[index]
+    if (!geometry) throw new TypeError(`native section ${section.id} has no exact header/footer body geometry`)
+    return geometry.body_width_millipoints
   })
-  const bodyWidth = bodyWidths[0]
-  if (!bodyWidth || bodyWidths.some((candidate) => candidate !== bodyWidth)) throw new TypeError('header/footer stories require one exact shared section body width')
-  for (const story of relatedStories) for (const block of story.blocks) {
-    if (block.paragraph) widths.set(block.paragraph.id, bodyWidth)
-    if (block.table) for (const row of block.table.rows) for (const cell of row.cells) for (const paragraph of cell.paragraphs) widths.set(paragraph.id, bodyWidth)
+  const fallback = bodyWidths[0]
+  if (!fallback) throw new TypeError('header/footer stories require at least one exact section body width')
+  for (const story of relatedStories) {
+    const referencing = document.sections.flatMap((section, index) =>
+      [...section.header_refs, ...section.footer_refs].some((reference) => reference.story_id === story.id) ? [bodyWidths[index]!] : [])
+    const distinct = [...new Set(referencing)]
+    if (distinct.length > 1) throw new TypeError(`header/footer story ${story.id} is referenced by sections with different body widths`)
+    const storyWidth = distinct[0] ?? fallback
+    for (const block of story.blocks) {
+      if (block.paragraph) widths.set(block.paragraph.id, storyWidth)
+      if (block.table) for (const row of block.table.rows) for (const cell of row.cells) for (const paragraph of cell.paragraphs) widths.set(paragraph.id, storyWidth)
+    }
   }
   return widths
 }
