@@ -122,9 +122,15 @@ The manifest is operator-owned configuration, never an HTTP request field:
 Use separate entries for normal/bold (400/700) and normal/italic faces.
 Only exact referenced family/style matches are loaded; embedded document faces
 take precedence. Missing fonts and digest mismatches refuse rendering instead
-of substituting a system font. The current host provider accepts standalone
-TTF/OTF files, at most 32 configured faces, 16 MiB per file and 64 MiB total
-including embedded resources. Operators must have permission to use the fonts;
+of substituting a system font. A face inside a TrueType/OpenType collection
+(`.ttc`/`.otc`) adds `"collectionIndex": <0-based face index>`; the whole
+collection file is still pinned by one `sha256`, and the pinned preflight
+refuses an index that names no face in the collection as well as a
+`collectionIndex` on a standalone sfnt. The current host provider accepts
+standalone TTF/OTF files and TTC/OTC collections, at most 32 configured faces,
+16 MiB per standalone file, 64 MiB per collection file and 64 MiB total
+including embedded resources; faces declared from the same collection file
+count its bytes once. Operators must have permission to use the fonts;
 this configuration does not bundle or redistribute them. Host fonts affect only
 the read-only native preview, not document bytes or mutation permissions.
 

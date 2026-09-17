@@ -234,9 +234,38 @@ func nativeFormatIdeographicCounter(value int, format string) (string, bool) {
 	return "", false
 }
 
+// nativeFormatEnclosedCircleCounter renders ECMA-376 §17.18.59
+// `decimalEnclosedCircle`: the counter as a decimal digit drawn inside a
+// circle. Unicode encodes that series as one precomposed character per value,
+// CIRCLED DIGIT ONE (U+2460) through CIRCLED NUMBER TWENTY (U+2473), and stops
+// there: twenty-one has no enclosed form in that block. The modelled range is
+// therefore one through twenty, the exact set Unicode supplies. A larger
+// counter is left unformatted rather than approximated with a composed circle
+// or a bare digit, because neither is the character the format names.
+func nativeFormatEnclosedCircleCounter(value int) (string, bool) {
+	if value < 1 || value > 20 {
+		return "", false
+	}
+	return string(rune(0x2460 + value - 1)), true
+}
+
 func nativeFormatNumberingCounter(value int, format string) (string, bool) {
 	switch format {
 	case "decimal":
+		return strconv.Itoa(value), true
+	case "decimalEnclosedCircle":
+		return nativeFormatEnclosedCircleCounter(value)
+	case "decimalZero":
+		// ECMA-376 §17.18.59 decimalZero is the decimal counter padded to two
+		// digits. Word's own export of listWithLgl.docx prints its first
+		// decimalZero counter as "01", so the padding is a leading zero below ten
+		// and nothing above it.
+		if value < 0 {
+			return "", false
+		}
+		if value < 10 {
+			return "0" + strconv.Itoa(value), true
+		}
 		return strconv.Itoa(value), true
 	case "lowerLetter":
 		return nativeFormatAlphabetic(value, false)
@@ -251,7 +280,12 @@ func nativeFormatNumberingCounter(value int, format string) (string, bool) {
 	}
 }
 
-func (resolver *nativeLayoutResolver) resolveLevelText(instance *nativeNumberingInstance, abstract *nativeAbstractNumbering, currentLevel int, format, template string, values map[int]int) (string, []NativeResolvedCounterValueV1, error) {
+// resolveLevelText expands one lvlText. legal carries w:isLgl (ECMA-376
+// 17.9.10) for the level being rendered: Word's own export of listWithLgl.docx
+// prints "Sect 1.01" for a level whose lvlText is "Sect %1.%2" over an
+// upperRoman parent and a decimalZero self, so isLgl re-renders the inherited
+// parent counters as plain decimal and leaves the level's own format alone.
+func (resolver *nativeLayoutResolver) resolveLevelText(instance *nativeNumberingInstance, abstract *nativeAbstractNumbering, currentLevel int, format, template string, values map[int]int, legal bool) (string, []NativeResolvedCounterValueV1, error) {
 	if template == "" || !utf8.ValidString(template) || strings.ContainsAny(template, "\x00\r\n") {
 		return "", nil, fmt.Errorf("missing or invalid lvlText")
 	}
@@ -295,6 +329,9 @@ func (resolver *nativeLayoutResolver) resolveLevelText(instance *nativeNumbering
 			return "", nil, fmt.Errorf("lvlText references a missing numbering level")
 		}
 		_, referencedFormat, _, _, _ := nativeNumberingDefaults(definition)
+		if legal && referenced < currentLevel {
+			referencedFormat = "decimal"
+		}
 		formatted, ok := nativeFormatNumberingCounter(value, referencedFormat)
 		if !ok {
 			return "", nil, fmt.Errorf("lvlText references an unsupported or out-of-range numbering format")
@@ -376,7 +413,7 @@ func (resolver *nativeLayoutResolver) materializeNativeNumbering(instance *nativ
 			alignmentDefaulted: level.alignment == nil,
 		}
 	}
-	resolvedText, counterValues, err := resolver.resolveLevelText(instance, abstract, levelIndex, format, template, values)
+	resolvedText, counterValues, err := resolver.resolveLevelText(instance, abstract, levelIndex, format, template, values, level.legal)
 	if err != nil {
 		state.values[instance.id] = previousValues
 		state.instanceStarted[instance.id] = previousStarted

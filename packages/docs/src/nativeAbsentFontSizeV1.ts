@@ -175,8 +175,7 @@ export function projectNativeDocxAbsentFontSizesV1(
     // Raw sentinel qualification is performed by the source producer. Retain
     // the decoded reserved identity, empty content and clean-part boundaries.
     ...document.value.notes.filter((s) =>
-      ((s.note_role === "separator" && s.native_story_id === "-1") ||
-        (s.note_role === "continuation-separator" && s.native_story_id === "0")) &&
+      (s.note_role === "separator" || s.note_role === "continuation-separator") &&
       s.blocks.length === 1 &&
       s.blocks[0]?.paragraph?.runs.length === 0 &&
       !document.value.unsupported.some((d) => d.scope_id === s.id || d.anchor?.part_name === s.part_name)

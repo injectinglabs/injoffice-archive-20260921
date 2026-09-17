@@ -89,9 +89,11 @@ describe('native DOCX ideographic marker formats on the resolved-layout wire', (
     }
   }
   it('accepts every modeled system and still rejects one that is not modeled', () => {
-    for (const format of ['ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2']) {
+    for (const format of ['ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2', 'decimalEnclosedCircle', 'decimalZero']) {
       expect(decodeNativeDocxResolvedLayout(layout(format)), format).toMatchObject({ ok: true })
     }
-    expect(decodeNativeDocxResolvedLayout(layout('ideographDigital'))).toMatchObject({ ok: false })
+    for (const format of ['ideographDigital', 'decimalEnclosedCircleChinese']) {
+      expect(decodeNativeDocxResolvedLayout(layout(format)), format).toMatchObject({ ok: false })
+    }
   })
 })

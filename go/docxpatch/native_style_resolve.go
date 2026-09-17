@@ -324,6 +324,7 @@ type nativeNumberingLevel struct {
 	p              nativeParagraphProperties
 	r              nativeRunProperties
 	picture        bool
+	legal          bool
 	restart        *int
 	numTab         *int64
 	styleLinks     []string
@@ -1006,8 +1007,10 @@ func (resolver *nativeLayoutResolver) loadNumbering(partName string) error {
 					resolver.addDiagnostic("FOREIGN_NUMBERING_MARKUP", resolver.doc.DocumentID, partName, property, "Foreign abstract numbering metadata is preserved")
 					continue
 				}
-				if property.Name.Local == "nsid" || property.Name.Local == "tmpl" {
-					// Stable authoring/template metadata does not alter counter or marker semantics.
+				if property.Name.Local == "nsid" || property.Name.Local == "tmpl" || property.Name.Local == "name" {
+					// Stable authoring/template metadata does not alter counter or marker
+					// semantics. w:name (ECMA-376 17.9.11) is the authoring label Word shows
+					// in its list-library UI; it selects no counter, format, text or geometry.
 					continue
 				}
 				if property.Name.Local == "multiLevelType" {
@@ -1136,7 +1139,7 @@ func (resolver *nativeLayoutResolver) parseNumberingLevel(partName string, node 
 			resolver.addDiagnostic("FOREIGN_NUMBERING_LEVEL", scopeID, partName, child, "Foreign numbering-level metadata is preserved")
 			continue
 		}
-		if child.Name.Local == "start" || child.Name.Local == "numFmt" || child.Name.Local == "lvlText" || child.Name.Local == "suff" || child.Name.Local == "lvlJc" || child.Name.Local == "pPr" || child.Name.Local == "rPr" || child.Name.Local == "lvlPicBulletId" || child.Name.Local == "lvlRestart" {
+		if child.Name.Local == "start" || child.Name.Local == "numFmt" || child.Name.Local == "lvlText" || child.Name.Local == "suff" || child.Name.Local == "lvlJc" || child.Name.Local == "pPr" || child.Name.Local == "rPr" || child.Name.Local == "lvlPicBulletId" || child.Name.Local == "lvlRestart" || child.Name.Local == "isLgl" {
 			if seen[child.Name.Local] {
 				return nil, fmt.Errorf("docxpatch: native style resolution: duplicate %s in numbering level %d", child.Name.Local, levelValue)
 			}
@@ -1209,7 +1212,19 @@ func (resolver *nativeLayoutResolver) parseNumberingLevel(partName string, node 
 				continue
 			}
 			level.styleLinks = append(level.styleLinks, value)
-		case "isLgl", "legacy":
+		case "isLgl":
+			value, present := nativeAttr(child, resolver.wordNS, "val")
+			if !present {
+				level.legal = true
+				continue
+			}
+			enabled, valid := nativeLexicalOnOff(value)
+			if !valid {
+				resolver.addDiagnostic("UNMODELED_NUMBERING_LEVEL", scopeID, partName, child, "This numbering-level semantic is preserved and not guessed")
+				continue
+			}
+			level.legal = enabled
+		case "legacy":
 			resolver.addDiagnostic("UNMODELED_NUMBERING_LEVEL", scopeID, partName, child, "This numbering-level semantic is preserved and not guessed")
 		default:
 			resolver.addDiagnostic("UNMODELED_NUMBERING_LEVEL", scopeID, partName, child, "This numbering-level metadata is preserved and not interpreted")
@@ -1874,7 +1889,7 @@ func nativeCanonicalDecimalID(raw string) (string, bool) {
 
 func nativeOrdinaryNumberFormat(value string) bool {
 	switch value {
-	case "decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman":
+	case "decimal", "decimalZero", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman", "decimalEnclosedCircle":
 		return true
 	default:
 		// The ideographic systems share one table with the counter formatter;
@@ -2226,6 +2241,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("WEB_LAYOUT_HIDDEN_RUN_PRESERVED", scopeID, partName, child, "Web Layout view hiding is preserved and not applied; paginated layout draws this run, so it moves no line and no page")
 			} else {
 				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
+			}
+		case "bdr":
+			if nativeAbsentRunBorder(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("RUN_BORDER_ABSENT_PRESERVED", scopeID, partName, child, "A run border that states no border is preserved and not applied; it paints no stroke and reserves no space, so it moves no glyph, line or page")
+			} else {
+				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Only a run border that states no border is proven layout-neutral; a painted run border reserves space this tier does not model")
 			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)

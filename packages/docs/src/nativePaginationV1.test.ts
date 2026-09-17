@@ -24,6 +24,7 @@ import {
   type NativeDocxResolvedLayoutInputV1,
 } from './nativeResolvedLayout.js'
 import {
+  DOCX_SHAPED_LINES_LIMITS,
   DOCX_SHAPED_LINES_PROTOCOL,
   DOCX_SHAPED_LINES_VERSION,
   twipsToMilliPoints,
@@ -330,6 +331,17 @@ function paginated(request: NativeDocxPaginationRequestV1) {
   const decoded = decodeNativeDocxPaginatedLayoutForRequest(result.value, request)
   if (!decoded.ok) throw new Error(JSON.stringify(decoded.issues))
   return result.value
+}
+
+/** Turns a fixture into one the approximate tier accepts, and its eligibility. */
+function approximateSettings(request: NativeDocxPaginationRequestV1): void {
+  request.pagination_settings.profile = 'unsupported'
+  delete request.pagination_settings.compatibility_mode
+  request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+}
+
+function approximateEligibility(request: NativeDocxPaginationRequestV1) {
+  return { protocol: 'injoffice.docx.approximation-eligibility' as const, version: 1 as const, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
 }
 
 function noteAnchor(partName: string, path: string, start: number, end: number) {
@@ -1461,7 +1473,7 @@ describe('native DOCX pagination v1', () => {
   })
 
   it('omits an unshaped picture or partial-run paragraph in approximate layout and keeps the sibling paragraph', () => {
-    for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PARTIAL_RUN_PROPERTIES'] as const) {
+    for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PICTURE_TRANSFORM_PRESERVED', 'PARTIAL_RUN_PROPERTIES'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const dropped = request.document.body.blocks[0]!.paragraph!
       dropped.runs = []
@@ -1512,6 +1524,30 @@ describe('native DOCX pagination v1', () => {
     // it like any other run, so the fact is recorded and the paragraph paints;
     // a malformed leaf is recorded as an unmodelled property and still refuses.
     for (const code of ['WEB_LAYOUT_HIDDEN_RUN_PRESERVED', 'UNMODELED_RUN_PROPERTY'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'UNMODELED_RUN_PROPERTY') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+    }
+  })
+
+  it('paints a run whose border states no border', () => {
+    // A w:bdr naming ST_Border none or nil asks for no border: it paints no
+    // stroke and reserves no space, so the run occupies the box it would
+    // without the element and the paragraph paints. A border that does paint
+    // is recorded as an unmodelled property and still refuses.
+    for (const code of ['RUN_BORDER_ABSENT_PRESERVED', 'UNMODELED_RUN_PROPERTY'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const marked = request.document.body.blocks[0]!.paragraph!
       request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
@@ -1918,6 +1954,27 @@ describe('native DOCX pagination v1', () => {
     expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(2)
   })
 
+  // A content control around a table row's cells: the extractor reads the same
+  // w:tc elements through it, so the wrapper itself adds no column and no
+  // advance. Anything else in the row keeps refusing.
+  it('defers a content control whose cells the extractor read through, and refuses other row content', () => {
+    const request = fixture()
+    request.document.unsupported.push({
+      id: 'unsupported:wrapped-row-cells', code: 'WRAPPED_ROW_CELLS', capability: 'table-structure', scope_id: 'story:body',
+      preservation: 'refuse-mutation', message: 'Row cells wrapped in a content control are laid out; the control itself is preserved verbatim',
+    })
+    const value = paginated(request)
+    expect(value.status).toBe('paginated')
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic' && entry.source_code === 'WRAPPED_ROW_CELLS')).toHaveLength(1)
+
+    const other = fixture()
+    other.document.unsupported.push({
+      id: 'unsupported:row-content', code: 'UNMODELED_ROW_CONTENT', capability: 'table-structure', scope_id: 'story:body',
+      preservation: 'refuse-mutation', message: 'Row content outside direct cells is preserved verbatim',
+    })
+    expect(paginateNativeDocxV1(other)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported' })]) }) }))
+  })
+
   // A body-level w:sectPr the extractor omitted because it governs no block
   // reaches no page: nothing falls in its range. Pagination reads the sections
   // that do hold blocks, and the omission stays visible as a deferred record.
@@ -2027,6 +2084,63 @@ describe('native DOCX pagination v1', () => {
     expect(area.every((entry) => entry.section_id === 'section:1' && entry.column_id === 'column:section:1:0' && entry.column_ordinal === 0 && entry.lines.every((line) => line.section_id === entry.section_id && line.column_id === entry.column_id && line.column_ordinal === entry.column_ordinal))).toBe(true)
     expect(area[0]!.top_millipoints).toBeGreaterThanOrEqual(first.pages[0]!.lines.at(-1)!.y_millipoints + first.pages[0]!.lines.at(-1)!.height_millipoints)
     expect(area.at(-1)!.top_millipoints + area.at(-1)!.height_millipoints).toBe(first.pages[0]!.body_box.y_millipoints + first.pages[0]!.body_box.height_millipoints)
+  })
+
+  it('lays out the paragraphs a separator story carries after its instruction', () => {
+    // ECMA-376 17.11.14 lets a reserved separator story hold paragraphs after
+    // the instruction one; Word writes a trailing empty paragraph itself and
+    // paints authored text there above the notes. They are measured and placed
+    // like any other note paragraph, so the note area grows by their height.
+    // The strict footnote-flow lane still requires a one-paragraph separator,
+    // so this is measured on the approximate tier that reaches note placement.
+    const carriedFixture = (carry: boolean) => {
+      const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+      addFootnote(request, '9', '1')
+      approximateSettings(request)
+      if (!carry) return request
+      const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+      const instruction = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!
+      const carried = paragraph('paragraph:separator:text', 90)
+      carried.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]', 51, 59)
+      carried.runs[0]!.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]/w:r[1]', 52, 58)
+      separator.blocks.push({ kind: 'paragraph', id: carried.id, paragraph: carried })
+      request.resolved_layout.paragraphs.push({ paragraph_id: carried.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+      request.resolved_layout.runs.push({ run_id: carried.runs[0]!.id, paragraph_id: carried.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+      request.shaped_lines.paragraphs.push({ ...structuredClone(instruction), paragraph_id: carried.id, lines: [{ ...structuredClone(instruction.lines[0]!), id: `line:${carried.id}:0` }] })
+      return request
+    }
+    const plainRequest = carriedFixture(false)
+    const plain = paginateNativeDocxApproximateLegacyV1(plainRequest, approximateEligibility(plainRequest)).layout
+    const request = carriedFixture(true)
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(plain.status).toBe('paginated')
+    expect(output.status).toBe('paginated')
+    if (plain.status !== 'paginated' || output.status !== 'paginated') return
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    const placed = output.pages[0]!.note_stories!.find((entry) => entry.note_role === 'separator')!
+    expect(placed.lines.map((line) => line.paragraph_id)).toEqual([separator.blocks[0]!.id, 'paragraph:separator:text'])
+    const before = plain.pages[0]!.note_stories!.find((entry) => entry.note_role === 'separator')!
+    const instruction = plainRequest.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!
+    expect(placed.height_millipoints).toBe(before.height_millipoints + instruction.lines[0]!.line_height_millipoints)
+  })
+
+  it('refuses a separator story whose carried paragraph has no shaped projection', () => {
+    // A carried separator paragraph is laid out like any other note paragraph,
+    // so it has to arrive with its exact shaped lines; an unshaped one has no
+    // measurable height and cannot be placed.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    const carried = paragraph('paragraph:separator:unshaped', 91)
+    carried.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]', 51, 59)
+    carried.runs[0]!.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]/w:r[1]', 52, 58)
+    separator.blocks.push({ kind: 'paragraph', id: carried.id, paragraph: carried })
+    request.resolved_layout.paragraphs.push({ paragraph_id: carried.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+    request.resolved_layout.runs.push({ run_id: carried.runs[0]!.id, paragraph_id: carried.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(output.status).toBe('refused')
+    expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'note-structure-unsupported' })]))
   })
 
   it('reserves final body paragraph after-spacing before admitting footnotes', () => {
@@ -2766,13 +2880,38 @@ describe('joint body and continued footnote flow',()=>{
   const output=coverage(input(8,3))
   expect(output.pages.flatMap(p=>p.note_stories?.filter(n=>n.note_role==='content').map(n=>n.number)??[])).toEqual([1,1,1,2,3])
  })
- it('handles large reference groups and retains the existing request traversal budget',()=>{
+ it('measures a pagination request against the composite budget, not the gateway per-structure one',()=>{
+  // Shaped lines dominate a pagination request: a text document with a small source
+  // model produces a shaped-lines value many times larger than the document contract.
+  // Applying the gateway's single-structure DOCX_NATIVE_LIMITS.maxNodes to the union
+  // refused documents the collection limits declare legal, so the request carries its
+  // own budget and each part keeps its own.
+  expect(DOCX_PAGINATION_LIMITS.maxRequestNodes).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(DOCX_SHAPED_LINES_LIMITS.maxNodes).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  const count=(v:unknown):number=>{let n=1;if(Array.isArray(v))for(const e of v)n+=count(e);else if(v&&typeof v==='object')for(const k of Object.keys(v as object))n+=count((v as Record<string,unknown>)[k]);return n}
+  const request=fixture({lineCounts:Array.from({length:100},()=>100),bodyHeight:200_000_000,lineHeight:10_000})
+  expect(count(request.document)).toBeLessThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(count(request.shaped_lines)).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(count(request)).toBeGreaterThan(DOCX_NATIVE_LIMITS.maxNodes)
+  expect(decodeNativeDocxShapedLines(request.shaped_lines).ok).toBe(true)
+  const output=paginateNativeDocxV1(request)
+  expect(output.ok).toBe(true)
+  expect(output.ok&&output.value.status).toBe('paginated')
+  expect(output.ok&&output.value.pages[0]!.lines).toHaveLength(10_000)
+ })
+ it('handles large reference groups under the composite request budget, not the gateway per-structure one',()=>{
   const make=(count:number)=>{const r=fixture({lineCounts:Array.from({length:count},()=>1),bodyHeight:20_000_000});for(let i=1;i<=count;i++)addFootnote(r,String(i),String(i));return r}
   const output=paginated(make(200))
   expect(output.pages).toHaveLength(1)
   expect(output.pages[0]!.lines).toHaveLength(200)
   expect(output.pages[0]!.note_stories!.slice(1).map(n=>n.number)).toEqual(Array.from({length:200},(_,i)=>i+1))
-  expect(paginateNativeDocxV1(make(1000))).toMatchObject({ok:false,issues:expect.arrayContaining([expect.objectContaining({code:'LIMIT_EXCEEDED'})])})
+  // 1,000 references traverse ~201,000 request values. That is past the gateway's
+  // 100,000 per-structure budget and inside the composite request budget, so the
+  // request no longer refuses a note count the contract declares legal (10,000).
+  expect(paginateNativeDocxV1(make(1000)).ok).toBe(true)
+  // The component budgets still apply: the document contract's own unchanged
+  // traversal budget refuses first, under its own path.
+  expect(paginateNativeDocxV1(make(2000))).toMatchObject({ok:false,issues:expect.arrayContaining([expect.objectContaining({code:'LIMIT_EXCEEDED',message:`document traversal exceeds ${DOCX_NATIVE_LIMITS.maxNodes} values`})])})
  })
  it('splits later body text while keeping every paragraph slice in source order',()=>{
   const output=coverage(continuedFootnoteFixture(6))

@@ -3,7 +3,7 @@ import {isAbsolute} from 'node:path'
 import {createHash} from 'node:crypto'
 import {createNativeDocxEmbeddedFontResolverV1, type NativeDocxPagePaintPrepareInputV1, type NativeDocxHostFontsV1} from '@injoffice/docs/native-page-paint-compiler'
 import {decodeNativeDOCXFontInventoryV1} from '@injoffice/docs/native-page-paint-compiler'
-import {inspectHarfBuzzFontMetricsV1} from '@injoffice/font-metrics/harfbuzz'
+import {HARFBUZZ_SHAPER_LIMITS,inspectHarfBuzzFontMetricsV1} from '@injoffice/font-metrics/harfbuzz'
 import type {FontResource, NativeFontManifest, ResolvedFontFace} from '@injoffice/font-metrics/layout'
 import {decodeExplicitFontPolicyV1,selectExplicitFontV1} from '@injoffice/font-metrics/layout'
 import {
@@ -24,19 +24,36 @@ function file(path:string,max:number):Uint8Array {
  if(bytes.length!==stat.size||bytes.length>max)throw new Error('Host font file changed while loading')
  return bytes
 }
+/** A TTC/OTC holds every face of a family group in one file, so a collection
+ * carries a larger per-file bound than a standalone sfnt. The cumulative
+ * budget is unchanged and each distinct file still counts exactly once. */
+const STANDALONE_FONT_BYTES=16*1024*1024
+const COLLECTION_FONT_BYTES=HARFBUZZ_SHAPER_LIMITS.maxFontBytes
 
 export type HostFontLoadMode=boolean|'approximate'
 /** Additional exact face identity a same-bytes sidecar asks the host to load (never a substitution). */
 export interface HostFontReference {family:string;weight:number;style:'normal'|'italic'}
+/** One operator-configured face: a standalone sfnt file, or one face of a TTC/OTC collection named by collectionIndex. */
+interface HostFontConfiguredFace {family:string;weight:number;style:'normal'|'italic';sha256:`sha256:${string}`;path:string;collectionIndex?:number}
 export type NativeDocxLoadedHostFontsV1=NativeDocxHostFontsV1 & {resources:Map<string,FontResource>;approximateSubstitutions?:NativeDocxHostFontApproximateSubstitutionV1[]}
 
-function admitConfiguredFace(index:number,f:{family:string,weight:number,style:'normal'|'italic',sha256:`sha256:${string}`,path:string},faces:NativeFontManifest['faces'][number][],resources:Map<string,FontResource>,occupied:Set<string>,total:number):number{
- const bytes=file(f.path,16*1024*1024);total+=bytes.length
- if(total>64*1024*1024||digest(bytes)!==f.sha256)throw new Error('Host font digest or cumulative byte budget failed')
+function admitConfiguredFace(index:number,f:HostFontConfiguredFace,faces:NativeFontManifest['faces'][number][],resources:Map<string,FontResource>,occupied:Set<string>,total:number,loaded:Map<string,Uint8Array>):number{
+ // A collection file admitted for a second face is already budgeted and
+ // digest-checked; re-reading it would double-count the same bytes.
+ let bytes=loaded.get(f.sha256)
+ if(!bytes){
+  bytes=file(f.path,f.collectionIndex===undefined?STANDALONE_FONT_BYTES:COLLECTION_FONT_BYTES);total+=bytes.length
+  if(total>64*1024*1024||digest(bytes)!==f.sha256)throw new Error('Host font digest or cumulative byte budget failed')
+  loaded.set(f.sha256,bytes)
+ }
+ const collection=f.collectionIndex===undefined?{}:{collectionIndex:f.collectionIndex}
  const faceId=`host-font-${index}-${f.sha256.slice(7,23)}`
- const face:ResolvedFontFace={faceId,family:f.family,weight:f.weight,style:f.style,stretch:100,sourceKind:'host',resourceId:faceId,contentDigest:f.sha256,resolution:'exact',matchedFamily:f.family}
- resources.set(faceId,{face,bytes,metrics:inspectHarfBuzzFontMetricsV1({bytes,contentDigest:f.sha256})})
- faces.push({faceId,family:f.family,weight:f.weight,style:f.style,stretch:100,source:{kind:'host',resourceId:faceId,contentDigest:f.sha256}})
+ const face:ResolvedFontFace={faceId,family:f.family,weight:f.weight,style:f.style,stretch:100,sourceKind:'host',resourceId:faceId,contentDigest:f.sha256,...collection,resolution:'exact',matchedFamily:f.family}
+ // The pinned HarfBuzz preflight is the only authority on the ttcf wrapper: it
+ // refuses an index outside the collection and a collectionIndex on a
+ // standalone sfnt, and reports that face's own design metrics.
+ resources.set(faceId,{face,bytes,metrics:inspectHarfBuzzFontMetricsV1({bytes,contentDigest:f.sha256,...collection})})
+ faces.push({faceId,family:f.family,weight:f.weight,style:f.style,stretch:100,source:{kind:'host',resourceId:faceId,contentDigest:f.sha256,...collection}})
  occupied.add(key(f.family,f.weight,f.style))
  return total
 }
@@ -69,14 +86,17 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
  for(const mapping of policy?.mappings??[])if(needed.has(key(mapping.sourceFamily,mapping.weight,mapping.style)))needed.add(key(mapping.targetFamily,mapping.weight,mapping.style))
  const seen=new Set<string>();let total=[...resources.values()].reduce((n,r)=>n+r.bytes.length,0)
  if(total>64*1024*1024)throw new Error('Host font cumulative byte budget failed')
- const configured:{family:string,weight:number,style:'normal'|'italic',sha256:`sha256:${string}`,path:string}[]=[]
+ const loaded=new Map<string,Uint8Array>()
+ const configured:HostFontConfiguredFace[]=[]
  for(const [index,f] of config.faces.entries()){
-  if(!f||Object.keys(f).sort().join(',')!=='family,path,sha256,style,weight'||typeof f.family!=='string'||!f.family||f.family.length>128||typeof f.weight!=='number'||![400,700].includes(f.weight)||!['normal','italic'].includes(f.style)||typeof f.path!=='string'||!isAbsolute(f.path)||typeof f.sha256!=='string'||!/^sha256:[a-f0-9]{64}$/.test(f.sha256))throw new Error('Invalid host font face')
+  const shape=Object.keys(f??{}).sort().join(',')
+  if(!f||(shape!=='family,path,sha256,style,weight'&&shape!=='collectionIndex,family,path,sha256,style,weight')||typeof f.family!=='string'||!f.family||f.family.length>128||typeof f.weight!=='number'||![400,700].includes(f.weight)||!['normal','italic'].includes(f.style)||typeof f.path!=='string'||!isAbsolute(f.path)||typeof f.sha256!=='string'||!/^sha256:[a-f0-9]{64}$/.test(f.sha256))throw new Error('Invalid host font face')
+  if(f.collectionIndex!==undefined&&(!Number.isSafeInteger(f.collectionIndex)||f.collectionIndex<0||f.collectionIndex>65535))throw new Error('Invalid host font collection index')
   const identity=key(f.family,f.weight,f.style)
   if(seen.has(identity))throw new Error('Ambiguous host font family/style');seen.add(identity)
-  configured[index]={family:f.family,weight:f.weight,style:f.style,sha256:f.sha256,path:f.path}
+  configured[index]={family:f.family,weight:f.weight,style:f.style,sha256:f.sha256,path:f.path,...(f.collectionIndex===undefined?{}:{collectionIndex:f.collectionIndex})}
   if(occupied.has(identity)||!needed.has(identity))continue
-  total=admitConfiguredFace(index,configured[index]!,faces,resources,occupied,total)
+  total=admitConfiguredFace(index,configured[index]!,faces,resources,occupied,total,loaded)
  }
  const missing=()=>inventory.references.filter(r=>!occupied.has(key(r.family,r.weight,r.style))&&!(policy&&faces.length&&selectExplicitFontV1(manifest,{version:1,text:'',fontSizeMilliPoints:1000,font:{families:[r.family],weight:r.weight,style:r.style,stretch:100},script:'Zyyy',language:'und',direction:'ltr'},policy)))
  const approximateSubstitutions:NativeDocxHostFontApproximateSubstitutionV1[]=[]
@@ -85,7 +105,7 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
   for(const [index,f] of configured.entries()){
    if(!f||occupied.has(key(f.family,f.weight,f.style)))continue
    if(!missing().some(r=>r.weight===f.weight&&r.style===f.style)||loadedHost(f.weight,f.style))continue
-   total=admitConfiguredFace(index,f,faces,resources,occupied,total)
+   total=admitConfiguredFace(index,f,faces,resources,occupied,total,loaded)
   }
   const loadedIds=new Set(resources.keys())
   for(const reference of missing()){
@@ -105,7 +125,7 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
  const requested=new Set(extraReferences.map(r=>key(r.family,r.weight,r.style)))
  for(const [index,f] of configured.entries()){
   if(!f||occupied.has(key(f.family,f.weight,f.style))||!requested.has(key(f.family,f.weight,f.style)))continue
-  total=admitConfiguredFace(index,f,faces,resources,occupied,total)
+  total=admitConfiguredFace(index,f,faces,resources,occupied,total,loaded)
  }
  const unavailable=missing()
  if(unavailable.length)throw new Error(`Exact configured font unavailable: ${unavailable.map(r=>`${r.family} / ${r.weight} / ${r.style}`).join(', ').slice(0,1024)}`)

@@ -41,6 +41,14 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'PARTIAL_PARAGRAPH_PROPERTIES',
   'PARTIAL_RUN_PROPERTIES',
   'PICTURE_GRAPHIC_REQUIRED',
+  // A picture the extractor refuses at the transform gate is a drawing this
+  // tier does not model, exactly like PICTURE_GRAPHIC_REQUIRED and
+  // UNMODELED_DRAWING: the run carries no drawing, nothing in the document
+  // model represents the picture, and there is no image to paint. Omitting it
+  // and painting the paragraph's remaining runs is the same decision already
+  // taken for every other unmodelled drawing; refusing the whole page instead
+  // produced no preview at all.
+  'PICTURE_TRANSFORM_PRESERVED',
   'UNMODELED_DRAWING',
   'UNRESOLVED_COMMENT_RANGE',
   'UNRESOLVED_COMMENT_REFERENCE',
@@ -66,6 +74,12 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // byte-identical glyphs and advances, so this states shaping this tier
   // already performs; a disabled w14:val stays foreign markup.
   'CONTEXTUAL_ALTERNATES_MATCH_SHAPER',
+  // A w:bdr that states ST_Border none or nil asks for no border. It paints
+  // no stroke and reserves no space around the run, so the run occupies the
+  // same box as the same run without the element and cannot move a line or a
+  // page. Both the extractor and the resolver emit this code only for those
+  // two values; a border that paints stays foreign markup.
+  'RUN_BORDER_ABSENT_PRESERVED',
   // w:webHidden hides a run in Word's Web Layout view only. Paginated layout
   // draws it like any other run, so the fact is recorded and the run is
   // painted; it cannot move a line or a page here.

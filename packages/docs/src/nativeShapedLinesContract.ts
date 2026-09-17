@@ -172,9 +172,9 @@ interface PreflightState { nodes: number; bounded: boolean }
 function preflight(value: unknown, path: string, depth: number, state: PreflightState, issues: NativeDocxValidationIssue[]): void {
   if (!state.bounded) return
   state.nodes += 1
-  if (state.nodes > DOCX_NATIVE_LIMITS.maxNodes) {
+  if (state.nodes > DOCX_SHAPED_LINES_LIMITS.maxNodes) {
     state.bounded = false
-    add(issues, 'LIMIT_EXCEEDED', path, `shaped-lines traversal exceeds ${DOCX_NATIVE_LIMITS.maxNodes} values`)
+    add(issues, 'LIMIT_EXCEEDED', path, `shaped-lines traversal exceeds ${DOCX_SHAPED_LINES_LIMITS.maxNodes} values`)
     return
   }
   if (depth > DOCX_NATIVE_LIMITS.maxDepth) {

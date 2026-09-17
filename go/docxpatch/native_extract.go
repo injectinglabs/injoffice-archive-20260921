@@ -1424,7 +1424,10 @@ func (extractor *nativeExtractor) extractNotes(partName, kind, relationshipID st
 				continue
 			}
 		}
-		validID := ok && (noteRole == "content" && !hasType && nativeNoteIDPattern.MatchString(nativeID) || noteRole == "separator" && hasType && nativeID == "-1" || noteRole == "continuation-separator" && hasType && nativeID == "0")
+		// w:type is the only attestation of a reserved separator story. Word writes
+		// the -1/0 ids and LibreOffice writes 0/1; both are the same feature, so the
+		// id is validated as an identity and the role is never inferred from it.
+		validID := ok && (noteRole == "content" && !hasType && nativeNoteIDPattern.MatchString(nativeID) || noteRole != "content" && hasType && nativeNoteSentinelIDPattern.MatchString(nativeID))
 		if !validID {
 			extractor.addUnsupported("SPECIAL_NOTE_STORY", "notes", extractor.bodyID, partName, node, "Invalid native note story identity/type pairing is preserved but not modeled")
 			continue
@@ -1459,9 +1462,17 @@ func nativeExactNoteSentinel(node *nativeXMLNode, wordNS, role string) bool {
 		instruction = "continuationSeparator"
 	}
 	paragraphs := directNativeChildren(node, wordNS, "p")
+	// ECMA-376 17.11.14 makes a reserved separator story an ordinary story:
+	// its first paragraph carries the separator instruction, and Word paints
+	// whatever further paragraphs follow it above the notes. Word itself
+	// writes a trailing empty paragraph here, and an author can put visible
+	// text in one. Require the instruction paragraph to be exact and require
+	// every remaining block to be an ordinary paragraph, which the story
+	// extraction below reads and note placement lays out like any other.
+	//
 	// Word records revision-session identifiers on otherwise exact reserved
 	// separators. These source-preserved hex IDs do not alter separator layout.
-	if len(node.Children) != 1 || len(paragraphs) != 1 || !nativeExactRevisionContainer(paragraphs[0], wordNS, "rsidR", "rsidRDefault", "rsidP") {
+	if len(paragraphs) == 0 || len(node.Children) != len(paragraphs) || !nativeExactRevisionContainer(paragraphs[0], wordNS, "rsidR", "rsidRDefault", "rsidP") {
 		return false
 	}
 	runs := directNativeChildren(paragraphs[0], wordNS, "r")
@@ -3420,6 +3431,14 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
 			}
+		case "bdr":
+			preserveOnly = true
+			if nativeAbsentRunBorder(child, node, extractor.wordNS) {
+				extractor.addUnsupported("RUN_BORDER_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A run border that states no border is preserved and not applied; it paints no stroke and reserves no space, so it moves no glyph, line or page")
+			} else {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Only a run border that states no border is proven layout-neutral; a painted run border reserves space this tier does not model")
+			}
 		case "vertAlign":
 			preserveOnly = true
 			value, ok := nativeVerticalAlignmentValue(child, extractor.wordNS)
@@ -3863,22 +3882,66 @@ func (extractor *nativeExtractor) extractTableRow(partName, tableID string, node
 		if child.Name == (xml.Name{Space: extractor.wordNS, Local: "trPr"}) {
 			continue
 		}
+		cellNodes := []*nativeXMLNode{child}
 		if child.Name != (xml.Name{Space: extractor.wordNS, Local: "tc"}) {
+			wrapped := extractor.structuredTagRowCells(child)
+			if wrapped == nil {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_ROW_CONTENT", "table-structure", tableID, partName, child, "Row content outside direct cells is preserved verbatim")
+				continue
+			}
+			// A w:sdt around a row's cells is a content control: ECMA-376
+			// 17.5.2.31 puts the same w:tc elements inside w:sdtContent without
+			// adding a grid column or any geometry of its own, so the cells it
+			// holds are the row's cells and reading through it moves nothing.
+			// The control keeps its own preserve-only record, which leaves the
+			// table read-only for mutation.
 			unsafe = true
-			extractor.addUnsupported("UNMODELED_ROW_CONTENT", "table-structure", tableID, partName, child, "Row content outside direct cells is preserved verbatim")
-			continue
+			extractor.addUnsupported("WRAPPED_ROW_CELLS", "table-structure", tableID, partName, child, "Row cells wrapped in a content control are laid out; the control itself is preserved verbatim")
+			cellNodes = wrapped
 		}
-		cell, cellUnsafe, err := extractor.extractTableCell(partName, tableID, child)
-		if err != nil {
-			return NativeTableRowV1{}, false, err
-		}
-		row.Cells = append(row.Cells, cell)
-		unsafe = unsafe || cellUnsafe
-		if len(row.Cells) > NativeDOCXMaxCollectionItems {
-			return NativeTableRowV1{}, false, fmt.Errorf("docxpatch: native extract: row %q exceeds %d cells", id, NativeDOCXMaxCollectionItems)
+		for _, cellNode := range cellNodes {
+			cell, cellUnsafe, err := extractor.extractTableCell(partName, tableID, cellNode)
+			if err != nil {
+				return NativeTableRowV1{}, false, err
+			}
+			row.Cells = append(row.Cells, cell)
+			unsafe = unsafe || cellUnsafe
+			if len(row.Cells) > NativeDOCXMaxCollectionItems {
+				return NativeTableRowV1{}, false, fmt.Errorf("docxpatch: native extract: row %q exceeds %d cells", id, NativeDOCXMaxCollectionItems)
+			}
 		}
 	}
 	return row, unsafe, nil
+}
+
+// structuredTagRowCells returns the cells of a content control whose entire
+// content is direct w:tc children, or nil for anything else. Requiring the
+// control to hold nothing but cells is what makes reading through it lossless:
+// any other child would be row content this extractor would silently drop.
+func (extractor *nativeExtractor) structuredTagRowCells(node *nativeXMLNode) []*nativeXMLNode {
+	if node.Name != (xml.Name{Space: extractor.wordNS, Local: "sdt"}) || !nativeExactContainer(node) {
+		return nil
+	}
+	for _, child := range node.Children {
+		if child.Name.Space != extractor.wordNS {
+			return nil
+		}
+		switch child.Name.Local {
+		case "sdtPr", "sdtEndPr", "sdtContent":
+		default:
+			return nil
+		}
+	}
+	contents := directNativeChildren(node, extractor.wordNS, "sdtContent")
+	if len(contents) != 1 || !nativeExactContainer(contents[0]) {
+		return nil
+	}
+	cells := directNativeChildren(contents[0], extractor.wordNS, "tc")
+	if len(cells) == 0 || len(cells) != len(contents[0].Children) {
+		return nil
+	}
+	return cells
 }
 
 func (extractor *nativeExtractor) extractTableCell(partName, tableID string, node *nativeXMLNode) (NativeTableCellV1, bool, error) {

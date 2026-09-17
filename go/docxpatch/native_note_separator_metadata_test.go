@@ -75,3 +75,45 @@ func TestExtractNoteSeparatorRevisionMetadataPreservesSource(t *testing.T) {
 		t.Fatal("note content/source changed")
 	}
 }
+
+// ECMA-376 17.11.14 makes a reserved separator story an ordinary story: its
+// first paragraph carries the instruction, and Word paints whatever paragraphs
+// follow it above the notes. Word writes a trailing empty paragraph itself, and
+// an author can put visible text in one. The instruction paragraph still has to
+// be exact, and a block that is not a paragraph keeps refusing.
+func TestNoteSeparatorStoryCarriesFurtherParagraphs(t *testing.T) {
+	for _, ns := range []string{wordMLTransitional, wordMLStrict} {
+		for _, role := range []string{"separator", "continuation-separator"} {
+			instruction := "separator"
+			if role == "continuation-separator" {
+				instruction = "continuationSeparator"
+			}
+			for _, tc := range []struct {
+				name, trailing string
+				valid          bool
+			}{
+				{name: "instruction alone", valid: true},
+				{name: "trailing empty paragraph", trailing: `<w:p/>`, valid: true},
+				{name: "trailing text paragraph", trailing: `<w:p><w:r><w:t>Text in footnote separator</w:t></w:r></w:p>`, valid: true},
+				{name: "several trailing paragraphs", trailing: `<w:p><w:r><w:t>one</w:t></w:r></w:p><w:p/>`, valid: true},
+				{name: "trailing table", trailing: `<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>`},
+				{name: "trailing foreign block", trailing: `<w:sdt/>`},
+				{name: "leading paragraph before the instruction", trailing: ``},
+			} {
+				t.Run(ns+role+tc.name, func(t *testing.T) {
+					body := `<w:p><w:r><w:` + instruction + `/></w:r></w:p>` + tc.trailing
+					if tc.name == "leading paragraph before the instruction" {
+						body = `<w:p><w:r><w:t>first</w:t></w:r></w:p><w:p><w:r><w:` + instruction + `/></w:r></w:p>`
+					}
+					node, err := parseNativeXML("word/footnotes.xml", []byte(`<w:footnote xmlns:w="`+ns+`">`+body+`</w:footnote>`))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if got := nativeExactNoteSentinel(node, ns, role); got != tc.valid {
+						t.Fatalf("qualification=%v want %v", got, tc.valid)
+					}
+				})
+			}
+		}
+	}
+}

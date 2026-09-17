@@ -47,7 +47,7 @@ import {
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableRowGroupSizeV1, qualifyNativeDocxTablesV1, type NativeDocxQualifiedTableV1, type NativeDocxTableRowGeometryV1 } from './nativeTablePagePaintV1.js'
 import { qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
-import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
+import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1, type NativeDocxQualifiedSectionGeometryV1 } from './nativeSectionColumnsV1.js'
 import { planNativeDocxColumnParagraphFlowV1, type NativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 import {planNativeDocxFootnoteFlowV1, type NativeDocxFootnoteFlowV1} from './nativeFootnoteFlowV1.js'
 import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationV1 } from './nativeFootnoteReservationV1.js'
@@ -65,6 +65,14 @@ export const DOCX_PAGINATION_LIMITS = {
   maxParagraphSlices: 100_000,
   maxDiagnostics: 1_000,
   maxOutputNodes: 2_000_000,
+  /** Traversal budget for the whole pagination request. It is not the gateway's
+   * per-structure DOCX_NATIVE_LIMITS.maxNodes: a request is the union of an already
+   * bounded document, resolved layout, one to three shaped-lines candidates and the
+   * settings attestation, each of which the decoders below still traverse under their
+   * own budget. It equals the enclosing page-paint request bound
+   * (DOCX_PAGE_PAINT_LIMITS.maxOutputNodes), which every caller that can reach this
+   * one has already passed, so it adds no reachable slack. */
+  maxRequestNodes: 5_000_000,
   maxCoordinateMilliPoints: 1_000_000_000_000,
 } as const
 
@@ -295,6 +303,12 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   'INVALID_NATIVE_PARAGRAPH_ID',
   'HYPERLINK_SEMANTICS',
   'UNMODELED_COMMENT_MARKUP',
+  // A content control around a table row's cells, read through the same way a
+  // hyperlink's runs are. The extractor emits this code only when the control
+  // holds nothing but w:tc children, so every cell of the row reaches the
+  // table projection and the wrapper contributes no grid column, no width and
+  // no advance of its own.
+  'WRAPPED_ROW_CELLS',
 ])
 
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
@@ -328,6 +342,7 @@ interface PaginationContext {
   tableQualificationCauses?: Map<string, { code: string; message: string }>
   containingTableIDs?: Map<string, string>
   lastSliceLocation: Map<string, { pageOrdinal: number; columnOrdinal: number }>
+  shapedSectionWidths?: Map<string, Set<number>>
 }
 
 function issue(code: NativeDocxValidationIssue['code'], path: string, message: string): NativeDocxValidationIssue {
@@ -356,8 +371,8 @@ function preflightWire(value: unknown): NativeDocxValidationIssue[] {
   const visit = (entry: unknown, path: string, depth: number): void => {
     if (issues.length >= DOCX_NATIVE_LIMITS.maxIssues) return
     nodes += 1
-    if (nodes > DOCX_NATIVE_LIMITS.maxNodes) {
-      issues.push(issue('LIMIT_EXCEEDED', path, `pagination request traversal exceeds ${DOCX_NATIVE_LIMITS.maxNodes} values`))
+    if (nodes > DOCX_PAGINATION_LIMITS.maxRequestNodes) {
+      issues.push(issue('LIMIT_EXCEEDED', path, `pagination request traversal exceeds ${DOCX_PAGINATION_LIMITS.maxRequestNodes} values`))
       return
     }
     if (depth > DOCX_NATIVE_LIMITS.maxDepth) {
@@ -388,11 +403,11 @@ function preflightWire(value: unknown): NativeDocxValidationIssue[] {
     if (Array.isArray(entry)) {
       if (entry.length > 500_000) issues.push(issue('LIMIT_EXCEEDED', path, 'array exceeds the largest v1 shaped-lines collection bound'))
       const length = Math.min(entry.length, 500_000)
-      for (let index = 0; index < length && nodes <= DOCX_NATIVE_LIMITS.maxNodes; index += 1) visit(entry[index], `${path}/${index}`, depth + 1)
+      for (let index = 0; index < length && nodes <= DOCX_PAGINATION_LIMITS.maxRequestNodes; index += 1) visit(entry[index], `${path}/${index}`, depth + 1)
     } else {
       for (const key of Object.keys(entry).sort()) {
         visit((entry as Record<string, unknown>)[key], `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`, depth + 1)
-        if (nodes > DOCX_NATIVE_LIMITS.maxNodes) break
+        if (nodes > DOCX_PAGINATION_LIMITS.maxRequestNodes) break
       }
     }
     active.delete(entry)
@@ -925,7 +940,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
       addDiagnostic(context, {
         code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
         source_code: entry.code, source_message: entry.message,
-        message: `Native preserve-only record is identity-, relationship-, or detached-story-only and does not alter current body advances: ${entry.code}: ${entry.message}`,
+        message: `Native preserve-only record is identity-, relationship-, wrapper-, or detached-story-only and does not alter current body advances: ${entry.code}: ${entry.message}`,
       })
       continue
     }
@@ -1028,6 +1043,59 @@ function sectionGroups(context: PaginationContext): SectionGroup[] {
   }))
 }
 
+/**
+ * Word wraps each section's body text at that section's own column width, so a
+ * document whose sections disagree is shaped once per section width and nothing
+ * on the wire restates that width per paragraph. What a line does state is the
+ * interval it was offered, which for every line but the first is the section
+ * width less the paragraph's start and end indents, narrowed further by a wrap
+ * exclusion. Narrowing is the only thing an exclusion does, so re-adding the
+ * indents bounds the shaping width from below and a section whose body lines
+ * were offered MORE than its column proves the shaped record does not join this
+ * geometry. A narrower observation proves nothing on its own - the line may
+ * simply have been excluded - and placement already refuses any line that
+ * escapes its column. Table-cell paragraphs are shaped against their cell, not
+ * the column, so they are not part of any section's width evidence.
+ */
+function shapedSectionWidths(request: NativeDocxPaginationRequestV1): Map<string, Set<number>> {
+  const indexes = new Map(request.document.body.blocks.map((block, index) => [block.id, index]))
+  const sectionOfParagraph = new Map<string, string>()
+  request.document.sections.forEach((section, index) => {
+    const start = indexes.get(section.starts_at_block_id)
+    const next = request.document.sections[index + 1]
+    const end = next ? indexes.get(next.starts_at_block_id) : request.document.body.blocks.length
+    if (start === undefined || end === undefined) return
+    for (const block of request.document.body.blocks.slice(start, end)) if (block.kind === 'paragraph' && block.paragraph) sectionOfParagraph.set(block.paragraph.id, section.id)
+  })
+  const widths = new Map<string, Set<number>>()
+  for (const paragraph of request.shaped_lines.paragraphs) {
+    if (paragraph.story_kind !== 'body') continue
+    const sectionID = sectionOfParagraph.get(paragraph.paragraph_id)
+    if (sectionID === undefined) continue
+    let observed = widths.get(sectionID)
+    if (!observed) { observed = new Set(); widths.set(sectionID, observed) }
+    for (const line of paragraph.lines) {
+      // A first line offset by a hanging indent or a list marker is offered a
+      // width this arithmetic cannot invert, and it is the only line that is.
+      if (line.ordinal === 0 && (paragraph.first_line_delta_millipoints !== 0 || paragraph.list_marker !== undefined)) continue
+      const base = checkedSum(line.available_width_millipoints, paragraph.indent_start_millipoints, paragraph.indent_end_millipoints)
+      if (base !== undefined) observed.add(base)
+    }
+  }
+  return widths
+}
+
+/** The widths a section's body paragraphs are allowed to have been shaped at. */
+function permittedSectionWidths(geometry: NativeDocxQualifiedSectionGeometryV1, columnFlow: boolean): Set<number> {
+  return new Set(columnFlow ? geometry.columns.map((column) => column.width_millipoints) : [geometry.columns[0]!.width_millipoints])
+}
+
+function divergentSectionWidth(observed: Set<number> | undefined, permitted: Set<number>): number | undefined {
+  const widest = Math.max(...permitted)
+  for (const width of observed ?? []) if (width > widest) return width
+  return undefined
+}
+
 function sectionBodyBox(context: PaginationContext, section: NativeDocxSectionV1): NativeDocxPageBodyBoxV1 | undefined {
   const qualified = qualifyNativeDocxSectionColumnsV1(section, context.columnFlow ? { allowUnequalWidths: true } : undefined)
   if (!qualified.ok) {
@@ -1035,8 +1103,10 @@ function sectionBodyBox(context: PaginationContext, section: NativeDocxSectionV1
     return undefined
   }
   const columnWidth = qualified.value.columns[0]?.width_millipoints
-  if (columnWidth !== context.request.shaped_lines.available_width_millipoints) {
-    refuse(context, 'section-width-mismatch', section.id, `Section column width ${columnWidth} does not match shaped width ${context.request.shaped_lines.available_width_millipoints}`)
+  context.shapedSectionWidths ??= shapedSectionWidths(context.request)
+  const divergent = columnWidth === undefined ? undefined : divergentSectionWidth(context.shapedSectionWidths.get(section.id), permittedSectionWidths(qualified.value, context.columnFlow !== undefined))
+  if (columnWidth === undefined || divergent !== undefined) {
+    refuse(context, 'section-width-mismatch', section.id, `Section column width ${columnWidth} does not match shaped width ${divergent}`)
     return undefined
   }
   return {
@@ -2233,6 +2303,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
   refuseUnsupportedSource(semanticContext)
   if (semanticContext.refused) add('BROKEN_REFERENCE', '/status', 'paginated output cannot be complete for source semantics that require native pagination refusal')
 
+  const observedSectionWidths = shapedSectionWidths(request)
   if (output.sections.length !== request.document.sections.length) add('BROKEN_REFERENCE', '/sections', 'paginated sections must exactly cover native source sections')
   const sourceSections = new Map(request.document.sections.map((section) => [section.id, section]))
   output.sections.forEach((section, index) => {
@@ -2241,7 +2312,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
     const geometry = source ? expectedSectionGeometry(source) : undefined
     const columnFlow = semanticContext.columnFlow
     const qualified = source ? qualifyNativeDocxSectionColumnsV1(source, columnFlow ? { allowUnequalWidths: true } : undefined) : undefined
-    if (source && (!geometry || !qualified?.ok || (!columnFlow && qualified.value.columns.some((column) => column.width_millipoints !== request.shaped_lines.available_width_millipoints)))) add('BROKEN_REFERENCE', `/sections/${index}`, 'paginated source section must have exact bounded columns at the attested shaping width')
+    if (source && (!geometry || !qualified?.ok || divergentSectionWidth(observedSectionWidths.get(source.id), permittedSectionWidths(qualified.value, columnFlow !== undefined)) !== undefined)) add('BROKEN_REFERENCE', `/sections/${index}`, 'paginated source section must have exact bounded columns at the width its own body paragraphs were shaped at')
   })
   output.pages.forEach((page, index) => {
     const source = sourceSections.get(page.section_id)

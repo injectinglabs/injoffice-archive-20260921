@@ -19,6 +19,7 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   'UNMODELED_BODY_BLOCK',
   'NESTED_TABLE_OR_CELL_MARKUP',
   'PICTURE_GRAPHIC_REQUIRED',
+  'PICTURE_TRANSFORM_PRESERVED',
   'UNMODELED_DRAWING',
   'UNRESOLVED_COMMENT_RANGE',
   'UNRESOLVED_COMMENT_REFERENCE',
@@ -84,7 +85,7 @@ export function nativeDocxNonVisualMarkerPathV1(path: string | undefined): boole
 export function nativeDocxOmittedContentCategoryV1(code: string, path: string | undefined): NativeDocxOmittedContentCategoryV1 {
   const at = path ?? ''
   if (EQUATION.test(at)) return 'equation'
-  if (DRAWING.test(at) || code === 'UNMODELED_DRAWING' || code === 'PICTURE_GRAPHIC_REQUIRED' || code === 'drawing-layout-unsupported') return 'drawing'
+  if (DRAWING.test(at) || code === 'UNMODELED_DRAWING' || code === 'PICTURE_GRAPHIC_REQUIRED' || code === 'PICTURE_TRANSFORM_PRESERVED' || code === 'drawing-layout-unsupported') return 'drawing'
   if (FIELD.test(at) || code === 'FIELD_SEMANTICS') return 'field'
   if (CONTENT_CONTROL.test(at)) return 'content-control'
   if (REVISION.test(at) || code === 'WRAPPED_RUN_MARKUP') return 'revision'

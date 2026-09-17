@@ -200,6 +200,9 @@ func (context *nativeApproximateNestedContext) describe(outer *NativeTableV1, ce
 			return omit("nested-depth-limit")
 		case "UNMODELED_TABLE_CONTENT", "UNMODELED_ROW_CONTENT":
 			return omit("unsupported-table-structure")
+		case "WRAPPED_ROW_CELLS":
+			// The control's cells are read through and laid out; nothing is
+			// dropped, so this disclosure omits neither the table nor a run.
 		case "UNMODELED_TABLE_PROPERTY", "UNMODELED_ROW_PROPERTY", "UNMODELED_CELL_PROPERTY":
 			local := "unknown"
 			if d.Anchor != nil {
