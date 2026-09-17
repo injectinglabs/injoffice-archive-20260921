@@ -9,7 +9,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
  * one refusal and leaves the caller responsible for discarding every page.
  */
 
-import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxStoryV1 } from './nativeContract.js'
+import { nativeDocxSeparatorStoryProjectionV1, type NativeDocxDocumentV1, type NativeDocxParagraphV1, type NativeDocxStoryV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
 import { layoutNativeDocxTableRowsV1, qualifyNativeDocxTablesV1, type NativeDocxQualifiedTableV1 } from './nativeTablePagePaintV1.js'
@@ -262,10 +262,7 @@ function shapedRunTextIndex(shaped: NativeDocxShapedLinesV1): Map<string, string
  * Those paragraphs are laid out and measured like any other note paragraph, so
  * they only have to be paragraphs, never nested tables.
  */
-function exactInstructionSentinelProjection(story: NativeDocxStoryV1): boolean {
-  return story.blocks.length >= 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
-    && story.blocks.every((block) => block.kind === 'paragraph' && block.paragraph !== undefined)
-}
+const exactInstructionSentinelProjection = nativeDocxSeparatorStoryProjectionV1
 
 function measureNoteGroup(
   page: Pick<NativeDocxPaginatedPageV1, 'ordinal'>,
