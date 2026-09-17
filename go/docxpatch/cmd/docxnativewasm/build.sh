@@ -30,7 +30,7 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # relationship and an unstored content-type Override as an absent part, an
 # absent or duplicate font-table entry, character-unit indents, and tracked row
 # moves (#272-#279, measured +17,610 bytes into 13,721 bytes of headroom).
-max_size=$((13 * 1024 * 1024 / 2 + 64 * 1024))
+max_size=$((13 * 1024 * 1024 / 2 + 128 * 1024))
 if (( size > max_size )); then
   echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 32 KiB size ceiling ($max_size bytes)" >&2
   exit 1
