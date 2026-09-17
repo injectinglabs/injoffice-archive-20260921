@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NativeDocxResolvedNumberingV1 } from './nativeResolvedLayout.js'
-import { nativeDocxResolvedNumberingDefinitionSha256V1 } from './nativeResolvedLayout.js'
+import { decodeNativeDocxResolvedLayout, nativeDocxResolvedNumberingDefinitionSha256V1 } from './nativeResolvedLayout.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 
 function marker(alignment: NativeDocxResolvedNumberingV1['alignment']): NativeDocxResolvedNumberingV1 {
@@ -57,5 +57,41 @@ describe('native DOCX marker geometry', () => {
       expect(positionNativeDocxListMarkerV1(marker(trailing), direction, 5_000)).toBeDefined()
       expect(positionNativeDocxListMarkerV1(marker(trailing), direction, 5_001)).toBeUndefined()
     }
+  })
+})
+
+/** The ideographic systems the Go resolver now renders have to survive the
+ * wire: a format the validator does not know rejects the whole layout, so the
+ * enum is the only thing standing between a resolved CJK marker and a refusal
+ * that names nothing. */
+describe('native DOCX ideographic marker formats on the resolved-layout wire', () => {
+  function layout(format: string): unknown {
+    return {
+      protocol: 'injoffice.docx.resolved-layout',
+      version: 1,
+      document_id: 'document:1',
+      revision: 'rev:1',
+      source_parts: { main_part: 'word/document.xml' },
+      paragraphs: [{
+        paragraph_id: 'paragraph:1',
+        applied_styles: [],
+        properties: {},
+        paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 },
+        numbering: {
+          marker_id: 'marker:1', definition_sha256: `sha256:${'a'.repeat(64)}`, num_id: '1', abstract_num_id: '1',
+          level: 0, start: 1, format, text: '%1.', suffix: 'tab', alignment: 'left', never_restart: true,
+          counter_value: 10, counter_values: [{ level: 0, value: 10, format }], resolved_text: '一零.',
+          label_start_twips: 0, label_end_twips: 480, text_start_twips: 480, marker_properties: {},
+        },
+      }],
+      runs: [{ run_id: 'run:1', paragraph_id: 'paragraph:1', applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } }],
+      tables: [], fonts: [{ name: 'Test' }], diagnostics: [],
+    }
+  }
+  it('accepts every modeled system and still rejects one that is not modeled', () => {
+    for (const format of ['ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2']) {
+      expect(decodeNativeDocxResolvedLayout(layout(format)), format).toMatchObject({ ok: true })
+    }
+    expect(decodeNativeDocxResolvedLayout(layout('ideographDigital'))).toMatchObject({ ok: false })
   })
 })

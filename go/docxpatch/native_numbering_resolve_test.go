@@ -651,3 +651,71 @@ func TestNativeZeroCharacterIndentKeepsInheritedAbsoluteIndent(t *testing.T) {
 		t.Fatalf("resolved left indent = %#v", properties.IndentLeftTwips)
 	}
 }
+
+// TestNativeNumberingIdeographicFormats pins the five ideographic systems
+// against Microsoft Word's own rendering of the benchmark documents
+// cjklist30/31/34/35/44, which number twenty identical list paragraphs at
+// level zero. Reading the markers off those pages is what fixes the cycle
+// boundaries, the tens-unit spelling and the positional digits; none of it is
+// derivable from the format name.
+func TestNativeNumberingIdeographicFormats(t *testing.T) {
+	for _, test := range []struct {
+		format string
+		want   []string
+	}{
+		{"ideographTraditional", []string{"甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"}},
+		{"ideographZodiac", []string{"子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥", "13", "14", "15", "16", "17", "18", "19", "20"}},
+		{"ideographLegalTraditional", []string{"壹", "貳", "參", "肆", "伍", "陸", "柒", "捌", "玖", "壹拾", "壹拾壹", "壹拾貳", "壹拾參", "壹拾肆", "壹拾伍", "壹拾陸", "壹拾柒", "壹拾捌", "壹拾玖", "貳拾"}},
+		{"taiwaneseCountingThousand", []string{"一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"}},
+		{"koreanDigital2", []string{"一", "二", "三", "四", "五", "六", "七", "八", "九", "一零", "一一", "一二", "一三", "一四", "一五", "一六", "一七", "一八", "一九", "二零"}},
+	} {
+		t.Run(test.format, func(t *testing.T) {
+			numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="` + test.format + `"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="480" w:hanging="480"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+			paragraphs := ""
+			for index := range test.want {
+				paragraphs += numberedParagraph("2", 0, fmt.Sprintf("item %d", index+1))
+			}
+			result := resolveNumberingFixture(t, numbering, paragraphs)
+			if hasResolutionDiagnostic(result, "UNSUPPORTED_NUMBER_FORMAT") {
+				t.Fatalf("%s is modeled but was refused as an unsupported format", test.format)
+			}
+			if len(result.Paragraphs) != len(test.want) {
+				t.Fatalf("paragraph count = %d; want %d", len(result.Paragraphs), len(test.want))
+			}
+			for index, want := range test.want {
+				marker := result.Paragraphs[index].Numbering
+				if marker == nil {
+					t.Fatalf("counter %d produced no marker", index+1)
+				}
+				if marker.ResolvedText != want+"." || marker.Format != test.format || marker.CounterValue != index+1 {
+					t.Fatalf("counter %d = %q (format %q, value %d); want %q", index+1, marker.ResolvedText, marker.Format, marker.CounterValue, want+".")
+				}
+			}
+		})
+	}
+
+	// The counting systems stop where the documents stop attesting them: the
+	// hundreds spelling needs zero-insertion rules that are not modeled, so the
+	// marker is refused rather than guessed. The positional system has no such
+	// boundary, and the cycles fall back to decimal by Word's own rule.
+	for _, test := range []struct {
+		format string
+		value  int
+		want   string
+		ok     bool
+	}{
+		{"ideographLegalTraditional", 99, "玖拾玖", true},
+		{"ideographLegalTraditional", 100, "", false},
+		{"taiwaneseCountingThousand", 99, "九十九", true},
+		{"taiwaneseCountingThousand", 100, "", false},
+		{"koreanDigital2", 100, "一零零", true},
+		{"ideographTraditional", 0, "", false},
+		{"ideographZodiac", 1000, "1000", true},
+		{"ideographDigital", 1, "", false},
+	} {
+		got, ok := nativeFormatNumberingCounter(test.value, test.format)
+		if got != test.want || ok != test.ok {
+			t.Fatalf("%s %d = %q, %v; want %q, %v", test.format, test.value, got, ok, test.want, test.ok)
+		}
+	}
+}
