@@ -125,8 +125,12 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, error) {
 }
 
 func (r *nativeLayoutResolver) absentDefaultSize() bool {
+	// A package with no styles part carries no w:docDefaults at all, which is
+	// strictly stronger evidence of an absent default size than a styles part
+	// whose docDefaults happen to state none. ECMA-376 17.7.2 makes the part
+	// optional, so its absence is a source fact, not an unread default.
 	if r.parts.StylesPart == nil {
-		return false
+		return len(r.styles) == 0
 	}
 	root, err := parseNativeXML(*r.parts.StylesPart, r.pkg.files[*r.parts.StylesPart])
 	// mc:Ignorable only declares ignorable namespaces, exactly as the main
@@ -176,8 +180,11 @@ func (r *nativeLayoutResolver) absentDefaultSize() bool {
 
 func (r *nativeLayoutResolver) absentStyleSize(ids []string, kind string) bool {
 	// A complete explicit chain is required, never a missing/default style guess.
+	// The one exception is a package with no styles part: there is no default
+	// style to guess and no definition that could have been missed, so the
+	// empty chain is the complete chain rather than an unresolved reference.
 	if len(ids) == 0 {
-		return false
+		return r.parts.StylesPart == nil && len(r.styles) == 0
 	}
 	previous := ""
 	for _, id := range ids {

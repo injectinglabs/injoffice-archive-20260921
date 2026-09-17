@@ -205,3 +205,77 @@ func TestAbsentFontSizeAcceptsIgnorableStylesRootOnly(t *testing.T) {
 		})
 	}
 }
+
+// TestAbsentFontSizeNoStylesPart pins the difference between a package that
+// omits the styles part entirely and one that ships it. Without the part there
+// is no w:docDefaults and no default paragraph/character style, so an empty
+// applied-style chain is the complete chain and the absence is proven. With the
+// part present the same empty chain may mean an unresolved or default style
+// that carries a size, so it keeps refusing.
+func TestAbsentFontSizeNoStylesPart(t *testing.T) {
+	body := func(mark, run string) string {
+		return `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:rPr>` + mark + `</w:rPr></w:pPr><w:r><w:rPr>` + run + `</w:rPr><w:t>Source</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+	}
+	noStyles := func(document string) map[string]string {
+		return map[string]string{
+			"[Content_Types].xml":          `<Types xmlns="` + opcContentTypesNS + `"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+			"_rels/.rels":                  `<Relationships xmlns="` + opcRelationshipsNS + `"><Relationship Id="office" Type="` + relBaseTransitional + `officeDocument" Target="word/document.xml"/></Relationships>`,
+			"word/document.xml":            document,
+			"word/_rels/document.xml.rels": `<Relationships xmlns="` + opcRelationshipsNS + `"></Relationships>`,
+		}
+	}
+	for _, tc := range []struct {
+		name, mark, run string
+		want            int
+	}{
+		{name: "absent", want: 2},
+		{name: "mark explicit", mark: `<w:sz w:val="24"/>`, want: 1},
+		{name: "run explicit", run: `<w:sz w:val="24"/>`, want: 1},
+		{name: "both explicit", mark: `<w:sz w:val="24"/>`, run: `<w:sz w:val="24"/>`},
+		{name: "run invalid", run: `<w:sz w:val="oops"/>`, want: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := buildNativeDOCX(t, nativeEntries(noStyles(body(tc.mark, tc.run))))
+			before := bytes.Clone(data)
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(eligibility.AbsentFontSizes) != tc.want {
+				t.Fatalf("got%d want%d: %#v", len(eligibility.AbsentFontSizes), tc.want, eligibility.AbsentFontSizes)
+			}
+			for _, fact := range eligibility.AbsentFontSizes {
+				if fact.PackageSHA256 != eligibility.PackageSHA256 || fact.PartName != "word/document.xml" || !strings.HasPrefix(fact.Path, "/w:document[1]/w:body[1]/w:p[1]") {
+					t.Fatalf("unbound fact %#v", fact)
+				}
+			}
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.name == "absent" && (layout.Paragraphs[0].ParagraphMarkProperties.FontSizeHalfPoint != nil || layout.Runs[0].Properties.FontSizeHalfPoint != nil) {
+				t.Fatal("strict size was invented")
+			}
+			if !bytes.Equal(data, before) {
+				t.Fatal("source mutated")
+			}
+		})
+	}
+	// A styles part keeps the old rule: an empty applied-style chain is never
+	// evidence, whatever the part happens to declare.
+	for _, styles := range []string{
+		`<w:styles xmlns:w="` + wordMLTransitional + `"/>`,
+		`<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:rPr><w:sz w:val="24"/></w:rPr></w:style></w:styles>`,
+	} {
+		parts := resolvedStylesTestParts(styles)
+		parts["word/document.xml"] = body("", "")
+		data := buildNativeDOCX(t, nativeEntries(parts))
+		eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(eligibility.AbsentFontSizes) != 0 {
+			t.Fatalf("a styles-bearing package guessed a missing style chain: %#v", eligibility.AbsentFontSizes)
+		}
+	}
+}
