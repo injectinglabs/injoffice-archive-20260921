@@ -12,7 +12,10 @@ package docxpatch
 //   - A zero character measure is zero twips for every font. Word writes
 //     w:leftChars="0" as the ordinary way to cancel a style's character indent,
 //     so refusing it withholds layout from documents that carry no character
-//     indent at all.
+//     indent at all. Cancelling the character channel is not the same as
+//     cancelling the indent: the absolute channel keeps whatever the style,
+//     the numbering level or the same w:ind element attests, and only an
+//     absolute companion on that same element is superseded by the zero.
 //   - A non-zero character measure whose absolute companion attribute is
 //     present on the same w:ind element carries the producer's own conversion
 //     of that measure. Word emits both attributes together and keeps the twip
@@ -44,11 +47,13 @@ func nativeCharacterIndentResolution(node *nativeXMLNode, wordNS, characters, ab
 	if !valid {
 		return true, false, false
 	}
+	if _, ok := nativeAttr(node, wordNS, absolute); !ok {
+		// A zero measure with no absolute companion adds no length of its own
+		// and supersedes nothing, so the inherited absolute indent stands.
+		return true, value == 0, false
+	}
 	if value == 0 {
 		return true, true, true
-	}
-	if _, ok := nativeAttr(node, wordNS, absolute); !ok {
-		return true, false, false
 	}
 	// The companion must itself be a value this layer resolves; an invalid one
 	// is no conversion at all.
