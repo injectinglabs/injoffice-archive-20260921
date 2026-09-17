@@ -588,3 +588,37 @@ func TestNativeNumberingRefusesUnsupportedFormatsAndAmbiguousRelationships(t *te
 		t.Fatalf("external numbering relationship error = %v", err)
 	}
 }
+
+// TestNativeNumberingEmptyLevelTextDrawsNoLabel pins the
+// decimal-numbering-no-leveltext benchmark document: <w:lvlText w:val=""/> is
+// a label with no text, not a malformed one. Word advances the counter, paints
+// nothing, and lays the paragraph out at its own indents.
+func TestNativeNumberingEmptyLevelTextDrawsNoLabel(t *testing.T) {
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val=""/><w:lvlJc w:val="left"/></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	parts := resolvedNumberingTestParts(numbering)
+	parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr><w:ind w:left="720"/></w:pPr><w:r><w:t>hello</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+	result, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasResolutionDiagnostic(result, "MALFORMED_NUMBERING_TEXT") {
+		t.Fatal("an empty lvlText with no hanging indent was reported as malformed")
+	}
+	if result.Paragraphs[0].Numbering != nil {
+		t.Fatalf("an empty label produced a marker: %#v", result.Paragraphs[0].Numbering)
+	}
+	if properties := result.Paragraphs[0].Properties; properties.IndentLeftTwips == nil || *properties.IndentLeftTwips != 720 || properties.HangingTwips != nil {
+		t.Fatalf("the paragraph lost its own indents: %#v", properties)
+	}
+
+	// Under a hanging indent the empty label still owns the label region and
+	// the suffix still moves the first line. That stays refused.
+	parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:r><w:t>hello</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+	hanging, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hanging.Paragraphs[0].Numbering != nil || !hasResolutionDiagnostic(hanging, "MALFORMED_NUMBERING_TEXT") {
+		t.Fatalf("an empty label under a hanging indent was guessed or silent: %#v", hanging)
+	}
+}

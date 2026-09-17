@@ -294,6 +294,20 @@ func (resolver *nativeLayoutResolver) materializeNativeNumbering(instance *nativ
 		return nil
 	}
 	values := state.values[instance.id]
+	// A w:lvlText that is present and empty is a label with no text, not a
+	// missing one. Word advances the counter and draws nothing. The counter
+	// vector is empty for the same reason: no placeholder was expanded.
+	if level.text != nil && template == "" {
+		return &NativeResolvedNumberingV1{
+			MarkerID: nativeStableID("marker", level.partName, scopeID, instance.id+":"+strconv.Itoa(levelIndex)),
+			NumID:    instance.id, AbstractNumID: instance.abstractID, Level: levelIndex,
+			Start: start, Format: format, Text: template, Suffix: suffix, Alignment: alignment,
+			RestartAfterLevel: restartAfter, NeverRestart: never, CounterValue: counterValue,
+			CounterValues: []NativeResolvedCounterValueV1{}, ResolvedText: "",
+			Marker: NativeResolvedRunPropertiesV1{}, NumberingTabTwips: level.numTab,
+			alignmentDefaulted: level.alignment == nil,
+		}
+	}
 	resolvedText, counterValues, err := resolver.resolveLevelText(instance, abstract, levelIndex, format, template, values)
 	if err != nil {
 		state.values[instance.id] = previousValues
@@ -370,6 +384,21 @@ func nativeNumberingCanonicalSHA256V1(value any) string {
 }
 
 func (resolver *nativeLayoutResolver) resolveNumberingGeometry(numbering *NativeResolvedNumberingV1, properties nativeParagraphProperties, scopeID string) bool {
+	if numbering.ResolvedText == "" {
+		// An empty label paints nothing. Without a hanging indent it also
+		// displaces nothing: the numbering suffix cannot advance past a
+		// text margin the label already sits on, so the paragraph lays out at
+		// exactly the indents it resolved, and carrying a marker that paints
+		// no glyph would only add an empty label region to the wire. Under a
+		// hanging indent the empty label still owns that region and the suffix
+		// still moves the first line, which is not modelled here, so that
+		// shape keeps refusing rather than guessing a first-line offset.
+		if properties.hanging == nil || *properties.hanging == 0 {
+			return false
+		}
+		resolver.addDiagnostic("MALFORMED_NUMBERING_TEXT", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "An empty lvlText under a hanging indent leaves the label region and suffix unmodeled")
+		return false
+	}
 	if numbering.alignmentDefaulted {
 		numbering.Alignment = "left"
 		if properties.bidi.present && properties.bidi.value {
