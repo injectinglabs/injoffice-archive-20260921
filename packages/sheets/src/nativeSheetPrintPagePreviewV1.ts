@@ -183,6 +183,10 @@ function resolvePageSettings(source:NativeWorkbookObjectsV1,sheetId:string,part:
    paper:HOST_DEFAULT_PAGE.paper,orientation:HOST_DEFAULT_PAGE.orientation,scale:HOST_DEFAULT_PAGE.scale,
    left_inches:page.margins.left_inches,right_inches:page.margins.right_inches,
    top_inches:page.margins.top_inches,bottom_inches:page.margins.bottom_inches,
+   // Authored header/footer margins are the worksheet's own too, and they
+   // reserve body height; dropping them would print a taller body than Excel.
+   ...(page.margins.header_inches!==undefined?{header_inches:page.margins.header_inches}:{}),
+   ...(page.margins.footer_inches!==undefined?{footer_inches:page.margins.footer_inches}:{}),
   }}
  }
  if(page.status!=='available'||!page.settings){

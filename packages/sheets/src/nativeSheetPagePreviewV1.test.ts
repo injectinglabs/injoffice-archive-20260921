@@ -283,6 +283,38 @@ describe('source-bound selected worksheet page geometry',()=>{
   expect(p.pages[0]).toMatchObject({width_emu:7772400,height_emu:10058400,scale:1,translate_x_emu:914400,translate_y_emu:914400,source_clip:geometry.bounds})
   expect(JSON.stringify(objects)).toBe(before)
  })
+ it('reserves the deeper of the top and header margins and of the bottom and footer margins',()=>{
+  // ECMA-376 §18.3.1.62 measures all six margins from the paper edge, so Excel's
+  // body runs from max(top, header) to max(bottom, footer). These are the
+  // authored margins of hard-v2 cell-anchored-hidden-shapes.xlsx, whose header
+  // margin is deeper than its top margin; ignoring them printed a body
+  // 326,304 EMU too tall and lost a whole row band.
+  const {model,font,objects}=fixture()
+  const geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:33,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  const inch=(value:number)=>Math.round(value*914400)
+  const settings=objects.page_settings![0]!.settings!
+  Object.assign(settings,{paper:'A4',orientation:'portrait',scale:153,left_inches:0.7,right_inches:0.7,top_inches:0.63,bottom_inches:0,header_inches:0.79,footer_inches:0.19685})
+  const reserved=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(reserved.pages[0]!.content_clip.y_emu).toBe(inch(0.79))
+  expect(reserved.pages[0]!.content_clip.height_emu).toBe(10692000-inch(0.79)-inch(0.19685))
+  expect(reserved.pages).toHaveLength(2)
+  // A worksheet that states no header or footer band reserves none, so the
+  // body keeps the top and bottom margins it authored.
+  delete settings.header_inches;delete settings.footer_inches
+  const bare=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(bare.pages[0]!.content_clip.y_emu).toBe(inch(0.63))
+  expect(bare.pages[0]!.content_clip.height_emu).toBe(10692000-inch(0.63))
+  expect(bare.pages).toHaveLength(1)
+  // A header shallower than the top margin changes nothing: the body edge is
+  // the deeper of the two, never their sum.
+  Object.assign(settings,{header_inches:0.3,footer_inches:0})
+  const shallow=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(shallow.pages[0]!.content_clip).toEqual(bare.pages[0]!.content_clip)
+  // An explicit host policy may state the bands too, and is still exact data.
+  const host=compileNativeSheetPagePreviewV1(geometry,objects,{kind:'explicit-host-page-policy-v1',paper:'A4',orientation:'portrait',scale:153,left_inches:0.7,right_inches:0.7,top_inches:0.63,bottom_inches:0,header_inches:0.79,footer_inches:0.19685})
+  expect(host.pages[0]!.content_clip).toEqual(reserved.pages[0]!.content_clip)
+  expect(host.settings.header_inches).toBe(0.79)
+ })
  it('requires explicit host choice for unavailable settings and labels it',()=>{
   const {geometry,objects}=fixture();objects.page_settings![0]={sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'unavailable',warnings:['Printer settings not modeled']}
   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow('explicit host')

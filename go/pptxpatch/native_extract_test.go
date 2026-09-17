@@ -355,6 +355,61 @@ func TestExtractNativePPTXOmitsUntypedLeftoverParts(t *testing.T) {
 	}
 }
 
+// A relationship whose target the package does not store resolves to nothing.
+// It is followed by nothing: every consumer resolves a relationship by id and
+// then demands a stored part of the exact expected content type, so such an
+// entry can only fail where it is actually used. Real saves leave them behind —
+// smartart-autoTxRot.pptx keeps its diagramDrawing relationship to
+// /ppt/diagrams/drawing1.xml after the cached drawing was dropped — and
+// PowerPoint and LibreOffice open those packages.
+func TestExtractNativePPTXOpensAPackageWithARelationshipToAnAbsentPart(t *testing.T) {
+	t.Parallel()
+
+	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+		parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `</Relationships>`,
+			`<Relationship Id="rDrawing" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="../diagrams/drawing1.xml"/></Relationships>`, 1)
+	}})
+	deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("relationship naming an absent part refused the package: %v", err)
+	}
+	if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 1 {
+		t.Fatalf("slide lost its content: %#v", deck.Slides)
+	}
+	// Nothing is preserved for it: an absent part has no bytes to bind.
+	for _, diagnostic := range deck.Slides[0].Compatibility.Diagnostics {
+		if diagnostic.Scope != nil && diagnostic.Scope.PartName != nil && strings.Contains(*diagnostic.Scope.PartName, "drawing1.xml") {
+			t.Fatalf("absent part was bound as an opaque closure: %#v", diagnostic)
+		}
+	}
+}
+
+// A relationship that names a part this reader would have to follow still
+// refuses when that part is absent.
+func TestExtractNativePPTXStillRefusesAFollowedRelationshipToAnAbsentPart(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]string)
+	}{
+		{name: "slide layout", mutate: func(parts map[string]string) {
+			parts["relocated/slides/_rels/slide-a.xml.rels"] = strings.Replace(parts["relocated/slides/_rels/slide-a.xml.rels"], `Target="../layouts/layout.xml"`, `Target="../layouts/absent.xml"`, 1)
+		}},
+		{name: "theme", mutate: func(parts map[string]string) {
+			parts["relocated/masters/_rels/master.xml.rels"] = strings.Replace(parts["relocated/masters/_rels/master.xml.rels"], `Target="../themes/theme.xml"`, `Target="../themes/absent.xml"`, 1)
+		}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ExtractNativePPTX(nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: test.mutate}), nativeTestExtractOptions()); err == nil {
+				t.Fatal("a followed relationship to an absent part was accepted")
+			}
+		})
+	}
+}
+
 func TestExtractNativePPTXStillRefusesReferencedUntypedParts(t *testing.T) {
 	t.Parallel()
 	payload := nativeExtractFixture(t, nativeExtractFixtureOptions{

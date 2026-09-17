@@ -141,6 +141,18 @@ describe('host-default paper for a worksheet that authors margins and no pageSet
   expect(preview.pages[0]!.height_css_px).toBe(1056)
   expect(preview.pages.map(p=>[p.width_emu,p.height_emu])).toEqual(authored.pages.map(p=>[p.width_emu,p.height_emu]))
  })
+ it('reserves the authored header and footer bands of a margins-only worksheet',()=>{
+  // The host chooses paper for such a worksheet; the six authored margins are
+  // still the worksheet's own, and the header band is measured from the paper
+  // edge, so a header deeper than the top margin lowers the body.
+  const {objects,geometry,part}=fixture()
+  objects.page_settings=[{...marginsOnly(part),margins:{left_inches:1,right_inches:1,top_inches:1,bottom_inches:1,header_inches:1.5,footer_inches:0.3}}]
+  const preview=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  expect(preview.status).toBe('available')
+  if(preview.status!=='available')return
+  expect(preview.pages[0]!.content_clip.y_emu).toBe(Math.round(1.5*914400))
+  expect(preview.pages[0]!.content_clip.height_emu).toBe(10058400-Math.round(1.5*914400)-914400)
+ })
  it('keeps refusing an authored pageSetup this tier cannot support, and margins-only with no margins',()=>{
   const {objects,geometry,part}=fixture()
   objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['Unsupported page settings']}]

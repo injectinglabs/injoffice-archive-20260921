@@ -1314,7 +1314,18 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     } else if (nativeRun.kind === 'control' && nativeRun.control === 'line-break' && sourceHardBreakCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native line break must have exactly one hard-break attestation') }
     } else if (nativeRun.kind === 'drawing' && sourceImageCounts.get(coverageID) !== 1) {
-      return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native image must have exactly one visual fragment') }
+      // The approximate lane already omits a drawing whose payload the exact inline
+      // slice cannot model: nativeShapingLines drops the run with a
+      // `drawing-layout-unsupported` diagnostic and nativePaginationV1 defers the same
+      // qualification, so the run reaches paint with no visual fragment by
+      // construction and the drop is disclosed as approximate omitted_content. The
+      // exemption is that omission and nothing else - it requires an empty coverage
+      // count and a payload that neither qualifyNativeDocxInlineImageV1 nor
+      // qualifyNativeDocxInlineTextboxV1 accepts - so a paintable picture that lost
+      // its fragment is still a coverage failure and still refuses.
+      const approximateOmittedDrawing = Boolean(approximateLegacySettings) && (sourceImageCounts.get(coverageID) ?? 0) === 0
+        && (!nativeRun.drawing || (!qualifyNativeDocxInlineTextboxV1(pagination.document, nativeRun.id, nativeRun.drawing).ok && !qualifyNativeDocxInlineImageV1(pagination.document, nativeRun.id, nativeRun.drawing).ok))
+      if (!approximateOmittedDrawing) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native image must have exactly one visual fragment') }
     } else if (nativeRun.kind === 'control' && nativeRun.control === 'soft-hyphen') {
       return { ok: true, value: refusal(provenance, 'unsupported-source', nativeRun.id, 'Conditional soft-hyphen painting is outside page-paint v1') }
     }

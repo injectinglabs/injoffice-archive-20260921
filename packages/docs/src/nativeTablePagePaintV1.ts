@@ -285,12 +285,23 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
   for (const block of document.body.blocks) {
     activeSection = sectionsByStart.get(block.id) ?? activeSection
     const table = block.table ? nativeDocxTableGeometryV1(block.table, resolved) : undefined
-    if ((table?.width_percent_fiftieths !== undefined || table?.layout === 'autofit') && activeSection) {
+    // A table with no w:tblLayout is autofit by cascade default (ECMA-376
+    // 17.4.53), so the approximate lane needs its container too: its authored
+    // grid is a preference that has to be fitted to the text column, not a
+    // fixed width that may run past it.
+    const cascadeAutofit = approximate === true && table !== undefined && table.layout === undefined && table.width_twips === undefined && table.width_percent_fiftieths === undefined
+    if ((table?.width_percent_fiftieths !== undefined || table?.layout === 'autofit' || cascadeAutofit) && activeSection) {
       const geometry = qualifyNativeDocxSectionColumnsV1(activeSection)
       if (geometry.ok && geometry.value.columns.length === 1) tableContainers.set(table!.id, { width: geometry.value.columns[0]!.width_millipoints / 50, sectionID: activeSection.id })
     }
   }
-  for (const [blockIndex, block] of document.body.blocks.entries()) if (block.table) {
+  // Strict pagination still starts a table at the bare cursor, so it refuses
+  // rather than silently drop a neighbouring paragraph's spacing. The
+  // approximate lane no longer has to: it seats a table below the preceding
+  // space-after the way Word does (measured in #242), and a table clears
+  // previousAfter, so the following paragraph's own space-before is the gap
+  // Word leaves under the table. Both spacings are modelled, not guessed.
+  if (!approximate) for (const [blockIndex, block] of document.body.blocks.entries()) if (block.table) {
     const previous = document.body.blocks[blockIndex - 1]?.paragraph
     const next = document.body.blocks[blockIndex + 1]?.paragraph
     if (previous && (resolvedParagraphs.get(previous.id)?.properties.spacing_after_twips ?? 0) !== 0) return fail(block.table.id, 'Paragraph spacing adjacent to a table must be explicit zero in v1')
@@ -331,14 +342,22 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
       const grid = table.grid_widths_twips
       const sum = grid?.reduce((total, width) => total + width, 0)
       if (grid?.length && Number.isSafeInteger(sum) && sum! > 0 && (table.width_twips === undefined || table.width_twips === 0)) {
-        table = {
-          ...table,
-          layout: 'fixed',
-          width_twips: sum,
-          alignment: table.alignment ?? 'left',
+        const { width_twips: _authoredWidth, ...rest } = table
+        const authored = {
+          ...rest,
+          alignment: table.alignment ?? 'left' as const,
           indent_twips: table.indent_twips ?? 0,
           cell_margins: table.cell_margins ?? { top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 },
         }
+        // An auto-width table whose authored grid is wider than the text column
+        // is fitted to that column by the declared grid policy rather than
+        // painted at the authored sum: an authored grid is a preference, and a
+        // fixed table wider than its column has no lawful placement, so
+        // pagination would otherwise refuse the whole document over it.
+        const container = tableContainers.get(table.id)
+        const fitted = container ? fitNativeDocxApproximateTableGridV1(authored, container.width, container.sectionID) : undefined
+        if (fitted) { table = fitted.table; widthPolicy = fitted.policy }
+        else table = { ...authored, layout: 'fixed', width_twips: sum }
       }
     }
     if (table.layout !== 'fixed' || table.alignment !== 'left' || table.indent_twips === undefined || table.width_twips === undefined || !table.cell_margins) return fail(table.id, 'Table requires explicit fixed dxa width, left alignment, indent, and all four cell margins')

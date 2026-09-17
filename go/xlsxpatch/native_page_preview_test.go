@@ -2,6 +2,7 @@ package xlsxpatch
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -312,6 +313,37 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 	} {
 		if got := previewNativePageSettings(sheet(tc.body), "xl/worksheets/sheet1.xml", "1"); got.Status != "unavailable" || got.Settings != nil {
 			t.Fatalf("%s: defaulted a fact with no default: %+v", tc.name, got)
+		}
+	}
+}
+
+// ECMA-376 Part 1 §18.3.1.62 measures every pageMargins attribute from the
+// paper edge, so header and footer are not additions to top and bottom: Excel
+// prints the body between max(top, header) and max(bottom, footer). The
+// attributes were parsed and then dropped, which silently gave every worksheet
+// with a header margin deeper than its top margin a taller body than Excel
+// prints. These are the authored margins of hard-v2 cell-anchored-hidden-shapes.xlsx.
+func TestNativePageSettingsProjectHeaderAndFooterMargins(t *testing.T) {
+	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
+		margins := `<pageMargins left="0.7" right="0.7" top="0.63" bottom="0" header="0.79" footer="0.19685"/>`
+		got := previewNativePageSettings([]byte(`<worksheet xmlns="`+ns+`">`+margins+`<pageSetup paperSize="9" orientation="portrait" scale="80"/></worksheet>`), "xl/worksheets/sheet1.xml", "1")
+		if got.Status != "available" || got.Settings == nil || got.Settings.Header != 0.79 || got.Settings.Footer != 0.19685 || got.Settings.Top != 0.63 || got.Settings.Bottom != 0 {
+			t.Fatalf("authored header/footer margins lost: %+v", got.Settings)
+		}
+		// A worksheet with no pageSetup reports them too: its host must reserve
+		// the same bands once it chooses paper.
+		bare := previewNativePageSettings([]byte(`<worksheet xmlns="`+ns+`">`+margins+`</worksheet>`), "xl/worksheets/sheet1.xml", "1")
+		if bare.Status != "margins-only" || bare.Margins == nil || bare.Margins.Header != 0.79 || bare.Margins.Footer != 0.19685 {
+			t.Fatalf("authored header/footer margins lost without pageSetup: %+v", bare.Margins)
+		}
+		raw, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{`"header_inches":0.79`, `"footer_inches":0.19685`} {
+			if !strings.Contains(string(raw), key) {
+				t.Fatalf("page settings do not carry %s: %s", key, raw)
+			}
 		}
 	}
 }

@@ -130,6 +130,10 @@ type nativeExtractPackage struct {
 	parts        map[string][]byte
 	aliases      map[string]string
 	contentTypes nativeExtractContentTypes
+	// Aliases of parts the ZIP stores but no content type maps. They are
+	// dropped from the index so an unreferenced editor leftover cannot fail the
+	// package, and kept here so a relationship that names one still refuses.
+	untypedAliases map[string]bool
 }
 
 type nativeExtractContentTypes struct {
@@ -541,12 +545,14 @@ func openNativeExtractPackage(data []byte) (nativeExtractPackage, error) {
 	for _, actualPart := range omitted {
 		delete(parts, actualPart)
 	}
+	untypedAliases := map[string]bool{}
 	for alias, name := range aliases {
 		if _, ok := parts[name]; !ok {
+			untypedAliases[alias] = true
 			delete(aliases, alias)
 		}
 	}
-	return nativeExtractPackage{parts: parts, aliases: aliases, contentTypes: contentTypes}, nil
+	return nativeExtractPackage{parts: parts, aliases: aliases, contentTypes: contentTypes, untypedAliases: untypedAliases}, nil
 }
 
 func secureNativePartName(name string) bool {
@@ -983,8 +989,23 @@ func (extractor *nativeExtractor) parseRelationships(sourcePart string) ([]nativ
 			}
 			partAlias, aliasErr := nativePartAlias(part)
 			actualPart, exists := extractor.pkg.aliases[partAlias]
+			if aliasErr == nil && !exists && extractor.pkg.untypedAliases[partAlias] {
+				// The package does store this part; nothing gives it a content
+				// type. Following it would read bytes of unknown kind, so the
+				// reference still refuses.
+				return nil, fmt.Errorf("pptxpatch: native extract OPC: relationship %s targets a part with no effective content type %q", id, part)
+			}
 			if aliasErr != nil || !exists {
-				return nil, fmt.Errorf("pptxpatch: native extract OPC: relationship %s targets missing OPC part %q", id, part)
+				// A relationship whose target the package does not store
+				// resolves to nothing. It is not followed here: every consumer
+				// resolves a relationship by id and then demands a stored part
+				// of the exact expected content type, so an entry that names no
+				// stored part can only fail where it is actually used. Real
+				// saves leave these behind — a deck that drops a cached
+				// SmartArt drawing keeps its diagramDrawing relationship — and
+				// refusing the package refused every slide over a line no
+				// reader follows.
+				actualPart = ""
 			}
 			part = actualPart
 		}
@@ -1639,7 +1660,18 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 		case xml.Name{Space: dialect.presentation, Local: "pic"}:
 			element, elementErr := extractor.extractPicture(child, part, slideID, graph.relationships, dialect)
 			if elementErr != nil {
-				return NativeSlide{}, elementErr
+				var refusal nativePictureProjectionRefusal
+				if !errors.As(elementErr, &refusal) {
+					return NativeSlide{}, elementErr
+				}
+				raw, rawErr := rawNativeNode(payload, child)
+				if rawErr != nil {
+					return NativeSlide{}, rawErr
+				}
+				if err := extractor.markSlideUnsupported(&slide, part, objectIDs[child], nativeSHA256(raw), raw, refusal.code, nativeDiscloseShapeRefusal(child, dialect, refusal.message)); err != nil {
+					return NativeSlide{}, err
+				}
+				continue
 			}
 			usedPictureRelationships[*element.Source.RelationshipID] = true
 			slide.Elements = append(slide.Elements, element)

@@ -1724,18 +1724,29 @@ function approximateInertNoteSeparators(document: NativeDocxDocumentV1): boolean
  * an unqualified 'shaped-paragraph-missing' names a symptom and discards the
  * cause. Recover the originating resolved-layout code so the refusal is
  * actionable; every field here is already on the shaped-lines wire.
+ *
+ * A blocker that lives in styles.xml docDefaults, in the settings part or in any
+ * other document-wide source is scoped to the document, not to a paragraph:
+ * shaping sets documentBlocked once and then refuses every paragraph, recording
+ * the cause under the document id. Matching paragraph scope alone therefore
+ * named no cause at all for exactly the blockers that stop the whole body, so
+ * fall back to the document-scoped record. A paragraph-scoped cause still wins,
+ * since it names the specific paragraph's own blocker.
  */
 function unshapedParagraphCause(context: PaginationContext, paragraphID: string): { code: string; message: string } | undefined {
+  const documentID = context.request.document.document_id
+  let documentCause: { code: string; message: string } | undefined
   for (const diagnostic of context.request.shaped_lines.diagnostics) {
     // Only 'unresolved-layout-diagnostic' records a diagnostic that actually
     // blocked shaping. 'paint-diagnostic-preserved' carries a source code too,
     // but it is emitted for paint-only codes that explicitly do not change
     // shaping advances, so attributing a refusal to one names an innocent code.
-    if (diagnostic.code !== 'unresolved-layout-diagnostic') continue
-    if (diagnostic.scope_id !== paragraphID || diagnostic.source_diagnostic_code === undefined) continue
-    return { code: diagnostic.source_diagnostic_code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+    if (diagnostic.code !== 'unresolved-layout-diagnostic' || diagnostic.source_diagnostic_code === undefined) continue
+    const cause = { code: diagnostic.source_diagnostic_code, message: diagnostic.source_diagnostic_message ?? diagnostic.message }
+    if (diagnostic.scope_id === paragraphID) return cause
+    if (diagnostic.scope_id === documentID && documentCause === undefined) documentCause = cause
   }
-  return undefined
+  return documentCause
 }
 
 function approximateOmittedUnshapedParagraph(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): boolean {

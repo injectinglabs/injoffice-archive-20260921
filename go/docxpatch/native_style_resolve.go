@@ -2016,6 +2016,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 	}
 	for _, child := range node.Children {
 		if child.Name.Space != resolver.wordNS {
+			if nativeShaperDefaultLigatureMode(child, node) {
+				resolver.addDiagnostic("LIGATURE_MODE_MATCHES_SHAPER", scopeID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
+				continue
+			}
 			resolver.addDiagnostic("FOREIGN_RUN_PROPERTY", scopeID, partName, child, "Foreign run-property markup is preserved verbatim")
 			continue
 		}
@@ -2208,6 +2212,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 		case "noProof":
 			if !nativeNeutralSourceProperty(child, node, resolver.wordNS) {
 				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
+			}
+		case "webHidden":
+			if nativeWebLayoutHiddenRun(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("WEB_LAYOUT_HIDDEN_RUN_PRESERVED", scopeID, partName, child, "Web Layout view hiding is preserved and not applied; paginated layout draws this run, so it moves no line and no page")
+			} else {
+				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
 			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)

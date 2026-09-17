@@ -1766,8 +1766,12 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(completed.page_paint_output.status).toBe('painted')
     expect(completed.page_paint_output.pages.flatMap(p => p.commands).find(c => c.kind === 'paint_inline_image')).toMatchObject({ x_millipoints: 73_000, width_millipoints: 10_000, height_millipoints: 10_000 })
     const invalid = imageFixture()
-    ;(invalid.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!.inline_effect_extent_emu = { left: 1, top: 0, right: 0, bottom: 0 }
-    await expect(prepareNativeDocxPagePaintV1(invalid)).rejects.toThrow('authoritative media assets')
+    const invalidDrawing = (invalid.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!
+    invalidDrawing.inline_effect_extent_emu = { left: 1, top: 0, right: 0, bottom: 0 }
+    expect(qualifyNativeDocxInlineImageV1(invalid.document as NativeDocxDocumentV1, 'run:image', invalidDrawing)).toMatchObject({ ok: false, code: 'unsupported-image', message: expect.stringContaining('Inline effect extents') })
+    const invalidPrepared = await prepareNativeDocxPagePaintV1(invalid)
+    expect(invalidPrepared.page_paint_request.paginated_layout.status).toBe('refused')
+    expect(invalidPrepared.page_paint_request.media_assets).toEqual([])
     const overflow = imageFixture(), overflowDoc = overflow.document as NativeDocxDocumentV1
     const drawing = overflowDoc.body.blocks[0]!.paragraph!.runs[0]!.drawing!
     drawing.width_emu = 12_700_000_000
@@ -1887,7 +1891,11 @@ describe('native DOCX page-paint compiler v1', () => {
 
     const duplicate = imageFixture()
     duplicate.media_assets = [duplicate.media_assets[0]!, duplicate.media_assets[0]!]
-    await expect(prepareNativeDocxPagePaintV1(duplicate)).rejects.toThrow(/exactly cover/)
+    await expect(prepareNativeDocxPagePaintV1(duplicate)).rejects.toThrow(/supplied more than once/)
+
+    const missing = imageFixture()
+    missing.media_assets = []
+    await expect(prepareNativeDocxPagePaintV1(missing)).rejects.toThrow(/must cover every qualified unique inline picture part/)
 
     const vector = imageFixture()
     ;(vector.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!.content_type = 'image/svg+xml'
@@ -1896,6 +1904,35 @@ describe('native DOCX page-paint compiler v1', () => {
     const vectorPrepared = await prepareNativeDocxPagePaintV1(vector)
     expect(vectorPrepared.page_paint_request.paginated_layout).toMatchObject({ status: 'refused', pages: [] })
     expect(vectorPrepared.page_paint_request.media_assets).toEqual([])
+  })
+
+  it('paints a page whose supplier offers raster parts no qualified inline picture names', async () => {
+    // A package supplier walks the whole model for PNG/JPEG parts; this module
+    // qualifies only inline run drawings. numbering.xml picture bullets and
+    // refused drawings therefore arrive as assets that paint nothing.
+    const bullets = imageFixture()
+    ;(bullets.document as NativeDocxDocumentV1).passthrough_parts.push({ part_name: 'word/media/bullet.png', content_type: 'image/png', byte_length: PNG_BYTES.byteLength, sha256: PNG_DIGEST, policy: 'preserve-verbatim' })
+    bullets.media_assets = [...bullets.media_assets, { part_name: 'word/media/bullet.png', content_type: 'image/png', content_digest: PNG_DIGEST, bytes: PNG_BYTES }]
+    const prepared = await prepareNativeDocxPagePaintV1(bullets)
+    expect(prepared.page_paint_request.media_assets.map((asset) => asset.part_name)).toEqual(['word/media/image.png'])
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to' as const, x: 0, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 1_000 }, { kind: 'close_path' as const }],
+    })) })
+    expect(completed.page_paint_output.status).toBe('painted')
+    expect(completed.page_paint_output.resources.map((resource) => resource.part_name)).toEqual(['word/media/image.png'])
+
+    // The same holds when the only drawing naming that part is itself refused.
+    const refusedDrawing = imageFixture()
+    ;(refusedDrawing.document as NativeDocxDocumentV1).body.blocks[0]!.paragraph!.runs[0]!.drawing!.width_emu = 127_001
+    const refusedPrepared = await prepareNativeDocxPagePaintV1(refusedDrawing)
+    expect(refusedPrepared.page_paint_request.media_assets).toEqual([])
+
+    // An over-collected part is dropped, never joined loosely: a supplied part
+    // that does name a qualified picture still has to match it byte for byte.
+    const tampered = imageFixture()
+    tampered.media_assets = [{ ...tampered.media_assets[0]!, content_digest: `sha256:${'c'.repeat(64)}` }]
+    await expect(prepareNativeDocxPagePaintV1(tampered)).rejects.toThrow(/exact-join one qualified native picture/)
   })
 
   it('normalizes legal ASCII MIME case while rejecting non-canonical OPC media part names', async () => {

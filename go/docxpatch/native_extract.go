@@ -2923,10 +2923,15 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 	y, okY := nativeInt64Attr(off, "", "y")
 	cx, okCX := nativePositiveInt64Attr(ext, "", "cx")
 	cy, okCY := nativePositiveInt64Attr(ext, "", "cy")
+	// wp:extent states the drawing object's final size in the document and the
+	// graphic frame maps the shape onto it, so an unrotated shape extent adds no
+	// layout fact and Word's own writer rounds the two apart by a few EMU. Only
+	// a quarter turn reads the shape extent, whose axes must be the transpose of
+	// the painted box for the rotation to be the one the frame describes.
 	if quarterTurn {
 		return okX && okY && x == 0 && y == 0 && okCX && okCY && cy == width && cx == height
 	}
-	return okX && okY && x == 0 && y == 0 && okCX && okCY && cx == width && cy == height
+	return okX && okY && x == 0 && y == 0 && okCX && okCY
 }
 
 func nativeInt64Attr(node *nativeXMLNode, namespace, local string) (int64, bool) {
@@ -3111,6 +3116,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 	preserveOnly := false
 	for _, child := range node.Children {
 		if child.Name.Space != extractor.wordNS {
+			if nativeShaperDefaultLigatureMode(child, node) {
+				preserveOnly = true
+				extractor.addUnsupported("LIGATURE_MODE_MATCHES_SHAPER", "run-properties", paragraphID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("FOREIGN_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Foreign namespace run property is preserved verbatim")
 			continue
@@ -3217,6 +3227,14 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Proofing metadata has malformed, duplicate or unknown source structure")
+			}
+		case "webHidden":
+			preserveOnly = true
+			if nativeWebLayoutHiddenRun(child, node, extractor.wordNS) {
+				extractor.addUnsupported("WEB_LAYOUT_HIDDEN_RUN_PRESERVED", "run-properties", paragraphID, partName, child, "Web Layout view hiding is preserved and not applied; paginated layout draws this run, so it moves no line and no page")
+			} else {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
 			}
 		case "vertAlign":
 			preserveOnly = true

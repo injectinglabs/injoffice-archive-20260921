@@ -1127,6 +1127,58 @@ describe('native DOCX pagination v1', () => {
     })]))
   })
 
+  // A blocker in styles.xml docDefaults or in any other document-wide source is
+  // recorded under the document id, and shaping then drops every paragraph. The
+  // absence was reported with no cause at all for exactly the blockers that stop
+  // the whole body, which is the case most in need of naming itself.
+  it('names a document-scoped resolved-layout cause when every paragraph is missing', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [{
+      code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: request.document.document_id,
+      source_diagnostic_code: 'FOREIGN_RUN_PROPERTY',
+      source_diagnostic_message: 'Foreign run-property markup is preserved verbatim',
+      message: 'Resolved layout diagnostic FOREIGN_RUN_PROPERTY blocks native shaping',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'shaped-paragraph-missing',
+      scope_id: droppedID,
+      source_code: 'FOREIGN_RUN_PROPERTY',
+      source_message: 'Foreign run-property markup is preserved verbatim',
+    })]))
+  })
+
+  // The paragraph's own blocker is the more specific answer, so it still wins
+  // over a document-scoped record that is also present.
+  it('prefers the paragraph-scoped cause over a document-scoped one', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [
+      {
+        code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: request.document.document_id,
+        source_diagnostic_code: 'FOREIGN_RUN_PROPERTY',
+        source_diagnostic_message: 'Foreign run-property markup is preserved verbatim',
+        message: 'Resolved layout diagnostic FOREIGN_RUN_PROPERTY blocks native shaping',
+      },
+      {
+        code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: droppedID,
+        source_diagnostic_code: 'UNSUPPORTED_NUMBER_FORMAT',
+        source_diagnostic_message: 'Numbering format is not modelled',
+        message: 'Resolved layout diagnostic UNSUPPORTED_NUMBER_FORMAT blocks native shaping',
+      },
+    ]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toMatchObject({ source_code: 'UNSUPPORTED_NUMBER_FORMAT' })
+  })
+
   // paint-diagnostic-preserved also carries a source code, but it is emitted for
   // codes that explicitly do not change shaping advances. Attributing a refusal
   // to one names an innocent code and sends the reader at the wrong subsystem.
@@ -1326,6 +1378,54 @@ describe('native DOCX pagination v1', () => {
       const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
       expect(approximate.layout.status, code).toBe('paginated')
       expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:2'])
+    }
+  })
+
+  it('paints every paragraph under a document-scoped ligature mode the shaper already applies', () => {
+    // w14:ligatures w14:val="standardContextual" sits in styles.xml docDefaults,
+    // so its record is scoped to the document and withholding it blocks every
+    // paragraph. The declared HarfBuzz shaping defaults already apply the
+    // standard and contextual ligature sets, so the approximate tier paints on;
+    // the foreign markup this value used to be recorded as still refuses.
+    for (const code of ['LIGATURE_MODE_MATCHES_SHAPER', 'FOREIGN_RUN_PROPERTY'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const documentID = request.document.document_id
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: documentID, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'FOREIGN_RUN_PROPERTY') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2'])
+    }
+  })
+
+  it('paints a run Word hides only in its Web Layout view', () => {
+    // w:webHidden hides a run in Word's Web Layout view. Paginated layout draws
+    // it like any other run, so the fact is recorded and the paragraph paints;
+    // a malformed leaf is recorded as an unmodelled property and still refuses.
+    for (const code of ['WEB_LAYOUT_HIDDEN_RUN_PRESERVED', 'UNMODELED_RUN_PROPERTY'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'UNMODELED_RUN_PROPERTY') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
     }
   })
 

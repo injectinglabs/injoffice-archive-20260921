@@ -923,8 +923,8 @@ func TestExtractNativeDocumentDrawingMLFloatingAndCropRefusal(t *testing.T) {
 		{name: "rotation remains preserve-only", mutate: func(parts map[string]string) {
 			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<a:xfrm/>`, `<a:xfrm rot="5400000"/>`, 1)
 		}, code: "PICTURE_TRANSFORM_PRESERVED"},
-		{name: "mismatched transform extent remains preserve-only", mutate: func(parts map[string]string) {
-			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<a:xfrm/>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="914401" cy="457200"/></a:xfrm>`, 1)
+		{name: "mismatched rotated transform extent remains preserve-only", mutate: func(parts map[string]string) {
+			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<a:xfrm/>`, `<a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="914401" cy="457200"/></a:xfrm>`, 1)
 		}, code: "PICTURE_TRANSFORM_PRESERVED"},
 		{name: "hidden picture remains preserve-only", mutate: func(parts map[string]string) {
 			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<wp:docPr id="1"`, `<wp:docPr hidden="1" id="1"`, 1)
