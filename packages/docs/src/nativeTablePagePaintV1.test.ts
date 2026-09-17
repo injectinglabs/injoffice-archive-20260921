@@ -256,6 +256,38 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(request.document).toEqual(original)
   })
 
+  /** cell-sdt-redline.docx: w:tblPr states only w:tblLayout fixed, with no
+   * w:tblW, no w:tblInd and no w:tblCellMar. A fixed-layout table sizes its
+   * columns from w:tblGrid (ECMA-376 17.4.53), so the grid sum is the width the
+   * source states; the approximate lane used to refuse the whole document for
+   * lack of a w:tblW that a fixed table does not need. */
+  it('uses the authored tblGrid when an explicitly fixed table states no tblW', () => {
+    const request = fixture()
+    const table = request.document.body.blocks[0]!.table!
+    table.layout = 'fixed'
+    delete table.alignment
+    delete table.indent_twips
+    delete table.width_twips
+    delete table.cell_margins
+    table.grid_widths_twips = [400]
+    const original = structuredClone(request.document)
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout).status).toBe('refused')
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.table.layout).toBe('fixed')
+    expect(approximate.tables[0]!.table.width_twips).toBe(400)
+    expect(approximate.tables[0]!.table.alignment).toBe('left')
+    expect(approximate.tables[0]!.table.indent_twips).toBe(0)
+    expect(approximate.tables[0]!.table.cell_margins).toEqual({ top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 })
+    expect(request.document).toEqual(original)
+    // A fixed table that does state its width keeps that width, not the grid sum.
+    const stated = fixture()
+    stated.document.body.blocks[0]!.table!.width_twips = 400
+    stated.document.body.blocks[0]!.table!.grid_widths_twips = [400]
+    expect(qualifyApproximateLegacyTables(stated.document, stated.resolved_layout, stated.shaped_lines, { legacy_compatibility_mode: 14 }))
+      .toEqual(qualifyNativeDocxTablesV1(stated.document, stated.resolved_layout, stated.shaped_lines))
+  })
+
   it('uses bounded resolved geometry without changing source or overriding direct properties', () => {
     const request=fixture(), table=request.document.body.blocks[0]!.table!
     const expected=structuredClone(qualifyNativeDocxTablesV1(request.document,request.resolved_layout))
