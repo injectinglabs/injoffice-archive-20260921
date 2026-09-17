@@ -110,6 +110,9 @@ export interface NativeDocxDrawingV1 {
   stacking_order?: number
   vertical_relative_from?: string
   wrap?: 'none' | 'square' | 'tight' | 'through' | 'top-and-bottom'
+  /** wp:anchor distL/distR: the wrap region is the extent widened by these. */
+  wrap_distance_left_emu?: number
+  wrap_distance_right_emu?: number
   /** Inline DrawingML text box payload extracted from wps:wsp. */
   textbox_text?: string
   textbox_fill_rgb?: string
@@ -391,7 +394,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
   RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'wrap_distance_left_emu', 'wrap_distance_right_emu', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
@@ -682,6 +685,11 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
   if (placement === 'inline' && (entry.floating_layer !== undefined || entry.stacking_order !== undefined)) add(issues, 'INVALID_VALUE', path, 'inline drawings cannot carry floating layering')
   optionalString(entry.vertical_relative_from, `${path}/vertical_relative_from`, issues)
   if (entry.wrap !== undefined) enumValue(entry.wrap, `${path}/wrap`, ['none', 'square', 'tight', 'through', 'top-and-bottom'], issues)
+  for (const key of ['wrap_distance_left_emu', 'wrap_distance_right_emu'] as const) {
+    const value = integer(entry[key], `${path}/${key}`, issues, 0, false)
+    if (typeof value === 'number' && value > 91_440_000) add(issues, 'OUT_OF_RANGE', `${path}/${key}`, 'wrap distance must be a bounded non-negative EMU')
+    if (entry[key] !== undefined && placement === 'inline') add(issues, 'INVALID_VALUE', path, 'inline drawings cannot carry floating wrap distances')
+  }
   if (placement === 'inline' && (entry.x_emu !== undefined || entry.y_emu !== undefined)) add(issues, 'INVALID_VALUE', path, 'inline drawings cannot carry floating offsets')
   validateEditPolicy(entry.edit_policy, `${path}/edit_policy`, issues, drawingOperations)
   if (mediaPart) reference(refs, mediaPart, `${path}/media_part`, 'media-part')
