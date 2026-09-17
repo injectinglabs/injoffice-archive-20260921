@@ -780,7 +780,18 @@ func (resolver *nativeLayoutResolver) loadFonts(partName string) error {
 		}
 		key := strings.ToLower(name)
 		if seen[key] {
-			return fmt.Errorf("docxpatch: native style resolution: duplicate font %q", name)
+			// A second w:font for a family already described carries only the
+			// descriptive metadata this tier never consults - panose1, charset,
+			// family, pitch, sig - so it selects nothing and changes no advance.
+			// Word and LibreOffice both keep the first description and render
+			// the document. An entry that also binds an embedded face is a
+			// different matter: two faces claiming one family name is a real
+			// ambiguity, and that still refuses.
+			if nativeDOCXHasEmbeddedFace(child, resolver.wordNS) {
+				return fmt.Errorf("docxpatch: native style resolution: duplicate font %q binds an embedded face", name)
+			}
+			resolver.addDiagnostic("DUPLICATE_FONT_TABLE_ENTRY", resolver.doc.DocumentID, partName, child, "A repeated font-table entry for this family is preserved; the first description resolves the family")
+			continue
 		}
 		seen[key] = true
 		font := NativeResolvedFontV1{Name: name}
