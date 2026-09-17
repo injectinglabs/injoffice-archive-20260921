@@ -157,12 +157,30 @@ interface CachedFace {
   preflight: SfntPreflight
   bytes: number
   features: ReadonlySet<string>
+  /** The exact bytes this provider hashed when the face entered the cache. */
+  verifiedBytes: Uint8Array
 }
 
 const canonicalHarfBuzzShapers = new WeakSet<object>()
 
 function digestBytes(bytes: Uint8Array): `sha256:${string}` {
   return `sha256:${bytesToHex(sha256(bytes))}`
+}
+
+/**
+ * Exact byte equality against a copy this provider already hashed.
+ *
+ * Under the same collision resistance the content digest already assumes,
+ * `sameBytes(candidate, verified)` accepts exactly the inputs whose SHA-256
+ * equals the digest of `verified`, so it is an equivalent time-of-check /
+ * time-of-use guard and never reaches HarfBuzz with different bytes.
+ */
+function sameBytes(candidate: Uint8Array, verified: Uint8Array): boolean {
+  if (candidate.byteLength !== verified.byteLength) return false
+  return Buffer.compare(
+    Buffer.from(candidate.buffer, candidate.byteOffset, candidate.byteLength),
+    Buffer.from(verified.buffer, verified.byteOffset, verified.byteLength),
+  ) === 0
 }
 
 function refusal(code: NativeTextDecision['code'], message: string, faceId?: string, startUtf16?: number, endUtf16?: number): NativeTextRefusal {
@@ -776,12 +794,22 @@ export function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): Ha
     if (font.bytes.byteLength === 0 || font.bytes.byteLength > HARFBUZZ_SHAPER_LIMITS.maxFontBytes) return refusal('font-bytes-unavailable', `font bytes must contain 1 through ${HARFBUZZ_SHAPER_LIMITS.maxFontBytes} bytes`, font.face.faceId)
     if ((typeof SharedArrayBuffer !== 'undefined' && font.bytes.buffer instanceof SharedArrayBuffer)
       || ('resizable' in font.bytes.buffer && font.bytes.buffer.resizable === true)) return refusal('invalid-contract', 'shared or resizable font byte storage is outside the immutable snapshot contract', font.face.faceId)
-    const ownedBytes = Uint8Array.from(font.bytes)
-    const beforeDigest = digestBytes(ownedBytes)
-    if (beforeDigest !== font.face.contentDigest) return refusal('font-digest-mismatch', 'font bytes do not match the resolved content digest', font.face.faceId)
-    const fontSnapshot: FontResource = Object.freeze({ face: snapshotFace(font.face), bytes: ownedBytes, metrics: snapshotMetrics(font.metrics) })
-    const cacheKey = `${fontSnapshot.face.contentDigest}:${fontSnapshot.face.collectionIndex ?? 'standalone'}`
+    // A face's content digest is hashed once, when that face enters the cache.
+    // Re-hashing the whole font on every run is repetition, not verification:
+    // comparing against the copy this provider already hashed refuses and
+    // accepts exactly the same bytes for the same face, and keeps hashing cost
+    // proportional to the number of distinct fonts instead of shaped runs.
+    const cacheKey = `${font.face.contentDigest}:${font.face.collectionIndex ?? 'standalone'}`
     let cached = cache.get(cacheKey)
+    let ownedBytes: Uint8Array
+    if (cached) {
+      if (!sameBytes(font.bytes, cached.verifiedBytes)) return refusal('font-digest-mismatch', 'font bytes do not match the resolved content digest', font.face.faceId)
+      ownedBytes = cached.verifiedBytes
+    } else {
+      ownedBytes = Uint8Array.from(font.bytes)
+      if (digestBytes(ownedBytes) !== font.face.contentDigest) return refusal('font-digest-mismatch', 'font bytes do not match the resolved content digest', font.face.faceId)
+    }
+    const fontSnapshot: FontResource = Object.freeze({ face: snapshotFace(font.face), bytes: ownedBytes, metrics: snapshotMetrics(font.metrics) })
     if (!cached) {
       if (cache.size >= HARFBUZZ_SHAPER_LIMITS.maxCachedFaces || cachedBytes + fontSnapshot.bytes.byteLength > HARFBUZZ_SHAPER_LIMITS.maxCachedFontBytes) return refusal('provider-failure', 'HarfBuzz face cache exceeds its bounded lifetime budget', fontSnapshot.face.faceId)
       const preflight = preflightSfnt(ownedBytes, fontSnapshot.face.collectionIndex)
@@ -793,7 +821,7 @@ export function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): Ha
         if (face.upem !== preflight.unitsPerEm) return refusal('unsupported-font-format', 'HarfBuzz face unitsPerEm disagree with the preflighted sfnt', font.face.faceId)
         const hbFont = new hb.Font(face)
         const features = new Set([...face.getTableFeatureTags('GSUB'), ...face.getTableFeatureTags('GPOS')])
-        cached = { blob, face, font: hbFont, preflight, bytes: ownedBytes.byteLength, features }
+        cached = { blob, face, font: hbFont, preflight, bytes: ownedBytes.byteLength, features, verifiedBytes: ownedBytes }
         cache.set(cacheKey, cached)
         cachedBytes += ownedBytes.byteLength
       } catch {
@@ -804,7 +832,7 @@ export function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): Ha
     }
     try {
       const result = shapeWithCachedFace({ run, startUtf16: 0, endUtf16: run.text.length, font: fontSnapshot }, cached, buffer)
-      if (digestBytes(font.bytes) !== beforeDigest) return refusal('font-digest-mismatch', 'font bytes changed during shaping', font.face.faceId)
+      if (!sameBytes(font.bytes, ownedBytes)) return refusal('font-digest-mismatch', 'font bytes changed during shaping', font.face.faceId)
       return result
     } catch {
       return refusal('provider-failure', 'pinned HarfBuzz runtime failed while shaping the qualified run', font.face.faceId)
