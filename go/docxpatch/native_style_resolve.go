@@ -2242,6 +2242,12 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			} else {
 				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
 			}
+		case "bdr":
+			if nativeAbsentRunBorder(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("RUN_BORDER_ABSENT_PRESERVED", scopeID, partName, child, "A run border that states no border is preserved and not applied; it paints no stroke and reserves no space, so it moves no glyph, line or page")
+			} else {
+				resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "Only a run border that states no border is proven layout-neutral; a painted run border reserves space this tier does not model")
+			}
 		case "vertAlign":
 			value, ok := nativeVerticalAlignmentValue(child, resolver.wordNS)
 			if ok {

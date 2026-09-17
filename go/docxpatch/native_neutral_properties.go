@@ -93,3 +93,36 @@ func nativeShaperDefaultContextualAlternates(node, owner *nativeXMLNode) bool {
 	enabled, valid := nativeOnOffAttr(node, nativeWordML2010, "val", true)
 	return valid && enabled
 }
+
+// w:bdr states the border Word draws around a run. ECMA-376 17.18.2 gives
+// ST_Border both a "none" and a "nil" member, and both state the same thing:
+// no border. A run border that names one of them therefore selects exactly the
+// absence an omitted w:bdr already states — Word paints no stroke for it and
+// reserves no space around the run, so the run's glyphs, advances, line box
+// and page position are the ones the same run without the element produces.
+// The companion w:sz, w:space, w:color, theme and w:frame/w:shadow attributes
+// describe a stroke that is never drawn, so none of them can move a line.
+//
+// Every other ST_Border value paints a stroke and reserves space on all four
+// sides of the run, which v1 has no input for, so it stays unmodeled markup
+// along with malformed, decorated or repeated w:bdr elements.
+func nativeAbsentRunBorder(node, owner *nativeXMLNode, ns string) bool {
+	if node.Name != (xml.Name{Space: ns, Local: "bdr"}) || len(directNativeChildren(owner, ns, "bdr")) != 1 {
+		return false
+	}
+	value := xml.Name{Space: ns, Local: "val"}
+	if !nativeExactLeaf(node, value,
+		xml.Name{Space: ns, Local: "sz"}, xml.Name{Space: ns, Local: "space"}, xml.Name{Space: ns, Local: "color"},
+		xml.Name{Space: ns, Local: "themeColor"}, xml.Name{Space: ns, Local: "themeTint"}, xml.Name{Space: ns, Local: "themeShade"},
+		xml.Name{Space: ns, Local: "frame"}, xml.Name{Space: ns, Local: "shadow"}) {
+		return false
+	}
+	count, declared := 0, ""
+	for _, attr := range node.Attrs {
+		if attr.Name == value {
+			count++
+			declared = attr.Value
+		}
+	}
+	return count == 1 && (declared == "none" || declared == "nil")
+}
