@@ -1918,6 +1918,27 @@ describe('native DOCX pagination v1', () => {
     expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(2)
   })
 
+  // A content control around a table row's cells: the extractor reads the same
+  // w:tc elements through it, so the wrapper itself adds no column and no
+  // advance. Anything else in the row keeps refusing.
+  it('defers a content control whose cells the extractor read through, and refuses other row content', () => {
+    const request = fixture()
+    request.document.unsupported.push({
+      id: 'unsupported:wrapped-row-cells', code: 'WRAPPED_ROW_CELLS', capability: 'table-structure', scope_id: 'story:body',
+      preservation: 'refuse-mutation', message: 'Row cells wrapped in a content control are laid out; the control itself is preserved verbatim',
+    })
+    const value = paginated(request)
+    expect(value.status).toBe('paginated')
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic' && entry.source_code === 'WRAPPED_ROW_CELLS')).toHaveLength(1)
+
+    const other = fixture()
+    other.document.unsupported.push({
+      id: 'unsupported:row-content', code: 'UNMODELED_ROW_CONTENT', capability: 'table-structure', scope_id: 'story:body',
+      preservation: 'refuse-mutation', message: 'Row content outside direct cells is preserved verbatim',
+    })
+    expect(paginateNativeDocxV1(other)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported' })]) }) }))
+  })
+
   // A body-level w:sectPr the extractor omitted because it governs no block
   // reaches no page: nothing falls in its range. Pagination reads the sections
   // that do hold blocks, and the omission stays visible as a deferred record.
