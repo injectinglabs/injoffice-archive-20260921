@@ -1,11 +1,40 @@
 /** Bounded baseline JFIF marker validation (ITU-T T.81 / T.871).
- * No EXIF orientation, ICC profiles, Adobe transforms, progressive/multiscan,
- * arithmetic coding or external tables. Pixels remain the browser's job.
+ * No ICC profiles, Adobe transforms, progressive/multiscan, arithmetic coding
+ * or external tables. One Exif attribute segment is read far enough to prove it
+ * states no orientation but the identity; a rotating orientation is refused,
+ * because a browser applies it and a rotated paint is not the source page.
+ * Pixels remain the browser's job.
  */
+/** True only for an APP1 payload that is a structurally complete Exif TIFF
+ * header whose IFD0 either omits Orientation (TIFF 6.0 tag 0x0112) or states
+ * the identity. Sub-IFDs are not walked: renderers read orientation from IFD0,
+ * and IFD1 describes the thumbnail this module never paints. */
+function identityOrientationExif(bytes: Uint8Array, start: number, end: number): boolean {
+  if (end - start < 14 || String.fromCharCode(...bytes.subarray(start, start + 6)) !== 'Exif\0\0') return false
+  const tiff = start + 6
+  const big = bytes[tiff] === 0x4d && bytes[tiff + 1] === 0x4d
+  if (!big && !(bytes[tiff] === 0x49 && bytes[tiff + 1] === 0x49)) return false
+  const short = (at: number) => big ? bytes[at]! * 256 + bytes[at + 1]! : bytes[at + 1]! * 256 + bytes[at]!
+  const long = (at: number) => big ? short(at) * 65536 + short(at + 2) : short(at + 2) * 65536 + short(at)
+  if (short(tiff + 2) !== 42) return false
+  const first = long(tiff + 4)
+  if (first < 8 || tiff + first + 2 > end) return false
+  const directory = tiff + first
+  const count = short(directory)
+  // TIFF stores an inline SHORT left-justified in its four value bytes, so the
+  // orientation reads the same way under either byte order.
+  if (count === 0 || count > 256 || directory + 2 + count * 12 + 4 > end) return false
+  for (let index = 0; index < count; index += 1) {
+    const entry = directory + 2 + index * 12
+    if (short(entry) === 0x0112 && (short(entry + 2) !== 3 || long(entry + 4) !== 1 || short(entry + 8) !== 1)) return false
+  }
+  return true
+}
+
 export function nativeBaselineJpegDimensions(bytes: Uint8Array): { width: number; height: number } | undefined {
   if (bytes.length < 24 || bytes.length > 16 * 1024 * 1024 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return undefined
   let offset = 2, segments = 0, width = 0, height = 0, restartInterval = 0
-  let jfif = false
+  let jfif = false, exif = false
   const components = new Map<number, number>()
   const quantization = new Set<number>(), huffman = new Set<number>()
   const word = (at: number) => bytes[at]! * 256 + bytes[at + 1]!
@@ -19,6 +48,11 @@ export function nativeBaselineJpegDimensions(bytes: Uint8Array): { width: number
     if (marker === 0xe0) {
       if (jfif || length !== 16 || String.fromCharCode(...bytes.subarray(start, start + 5)) !== 'JFIF\0' || bytes[start + 5] !== 1 || bytes[start + 6]! > 2 || bytes[start + 7]! > 2 || word(start + 8) === 0 || word(start + 10) === 0 || bytes[start + 12] !== 0 || bytes[start + 13] !== 0) return undefined
       jfif = true
+    } else if (marker === 0xe1) {
+      // T.871 places Exif attributes in APP1. One segment, before the frame
+      // header, and only when its IFD0 states no rotating orientation.
+      if (exif || components.size || !identityOrientationExif(bytes, start, end)) return undefined
+      exif = true
     } else if (marker === 0xc0) {
       if (components.size || bytes[start] !== 8) return undefined
       height = word(start + 1); width = word(start + 3)
