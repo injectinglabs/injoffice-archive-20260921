@@ -294,6 +294,28 @@ it('applies native shape-frame quarter turns to glyph paint without reshaping ho
  }
 })
 
+it('places a refused element mirrored on one axis instead of refusing the whole slide',async()=>{
+ // LibreOffice writes straight connectors as a frame plus a single a:flipH or
+ // a:flipV. The refused-element placement path carries that exactly
+ // representable reflection as integer PPM, so the world-affine classifier —
+ // not the source affine — decides whether the slide renders at all.
+ const scope={slideId:'slide-a',elementId:'el-shape'}
+ for(const [orientation,aPpm,dPpm] of [[{flipH:true},-1_000_000,1_000_000],[{flipV:true},1_000_000,-1_000_000],[{flipH:true,flipV:true},-1_000_000,-1_000_000]] as const){
+  const deck=structuredClone(parsedFull)
+  const shape=deck.slides[0]!.elements.find(element=>element.id==='el-shape')!
+  shape.transform={...shape.transform,rotationAngle:0,...orientation}
+  shape.compatibility={status:'refused',diagnostics:[{severity:'refusal',code:'pptx.test-refusal',message:'refused for test',scope}]}
+  deck.slides[0]!.compatibility={status:'refused',diagnostics:[{severity:'refusal',code:'pptx.test-refusal',message:'refused for test',scope}]}
+  deck.compatibility={status:'refused',diagnostics:[{severity:'refusal',code:'pptx.test-refusal',message:'refused for test',scope}]}
+  deck.slides[0]!.elements=[shape]
+  const tree=await compileNativePptxSlide(deck,0,{textLayout:textLayout()})
+  const node=findNode(tree,'placeholder','el-shape')
+  expect(node.reason).toBe('refused')
+  expect(node.transform).toMatchObject({aPpm,bPpm:0,cPpm:0,dPpm})
+  expect(tree.nodes.some(candidate=>candidate.kind==='placeholder'&&candidate.sourceElementId==='slide-a')).toBe(false)
+ }
+})
+
 it('retains source quarter-turn shape paths through native paint and checks rotated world bounds',async()=>{
  for(const quarterTurns of [1,2,3] as const){
   const shape:NativeElement={kind:'shape',id:'rotated',provenance:'authored',transform:{x:100,y:200,cx:400,cy:200,quarterTurns},preset:'triangle',fill:'123456',paragraphs:[],passthrough:[],compatibility:{status:'editable',diagnostics:[]}}
