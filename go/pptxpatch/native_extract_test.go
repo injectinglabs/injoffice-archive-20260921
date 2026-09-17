@@ -380,9 +380,6 @@ func TestExtractNativePPTXRejectsHostileContentTypeDeclarationsAndPartCharacters
 			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/RELOCATED/DECK.XML" ContentType="application/xml"/></Types>`, 1)
 		}},
 		{mutate: func(parts map[string]string) {
-			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/missing.xml" ContentType="application/xml"/></Types>`, 1)
-		}},
-		{mutate: func(parts map[string]string) {
 			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `ContentType="application/xml"/>`, `ContentType=" "/>`, 1)
 		}},
 		{mutate: func(parts map[string]string) {
@@ -391,9 +388,6 @@ func TestExtractNativePPTXRejectsHostileContentTypeDeclarationsAndPartCharacters
 		{mutate: func(parts map[string]string) {
 			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `ContentType="application/vnd.openxmlformats-package.relationships+xml"`, `ContentType="application/xml"`, 1)
 		}},
-		{mutate: func(parts map[string]string) {
-			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Default Extension="unused" ContentType="application/octet-stream"/></Types>`, 1)
-		}},
 	}
 	for index, options := range tests {
 		options := options
@@ -401,6 +395,71 @@ func TestExtractNativePPTXRejectsHostileContentTypeDeclarationsAndPartCharacters
 			t.Parallel()
 			if _, err := ExtractNativePPTX(nativeExtractFixture(t, options), nativeTestExtractOptions()); err == nil {
 				t.Fatal("expected hostile content type/part rejection")
+			}
+		})
+	}
+}
+
+// A content-type entry that maps no stored part is inert. OPC gives
+// [Content_Types].xml one job, resolving a stored part to its media type, and
+// forPart answers every stored part without reading the rest of the table.
+// Real decks carry both kinds of leftover: smartart-autoTxRot.pptx keeps an
+// Override for /ppt/diagrams/drawing1.xml after the part was dropped, and
+// trailing-paragraphs.pptx, pres-with-notes.pptx and slide-section-test.pptx
+// each keep a Default for an extension ("png", "fntdata") no part uses.
+// PowerPoint and LibreOffice open all four.
+func TestExtractNativePPTXAcceptsInertContentTypeEntries(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		entry string
+	}{
+		{name: "override for absent part", entry: `<Override PartName="/missing.xml" ContentType="application/xml"/>`},
+		{name: "override for absent directory", entry: `<Override PartName="/ppt/diagrams/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.diagramDrawing+xml"/>`},
+		{name: "default for unused extension", entry: `<Default Extension="png" ContentType="image/png"/>`},
+		{name: "default for unknown extension", entry: `<Default Extension="fntdata" ContentType="application/x-fontdata"/>`},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+				parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, test.entry+`</Types>`, 1)
+			}})
+			deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+			if err != nil {
+				t.Fatalf("inert content-type entry must not refuse the package: %v", err)
+			}
+			if len(deck.Slides) != 1 {
+				t.Fatalf("stored parts must keep their content types: slides=%d", len(deck.Slides))
+			}
+		})
+	}
+}
+
+// The stored-part side of the table is unchanged: a stored part still needs an
+// effective content type, and two entries may still not claim the same part.
+func TestExtractNativePPTXStillRefusesAmbiguousOrMissingContentTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(map[string]string)
+	}{
+		{name: "duplicate override for one part", mutate: func(parts map[string]string) {
+			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/`+"relocated/slides/slide-a.xml"+`" ContentType="application/xml"/></Types>`, 1)
+		}},
+		{name: "duplicate default for one extension", mutate: func(parts map[string]string) {
+			parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Default Extension="xml" ContentType="application/octet-stream"/></Types>`, 1)
+		}},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ExtractNativePPTX(nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: test.mutate}), nativeTestExtractOptions()); err == nil {
+				t.Fatal("ambiguous content-type table was accepted")
 			}
 		})
 	}
