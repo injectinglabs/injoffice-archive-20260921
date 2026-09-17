@@ -5,7 +5,7 @@ import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, t
 import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION, type NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION } from './nativePaginationSettings.js'
-import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
+import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxApproximateLegacyV1, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
 import { qualifyApproximateLegacyTables } from './nativeLegacyTableOriginV1.js'
 import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
@@ -57,6 +57,23 @@ function fixture(bodyHeight = 10_000): NativeDocxPaginationRequestV1 {
   return {
     protocol: DOCX_PAGINATION_REQUEST_PROTOCOL, version: DOCX_PAGINATION_REQUEST_VERSION, document, resolved_layout: resolved, shaped_lines: shaped,
     pagination_settings: { protocol: DOCX_PAGINATION_SETTINGS_PROTOCOL, version: DOCX_PAGINATION_SETTINGS_VERSION, document_id: document.document_id, revision: document.revision, package_sha256: HASH, main_part: 'word/document.xml', relationships_part: 'word/_rels/document.xml.rels', relationships_sha256: HASH, relationship_id: 'rIdSettings', settings_part: 'word/settings.xml', settings_sha256: HASH, profile: 'word-modern-default', default_tab_stop_twips: DOCX_DEFAULT_TAB_STOP_TWIPS, mirror_margins: false, gutter_at_top: false, even_and_odd_headers: false, compatibility_mode: 15, diagnostics: [] },
+  }
+}
+
+/** The approximate lane only runs on a document whose settings are ineligible
+ * for the strict profile; these two mirror the server's declared eligibility. */
+function approximateRequest(request: NativeDocxPaginationRequestV1): NativeDocxPaginationRequestV1 {
+  const copy = structuredClone(request)
+  copy.pagination_settings.profile = 'unsupported'
+  delete copy.pagination_settings.compatibility_mode
+  copy.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: 'word/settings.xml', path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+  return copy
+}
+
+function approximateEligibility(request: NativeDocxPaginationRequestV1): unknown {
+  return {
+    protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.document.document_id, revision: request.document.revision,
+    package_sha256: HASH, settings_sha256: HASH, status: 'eligible', legacy_compatibility_mode: 14, reasons: ['Legacy mode 14 uses current layout'],
   }
 }
 
@@ -155,6 +172,36 @@ describe('bounded native DOCX table page-paint geometry', () => {
     conflicting.document.body.blocks[0]!.table!.rows[0]!.cells[1]!.width_twips = 4000
     const fallback = qualifyApproximateLegacyTables(conflicting.document, conflicting.resolved_layout, conflicting.shaped_lines, { legacy_compatibility_mode: 14 })
     expect(fallback.status === 'qualified' ? fallback.tables[0]!.width_policy?.name : fallback.status).not.toBe('approximate-authored-grid-fitted-v1')
+  })
+
+  /** table-rtl.docx and conditionalstyles-tbllook.docx: w:tblW auto with no
+   * w:tblLayout element at all, so no resolved table geometry is published and
+   * the authored grid is 216 twips (two default cell margins) wider than the
+   * text column. The approximate fallback used to paint that grid sum as a
+   * fixed width, and pagination then refused the whole document with
+   * line-geometry-invalid because a fixed table wider than its column has no
+   * lawful placement. */
+  it('fits a cascade-default auto table whose authored grid exceeds its column', () => {
+    const request = autoGridFixture([4428, 4428])
+    request.resolved_layout.tables = [{ table_id: 'table:1' }]
+    const table = request.document.body.blocks[0]!.table!
+    expect(table.layout).toBeUndefined()
+    expect(table.width_twips).toBeUndefined()
+    const original = structuredClone(request.document)
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    const [entry] = approximate.tables
+    expect(entry!.width_policy).toMatchObject({ name: 'approximate-authored-grid-fitted-v1', available_width_twips: 8640, source_grid_widths_twips: [4428, 4428], fitted_grid_widths_twips: [4320, 4320] })
+    expect(entry!.width_millipoints).toBe(8640 * 50)
+    expect(entry!.x_millipoints + entry!.width_millipoints).toBeLessThanOrEqual(8640 * 50)
+    expect(request.document).toEqual(original)
+    // Strict qualification still refuses: it never derives a width from the grid.
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines).status).toBe('refused')
+    const forPagination = approximateRequest(request)
+    forPagination.shaped_lines.available_width_millipoints = 8640 * 50
+    const paginated = paginateNativeDocxApproximateLegacyV1(forPagination, approximateEligibility(request))
+    expect(paginated.layout.status).toBe('paginated')
+    expect(paginated.layout.pages.length).toBe(1)
   })
 
   it('uses authored tblGrid as approximate fixed width when source layout is auto', () => {
