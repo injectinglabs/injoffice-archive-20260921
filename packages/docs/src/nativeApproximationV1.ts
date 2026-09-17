@@ -84,6 +84,18 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // draws it like any other run, so the fact is recorded and the run is
   // painted; it cannot move a line or a page here.
   'WEB_LAYOUT_HIDDEN_RUN_PRESERVED',
+  // w:cols w:sep="1" asks for a vertical rule drawn in the inter-column gap.
+  // It is ink this tier cannot paint - the paint plan binds its only straight
+  // rule, stroke_note_separator, to a placed note-separator line, and a column
+  // separator has no line to bind to - but it moves no column box. Measured on
+  // Word's own export of multi-column-separator-with-line.docx: the rule is a
+  // filled 0.96 pt wide bar centred on x=306 pt, the exact centre of the gap
+  // between the two columns, while the column text origins are 50.4 pt and
+  // 324.0 pt - value-for-value the equal-width boxes this model derives from
+  // w:pgSz, w:pgMar and w:cols with w:sep ignored. So the omission drops that
+  // one bar and nothing else; it is disclosed as omitted content and the
+  // strict tier keeps refusing it.
+  'COLUMN_SEPARATOR_UNSUPPORTED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal
