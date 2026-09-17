@@ -184,6 +184,36 @@ func nativeSettingsNeutralThemeFontLang(result *NativePaginationSettingsV1, node
 	return true
 }
 
+// nativeSettingsSubsetNode is the narrow form of nativeSettingsExactNode for a
+// neutrality probe. Attributes and child elements the probe does not attest are
+// still schema-valid markup, so they refuse quietly and the caller falls through
+// to that element's ordinary "not proven neutral" refusal. Character data in an
+// element-only content model is not valid markup, so it keeps reporting
+// INVALID_SETTINGS_STRUCTURE exactly as the exact form does.
+func nativeSettingsSubsetNode(result *NativePaginationSettingsV1, node *nativeXMLNode, allowedAttrs map[xml.Name]bool, allowChildren bool) bool {
+	if !nativeXMLWhitespaceOnly(node.Text) {
+		result.addDiagnostic("INVALID_SETTINGS_STRUCTURE", node, "Non-whitespace settings text is not part of the attested settings subset")
+		return false
+	}
+	for _, attr := range node.Attrs {
+		if nativeSettingsNamespaceDeclaration(attr) {
+			continue
+		}
+		if !allowedAttrs[attr.Name] {
+			return false
+		}
+	}
+	return allowChildren || len(node.Children) == 0
+}
+
+func nativeSettingsSubsetLeaf(result *NativePaginationSettingsV1, node *nativeXMLNode, allowedAttrs ...xml.Name) bool {
+	allowed := make(map[xml.Name]bool, len(allowedAttrs))
+	for _, name := range allowedAttrs {
+		allowed[name] = true
+	}
+	return nativeSettingsSubsetNode(result, node, allowed, false)
+}
+
 func nativeSettingsNeutralShapeDefaults(result *NativePaginationSettingsV1, node *nativeXMLNode) bool {
 	// ECMA-376 17.15.1.79: shapeDefaults are defaults for creating new shapes.
 	// The attested Word subset is v:ext="edit" authoring identity (spidmax/idmap)
@@ -197,8 +227,14 @@ func nativeSettingsNeutralShapeDefaults(result *NativePaginationSettingsV1, node
 // main-story idmap seed. The header story omits o:shapelayout in most Word
 // output and seeds its own idmap, so only its bounded shape is required. Either
 // way the value is an authoring id counter: nothing reads it during layout.
+//
+// A richer new-shape template - the style, fill and colour history Word and
+// LibreOffice record for the next shape the user draws - is schema-valid markup
+// this probe simply does not attest, so it refuses through the subset form and
+// the element keeps its own "not proven neutral" refusal, instead of declaring
+// settings.xml structurally invalid for the whole package.
 func nativeSettingsNeutralShapeIdentityDefaults(result *NativePaginationSettingsV1, node *nativeXMLNode, body bool) bool {
-	if !nativeSettingsExactNode(result, node, map[xml.Name]bool{}, true) {
+	if !nativeSettingsSubsetNode(result, node, map[xml.Name]bool{}, true) {
 		return false
 	}
 	if len(node.Children) != 2 && (body || len(node.Children) != 1) {
@@ -207,20 +243,20 @@ func nativeSettingsNeutralShapeIdentityDefaults(result *NativePaginationSettings
 	ext := xml.Name{Space: nativeVMLNamespace, Local: "ext"}
 	defaults := node.Children[0]
 	if defaults.Name != (xml.Name{Space: nativeOfficeNamespace, Local: "shapedefaults"}) ||
-		!nativeSettingsExactLeaf(result, defaults, ext, xml.Name{Local: "spidmax"}) {
+		!nativeSettingsSubsetLeaf(result, defaults, ext, xml.Name{Local: "spidmax"}) {
 		return false
 	}
 	identities := []*nativeXMLNode{defaults}
 	if len(node.Children) == 2 {
 		layout := node.Children[1]
 		if layout.Name != (xml.Name{Space: nativeOfficeNamespace, Local: "shapelayout"}) ||
-			!nativeSettingsExactNode(result, layout, map[xml.Name]bool{ext: true}, true) ||
+			!nativeSettingsSubsetNode(result, layout, map[xml.Name]bool{ext: true}, true) ||
 			len(layout.Children) != 1 {
 			return false
 		}
 		idmap := layout.Children[0]
 		if idmap.Name != (xml.Name{Space: nativeOfficeNamespace, Local: "idmap"}) ||
-			!nativeSettingsExactLeaf(result, idmap, ext, xml.Name{Local: "data"}) {
+			!nativeSettingsSubsetLeaf(result, idmap, ext, xml.Name{Local: "data"}) {
 			return false
 		}
 		data, _ := nativeAttr(idmap, "", "data")
