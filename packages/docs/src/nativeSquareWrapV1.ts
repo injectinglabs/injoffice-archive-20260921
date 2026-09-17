@@ -41,7 +41,9 @@ export function deriveNativeSquareWrapPlanV1(document:NativeDocxDocumentV1,resol
   // distL/distR, and only the region decides which text intervals a line has.
   const drawn={x:anchor.x_millipoints,y:anchor.y_millipoints,width:image.width_millipoints,height:image.height_millipoints}
   if(drawn.x<0||drawn.y<0||drawn.x+drawn.width>page.width_millipoints||drawn.y+drawn.height>page.height_millipoints)throw new Error('Square image exceeds its anchor page')
-  const rect={x:anchor.exclusion_left_millipoints,y:drawn.y,width:anchor.exclusion_right_millipoints-anchor.exclusion_left_millipoints,height:drawn.height}
+  // The excluded band spans the drawing's rendered envelope, not just wp:extent:
+  // a rotated picture reaches above and below its box by wp:effectExtent.
+  const rect={x:anchor.exclusion_left_millipoints,y:drawn.y-f.effect_extent_top_millipoints,width:anchor.exclusion_right_millipoints-anchor.exclusion_left_millipoints,height:drawn.height+f.effect_extent_top_millipoints+f.effect_extent_bottom_millipoints}
   if(rect.x>body.x_millipoints&&rect.x+rect.width<body.x_millipoints+body.width_millipoints)throw new Error('Square image creates two text intervals; middle-image wrapping remains unsupported')
   const onPage=images.get(page.id)??[];onPage.push(rect);images.set(page.id,onPage)
  }

@@ -99,10 +99,18 @@ export interface NativeDocxDrawingV1 {
   width_emu: number
   height_emu: number
   rotation_degrees?: 0 | 90 | 180 | 270
+  /** a:xfrm/@rot in ECMA-376 60000ths of a degree. Absent means no rotation; a
+   * quarter turn states both this and `rotation_degrees`, every other angle
+   * states only this, so no oblique rotation is rounded to a whole degree. */
+  rotation_60000ths?: number
   flip_horizontal?: boolean
   flip_vertical?: boolean
   source_crop?: { left: number; top: number; right: number; bottom: number }
   inline_effect_extent_emu?: { left: number; top: number; right: number; bottom: number }
+  /** wp:effectExtent on an anchor whose picture is already proven effect-free:
+   * the envelope its own rotation reaches into, which widens the wrap region
+   * and never moves the painted image. */
+  floating_effect_extent_emu?: { left: number; top: number; right: number; bottom: number }
   x_emu?: number
   y_emu?: number
   horizontal_relative_from?: string
@@ -396,7 +404,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   CapabilityV1: ['name', 'level', 'detail'],
   PassthroughPartV1: ['part_name', 'content_type', 'byte_length', 'sha256', 'policy'],
   RunPropertiesV1: ['character_style_id', 'font_family', 'font_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'rtl', 'hidden'],
-  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'wrap_distance_left_emu', 'wrap_distance_right_emu', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_layer', 'stacking_order'],
+  DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'wrap_distance_left_emu', 'wrap_distance_right_emu', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'rotation_60000ths', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_effect_extent_emu', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
@@ -669,7 +677,23 @@ function validateDrawing(value: unknown, path: string, issues: NativeDocxValidat
       if (typeof value === 'number' && value > 91_440_000) add(issues, 'OUT_OF_RANGE', `${path}/inline_effect_extent_emu/${key}`, 'effect extent exceeds 100 inches')
     }
   }
+  if (entry.floating_effect_extent_emu !== undefined) {
+    const effect = object(entry.floating_effect_extent_emu, `${path}/floating_effect_extent_emu`, DOCX_NATIVE_V1_BINDING_FIELDS.DrawingCropV1, issues)
+    if (placement !== 'floating') add(issues, 'INVALID_VALUE', `${path}/floating_effect_extent_emu`, 'floating effect extents are anchor-only')
+    if (effect) for (const key of ['left','top','right','bottom'] as const) {
+      const value = integer(effect[key], `${path}/floating_effect_extent_emu/${key}`, issues, 0)
+      if (typeof value === 'number' && value > 91_440_000) add(issues, 'OUT_OF_RANGE', `${path}/floating_effect_extent_emu/${key}`, 'effect extent exceeds 100 inches')
+    }
+  }
   if (entry.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(entry.rotation_degrees as number)) add(issues, 'INVALID_VALUE', `${path}/rotation_degrees`, 'must equal 0, 90, 180 or 270')
+  if (entry.rotation_60000ths !== undefined) {
+    const angle = integer(entry.rotation_60000ths, `${path}/rotation_60000ths`, issues, 0)
+    if (typeof angle === 'number') {
+      if (angle >= 21_600_000) add(issues, 'OUT_OF_RANGE', `${path}/rotation_60000ths`, 'rotation must be a positive fixed angle below one full turn')
+      if (entry.rotation_degrees !== undefined && angle !== (entry.rotation_degrees as number) * 60_000) add(issues, 'INVALID_VALUE', `${path}/rotation_60000ths`, 'the exact angle and the whole-degree projection must state the same rotation')
+      if (entry.rotation_degrees === undefined && angle % 5_400_000 === 0) add(issues, 'INVALID_VALUE', `${path}/rotation_60000ths`, 'a quarter turn must also state its whole-degree projection')
+    }
+  }
   booleanValue(entry.flip_horizontal, `${path}/flip_horizontal`, issues, false)
   booleanValue(entry.flip_vertical, `${path}/flip_vertical`, issues, false)
   if (entry.source_crop !== undefined) {

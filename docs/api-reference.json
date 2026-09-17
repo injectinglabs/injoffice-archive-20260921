@@ -3098,6 +3098,11 @@
               "signature": "export interface NativeDocxAuthoritativeMediaAssetV1"
             },
             {
+              "name": "NativeDocxImageTransformV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxImageTransformV1"
+            },
+            {
               "name": "NativeDocxInlineImageQualificationV1",
               "kind": "type",
               "signature": "export type NativeDocxInlineImageQualificationV1 ="
@@ -4582,6 +4587,11 @@
               "name": "NativeDocxHostFontsV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHostFontsV1"
+            },
+            {
+              "name": "NativeDocxImageTransformV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxImageTransformV1"
             },
             {
               "name": "NativeDocxInlineImageQualificationV1",

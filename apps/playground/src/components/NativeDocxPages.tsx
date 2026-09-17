@@ -14,10 +14,14 @@ export function NativeDocxImage({ command, base64, contentType = 'image/png', on
 }
 
 /** Reflect in source axes, then rotate clockwise into the attested inline box.
- * Integer matrices avoid transform-origin and trigonometric rounding. */
+ * Quarter turns keep integer matrices, which avoid transform-origin and
+ * trigonometric rounding. An oblique a:xfrm/@rot has no integer matrix: it turns
+ * the same reflected box clockwise about its own centre, which is where Word
+ * puts it and where wp:extent stays the unrotated box. */
 export function nativeDocxImageOrientation(command: NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1) {
   const { x_millipoints: x, y_millipoints: y, width_millipoints: boxWidth, height_millipoints: boxHeight } = command
   const angle = command.transform.rotation_degrees, quarter = angle === 90 || angle === 270
+  const oblique = command.transform.rotation_60000ths
   const width = quarter ? boxHeight : boxWidth, height = quarter ? boxWidth : boxHeight
   const sx = command.transform.flip_horizontal ? -1 : 1, sy = command.transform.flip_vertical ? -1 : 1
   const dx = sx < 0 ? width : 0, dy = sy < 0 ? height : 0
@@ -25,7 +29,15 @@ export function nativeDocxImageOrientation(command: NativeDocxPaintInlineImageCo
     : angle === 180 ? [-sx, 0, 0, -sy, x + width - dx, y + height - dy]
       : angle === 270 ? [0, -sx, sy, 0, x + dy, y + width - dx]
         : [sx, 0, 0, sy, x + dx, y + dy]
-  const [a, b, c, d, e, f] = local as [number, number, number, number, number, number]
+  let [a, b, c, d, e, f] = local as [number, number, number, number, number, number]
+  if (oblique !== undefined) {
+    const theta = (oblique / 60_000) * Math.PI / 180, cos = Math.cos(theta), sin = Math.sin(theta)
+    const cx = x + width / 2, cy = y + height / 2
+    const [la, lb, lc, ld, le, lf] = [a, b, c, d, e, f]
+    a = cos*la - sin*lb; b = sin*la + cos*lb; c = cos*lc - sin*ld; d = sin*lc + cos*ld
+    e = cos*le - sin*lf + cx - cos*cx + sin*cy
+    f = sin*le + cos*lf + cy - sin*cx - cos*cy
+  }
   return { width, height, matrix: [a, b, c, d, e - a*x - c*y, f - b*x - d*y].map((value) => value === 0 ? 0 : value) }
 }
 

@@ -50,6 +50,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   NoteSeparatorCommandV1: ['kind', 'id', 'line_id', 'story_id', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   ImageCropV1: ['left', 'top', 'right', 'bottom', 'unit'],
   ImageTransformV1: ['rotation_degrees', 'flip_horizontal', 'flip_vertical'],
+  ImageObliqueTransformV1: ['rotation_degrees', 'rotation_60000ths', 'flip_horizontal', 'flip_vertical'],
   ImageCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'drawing_id', 'asset_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'source_crop', 'transform'],
   FloatingImageCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'drawing_id', 'asset_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'source_crop', 'transform', 'layer', 'stacking_order'],
   BodyLineV1: ['placed_line_id', 'line_id', 'paragraph_id', 'region', 'section_id', 'column_id', 'column_ordinal', 'source_line_ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'baseline_y_millipoints', 'command_ids'],
@@ -588,8 +589,16 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
           for (const key of ['left','top','right','bottom'] as const) integer(crop[key], `${commandPath}/source_crop/${key}`, issues, 0, 99000)
           if (crop.unit !== 'one-hundred-thousandth' || (crop.left as number)+(crop.right as number)>99000 || (crop.top as number)+(crop.bottom as number)>99000) add(issues, 'INVALID_VALUE', `${commandPath}/source_crop`, 'source crop must retain at least one percent per axis in exact integer units')
         }
-        const transform = exactObject(command.transform, `${commandPath}/transform`, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageTransformV1, issues)
+        const oblique = isObject(command.transform) && 'rotation_60000ths' in command.transform
+        const transform = exactObject(command.transform, `${commandPath}/transform`, oblique ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageObliqueTransformV1 : DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageTransformV1, issues)
         if (transform && (![0, 90, 180, 270].includes(transform.rotation_degrees as number) || typeof transform.flip_horizontal !== 'boolean' || typeof transform.flip_vertical !== 'boolean')) add(issues, 'INVALID_VALUE', `${commandPath}/transform`, 'image transform must specify quarter-turn rotation and explicit flip booleans')
+        // An oblique rotation is the source's own 60000ths of a degree strictly
+        // between quarter turns, and it replaces the whole-degree projection
+        // rather than adding to it, so the quarter-turn field stays zero.
+        if (transform && oblique) {
+          const angle = transform.rotation_60000ths
+          if (!Number.isSafeInteger(angle) || (angle as number) <= 0 || (angle as number) >= 21_600_000 || (angle as number) % 5_400_000 === 0 || transform.rotation_degrees !== 0) add(issues, 'INVALID_VALUE', `${commandPath}/transform/rotation_60000ths`, 'oblique image rotation must be an exact angle strictly between quarter turns with no whole-degree projection')
+        }
       }
     })
     if (commands.length > DOCX_PAGE_PAINT_LIMITS.maxGlyphs) add(issues, 'LIMIT_EXCEEDED', `${path}/commands`, `commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxGlyphs}`)
