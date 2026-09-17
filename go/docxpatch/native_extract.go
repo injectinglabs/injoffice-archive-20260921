@@ -3158,6 +3158,16 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Complex-script size is malformed, duplicate or outside the bounded whole half-point subset")
 			}
+		case "bCs", "iCs":
+			// The complex-script companions of b/i. The style resolver already
+			// carries them as deferred script slots that only speak when the
+			// run actually needs script shaping, so extraction records them as
+			// preserved rather than as unmodeled markup. Never expose for edits.
+			preserveOnly = true
+			if _, ok := nativeOnOff(child, extractor.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || len(directNativeChildren(node, extractor.wordNS, child.Name.Local)) != 1 {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Complex-script toggle is malformed, duplicate or outside the bounded on/off subset")
+			}
 		case "noProof":
 			preserveOnly = true
 			if !nativeNeutralSourceProperty(child, node, extractor.wordNS) {
