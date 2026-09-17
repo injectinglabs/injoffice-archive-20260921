@@ -614,3 +614,94 @@ func TestNativePaginationSettingsNoColumnBalance(t *testing.T) {
 		})
 	}
 }
+
+// nativeNoteSentinelSettingsParts builds a package whose footnotes part attests
+// its own separator roles with w:type, so the settings registration list can be
+// cross-checked against it instead of against a hardcoded id literal.
+func nativeNoteSentinelSettingsParts(settings, footnotes string) map[string]string {
+	parts := nativePaginationSettingsParts(settings)
+	parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], "</Types>",
+		`<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>`, 1)
+	parts["Word/_RELS/Document.XML.RELS"] = strings.Replace(parts["Word/_RELS/Document.XML.RELS"], "</Relationships>",
+		`<Relationship Id="notes" Type="`+relBaseTransitional+`footnotes" Target="FOOTNOTES.xml"/></Relationships>`, 1)
+	parts["Word/Footnotes.XML"] = footnotes
+	return parts
+}
+
+// LibreOffice writes the separator/continuationSeparator pair as ids 0 and 1
+// where Word writes -1 and 0. Both attest the role with w:type, so both are the
+// same reserved-sentinel subset and neither may be refused for its id alone.
+func TestExtractNativePaginationSettingsV1AcceptsProducerChosenNoteSentinelIDs(t *testing.T) {
+	notes := `<w:footnotes xmlns:w="` + wordMLTransitional + `"><w:footnote w:type="separator" w:id="0"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="1"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote></w:footnotes>`
+	settingsXML := `<w:settings xmlns:w="` + wordMLTransitional + `"><w:footnotePr><w:footnote w:id="0"/><w:footnote w:id="1"/></w:footnotePr><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+	settings, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(nativeNoteSentinelSettingsParts(settingsXML, notes))))
+	if err != nil || settings.Profile != "word-modern-default" || len(settings.Diagnostics) != 0 {
+		t.Fatalf("LibreOffice sentinel ids: profile=%q diagnostics=%#v err=%v", settings.Profile, settings.Diagnostics, err)
+	}
+}
+
+// The refusal this cross-check exists to keep: a registration that names a
+// CONTENT note (Word's custom separator) must never be read as a sentinel just
+// because the id happens to look like one.
+func TestExtractNativePaginationSettingsV1RefusesNoteSettingsRegisteringAContentStory(t *testing.T) {
+	notes := `<w:footnotes xmlns:w="` + wordMLTransitional + `"><w:footnote w:type="separator" w:id="0"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="1"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote><w:footnote w:id="2"><w:p><w:r><w:t>custom separator</w:t></w:r></w:p></w:footnote></w:footnotes>`
+	settingsXML := `<w:settings xmlns:w="` + wordMLTransitional + `"><w:footnotePr><w:footnote w:id="0"/><w:footnote w:id="2"/></w:footnotePr><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+	settings, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(nativeNoteSentinelSettingsParts(settingsXML, notes))))
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if settings.Profile != "unsupported" {
+		t.Fatalf("content-note registration must refuse: profile=%q diagnostics=%#v", settings.Profile, settings.Diagnostics)
+	}
+	for _, want := range []string{"PAGINATION_SETTING_UNSUPPORTED", "INVALID_SETTINGS_STRUCTURE"} {
+		found := false
+		for _, diagnostic := range settings.Diagnostics {
+			if diagnostic.Code == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing %s: %#v", want, settings.Diagnostics)
+		}
+	}
+}
+
+// A registration that names no modeled sentinel at all, where the note part does
+// attest one, still refuses: the fallback to Word's reserved literals applies
+// only when the package models no story of that kind.
+func TestExtractNativePaginationSettingsV1RefusesWordLiteralsAgainstAnAttestingNotePart(t *testing.T) {
+	notes := `<w:footnotes xmlns:w="` + wordMLTransitional + `"><w:footnote w:type="separator" w:id="0"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="1"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote></w:footnotes>`
+	settingsXML := `<w:settings xmlns:w="` + wordMLTransitional + `"><w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+	settings, err := ExtractNativePaginationSettingsV1(buildNativeDOCX(t, nativeEntries(nativeNoteSentinelSettingsParts(settingsXML, notes))))
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if settings.Profile != "unsupported" {
+		t.Fatalf("unattested id must refuse: profile=%q diagnostics=%#v", settings.Profile, settings.Diagnostics)
+	}
+}
+
+// The note part is the authority for the role: w:type selects it and the id is
+// only an identity, so a LibreOffice-written package models both sentinels.
+func TestExtractNativeDocumentV1ModelsProducerChosenNoteSentinelIDs(t *testing.T) {
+	notes := `<w:footnotes xmlns:w="` + wordMLTransitional + `"><w:footnote w:type="separator" w:id="0"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="1"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote></w:footnotes>`
+	settingsXML := `<w:settings xmlns:w="` + wordMLTransitional + `"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`
+	doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(nativeNoteSentinelSettingsParts(settingsXML, notes))))
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	roles := map[string]string{}
+	for _, story := range doc.Notes {
+		if story.NativeStoryID != nil {
+			roles[*story.NativeStoryID] = story.NoteRole
+		}
+	}
+	if len(doc.Notes) != 2 || roles["0"] != "separator" || roles["1"] != "continuation-separator" {
+		t.Fatalf("producer-chosen sentinel ids: %#v", roles)
+	}
+	for _, unsupported := range doc.Unsupported {
+		if unsupported.Code == "SPECIAL_NOTE_STORY" {
+			t.Fatalf("sentinel story refused for its id: %#v", unsupported)
+		}
+	}
+}
