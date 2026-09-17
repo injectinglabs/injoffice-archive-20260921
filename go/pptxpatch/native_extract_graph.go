@@ -250,7 +250,10 @@ func collectNativeDependencyUnsupported(part string, payload []byte, root *nativ
 	if err != nil {
 		return nil, err
 	}
-	objectIDs, err := collectNativeShapeTreeObjectIDs(spTree, dialect)
+	// A layout or master is read-only inheritance: these ids label preserved
+	// passthrough entries and never anchor a mutation, so a repeated or
+	// non-canonical one is disambiguated here rather than failing the package.
+	objectIDs, err := collectNativeShapeTreeObjectIDsWithPolicy(spTree, dialect, nativeShapeTreeIDsLabelled)
 	if err != nil {
 		return nil, err
 	}
