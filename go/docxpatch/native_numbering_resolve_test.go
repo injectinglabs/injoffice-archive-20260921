@@ -719,3 +719,74 @@ func TestNativeNumberingIdeographicFormats(t *testing.T) {
 		}
 	}
 }
+
+// TestNativeNumberingEnclosedCircleFormat pins ECMA-376 §17.18.59
+// decimalEnclosedCircle against Microsoft Word's own export of the benchmark
+// document numbering-circle.docx. Word's PDF for that page draws the marker as
+// two glyphs, CID 7555 and CID 15 of HiraMinProN-W3, which are U+2460 CIRCLED
+// DIGIT ONE and FULL STOP: the format is the precomposed Unicode enclosed
+// series, not a digit composed with a drawn ring. Unicode supplies that series
+// only to twenty (U+2473 CIRCLED NUMBER TWENTY), so twenty-one is refused
+// rather than approximated.
+func TestNativeNumberingEnclosedCircleFormat(t *testing.T) {
+	want := []string{"①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"}
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimalEnclosedCircle"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	paragraphs := ""
+	for index := range want {
+		paragraphs += numberedParagraph("2", 0, fmt.Sprintf("item %d", index+1))
+	}
+	result := resolveNumberingFixture(t, numbering, paragraphs)
+	if hasResolutionDiagnostic(result, "UNSUPPORTED_NUMBER_FORMAT") {
+		t.Fatal("decimalEnclosedCircle is modeled but was refused as an unsupported format")
+	}
+	if len(result.Paragraphs) != len(want) {
+		t.Fatalf("paragraph count = %d; want %d", len(result.Paragraphs), len(want))
+	}
+	for index, expected := range want {
+		marker := result.Paragraphs[index].Numbering
+		if marker == nil {
+			t.Fatalf("counter %d produced no marker", index+1)
+		}
+		if marker.ResolvedText != expected+"." || marker.Format != "decimalEnclosedCircle" || marker.CounterValue != index+1 {
+			t.Fatalf("counter %d = %q (format %q, value %d); want %q", index+1, marker.ResolvedText, marker.Format, marker.CounterValue, expected+".")
+		}
+	}
+
+	for _, test := range []struct {
+		value int
+		want  string
+		ok    bool
+	}{
+		{1, "①", true},
+		{20, "⑳", true},
+		{21, "", false},
+		{0, "", false},
+		{-1, "", false},
+	} {
+		got, ok := nativeFormatNumberingCounter(test.value, "decimalEnclosedCircle")
+		if got != test.want || ok != test.ok {
+			t.Fatalf("decimalEnclosedCircle %d = %q, %v; want %q, %v", test.value, got, ok, test.want, test.ok)
+		}
+	}
+
+	// A twenty-first counter has no enclosed form to render, so the marker is
+	// refused at the lvlText rather than falling back to a bare digit.
+	overflow := resolveNumberingFixture(t, numbering, paragraphs+numberedParagraph("2", 0, "item 21"))
+	if last := overflow.Paragraphs[len(overflow.Paragraphs)-1]; last.Numbering != nil {
+		t.Fatalf("counter 21 resolved a marker %#v", last.Numbering)
+	}
+	if !hasResolutionDiagnostic(overflow, "MALFORMED_NUMBERING_TEXT") {
+		t.Fatal("counter 21 was neither resolved nor reported")
+	}
+
+	// Neighbouring enclosed formats stay outside the modeled set: only the
+	// plain circled series is attested by a Word reference.
+	for _, format := range []string{"decimalEnclosedCircleChinese", "decimalEnclosedFullstop", "decimalEnclosedParen"} {
+		if _, ok := nativeFormatNumberingCounter(1, format); ok {
+			t.Fatalf("%s is not attested by any reference but was modeled", format)
+		}
+		if nativeOrdinaryNumberFormat(format) {
+			t.Fatalf("%s is not attested by any reference but was admitted as ordinary", format)
+		}
+	}
+}
