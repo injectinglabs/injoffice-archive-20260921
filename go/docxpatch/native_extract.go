@@ -2923,10 +2923,15 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 	y, okY := nativeInt64Attr(off, "", "y")
 	cx, okCX := nativePositiveInt64Attr(ext, "", "cx")
 	cy, okCY := nativePositiveInt64Attr(ext, "", "cy")
+	// wp:extent states the drawing object's final size in the document and the
+	// graphic frame maps the shape onto it, so an unrotated shape extent adds no
+	// layout fact and Word's own writer rounds the two apart by a few EMU. Only
+	// a quarter turn reads the shape extent, whose axes must be the transpose of
+	// the painted box for the rotation to be the one the frame describes.
 	if quarterTurn {
 		return okX && okY && x == 0 && y == 0 && okCX && okCY && cy == width && cx == height
 	}
-	return okX && okY && x == 0 && y == 0 && okCX && okCY && cx == width && cy == height
+	return okX && okY && x == 0 && y == 0 && okCX && okCY
 }
 
 func nativeInt64Attr(node *nativeXMLNode, namespace, local string) (int64, bool) {

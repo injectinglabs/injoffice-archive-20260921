@@ -65,3 +65,47 @@ func TestExtractNativePictureInertWordMarkup(t *testing.T) {
 		})
 	}
 }
+
+// wp:extent states the drawing object's final size in the document, so an
+// unrotated DrawingML shape extent adds no layout fact and Word's own writer
+// rounds the two apart. A quarter turn still needs the shape extent to be the
+// transpose of the painted box.
+func TestExtractNativePictureExtentIsTheInlineExtent(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		xfrm     string
+		rotation int64
+		refused  bool
+	}{
+		{name: "unrotated shape extent disagrees", xfrm: `<a:xfrm><a:off x="0" y="0"/><a:ext cx="914401" cy="457199"/></a:xfrm>`},
+		{name: "flipped shape extent disagrees", xfrm: `<a:xfrm flipH="1"><a:off x="0" y="0"/><a:ext cx="912000" cy="456000"/></a:xfrm>`},
+		{name: "quarter turn transposes the painted box", xfrm: `<a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="457200" cy="914400"/></a:xfrm>`, rotation: 90},
+		{name: "quarter turn without the transpose", xfrm: `<a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="914401" cy="457200"/></a:xfrm>`, refused: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parts := transitionalNativeParts()
+			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], `<a:xfrm/>`, test.xfrm, 1)
+			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			drawing := firstNativeBodyDrawing(doc)
+			if test.refused {
+				if drawing != nil || !hasUnsupportedCode(doc, "PICTURE_TRANSFORM_PRESERVED") {
+					t.Fatalf("a rotated picture without the transposed shape extent must stay preserve-only: %#v", drawing)
+				}
+				return
+			}
+			if drawing == nil || *drawing.WidthEMU != 914400 || *drawing.HeightEMU != 457200 {
+				t.Fatalf("the painted box must come from wp:extent: %#v", drawing)
+			}
+			rotation := int64(0)
+			if drawing.RotationDegrees != nil {
+				rotation = *drawing.RotationDegrees
+			}
+			if rotation != test.rotation {
+				t.Fatalf("rotation = %d, want %d", rotation, test.rotation)
+			}
+		})
+	}
+}
