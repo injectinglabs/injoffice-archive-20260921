@@ -169,6 +169,9 @@ export type { NativeDocxApproximationEligibilityV1, NativeDocxApproximatePagePre
 export { DOCX_APPROXIMATE_PREVIEW_PROTOCOL, DOCX_APPROXIMATE_PREVIEW_POLICY, decodeNativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
 import { decodeNativeDocxApproximationEligibilityV1, decodeNativeDocxApproximatePagePreviewV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 import { projectNativeDocxAbsentFontSizesV1, validNativeDocxHostDefaultSizePolicyV1, DOCX_ABSENT_FONT_SIZE_WARNING, type NativeDocxHostDefaultSizePolicyV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+import { projectNativeDocxApproximateImageExtentsV1, DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING, type NativeDocxApproximatedImageExtentV1 } from './nativeApproximateImageExtentV1.js'
+export { projectNativeDocxApproximateImageExtentsV1, nearestNativeDocxMilliPointEmuV1, validNativeDocxApproximatedImageExtentsV1, DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING, DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS } from './nativeApproximateImageExtentV1.js'
+export type { NativeDocxApproximatedImageExtentV1, NativeDocxApproximatedImageExtentFieldV1 } from './nativeApproximateImageExtentV1.js'
 export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1, stripNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
@@ -248,6 +251,20 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   const settings = decodeNativeDocxPaginationSettings(input.pagination_settings)
   if (!settings.ok) failIssues('Approximate settings are invalid', settings.issues)
   const eligibility = decodeNativeDocxApproximationEligibilityV1(eligibilityValue, settings.value)
+  // Picture extents off the 127-EMU milli-point lattice: the strict lane needs
+  // an exact multiple and refuses anything else, which declines a picture over
+  // at most 0.005 pt. This lane rounds to the nearest milli-point in an internal
+  // body copy, keeping only what the unchanged exact qualifier then accepts, and
+  // discloses every move below. It runs before every other projection so one
+  // consistent body reaches shaping, pagination and the sidecar stages.
+  let appliedImageExtents: NativeDocxApproximatedImageExtentV1[] = []
+  if (eligibility.status === 'eligible') {
+    const rounded = projectNativeDocxApproximateImageExtentsV1(input.document)
+    if (rounded.applied.length > 0) {
+      input = { ...input, document: rounded.document }
+      appliedImageExtents = rounded.applied
+    }
+  }
   // Approximate OMML equations: validate the same-bytes sidecar against the
   // source document, lay the equations out with the declared math face policy,
   // and reserve their extents as glyphless inline atoms in the internal body
@@ -407,6 +424,10 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
+  }
+  if (appliedImageExtents.length > 0) {
+    result.approximated_image_extents = appliedImageExtents
+    if (!result.reasons.includes(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)) result.reasons.push(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)
   }
   if (appliedFaces.length > 0 && result.status === 'painted') {
     result.approximated_font_faces = appliedFaces
