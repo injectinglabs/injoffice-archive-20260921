@@ -85,6 +85,12 @@ export const DOCX_SHAPED_LINES_LIMITS = {
   maxParagraphs: 10_000,
   maxLines: 100_000,
   maxFragments: 500_000,
+  /** Traversal budget for one shaped-lines value. The gateway's per-structure
+   * DOCX_NATIVE_LIMITS.maxNodes of 100,000 is unreachable here: the collection limits
+   * above already declare a legal value orders of magnitude larger, and shaped lines
+   * are produced in-process by the shaper, never posted as gateway JSON. It matches
+   * the pagination output bound this value is measured against. */
+  maxNodes: 2_000_000,
   maxDiagnostics: 1_000,
   maxWidthMilliPoints: 1_000_000_000,
   maxFontResourceBytes: 64 * 1024 * 1024,

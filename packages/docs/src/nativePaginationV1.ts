@@ -65,6 +65,14 @@ export const DOCX_PAGINATION_LIMITS = {
   maxParagraphSlices: 100_000,
   maxDiagnostics: 1_000,
   maxOutputNodes: 2_000_000,
+  /** Traversal budget for the whole pagination request. It is not the gateway's
+   * per-structure DOCX_NATIVE_LIMITS.maxNodes: a request is the union of an already
+   * bounded document, resolved layout, one to three shaped-lines candidates and the
+   * settings attestation, each of which the decoders below still traverse under their
+   * own budget. It equals the enclosing page-paint request bound
+   * (DOCX_PAGE_PAINT_LIMITS.maxOutputNodes), which every caller that can reach this
+   * one has already passed, so it adds no reachable slack. */
+  maxRequestNodes: 5_000_000,
   maxCoordinateMilliPoints: 1_000_000_000_000,
 } as const
 
@@ -363,8 +371,8 @@ function preflightWire(value: unknown): NativeDocxValidationIssue[] {
   const visit = (entry: unknown, path: string, depth: number): void => {
     if (issues.length >= DOCX_NATIVE_LIMITS.maxIssues) return
     nodes += 1
-    if (nodes > DOCX_NATIVE_LIMITS.maxNodes) {
-      issues.push(issue('LIMIT_EXCEEDED', path, `pagination request traversal exceeds ${DOCX_NATIVE_LIMITS.maxNodes} values`))
+    if (nodes > DOCX_PAGINATION_LIMITS.maxRequestNodes) {
+      issues.push(issue('LIMIT_EXCEEDED', path, `pagination request traversal exceeds ${DOCX_PAGINATION_LIMITS.maxRequestNodes} values`))
       return
     }
     if (depth > DOCX_NATIVE_LIMITS.maxDepth) {
@@ -395,11 +403,11 @@ function preflightWire(value: unknown): NativeDocxValidationIssue[] {
     if (Array.isArray(entry)) {
       if (entry.length > 500_000) issues.push(issue('LIMIT_EXCEEDED', path, 'array exceeds the largest v1 shaped-lines collection bound'))
       const length = Math.min(entry.length, 500_000)
-      for (let index = 0; index < length && nodes <= DOCX_NATIVE_LIMITS.maxNodes; index += 1) visit(entry[index], `${path}/${index}`, depth + 1)
+      for (let index = 0; index < length && nodes <= DOCX_PAGINATION_LIMITS.maxRequestNodes; index += 1) visit(entry[index], `${path}/${index}`, depth + 1)
     } else {
       for (const key of Object.keys(entry).sort()) {
         visit((entry as Record<string, unknown>)[key], `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`, depth + 1)
-        if (nodes > DOCX_NATIVE_LIMITS.maxNodes) break
+        if (nodes > DOCX_PAGINATION_LIMITS.maxRequestNodes) break
       }
     }
     active.delete(entry)
