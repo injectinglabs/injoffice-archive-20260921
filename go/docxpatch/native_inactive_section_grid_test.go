@@ -25,7 +25,11 @@ func TestInactiveSectionGridQualification(t *testing.T) {
 			{"unknown", `<w:docGrid w:extra="1"/>`, false},
 			{"children", `<w:docGrid><w:unknown/></w:docGrid>`, false},
 			{"text", `<w:docGrid>not metadata</w:docGrid>`, false},
-			{"duplicate", `<w:docGrid/><w:docGrid/>`, false},
+			// A repeat that restates the first occurrence exactly asks for the
+			// grid the section already has, so it is layout-neutral; a repeat
+			// that states a different pitch is still ambiguous.
+			{"duplicate-identical", `<w:docGrid/><w:docGrid/>`, true},
+			{"duplicate-divergent", `<w:docGrid w:linePitch="360"/><w:docGrid w:linePitch="240"/>`, false},
 		} {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + ns + `"/>`)
 			parts["word/document.xml"] = `<w:document xmlns:w="` + ns + `"><w:body><w:p/><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/>` + test.grid + `</w:sectPr></w:body></w:document>`
