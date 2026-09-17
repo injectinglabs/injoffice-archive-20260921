@@ -483,7 +483,12 @@ export function placeNativeDocxNotesV1(
   const resolvedParagraphs = new Map(resolved.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
   const sourceFailure = document.unsupported.find((entry) => scopes.has(entry.scope_id))
   if (sourceFailure) return { scope_id: sourceFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note source semantics: ${sourceFailure.code}: ${sourceFailure.message}` }
-  if (resolved.diagnostics.some((entry) => scopes.has(entry.scope_id))) return { scope_id: document.document_id, code: 'note-structure-unsupported', message: 'Resolved note layout contains unsupported or ambiguous style semantics' }
+  // Name the diagnostic and scope it to the note that carries it, exactly as the
+  // source-side refusal above does. The refusal is still the whole document's --
+  // one unresolvable note scope leaves note numbering ambiguous everywhere -- but
+  // an unnamed blanket refusal tells a caller nothing about which note, or why.
+  const resolvedFailure = resolved.diagnostics.find((entry) => scopes.has(entry.scope_id))
+  if (resolvedFailure) return { scope_id: resolvedFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note layout semantics: ${resolvedFailure.code}: ${resolvedFailure.message}` }
 
   const content = new Map(document.notes.filter((story) => (story.note_role ?? 'content') === 'content').map((story) => [story.id, story]))
   const separators = new Map<NoteKind, NativeDocxStoryV1>()
