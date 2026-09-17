@@ -901,6 +901,22 @@ function refuseUnsupportedSource(context: PaginationContext): void {
         continue
       }
     }
+    // A body-level w:sectPr that governs no block paints nothing: no paragraph
+    // and no table falls in its range, so its page geometry, its header and
+    // footer references and its page numbering reach no page. The extractor
+    // omits it from the section list and records it here; the exemption holds
+    // only while no modelled section claims that element, which is what makes
+    // the omission provably invisible to pagination.
+    if (entry.code === 'EMPTY_TRAILING_SECTION_OMITTED' && entry.capability === 'sections' && entry.scope_id === document.body.id
+      && entry.anchor !== undefined && entry.anchor.part_name === document.source.main_part
+      && !document.sections.some((section) => section.anchor.part_name === entry.anchor!.part_name && section.anchor.path === entry.anchor!.path)) {
+      addDiagnostic(context, {
+        code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
+        source_code: entry.code, source_message: entry.message,
+        message: 'Final section properties govern no block; no page can fall in their range and pagination reads the sections that do hold blocks',
+      })
+      continue
+    }
     if (PAGINATION_AFFECTING_CAPABILITIES.has(entry.capability) || scopes.has(entry.scope_id)) {
       refuse(context, 'body-structure-unsupported', entry.scope_id, `Native unsupported record can affect body pagination: ${entry.code}: ${entry.message}`, { code: entry.code, message: entry.message })
     }
