@@ -43,6 +43,12 @@ const (
 	drawingMLStrict         = "http://purl.oclc.org/ooxml/drawingml/main"
 	pictureMLTransitional   = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 	pictureMLStrict         = "http://purl.oclc.org/ooxml/drawingml/picture"
+	// Word 2010 drawing extensions. Both members used here state identity or a
+	// raster resampling hint, never geometry, so they are qualified and skipped
+	// rather than treated as unmodeled drawing semantics.
+	wordDrawing2010   = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
+	drawingML2010     = "http://schemas.microsoft.com/office/drawing/2010/main"
+	useLocalDpiExtURI = "{28A0092B-C50C-407E-A947-70E740481C1C}"
 )
 
 type nativePackage struct {
@@ -2623,7 +2629,7 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 		return refuse("PICTURE_TRANSFORM_PRESERVED", "Only flips and quarter turns with exact rotated DrawingML/inline extents are projected", picture)
 	}
 	blips := nativeDescendants(picture, aNS, "blip")
-	if len(blips) != 1 || !nativeExactLeaf(blips[0], xml.Name{Space: extractor.relNS, Local: "embed"}, xml.Name{Local: "cstate"}) {
+	if len(blips) != 1 || !nativeInertBlipExtensions(blips[0], aNS) || !nativeExactContainer(blips[0], xml.Name{Space: extractor.relNS, Local: "embed"}, xml.Name{Local: "cstate"}) {
 		return refuse("PICTURE_EFFECTS_PRESERVED", "Pictures with missing, ambiguous, or effect-bearing blips remain preserve-only", picture)
 	}
 	if state, present := nativeUnqualifiedAttr(blips[0], "cstate"); present && state != "email" && state != "screen" && state != "print" && state != "hqprint" && state != "none" {
@@ -2702,8 +2708,46 @@ func (extractor *nativeExtractor) extractDrawing(partName, paragraphID string, n
 	return drawing, true
 }
 
+// wp14:anchorId and wp14:editId are opaque Word revision-identity tokens on a
+// drawing container: MS-DOCX assigns them no extent, position or wrap meaning.
+// Qualify their lexical shape and skip them instead of turning every drawing
+// Word has ever written into an unmodeled container.
+var (
+	nativeInlineDrawingAttrs = []xml.Name{{Space: wordDrawing2010, Local: "anchorId"}, {Space: wordDrawing2010, Local: "editId"}, {Local: "distT"}, {Local: "distB"}, {Local: "distL"}, {Local: "distR"}}
+	nativeAnchorDrawingAttrs = []xml.Name{{Space: wordDrawing2010, Local: "anchorId"}, {Space: wordDrawing2010, Local: "editId"}, {Local: "distT"}, {Local: "distB"}, {Local: "distL"}, {Local: "distR"}, {Local: "simplePos"}, {Local: "relativeHeight"}, {Local: "behindDoc"}, {Local: "locked"}, {Local: "layoutInCell"}, {Local: "allowOverlap"}}
+)
+
+func nativeExactDrawingIdentity(node *nativeXMLNode) bool {
+	anchorID, hasAnchorID := nativeAttr(node, wordDrawing2010, "anchorId")
+	editID, hasEditID := nativeAttr(node, wordDrawing2010, "editId")
+	return (!hasAnchorID || nativeValidOfficeHexID(anchorID)) && (!hasEditID || nativeValidOfficeHexID(editID))
+}
+
+// a14:useLocalDpi is Word's raster resampling hint for one blip. The painted
+// box stays wp:extent and the sampled rectangle stays a:srcRect, so the hint
+// cannot move a line or a page. Every other blip extension stays preserve-only.
+func nativeInertBlipExtensions(blip *nativeXMLNode, aNS string) bool {
+	if len(blip.Children) == 0 {
+		return true
+	}
+	list := blip.Children[0]
+	if len(blip.Children) != 1 || list.Name != (xml.Name{Space: aNS, Local: "extLst"}) || !nativeExactContainer(list) || len(list.Children) == 0 {
+		return false
+	}
+	for _, extension := range list.Children {
+		uri, ok := nativeUnqualifiedAttr(extension, "uri")
+		if extension.Name != (xml.Name{Space: aNS, Local: "ext"}) || !nativeExactContainer(extension, xml.Name{Local: "uri"}) || !ok || uri != useLocalDpiExtURI || len(extension.Children) != 1 {
+			return false
+		}
+		if hint := extension.Children[0]; hint.Name != (xml.Name{Space: drawingML2010, Local: "useLocalDpi"}) || !nativeExactLeaf(hint, xml.Name{Local: "val"}) {
+			return false
+		}
+	}
+	return true
+}
+
 func nativeExactInlinePictureContainer(container *nativeXMLNode, wpNS, aNS string) bool {
-	if !nativeExactContainer(container, xml.Name{Local: "distT"}, xml.Name{Local: "distB"}, xml.Name{Local: "distL"}, xml.Name{Local: "distR"}) {
+	if !nativeExactDrawingIdentity(container) || !nativeExactContainer(container, nativeInlineDrawingAttrs...) {
 		return false
 	}
 	allowed := map[xml.Name]bool{
@@ -2825,7 +2869,7 @@ func nativePictureBoundedTransform(picture *nativeXMLNode, aNS, picNS string, wi
 	blips := directNativeChildren(blipFill, aNS, "blip")
 	stretches := directNativeChildren(blipFill, aNS, "stretch")
 	crops := directNativeChildren(blipFill, aNS, "srcRect")
-	if !nativeExactContainer(blipFill) || len(crops) > 1 || len(blipFill.Children) != 2+len(crops) || len(blips) != 1 || len(stretches) != 1 || len(blips[0].Children) != 0 || !nativeExactContainer(stretches[0]) || len(stretches[0].Children) != 1 {
+	if !nativeExactContainer(blipFill) || len(crops) > 1 || len(blipFill.Children) != 2+len(crops) || len(blips) != 1 || len(stretches) != 1 || !nativeInertBlipExtensions(blips[0], aNS) || !nativeExactContainer(stretches[0]) || len(stretches[0].Children) != 1 {
 		return false
 	}
 	fillRect := firstDirectNativeChild(stretches[0], aNS, "fillRect")
@@ -2935,7 +2979,7 @@ func (extractor *nativeExtractor) imageRelationship(ownerPart, relID string) (st
 }
 
 func nativeExactPageAnchor(node *nativeXMLNode, wpNS, aNS string) bool {
-	if !nativeExactContainer(node, xml.Name{Local: "distT"}, xml.Name{Local: "distB"}, xml.Name{Local: "distL"}, xml.Name{Local: "distR"}, xml.Name{Local: "simplePos"}, xml.Name{Local: "relativeHeight"}, xml.Name{Local: "behindDoc"}, xml.Name{Local: "locked"}, xml.Name{Local: "layoutInCell"}, xml.Name{Local: "allowOverlap"}) {
+	if !nativeExactDrawingIdentity(node) || !nativeExactContainer(node, nativeAnchorDrawingAttrs...) {
 		return false
 	}
 	for _, name := range []string{"distT", "distB", "distL", "distR"} {
