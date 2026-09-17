@@ -453,7 +453,7 @@ func (resolver *nativeLayoutResolver) singletonRelatedRelationship(kind string) 
 	var found *nativeRelationship
 	for index := range resolver.pkg.rels[resolver.mainPart] {
 		rel := &resolver.pkg.rels[resolver.mainPart][index]
-		if rel.Type != want {
+		if rel.Type != want || rel.Dangling {
 			continue
 		}
 		if found != nil {
@@ -536,6 +536,11 @@ func (resolver *nativeLayoutResolver) singletonRelatedPart(kind string) (string,
 			return "", fmt.Errorf("docxpatch: native style resolution: %s relationship %q uses the wrong Strict/Transitional namespace", kind, rel.ID)
 		}
 		if rel.Type != want {
+			continue
+		}
+		// A related part the package does not store is absent; every one of
+		// these kinds is optional and already resolves to the Word defaults.
+		if rel.Dangling {
 			continue
 		}
 		if rel.External || rel.PartName == "" {

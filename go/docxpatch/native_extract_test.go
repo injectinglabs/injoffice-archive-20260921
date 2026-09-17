@@ -646,6 +646,61 @@ func TestExtractNativeDocumentAcceptsContentTypeOverrideForAbsentPart(t *testing
 	}
 }
 
+// An internal relationship whose target part the package does not store
+// resolves to nothing. Word repairs such a package by dropping the entry and
+// LibreOffice reads the related part as absent, which is the state the format
+// already models for every optional part; refusing the document instead cost
+// us files whose body, styles and sections are entirely readable.
+func TestExtractNativeDocumentToleratesDanglingRelationship(t *testing.T) {
+	t.Run("absent image media", func(t *testing.T) {
+		parts := cloneNativeParts(transitionalNativeParts())
+		delete(parts, "Custom/Media/image.PNG")
+		doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+		if err != nil {
+			t.Fatalf("a dangling image relationship must not refuse the package: %v", err)
+		}
+		var text strings.Builder
+		for _, run := range doc.Body.Blocks[0].Paragraph.Runs {
+			if run.Drawing != nil && run.Drawing.MediaPart != nil {
+				t.Fatalf("an unstored media part must not resolve: %q", *run.Drawing.MediaPart)
+			}
+			if run.Text != nil {
+				text.WriteString(*run.Text)
+			}
+		}
+		if !strings.Contains(text.String(), "Hello") {
+			t.Fatalf("the rest of the paragraph must survive: %q", text.String())
+		}
+	})
+	t.Run("absent header story", func(t *testing.T) {
+		parts := cloneNativeParts(transitionalNativeParts())
+		delete(parts, "Custom/Stories/HeaderA.XML")
+		parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `<Override PartName="/custom/stories/headera.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`, "", 1)
+		doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+		if err != nil {
+			t.Fatalf("a dangling header relationship must not refuse the package: %v", err)
+		}
+		if len(doc.Headers) != 0 || len(doc.Footers) != 1 {
+			t.Fatalf("the absent story must be absent and its siblings intact: headers=%d footers=%d", len(doc.Headers), len(doc.Footers))
+		}
+	})
+	t.Run("absent font table", func(t *testing.T) {
+		parts := cloneNativeParts(transitionalNativeParts())
+		parts["Custom/_RELS/Main.XML.RELS"] = strings.Replace(parts["Custom/_RELS/Main.XML.RELS"], "</Relationships>", `<Relationship Id="rFonts" Type="`+relBaseTransitional+`fontTable" Target="fontTable.xml"/></Relationships>`, 1)
+		data := buildNativeDOCX(t, nativeEntries(parts))
+		if _, err := ExtractNativeDocumentV1(data); err != nil {
+			t.Fatalf("a dangling fontTable relationship must not refuse extraction: %v", err)
+		}
+		inventory, err := ExtractNativeDOCXFontInventoryV1(data)
+		if err != nil {
+			t.Fatalf("a dangling fontTable relationship must not refuse the font inventory: %v", err)
+		}
+		if inventory.FontTable != nil || len(inventory.Families) != 0 {
+			t.Fatalf("an unstored font table must bind nothing: %#v", inventory.FontTable)
+		}
+	})
+}
+
 func TestExtractNativeDocumentRejectsAdversarialPackages(t *testing.T) {
 	base := transitionalNativeParts()
 	tests := []struct {
@@ -678,11 +733,11 @@ func TestExtractNativeDocumentRejectsAdversarialPackages(t *testing.T) {
 			parts["_rels/.rels"] = strings.Replace(parts["_rels/.rels"], `custom/MAIN.xml`, `%2E%2E/Custom/Main.XML`, 1)
 			return nativeEntries(parts)
 		}, want: "unsafe percent-encoded"},
-		{name: "missing internal target", entries: func() []nativeZipEntry {
+		{name: "dangling office document target", entries: func() []nativeZipEntry {
 			parts := cloneNativeParts(base)
-			delete(parts, "Custom/Media/image.PNG")
+			parts["_rels/.rels"] = strings.Replace(parts["_rels/.rels"], `custom/MAIN.xml`, `custom/ABSENT.xml`, 1)
 			return nativeEntries(parts)
-		}, want: "targets missing part"},
+		}, want: "which the package does not store"},
 		{name: "word namespace spoof", entries: func() []nativeZipEntry {
 			parts := cloneNativeParts(base)
 			parts["Custom/Main.XML"] = strings.Replace(parts["Custom/Main.XML"], testW, "urn:spoofed-word", 1)
