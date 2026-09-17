@@ -117,6 +117,16 @@ function fixture(): NativeDocxPaginationRequestV1 {
   }
 }
 
+/** The same shape with a real caption above the table, as TableWithAboveCaptions.docx
+ * has it: the preceding paragraph carries text and states its own space-after. */
+function captionFixture(): NativeDocxPaginationRequestV1 {
+  const request = fixture()
+  const lead = request.document.body.blocks[0]!.paragraph!
+  lead.runs = [{ kind: 'text', id: `run:${lead.id}`, anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:t[1]', 105, 125), properties: {}, text: 'Table 1' }]
+  request.resolved_layout.runs.push({ run_id: `run:${lead.id}`, paragraph_id: lead.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+  return request
+}
+
 /** Turn the request into one the approximate lane accepts, plus its eligibility. */
 function approximate(request: NativeDocxPaginationRequestV1): NativeDocxApproximationEligibilityV1 {
   const settings = request.pagination_settings
@@ -170,6 +180,22 @@ describe('approximate table seating below a spaced paragraph', () => {
     expect(JSON.stringify(after)).toBe(JSON.stringify(before))
     expect(input).toEqual(snapshot)
     expect(eligibility.status).toBe('eligible')
+  })
+
+  it('seats a table under a caption paragraph that states a real space-after', () => {
+    // Strict pagination still starts a table at the bare cursor, so it keeps
+    // refusing rather than dropping the caption's space-after silently.
+    const strictResult = paginateNativeDocxV1(captionFixture())
+    expect(strictResult.ok).toBe(true)
+    if (!strictResult.ok) return
+    expect(strictResult.value.status).toBe('refused')
+    expect(strictResult.value.diagnostics.some(entry => entry.code === 'body-table-unsupported' && entry.message.includes('Paragraph spacing adjacent to a table must be explicit zero in v1'))).toBe(true)
+
+    const request = captionFixture()
+    const { layout } = paginateNativeDocxApproximateLegacyV1(request, approximate(request))
+    expect(layout.status).toBe('paginated')
+    if (layout.status !== 'paginated') return
+    expect(cellLineY(layout) - leadLineY(layout)).toBe(LINE_HEIGHT + BODY_SPACE_AFTER + CELL_SPACE_BEFORE)
   })
 
   it('does not add the gap when the table starts an empty column', () => {
