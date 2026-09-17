@@ -145,6 +145,11 @@ func nativeSingletonSettingsPart(pkg *nativePackage, mainPart, relBase string) (
 		if rel.Type != want {
 			continue
 		}
+		// An absent settings part is the modelled 'absent-default' state, and a
+		// relationship to a part the package does not store reaches that state.
+		if rel.Dangling {
+			continue
+		}
 		if rel.External || rel.PartName == "" {
 			return "", "", fmt.Errorf("docxpatch: native pagination settings: relationship %q must be internal", rel.ID)
 		}

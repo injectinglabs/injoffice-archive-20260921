@@ -60,6 +60,11 @@ type nativeRelationship struct {
 	Target   string
 	External bool
 	PartName string
+	// Dangling marks an internal relationship whose resolved target is not a
+	// part this package stores. The relationship is kept so the writer sees
+	// every allocated id, and PartName stays empty so no reader can resolve
+	// through it; readers treat the related part as absent.
+	Dangling bool
 }
 
 type nativeXMLNode struct {
@@ -536,7 +541,16 @@ func (pkg *nativePackage) loadRelationships() error {
 			}
 			actual, exists := pkg.partByKey[key]
 			if !exists {
-				return fmt.Errorf("docxpatch: native extract: relationship %q in %q targets missing part %q", rels[index].ID, name, resolved)
+				// A relationship whose target part is not stored resolves to
+				// nothing. OPC calls that a package defect, but every real
+				// consumer tolerates it: Word repairs the package by dropping
+				// the entry, and LibreOffice reads the document as if the
+				// related part were simply absent, which is the state the
+				// format already models for every optional part. Refusing the
+				// whole document over one entry cost us documents whose body,
+				// styles and sections are entirely readable.
+				rels[index].Dangling = true
+				continue
 			}
 			rels[index].PartName = actual
 		}
@@ -689,6 +703,9 @@ func (pkg *nativePackage) officeDocumentPart() (string, bool, error) {
 		isStrict := rel.Type == relBaseStrict+"officeDocument"
 		if rel.Type != relBaseTransitional+"officeDocument" && !isStrict {
 			continue
+		}
+		if rel.Dangling {
+			return "", false, fmt.Errorf("docxpatch: native extract: officeDocument relationship %q targets part %q, which the package does not store", rel.ID, rel.Target)
 		}
 		if rel.External || rel.PartName == "" {
 			return "", false, fmt.Errorf("docxpatch: native extract: officeDocument relationship must be internal")
@@ -1230,6 +1247,12 @@ func (extractor *nativeExtractor) extractRelatedStories() error {
 		}
 		kind, modeled := extractor.relationshipKind(rel.Type)
 		if !modeled {
+			continue
+		}
+		// A header, footer, notes or comments relationship whose part the
+		// package does not store relates nothing. The story is absent, exactly
+		// as it is for a document that never declared the relationship.
+		if rel.Dangling {
 			continue
 		}
 		if rel.External || rel.PartName == "" {
@@ -3907,6 +3930,13 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 				return NativeSectionV1{}, fmt.Errorf("docxpatch: native extract: section %s has duplicate %s %q reference", node.Path, child.Name.Local, kind)
 			}
 			seenRefs[refKey] = true
+			// A reference whose relationship targets a part the package does
+			// not store names no story. The section then carries no header or
+			// footer of that kind, exactly as a section that never declared
+			// one does, which is what Word and LibreOffice both paint.
+			if extractor.mainRelationshipDangling(relID) {
+				continue
+			}
 			storyID := extractor.storyByRel[relID]
 			wantKind := strings.TrimSuffix(child.Name.Local, "Reference")
 			if storyID == "" || !extractor.mainRelationshipMatches(relID, wantKind) {
@@ -3995,6 +4025,15 @@ func nativeColumnIdentities(sectionID string, count int) []NativeColumnV1 {
 		columns[index] = NativeColumnV1{ID: nativeColumnID(sectionID, index), Ordinal: nativeInt(index)}
 	}
 	return columns
+}
+
+func (extractor *nativeExtractor) mainRelationshipDangling(id string) bool {
+	for _, rel := range extractor.pkg.rels[extractor.mainPart] {
+		if rel.ID == id {
+			return rel.Dangling
+		}
+	}
+	return false
 }
 
 func (extractor *nativeExtractor) mainRelationshipMatches(id, kind string) bool {
