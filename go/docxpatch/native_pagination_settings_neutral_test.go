@@ -231,6 +231,48 @@ func TestExtractNativePaginationSettingsV1RejectsSpoofedNeutralExtras(t *testing
 	}
 }
 
+// The Word/LibreOffice new-shape template carries the fill, style and colour
+// history the next drawn shape inherits. It is outside the attested identity
+// subset, so it must refuse — but as "not proven neutral" for the one
+// w:shapeDefaults element, never as a structural invalidity of settings.xml,
+// which is what keeps the whole package out of the approximate tier.
+func TestExtractNativePaginationSettingsV1NewShapeTemplateIsNotStructurallyInvalid(t *testing.T) {
+	markup := `<w:shapeDefaults><o:shapedefaults v:ext="edit" spidmax="8193" style="mso-height-percent:900" fillcolor="white"><v:fill color="white"/><o:colormru v:ext="edit" colors="#40a6be,#b4dce6"/></o:shapedefaults><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout></w:shapeDefaults>`
+	settings := extractNativePaginationSettingsMarkup(t, wordMLTransitional, markup+nativeMode15Compat())
+	if paginationSettingsHasCode(settings, "INVALID_SETTINGS_STRUCTURE") {
+		t.Fatalf("new-shape defaults must not report structural invalidity: %#v", settings.Diagnostics)
+	}
+	count := 0
+	for _, diagnostic := range settings.Diagnostics {
+		if diagnostic.Path != "/w:settings[1]/w:shapeDefaults[1]" {
+			continue
+		}
+		if diagnostic.Code != "PAGINATION_SETTING_UNSUPPORTED" {
+			t.Fatalf("want PAGINATION_SETTING_UNSUPPORTED at w:shapeDefaults, got %s", diagnostic.Code)
+		}
+		count++
+	}
+	if count != 1 {
+		t.Fatalf("expected one w:shapeDefaults refusal, got %d: %#v", count, settings.Diagnostics)
+	}
+	eligibility, err := ExtractNativeDocxApproximationEligibilityV1(nativeApproximationTestDOCX(t, markup+nativeMode15Compat()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eligibility.Status != "eligible" {
+		t.Fatalf("new-shape defaults must stay approximate-eligible, got %s: %#v", eligibility.Status, eligibility.Reasons)
+	}
+}
+
+// Markup that is genuinely unrepresentable still reports INVALID_SETTINGS_STRUCTURE
+// through the same element, so the quiet subset probe never hides a malformed part.
+func TestExtractNativePaginationSettingsV1ShapeDefaultsTextStaysStructurallyInvalid(t *testing.T) {
+	settings := extractNativePaginationSettingsMarkup(t, wordMLTransitional, `<w:shapeDefaults>shape</w:shapeDefaults>`+nativeMode15Compat())
+	if !paginationSettingsHasCode(settings, "INVALID_SETTINGS_STRUCTURE") {
+		t.Fatalf("non-whitespace settings text must stay structurally invalid: %#v", settings.Diagnostics)
+	}
+}
+
 func nativeHdrShapeDefaults() string {
 	return `<w:hdrShapeDefaults><o:shapedefaults v:ext="edit" spidmax="2049"/></w:hdrShapeDefaults>`
 }

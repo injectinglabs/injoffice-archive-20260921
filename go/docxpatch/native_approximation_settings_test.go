@@ -30,7 +30,11 @@ func TestNativeApproximationKnownSettingsRetainStrictRefusal(t *testing.T) {
 		{"duplicate math", strings.Replace(math, `</m:mathPr>`, `<m:intLim m:val="subSup"/></m:mathPr>`, 1), true},
 		{"unknown math attribute", strings.Replace(math, `<m:mathPr `, `<m:mathPr foo="1" `, 1), false},
 		{"malformed shape id", strings.Replace(shape, `spidmax="1026"`, `spidmax="01026"`, 1), true},
-		{"shape content", strings.Replace(shape, `data="1"/>`, `data="1"><o:unknown/></o:idmap>`, 1), false},
+		// Schema-valid content the shapeDefaults probe does not attest refuses that
+		// one element as not-proven-neutral; only unrepresentable markup such as
+		// character data in an element-only model keeps the package ineligible.
+		{"shape content", strings.Replace(shape, `data="1"/>`, `data="1"><o:unknown/></o:idmap>`, 1), true},
+		{"shape text", strings.Replace(shape, `<o:shapelayout`, `text<o:shapelayout`, 1), false},
 		{"unknown flag value", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="oops"/></w:compat>`, false},
 		{"flag first without mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/></w:compat>`, true},
 		{"flag before mode", `<w:compat><w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat>`, true},
