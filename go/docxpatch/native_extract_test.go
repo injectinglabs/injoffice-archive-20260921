@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -1245,5 +1246,103 @@ func TestExtractNativeDocumentV1DeclaresHyperlinkContentItCannotExtract(t *testi
 	// drops nothing, so it must not raise an omission of its own.
 	if dropped != 1 {
 		t.Fatalf("UNMODELED_PARAGRAPH_CONTENT count = %d, want 1: %#v", dropped, doc.Unsupported)
+	}
+}
+
+// ECMA-376 17.6.20 w:textDirection states the section's text flow direction,
+// and lrTb is what an omitted element already states. Nothing in this package
+// or in the painter reads a section direction, so the modeled section must be
+// byte-identical with and without the default-valued element, while every
+// rotated member keeps refusing the page.
+func TestExtractNativeDocumentAdmitsOnlyTheDefaultSectionTextDirection(t *testing.T) {
+	sectPr := func(markup string) []byte {
+		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+		parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r><w:t>test</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>` + markup + `</w:sectPr></w:body></w:document>`
+		return buildNativeDOCX(t, nativeEntries(parts))
+	}
+	for _, test := range []struct {
+		name     string
+		markup   string
+		admitted bool
+	}{
+		{"absent", "", true},
+		{"default lrTb", `<w:textDirection w:val="lrTb"/>`, true},
+		{"repeated default", `<w:textDirection w:val="lrTb"/><w:textDirection w:val="lrTb"/>`, true},
+		// tblr-height.docx carries btLr and tbRl: genuine 90/270 degree turns.
+		{"bottom-to-top btLr", `<w:textDirection w:val="btLr"/>`, false},
+		{"top-to-bottom tbRl", `<w:textDirection w:val="tbRl"/>`, false},
+		{"rotated lrTbV", `<w:textDirection w:val="lrTbV"/>`, false},
+		{"rotated tbRlV", `<w:textDirection w:val="tbRlV"/>`, false},
+		{"rotated tbLrV", `<w:textDirection w:val="tbLrV"/>`, false},
+		{"unknown member", `<w:textDirection w:val="sideways"/>`, false},
+		{"missing value", `<w:textDirection/>`, false},
+		{"empty value", `<w:textDirection w:val=""/>`, false},
+		{"foreign value attribute", `<w:textDirection x:val="lrTb" xmlns:x="urn:foreign"/>`, false},
+		{"extra attribute", `<w:textDirection w:val="lrTb" w:frame="1"/>`, false},
+		{"carries a child", `<w:textDirection w:val="lrTb"><w:vanish/></w:textDirection>`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc, err := ExtractNativeDocumentV1(sectPr(test.markup))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasUnsupportedCode(doc, "UNMODELED_SECTION_PROPERTY") == test.admitted {
+				t.Fatalf("wrong section text-direction decision: %#v", doc.Unsupported)
+			}
+		})
+	}
+	// The inertness itself: an admitted direction must leave the modeled
+	// section exactly as the section that declares no direction at all.
+	baseline, err := ExtractNativeDocumentV1(sectPr(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stated, err := ExtractNativeDocumentV1(sectPr(`<w:textDirection w:val="lrTb"/>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stated.Unsupported) != len(baseline.Unsupported) {
+		t.Fatalf("default direction changed the diagnostic vector: %#v", stated.Unsupported)
+	}
+	for index := range baseline.Sections {
+		want, err := json.Marshal(baseline.Sections[index])
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Section ids and anchors are derived from the source bytes, which the
+		// element changes; everything that describes layout must not move.
+		got, err := json.Marshal(stated.Sections[index].Page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantPage, err := json.Marshal(baseline.Sections[index].Page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(wantPage) {
+			t.Fatalf("default direction moved section geometry:\n%s\n%s", wantPage, got)
+		}
+		if baseline.Sections[index].BreakType != stated.Sections[index].BreakType || baseline.Sections[index].TitlePage != nil != (stated.Sections[index].TitlePage != nil) {
+			t.Fatalf("default direction moved section flow: %s", want)
+		}
+	}
+}
+
+// A table cell's own w:textDirection is a different property in a different
+// container: tblr-height.docx rotates two cells through 90 and 270 degrees and
+// must keep refusing, whatever the section-level rule admits.
+func TestExtractNativeDocumentRefusesRotatedCellTextDirection(t *testing.T) {
+	for _, value := range []string{"btLr", "tbRl", "lrTb"} {
+		t.Run(value, func(t *testing.T) {
+			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:textDirection w:val="` + value + `"/></w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`
+			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+				t.Fatalf("cell text direction %q was admitted: %#v", value, doc.Unsupported)
+			}
+		})
 	}
 }
