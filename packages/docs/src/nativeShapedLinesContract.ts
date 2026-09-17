@@ -270,9 +270,9 @@ function validateFragment(value: unknown, path: string, issues: NativeDocxValida
 function canonicalAlignmentOffset(alignment: string, direction: string, available: number, advance: number): number {
   const remaining = Math.max(0, available - advance)
   if (alignment === 'center') return Math.round(remaining / 2)
-  if (alignment === 'left' || alignment === 'both' || alignment === 'distribute') return 0
-  if (alignment === 'right') return remaining
-  if (alignment === 'start') return direction === 'ltr' ? 0 : remaining
+  if (alignment === 'both' || alignment === 'distribute') return 0
+  // ECMA-376 17.18.44 ST_Jc: left/right are the legacy aliases of start/end.
+  if (alignment === 'start' || alignment === 'left') return direction === 'ltr' ? 0 : remaining
   return direction === 'ltr' ? remaining : 0
 }
 

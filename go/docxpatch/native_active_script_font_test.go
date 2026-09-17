@@ -86,25 +86,36 @@ func TestNativeScriptPropertiesKeepMalformedAndForcedScriptRefusals(t *testing.T
 	}
 }
 
-func TestNativeEmptyParagraphScriptSelectionRetainsBidiUncertainty(t *testing.T) {
-	for _, bidi := range []bool{false, true} {
-		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Latin" w:hAnsi="Latin" w:cs="Arabic"/><w:sz w:val="24"/><w:szCs w:val="40"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`)
-		property := ""
-		if bidi {
-			property = "<w:pPr><w:bidi/></w:pPr>"
-		}
-		parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p>` + property + `</w:p><w:sectPr/></w:body></w:document>`
-		resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if hasResolutionDiagnostic(resolved, "SCRIPT_FONT_PRESERVED") != bidi || hasResolutionDiagnostic(resolved, "COMPLEX_SCRIPT_SIZE_PRESERVED") != bidi {
-			t.Fatalf("wrong empty mark script decision bidi=%v %#v", bidi, resolved.Diagnostics)
-		}
-		mark := resolved.Paragraphs[0].ParagraphMarkProperties
-		if !bidi && (mark.FontFamily == nil || *mark.FontFamily != "Latin" || mark.FontSizeHalfPoint == nil || *mark.FontSizeHalfPoint != 24) {
-			t.Fatalf("literal-CR Latin mark changed %#v", mark)
-		}
+// ECMA-376 17.3.2.30 (w:rtl) and 17.3.2.26 (w:cs) select the complex-script
+// slot per run, the paragraph mark included. Paragraph-level w:bidi (17.3.1.6)
+// only orders the line, so on its own it must not defer the mark's script
+// properties; an explicit mark-level w:rtl still must.
+func TestNativeEmptyParagraphScriptSelectionFollowsMarkRunProperties(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		property string
+		deferred bool
+	}{
+		{"plain", "", false},
+		{"paragraph bidi only", "<w:pPr><w:bidi/></w:pPr>", false},
+		{"mark rtl", "<w:pPr><w:rPr><w:rtl/></w:rPr></w:pPr>", true},
+		{"paragraph bidi with mark rtl", "<w:pPr><w:bidi/><w:rPr><w:rtl/></w:rPr></w:pPr>", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Latin" w:hAnsi="Latin" w:cs="Arabic"/><w:sz w:val="24"/><w:szCs w:val="40"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p>` + test.property + `</w:p><w:sectPr/></w:body></w:document>`
+			resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasResolutionDiagnostic(resolved, "SCRIPT_FONT_PRESERVED") != test.deferred || hasResolutionDiagnostic(resolved, "COMPLEX_SCRIPT_SIZE_PRESERVED") != test.deferred {
+				t.Fatalf("wrong empty mark script decision %#v", resolved.Diagnostics)
+			}
+			mark := resolved.Paragraphs[0].ParagraphMarkProperties
+			if !test.deferred && (mark.FontFamily == nil || *mark.FontFamily != "Latin" || mark.FontSizeHalfPoint == nil || *mark.FontSizeHalfPoint != 24) {
+				t.Fatalf("literal-CR Latin mark changed %#v", mark)
+			}
+		})
 	}
 }
 

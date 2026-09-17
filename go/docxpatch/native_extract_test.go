@@ -1165,3 +1165,44 @@ func readNativeZipPart(t *testing.T, data []byte, name string) []byte {
 	t.Fatalf("missing %s", name)
 	return nil
 }
+
+// ECMA-376 17.6.19 rtlGutter moves the binding gutter to the right edge of the
+// page. It is exact section geometry: recording it as an unmodeled property
+// leaves layout to bind on the left and paint the body box in the wrong place.
+func TestExtractNativeDocumentModelsRightBindingGutter(t *testing.T) {
+	sectPr := func(markup string) []byte {
+		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+		parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r><w:t>test</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="8391" w:h="5940" w:orient="landscape"/><w:pgMar w:top="720" w:right="360" w:bottom="1440" w:left="360" w:header="0" w:footer="0" w:gutter="1080"/>` + markup + `</w:sectPr></w:body></w:document>`
+		return buildNativeDOCX(t, nativeEntries(parts))
+	}
+	for _, test := range []struct {
+		name    string
+		markup  string
+		active  bool
+		modeled bool
+	}{
+		{"absent", "", false, true},
+		{"present", "<w:rtlGutter/>", true, true},
+		{"explicitly on", `<w:rtlGutter w:val="1"/>`, true, true},
+		{"explicitly off", `<w:rtlGutter w:val="0"/>`, false, true},
+		{"invalid lexical value", `<w:rtlGutter w:val="maybe"/>`, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc, err := ExtractNativeDocumentV1(sectPr(test.markup))
+			if err != nil {
+				t.Fatal(err)
+			}
+			gutter := doc.Sections[0].Page.RTLGutter
+			if test.active != (gutter != nil && *gutter) {
+				t.Fatalf("right gutter %v, wanted %v", gutter, test.active)
+			}
+			// An absent or inactive right gutter must leave the wire alone.
+			if !test.active && gutter != nil {
+				t.Fatalf("inactive right gutter was recorded: %#v", gutter)
+			}
+			if hasUnsupportedCode(doc, "UNMODELED_SECTION_PROPERTY") == test.modeled {
+				t.Fatalf("wrong unmodeled-section-property decision: %#v", doc.Unsupported)
+			}
+		})
+	}
+}

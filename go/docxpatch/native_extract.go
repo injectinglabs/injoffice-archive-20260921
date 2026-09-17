@@ -3870,6 +3870,23 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			if hasStart {
 				section.PageNumberStart = &number
 			}
+		case "rtlGutter":
+			// ECMA-376 17.6.19: rtlGutter puts the binding gutter on the right
+			// edge instead of the left. It is exact section geometry, so model
+			// it rather than preserving it as an unmodeled property and then
+			// laying the page out with the gutter on the wrong side.
+			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Right-gutter markup has attributes or children outside the exact v1 subset")
+				continue
+			}
+			value, ok := nativeOnOff(child, extractor.wordNS)
+			if !ok {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Right-gutter policy has an invalid lexical value")
+				continue
+			}
+			if value {
+				section.Page.RTLGutter = nativeBool(true)
+			}
 		case "titlePg":
 			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Title-page markup has attributes or children outside the exact v1 subset")
