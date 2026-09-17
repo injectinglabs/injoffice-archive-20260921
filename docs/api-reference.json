@@ -5161,7 +5161,7 @@
             {
               "name": "nativeDocxSectionsShareExactPageV1",
               "kind": "function",
-              "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1): boolean"
+              "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; }): boolean"
             },
             {
               "name": "NativeDocxSectionV1",
