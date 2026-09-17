@@ -566,13 +566,18 @@ func nativeDOCXFontReferences(resolved *NativeResolvedLayoutInputV1) []NativeDOC
 	}
 	for _, run := range resolved.Runs {
 		add(run.Properties.FontFamily, run.Properties.Bold, run.Properties.Italic, run.RunID)
+		// The East-Asian slot is carried only for text that reaches it, so it
+		// is a face the document genuinely needs, exactly like font_family.
+		add(run.Properties.EastAsiaFontFamily, run.Properties.Bold, run.Properties.Italic, run.RunID)
 	}
 	for _, paragraph := range resolved.Paragraphs {
 		properties := paragraph.ParagraphMarkProperties
 		add(properties.FontFamily, properties.Bold, properties.Italic, paragraph.ParagraphID)
+		add(properties.EastAsiaFontFamily, properties.Bold, properties.Italic, paragraph.ParagraphID)
 		if paragraph.Numbering != nil {
 			marker := paragraph.Numbering.Marker
 			add(marker.FontFamily, marker.Bold, marker.Italic, paragraph.ParagraphID)
+			add(marker.EastAsiaFontFamily, marker.Bold, marker.Italic, paragraph.ParagraphID)
 		}
 	}
 	result := make([]NativeDOCXFontReferenceV1, 0, len(refs))

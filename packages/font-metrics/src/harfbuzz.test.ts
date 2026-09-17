@@ -254,7 +254,7 @@ describe('canonical HarfBuzz text shaper v1', () => {
     if (!('status' in kerned) && !('status' in unkerned)) expect(kerned.advanceInlineMilliPoints).toBeLessThan(unkerned.advanceInlineMilliPoints)
   })
 
-  it('allows disabling absent kern without enabling unadvertised features', () => {
+  it('allows disabling absent kern and makes enabling one a no-op', () => {
     const noKern = mutatedResource(bytes => {
       for (const tag of ['GPOS','kern']) {
         const record = tableRecord(bytes,tag)
@@ -265,8 +265,16 @@ describe('canonical HarfBuzz text shaper v1', () => {
     const disabled = run('AV',{features:[{tag:'kern',value:0}]})
     const result = shaper.shape({run:disabled,startUtf16:0,endUtf16:2,font:noKern})
     expect('status' in result).toBe(false)
-    const enabled = run('AV',{features:[{tag:'kern',value:1}]})
-    expect(refusalCode(shaper.shape({run:enabled,startUtf16:0,endUtf16:2,font:noKern}))).toBe('unsupported-feature')
+    // A face with no kern lookup has nothing for an explicit kern=1 to run, so
+    // asking for it is the same shaping as not asking - not a refusal. Refusing
+    // it made an inherited w:kern unpaintable on every face without GSUB/GPOS
+    // kern, which is most CJK faces.
+    const enabled = shaper.shape({run:run('AV',{features:[{tag:'kern',value:1}]}),startUtf16:0,endUtf16:2,font:noKern})
+    const plain = shaper.shape({run:run('AV',{features:[]}),startUtf16:0,endUtf16:2,font:noKern})
+    expect('status' in enabled).toBe(false)
+    if ('status' in enabled || 'status' in plain) return
+    expect(enabled.advanceInlineMilliPoints).toBe(plain.advanceInlineMilliPoints)
+    expect(enabled.glyphs).toEqual(plain.glyphs)
   })
 
   it('keeps combining marks and supplementary Unicode on complete UTF-16 clusters', () => {
@@ -344,7 +352,12 @@ describe('canonical HarfBuzz text shaper v1', () => {
     expect(refusalCode(shape('a\u200db'))).toBeUndefined()
     expect(refusalCode(shape('abc', { script: 'Grek' }))).toBe('unsupported-script')
     expect(refusalCode(shape('abc', { script: 'Arab', direction: 'rtl' }))).toBe('unsupported-script')
-    for (const [text, script] of [['Ж', 'Cyrl'], ['Ω', 'Grek'], ['अ', 'Deva'], ['漢', 'Hani'], ['あ', 'Kana'], ['한', 'Hang']] as const) expect(refusalCode(shape(text, { script }))).toBe('unsupported-script')
+    for (const [text, script] of [['Ж', 'Cyrl'], ['Ω', 'Grek'], ['अ', 'Deva']] as const) expect(refusalCode(shape(text, { script }))).toBe('unsupported-script')
+    // Hani/Kana/Hang are qualified scripts now, so this Latin-only face refuses
+    // them for the honest reason: it has no glyph, not an unknown script.
+    for (const [text, script] of [['漢', 'Hani'], ['あ', 'Kana'], ['한', 'Hang']] as const) expect(refusalCode(shape(text, { script }))).toBe('missing-glyph')
+    // A scalar that does not belong to the declared East-Asian script still refuses as one.
+    expect(refusalCode(shape('あ', { script: 'Hani' }))).toBe('unsupported-script')
     expect(refusalCode(shape('abc', { variations: [{ tag: 'wght', value: 500 }] }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', { letterSpacingMilliPoints: 1 }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', { wordSpacingMilliPoints: 1 }))).toBe('unsupported-feature')

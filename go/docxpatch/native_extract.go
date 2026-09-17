@@ -1064,6 +1064,14 @@ func nativeExactThemeSrgbSlot(slot *nativeXMLNode, drawingNS string) (string, bo
 type nativeThemeLatinFonts struct {
 	major string
 	minor string
+	// East-Asian slots and the fontScheme script table that an empty
+	// <a:ea typeface=""/> defers to. See native_east_asian_theme.go.
+	majorEastAsia         string
+	minorEastAsia         string
+	majorEastAsiaAuthored bool
+	minorEastAsiaAuthored bool
+	majorScripts          map[string]string
+	minorScripts          map[string]string
 }
 
 func nativeExactThemeLatinTypeface(fontSet *nativeXMLNode, drawingNS string) (string, bool) {
@@ -1099,9 +1107,13 @@ func nativeParseThemeLatinFonts(root *nativeXMLNode, drawingNS string) nativeThe
 	}
 	if major := nativeUniqueThemeFontChild(scheme, drawingNS, "majorFont"); major != nil {
 		fonts.major, _ = nativeExactThemeLatinTypeface(major, drawingNS)
+		fonts.majorEastAsia, fonts.majorEastAsiaAuthored = nativeExactThemeSlotTypeface(major, drawingNS, "ea")
+		fonts.majorScripts = nativeParseThemeScriptFonts(major, drawingNS)
 	}
 	if minor := nativeUniqueThemeFontChild(scheme, drawingNS, "minorFont"); minor != nil {
 		fonts.minor, _ = nativeExactThemeLatinTypeface(minor, drawingNS)
+		fonts.minorEastAsia, fonts.minorEastAsiaAuthored = nativeExactThemeSlotTypeface(minor, drawingNS, "ea")
+		fonts.minorScripts = nativeParseThemeScriptFonts(minor, drawingNS)
 	}
 	return fonts
 }

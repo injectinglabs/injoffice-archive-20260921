@@ -353,6 +353,8 @@ interface SourceSpan {
   startUtf16: number
   endUtf16: number
   script: string
+  /** The resolved-layout font slot this span's runes belong to (MS-OI29500 17.3.2.26). */
+  eastAsiaSlot: boolean
   direction: 'ltr' | 'rtl'
   bidiLevel: number
   language: string
@@ -687,6 +689,30 @@ function scriptForCharacter(character: string): string {
   return script === 'Other' ? 'Zyyy' : script ?? ''
 }
 
+/**
+ * Mirrors Go docxpatch.nativeEastAsianSlotRune: the ranges MS-OI29500 17.3.2.26
+ * assigns to the East-Asian font slot with no dependence on w:hint.
+ *
+ * Unicode script alone cannot stand in for this. `、` and `。` are script Zyyy
+ * exactly like `.`, but Word paints the first two in the East-Asian face and the
+ * third in the ascii face, so the slot is its own dimension of a shaping span.
+ */
+function eastAsiaSlotCodePoint(codePoint: number): boolean {
+  return (codePoint >= 0x1100 && codePoint <= 0x11ff)
+    || (codePoint >= 0x2e80 && codePoint <= 0x2fdf)
+    || (codePoint >= 0x3000 && codePoint <= 0x30ff)
+    || (codePoint >= 0x3100 && codePoint <= 0x312f)
+    || (codePoint >= 0x3130 && codePoint <= 0x318f)
+    || (codePoint >= 0x31c0 && codePoint <= 0x31ff)
+    || (codePoint >= 0x3200 && codePoint <= 0x4dbf)
+    || (codePoint >= 0x4e00 && codePoint <= 0x9fff)
+    || (codePoint >= 0xac00 && codePoint <= 0xd7af)
+    || (codePoint >= 0xf900 && codePoint <= 0xfaff)
+    || (codePoint >= 0xfe30 && codePoint <= 0xfe4f)
+    || (codePoint >= 0xff00 && codePoint <= 0xffef)
+    || (codePoint >= 0x20000 && codePoint <= 0x2fa1f)
+}
+
 function shapingSpans(text: string, language: string, sourceOffset: number, paragraphOffset: number, levels: readonly number[]): SourceSpan[] {
   const spans: SourceSpan[] = []
   let current: SourceSpan | undefined
@@ -696,13 +722,14 @@ function shapingSpans(text: string, language: string, sourceOffset: number, para
     const character = String.fromCodePoint(codePoint)
     const next = offset + character.length
     let script = scriptForCharacter(character)
+    const eastAsiaSlot = eastAsiaSlotCodePoint(codePoint)
     const bidiLevel = levels[paragraphOffset + offset]
     if (!Number.isSafeInteger(bidiLevel) || bidiLevel! < 0 || bidiLevel! > 125) return []
     for (let unit = offset + 1; unit < next; unit++) if (levels[paragraphOffset + unit] !== bidiLevel) return []
     const direction = (bidiLevel! & 1) === 1 ? 'rtl' : 'ltr'
     if (script === 'Zinh' && current) script = current.script
-    if (!current || current.script !== script || current.direction !== direction || current.bidiLevel !== bidiLevel) {
-      current = { text: character, startUtf16: sourceOffset + offset, endUtf16: sourceOffset + next, script, direction, bidiLevel: bidiLevel!, language }
+    if (!current || current.script !== script || current.eastAsiaSlot !== eastAsiaSlot || current.direction !== direction || current.bidiLevel !== bidiLevel) {
+      current = { text: character, startUtf16: sourceOffset + offset, endUtf16: sourceOffset + next, script, eastAsiaSlot, direction, bidiLevel: bidiLevel!, language }
       spans.push(current)
     } else {
       current.text += character
@@ -735,20 +762,25 @@ function familyCandidates(family: string, aliases: Map<string, string>): string[
 }
 
 function textRunInput(span: SourceSpan, properties: NativeDocxResolvedRunPropertiesV1, aliases: Map<string, string>): TextRunInput | null {
-  if (!properties.font_family || !properties.font_size_half_points) return null
+  // A run carries one face per slot, not one face. The resolver only emits the
+  // East-Asian slot for text that reaches it, so a span in that slot without a
+  // face has already been refused upstream and must not fall back to ascii.
+  const family = span.eastAsiaSlot ? properties.east_asia_font_family : properties.font_family
+  const language = (span.eastAsiaSlot ? properties.east_asia_language : undefined) ?? span.language
+  if (!family || !properties.font_size_half_points) return null
   return deepFreezeWire({
     version: NATIVE_TEXT_LAYOUT_VERSION,
     text: span.text,
     fontSizeMilliPoints: halfPointsToMilliPoints(properties.font_size_half_points),
     features: [{ tag: 'kern', value: properties.kerning_min_size_half_points !== undefined && properties.font_size_half_points >= properties.kerning_min_size_half_points ? 1 : 0 }],
     font: {
-      families: familyCandidates(properties.font_family, aliases),
+      families: familyCandidates(family, aliases),
       weight: properties.bold ? 700 : 400,
       style: properties.italic ? 'italic' : 'normal',
       stretch: 100,
     },
     script: span.script,
-    language: span.language,
+    language,
     direction: span.direction,
   })
 }
@@ -1232,8 +1264,11 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
     return []
   }
   context.shapedCodeUnits += span.text.length
-  if (!properties.font_family) {
-    addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Resolved font family is absent; shaping was refused instead of guessing a platform font' })
+  // The slot the span belongs to is the one that must name a face. An
+  // East-Asian span with no East-Asian slot refuses here rather than being
+  // dropped silently or painted in the ascii face.
+  if (!(span.eastAsiaSlot ? properties.east_asia_font_family : properties.font_family)) {
+    addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: span.eastAsiaSlot ? 'Resolved East-Asian font slot is absent; shaping was refused instead of painting East-Asian text in the ascii face' : 'Resolved font family is absent; shaping was refused instead of guessing a platform font' })
     return []
   }
   if (!properties.font_size_half_points) {
@@ -1322,7 +1357,7 @@ async function resolveParagraphMarkMetrics(context: NativeShapingContext, paragr
     return null
   }
   const markDirection = properties.rtl ? 'rtl' : direction
-  const span: SourceSpan = { text: '', startUtf16: 0, endUtf16: 0, script: 'Zyyy', direction: markDirection, bidiLevel: markDirection === 'rtl' ? 1 : 0, language: properties.language ?? 'und' }
+  const span: SourceSpan = { text: '', startUtf16: 0, endUtf16: 0, script: 'Zyyy', eastAsiaSlot: false, direction: markDirection, bidiLevel: markDirection === 'rtl' ? 1 : 0, language: properties.language ?? 'und' }
   const run = textRunInput(span, properties, context.fontAliases)
   if (!run) return null
   const validation = validateTextRunInput(run)
@@ -1596,7 +1631,7 @@ async function markerEvents(context: NativeShapingContext, paragraph: NativeDocx
   let textStart = markerStart + markerAdvance
   if (paragraph.numbering.suffix === 'space') {
     const level = direction === 'rtl' ? 1 : 0
-    const span: SourceSpan = { text: ' ', startUtf16: text.length, endUtf16: text.length + 1, script: 'Zyyy', direction, bidiLevel: level, language }
+    const span: SourceSpan = { text: ' ', startUtf16: text.length, endUtf16: text.length + 1, script: 'Zyyy', eastAsiaSlot: false, direction, bidiLevel: level, language }
     const suffixAtoms = await shapeSpan(context, span, properties, 'list-marker', paragraph.paragraph_id)
     atoms.push(...suffixAtoms)
     textStart += suffixAtoms.reduce((sum, atom) => sum + atom.advance, 0)
