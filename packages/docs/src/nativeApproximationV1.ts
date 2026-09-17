@@ -80,6 +80,15 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // page. Both the extractor and the resolver emit this code only for those
   // two values; a border that paints stays foreign markup.
   'RUN_BORDER_ABSENT_PRESERVED',
+  // The same reading for the rest of the CT_RPr block Word writes when direct
+  // character formatting is cleared: a value that states its own absence, with
+  // no case transform, no strike, no relief, no animation, no emphasis mark,
+  // zero character spacing, zero baseline offset and no shading. Both the
+  // extractor and the resolver emit this code only for those exact values, so
+  // it records the formatting this tier already applies -- none -- and cannot
+  // move a glyph, an advance or a break. Every enabled value stays an
+  // unmodelled run property.
+  'RUN_FORMATTING_ABSENCE_PRESERVED',
   // w:webHidden hides a run in Word's Web Layout view only. Paginated layout
   // draws it like any other run, so the fact is recorded and the run is
   // painted; it cannot move a line or a page here.

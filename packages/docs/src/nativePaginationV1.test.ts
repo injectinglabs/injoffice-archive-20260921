@@ -1566,6 +1566,31 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('paints a run whose formatting properties state their own absence', () => {
+    // Word writes a full CT_RPr of explicit "off" leaves whenever direct
+    // character formatting is cleared: no case transform, no strike, no relief,
+    // zero character spacing, zero baseline offset and no shading. Applying
+    // that is applying nothing, so the approximate tier paints on; an enabled
+    // value is still recorded as an unmodelled property and refuses.
+    for (const code of ['RUN_FORMATTING_ABSENCE_PRESERVED', 'UNMODELED_RUN_PROPERTY'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'UNMODELED_RUN_PROPERTY') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+    }
+  })
+
   it('paints a paragraph whose spacing Word determines automatically', () => {
     // w:beforeAutospacing/w:afterAutospacing is an exact source shape whose
     // measurement Word determines; the resolved layout owns that value and the

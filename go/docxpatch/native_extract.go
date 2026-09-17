@@ -3449,6 +3449,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported("VERTICAL_ALIGNMENT_UNSUPPORTED", "run-properties", paragraphID, partName, child, "Vertical alignment requires an exact baseline, subscript or superscript value")
 			}
 		default:
+			if nativeAbsentRunFormatting(child, node, extractor.wordNS) {
+				preserveOnly = true
+				extractor.addUnsupported("RUN_FORMATTING_ABSENCE_PRESERVED", "run-properties", paragraphID, partName, child, nativeAbsentRunFormattingMessage)
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "This run property is preserved verbatim")
 		}
