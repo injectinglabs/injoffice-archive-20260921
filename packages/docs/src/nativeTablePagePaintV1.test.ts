@@ -140,6 +140,35 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines)).toEqual(strict)
   })
 
+  /** Mirrors Table_cell_auto_width_fdo69656.docx: one cell states
+   * `<w:tcW w:w="0" w:type="auto"/>`, which the extractor models as an absent
+   * width_twips. Word draws that cell at its gridCol width like every other. */
+  it('qualifies a cell that states no absolute preferred width at its grid slice', () => {
+    const request = autoGridFixture([4428, 4428])
+    for (const row of request.document.body.blocks[0]!.table!.rows) delete row.cells[1]!.width_twips
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.status === 'qualified' ? approximate.tables[0]!.width_policy : undefined)
+      .toEqual({ name: 'approximate-authored-grid-fitted-v1', section_id: 'section:1', container_width_twips: 8640, available_width_twips: 8640, source_grid_widths_twips: [4428, 4428], source_cell_widths_twips: [[4428, null], [4428, null]], fitted_grid_widths_twips: [4320, 4320] })
+    expect(approximate.status === 'qualified' ? approximate.tables[0]!.rows[0]!.cells.map((cell) => cell.width_millipoints) : undefined).toEqual([4320 * 50, 4320 * 50])
+  })
+
+  /** An authored width that disagrees with the grid is still a conflict. */
+  it('still refuses a fixed-grid cell whose stated width disagrees with its grid slice', () => {
+    const request = fixture()
+    request.document.body.blocks[0]!.table!.rows[0]!.cells[0]!.width_twips = 401
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines).status).toBe('refused')
+  })
+
+  /** A fixed-grid cell that states no preferred width takes its grid slice. */
+  it('qualifies a fixed-grid cell that states no absolute preferred width', () => {
+    const request = fixture()
+    delete request.document.body.blocks[0]!.table!.rows[0]!.cells[0]!.width_twips
+    const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(qualified.status).toBe('qualified')
+    expect(qualified.status === 'qualified' ? qualified.tables[0]!.rows[0]!.cells[0]!.width_millipoints : undefined).toBe(400 * 50)
+  })
+
   it('approximate preview scales an uneven authored grid to the column with largest-remainder twips', () => {
     const request = autoGridFixture([6000, 3000])
     const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })

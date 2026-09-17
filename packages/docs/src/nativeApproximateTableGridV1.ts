@@ -1,6 +1,7 @@
 /** Approximate-preview-only sizing of auto-width tables from their authored
  * tblGrid. Strict page paint never calls this; it is a declared policy of the
  * read-only current-layout approximate preview. No source bytes change. */
+import { nativeDocxCellWidthAgreesWithGridV1 } from './nativeContract.js'
 import type { NativeDocxTableV1 } from './nativeContract.js'
 
 export const DOCX_APPROXIMATE_TABLE_GRID_POLICY = 'approximate-authored-grid-fitted-v1' as const
@@ -12,7 +13,7 @@ export interface NativeDocxApproximateTableGridPolicyV1 {
   /** Container minus the table indent: the column width the fitted grid sums to. */
   available_width_twips: number
   source_grid_widths_twips: number[]
-  source_cell_widths_twips: number[][]
+  source_cell_widths_twips: (number | null)[][]
   fitted_grid_widths_twips: number[]
 }
 
@@ -50,7 +51,7 @@ export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, co
     for (const cell of row.cells) {
       if (++cells > 100_000 || !Number.isSafeInteger(cell.grid_span) || cell.grid_span < 1 || column + cell.grid_span > grid.length || cell.vertical_merge !== 'none') return undefined
       const end = column + cell.grid_span
-      if (cell.width_twips !== grid.slice(column, end).reduce((a, b) => a + b, 0)) return undefined
+      if (!nativeDocxCellWidthAgreesWithGridV1(cell, grid.slice(column, end).reduce((a, b) => a + b, 0))) return undefined
       column = end
     }
     if (column !== grid.length) return undefined
@@ -69,7 +70,7 @@ export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, co
   })
   const policy: NativeDocxApproximateTableGridPolicyV1 = {
     name: DOCX_APPROXIMATE_TABLE_GRID_POLICY, section_id: sectionID, container_width_twips: containerWidth, available_width_twips: available,
-    source_grid_widths_twips: [...grid], source_cell_widths_twips: table.rows.map((row) => row.cells.map((cell) => cell.width_twips!)),
+    source_grid_widths_twips: [...grid], source_cell_widths_twips: table.rows.map((row) => row.cells.map((cell) => cell.width_twips ?? null)),
     fitted_grid_widths_twips: [...fitted],
   }
   return { policy, table: { ...table, layout: 'fixed', width_twips: width, grid_widths_twips: fitted, rows } }

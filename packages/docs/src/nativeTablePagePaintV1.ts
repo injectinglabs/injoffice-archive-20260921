@@ -15,6 +15,7 @@ import type {
 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1, NativeDocxResolvedTableV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
+import { nativeDocxCellWidthAgreesWithGridV1 } from './nativeContract.js'
 import { validNativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
@@ -242,7 +243,7 @@ function percentTable(table: NativeDocxTableV1, width: number, sectionID: string
       cells += 1
       if (cells > DOCX_TABLE_PAGE_PAINT_LIMITS.maxCells || !Number.isSafeInteger(cell.grid_span) || cell.grid_span < 1 || column + cell.grid_span > grid.length) return undefined
       const end = column + cell.grid_span
-      if (cell.width_twips !== grid.slice(column, end).reduce((sum, value) => sum + value, 0)) return undefined
+      if (!nativeDocxCellWidthAgreesWithGridV1(cell, grid.slice(column, end).reduce((sum, value) => sum + value, 0))) return undefined
       projected.push({ ...cell, width_twips: scaled.slice(column, end).reduce((sum, value) => sum + value, 0) })
       column = end
     }
@@ -406,7 +407,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
           widthTwips += grid[column + offset]!
           widthParts.push(gridMP[column + offset]!)
         }
-        if (cell.width_twips !== widthTwips) return fail(cell.id, 'Cell width must exactly equal the sum of its fixed grid columns')
+        if (!nativeDocxCellWidthAgreesWithGridV1(cell, widthTwips)) return fail(cell.id, 'Cell width must exactly equal the sum of its fixed grid columns, or state no absolute preference')
         if (cell.borders) return fail(cell.id, 'Cell border conflict resolution is outside v1; use unambiguous table-level borders')
         const shading = cell.shading_rgb ?? resolvedTable.cell_shading_rgb
         if (shading !== undefined && !/^[0-9A-F]{6}$/.test(shading)) return fail(cell.id, 'Cell shading must be an explicit RGB clear fill')

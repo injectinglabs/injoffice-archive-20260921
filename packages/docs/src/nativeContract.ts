@@ -175,6 +175,19 @@ export interface NativeDocxTableCellV1 {
   paragraphs: NativeDocxParagraphV1[]
 }
 
+/**
+ * ECMA-376 17.4.72: `w:tcW` is a *preferred* cell width, and `w:type="auto"`
+ * (or an omitted `w:tcW`) states no absolute preference at all. The extractor
+ * models that as an absent `width_twips`. An absent preference cannot conflict
+ * with the `w:tblGrid` slice the cell occupies, so table geometry policies that
+ * require authored cell widths to agree with the grid treat it as agreeing
+ * rather than as an unresolvable conflict; the grid slice is the only width
+ * Word can place the cell at.
+ */
+export function nativeDocxCellWidthAgreesWithGridV1(cell: NativeDocxTableCellV1, gridSliceTwips: number): boolean {
+  return cell.width_twips === undefined || cell.width_twips === gridSliceTwips
+}
+
 export interface NativeDocxTableRowV1 {
   id: string
   anchor: NativeDocxSourceAnchorV1
