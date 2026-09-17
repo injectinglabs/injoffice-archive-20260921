@@ -1089,7 +1089,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       const highlights: NativeDocxFillTextHighlightCommandV1[] = []
       const underlines: NativeDocxStrokeTextUnderlineCommandV1[] = []
       if ((noteStory?.note_role === 'separator' || noteStory?.note_role === 'continuation-separator') && noteStory.lines[0]?.id === placed.id) {
-        if (noteStory.lines.length !== 1 || line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'Instruction-only note separator must paint exactly one derived rule and no text or glyph commands') }
+        if (line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'The note separator instruction line must paint exactly one derived rule and no text or glyph commands') }
         const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id, noteStory.note_role === 'continuation-separator')
         if (!separator) return { ok: true, value: refusal(provenance, 'identity-mismatch', noteStory.story_id, 'Ordinary note separator cannot exact-join its placed line and column geometry') }
         contentCommands.push(separator)
@@ -1404,7 +1404,9 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
         placements.forEach((placed) => {
           const line = shapedParagraphs.get(placed.paragraph_id)?.lines[placed.source_line_ordinal]
           const indexedStory = noteStoryByLineID.get(placed.id)
-          const separatorStory = indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator' ? indexedStory : undefined
+          // The derived rule belongs to the instruction line alone; any further
+          // separator-story paragraph paints as ordinary text.
+          const separatorStory = (indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator') && indexedStory.lines[0]?.id === placed.id ? indexedStory : undefined
           if (separatorStory) {
             const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, separatorStory.story_id, separatorStory.note_role === 'continuation-separator')
             if (separator) expectedSeparators.push({ pageIndex, command: separator })
@@ -1468,7 +1470,7 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           const placed = sourceLines[lineIndex]
           const shaped = placed ? shapedParagraphs.get(placed.paragraph_id)?.lines[placed.source_line_ordinal] : undefined
           const indexedStory = placed ? noteStoryByPlacedLineID.get(placed.id) : undefined
-          const separatorStory = indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator' ? indexedStory : undefined
+          const separatorStory = (indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator') && placed !== undefined && indexedStory.lines[0]?.id === placed.id ? indexedStory : undefined
           const expectedCommandIDs = [
             ...(placed ? highlightIDsByPlacement.get(`${pageIndex}\0${placed.id}`) ?? [] : []),
             ...(separatorStory && placed ? [paintNoteSeparatorCommandID(placed.id)] : []),

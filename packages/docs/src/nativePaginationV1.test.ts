@@ -333,6 +333,17 @@ function paginated(request: NativeDocxPaginationRequestV1) {
   return result.value
 }
 
+/** Turns a fixture into one the approximate tier accepts, and its eligibility. */
+function approximateSettings(request: NativeDocxPaginationRequestV1): void {
+  request.pagination_settings.profile = 'unsupported'
+  delete request.pagination_settings.compatibility_mode
+  request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+}
+
+function approximateEligibility(request: NativeDocxPaginationRequestV1) {
+  return { protocol: 'injoffice.docx.approximation-eligibility' as const, version: 1 as const, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+}
+
 function noteAnchor(partName: string, path: string, start: number, end: number) {
   return { part_name: partName, path, start_byte: start, end_byte: end, xml_sha256: HASH }
 }
@@ -2073,6 +2084,63 @@ describe('native DOCX pagination v1', () => {
     expect(area.every((entry) => entry.section_id === 'section:1' && entry.column_id === 'column:section:1:0' && entry.column_ordinal === 0 && entry.lines.every((line) => line.section_id === entry.section_id && line.column_id === entry.column_id && line.column_ordinal === entry.column_ordinal))).toBe(true)
     expect(area[0]!.top_millipoints).toBeGreaterThanOrEqual(first.pages[0]!.lines.at(-1)!.y_millipoints + first.pages[0]!.lines.at(-1)!.height_millipoints)
     expect(area.at(-1)!.top_millipoints + area.at(-1)!.height_millipoints).toBe(first.pages[0]!.body_box.y_millipoints + first.pages[0]!.body_box.height_millipoints)
+  })
+
+  it('lays out the paragraphs a separator story carries after its instruction', () => {
+    // ECMA-376 17.11.14 lets a reserved separator story hold paragraphs after
+    // the instruction one; Word writes a trailing empty paragraph itself and
+    // paints authored text there above the notes. They are measured and placed
+    // like any other note paragraph, so the note area grows by their height.
+    // The strict footnote-flow lane still requires a one-paragraph separator,
+    // so this is measured on the approximate tier that reaches note placement.
+    const carriedFixture = (carry: boolean) => {
+      const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+      addFootnote(request, '9', '1')
+      approximateSettings(request)
+      if (!carry) return request
+      const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+      const instruction = request.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!
+      const carried = paragraph('paragraph:separator:text', 90)
+      carried.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]', 51, 59)
+      carried.runs[0]!.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]/w:r[1]', 52, 58)
+      separator.blocks.push({ kind: 'paragraph', id: carried.id, paragraph: carried })
+      request.resolved_layout.paragraphs.push({ paragraph_id: carried.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+      request.resolved_layout.runs.push({ run_id: carried.runs[0]!.id, paragraph_id: carried.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+      request.shaped_lines.paragraphs.push({ ...structuredClone(instruction), paragraph_id: carried.id, lines: [{ ...structuredClone(instruction.lines[0]!), id: `line:${carried.id}:0` }] })
+      return request
+    }
+    const plainRequest = carriedFixture(false)
+    const plain = paginateNativeDocxApproximateLegacyV1(plainRequest, approximateEligibility(plainRequest)).layout
+    const request = carriedFixture(true)
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(plain.status).toBe('paginated')
+    expect(output.status).toBe('paginated')
+    if (plain.status !== 'paginated' || output.status !== 'paginated') return
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    const placed = output.pages[0]!.note_stories!.find((entry) => entry.note_role === 'separator')!
+    expect(placed.lines.map((line) => line.paragraph_id)).toEqual([separator.blocks[0]!.id, 'paragraph:separator:text'])
+    const before = plain.pages[0]!.note_stories!.find((entry) => entry.note_role === 'separator')!
+    const instruction = plainRequest.shaped_lines.paragraphs.find((entry) => entry.paragraph_id === separator.blocks[0]!.id)!
+    expect(placed.height_millipoints).toBe(before.height_millipoints + instruction.lines[0]!.line_height_millipoints)
+  })
+
+  it('refuses a separator story whose carried paragraph has no shaped projection', () => {
+    // A carried separator paragraph is laid out like any other note paragraph,
+    // so it has to arrive with its exact shaped lines; an unshaped one has no
+    // measurable height and cannot be placed.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    const carried = paragraph('paragraph:separator:unshaped', 91)
+    carried.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]', 51, 59)
+    carried.runs[0]!.anchor = noteAnchor('word/footnotes.xml', '/w:footnotes[1]/w:footnote[1]/w:p[2]/w:r[1]', 52, 58)
+    separator.blocks.push({ kind: 'paragraph', id: carried.id, paragraph: carried })
+    request.resolved_layout.paragraphs.push({ paragraph_id: carried.id, applied_styles: [], properties: {}, paragraph_mark_properties: { font_family: 'Test', font_size_half_points: 20 } })
+    request.resolved_layout.runs.push({ run_id: carried.runs[0]!.id, paragraph_id: carried.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(output.status).toBe('refused')
+    expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'note-structure-unsupported' })]))
   })
 
   it('reserves final body paragraph after-spacing before admitting footnotes', () => {
