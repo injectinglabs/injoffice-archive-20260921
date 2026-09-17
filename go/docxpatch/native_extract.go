@@ -3237,6 +3237,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported("LIGATURE_MODE_MATCHES_SHAPER", "run-properties", paragraphID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
 				continue
 			}
+			if nativeShaperDefaultContextualAlternates(child, node) {
+				preserveOnly = true
+				extractor.addUnsupported("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", "run-properties", paragraphID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("FOREIGN_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Foreign namespace run property is preserved verbatim")
 			continue
@@ -3959,6 +3964,23 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			}
 			if hasStart {
 				section.PageNumberStart = &number
+			}
+		case "rtlGutter":
+			// ECMA-376 17.6.19: rtlGutter puts the binding gutter on the right
+			// edge instead of the left. It is exact section geometry, so model
+			// it rather than preserving it as an unmodeled property and then
+			// laying the page out with the gutter on the wrong side.
+			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Right-gutter markup has attributes or children outside the exact v1 subset")
+				continue
+			}
+			value, ok := nativeOnOff(child, extractor.wordNS)
+			if !ok {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Right-gutter policy has an invalid lexical value")
+				continue
+			}
+			if value {
+				section.Page.RTLGutter = nativeBool(true)
 			}
 		case "titlePg":
 			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {

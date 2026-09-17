@@ -1659,7 +1659,11 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 			resolvedNumbering = nil
 		}
 	}
-	markScriptUncertain := p.bidi.value
+	// ECMA-376 17.3.2.30 (w:rtl) and 17.3.2.26 (w:cs) select the complex-script
+	// slot per run; paragraph-level w:bidi (17.3.1.6) only orders the line. The
+	// mark's own w:rtl is already honoured by resolveLatinRunFont, so a bidi
+	// paragraph of plain Latin text needs no script-uncertainty flush.
+	markScriptUncertain := false
 	for _, run := range paragraph.Runs {
 		if run.Text != nil {
 			for _, character := range *run.Text {
@@ -1747,8 +1751,8 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 			text = *run.Text
 		}
 		resolver.resolveLatinRunFont(&r, text, run.ID, run.Anchor.PartName)
-		if run.Kind != "text" && r.verticalAlignment != nil && *r.verticalAlignment != "baseline" {
-			resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", run.ID, run.Anchor.PartName, nil, "Script transforms on note markers and controls remain unqualified")
+		if !nativeScriptTransformEligibleRun(run) && r.verticalAlignment != nil && *r.verticalAlignment != "baseline" {
+			resolver.addDiagnostic("VERTICAL_ALIGNMENT_UNSUPPORTED", run.ID, run.Anchor.PartName, nil, "Script transforms on controls, drawings and comment marks remain unqualified")
 		}
 		result.Runs = append(result.Runs, NativeResolvedRunV1{
 			RunID: run.ID, ParagraphID: paragraph.ID, CharacterStyle: characterStyle,
@@ -2018,6 +2022,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 		if child.Name.Space != resolver.wordNS {
 			if nativeShaperDefaultLigatureMode(child, node) {
 				resolver.addDiagnostic("LIGATURE_MODE_MATCHES_SHAPER", scopeID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
+				continue
+			}
+			if nativeShaperDefaultContextualAlternates(child, node) {
+				resolver.addDiagnostic("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", scopeID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
 				continue
 			}
 			resolver.addDiagnostic("FOREIGN_RUN_PROPERTY", scopeID, partName, child, "Foreign run-property markup is preserved verbatim")
@@ -3173,4 +3181,17 @@ func nativeBoundedNumberingString(value string, limit int) bool {
 
 func nativeBoundedResolvedString(value string, limit int) bool {
 	return value != "" && len(value) <= limit && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\x00\r\n")
+}
+
+// nativeScriptTransformEligibleRun reports whether a run's shaped fragments are
+// produced by the same shaped-text path that carries the OS/2 script transform.
+// Footnote and endnote reference marks shape their placed decimal number through
+// that identical text path, so their sub/superscript is the same modeled
+// transform, not a guess. Controls, drawings and comment marks emit glyphless or
+// image atoms that no script transform is applied to, so they stay refused.
+func nativeScriptTransformEligibleRun(run *NativeRunV1) bool {
+	if run.Kind == "text" {
+		return true
+	}
+	return run.Kind == "reference" && run.Reference != nil && (run.Reference.Kind == "footnote" || run.Reference.Kind == "endnote")
 }

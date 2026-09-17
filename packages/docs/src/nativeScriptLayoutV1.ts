@@ -54,3 +54,15 @@ export function nativeDocxScriptScaleV1(value: number, transform: NativeDocxScri
 export function nativeDocxScriptShiftV1(fontSize: number, transform: NativeDocxScriptTransformV1, axis: 'x'|'y'): number {
   return scaleFontUnits(axis==='x'?transform.x_offset:transform.y_offset,transform.units_per_em,fontSize)*(axis==='y'&&transform.kind==='subscript'?-1:1)
 }
+
+/**
+ * Runs whose shaped fragments come from the shared shaped-text path that carries
+ * the OS/2 script transform. Text runs, and footnote/endnote reference marks,
+ * whose placed decimal number is shaped through that identical path. Controls,
+ * drawings and comment marks emit glyphless or image atoms that carry no
+ * transform, so a script transform on them stays refused.
+ */
+export function nativeDocxScriptTransformEligibleRunV1(run: { readonly kind: string; readonly reference?: { readonly kind: string } }): boolean {
+  if (run.kind === 'text') return true
+  return run.kind === 'reference' && (run.reference?.kind === 'footnote' || run.reference?.kind === 'endnote')
+}
