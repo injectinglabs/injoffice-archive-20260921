@@ -1659,7 +1659,11 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 			resolvedNumbering = nil
 		}
 	}
-	markScriptUncertain := p.bidi.value
+	// ECMA-376 17.3.2.30 (w:rtl) and 17.3.2.26 (w:cs) select the complex-script
+	// slot per run; paragraph-level w:bidi (17.3.1.6) only orders the line. The
+	// mark's own w:rtl is already honoured by resolveLatinRunFont, so a bidi
+	// paragraph of plain Latin text needs no script-uncertainty flush.
+	markScriptUncertain := false
 	for _, run := range paragraph.Runs {
 		if run.Text != nil {
 			for _, character := range *run.Text {

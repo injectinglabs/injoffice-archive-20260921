@@ -1091,8 +1091,11 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(distributed.ok && distributed.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'justification-unsupported' })]))
   })
 
-  it('keeps physical left/right fixed and maps logical start/end through LTR and RTL direction', async () => {
-    const expected = { ltr: { left: 500, right: 2_000, start: 500, end: 2_000 }, rtl: { left: 1_000, right: 2_500, start: 2_500, end: 1_000 } } as const
+  // ECMA-376 17.18.44 ST_Jc: left/right are the legacy aliases of start/end, so
+  // they follow paragraph direction. Word's own raster for an RTL paragraph
+  // authored with w:jc="left" puts the line against the right edge.
+  it('maps ST_Jc left/right as the legacy aliases of start/end through LTR and RTL direction', async () => {
+    const expected = { ltr: { left: 500, right: 2_000, start: 500, end: 2_000 }, rtl: { left: 2_500, right: 1_000, start: 2_500, end: 1_000 } } as const
     for (const direction of ['ltr', 'rtl'] as const) for (const alignment of ['left', 'right', 'start', 'end'] as const) {
       const document = nativeDocument()
       makeTextOnly(document, 'ab')

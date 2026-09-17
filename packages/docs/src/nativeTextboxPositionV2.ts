@@ -12,7 +12,9 @@ export function resolveTextboxPosition(document:NativeDocxDocumentV1,item:Native
  const lines=context?[context.line]:page.lines.filter(l=>l.region==='body'&&l.paragraph_id===item.owner.paragraph_id&&l.source_line_ordinal===0),line=lines[0]
  const section=document.sections.find(s=>s.id===line?.section_id)
  if(lines.length!==1||!line||!section||page.width_millipoints!==section.page.width_twips*50||page.height_millipoints!==section.page.height_twips*50)throw new TypeError('Textbox position requires its source section and anchor line')
- const m=section.page.margins,left=(m.left_twips+m.gutter_twips)*50,top=m.top_twips*50,right=page.width_millipoints-m.right_twips*50,bottom=page.height_millipoints-m.bottom_twips*50
+ // ECMA-376 17.6.19: a right binding gutter comes out of the right margin instead of the left.
+ const m=section.page.margins,rtlGutter=section.page.rtl_gutter===true
+ const left=(m.left_twips+(rtlGutter?0:m.gutter_twips))*50,top=m.top_twips*50,right=page.width_millipoints-(m.right_twips+(rtlGutter?m.gutter_twips:0))*50,bottom=page.height_millipoints-m.bottom_twips*50
  const odd=page.ordinal%2===0
  const horizontal=p.horizontal_relative==='insideMargin'?(odd?'leftMargin':'rightMargin'):p.horizontal_relative==='outsideMargin'?(odd?'rightMargin':'leftMargin'):p.horizontal_relative
  const vertical=p.vertical_relative==='insideMargin'?(odd?'topMargin':'bottomMargin'):p.vertical_relative==='outsideMargin'?(odd?'bottomMargin':'topMargin'):p.vertical_relative

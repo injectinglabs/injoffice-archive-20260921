@@ -260,6 +260,9 @@ type NativePageGeometryV1 struct {
 	ColumnSpacingTwips *int64              `json:"column_spacing_twips"`
 	ColumnLayout       string              `json:"column_layout"`
 	ColumnDefinitions  []NativeColumnV1    `json:"column_definitions"`
+	// ECMA-376 17.6.19 rtlGutter: the binding edge moves to the right of the
+	// page. Recorded only when active so documents without it keep their wire.
+	RTLGutter *bool `json:"rtl_gutter,omitempty"`
 }
 
 type NativeColumnV1 struct {
