@@ -2013,6 +2013,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 	}
 	for _, child := range node.Children {
 		if child.Name.Space != resolver.wordNS {
+			if nativeShaperDefaultLigatureMode(child, node) {
+				resolver.addDiagnostic("LIGATURE_MODE_MATCHES_SHAPER", scopeID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
+				continue
+			}
 			resolver.addDiagnostic("FOREIGN_RUN_PROPERTY", scopeID, partName, child, "Foreign run-property markup is preserved verbatim")
 			continue
 		}

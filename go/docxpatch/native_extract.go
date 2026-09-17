@@ -3116,6 +3116,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 	preserveOnly := false
 	for _, child := range node.Children {
 		if child.Name.Space != extractor.wordNS {
+			if nativeShaperDefaultLigatureMode(child, node) {
+				preserveOnly = true
+				extractor.addUnsupported("LIGATURE_MODE_MATCHES_SHAPER", "run-properties", paragraphID, partName, child, "Standard and contextual ligatures are what this tier's HarfBuzz shaping defaults already apply, so this ligature mode states the shaping already performed")
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("FOREIGN_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Foreign namespace run property is preserved verbatim")
 			continue
