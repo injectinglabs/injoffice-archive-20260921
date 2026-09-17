@@ -295,7 +295,13 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
       if (geometry.ok && geometry.value.columns.length === 1) tableContainers.set(table!.id, { width: geometry.value.columns[0]!.width_millipoints / 50, sectionID: activeSection.id })
     }
   }
-  for (const [blockIndex, block] of document.body.blocks.entries()) if (block.table) {
+  // Strict pagination still starts a table at the bare cursor, so it refuses
+  // rather than silently drop a neighbouring paragraph's spacing. The
+  // approximate lane no longer has to: it seats a table below the preceding
+  // space-after the way Word does (measured in #242), and a table clears
+  // previousAfter, so the following paragraph's own space-before is the gap
+  // Word leaves under the table. Both spacings are modelled, not guessed.
+  if (!approximate) for (const [blockIndex, block] of document.body.blocks.entries()) if (block.table) {
     const previous = document.body.blocks[blockIndex - 1]?.paragraph
     const next = document.body.blocks[blockIndex + 1]?.paragraph
     if (previous && (resolvedParagraphs.get(previous.id)?.properties.spacing_after_twips ?? 0) !== 0) return fail(block.table.id, 'Paragraph spacing adjacent to a table must be explicit zero in v1')
