@@ -97,6 +97,7 @@ describe('approximate omitted-content disclosure', () => {
     expect(nativeDocxOmittedContentCategoryV1('SOMETHING_ELSE', undefined)).toBe('other')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_RUN_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/ns4d2aa588:AlternateContent[1]')).toBe('drawing')
     expect(nativeDocxOmittedContentCategoryV1('PICTURE_GRAPHIC_REQUIRED', '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]/ns4a8a39ac:inline[1]')).toBe('drawing')
+    expect(nativeDocxOmittedContentCategoryV1('PICTURE_TRANSFORM_PRESERVED', undefined)).toBe('drawing')
     expect(nativeDocxOmittedContentCategoryV1('table-layout-unsupported', undefined)).toBe('table')
     expect(nativeDocxOmittedContentCategoryV1('unsupported-numbering-text', undefined)).toBe('text')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/ns1234abcd:oMathPara[1]')).toBe('equation')

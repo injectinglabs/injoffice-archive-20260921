@@ -1462,7 +1462,7 @@ describe('native DOCX pagination v1', () => {
   })
 
   it('omits an unshaped picture or partial-run paragraph in approximate layout and keeps the sibling paragraph', () => {
-    for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PARTIAL_RUN_PROPERTIES'] as const) {
+    for (const code of ['PICTURE_GRAPHIC_REQUIRED', 'PICTURE_TRANSFORM_PRESERVED', 'PARTIAL_RUN_PROPERTIES'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const dropped = request.document.body.blocks[0]!.paragraph!
       dropped.runs = []
