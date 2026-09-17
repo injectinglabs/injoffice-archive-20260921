@@ -213,6 +213,31 @@ function rewriteInventory(input: NativeDocxPagePaintPrepareInputV1, mutate: (inv
   input.font_inventory_json = encodeNativeDOCXFontInventoryV1(inventory)
 }
 
+/** Two next-page sections that differ only in their left and right margins. */
+function twoSectionFixture(): NativeDocxPagePaintPrepareInputV1 {
+  const input = fixture()
+  const document = input.document as NativeDocxDocumentV1
+  const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+  const first = document.body.blocks[0]!.paragraph!
+  const second = structuredClone(first)
+  second.id = 'paragraph:2'
+  second.anchor = anchor('/w:document[1]/w:body[1]/w:p[2]', 200, 290)
+  second.runs = [{ ...second.runs[0]!, id: 'run:2', anchor: anchor('/w:document[1]/w:body[1]/w:p[2]/w:r[1]', 210, 280), text: 'B' }]
+  document.body.blocks.push({ kind: 'paragraph', id: second.id, paragraph: second })
+  resolved.paragraphs.push({ ...structuredClone(resolved.paragraphs[0]!), paragraph_id: second.id })
+  resolved.runs.push({ ...structuredClone(resolved.runs[0]!), run_id: 'run:2', paragraph_id: second.id })
+  rewriteInventory(input, (inventory) => { inventory.references[0]!.scope_ids = ['paragraph:1', 'paragraph:2', 'run:1', 'run:2'] })
+  const narrow = structuredClone(document.sections[0]!)
+  narrow.id = 'section:2'
+  narrow.anchor = anchor('/w:document[1]/w:body[1]/w:sectPr[2]', 2_200, 2_290)
+  narrow.starts_at_block_id = second.id
+  narrow.page.margins.left_twips = 2_880
+  narrow.page.margins.right_twips = 2_880
+  narrow.page.column_definitions = [{ id: 'column:section:2:0', ordinal: 0 }]
+  document.sections.push(narrow)
+  return input
+}
+
 function imageFixture(): NativeDocxPagePaintPrepareInputV1 {
   const input = fixture()
   const document = input.document as NativeDocxDocumentV1
@@ -1118,31 +1143,33 @@ describe('native DOCX page-paint compiler v1', () => {
     await expect(prepareNativeDocxPagePaintV1(forged.input, { fonts: forged.fonts })).rejects.toThrow('font families require a font-table binding')
   })
 
-  // Every body paragraph is shaped once, at one width, so sections that
-  // disagree on that width are a capability the preview does not implement.
-  // Refusing is right; doing it with an unstructured message a caller cannot
-  // branch on is not, and neither is failing to say which section disagrees.
-  it('refuses sections that disagree on the shaping width with a typed, scoped refusal', async () => {
-    const input = fixture()
-    const document = input.document as NativeDocxDocumentV1
-    const wide = structuredClone(document.sections[0]!)
-    wide.id = 'section:2'
-    wide.anchor = anchor('/w:document[1]/w:body[1]/w:sectPr[2]', 2_200, 2_290)
-    wide.page.width_twips = 15_840
-    wide.page.height_twips = 15_840
-    wide.page.column_definitions = [{ id: 'column:section:2:0', ordinal: 0 }]
-    document.sections.push(wide)
-    const refusal = await prepareNativeDocxPagePaintV1(input).then(() => undefined, (error: unknown) => error)
-    expect(refusal).toBeInstanceOf(NativeDocxPreviewRefusalV1)
-    expect(nativeDocxPreviewRefusalRecordV1(refusal)).toEqual({
-      protocol: DOCX_PREVIEW_REFUSAL_PROTOCOL,
-      version: DOCX_PREVIEW_REFUSAL_VERSION,
-      code: 'SECTION_SHAPING_WIDTHS_UNSUPPORTED',
-      scope_id: 'section:2',
-      message: expect.stringContaining('section:2 column 0 is'),
-    })
-    // A plain failure stays untyped: only a named source fact gets a code.
-    expect(nativeDocxPreviewRefusalRecordV1(new TypeError('unrelated'))).toBeUndefined()
+  // Word wraps a body paragraph at the column width of the section that owns
+  // it. The preview used to shape every paragraph at one width and refuse a
+  // document whose sections disagreed; it now maps each section's paragraphs to
+  // its own column width, which the line core already takes per paragraph.
+  it('shapes each section\'s body paragraphs at that section\'s own column width', async () => {
+    const input = twoSectionFixture()
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const shaped = prepared.page_paint_request.pagination_request.shaped_lines
+    // 12240 - 1440 - 1440 twips, and 12240 - 2880 - 2880 twips, in milli-points.
+    expect(shaped.available_width_millipoints).toBe(468_000)
+    expect(Object.fromEntries(shaped.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph.lines.map((line) => line.available_width_millipoints)])))
+      .toEqual({ 'paragraph:1': [468_000], 'paragraph:2': [324_000] })
+    expect(prepared.page_paint_request.paginated_layout.status).toBe('paginated')
+  })
+
+  // The shaped record does not restate its shaping width per paragraph, so
+  // pagination re-derives it from the offered line intervals. A section whose
+  // body lines were offered more than its own column never joins this geometry.
+  it('refuses a section whose body lines were shaped wider than its own column', async () => {
+    const input = twoSectionFixture()
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const request = structuredClone(prepared.page_paint_request.pagination_request)
+    request.document.sections[1]!.page.margins.left_twips = 4_320
+    request.document.sections[1]!.page.margins.right_twips = 4_320
+    const layout = paginateNativeDocxV1(request)
+    expect(layout.ok && layout.value.status).toBe('refused')
+    expect(layout.ok && layout.value.diagnostics.map((entry) => entry.code)).toContain('section-width-mismatch')
   })
 
   it('refuses approximate pagination policies in the font-substitution legacy preview instead of applying them undisclosed', async () => {
