@@ -1127,6 +1127,58 @@ describe('native DOCX pagination v1', () => {
     })]))
   })
 
+  // A blocker in styles.xml docDefaults or in any other document-wide source is
+  // recorded under the document id, and shaping then drops every paragraph. The
+  // absence was reported with no cause at all for exactly the blockers that stop
+  // the whole body, which is the case most in need of naming itself.
+  it('names a document-scoped resolved-layout cause when every paragraph is missing', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [{
+      code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: request.document.document_id,
+      source_diagnostic_code: 'FOREIGN_RUN_PROPERTY',
+      source_diagnostic_message: 'Foreign run-property markup is preserved verbatim',
+      message: 'Resolved layout diagnostic FOREIGN_RUN_PROPERTY blocks native shaping',
+    }]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'shaped-paragraph-missing',
+      scope_id: droppedID,
+      source_code: 'FOREIGN_RUN_PROPERTY',
+      source_message: 'Foreign run-property markup is preserved verbatim',
+    })]))
+  })
+
+  // The paragraph's own blocker is the more specific answer, so it still wins
+  // over a document-scoped record that is also present.
+  it('prefers the paragraph-scoped cause over a document-scoped one', () => {
+    const request = fixture({}) as any
+    const droppedID = request.shaped_lines.paragraphs[0].paragraph_id
+    request.shaped_lines.paragraphs = []
+    request.shaped_lines.diagnostics = [
+      {
+        code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: request.document.document_id,
+        source_diagnostic_code: 'FOREIGN_RUN_PROPERTY',
+        source_diagnostic_message: 'Foreign run-property markup is preserved verbatim',
+        message: 'Resolved layout diagnostic FOREIGN_RUN_PROPERTY blocks native shaping',
+      },
+      {
+        code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: droppedID,
+        source_diagnostic_code: 'UNSUPPORTED_NUMBER_FORMAT',
+        source_diagnostic_message: 'Numbering format is not modelled',
+        message: 'Resolved layout diagnostic UNSUPPORTED_NUMBER_FORMAT blocks native shaping',
+      },
+    ]
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (!result.ok) return
+    const entry = result.value.diagnostics.find(d => d.code === 'shaped-paragraph-missing' && d.scope_id === droppedID)
+    expect(entry).toMatchObject({ source_code: 'UNSUPPORTED_NUMBER_FORMAT' })
+  })
+
   // paint-diagnostic-preserved also carries a source code, but it is emitted for
   // codes that explicitly do not change shaping advances. Attributing a refusal
   // to one names an innocent code and sends the reader at the wrong subsystem.
