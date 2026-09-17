@@ -2716,7 +2716,12 @@ func validateNativeRootGroupScaffold(spTree *nativeXMLNode, dialect nativeExtrac
 	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil {
 		return "", err
 	}
-	if err := requireOnlyNativeChildren(cNvPr); err != nil {
+	// a:extLst on a cNvPr is authoring metadata: CT_OfficeArtExtensionList
+	// (ECMA-376 §20.1.2.2.15) holds uri-keyed extensions, and the one modern
+	// PowerPoint writes here is a16:creationId, a stable authoring identity.
+	// Nothing in it is a position, a size or a visibility, and the native
+	// projection reads none of it. A graphicFrame's cNvPr already allows it.
+	if err := requireOnlyNativeChildren(cNvPr, xml.Name{Space: dialect.drawing, Local: "extLst"}); err != nil {
 		return "", err
 	}
 	if err := requireEmptyNativeElement(cNvGrpSpPr); err != nil {

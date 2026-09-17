@@ -192,6 +192,64 @@ func TestExtractNativePPTXPreservesSchemaValidImplicitGroupTransforms(t *testing
 	}
 }
 
+// a:extLst on a group's p:cNvPr is authoring metadata, not geometry.
+// CT_OfficeArtExtensionList (ECMA-376 §20.1.2.2.15) holds uri-keyed
+// extensions, and the one modern PowerPoint writes here is a16:creationId, the
+// stable authoring identity it stamps on the shape tree of essentially every
+// deck it saves. slide-sections.pptx carries it on the root p:nvGrpSpPr of all
+// seven slides and produced no page at all because of it.
+func TestExtractNativePPTXAcceptsGroupIdentityExtensionLists(t *testing.T) {
+	t.Parallel()
+
+	const creationID = `<a:extLst><a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}"><a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{2377994E-D955-4FC0-EB55-09C0A8872FE8}"/></a:ext></a:extLst>`
+
+	t.Run("root shape tree", func(t *testing.T) {
+		t.Parallel()
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"],
+				`<p:cNvPr id="1" name=""/>`, `<p:cNvPr id="1" name="">`+creationID+`</p:cNvPr>`, 1)
+		}})
+		deck, err := ExtractNativePPTX(payload, nativeAtomicTestExtractOptions())
+		if err != nil {
+			t.Fatalf("authoring metadata on the root group must not refuse the deck: %v", err)
+		}
+		if len(deck.Slides) != 1 || len(deck.Slides[0].Elements) != 1 {
+			t.Fatalf("slide lost its elements: %#v", deck.Slides)
+		}
+	})
+
+	t.Run("group shape", func(t *testing.T) {
+		t.Parallel()
+		group := fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Authored Group">%s</p:cNvPr><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr>%s</p:grpSp>`, creationID, nativeGroupRectXML(4, "Leaf", 0, 0, 10, 10))
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, group+`</p:spTree>`, 1)
+		}})
+		deck, err := ExtractNativePPTX(payload, nativeAtomicTestExtractOptions())
+		if err != nil {
+			t.Fatalf("authoring metadata on a group must not refuse the deck: %v", err)
+		}
+		if nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-nonvisual-unavailable") {
+			t.Fatalf("authoring metadata refused the group: %#v", deck.Slides[0].Compatibility)
+		}
+		if len(deck.Slides[0].Elements) != 2 {
+			t.Fatalf("group projection lost its leaf: %#v", deck.Slides[0].Elements)
+		}
+	})
+
+	// The allowance is exactly a:extLst. Any other child of a cNvPr, and the
+	// hyperlink children ECMA-376 declares there, keep refusing.
+	t.Run("other children keep refusing", func(t *testing.T) {
+		t.Parallel()
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"],
+				`<p:cNvPr id="1" name=""/>`, `<p:cNvPr id="1" name=""><a:hlinkClick xmlns:r="`+nsOfficeRelsTransitional+`" r:id=""/></p:cNvPr>`, 1)
+		}})
+		if _, err := ExtractNativePPTX(payload, nativeAtomicTestExtractOptions()); err == nil {
+			t.Fatal("unmodeled cNvPr child was accepted")
+		}
+	})
+}
+
 func TestExtractNativePPTXBubblesRefusedChildToOneExactGroupCapability(t *testing.T) {
 	t.Parallel()
 

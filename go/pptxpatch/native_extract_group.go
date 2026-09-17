@@ -396,7 +396,10 @@ func validateNativeGroupNonVisual(node *nativeXMLNode, dialect nativeExtractDial
 	if len(node.Children) != 3 || node.Children[0] != cNvPr || node.Children[1] != cNvGrpSpPr || node.Children[2] != nvPr {
 		return "", "", fmt.Errorf("pptxpatch: native extract: malformed group nonvisual child order")
 	}
-	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil || requireOnlyNativeChildren(cNvPr) != nil {
+	// a:extLst is authoring metadata (see validateNativeRootGroupScaffold): the
+	// a16:creationId PowerPoint writes on every group carries no geometry.
+	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil ||
+		requireOnlyNativeChildren(cNvPr, xml.Name{Space: dialect.drawing, Local: "extLst"}) != nil {
 		return "", "", refuseNativeGroup("pptx.group-nonvisual-unavailable", "group identity metadata is outside the exact native subset")
 	}
 	if err := requireEmptyNativeElement(cNvGrpSpPr); err != nil {
