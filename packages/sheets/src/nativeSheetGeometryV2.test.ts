@@ -175,6 +175,28 @@ describe('native XLSX deterministic sheet geometry', () => {
     expect(geometry.columns[0]).toMatchObject({ column: 2, x_emu: 0 })
   })
 
+  // sheetFormatPr is optional in CT_Worksheet (ECMA-376 §18.3.1.99), and the
+  // LibreOffice-written formats.xlsx omits it while stating ht on every row it
+  // has. Nothing is inferred for such a sheet: the stored heights are compiled
+  // and the absent default is never read.
+  it('compiles a worksheet with no sheetFormatPr from the heights its rows state', () => {
+    const workbook = structuredClone(fixture())
+    delete (workbook.sheets[0] as { sheet_format?: unknown }).sheet_format
+    const geometry = compileNativeSheetGeometryV2(projectNativeWorkbookV2(workbook), '7', { row: 0, column: 0, end_row: 0, end_column: 2 }, metric(workbook))
+
+    // The numbers are the ones the source states, identical to the same sheet
+    // compiled with a sheetFormatPr present.
+    const withFormat = compileNativeSheetGeometryV2(projectNativeWorkbookV2(fixture()), '7', { row: 0, column: 0, end_row: 0, end_column: 2 }, metric(fixture()))
+    expect(geometry.rows).toEqual(withFormat.rows)
+    expect(geometry.columns).toEqual(withFormat.columns)
+    expect(geometry.rows[0]!.height_emu).toBe(Math.round(18.25 * EMU_PER_POINT))
+
+    // The third column states no width of its own; baseColWidth does have a
+    // declared default of 8 (§18.3.1.81), so it is padded from that either way.
+    expect(geometry.columns[2]!.source).toBe('sheet-default')
+    expect(geometry.columns[2]!.width_characters).toBe(paddedBaseColumnWidth(8, metric(workbook).maximum_digit_width_pixels))
+  })
+
   it('fails closed on absent native defaults, unbound font metrics, zeroHeight, clipped merges, and budgets', () => {
     const base = fixture()
     const withoutFormat = structuredClone(base); delete (withoutFormat.sheets[0] as { sheet_format?: unknown }).sheet_format
@@ -193,7 +215,9 @@ describe('native XLSX deterministic sheet geometry', () => {
       part_name: 'Worksheets/Sheet1.xml', preservation: 'preserve-exact', message: 'thickTop remains source-authoritative',
     }]
     const cases: Array<() => unknown> = [
-      () => compileNativeSheetGeometryV2(projectNativeWorkbookV2(withoutFormat), '7', { row: 0, column: 0, end_row: 0, end_column: 0 }, metric(withoutFormat)),
+      // Row 1 states no ht of its own, so with no sheetFormatPr there is no
+      // default row height to read and the sheet still refuses.
+      () => compileNativeSheetGeometryV2(projectNativeWorkbookV2(withoutFormat), '7', { row: 0, column: 0, end_row: 1, end_column: 0 }, metric(withoutFormat)),
       () => compileNativeSheetGeometryV2(projectNativeWorkbookV2(base), '7', { row: 0, column: 0, end_row: 0, end_column: 0 }, { ...metric(base), source_revision: `rev:${'c'.repeat(64)}` }),
       () => compileNativeSheetGeometryV2(projectNativeWorkbookV2(base), '7', { row: 0, column: 0, end_row: 0, end_column: 0 }, { ...metric(base), measurement_dpi: 192 as 96 }),
       () => compileNativeSheetGeometryV2(projectNativeWorkbookV2(zeroHeight), '7', { row: 0, column: 0, end_row: 0, end_column: 0 }, metric(zeroHeight)),
