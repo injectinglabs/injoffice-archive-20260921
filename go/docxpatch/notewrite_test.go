@@ -101,7 +101,10 @@ func TestInsertNote_Footnote_NoExistingPart(t *testing.T) {
 	}
 }
 
-func TestInsertNote_SyntheticFixturePreservesSuperscriptButNativeResolutionRefusesIt(t *testing.T) {
+// The writer authors the Word reference style superscript. Native resolution now
+// carries it as the modeled OS/2 script transform on the note marks themselves,
+// so it must resolve without a refusal and without changing any other run.
+func TestInsertNote_SyntheticFixtureResolvesAuthoredSuperscript(t *testing.T) {
 	for _, kind := range []NoteKind{Footnote, Endnote} {
 		t.Run(string(kind), func(t *testing.T) {
 			out, _, err := InsertNote(buildNoteTestDocx(t), kind, 0, "Synthetic fixture note.")
@@ -112,12 +115,19 @@ func TestInsertNote_SyntheticFixturePreservesSuperscriptButNativeResolutionRefus
 			if err != nil {
 				t.Fatal(err)
 			}
-			found := false
 			for _, diagnostic := range resolved.Diagnostics {
-				found = found || diagnostic.Code == "VERTICAL_ALIGNMENT_UNSUPPORTED"
+				if diagnostic.Code == "VERTICAL_ALIGNMENT_UNSUPPORTED" {
+					t.Fatalf("%s marker superscript is modeled, not refused: %#v", kind, diagnostic)
+				}
 			}
-			if !found {
-				t.Fatalf("%s superscript must remain non-authoritative for native layout: %#v", kind, resolved.Diagnostics)
+			superscripts := 0
+			for _, run := range resolved.Runs {
+				if run.Properties.VerticalAlignment != nil && *run.Properties.VerticalAlignment == "superscript" {
+					superscripts++
+				}
+			}
+			if superscripts != 2 {
+				t.Fatalf("%s superscript runs = %d, want the anchor and the label mark: %#v", kind, superscripts, resolved.Runs)
 			}
 		})
 	}
