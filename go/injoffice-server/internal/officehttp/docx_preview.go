@@ -186,6 +186,8 @@ func compilePreviewWorkerOperation(ctx context.Context, workerPath, protocol, op
 		OK       bool            `json:"ok"`
 		Result   json.RawMessage `json:"result"`
 		Error    struct {
+			Code    string `json:"code"`
+			ScopeID string `json:"scope_id"`
 			Message string `json:"message"`
 		} `json:"error"`
 	}
@@ -193,9 +195,46 @@ func compilePreviewWorkerOperation(ctx context.Context, workerPath, protocol, op
 		return nil, errors.New("native preview worker returned an invalid envelope")
 	}
 	if !response.OK {
+		if code := response.Error.Code; code != "" && code != "COMPILATION_REFUSED" {
+			return nil, &docxPreviewRefusal{Code: code, ScopeID: response.Error.ScopeID, Message: response.Error.Message}
+		}
 		return nil, errors.New(response.Error.Message)
 	}
 	return response.Result, nil
+}
+
+// docxPreviewRefusal is a preview refusal the compiler named. Its code and
+// scope come from the worker's typed refusal record, so the 422 body can state
+// which source fact the preview does not implement instead of carrying only an
+// English sentence a caller cannot branch on.
+type docxPreviewRefusal struct {
+	Code    string
+	ScopeID string
+	Message string
+}
+
+func (refusal *docxPreviewRefusal) Error() string { return refusal.Message }
+
+// writeDOCXPreviewError keeps the {"error": "..."} body every client already
+// reads and adds the typed record when the compiler produced one.
+func writeDOCXPreviewError(w http.ResponseWriter, err error) {
+	var refusal *docxPreviewRefusal
+	if !errors.As(err, &refusal) {
+		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": refusal.Message,
+		"refusal": map[string]any{
+			"protocol": "injoffice.docx.preview-refusal",
+			"version":  1,
+			"code":     refusal.Code,
+			"scope_id": refusal.ScopeID,
+			"message":  refusal.Message,
+		},
+	})
 }
 
 func handleDOCXPreview(w http.ResponseWriter, r *http.Request, options DOCXPreviewOptions, gate chan struct{}) {
@@ -332,7 +371,7 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 		result, err = compileDOCXPreview(ctx, options, input)
 	}
 	if err != nil {
-		xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, err)
+		writeDOCXPreviewError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

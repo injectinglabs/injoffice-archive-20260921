@@ -3,6 +3,7 @@ import {decodeNativeDocxTextboxGeometryV1} from '@injoffice/docs/native-docx'
 import {
   DOCX_INLINE_IMAGE_LIMITS,
   decodeNativeDOCXFontInventoryV1,
+  nativeDocxPreviewRefusalRecordV1,
   completeNativeDocxPagePaintV1,
   prepareNativeDocxPagePaintV1,
   renderNativeDocxApproximatePagePreviewV1,
@@ -47,7 +48,7 @@ export type NativeDocxPagePaintWorkerResponseV1 = {
   protocol: typeof DOCX_PAGE_PAINT_WORKER_PROTOCOL
   version: typeof DOCX_PAGE_PAINT_WORKER_VERSION
   id: string
-} & ({ ok: true; result: unknown } | { ok: false; error: { code: string; message: string } })
+} & ({ ok: true; result: unknown } | { ok: false; error: { code: string; scope_id?: string; message: string } })
 
 /** One bounded, de-duplicated sidecar request list: equation faces first, then evidenced
  * Latin fallback faces. Requests past the loader bound are dropped (their facts then stay
@@ -88,6 +89,15 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 
 function exactFieldSet(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).length === keys.length && exactKeys(value, keys)
+}
+
+/** A typed refusal names a source fact the preview does not implement, so it
+ * travels with the compiler's own code and scope; every other failure stays the
+ * blanket compilation refusal this worker has always reported. */
+export function nativeDocxPagePaintWorkerErrorV1(error: unknown): { code: string; scope_id?: string; message: string } {
+  const refusal = nativeDocxPreviewRefusalRecordV1(error)
+  if (refusal) return { code: refusal.code, scope_id: refusal.scope_id, message: refusal.message }
+  return { code: 'COMPILATION_REFUSED', message: boundedMessage(error) }
 }
 
 function boundedMessage(value: unknown): string {
@@ -270,7 +280,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
     if (value.op === 'complete') return { ...base, ok: true, result: await completeNativeDocxPagePaintV1(value.input as NativeDocxPagePaintCompleteInputV1) }
     throw new TypeError('worker operation is unsupported')
   } catch (error) {
-    return { ...base, ok: false, error: { code: 'COMPILATION_REFUSED', message: boundedMessage(error) } }
+    return { ...base, ok: false, error: nativeDocxPagePaintWorkerErrorV1(error) }
   }
 }
 

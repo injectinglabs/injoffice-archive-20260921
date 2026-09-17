@@ -4,9 +4,19 @@ import {
   DOCX_PAGE_PAINT_WORKER_VERSION,
   dispatchNativeDocxPagePaintWorkerRequestV1,
   encodeNativeDocxPagePaintWorkerResponseV1,
+  nativeDocxPagePaintWorkerErrorV1,
 } from './protocol.js'
+import { NativeDocxPreviewRefusalV1 } from '@injoffice/docs/native-page-paint-compiler'
 
 describe('native DOCX page-paint worker protocol', () => {
+  // A refusal the compiler named keeps its code and the id it is about, so a
+  // client can branch on the cause. Everything else stays the blanket code.
+  it('carries a typed compiler refusal and leaves every other failure blanket', () => {
+    expect(nativeDocxPagePaintWorkerErrorV1(new NativeDocxPreviewRefusalV1('SECTION_SHAPING_WIDTHS_UNSUPPORTED', 'section:2', 'sections disagree\non the shaping width')))
+      .toEqual({ code: 'SECTION_SHAPING_WIDTHS_UNSUPPORTED', scope_id: 'section:2', message: 'sections disagree on the shaping width' })
+    expect(nativeDocxPagePaintWorkerErrorV1(new TypeError('something else'))).toEqual({ code: 'COMPILATION_REFUSED', message: 'something else' })
+  })
+
   it('refuses textbox font overrides and unqualified source without partial results',async()=>{
     for(const input of [{},{prepare:{},evidence:{}},{prepare:{},evidence:{},font_base64:'AA=='},{prepare:{},evidence:{},font_size_policy:{kind:'host-default-size-v1',half_points:22}},{prepare:{},evidence:{},host_font_manifest_path:'/caller/font.json'}]){
       const response=await dispatchNativeDocxPagePaintWorkerRequestV1({protocol:DOCX_PAGE_PAINT_WORKER_PROTOCOL,version:1,id:'textbox:refusal',op:'render-textbox-pages',input})
