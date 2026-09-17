@@ -20,10 +20,12 @@ const LIMIT = 20_000_000
 const bounded = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= LIMIT
 
 /**
- * Applies only when today's content autofit would otherwise collapse a table
- * whose consistent authored preferences do not fit the text column: layout is
- * autofit (explicit or cascade default), preferred width is auto, every cell
- * repeats its grid slice, and the grid sum exceeds the available column width.
+ * Applies only when today's content autofit would otherwise collapse a table,
+ * or the approximate fixed-width fallback would paint it past its column,
+ * although its consistent authored preferences do not fit the text column:
+ * layout is autofit (explicit, or the cascade default of an absent
+ * w:tblLayout), preferred width is auto, every cell repeats its grid slice,
+ * and the grid sum exceeds the available column width.
  * Word's gridCol widths include the cell margins, so a body-wide table authored
  * by Word carries a grid wider than the column by exactly those margins; the
  * preview scales the grid proportionally to the column with deterministic
@@ -36,7 +38,7 @@ const bounded = (n: unknown): n is number => typeof n === 'number' && Number.isS
  */
 export function fitNativeDocxApproximateTableGridV1(table: NativeDocxTableV1, containerWidth: number, sectionID: string): { table: NativeDocxTableV1; policy: NativeDocxApproximateTableGridPolicyV1 } | undefined {
   const grid = table.grid_widths_twips, margins = table.cell_margins
-  if (table.layout !== 'autofit' || table.width_twips !== undefined || table.width_percent_fiftieths !== undefined || table.alignment !== 'left') return undefined
+  if ((table.layout !== undefined && table.layout !== 'autofit') || table.width_twips !== undefined || table.width_percent_fiftieths !== undefined || table.alignment !== 'left') return undefined
   if (!grid?.length || grid.length > 256 || grid.some((n) => !bounded(n) || n === 0) || !margins || !bounded(containerWidth) || !bounded(table.indent_twips) || ![margins.left_twips, margins.right_twips].every(bounded)) return undefined
   if (table.rows.length === 0 || table.rows.length > 10_000) return undefined
   const gridSum = grid.reduce((a, b) => a + b, 0)
