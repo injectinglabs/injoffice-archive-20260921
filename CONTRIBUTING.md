@@ -37,7 +37,7 @@ The repository contains independent Go modules under `go/` (`xlsxpatch`, `docxpa
 
 PR CI is deliberately short (a few minutes) and keeps only the fast gates as the required `CI required` status: build, typecheck, `check:docs-api`, `check:unicode13`, `check:typescript-version`, `test:dependency-integrity`, `test:declaration-specifiers`, `check:packages`, the workspace unit tests (sharded across the `ts-tests` matrix from `scripts/ci-test-shards.json`, plus `test:native-office-completion`), the Go modules, the WASM size ceilings and contracts, and the officecompat fuzz shards. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are not merge gates either.
 
-The slower and audit-style checks run after merge, on every push to `main`, in the **Main audit** workflow (`.github/workflows/main-audit.yml`, also runnable on demand via **Run workflow**). They were moved out of the PR job, not removed, so run them locally before opening a PR that touches the office pipeline, packaging, or the qualification harness. After `npm ci` and `npm run build`:
+The slower and audit-style checks currently do not run automatically after merge. They remain in the **Main audit** workflow (`.github/workflows/main-audit.yml`) and can be dispatched on demand via **Run workflow**. They were moved out of the PR job, not removed, so run them locally before opening a PR that touches the office pipeline, packaging, or the qualification harness. After `npm ci` and `npm run build`:
 
 ```bash
 npm run test                       # every workspace test plus the root script tests, sequentially
