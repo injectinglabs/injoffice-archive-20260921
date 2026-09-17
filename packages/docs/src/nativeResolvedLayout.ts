@@ -79,14 +79,14 @@ export interface NativeDocxResolvedNumberingV1 {
   level: number
   level_style_id?: string
   start: number
-  format: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'bullet' | 'ideographTraditional' | 'ideographZodiac' | 'ideographLegalTraditional' | 'taiwaneseCountingThousand' | 'koreanDigital2'
+  format: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'bullet' | 'decimalEnclosedCircle' | 'ideographTraditional' | 'ideographZodiac' | 'ideographLegalTraditional' | 'taiwaneseCountingThousand' | 'koreanDigital2'
   text: string
   suffix: 'tab' | 'space' | 'nothing'
   alignment: 'left' | 'right' | 'center' | 'start' | 'end'
   restart_after_level?: number
   never_restart: boolean
   counter_value: number
-  counter_values: Array<{ level: number; value: number; format: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'ideographTraditional' | 'ideographZodiac' | 'ideographLegalTraditional' | 'taiwaneseCountingThousand' | 'koreanDigital2' }>
+  counter_values: Array<{ level: number; value: number; format: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'decimalEnclosedCircle' | 'ideographTraditional' | 'ideographZodiac' | 'ideographLegalTraditional' | 'taiwaneseCountingThousand' | 'koreanDigital2' }>
   resolved_text: string
   label_start_twips: number
   label_end_twips: number
@@ -369,7 +369,7 @@ function validateNumbering(value: unknown, path: string, issues: NativeDocxValid
   integer(entry.level, `${path}/level`, issues, 0, 8, false)
   optionalString(entry.level_style_id, `${path}/level_style_id`, issues)
   integer(entry.start, `${path}/start`, issues, 0, 2_147_483_647)
-  enumValue(entry.format, `${path}/format`, ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'bullet', 'ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2'], issues)
+  enumValue(entry.format, `${path}/format`, ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'bullet', 'decimalEnclosedCircle', 'ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2'], issues)
   numberingText(entry.text, `${path}/text`, issues)
   enumValue(entry.suffix, `${path}/suffix`, ['tab', 'space', 'nothing'], issues)
   enumValue(entry.alignment, `${path}/alignment`, ['left', 'right', 'center', 'start', 'end'], issues)
@@ -387,7 +387,7 @@ function validateNumbering(value: unknown, path: string, issues: NativeDocxValid
     if (counterLevel !== undefined && counterLevels.has(counterLevel)) add(issues, 'DUPLICATE_ID', `${counterPath}/level`, 'counter level is duplicated')
     if (counterLevel !== undefined) counterLevels.add(counterLevel)
     integer(counter.value, `${counterPath}/value`, issues, 0, 2_147_483_647)
-    enumValue(counter.format, `${counterPath}/format`, ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2'], issues)
+    enumValue(counter.format, `${counterPath}/format`, ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'decimalEnclosedCircle', 'ideographTraditional', 'ideographZodiac', 'ideographLegalTraditional', 'taiwaneseCountingThousand', 'koreanDigital2'], issues)
   })
   const resolvedText = numberingText(entry.resolved_text, `${path}/resolved_text`, issues)
   const resolvedScalars = resolvedText === null ? undefined : unicodeScalarLength(resolvedText)
