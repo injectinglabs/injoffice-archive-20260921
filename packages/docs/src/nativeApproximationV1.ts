@@ -6,6 +6,7 @@ import type { NativeDocxValidationIssue } from './nativeContract.js'
 import { nativeApproximationSettingReason, validNativeDocxApproximatedSettingV1, type NativeDocxApproximatedSettingV1 } from './nativeApproximationSettingsV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, validNativeDocxApproximatedFontFacesV1, validNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentFontSizesV1, validNativeDocxApproximatedFontSizesV1, type NativeDocxAbsentFontSizeV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+import { DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING, DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS, validNativeDocxApproximatedImageExtentsV1, type NativeDocxApproximatedImageExtentV1 } from './nativeApproximateImageExtentV1.js'
 import { collectNativeDocxApproximateOmissionsV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
 
 /** Bound on the typed not-applied disclosure vector, mirrored by the Go
@@ -108,6 +109,9 @@ export interface NativeDocxApproximatePagePreviewV1 {
   approximated_font_sizes?: NativeDocxApproximatedFontSizeV1[]
   source_latin_font_fallbacks?: NativeDocxLatinFontFallbackV1[]
   approximated_font_faces?: NativeDocxLatinFontFallbackV1[]
+  /** Picture extents this preview moved onto the milli-point lattice, with both
+   * the authored and the painted EMU. Present only when one was moved. */
+  approximated_image_extents?: NativeDocxApproximatedImageExtentV1[]
   legacy_table_origins?: NativeDocxLegacyTableOriginV1[]
   rendering_provenance: NativeDocxPagePaintV1['provenance']
   diagnostics: NativeDocxPagePaintV1['diagnostics']
@@ -178,7 +182,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const issues = preflightWire(value, 'approximate page preview').filter(issue => !(issue.code === 'INVALID_VALUE' && issue.path === '/source/settings_sha256' && candidate?.source?.settings_sha256 === null))
     if (issues.length) return { ok: false, issues }
     const input = structuredClone(value) as NativeDocxApproximatePagePreviewV1
-    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes', 'source_latin_font_fallbacks', 'approximated_font_faces','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
+    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'approximated_font_sizes', 'source_latin_font_fallbacks', 'approximated_font_faces','approximated_image_extents','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 264 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || !input.reasons.includes(DOCX_APPROXIMATE_LINE_BOX_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
     // A refused approximate preview must say so in its reasons, and a painted one
@@ -199,6 +203,10 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const fallbacks = input.source_latin_font_fallbacks ?? []
     if (!validNativeDocxLatinFontFallbacksV1(fallbacks, settings.package_sha256)) return invalid('Invalid Latin font fallback evidence')
     if (input.approximated_font_faces !== undefined && (!validNativeDocxApproximatedFontFacesV1(input.approximated_font_faces, fallbacks, settings.package_sha256) || !input.reasons.includes(DOCX_LATIN_FONT_FALLBACK_WARNING))) return invalid('Applied Latin font fallbacks require retained source evidence and the declared warning')
+    // An approximation is recorded, never silent: a moved picture extent must
+    // carry both its authored and painted EMU and declare the rounding warning.
+    if (input.approximated_image_extents !== undefined && (!validNativeDocxApproximatedImageExtentsV1(input.approximated_image_extents) || input.approximated_image_extents.length === 0 || input.approximated_image_extents.length > DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS || !input.reasons.includes(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING))) return invalid('Rounded picture extents require exact source/painted facts and the declared warning')
+    if (input.approximated_image_extents === undefined && input.reasons.includes(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)) return invalid('Declared picture extent rounding requires its retained source facts')
     const facts = input.approximated_settings ?? []
     if (!Array.isArray(facts) || facts.length > DOCX_APPROXIMATE_MAX_SETTING_FACTS || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) return invalid('invalid retained approximate settings facts')
     if (facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || (input.status === 'painted' && !coveredSettingsDiagnostics(settings, facts))) return invalid('missing approximate setting coverage or warning')
