@@ -144,12 +144,12 @@ func TestNativeEastAsianThemeScriptMap(t *testing.T) {
 		"zh-CN": "Hans", "zh-SG": "Hans", "zh-Hans": "Hans", "zh": "Hans",
 		"ja-JP": "Jpan", "ja": "Jpan", "ko-KR": "Hang", "ko": "Hang",
 	} {
-		if got, ok := nativeEastAsianThemeScript(tag); !ok || got != want {
-			t.Fatalf("%s resolved to %q/%v, want %q", tag, got, ok, want)
+		if got := nativeEastAsianThemeScript(tag); got != want {
+			t.Fatalf("%s resolved to %q, want %q", tag, got, want)
 		}
 	}
 	for _, tag := range []string{"", "en-US", "ar-SA", "th-TH", "x-none", "zhh", strings.Repeat("z", 40)} {
-		if got, ok := nativeEastAsianThemeScript(tag); ok {
+		if got := nativeEastAsianThemeScript(tag); got != "" {
 			t.Fatalf("%q was guessed as script %q", tag, got)
 		}
 	}

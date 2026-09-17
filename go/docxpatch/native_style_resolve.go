@@ -281,7 +281,7 @@ type nativeLayoutResolver struct {
 	autoBorderWhite          bool
 	themeSrgb                map[string]string
 	themeLatinFonts          nativeThemeLatinFonts
-	themeFontLangEastAsia    string
+	themeEastAsiaScript      string
 }
 
 type nativeDeferredNumberingDiagnostic struct {
@@ -919,7 +919,7 @@ func (resolver *nativeLayoutResolver) loadTheme(partName string) error {
 	// schemeClr, tint/shade, and other DrawingML transforms stay unresolved
 	// and are diagnosed at the referencing w:color.
 	resolver.themeSrgb = nativeParseThemeSrgbColors(root, drawingNS)
-	resolver.themeLatinFonts = nativeParseThemeLatinFonts(root, drawingNS)
+	resolver.themeLatinFonts = nativeParseThemeLatinFonts(root, drawingNS, resolver.themeEastAsiaScript)
 	return nil
 }
 
