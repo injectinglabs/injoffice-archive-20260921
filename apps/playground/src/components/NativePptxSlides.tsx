@@ -24,7 +24,11 @@ export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onI
    // A solid fill covers the slide in ink we did not render: on bullet-indent.pptx
    // two such boxes accounted for 70.8% of the page while the preview contained no
    // painted content at all, which reads as coverage we do not have.
-   case 'placeholder':return <g key={key}><rect x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} fill="none" stroke="#777" strokeWidth={1} strokeDasharray="4 3"/><text x={node.rect.x+1} y={node.rect.y+10} fontSize={8} fill="#777">{node.label}</text></g>
+   // The outline and its label are OUR chrome, not source paint. They are marked
+   // so a reader can tell the two apart by attribute instead of by colour: the
+   // dashed stroke and the grey label are the only dark pixels on a slide that
+   // painted nothing, and colour alone cannot separate them from grey content.
+   case 'placeholder':return <g key={key} data-native-placeholder="refused-region"><rect data-native-placeholder-outline x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} fill="none" stroke="#777" strokeWidth={1} strokeDasharray="4 3"/><text data-native-placeholder-label x={node.rect.x+1} y={node.rect.y+10} fontSize={8} fill="#777">{node.label}</text></g>
   }
  }
  return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${preview.width/SVG_EMU_PER_POINT} ${preview.height/SVG_EMU_PER_POINT}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>{preview.nodes.map((node,i)=>draw(nativePptxSvgNode(node),String(i)))}</svg>
