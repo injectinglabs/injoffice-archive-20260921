@@ -4344,6 +4344,11 @@
               "signature": "export interface NativeDocxCapabilityV1"
             },
             {
+              "name": "nativeDocxCellWidthAgreesWithGridV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxCellWidthAgreesWithGridV1(cell: NativeDocxTableCellV1, gridSliceTwips: number): boolean"
+            },
+            {
               "name": "NativeDocxColumnV1",
               "kind": "interface",
               "signature": "export interface NativeDocxColumnV1"
@@ -5828,6 +5833,11 @@
               "name": "NativeDocxCapabilityV1",
               "kind": "interface",
               "signature": "export interface NativeDocxCapabilityV1"
+            },
+            {
+              "name": "nativeDocxCellWidthAgreesWithGridV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxCellWidthAgreesWithGridV1(cell: NativeDocxTableCellV1, gridSliceTwips: number): boolean"
             },
             {
               "name": "NativeDocxColumnV1",
