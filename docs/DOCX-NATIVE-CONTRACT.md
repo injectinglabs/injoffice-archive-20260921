@@ -646,8 +646,15 @@ and document-end [`endnote pos`](https://learn.microsoft.com/en-us/dotnet/api/do
 It does not establish visual equivalence with Microsoft Word.
 
 Pagination limits are 2,048 pages, 100,000 placed lines, 100,000 paragraph
-slices, 1,000 diagnostics, two million traversed output values, and one
-trillion milli-points for any coordinate or checked sum. No DOM, HTML, CSS
+slices, 1,000 diagnostics, two million traversed output values, five million
+traversed request values, and one trillion milli-points for any coordinate or
+checked sum. The request bound is not the gateway's 100,000 per-structure
+traversal budget: a pagination request is the union of an already bounded
+document, resolved layout, one to three shaped-lines candidates and the
+settings attestation, each of which its own decoder still traverses under its
+own budget, and one shaped-lines value alone may traverse up to two million
+values. It equals the enclosing page-paint request bound, which every caller
+that can reach pagination has already passed. No DOM, HTML, CSS
 layout, canvas measurement, browser renderer, Mammoth, or legacy pixel
 paginator participates. Header/footer selection and static paragraph placement
 are performed only after complete body pagination; table and footnote layout
