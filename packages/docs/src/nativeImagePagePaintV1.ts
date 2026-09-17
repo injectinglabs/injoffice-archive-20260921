@@ -57,6 +57,13 @@ export interface NativeDocxQualifiedInlineImageV1 {
     layer: 'behind' | 'front'
     stacking_order: number
     wrap?: 'square'
+    /** The rotation envelope wp:effectExtent states, in milli-points. The wrap
+     * region is the painted box grown by these and then by distL/distR; the
+     * painted box itself is never moved by them. */
+    effect_extent_left_millipoints: number
+    effect_extent_top_millipoints: number
+    effect_extent_right_millipoints: number
+    effect_extent_bottom_millipoints: number
   }
   drawing_id: string
   run_id: string
@@ -77,7 +84,18 @@ export interface NativeDocxQualifiedInlineImageV1 {
   layout_descent_millipoints: number
   content_offset_x_millipoints: number
   source_crop: { left: number; top: number; right: number; bottom: number; unit: 'one-hundred-thousandth' }
-  transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
+  transform: NativeDocxImageTransformV1
+}
+
+/** Reflections in the source axes, then a rotation clockwise about the centre of
+ * the painted box. `rotation_degrees` carries the quarter turns whose matrix is
+ * exact in integers; `rotation_60000ths` carries the source's own angle, which
+ * an oblique rotation states instead. */
+export interface NativeDocxImageTransformV1 {
+  rotation_degrees: 0 | 90 | 180 | 270
+  rotation_60000ths?: number
+  flip_horizontal: boolean
+  flip_vertical: boolean
 }
 
 
@@ -240,10 +258,18 @@ function relationshipPart(ownerPart: string): string {
 export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, runID: string, drawing: NativeDocxDrawingV1): NativeDocxInlineImageQualificationV1 {
   const crop = drawing.source_crop ?? { left: 0, top: 0, right: 0, bottom: 0 }
   if (!['left','top','right','bottom'].every((key) => Number.isSafeInteger(crop[key as keyof typeof crop]) && crop[key as keyof typeof crop] >= 0 && crop[key as keyof typeof crop] <= 99000) || crop.left + crop.right > 99000 || crop.top + crop.bottom > 99000) return { ok: false, code: 'unsupported-image', message: 'Source crop must retain at least one percent per axis in exact integer units' }
-  if (drawing.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(drawing.rotation_degrees) || drawing.flip_horizontal !== undefined && typeof drawing.flip_horizontal !== 'boolean' || drawing.flip_vertical !== undefined && typeof drawing.flip_vertical !== 'boolean') return { ok: false, code: 'unsupported-image', message: 'Inline image transform requires explicit booleans and quarter-turn rotation' }
+  if (drawing.rotation_degrees !== undefined && ![0, 90, 180, 270].includes(drawing.rotation_degrees) || drawing.flip_horizontal !== undefined && typeof drawing.flip_horizontal !== 'boolean' || drawing.flip_vertical !== undefined && typeof drawing.flip_vertical !== 'boolean') return { ok: false, code: 'unsupported-image', message: 'Inline image transform requires explicit booleans and a quarter-turn whole-degree projection' }
+  const angle = drawing.rotation_60000ths
+  if (angle !== undefined && (!Number.isSafeInteger(angle) || angle < 0 || angle >= 21_600_000 || angle % 5_400_000 === 0 && angle !== (drawing.rotation_degrees ?? -1) * 60_000)) return { ok: false, code: 'unsupported-image', message: 'Image rotation must be a positive fixed angle below one full turn that agrees with its whole-degree projection' }
+  const oblique = angle !== undefined && angle % 5_400_000 !== 0
   let floating: NativeDocxQualifiedInlineImageV1['floating']
   if (drawing.placement === 'floating') {
-    if (drawing.wrap === 'square' && drawing.rotation_degrees !== undefined && drawing.rotation_degrees !== 0) return { ok: false, code: 'unsupported-image', message: 'Square wrapping requires an unrotated source extent; rotated exclusion bounds are unqualified' }
+    // A quarter turn swaps the painted box's axes, so wp:extent already states
+    // the rotated bounds and no exclusion can be derived from the source extent.
+    // An oblique rotation leaves wp:extent unrotated and states its envelope in
+    // wp:effectExtent, which is exactly the rectangle Word excludes.
+    if (drawing.wrap === 'square' && drawing.rotation_degrees !== undefined && drawing.rotation_degrees !== 0) return { ok: false, code: 'unsupported-image', message: 'Square wrapping requires an unrotated source extent; quarter-turn exclusion bounds are unqualified' }
+    if (drawing.wrap === 'square' && oblique && drawing.floating_effect_extent_emu === undefined) return { ok: false, code: 'unsupported-image', message: 'Square wrapping around an obliquely rotated picture requires the source rotation envelope in wp:effectExtent' }
     let bodyParagraph = false, floatingCount = 0, sameOrder = 0
     for (const block of document.body.blocks) for (const run of block.paragraph?.runs ?? []) {
       if (run.drawing?.placement !== 'floating') continue
@@ -264,9 +290,16 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       if (converted === undefined || value < 0 || value > 91_440_000) return { ok: false, code: 'unsupported-image', message: 'Floating wrap distances are not exact bounded non-negative milli-points' }
       distances.push(converted)
     }
-    floating = { offset_x_millipoints: x, offset_y_millipoints: y, horizontal_origin: horizontal as 'page' | 'column' | 'margin', vertical_origin: vertical as 'page' | 'paragraph', wrap_distance_left_millipoints: distances[0]!, wrap_distance_right_millipoints: distances[1]!, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order!, ...(drawing.wrap==='square'?{wrap:'square' as const}:{}) }
+    const envelope = drawing.floating_effect_extent_emu ?? { left: 0, top: 0, right: 0, bottom: 0 }
+    const extents: number[] = []
+    for (const value of [envelope.left, envelope.top, envelope.right, envelope.bottom]) {
+      const converted = value === 0 ? 0 : emuToMilliPoints(value)
+      if (converted === undefined || !Number.isSafeInteger(value) || value < 0 || value > 91_440_000) return { ok: false, code: 'unsupported-image', message: 'Floating rotation envelope extents are not exact bounded non-negative milli-points' }
+      extents.push(converted)
+    }
+    floating = { offset_x_millipoints: x, offset_y_millipoints: y, horizontal_origin: horizontal as 'page' | 'column' | 'margin', vertical_origin: vertical as 'page' | 'paragraph', wrap_distance_left_millipoints: distances[0]!, wrap_distance_right_millipoints: distances[1]!, effect_extent_left_millipoints: extents[0]!, effect_extent_top_millipoints: extents[1]!, effect_extent_right_millipoints: extents[2]!, effect_extent_bottom_millipoints: extents[3]!, layer: drawing.floating_layer!, stacking_order: drawing.stacking_order!, ...(drawing.wrap==='square'?{wrap:'square' as const}:{}) }
     if (sameOrder !== 1) return { ok: false, code: 'unsupported-image', message: 'Floating image stacking orders must be unique within each layer' }
-  } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined || drawing.wrap_distance_left_emu !== undefined || drawing.wrap_distance_right_emu !== undefined) {
+  } else if (drawing.placement !== 'inline' || drawing.x_emu !== undefined || drawing.y_emu !== undefined || drawing.wrap !== undefined || drawing.horizontal_relative_from !== undefined || drawing.vertical_relative_from !== undefined || drawing.floating_layer !== undefined || drawing.stacking_order !== undefined || drawing.wrap_distance_left_emu !== undefined || drawing.wrap_distance_right_emu !== undefined || drawing.floating_effect_extent_emu !== undefined) {
     return { ok: false, code: 'unsupported-image', message: 'Only bounded inline pictures without anchor, wrap, or floating offsets are supported' }
   }
   if (!drawing.relationship_id || !drawing.media_part || !drawing.content_type) return { ok: false, code: 'invalid-image', message: 'Inline picture lacks an exact embedded relationship/media identity' }
@@ -319,7 +352,7 @@ export function qualifyNativeDocxInlineImageV1(document: NativeDocxDocumentV1, r
       layout_descent_millipoints: effects.bottom === 0 ? 0 : -effects.bottom,
       content_offset_x_millipoints: effects.left,
       source_crop: { left: crop.left, top: crop.top, right: crop.right, bottom: crop.bottom, unit: 'one-hundred-thousandth' },
-      transform: { rotation_degrees: drawing.rotation_degrees ?? 0, flip_horizontal: drawing.flip_horizontal ?? false, flip_vertical: drawing.flip_vertical ?? false },
+      transform: { rotation_degrees: drawing.rotation_degrees ?? 0, ...(oblique ? { rotation_60000ths: angle! } : {}), flip_horizontal: drawing.flip_horizontal ?? false, flip_vertical: drawing.flip_vertical ?? false },
     },
   }
 }

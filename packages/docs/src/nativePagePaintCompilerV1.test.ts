@@ -1758,6 +1758,18 @@ describe('native DOCX page-paint compiler v1', () => {
       await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow('without tables or notes')
     }
   })
+  it('reports a refused layout instead of deriving a square-wrap plan from it', async () => {
+    const input = imageFixture(), document = input.document as NativeDocxDocumentV1
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    Object.assign(document.body.blocks[0]!.paragraph!.runs[0]!.drawing!, { placement: 'floating', x_emu: 914_400, y_emu: 914_400, width_emu: 1_270_000, height_emu: 635_000, horizontal_relative_from: 'page', vertical_relative_from: 'page', wrap: 'square', floating_layer: 'front', stacking_order: 7 })
+    // Anything pagination refuses leaves no placed line to wrap around. The
+    // caller is owed that refusal, not a throw from the wrap solver.
+    settings.profile = 'unsupported'
+    delete settings.compatibility_mode
+    settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy mode 12' }]
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    expect(prepared.page_paint_request.paginated_layout.status).toBe('refused')
+  })
   it('refuses ambiguous stacking, non-body anchors and excessive floating counts', () => {
     const input = imageFixture(), document = input.document as NativeDocxDocumentV1
     const paragraph = document.body.blocks[0]!.paragraph!, run = paragraph.runs[0]!, drawing = run.drawing!
