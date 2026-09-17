@@ -149,7 +149,9 @@ func (extractor *nativeExtractor) appendRelationshipClosure(graph *nativeSlideDe
 	relsPayload := extractor.pkg.parts[relsPart]
 	graph.unsupported = append(graph.unsupported, makeNativeUnsupportedPayload(relsPayload, relsPart, kind+"-relationships", "pptx.relationship-map-preserve", kind+" relationship map is capability-bound to the source revision"))
 	for _, relationship := range relationships {
-		if coreTypes[relationship.Type] || !relationship.internal() {
+		if coreTypes[relationship.Type] || !relationship.internal() || relationship.Part == "" {
+			// An internal relationship that names no stored part has no bytes
+			// to preserve, so there is no opaque closure to bind.
 			continue
 		}
 		if len(graph.unsupported) >= nativeExtractMaxPassthrough {
@@ -174,7 +176,10 @@ func (extractor *nativeExtractor) validateRelationshipSet(relationships []native
 		if strings.HasPrefix(relationship.Type, oppositeOfficeNamespace+"/") {
 			return fmt.Errorf("pptxpatch: native extract OPC: opposing Transitional/Strict relationship type in %q", ownerPart)
 		}
-		if relationship.internal() && strings.TrimSpace(extractor.pkg.contentTypes.forPart(relationship.Part)) == "" {
+		// A stored target still needs an effective content type; a target the
+		// package does not store resolves to nothing and is checked where it is
+		// followed, not here.
+		if relationship.internal() && relationship.Part != "" && strings.TrimSpace(extractor.pkg.contentTypes.forPart(relationship.Part)) == "" {
 			return fmt.Errorf("pptxpatch: native extract OPC: relationship %s in %q targets a part with no effective content type", relationship.ID, ownerPart)
 		}
 	}
