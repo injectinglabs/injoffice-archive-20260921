@@ -9,7 +9,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
  * one refusal and leaves the caller responsible for discarding every page.
  */
 
-import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxStoryV1 } from './nativeContract.js'
+import { nativeDocxSeparatorStoryProjectionV1, type NativeDocxDocumentV1, type NativeDocxParagraphV1, type NativeDocxStoryV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
 import { layoutNativeDocxTableRowsV1, qualifyNativeDocxTablesV1, type NativeDocxQualifiedTableV1 } from './nativeTablePagePaintV1.js'
@@ -262,10 +262,7 @@ function shapedRunTextIndex(shaped: NativeDocxShapedLinesV1): Map<string, string
  * Those paragraphs are laid out and measured like any other note paragraph, so
  * they only have to be paragraphs, never nested tables.
  */
-function exactInstructionSentinelProjection(story: NativeDocxStoryV1): boolean {
-  return story.blocks.length >= 1 && story.blocks[0]?.kind === 'paragraph' && story.blocks[0].paragraph?.runs.length === 0
-    && story.blocks.every((block) => block.kind === 'paragraph' && block.paragraph !== undefined)
-}
+const exactInstructionSentinelProjection = nativeDocxSeparatorStoryProjectionV1
 
 function measureNoteGroup(
   page: Pick<NativeDocxPaginatedPageV1, 'ordinal'>,
@@ -486,7 +483,12 @@ export function placeNativeDocxNotesV1(
   const resolvedParagraphs = new Map(resolved.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
   const sourceFailure = document.unsupported.find((entry) => scopes.has(entry.scope_id))
   if (sourceFailure) return { scope_id: sourceFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note source semantics: ${sourceFailure.code}: ${sourceFailure.message}` }
-  if (resolved.diagnostics.some((entry) => scopes.has(entry.scope_id))) return { scope_id: document.document_id, code: 'note-structure-unsupported', message: 'Resolved note layout contains unsupported or ambiguous style semantics' }
+  // Name the diagnostic and scope it to the note that carries it, exactly as the
+  // source-side refusal above does. The refusal is still the whole document's --
+  // one unresolvable note scope leaves note numbering ambiguous everywhere -- but
+  // an unnamed blanket refusal tells a caller nothing about which note, or why.
+  const resolvedFailure = resolved.diagnostics.find((entry) => scopes.has(entry.scope_id))
+  if (resolvedFailure) return { scope_id: resolvedFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note layout semantics: ${resolvedFailure.code}: ${resolvedFailure.message}` }
 
   const content = new Map(document.notes.filter((story) => (story.note_role ?? 'content') === 'content').map((story) => [story.id, story]))
   const separators = new Map<NoteKind, NativeDocxStoryV1>()

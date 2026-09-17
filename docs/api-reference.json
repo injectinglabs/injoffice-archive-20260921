@@ -5169,6 +5169,11 @@
               "signature": "export interface NativeDocxSectionV1"
             },
             {
+              "name": "nativeDocxSeparatorStoryProjectionV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxSeparatorStoryProjectionV1(story: Pick<NativeDocxStoryV1, 'blocks'>): boolean"
+            },
+            {
               "name": "NativeDocxShapedLinesV1",
               "kind": "type",
               "signature": "export interface NativeDocxShapedLinesV1"
@@ -6163,6 +6168,11 @@
               "name": "NativeDocxSectionV1",
               "kind": "interface",
               "signature": "export interface NativeDocxSectionV1"
+            },
+            {
+              "name": "nativeDocxSeparatorStoryProjectionV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxSeparatorStoryProjectionV1(story: Pick<NativeDocxStoryV1, 'blocks'>): boolean"
             },
             {
               "name": "NativeDocxSourceAnchorV1",

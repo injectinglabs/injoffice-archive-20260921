@@ -2297,6 +2297,26 @@ describe('native DOCX pagination v1', () => {
     expect(placed.height_millipoints).toBe(before.height_millipoints + instruction.lines[0]!.line_height_millipoints)
   })
 
+  it('names the resolved-layout diagnostic, and the note scope carrying it, when note layout is unresolvable', () => {
+    // This gate used to refuse with the document id and one fixed sentence for
+    // any resolved-layout diagnostic in any note scope, so a caller could not
+    // tell which note failed or what the resolver actually said about it.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    request.resolved_layout.diagnostics.push({
+      code: 'UNMODELED_PARAGRAPH_CONTENT', severity: 'unsupported', scope_id: 'paragraph:footnote:1',
+      part_name: 'word/footnotes.xml', path: '/w:footnotes[1]/w:footnote[2]/w:p[1]/w:permStart[1]',
+      preservation: 'preserve-verbatim', message: 'permission range',
+    })
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(output.status).toBe('refused')
+    expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'note-structure-unsupported', scope_id: 'paragraph:footnote:1',
+      message: 'Unsupported note layout semantics: UNMODELED_PARAGRAPH_CONTENT: permission range',
+    })]))
+  })
+
   it('refuses a separator story whose carried paragraph has no shaped projection', () => {
     // A carried separator paragraph is laid out like any other note paragraph,
     // so it has to arrive with its exact shaped lines; an unshaped one has no
