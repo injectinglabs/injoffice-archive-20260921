@@ -42,6 +42,7 @@ import { DOCX_ABSENT_FONT_SIZE_WARNING, projectNativeDocxAbsentFontSizesV1 } fro
 import { DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, decodeNativeDocxApproximateDrawingChartsV1 } from './nativeApproximateDrawingChartsV1.js'
 import { DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING, DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING } from './nativePaginationV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1 } from './nativeLatinFontFallbackV1.js'
+import { projectNativeDocxAbsentFontFamiliesV1, stripNativeDocxAbsentFontFamiliesV1 } from './nativeAbsentFontFamilyV1.js'
 import { DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING } from './nativeApproximateImageExtentV1.js'
 import { compileNativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 
@@ -535,6 +536,43 @@ describe('native DOCX page-paint compiler v1', () => {
     }
     expect(input).toEqual(before)
   },15000)
+  it('applies the declared host family only to a package that states no font anywhere', () => {
+    const input = fixture()
+    const document = input.document as NativeDocxDocumentV1
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const paragraph = document.body.blocks[0]!.paragraph!
+    const policy = { kind: 'host-default-family-v1', family: 'Aptos' }
+    const references = (layout: NativeDocxResolvedLayoutInputV1) => [...layout.runs.map(run => run.properties), ...layout.paragraphs.map(p => p.paragraph_mark_properties)]
+      .filter(properties => properties.font_family !== undefined)
+      .map(properties => ({ family: properties.font_family!, weight: properties.bold === true ? 700 : 400, style: properties.italic === true ? 'italic' : 'normal' }))
+    const facts = [
+      { scope_kind: 'paragraph-mark' as const, scope_id: paragraph.id, part_name: paragraph.anchor.part_name, path: paragraph.anchor.path, package_sha256: HASH },
+      { scope_kind: 'run' as const, scope_id: paragraph.runs[0]!.id, part_name: paragraph.runs[0]!.anchor.part_name, path: paragraph.runs[0]!.anchor.path, package_sha256: HASH },
+    ]
+    // A package that states a family keeps using it: the whole-package precondition refuses.
+    expect(() => projectNativeDocxAbsentFontFamiliesV1(document, resolved, facts, policy, references, () => true)).toThrow('no font reference at all')
+    const partial = structuredClone(resolved)
+    delete partial.runs[0]!.properties.font_family
+    expect(() => projectNativeDocxAbsentFontFamiliesV1(document, partial, [facts[1]!], policy, references, () => true)).toThrow('no font reference at all')
+    // A resolved family is never overridden even if a caller claims no references.
+    expect(() => projectNativeDocxAbsentFontFamiliesV1(document, resolved, [facts[0]!], policy, () => [], () => true)).toThrow('override')
+    const fontless = structuredClone(resolved)
+    delete fontless.paragraphs[0]!.paragraph_mark_properties.font_family
+    for (const run of fontless.runs) delete run.properties.font_family
+    const projected = projectNativeDocxAbsentFontFamiliesV1(document, fontless, facts, policy, references, () => true)
+    expect(projected.applied).toEqual(facts.map(fact => ({ ...fact, chosen_family: 'Aptos' })))
+    expect(projected.resolved.runs[0]!.properties.font_family).toBe('Aptos')
+    expect(projected.resolved.paragraphs[0]!.paragraph_mark_properties.font_family).toBe('Aptos')
+    expect(fontless.runs[0]!.properties.font_family).toBeUndefined()
+    // An unattested host face is recorded nowhere and the scope stays unshaped.
+    expect(projectNativeDocxAbsentFontFamiliesV1(document, fontless, facts, policy, references, () => false).applied).toEqual([])
+    // The strict view removes the projection so the strict inventory still joins.
+    expect(stripNativeDocxAbsentFontFamiliesV1(projected.resolved, facts)).toEqual(fontless)
+    expect(stripNativeDocxAbsentFontFamiliesV1(fontless, [])).toBe(fontless)
+    expect(() => projectNativeDocxAbsentFontFamiliesV1(document, fontless, facts, { kind: 'host-default-family-v1', family: 'Calibri' }, references, () => true)).toThrow('explicit')
+    expect(() => projectNativeDocxAbsentFontFamiliesV1(document, fontless, [{ ...facts[1]!, path: '/w:document[1]/w:body[1]/w:p[9]/w:r[1]' }], policy, references, () => true)).toThrow('scope anchor')
+    expect(projectNativeDocxAbsentFontFamiliesV1(document, resolved, [], policy, references, () => true).applied).toEqual([])
+  })
   it('limits note host-size policy to clean empty reserved separator paragraphs', () => {
     const input = noteFixture()
     const document = input.document as NativeDocxDocumentV1

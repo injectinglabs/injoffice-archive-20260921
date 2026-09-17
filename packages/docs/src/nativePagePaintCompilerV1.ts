@@ -174,11 +174,16 @@ export { projectNativeDocxApproximateImageExtentsV1, nearestNativeDocxMilliPoint
 export type { NativeDocxApproximatedImageExtentV1, NativeDocxApproximatedImageExtentFieldV1 } from './nativeApproximateImageExtentV1.js'
 export type { NativeDocxHostDefaultSizePolicyV1, NativeDocxAbsentFontSizeV1, NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
 export { validNativeDocxHostDefaultSizePolicyV1 } from './nativeAbsentFontSizeV1.js'
+import { projectNativeDocxAbsentFontFamiliesV1, stripNativeDocxAbsentFontFamiliesV1, DOCX_ABSENT_FONT_FAMILY_WARNING, type NativeDocxHostDefaultFamilyPolicyV1, type NativeDocxApproximatedFontFamilyV1 } from './nativeAbsentFontFamilyV1.js'
+export type { NativeDocxHostDefaultFamilyPolicyV1, NativeDocxAbsentFontFamilyV1, NativeDocxApproximatedFontFamilyV1 } from './nativeAbsentFontFamilyV1.js'
+export { validNativeDocxHostDefaultFamilyPolicyV1, validNativeDocxAbsentFontFamiliesV1, validNativeDocxApproximatedFontFamiliesV1, DOCX_ABSENT_FONT_FAMILY_WARNING, DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT } from './nativeAbsentFontFamilyV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1, stripNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
 export interface NativeDocxApproximateRuntimeV1 {
   createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1
   fonts?: NativeDocxHostFontsV1
   fontSizePolicy?: NativeDocxHostDefaultSizePolicyV1
+  /** Declared host default family for a package that selects no font anywhere. */
+  fontFamilyPolicy?: NativeDocxHostDefaultFamilyPolicyV1
   /** Server-supplied `InspectNativeApproximateDrawingShapesV1` sidecar for the same bytes; validated against the document before use. */
   drawingShapes?: unknown
   /** Server-supplied `InspectNativeApproximateEquationsV1` sidecar for the same bytes; validated against the document before use. */
@@ -318,6 +323,15 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     input = { ...input, resolved_layout: projected.resolved }
     applied = projected.applied
   }
+  let appliedFamilies: NativeDocxApproximatedFontFamilyV1[] = []
+  if (runtime?.fontFamilyPolicy !== undefined) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Host family policy requires independently eligible approximate settings')
+    const manifestFaces = runtime.fonts?.manifest.faces ?? []
+    const attestedFamily = (family: string, weight: 400 | 700, style: 'normal' | 'italic') => manifestFaces.some((face) => face.weight === weight && face.style === style && face.stretch === 100 && [face.family, ...(face.aliases ?? [])].some((name) => asciiEqual(name, family)))
+    const projected = projectNativeDocxAbsentFontFamiliesV1(input.document, input.resolved_layout, eligibility.absent_font_families ?? [], runtime.fontFamilyPolicy, resolvedFontReferences, attestedFamily)
+    input = { ...input, resolved_layout: projected.resolved }
+    appliedFamilies = projected.applied
+  }
   // Approximate drawing shapes: validate the same-bytes sidecar against the
   // source document, reserve inline shapes in the internal body copy, and paint
   // fills/strokes/text boxes after body pagination. Anything malformed refuses
@@ -424,6 +438,10 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   if (applied.length > 0) {
     result.approximated_font_sizes = applied
     result.reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)
+  }
+  if (appliedFamilies.length > 0) {
+    result.approximated_font_families = appliedFamilies
+    result.reasons.push(DOCX_ABSENT_FONT_FAMILY_WARNING)
   }
   if (appliedImageExtents.length > 0) {
     result.approximated_image_extents = appliedImageExtents
@@ -828,7 +846,8 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   // The approximate preview may have projected evidenced Latin fallback faces onto
   // scopes strict resolution left unresolved; the strict inventory is joined against
   // the layout with those projections removed. Projected faces never add a reference.
-  const strictView = approximateEligibility === undefined ? resolved.value : stripNativeDocxLatinFontFallbacksV1(resolved.value, decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value).latin_font_fallbacks ?? [])
+  const approximateEvidence = approximateEligibility === undefined ? undefined : decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value)
+  const strictView = approximateEvidence === undefined ? resolved.value : stripNativeDocxAbsentFontFamiliesV1(stripNativeDocxLatinFontFallbacksV1(resolved.value, approximateEvidence.latin_font_fallbacks ?? []), approximateEvidence.absent_font_families ?? [])
   if (JSON.stringify(inventory.references) !== JSON.stringify(resolvedFontReferences(strictView))) throw new TypeError('font inventory references do not exactly and completely cover the resolved document scopes')
   validateInventoryPackagePartJoins(inventory, document.value, settings.value)
   if (!inventory.native_text_manifest && !runtime?.fonts) throw new TypeError('document has no embedded fonts; configure explicit host fonts for native preview')
