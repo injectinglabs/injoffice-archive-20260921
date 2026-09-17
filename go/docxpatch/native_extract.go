@@ -3357,6 +3357,14 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Web Layout view hiding has malformed, duplicate or unknown source structure")
 			}
+		case "bdr":
+			preserveOnly = true
+			if nativeAbsentRunBorder(child, node, extractor.wordNS) {
+				extractor.addUnsupported("RUN_BORDER_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A run border that states no border is preserved and not applied; it paints no stroke and reserves no space, so it moves no glyph, line or page")
+			} else {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Only a run border that states no border is proven layout-neutral; a painted run border reserves space this tier does not model")
+			}
 		case "vertAlign":
 			preserveOnly = true
 			value, ok := nativeVerticalAlignmentValue(child, extractor.wordNS)
