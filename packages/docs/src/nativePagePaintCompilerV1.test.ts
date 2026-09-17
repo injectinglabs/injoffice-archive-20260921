@@ -972,6 +972,31 @@ describe('native DOCX page-paint compiler v1', () => {
     await expect(prepareNativeDocxPagePaintV1(input)).rejects.toThrow(/configure explicit host fonts/)
   })
 
+  // word/fontTable.xml is optional in the format, exactly as word/settings.xml
+  // is. A minimal package such as sdt_after_section_break.docx stores only
+  // [Content_Types].xml, _rels/.rels and word/document.xml, and requiring a
+  // font-table package binding refused every such document outright.
+  it('paints a document whose package has no fontTable.xml', async () => {
+    const { input, fonts } = hostFixture()
+    const document = input.document as NativeDocxDocumentV1
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    delete resolved.source_parts.font_table_part
+    document.passthrough_parts = document.passthrough_parts.filter((part) => part.part_name !== 'word/fontTable.xml')
+    rewriteInventory(input, (inventory) => { delete inventory.font_table; inventory.families = [] })
+    // The regression: this threw 'font inventory has no font-table package
+    // binding' before any layout decision was taken. It must now compile.
+    const prepared = await prepareNativeDocxPagePaintV1(input, { fonts })
+    expect(prepared.outline_requests.length).toBeGreaterThan(0)
+
+    // An inventory that describes a family has read a font table, so it must
+    // still carry the package binding that proves where it read it.
+    const forged = hostFixture()
+    const forgedResolved = forged.input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    delete forgedResolved.source_parts.font_table_part
+    rewriteInventory(forged.input, (inventory) => { delete inventory.font_table })
+    await expect(prepareNativeDocxPagePaintV1(forged.input, { fonts: forged.fonts })).rejects.toThrow('font families require a font-table binding')
+  })
+
   it('refuses approximate pagination policies in the font-substitution legacy preview instead of applying them undisclosed', async () => {
     const {input,fonts}=hostFixture()
     const document=input.document as NativeDocxDocumentV1,resolved=input.resolved_layout as NativeDocxResolvedLayoutInputV1,settings=input.pagination_settings as NativeDocxPaginationSettingsV1

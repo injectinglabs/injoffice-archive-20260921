@@ -679,7 +679,16 @@ async function attestResolvedFontReferencesBeforeBidi(
 
 function validateInventoryPackagePartJoins(inventory: NativeDOCXFontInventoryV1, document: NativeDocxDocumentV1, settings: NativeDocxPaginationSettingsV1): void {
   const binding = inventory.font_table
-  if (!binding) throw new TypeError('font inventory has no font-table package binding')
+  // word/fontTable.xml is optional in the format, exactly as word/settings.xml
+  // is below, and the Go inventory models its absence by omitting the binding
+  // while proving that no family and no embedded face was described without
+  // one. A minimal package such as sdt_after_section_break.docx stores only
+  // [Content_Types].xml, _rels/.rels and word/document.xml; requiring a binding
+  // refused every such document before any layout decision was taken. With no
+  // binding there is nothing to join - the inventory decoder already refuses an
+  // inventory that describes a family without one - and the host font
+  // configuration the compiler requires below governs which faces are painted.
+  if (!binding) return
   // word/settings.xml is optional in the format, and its absence is a modelled
   // state ('absent-default'): the settings then carry no relationship evidence
   // at all. Requiring equality against that absence refused every document with
