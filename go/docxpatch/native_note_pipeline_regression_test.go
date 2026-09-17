@@ -88,12 +88,12 @@ func TestNoteWriterStructuralFixture(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			foundVerticalRefusal := false
+			// The reference style superscript is the modeled OS/2 script transform on
+			// the note marks; the structural fixture must resolve with no refusal.
 			for _, diagnostic := range resolved.Diagnostics {
-				foundVerticalRefusal = foundVerticalRefusal || diagnostic.Code == "VERTICAL_ALIGNMENT_UNSUPPORTED"
-			}
-			if !foundVerticalRefusal {
-				t.Fatalf("Word superscript authoring must remain explicit unsupported native evidence: %#v", resolved.Diagnostics)
+				if diagnostic.Code == "VERTICAL_ALIGNMENT_UNSUPPORTED" {
+					t.Fatalf("structural note fixture refused a modeled marker script transform: %#v", diagnostic)
+				}
 			}
 			notesPart := "word/" + string(kind) + "s.xml"
 			notes, ok := zipPart(t, withNote, notesPart)
