@@ -12,7 +12,7 @@ type NativePartialTableTextStyleV1 struct {
 type NativePartialTableTextContextV1 struct {
 	PackageSHA256       string                                   `json:"package_sha256"`
 	TableID             string                                   `json:"table_id"`
-	LookDiagnosticID    string                                   `json:"look_diagnostic_id"`
+	LookDiagnosticID    string                                   `json:"look_diagnostic_id,omitempty"`
 	LookAnchor          NativeSourceAnchorV1                     `json:"look_anchor"`
 	StylesPart          string                                   `json:"styles_part"`
 	StylesSHA256        string                                   `json:"styles_sha256"`
@@ -198,8 +198,8 @@ func nativePartialTextTableStyle(n *nativeXMLNode, ns string) bool {
 // Original diagnostics, strict paint and mutation authority are unchanged.
 func inspectNativePartialTableTextContexts(data []byte, doc *NativeDocumentV1, layout *NativeResolvedLayoutInputV1) ([]NativePartialTableTextContextV1, error) {
 	candidate := false
-	for _, d := range doc.Unsupported {
-		if d.Code == "UNMODELED_TABLE_PROPERTY" && d.Anchor != nil {
+	for _, b := range doc.Body.Blocks {
+		if b.Table != nil && b.Table.TableStyleID != nil {
 			candidate = true
 			break
 		}
@@ -258,6 +258,17 @@ func inspectNativePartialTableTextContexts(data []byte, doc *NativeDocumentV1, l
 		if !exact {
 			continue
 		}
+		// The look is evidence either way: the extractor diagnoses a look whose
+		// conditional selection it cannot model, and omits that diagnostic only
+		// when it has proven the selection inactive. Both states leave the same
+		// element at the same bytes, and neither authorizes mutation, so the
+		// context anchors on the element and names the diagnostic when there is
+		// one.
+		main := resolver.pkg.files[doc.Source.MainPart]
+		if looks[0].Start < 0 || looks[0].End > int64(len(main)) || looks[0].End <= looks[0].Start {
+			continue
+		}
+		evidence.LookAnchor = NativeSourceAnchorV1{PartName: doc.Source.MainPart, Path: looks[0].Path, StartByte: nativeInt64(looks[0].Start), EndByte: nativeInt64(looks[0].End), XMLSHA256: nativeSHA(main[looks[0].Start:looks[0].End])}
 		for _, d := range doc.Unsupported {
 			if d.Code == "UNMODELED_TABLE_PROPERTY" && d.ScopeID == t.ID && d.Anchor != nil && d.Anchor.Path == looks[0].Path && d.Anchor.PartName == doc.Source.MainPart {
 				if evidence.LookDiagnosticID != "" {
@@ -268,7 +279,7 @@ func inspectNativePartialTableTextContexts(data []byte, doc *NativeDocumentV1, l
 				evidence.LookAnchor = *d.Anchor
 			}
 		}
-		if !exact || evidence.LookDiagnosticID == "" {
+		if !exact {
 			continue
 		}
 		diagnosticPaths := map[string]bool{}
