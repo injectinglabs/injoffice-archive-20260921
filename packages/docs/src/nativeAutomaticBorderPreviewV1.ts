@@ -387,7 +387,7 @@ export function decodeNativeDocxAutomaticBorderPreviewV1(
       const absent = eligibility.absent_font_sizes ?? []
       if(eligibility.legacy_table_origins?.length&&!input.reasons.includes(DOCX_LEGACY_TABLE_ORIGIN_WARNING))return {ok:false}
       if (input.approximated_font_sizes !== undefined) {
-        if (!validNativeDocxApproximatedFontSizesV1(input.approximated_font_sizes, absent, input.source.package_sha256) || !input.reasons.includes(DOCX_ABSENT_FONT_SIZE_WARNING)) return { ok: false }
+        if (!validNativeDocxApproximatedFontSizesV1(input.approximated_font_sizes, absent, input.source.package_sha256, eligibility.absent_font_size_shape) || !input.reasons.includes(DOCX_ABSENT_FONT_SIZE_WARNING)) return { ok: false }
       } else if (input.status === 'painted' && absent.length > 0) return { ok: false }
     } else if (
       paint.value.provenance.pagination_settings.diagnostics.length !== 0 || input.approximated_font_sizes !== undefined

@@ -321,20 +321,33 @@ func TestDOCXPreviewRealWorker(t *testing.T) {
 }
 
 func TestApproximateHostFontSizePolicyRequiresEligibleAbsence(t *testing.T) {
-	for _, status := range []string{"eligible", "ineligible"} {
-		eligibility := &docxpatch.NativeDocxApproximationEligibilityV1{Status: status, AbsentFontSizes: []docxpatch.NativeDocxAbsentFontSizeV1{{ScopeKind: "paragraph-mark", ScopeID: "paragraph:one"}}}
-		operation, input := docxApproximateWorkerInput(map[string]any{}, eligibility)
-		if operation != "render-approximate" {
-			t.Fatal(operation)
-		}
-		policy, exists := input["font_size_policy"]
-		if exists != (status == "eligible") {
-			t.Fatalf("unqualified host policy: %s %#v", status, input)
-		}
-		if exists {
-			value := policy.(map[string]any)
-			if value["kind"] != "host-default-size-v1" || value["half_points"] != 22 {
-				t.Fatal(value)
+	// The declared host size is selected by the proven source shape, because
+	// Microsoft Word 16.112 lays the two shapes out at different sizes: 12 pt
+	// for a package carrying no w:docDefaults record, 10 pt for one whose
+	// record states no w:sz. An unproven shape declares no policy at all.
+	for _, shape := range []struct {
+		name       string
+		halfPoints int
+	}{
+		{docxpatch.NativeDocxAbsentDocumentDefaultsV1, 24},
+		{docxpatch.NativeDocxSizelessDocumentDefaultsV1, 20},
+		{"", 0},
+	} {
+		for _, status := range []string{"eligible", "ineligible"} {
+			eligibility := &docxpatch.NativeDocxApproximationEligibilityV1{Status: status, AbsentFontSizes: []docxpatch.NativeDocxAbsentFontSizeV1{{ScopeKind: "paragraph-mark", ScopeID: "paragraph:one"}}, AbsentFontSizeShape: shape.name}
+			operation, input := docxApproximateWorkerInput(map[string]any{}, eligibility)
+			if operation != "render-approximate" {
+				t.Fatal(operation)
+			}
+			policy, exists := input["font_size_policy"]
+			if exists != (status == "eligible" && shape.name != "") {
+				t.Fatalf("unqualified host policy: %s %s %#v", shape.name, status, input)
+			}
+			if exists {
+				value := policy.(map[string]any)
+				if value["kind"] != "host-default-size-v1" || value["half_points"] != shape.halfPoints {
+					t.Fatalf("%s: %#v", shape.name, value)
+				}
 			}
 		}
 	}
