@@ -1607,6 +1607,29 @@ describe('native DOCX pagination v1', () => {
     expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(2)
   })
 
+  // A body-level w:sectPr the extractor omitted because it governs no block
+  // reaches no page: nothing falls in its range. Pagination reads the sections
+  // that do hold blocks, and the omission stays visible as a deferred record.
+  it('defers an omitted empty trailing section and refuses one that still claims a section', () => {
+    const request = fixture()
+    request.document.unsupported.push({
+      id: 'unsupported:empty-trailing-section', code: 'EMPTY_TRAILING_SECTION_OMITTED', capability: 'sections', scope_id: 'story:body',
+      anchor: anchor('/w:document[1]/w:body[1]/w:sectPr[9]', 9_000, 9_090),
+      preservation: 'refuse-mutation', message: 'The final section properties govern no block.',
+    })
+    const value = paginated(request)
+    expect(value.status).toBe('paginated')
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic')).toHaveLength(1)
+
+    const claimed = fixture()
+    claimed.document.unsupported.push({
+      id: 'unsupported:empty-trailing-section', code: 'EMPTY_TRAILING_SECTION_OMITTED', capability: 'sections', scope_id: 'story:body',
+      anchor: anchor(claimed.document.sections[0]!.anchor.path, 9_000, 9_090),
+      preservation: 'refuse-mutation', message: 'The final section properties govern no block.',
+    })
+    expect(paginateNativeDocxV1(claimed)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported' })]) }) }))
+  })
+
   it('fails safely for cyclic input and never mutates caller-owned wire values', () => {
     const cyclic: any = fixture()
     cyclic.document.loop = cyclic
