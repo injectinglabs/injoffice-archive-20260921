@@ -2343,12 +2343,19 @@ func nativeExactResolvedParagraphIndent(node *nativeXMLNode, wordNS string) bool
 func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID string, paragraph *nativeXMLNode) ([]NativeRunV1, bool, error) {
 	runs := []NativeRunV1{}
 	unsafe := false
+	indexEntryEnd := 0
 	for childIndex := 0; childIndex < len(paragraph.Children); childIndex++ {
 		child := paragraph.Children[childIndex]
 		if child.Name == (xml.Name{Space: extractor.wordNS, Local: "pPr"}) {
 			continue
 		}
 		switch {
+		case childIndex < indexEntryEnd && child.Name == (xml.Name{Space: extractor.wordNS, Local: "r"}):
+			// The rest of an index-entry field's boundary and instruction runs.
+			// The field has no result, so emitting no run for them omits
+			// nothing; the markers written between them keep their own
+			// treatment.
+			unsafe = true
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "bookmarkStart"}) && nativeExactEmptyBookmark(paragraph.Children[childIndex:], extractor.wordNS):
 			// A closed, empty bookmark has no painted content. Its source is
 			// retained and the containing paragraph remains non-editable.
@@ -2364,6 +2371,14 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 				if ok {
 					runs = append(runs, field)
 					childIndex += 4
+					continue
+				}
+				// An index-entry field has no result at all: its boundary and
+				// instruction runs paint nothing, so the field is admitted as
+				// the authoring metadata it is. The source is still preserved
+				// verbatim and the paragraph stays non-editable.
+				if span, marker := nativeIndexEntryFieldSpan(paragraph.Children[childIndex:], extractor.wordNS); marker {
+					indexEntryEnd = childIndex + span
 					continue
 				}
 				extractor.addUnsupported("FIELD_SEMANTICS", "fields", paragraphID, partName, child, "Complex page fields require an exact flat begin/instruction/separate/result/end run sequence")
