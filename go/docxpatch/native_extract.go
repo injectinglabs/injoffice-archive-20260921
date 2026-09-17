@@ -4160,6 +4160,20 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			if value {
 				section.Page.RTLGutter = nativeBool(true)
 			}
+		case "textDirection":
+			// ECMA-376 17.6.20: w:textDirection states the section's text flow
+			// direction, and lrTb is the direction an omitted element already
+			// states. Nothing in extraction, resolution or the painter reads a
+			// section direction at all, so a section that declares lrTb models
+			// exactly the section that declares nothing: the same glyphs,
+			// advances, line boxes and page geometry. Every other ST_TextDirection
+			// member (tbRl, btLr, lrTbV, tbRlV, tbLrV) turns the flow through 90
+			// or 270 degrees, which v1 does not model, so only the default is
+			// admitted and a rotated direction keeps refusing the page.
+			value, present := nativeAttr(child, extractor.wordNS, "val")
+			if !present || value != "lrTb" || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Only the default lrTb section text flow is layout-neutral; a rotated section direction is preserved verbatim")
+			}
 		case "titlePg":
 			if !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Title-page markup has attributes or children outside the exact v1 subset")
