@@ -133,19 +133,30 @@ function sameRefs(left: readonly NativeDocxHeaderFooterReferenceV1[], right: rea
   })
 }
 
-/** Continuous and next-column transitions share a page only across identical physical grids and page-level references. */
-export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1): boolean {
+/**
+ * Continuous and next-column transitions share a page only across identical
+ * physical grids and page-level references.
+ *
+ * `allow_different_columns` drops only the column-division comparison. A
+ * continuous break is Word's way of changing the column division part-way down
+ * a page — it is how an index is set in columns and then returned to one — so
+ * the division is exactly what such a break is allowed to change. The physical
+ * page, the body box and the header/footer references still have to agree,
+ * because those are what the shared page itself states.
+ */
+export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean }): boolean {
   const left = qualifyNativeDocxSectionColumnsV1(previous)
   const right = qualifyNativeDocxSectionColumnsV1(next)
   if (!left.ok || !right.ok) return false
   const a = left.value
   const b = right.value
+  const sameColumns = a.columns.length === b.columns.length && a.columns.every((column, index) => {
+    const other = b.columns[index]
+    return other !== undefined && column.x_millipoints === other.x_millipoints && column.y_millipoints === other.y_millipoints && column.width_millipoints === other.width_millipoints && column.height_millipoints === other.height_millipoints
+  })
   return a.page_width_millipoints === b.page_width_millipoints && a.page_height_millipoints === b.page_height_millipoints &&
     a.body_x_millipoints === b.body_x_millipoints && a.body_y_millipoints === b.body_y_millipoints &&
     a.body_width_millipoints === b.body_width_millipoints && a.body_height_millipoints === b.body_height_millipoints &&
     previous.title_page === next.title_page && previous.page.margins.header_twips === next.page.margins.header_twips && previous.page.margins.footer_twips === next.page.margins.footer_twips &&
-    a.columns.length === b.columns.length && a.columns.every((column, index) => {
-      const other = b.columns[index]
-      return other !== undefined && column.x_millipoints === other.x_millipoints && column.y_millipoints === other.y_millipoints && column.width_millipoints === other.width_millipoints && column.height_millipoints === other.height_millipoints
-    }) && sameRefs(previous.header_refs, next.header_refs) && sameRefs(previous.footer_refs, next.footer_refs)
+    (sameColumns || options?.allow_different_columns === true) && sameRefs(previous.header_refs, next.header_refs) && sameRefs(previous.footer_refs, next.footer_refs)
 }
