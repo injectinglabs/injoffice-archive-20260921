@@ -988,7 +988,10 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   }
   const paginationIssues = approximateEligibility === undefined ? validateNativeDocxPaginatedLayoutSourceV1(paginated.value, decodedPagination.value) : validateNativeDocxApproximatePaginatedLayoutSourceV1(paginated.value, decodedPagination.value, approximateEligibility)
   if (paginationIssues.length > 0) failIssues('native pagination source join failed', paginationIssues)
-  const wrapPlan = squareWrapPresent ? deriveNativeSquareWrapPlanV1(fieldDocument, resolved.value, shaped.value, paginated.value) : {}
+  // A refused layout has no placed line to wrap around, and the refusal is what
+  // the caller is owed; deriving a plan from it would throw over the refusal.
+  // The paint-request validator guards the same call the same way.
+  const wrapPlan = squareWrapPresent && paginated.value.status === 'paginated' ? deriveNativeSquareWrapPlanV1(fieldDocument, resolved.value, shaped.value, paginated.value) : {}
   return { next: { bodyFieldValues: bodyFields.length ? nativeDocxBodyPageFieldValuesV1(document.value,decodedPagination.value,paginated.value) : {}, wrapPlan }, result: { shaped, decodedPagination, paginated } }
   }
   })

@@ -90,6 +90,13 @@ export interface NativeDocxHeaderFooterPageLayoutV1 {
  * header/footer drawing outside the exact inline raster subset is a different fact and
  * still refuses the story through `selected-story-shape`.
  *
+ * HYPERLINK_SEMANTICS is the one member that declares nothing missing: the extractor
+ * appends the hyperlink's own runs to the paragraph, so the visible text is painted and
+ * only the relationship target stays preserve-only, which changes no advance and no line
+ * box. Body pagination already treats it as layout-neutral, on its strict path. A child
+ * of the hyperlink the extractor cannot turn into a run IS dropped, and is declared
+ * separately as UNMODELED_PARAGRAPH_CONTENT, so this member cannot hide one either.
+ *
  * Deliberately NOT included: FIELD_SEMANTICS (complex fields keep stale cached result
  * text, so the story must refuse rather than paint it), UNMODELED_SECTION_PROPERTY
  * (section geometry has its own omit flag), UNMODELED_BODY_BLOCK /
@@ -120,6 +127,7 @@ export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<stri
   'UNRESOLVED_COMMENT_REFERENCE',
   'WRAPPED_RUN_MARKUP',
   'NUMBERING_STYLE_PRESERVED',
+  'HYPERLINK_SEMANTICS',
 ])
 
 /** Declared approximate header/footer policies; each is disclosed as an envelope reason. */

@@ -76,6 +76,7 @@ import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualify
 import {
   decodeNativeDocxPagePaintMediaAssetsV1,
   qualifyNativeDocxInlineImageV1,
+  type NativeDocxImageTransformV1,
   type NativeDocxPagePaintMediaAssetV1,
 } from './nativeImagePagePaintV1.js'
 import {qualifyNativeDocxInlineTextboxV1} from './nativeTextboxInlineV1.js'
@@ -225,7 +226,7 @@ export interface NativeDocxPaintInlineImageCommandV1 {
   width_millipoints: number
   height_millipoints: number
   source_crop: { left: number; top: number; right: number; bottom: number; unit: 'one-hundred-thousandth' }
-  transform: { rotation_degrees: 0 | 90 | 180 | 270; flip_horizontal: boolean; flip_vertical: boolean }
+  transform: NativeDocxImageTransformV1
 }
 
 export interface NativeDocxPaintFloatingImageCommandV1 extends Omit<NativeDocxPaintInlineImageCommandV1, 'kind'> {
