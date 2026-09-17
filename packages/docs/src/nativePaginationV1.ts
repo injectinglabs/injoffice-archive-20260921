@@ -309,6 +309,17 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   // table projection and the wrapper contributes no grid column, no width and
   // no advance of its own.
   'WRAPPED_ROW_CELLS',
+  // Two annotations a previous producer wrote about its own session, named one
+  // at a time rather than as a class. w:proofErr (ECMA-376 17.13.5.15) delimits
+  // a spelling or grammar range, and w:lastRenderedPageBreak (17.3.3.13) is the
+  // position that producer's pagination happened to reach -- a hint 17.3.3.13
+  // states a consumer may ignore, and one a consumer that paginates for itself
+  // must ignore. Neither states a glyph, an advance or a break opportunity, so
+  // neither can move a line or a page. The extractor emits these codes only for
+  // an exact leaf; every other member of the catch-all buckets they were read
+  // from keeps refusing.
+  'PROOFING_ANNOTATION_PRESERVED',
+  'CACHED_PAGE_BREAK_HINT_PRESERVED',
 ])
 
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50

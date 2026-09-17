@@ -128,6 +128,11 @@ export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<stri
   'WRAPPED_RUN_MARKUP',
   'NUMBERING_STYLE_PRESERVED',
   'HYPERLINK_SEMANTICS',
+  // A proofing range and a cached page-break position a previous producer left
+  // in a header or footer story state no glyph and no advance, exactly as they
+  // state none in the body.
+  'PROOFING_ANNOTATION_PRESERVED',
+  'CACHED_PAGE_BREAK_HINT_PRESERVED',
 ])
 
 /** Declared approximate header/footer policies; each is disclosed as an envelope reason. */

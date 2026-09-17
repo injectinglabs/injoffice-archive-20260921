@@ -998,6 +998,25 @@ func nativeExactLeaf(node *nativeXMLNode, allowedAttrs ...xml.Name) bool {
 	return len(node.Children) == 0 && nativeExactContainer(node, allowedAttrs...)
 }
 
+// nativeProofingAnnotation reports whether the node is an exact w:proofErr leaf
+// naming one of the four proofing range endpoints ECMA-376 17.13.5.15 defines.
+// A proofErr carrying anything else states something this subset has not read,
+// so it keeps falling to the catch-all refusal.
+func nativeProofingAnnotation(node *nativeXMLNode, wordNS string) bool {
+	if !nativeExactLeaf(node, xml.Name{Space: wordNS, Local: "type"}) {
+		return false
+	}
+	kind, present := nativeAttr(node, wordNS, "type")
+	if !present {
+		return false
+	}
+	switch kind {
+	case "spellStart", "spellEnd", "gramStart", "gramEnd":
+		return true
+	}
+	return false
+}
+
 func nativeExactRGB(value string) (string, bool) {
 	upper := strings.ToUpper(value)
 	if len(upper) != 6 || !nativeColor.MatchString(upper) {
@@ -2451,6 +2470,13 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 				kind = "comment-range-end"
 			}
 			runs = append(runs, NativeRunV1{Kind: "reference", ID: extractor.objectID("run", partName, child, kind+":"+nativeID), Anchor: extractor.anchor(partName, child), Reference: &NativeReferenceV1{Kind: kind, TargetID: targetID}})
+		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "proofErr"}) && nativeProofingAnnotation(child, extractor.wordNS):
+			// ECMA-376 17.13.5.15. w:proofErr delimits the range a previous
+			// producer's spelling or grammar checker flagged. It is proofing
+			// state: no glyph, no advance, no break opportunity, and nothing a
+			// text splice inside a sibling w:t can disturb. Record it by name
+			// and leave the paragraph editable.
+			extractor.addUnsupported("PROOFING_ANNOTATION_PRESERVED", "run-structure", paragraphID, partName, child, "Spelling and grammar proofing ranges are preserved verbatim and contribute no painted content")
 		case child.Name.Space == extractor.wordNS && (child.Name.Local == "sdt" || child.Name.Local == "smartTag" || child.Name.Local == "customXml" || child.Name.Local == "ins" || child.Name.Local == "moveTo"):
 			unsafe = true
 			extractor.addUnsupported("WRAPPED_RUN_MARKUP", "run-structure", paragraphID, partName, child, "Wrapped or revision-tracked runs are preserved and exposed read-only")
@@ -2597,6 +2623,14 @@ func (extractor *nativeExtractor) extractRunNode(partName, paragraphID string, n
 			}
 			base.Kind, base.Drawing = "drawing", drawing
 			runs = append(runs, base)
+		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "lastRenderedPageBreak"}) && nativeExactLeaf(child):
+			// ECMA-376 17.3.3.13. w:lastRenderedPageBreak is the position a
+			// previous producer's own pagination happened to break at, which
+			// that clause states a consumer may ignore. A consumer that
+			// paginates for itself must ignore it: honouring a cached break
+			// would pin this layout to whoever last saved the file. It states
+			// no glyph and no advance of its own.
+			extractor.addUnsupported("CACHED_PAGE_BREAK_HINT_PRESERVED", "runs", paragraphID, partName, child, "A previous producer's cached page-break position is preserved verbatim and never paginates this layout")
 		case child.Name.Space == extractor.wordNS && (child.Name.Local == "pict" || child.Name.Local == "object"):
 			unsafe = true
 			extractor.addUnsupported("UNMODELED_DRAWING", "drawings", paragraphID, partName, child, "Drawing/object markup and related media are preserved verbatim")
