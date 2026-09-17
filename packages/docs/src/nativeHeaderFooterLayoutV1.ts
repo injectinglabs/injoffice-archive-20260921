@@ -80,16 +80,27 @@ export interface NativeDocxHeaderFooterPageLayoutV1 {
 }
 
 /** Source codes an approximate header/footer story may carry and still paint. Each is
- * already disclosed by the approximate omitted-content mechanism. Deliberately NOT
- * included: FIELD_SEMANTICS (complex fields keep stale cached result text, so the story
- * must refuse rather than paint it), UNMODELED_DRAWING / PICTURE_GRAPHIC_REQUIRED
- * (header images would silently vanish; selected-story-shape keeps refusing),
- * UNMODELED_SECTION_PROPERTY (section geometry has its own omit flag),
- * UNMODELED_BODY_BLOCK / NESTED_TABLE_OR_CELL_MARKUP / UNMODELED_TABLE_PROPERTY
- * (header/footer tables always refuse). */
+ * already disclosed by the approximate omitted-content mechanism, so nothing this set
+ * admits can leave the story silently.
+ *
+ * UNMODELED_DRAWING and PICTURE_GRAPHIC_REQUIRED are recorded only when the extractor
+ * dropped the drawing run entirely: `extractDrawing` refusing means no `RunV1.drawing`
+ * reaches the model, so the object is structurally absent rather than painted wrongly,
+ * and both codes are members of DOCX_APPROXIMATE_OMITTED_CONTENT_CODES. A *modeled*
+ * header/footer drawing outside the exact inline raster subset is a different fact and
+ * still refuses the story through `selected-story-shape`.
+ *
+ * Deliberately NOT included: FIELD_SEMANTICS (complex fields keep stale cached result
+ * text, so the story must refuse rather than paint it), UNMODELED_SECTION_PROPERTY
+ * (section geometry has its own omit flag), UNMODELED_BODY_BLOCK /
+ * NESTED_TABLE_OR_CELL_MARKUP / UNMODELED_TABLE_PROPERTY (header/footer tables always
+ * refuse), and every other drawing-refusal code the omitted-content discloser does not
+ * report, because admitting one would drop content with no disclosure. */
 export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<string> = new Set([
   'UNMODELED_RUN_CONTENT',
   'UNMODELED_PARAGRAPH_CONTENT',
+  'UNMODELED_DRAWING',
+  'PICTURE_GRAPHIC_REQUIRED',
   'UNMODELED_FONT_METADATA',
   'FONT_MATCHING_METADATA_PRESERVED',
   'UNMODELED_FONT_SELECTION',
