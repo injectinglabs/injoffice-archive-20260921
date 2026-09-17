@@ -62,6 +62,23 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('font-family="uploaded-exact-font"')
     expect(html).not.toContain('<button')
   })
+  it('sits a bottom-aligned baseline the font\u2019s own descent above the row edge', () => {
+    // Excel 16.112.4 prints the first baseline of a bottom-aligned cell exactly
+    // the face's hhea descent above the row's bottom edge; a fixed inset is
+    // wrong by a different amount for every face and every font size.
+    const props = fixture()
+    props.workbook.styles[0]!.effective.font_size_points = 12
+    expect(render({ ...props, descentEm: 0.25 })).toMatch(/<text[^>]*y="16"/)
+    // The gap is a fraction of the em, so it grows with the size rather than
+    // staying put.
+    props.workbook.styles[0]!.effective.font_size_points = 24
+    expect(render({ ...props, descentEm: 0.25 })).toMatch(/<text[^>]*y="12"/)
+  })
+  it('keeps the fixed inset when no font bytes supplied a descent', () => {
+    const props = fixture()
+    props.workbook.styles[0]!.effective.font_size_points = 12
+    expect(render(props)).toMatch(/<text[^>]*y="18"/)
+  })
   it.each(['objects', 'geometry', 'plan'] as const)('rejects stale %s source identity', field => {
     const props = fixture()
     if (field === 'objects') props.objects = { ...props.objects, package_sha256: 'other' }

@@ -250,6 +250,7 @@ export {
   NATIVE_XLSX_MDW_PROVIDER_REVISION,
   createNativeMaximumDigitWidthAuthorityV2,
   isNativeMaximumDigitWidthAuthorityV2,
+  nativeNormalFontDescentEmV1,
 } from './nativeMaximumDigitWidthV2.js'
 
 export {
