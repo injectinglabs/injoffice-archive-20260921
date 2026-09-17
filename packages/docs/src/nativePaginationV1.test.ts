@@ -1031,7 +1031,110 @@ describe('native DOCX pagination v1', () => {
     }))
   })
 
-  it('uses a unique quotient/remainder terminal balance after sequential full pages', () => {
+  /**
+   * Word's balance point is the smallest column height that still fits the
+   * fragment, filled column by column, not an even spread of the remainder.
+   * `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` paints six index
+   * lines of a four-column section two to a column with the fourth column empty.
+   */
+  it('balances a terminal fragment to the smallest column height and leaves a trailing column empty', () => {
+    const request = fixture({ lineCounts: [1, 1, 1, 1, 1, 1], bodyHeight: 40_000 })
+    setEqualColumns(request, 4)
+    const output = paginated(request)
+    expect(output.pages).toHaveLength(1)
+    expect(output.pages[0]!.lines.map((line) => [line.column_ordinal, line.y_millipoints])).toEqual([
+      [0, 5_000], [0, 15_000], [1, 5_000], [1, 15_000], [2, 5_000], [2, 15_000],
+    ])
+    expect(output.pages[0]!.columns.map((column) => column.ordinal)).toEqual([0, 1, 2, 3])
+  })
+
+  function setSectionColumns(request: NativeDocxPaginationRequestV1, sectionIndex: number, count: number, paragraphIndexes: readonly number[], spacingTwips = 100): number {
+    const spacing = spacingTwips * 50
+    const width = (40_000 - (count - 1) * spacing) / count
+    if (!Number.isSafeInteger(width)) throw new Error('test column width must be integral')
+    const section = request.document.sections[sectionIndex]!
+    section.page.columns = count
+    section.page.column_spacing_twips = spacingTwips
+    section.page.column_layout = 'equal-width'
+    section.page.column_definitions = Array.from({ length: count }, (_, ordinal) => ({ id: `column:section:${sectionIndex + 1}:${ordinal}`, ordinal }))
+    for (const index of paragraphIndexes) for (const line of request.shaped_lines.paragraphs[index]!.lines) line.available_width_millipoints = width
+    return width
+  }
+
+  /**
+   * A continuous break is how Word changes the column division part-way down a
+   * page. The new section opens a band: its columns start where the previous
+   * section stopped, all on the same baseline, and run to the foot of the body
+   * box. `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` paints that
+   * band one line below the single-column paragraph above it.
+   */
+  it('opens a continuous column-division change as a band below the previous section', () => {
+    const request = fixture({ lineCounts: [1, 1, 1, 1, 1], bodyHeight: 40_000, sections: [
+      { start: 0, breakType: 'next-page' },
+      { start: 1, breakType: 'continuous', columns: 2 },
+    ] })
+    const bandWidth = setSectionColumns(request, 1, 2, [1, 2, 3, 4])
+    const output = paginated(request)
+    expect(output.pages).toHaveLength(1)
+    expect(output.pages[0]!.section_ids).toEqual(['section:1', 'section:2'])
+    expect(output.pages[0]!.columns.map((column) => [column.section_id, column.ordinal, column.x_millipoints, column.y_millipoints, column.width_millipoints, column.height_millipoints])).toEqual([
+      ['section:1', 0, 5_000, 5_000, 40_000, 40_000],
+      ['section:2', 0, 5_000, 15_000, bandWidth, 30_000],
+      ['section:2', 1, 5_000 + bandWidth + 5_000, 15_000, bandWidth, 30_000],
+    ])
+    expect(output.pages[0]!.lines.map((line) => [line.section_id, line.column_ordinal, line.y_millipoints])).toEqual([
+      ['section:1', 0, 5_000],
+      ['section:2', 0, 15_000], ['section:2', 0, 25_000],
+      ['section:2', 1, 15_000], ['section:2', 1, 25_000],
+    ])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+  })
+
+  it('refuses a continuous transition that changes the shared page itself, and one that keeps an ambiguous column count', () => {
+    const differentPage = fixture({ lineCounts: [1, 1], sections: [
+      { start: 0, breakType: 'next-page', bodyHeight: 40_000 },
+      { start: 1, breakType: 'continuous', bodyHeight: 30_000, columns: 2 },
+    ] })
+    setSectionColumns(differentPage, 1, 2, [1])
+    expect(paginateNativeDocxV1(differentPage)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
+      status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]),
+    }) }))
+
+    const sameColumns = fixture({ lineCounts: [1, 1], bodyHeight: 40_000, sections: [
+      { start: 0, breakType: 'next-page' },
+      { start: 1, breakType: 'continuous' },
+    ] })
+    setEqualColumns(sameColumns, 2)
+    expect(paginateNativeDocxV1(sameColumns)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
+      status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]),
+    }) }))
+  })
+
+  /**
+   * Word writes a section break as an empty paragraph carrying the w:sectPr, and
+   * that paragraph mark is the break: it paints nothing and takes no height.
+   */
+  it('omits the empty paragraph that carries a section break and paints one that carries runs', () => {
+    const request = fixture({ lineCounts: [1, 1, 1], bodyHeight: 40_000, sections: [
+      { start: 0, breakType: 'next-page' },
+      { start: 2, breakType: 'next-page' },
+    ] }) as any
+    const mark = request.document.body.blocks[1].paragraph
+    request.document.sections[0].anchor = { ...mark.anchor, path: `${mark.anchor.path}/w:pPr[1]/w:sectPr[1]` }
+    const withRuns = paginated(request as NativeDocxPaginationRequestV1)
+    expect(withRuns.pages.flatMap((page) => page.lines.map((line) => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2', 'paragraph:3'])
+
+    // An empty section-break mark still shapes a paragraph-mark line; what this
+    // asserts is that the line is deliberately not placed.
+    request.resolved_layout.runs = request.resolved_layout.runs.filter((run: { run_id: string }) => run.run_id !== mark.runs[0].id)
+    mark.runs = []
+    for (const line of request.shaped_lines.paragraphs[1].lines) line.fragments = []
+    const output = paginated(request as NativeDocxPaginationRequestV1)
+    expect(output.pages.flatMap((page) => page.lines.map((line) => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:3'])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request as NativeDocxPaginationRequestV1).ok).toBe(true)
+  })
+
+  it('fills pages before the last one to the column height and balances only the terminal fragment', () => {
     const remainder = fixture({ lineCounts: [1, 1, 1, 1, 1], bodyHeight: 40_000 })
     setEqualColumns(remainder, 2)
     expect(paginated(remainder).pages[0]!.lines.map((line) => line.column_ordinal)).toEqual([0, 0, 0, 1, 1])
