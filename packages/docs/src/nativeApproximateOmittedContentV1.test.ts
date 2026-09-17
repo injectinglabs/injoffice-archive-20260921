@@ -101,5 +101,18 @@ describe('approximate omitted-content disclosure', () => {
     expect(nativeDocxOmittedContentCategoryV1('table-layout-unsupported', undefined)).toBe('table')
     expect(nativeDocxOmittedContentCategoryV1('unsupported-numbering-text', undefined)).toBe('text')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/ns1234abcd:oMathPara[1]')).toBe('equation')
+    expect(nativeDocxOmittedContentCategoryV1('COLUMN_SEPARATOR_UNSUPPORTED', '/w:document[1]/w:body[1]/w:p[2]/w:pPr[1]/w:sectPr[1]/w:cols[1]')).toBe('other')
+  })
+  it('records the column separator rule as dropped ink, not an approximated property', () => {
+    // The rule w:cols w:sep asks for is ink Word draws in the inter-column gap
+    // and this tier does not, so it belongs in omitted_content; the section
+    // property records that accompany it stay formatting-only.
+    const unsupported = [
+      { id: 'u:1', code: 'COLUMN_SEPARATOR_UNSUPPORTED', capability: 'sections', scope_id: 'section:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[2]/w:pPr[1]/w:sectPr[1]/w:cols[1]'), preservation: 'preserve-verbatim', message: 'Column separators require paint geometry that v1 does not model' },
+      { id: 'u:2', code: 'UNMODELED_SECTION_PROPERTY', capability: 'sections', scope_id: 'section:1', anchor: anchor('/w:document[1]/w:body[1]/w:sectPr[1]/w:docGrid[1]'), preservation: 'preserve-verbatim', message: 'grid' },
+    ]
+    const result = collectNativeDocxApproximateOmissionsV1(source({ unsupported }), { status: 'painted', pages: [page('page:1', 2)] })
+    expect(result).toMatchObject({ content_status: 'partial', omitted_content_total: 1 })
+    expect(result.omitted_content).toEqual([expect.objectContaining({ code: 'COLUMN_SEPARATOR_UNSUPPORTED', origin: 'source', category: 'other', scope_id: 'section:1', count: 1 })])
   })
 })
