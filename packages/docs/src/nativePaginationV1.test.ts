@@ -1566,6 +1566,35 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('omits the vertical rule w:cols w:sep asks for and paints the columns around it', () => {
+    // Measured on Word 16.112.4's own export of
+    // multi-column-separator-with-line.docx: the separator is a filled bar from
+    // x=305.52 pt to x=306.48 pt, centred on 306.0 pt, which is exactly the
+    // centre of the gap between the two columns. The column text origins are
+    // 50.4 pt and 324.0 pt - value-for-value the equal-width boxes derived from
+    // pgSz 12240x15840, pgMar left/right 1008 and cols space 720 with w:sep
+    // ignored. So w:sep adds ink in the gutter and moves no column box; the
+    // approximate tier paints the columns and discloses the dropped rule, and
+    // the strict tier keeps refusing it. Another section property that does
+    // move geometry still refuses on both tiers.
+    for (const code of ['COLUMN_SEPARATOR_UNSUPPORTED', 'AMBIGUOUS_COLUMN_SPACING'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'sections', scope_id: 'section:1', preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'AMBIGUOUS_COLUMN_SPACING') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2'])
+    }
+  })
+
   it('paints a paragraph whose spacing Word determines automatically', () => {
     // w:beforeAutospacing/w:afterAutospacing is an exact source shape whose
     // measurement Word determines; the resolved layout owns that value and the

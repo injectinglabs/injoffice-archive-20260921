@@ -25,6 +25,10 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   'UNRESOLVED_COMMENT_REFERENCE',
   'FIELD_SEMANTICS',
   'WRAPPED_RUN_MARKUP',
+  // The vertical rule w:cols w:sep="1" asks for is ink Word draws and this
+  // tier does not, so it is a dropped visible mark rather than an approximated
+  // property of painted content.
+  'COLUMN_SEPARATOR_UNSUPPORTED',
 ])
 
 /** Shaping diagnostics approximate preview ignores; strict paint refuses them. */
