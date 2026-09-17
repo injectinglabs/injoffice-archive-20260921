@@ -46,7 +46,12 @@ func characterIndentUnsupported(t *testing.T, indent string) []string {
 
 // w:leftChars="0" is Word's ordinary way of cancelling a style's character
 // indent. Zero characters is zero twips for every font, so it needs no metric
-// and must not leave the paragraph unresolved.
+// and must not leave the paragraph unresolved. Cancelling the character
+// channel is not the same as cancelling the indent: Word renders the cjklist
+// benchmark documents, whose list paragraphs carry exactly this markup over a
+// style with w:leftChars="200" w:left="480", with the label at the 480-twip
+// text margin, so the inherited absolute indent survives. Only an absolute
+// companion on the same w:ind element is superseded by the zero.
 func TestNativeZeroCharacterIndentResolvesWithoutFontMetrics(t *testing.T) {
 	resolved, codes := characterIndentDiagnostics(t, `<w:ind w:leftChars="0"/>`)
 	for _, code := range codes {
@@ -58,11 +63,20 @@ func TestNativeZeroCharacterIndentResolvesWithoutFontMetrics(t *testing.T) {
 		t.Fatalf("paragraphs = %#v", resolved.Paragraphs)
 	}
 	left := resolved.Paragraphs[0].Properties.IndentLeftTwips
-	if left == nil || *left != 0 {
-		t.Fatalf("zero character indent did not supersede the style twip indent: %#v", left)
+	if left == nil || *left != 480 {
+		t.Fatalf("zero character indent discarded the inherited absolute indent: %#v", left)
 	}
 	if codes := characterIndentUnsupported(t, `<w:ind w:leftChars="0"/>`); strings.Contains(strings.Join(codes, ","), "UNMODELED_PARAGRAPH_INDENT") {
 		t.Fatalf("extraction still refuses a zero character indent: %v", codes)
+	}
+	companion, codes := characterIndentDiagnostics(t, `<w:ind w:leftChars="0" w:left="720"/>`)
+	for _, code := range codes {
+		if code == "CHARACTER_INDENT_PRESERVED" {
+			t.Fatalf("zero character indent with a companion still refuses: %v", codes)
+		}
+	}
+	if left := companion.Paragraphs[0].Properties.IndentLeftTwips; left == nil || *left != 0 {
+		t.Fatalf("zero character indent did not supersede its own element's twip indent: %#v", left)
 	}
 }
 
