@@ -1,8 +1,39 @@
 import { decodeNativeDocxDocument } from "./nativeContract.js";
 import { decodeNativeDocxResolvedLayout } from "./nativeResolvedLayout.js";
 
+/** The single definition of the read-only host default size, one value per
+ * proven source shape. Both numbers were read directly out of the `Tf`
+ * operators of Microsoft Word 16.112's own PDF exports of corpus packages that
+ * state no size — Word lays text out on a 1/300 in grid, so its 50 units are
+ * 12 pt and its 42 units are 10 pt. A package that carries no `w:docDefaults`
+ * record at all is laid out at 12 pt; one whose `w:docDefaults` exists and
+ * states no `w:sz` is laid out at 10 pt. They are NOT interchangeable, so no
+ * single host default can match Word. Nothing else may spell these numbers:
+ * the policy type, the validators and the disclosure all derive from here. */
+export const DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1 = {
+  /** No `w:docDefaults` record in the package (ECMA-376 17.7.2 makes both the
+   * styles part and the element optional). Word 16.112 paints 12 pt. */
+  "absent-document-defaults": 24,
+  /** A `w:docDefaults` record that states no `w:sz`. Word 16.112 paints 10 pt. */
+  "sizeless-document-defaults": 20,
+} as const;
+export type NativeDocxAbsentDefaultSizeShapeV1 =
+  keyof typeof DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1;
+export type NativeDocxHostDefaultSizeHalfPointsV1 =
+  (typeof DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1)[NativeDocxAbsentDefaultSizeShapeV1];
+const hostDefaultHalfPoints: readonly number[] = Object.values(
+  DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1,
+);
+export function validNativeDocxAbsentDefaultSizeShapeV1(
+  value: unknown,
+): value is NativeDocxAbsentDefaultSizeShapeV1 {
+  return (
+    typeof value === "string" &&
+    Object.hasOwn(DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1, value)
+  );
+}
 export const DOCX_ABSENT_FONT_SIZE_WARNING =
-  "Approximate read-only preview: source-absent font sizes use the explicitly selected 11 pt host default; this is not an authored size or Microsoft Word default." as const;
+  `Approximate read-only preview: source-absent font sizes use an explicitly selected host default of ${[...hostDefaultHalfPoints].sort((a, b) => a - b).map((halfPoints) => halfPoints / 2).join(" or ")} pt, selected per proven source shape from Microsoft Word 16.112 references; this is not an authored size.` as const;
 export interface NativeDocxAbsentFontSizeV1 {
   scope_kind: "run" | "paragraph-mark";
   scope_id: string;
@@ -12,11 +43,11 @@ export interface NativeDocxAbsentFontSizeV1 {
 }
 export interface NativeDocxHostDefaultSizePolicyV1 {
   kind: "host-default-size-v1";
-  half_points: 22;
+  half_points: NativeDocxHostDefaultSizeHalfPointsV1;
 }
 export interface NativeDocxApproximatedFontSizeV1
   extends NativeDocxAbsentFontSizeV1 {
-  chosen_half_points: 22;
+  chosen_half_points: NativeDocxHostDefaultSizeHalfPointsV1;
 }
 export function validNativeDocxHostDefaultSizePolicyV1(
   value: unknown,
@@ -26,7 +57,8 @@ export function validNativeDocxHostDefaultSizePolicyV1(
   return (
     Object.keys(p).sort().join(",") === "half_points,kind" &&
     p.kind === "host-default-size-v1" &&
-    p.half_points === 22
+    typeof p.half_points === "number" &&
+    hostDefaultHalfPoints.includes(p.half_points)
   );
 }
 export function validNativeDocxAbsentFontSizesV1(
@@ -70,7 +102,12 @@ export function validNativeDocxApproximatedFontSizesV1(
   value: unknown,
   source: readonly NativeDocxAbsentFontSizeV1[],
   packageSHA256: string,
+  shape: unknown,
 ): value is NativeDocxApproximatedFontSizeV1[] {
+  // Every entry must carry the one host value declared for the shape the
+  // source evidence proved; the other shape's Word-derived size is a forgery.
+  if (!validNativeDocxAbsentDefaultSizeShapeV1(shape)) return false;
+  const chosen = DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1[shape];
   if (
     !Array.isArray(value) ||
     value.length !== source.length ||
@@ -79,7 +116,7 @@ export function validNativeDocxApproximatedFontSizesV1(
       (f) =>
         !f ||
         typeof f !== "object" ||
-        f.chosen_half_points !== 22 ||
+        f.chosen_half_points !== chosen ||
         Object.keys(f).sort().join(",") !==
           "chosen_half_points,package_sha256,part_name,path,scope_id,scope_kind",
     )
@@ -105,10 +142,18 @@ export function projectNativeDocxAbsentFontSizesV1(
   resolvedValue: unknown,
   facts: readonly NativeDocxAbsentFontSizeV1[],
   policy: unknown,
+  shape: unknown,
 ) {
-  if (!validNativeDocxHostDefaultSizePolicyV1(policy))
+  // The one place a host value is bound to the source shape it was measured
+  // for. A policy carrying the other shape's size is refused rather than
+  // applied, so the two Word-derived numbers cannot be swapped downstream.
+  if (
+    !validNativeDocxAbsentDefaultSizeShapeV1(shape) ||
+    !validNativeDocxHostDefaultSizePolicyV1(policy) ||
+    policy.half_points !== DOCX_HOST_DEFAULT_SIZE_HALF_POINTS_V1[shape]
+  )
     throw new TypeError(
-      "Missing-size approximation requires the explicit 11 pt host policy",
+      "Missing-size approximation requires the host size policy declared for the proven source shape",
     );
   const document = decodeNativeDocxDocument(documentValue),
     layout = decodeNativeDocxResolvedLayout(resolvedValue);

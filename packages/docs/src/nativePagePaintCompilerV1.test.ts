@@ -582,15 +582,16 @@ describe('native DOCX page-paint compiler v1', () => {
     target.paragraph_mark_properties = { ...target.paragraph_mark_properties }
     delete target.paragraph_mark_properties.font_size_half_points
     const fact = { scope_kind: 'paragraph-mark' as const, scope_id: paragraph.id, part_name: paragraph.anchor.part_name, path: paragraph.anchor.path, package_sha256: HASH }
-    const policy = { kind: 'host-default-size-v1', half_points: 22 }
-    expect(projectNativeDocxAbsentFontSizesV1(document, resolved, [fact], policy).applied).toEqual([{ ...fact, chosen_half_points: 22 }])
+    const shape = 'sizeless-document-defaults' as const
+    const policy = { kind: 'host-default-size-v1', half_points: 20 }
+    expect(projectNativeDocxAbsentFontSizesV1(document, resolved, [fact], policy, shape).applied).toEqual([{ ...fact, chosen_half_points: 20 }])
     expect(target.paragraph_mark_properties.font_size_half_points).toBeUndefined()
     const content = structuredClone(document)
     content.notes[0]!.note_role = 'content'; content.notes[0]!.native_story_id = '3'
-    expect(() => projectNativeDocxAbsentFontSizesV1(content, resolved, [fact], policy)).toThrow('scope anchor')
+    expect(() => projectNativeDocxAbsentFontSizesV1(content, resolved, [fact], policy, shape)).toThrow('scope anchor')
     const malformed = structuredClone(document)
     malformed.unsupported.push({ id: 'unsupported:note', code: 'UNMODELED_NOTE_MARKUP', capability: 'notes', scope_id: document.notes[0]!.id, anchor: paragraph.anchor, preservation: 'preserve-verbatim', message: 'Malformed instruction remains refused' })
-    expect(() => projectNativeDocxAbsentFontSizesV1(malformed, resolved, [fact], policy)).toThrow('scope anchor')
+    expect(() => projectNativeDocxAbsentFontSizesV1(malformed, resolved, [fact], policy, shape)).toThrow('scope anchor')
   })
   it('applies a declared host size only to source-proven omissions in the existing approximate envelope', async () => {
     const input = fixture()
@@ -604,33 +605,37 @@ describe('native DOCX page-paint compiler v1', () => {
     delete settings.compatibility_mode
     settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy mode 12' }]
     const absent = [{ scope_kind: 'paragraph-mark' as const, scope_id: paragraph.id, part_name: paragraph.anchor.part_name, path: paragraph.anchor.path, package_sha256: HASH }]
-    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy mode 12 uses current layout'], absent_font_sizes: absent }
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy mode 12 uses current layout'], absent_font_sizes: absent, absent_font_size_shape: 'sizeless-document-defaults' as const }
     const provider = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
     const outline = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const value = provider.outline(request.glyph_id); return value.path.length ? { status: 'outlined' as const, ...request, ...value } : { status: 'empty' as const, ...request, units_per_em: value.units_per_em } } }
     const original = structuredClone(input)
     const withoutPolicy = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outline)
     expect(withoutPolicy.status).toBe('refused')
-    const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outline, { fontSizePolicy: { kind: 'host-default-size-v1', half_points: 22 } })
+    const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outline, { fontSizePolicy: { kind: 'host-default-size-v1', half_points: 20 } })
     expect(result.status).toBe('painted')
     expect(result.protocol).toBe('injoffice.docx.approximate-page-preview')
-    expect(result.approximated_font_sizes).toEqual([{ ...absent[0], chosen_half_points: 22 }])
+    expect(result.approximated_font_sizes).toEqual([{ ...absent[0], chosen_half_points: 20 }])
     expect(result.source_absent_font_sizes).toEqual(absent)
     expect(result.reasons).toContain(DOCX_ABSENT_FONT_SIZE_WARNING)
     expect(input).toEqual(original)
     expect(decodeNativeDocxApproximatePagePreviewV1(result).ok).toBe(true)
-    for (const mutation of [{ approximated_font_sizes: undefined }, { source_absent_font_sizes: [] }, { reasons: result.reasons.filter(r => r !== DOCX_ABSENT_FONT_SIZE_WARNING) }, { approximated_font_sizes: [{ ...absent[0], chosen_half_points: 24 }] }]) expect(decodeNativeDocxApproximatePagePreviewV1({ ...result, ...mutation }).ok).toBe(false)
-    expect(() => projectNativeDocxAbsentFontSizesV1(document, original.resolved_layout, [{ ...absent[0]!, path: '/wrong' }], { kind: 'host-default-size-v1', half_points: 22 })).toThrow()
+    for (const mutation of [{ approximated_font_sizes: undefined }, { source_absent_font_sizes: [] }, { reasons: result.reasons.filter(r => r !== DOCX_ABSENT_FONT_SIZE_WARNING) }, { approximated_font_sizes: [{ ...absent[0], chosen_half_points: 24 }] }, { source_absent_font_size_shape: undefined }, { source_absent_font_size_shape: 'absent-document-defaults' }]) expect(decodeNativeDocxApproximatePagePreviewV1({ ...result, ...mutation }).ok).toBe(false)
+    expect(() => projectNativeDocxAbsentFontSizesV1(document, original.resolved_layout, [{ ...absent[0]!, path: '/wrong' }], { kind: 'host-default-size-v1', half_points: 20 }, 'sizeless-document-defaults')).toThrow()
     const authored = structuredClone(resolved); authored.paragraphs[0]!.paragraph_mark_properties!.font_size_half_points = 20
-    expect(() => projectNativeDocxAbsentFontSizesV1(document, authored, absent, { kind: 'host-default-size-v1', half_points: 22 })).toThrow('override')
+    expect(() => projectNativeDocxAbsentFontSizesV1(document, authored, absent, { kind: 'host-default-size-v1', half_points: 20 }, 'sizeless-document-defaults')).toThrow('override')
     const unrelated = structuredClone(resolved)
     unrelated.diagnostics.push({ code: 'INVALID_FONT_SIZE', severity: 'unsupported', scope_id: 'run:1', part_name: 'word/document.xml', path: '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/w:sz[1]', preservation: 'preserve-verbatim', message: 'A malformed independent authored run size must remain refused' })
-    expect(projectNativeDocxAbsentFontSizesV1(document, unrelated, absent, { kind: 'host-default-size-v1', half_points: 22 }).resolved.diagnostics).toEqual(unrelated.diagnostics)
-    expect(() => projectNativeDocxAbsentFontSizesV1(document, resolved, absent, { kind: 'host-default-size-v1', half_points: 24 })).toThrow('explicit')
+    expect(projectNativeDocxAbsentFontSizesV1(document, unrelated, absent, { kind: 'host-default-size-v1', half_points: 20 }, 'sizeless-document-defaults').resolved.diagnostics).toEqual(unrelated.diagnostics)
+    // The other shape's Word-derived size, and the host's old invented 11 pt,
+    // are both refused for a package whose defaults record states no size.
+    expect(() => projectNativeDocxAbsentFontSizesV1(document, resolved, absent, { kind: 'host-default-size-v1', half_points: 24 }, 'sizeless-document-defaults')).toThrow('proven source shape')
+    expect(() => projectNativeDocxAbsentFontSizesV1(document, resolved, absent, { kind: 'host-default-size-v1', half_points: 22 }, 'sizeless-document-defaults')).toThrow('proven source shape')
+    expect(() => projectNativeDocxAbsentFontSizesV1(document, resolved, absent, { kind: 'host-default-size-v1', half_points: 20 }, undefined)).toThrow('proven source shape')
     const tableInput = tableFixture()
     const tableResolved = tableInput.resolved_layout as NativeDocxResolvedLayoutInputV1
     delete tableResolved.paragraphs[0]!.paragraph_mark_properties!.font_size_half_points
-    expect(projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 22 }).applied).toEqual([{ ...absent[0], chosen_half_points: 22 }])
-    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, [{ ...absent[0]!, path: '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[2]' }], { kind: 'host-default-size-v1', half_points: 22 })).toThrow('scope anchor')
+    expect(projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, absent, { kind: 'host-default-size-v1', half_points: 20 }, 'sizeless-document-defaults').applied).toEqual([{ ...absent[0], chosen_half_points: 20 }])
+    expect(() => projectNativeDocxAbsentFontSizesV1(tableInput.document, tableResolved, [{ ...absent[0]!, path: '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:p[2]' }], { kind: 'host-default-size-v1', half_points: 20 }, 'sizeless-document-defaults')).toThrow('scope anchor')
     const strict = await prepareNativeDocxPagePaintV1(input)
     expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
   }, 20000)
@@ -1219,7 +1224,7 @@ describe('native DOCX page-paint compiler v1', () => {
       (v:any)=>{v.source_resolved_layout.fonts[0].name='forged'},
       (v:any)=>{v.font_descriptor_eligibility.package_sha256=`sha256:${'f'.repeat(64)}`},
       (v:any)=>{v.automatic_borders=true},
-      (v:any)=>{v.font_size_policy={kind:'host-default-size-v1',half_points:22}},
+      (v:any)=>{v.font_size_policy={kind:'host-default-size-v1',half_points:20}},
       (v:any)=>{v.unknown_policy=true},
     ]){const forged=structuredClone(composition);mutate(forged);await expect(renderNativeDocxFontSubstitutionPreviewV1(input,outlines,{fonts:configured,composition:forged})).rejects.toThrow()}
     for(const mutate of [(v:any)=>{v.composition_sha256=HASH},(v:any)=>{delete v.composition},(v:any)=>{v.composition.source_document.revision='stale'}]){const forged=structuredClone(composed);mutate(forged);expect(()=>decodeNativeDocxFontSubstitutionPreviewV1(forged)).toThrow()}
