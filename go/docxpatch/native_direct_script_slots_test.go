@@ -15,7 +15,11 @@ func TestNativeDirectScriptSlotsRemainContextQualified(t *testing.T) {
 		}{
 			{"latin", "Hello", "", base, true, false},
 			{"cjk", "A漢", "", base, true, true},
-			{"rtl", "Hello", `<w:bidi/>`, base, true, true},
+			// ECMA-376 17.3.2.30: run-level w:rtl selects the complex-script
+			// slot; paragraph-level w:bidi (17.3.1.6) only orders the line.
+			{"paragraph-bidi", "Hello", `<w:bidi/>`, base, true, false},
+			{"run-rtl", "Hello", "", strings.Replace(base, `<w:lang`, `<w:rtl/><w:lang`, 1), true, true},
+			{"paragraph-bidi-and-run-rtl", "Hello", `<w:bidi/>`, strings.Replace(base, `<w:lang`, `<w:rtl/><w:lang`, 1), true, true},
 			{"bad-size", "Hello", "", strings.Replace(base, `w:val="40"`, `w:val="0"`, 1), false, false},
 			{"duplicate-size", "Hello", "", base + `<w:szCs w:val="40"/>`, false, false},
 			{"size-child", "Hello", "", strings.Replace(base, `<w:szCs w:val="40"/>`, `<w:szCs w:val="40"><w:b/></w:szCs>`, 1), false, false},

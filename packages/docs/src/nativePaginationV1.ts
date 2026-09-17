@@ -2048,7 +2048,7 @@ function expectedSectionGeometry(section: NativeDocxSectionV1): { width: number;
   const left = twips(section.page.margins.left_twips)
   const gutter = twips(section.page.margins.gutter_twips)
   if ([width, height, top, right, bottom, left, gutter].some((entry) => entry === undefined)) return undefined
-  const x = checkedSum(left!, gutter!)
+  const x = section.page.rtl_gutter === true ? left! : checkedSum(left!, gutter!)
   const bodyWidth = checkedSum(width!, -left!, -right!, -gutter!)
   const bodyHeight = checkedSum(height!, -top!, -bottom!)
   if (x === undefined || bodyWidth === undefined || bodyHeight === undefined || bodyWidth <= 0 || bodyHeight <= 0) return undefined
