@@ -2661,14 +2661,41 @@ func nativeObjectIDFromContainer(node *nativeXMLNode, dialect nativeExtractDiale
 	return "cNvPr-" + value, nil
 }
 
+// nativeShapeTreeIDPolicy chooses what a non-unique or non-canonical cNvPr id
+// means for the part being read.
+//
+// A slide's ids are identity: every mutation anchors on one, so a shape tree
+// that states the same id twice cannot be edited unambiguously and is refused.
+//
+// A layout's or master's shape tree is a read-only inheritance source. Its ids
+// are never mutation anchors; they only label the preserved passthrough entry
+// for content native PPTX v1 does not model, which already falls back to a
+// positional label when a child carries no usable id at all. LibreOffice
+// writes layouts whose placeholders repeat an id and masters whose first
+// placeholder is id 0, and refusing those loses a whole deck over a part
+// nobody edits.
+type nativeShapeTreeIDPolicy int
+
+const (
+	nativeShapeTreeIDsUnique nativeShapeTreeIDPolicy = iota
+	nativeShapeTreeIDsLabelled
+)
+
 func collectNativeShapeTreeObjectIDs(spTree *nativeXMLNode, dialect nativeExtractDialect) (map[*nativeXMLNode]string, error) {
+	return collectNativeShapeTreeObjectIDsWithPolicy(spTree, dialect, nativeShapeTreeIDsUnique)
+}
+
+func collectNativeShapeTreeObjectIDsWithPolicy(spTree *nativeXMLNode, dialect nativeExtractDialect, policy nativeShapeTreeIDPolicy) (map[*nativeXMLNode]string, error) {
 	result := map[*nativeXMLNode]string{}
 	seen := map[string]bool{}
 	rootID, err := nativeObjectIDFromContainer(spTree, dialect, "nvGrpSpPr")
 	if err != nil {
-		return nil, fmt.Errorf("pptxpatch: native extract: invalid root group cNvPr id: %w", err)
+		if policy != nativeShapeTreeIDsLabelled {
+			return nil, fmt.Errorf("pptxpatch: native extract: invalid root group cNvPr id: %w", err)
+		}
+	} else {
+		seen[rootID] = true
 	}
-	seen[rootID] = true
 	var walk func(*nativeXMLNode) error
 	walk = func(container *nativeXMLNode) error {
 		for _, child := range container.Children {
@@ -2687,9 +2714,29 @@ func collectNativeShapeTreeObjectIDs(spTree *nativeXMLNode, dialect nativeExtrac
 			default:
 				continue
 			}
+			descend := child.Name == (xml.Name{Space: dialect.presentation, Local: "grpSp"})
 			objectID, err := nativeObjectIDFromContainer(child, dialect, nonVisual)
 			if err != nil {
-				return fmt.Errorf("pptxpatch: native extract: invalid shape-tree cNvPr id: %w", err)
+				if policy != nativeShapeTreeIDsLabelled {
+					return fmt.Errorf("pptxpatch: native extract: invalid shape-tree cNvPr id: %w", err)
+				}
+				// No usable id: leave the node unlabelled so the reader's own
+				// positional label names it.
+				if descend {
+					if err := walk(child); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if seen[objectID] {
+				if policy != nativeShapeTreeIDsLabelled {
+					return fmt.Errorf("pptxpatch: native extract: duplicate cNvPr id %s in shape tree", objectID)
+				}
+				// RawStart is this node's byte offset in the part, so the
+				// disambiguated label is unique within the part and stable for
+				// identical bytes.
+				objectID = fmt.Sprintf("%s#%d", objectID, child.RawStart)
 			}
 			if seen[objectID] {
 				return fmt.Errorf("pptxpatch: native extract: duplicate cNvPr id %s in shape tree", objectID)
@@ -2699,7 +2746,7 @@ func collectNativeShapeTreeObjectIDs(spTree *nativeXMLNode, dialect nativeExtrac
 			}
 			seen[objectID] = true
 			result[child] = objectID
-			if child.Name == (xml.Name{Space: dialect.presentation, Local: "grpSp"}) {
+			if descend {
 				if err := walk(child); err != nil {
 					return err
 				}
