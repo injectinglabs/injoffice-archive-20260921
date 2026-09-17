@@ -234,10 +234,27 @@ func nativeFormatIdeographicCounter(value int, format string) (string, bool) {
 	return "", false
 }
 
+// nativeFormatEnclosedCircleCounter renders ECMA-376 §17.18.59
+// `decimalEnclosedCircle`: the counter as a decimal digit drawn inside a
+// circle. Unicode encodes that series as one precomposed character per value,
+// CIRCLED DIGIT ONE (U+2460) through CIRCLED NUMBER TWENTY (U+2473), and stops
+// there: twenty-one has no enclosed form in that block. The modelled range is
+// therefore one through twenty, the exact set Unicode supplies. A larger
+// counter is left unformatted rather than approximated with a composed circle
+// or a bare digit, because neither is the character the format names.
+func nativeFormatEnclosedCircleCounter(value int) (string, bool) {
+	if value < 1 || value > 20 {
+		return "", false
+	}
+	return string(rune(0x2460 + value - 1)), true
+}
+
 func nativeFormatNumberingCounter(value int, format string) (string, bool) {
 	switch format {
 	case "decimal":
 		return strconv.Itoa(value), true
+	case "decimalEnclosedCircle":
+		return nativeFormatEnclosedCircleCounter(value)
 	case "lowerLetter":
 		return nativeFormatAlphabetic(value, false)
 	case "upperLetter":

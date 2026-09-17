@@ -1874,7 +1874,7 @@ func nativeCanonicalDecimalID(raw string) (string, bool) {
 
 func nativeOrdinaryNumberFormat(value string) bool {
 	switch value {
-	case "decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman":
+	case "decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman", "decimalEnclosedCircle":
 		return true
 	default:
 		// The ideographic systems share one table with the counter formatter;
