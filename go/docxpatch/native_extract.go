@@ -4093,6 +4093,26 @@ func (extractor *nativeExtractor) extractTableCell(partName, tableID string, nod
 	return cell, unsafe, nil
 }
 
+// nativeSameSectionPropertyMarkup reports whether two section-property elements
+// are the same markup: same name, same attributes in the same order with the
+// same values, same character data, and the same children recursively.
+func nativeSameSectionPropertyMarkup(a, b *nativeXMLNode) bool {
+	if a == nil || b == nil || a.Name != b.Name || a.Text != b.Text || len(a.Attrs) != len(b.Attrs) || len(a.Children) != len(b.Children) {
+		return false
+	}
+	for index := range a.Attrs {
+		if a.Attrs[index].Name != b.Attrs[index].Name || a.Attrs[index].Value != b.Attrs[index].Value {
+			return false
+		}
+	}
+	for index := range a.Children {
+		if !nativeSameSectionPropertyMarkup(a.Children[index], b.Children[index]) {
+			return false
+		}
+	}
+	return true
+}
+
 func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBlockID string) (NativeSectionV1, error) {
 	section := extractor.defaultSection(node, startsAtBlockID)
 	id := section.ID
@@ -4100,18 +4120,29 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 		extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, node, "Section-properties container has attributes or direct text outside the exact v1 subset")
 	}
 	seenRefs := map[string]bool{}
-	seenSingleton := map[string]bool{}
+	seenSingleton := map[string]*nativeXMLNode{}
 	for _, child := range node.Children {
 		if child.Name.Space != extractor.wordNS {
 			extractor.addUnsupported("FOREIGN_SECTION_MARKUP", "sections", id, extractor.mainPart, child, "Foreign section markup is preserved verbatim")
 			continue
 		}
 		if child.Name.Local == "type" || child.Name.Local == "titlePg" || child.Name.Local == "pgNumType" || child.Name.Local == "pgSz" || child.Name.Local == "pgMar" || child.Name.Local == "cols" || child.Name.Local == "docGrid" || child.Name.Local == "formProt" || child.Name.Local == "noEndnote" {
-			if seenSingleton[child.Name.Local] {
-				extractor.addUnsupported("DUPLICATE_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Duplicate modeled section-property singletons make exact pagination geometry ambiguous")
+			if first, seen := seenSingleton[child.Name.Local]; seen {
+				// A repeat that restates the first occurrence element for
+				// element, attribute for attribute and character for character
+				// asks for the geometry the section already has. There is no
+				// second value for the two to disagree about, so which one Word
+				// reads cannot change the page, and the record is layout-neutral
+				// rather than ambiguous. A repeat that states anything else is
+				// still a refusal.
+				code, message := "DUPLICATE_SECTION_PROPERTY", "Duplicate modeled section-property singletons make exact pagination geometry ambiguous"
+				if nativeSameSectionPropertyMarkup(first, child) {
+					code, message = "REDUNDANT_SECTION_PROPERTY", "Repeated section-property singleton restates the first occurrence exactly and states no further geometry"
+				}
+				extractor.addUnsupported(code, "sections", id, extractor.mainPart, child, message)
 				continue
 			}
-			seenSingleton[child.Name.Local] = true
+			seenSingleton[child.Name.Local] = child
 		}
 		switch child.Name.Local {
 		case "formProt":
@@ -4399,10 +4430,10 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "This section property is preserved verbatim")
 		}
 	}
-	if !seenSingleton["pgSz"] {
+	if seenSingleton["pgSz"] == nil {
 		extractor.addUnsupported("MISSING_PAGE_SIZE", "sections", id, extractor.mainPart, node, "A present section-properties element requires explicit page size for exact pagination geometry")
 	}
-	if !seenSingleton["pgMar"] {
+	if seenSingleton["pgMar"] == nil {
 		extractor.addUnsupported("MISSING_PAGE_MARGINS", "sections", id, extractor.mainPart, node, "A present section-properties element requires explicit page margins for exact pagination geometry")
 	}
 	extractor.attestSectionColumnGeometry(&section, node)

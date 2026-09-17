@@ -1012,6 +1012,52 @@ func TestNativeXMLAnchorStartsAtElementAndRejectsTrailingGarbage(t *testing.T) {
 	}
 }
 
+// A repeated section-property singleton that restates the first occurrence
+// element for element, attribute for attribute and character for character asks
+// for the geometry the section already has, so it is recorded as layout-neutral
+// rather than as ambiguity. `multi-column-line-separator-SAVED.docx` repeats
+// w:pgSz and w:docGrid verbatim, and Word's own export of it lays the section
+// out on exactly the geometry the single occurrence states. A repeat that
+// states anything else still refuses.
+func TestExtractNativeDocumentRepeatedSectionPropertyRestatingItself(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		sectPr   string
+		expected string
+	}{
+		{"identical", `<w:pgSz w:w="12240" w:h="15840"/><w:pgSz w:w="12240" w:h="15840"/>`, "REDUNDANT_SECTION_PROPERTY"},
+		{"identical-grid", `<w:pgSz w:w="12240" w:h="15840"/><w:docGrid w:linePitch="600" w:type="default"/><w:docGrid w:linePitch="600" w:type="default"/>`, "REDUNDANT_SECTION_PROPERTY"},
+		{"divergent-value", `<w:pgSz w:w="12240" w:h="15840"/><w:pgSz w:w="11906" w:h="16838"/>`, "DUPLICATE_SECTION_PROPERTY"},
+		{"divergent-attribute-order", `<w:pgSz w:w="12240" w:h="15840"/><w:pgSz w:h="15840" w:w="12240"/>`, "DUPLICATE_SECTION_PROPERTY"},
+		{"divergent-child", `<w:cols w:num="2" w:space="720"/><w:cols w:num="2" w:space="720"><w:col w:w="4752"/></w:cols>`, "DUPLICATE_SECTION_PROPERTY"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parts := map[string]string{
+				"[Content_Types].xml": `<Types xmlns="` + opcContentTypesNS + `"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+				"_rels/.rels":         `<Relationships xmlns="` + opcRelationshipsNS + `"><Relationship Id="office" Type="` + relBaseTransitional + `officeDocument" Target="word/document.xml"/></Relationships>`,
+				"word/document.xml":   `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r><w:t>restated</w:t></w:r></w:p><w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>` + test.sectPr + `</w:sectPr></w:body></w:document>`,
+			}
+			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasUnsupportedCode(doc, test.expected) {
+				t.Fatalf("expected %s: %#v", test.expected, doc.Unsupported)
+			}
+			other := "DUPLICATE_SECTION_PROPERTY"
+			if test.expected == other {
+				other = "REDUNDANT_SECTION_PROPERTY"
+			}
+			if hasUnsupportedCode(doc, other) {
+				t.Fatalf("unexpected %s: %#v", other, doc.Unsupported)
+			}
+			if *doc.Sections[0].Page.WidthTwips != 12240 || *doc.Sections[0].Page.HeightTwips != 15840 {
+				t.Fatal("a repeated singleton changed the modeled page geometry")
+			}
+		})
+	}
+}
+
 func TestExtractNativeDocumentPaginationSingletonsFailClosedInBothDialects(t *testing.T) {
 	for _, strict := range []bool{false, true} {
 		name, wordNS, relBase := "Transitional", wordMLTransitional, relBaseTransitional

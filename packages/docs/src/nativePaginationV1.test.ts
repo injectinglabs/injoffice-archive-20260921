@@ -2127,6 +2127,30 @@ describe('native DOCX pagination v1', () => {
     expect(paginateNativeDocxV1(wrongMargins)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'MISSING_PAGE_MARGINS' })]) }) }))
   })
 
+  // A repeated section-property singleton that restates the first occurrence
+  // exactly asks for the geometry the section already has, so the extractor
+  // records it under its own code and pagination defers it. A repeat that
+  // states anything else keeps the ambiguous code and keeps refusing.
+  it('defers a section property that only restates itself, and refuses a divergent repeat', () => {
+    const request = fixture()
+    request.document.unsupported.push({
+      id: 'unsupported:redundant-section', code: 'REDUNDANT_SECTION_PROPERTY', capability: 'sections', scope_id: 'section:1',
+      preservation: 'refuse-mutation', message: 'Repeated section-property singleton restates the first occurrence exactly and states no further geometry',
+    })
+    const value = paginated(request)
+    expect(value.status).toBe('paginated')
+    expect(value.diagnostics.filter((entry) => entry.code === 'source-diagnostic' && entry.source_code === 'REDUNDANT_SECTION_PROPERTY')).toHaveLength(1)
+
+    const divergent = fixture()
+    divergent.document.unsupported.push({
+      id: 'unsupported:duplicate-section', code: 'DUPLICATE_SECTION_PROPERTY', capability: 'sections', scope_id: 'section:1',
+      preservation: 'refuse-mutation', message: 'Duplicate modeled section-property singletons make exact pagination geometry ambiguous',
+    })
+    expect(paginateNativeDocxV1(divergent)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
+      status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', source_code: 'DUPLICATE_SECTION_PROPERTY' })]),
+    }) }))
+  })
+
   // A content control around a table row's cells: the extractor reads the same
   // w:tc elements through it, so the wrapper itself adds no column and no
   // advance. Anything else in the row keeps refusing.

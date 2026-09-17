@@ -309,6 +309,13 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   // table projection and the wrapper contributes no grid column, no width and
   // no advance of its own.
   'WRAPPED_ROW_CELLS',
+  // A repeated section-property singleton that restates the first occurrence
+  // element for element, attribute for attribute and character for character.
+  // The extractor emits this code only for that case, and the section model
+  // already carries the value both occurrences state, so no page geometry
+  // depends on which of the two Word reads. A repeat that states anything else
+  // stays DUPLICATE_SECTION_PROPERTY and still refuses.
+  'REDUNDANT_SECTION_PROPERTY',
 ])
 
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50
