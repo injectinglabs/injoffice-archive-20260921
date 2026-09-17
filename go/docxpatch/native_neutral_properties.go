@@ -69,3 +69,27 @@ func nativeShaperDefaultLigatureMode(node, owner *nativeXMLNode) bool {
 	}
 	return count == 1 && mode == "standardContextual"
 }
+
+// w14:cntxtAlts turns the OpenType contextual alternates feature on. The v1
+// shaper declares default_feature_policy 'harfbuzz-14.3.0-shape-defaults',
+// under which HarfBuzz already applies calt to every horizontal run, so an
+// enabled contextual-alternates request selects exactly the shaping this tier
+// already performs and moves no advance. Shaping the same text with calt=1 and
+// with the shaper defaults returns byte-identical glyphs and advances on every
+// manifest face measured, across Latin, Arabic and Hebrew.
+//
+// An explicitly disabled w14:val turns a default feature off, which v1 has no
+// input for and which does move advances, so it stays refused as foreign
+// markup along with malformed, decorated or repeated markup.
+func nativeShaperDefaultContextualAlternates(node, owner *nativeXMLNode) bool {
+	name := xml.Name{Space: nativeWordML2010, Local: "cntxtAlts"}
+	if node.Name != name || len(directNativeChildren(owner, nativeWordML2010, "cntxtAlts")) != 1 {
+		return false
+	}
+	value := xml.Name{Space: nativeWordML2010, Local: "val"}
+	if !nativeExactLeaf(node, value) {
+		return false
+	}
+	enabled, valid := nativeOnOffAttr(node, nativeWordML2010, "val", true)
+	return valid && enabled
+}
