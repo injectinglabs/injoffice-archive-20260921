@@ -986,7 +986,7 @@ func (resolver *nativeLayoutResolver) loadNumbering(partName string) error {
 		"start": true, "numFmt": true, "lvlText": true, "suff": true, "lvlJc": true,
 		"pPr": true, "rPr": true, "lvlPicBulletId": true, "lvlRestart": true,
 		"nsid": true, "multiLevelType": true, "tmpl": true, "pStyle": true, "isLgl": true, "legacy": true,
-		"tabs": true, "tab": true,
+		"tabs": true, "tab": true, "numIdMacAtCleanup": true,
 	}
 	for _, child := range root.Children {
 		if child.Name.Space != resolver.wordNS {
@@ -1005,6 +1005,14 @@ func (resolver *nativeLayoutResolver) loadNumbering(partName string) error {
 			continue
 		}
 		switch child.Name.Local {
+		case "numIdMacAtCleanup":
+			// ECMA-376 17.9.16: the last numbering instance an application had
+			// already reviewed when it last cleaned up this part. It is
+			// authoring bookkeeping about a past editing pass, exactly like the
+			// w:nsid/w:tmpl/w:name metadata skipped inside an abstractNum -- it
+			// selects no counter, format, level text or geometry, it applies to
+			// no paragraph, and it cannot move a marker or a line. Deferring it
+			// refused every numbered paragraph of a package Word had cleaned up.
 		case "numPicBullet":
 			// The concrete lvlPicBulletId reference carries the refusal. Merely
 			// declaring an unused picture-bullet resource is not a document semantic.
