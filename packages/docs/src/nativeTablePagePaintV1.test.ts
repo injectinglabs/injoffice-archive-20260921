@@ -8,6 +8,7 @@ import { DOCX_DEFAULT_TAB_STOP_TWIPS, DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PA
 import { DOCX_PAGINATION_REQUEST_PROTOCOL, DOCX_PAGINATION_REQUEST_VERSION, paginateNativeDocxApproximateLegacyV1, paginateNativeDocxV1, type NativeDocxPaginationRequestV1 } from './nativePaginationV1.js'
 import { layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1, qualifyNativeDocxTablesV1 } from './nativeTablePagePaintV1.js'
 import { qualifyApproximateLegacyTables } from './nativeLegacyTableOriginV1.js'
+import { isRenderNeutralLayoutDiagnostic } from './nativeRenderDiagnostics.js'
 import { decodeNativeDocxPaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
 import { DOCX_AUTO_BORDER_POLICY, type NativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
 
@@ -704,5 +705,80 @@ describe('bounded native DOCX table page-paint geometry', () => {
       if (mode === 'conditional') request.resolved_layout.diagnostics.push({ code: 'CONDITIONAL_TABLE_STYLE_PRESERVED', severity: 'unsupported', scope_id: table.id, part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[5]', preservation: 'preserve-verbatim', message: 'first-row effects' })
       expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)).toMatchObject({ status: 'refused', tables: [] })
     }
+  })
+
+  // tblr-height.docx names the table style `Tabellengitternetz`, which its own
+  // styles.xml does not define. ECMA-376 17.7.2 binds w:tblStyle to the w:style
+  // whose w:styleId it names, so that reference selects nothing and the table
+  // the source states in full has to paint. A style that does exist but whose
+  // effects this tier cannot reproduce keeps blocking.
+  it('paints a table whose style reference resolves to nothing and still refuses a style that hides effects', () => {
+    const dangling = (): NativeDocxPaginationRequestV1 => {
+      const request = fixture()
+      request.document.body.blocks[0]!.table!.table_style_id = 'Tabellengitternetz'
+      request.resolved_layout.source_parts.styles_part = 'word/styles.xml'
+      request.resolved_layout.tables[0]!.style_id = 'Tabellengitternetz'
+      request.resolved_layout.diagnostics.push({ code: 'MISSING_TABLE_STYLE', severity: 'unsupported', scope_id: 'table:1', part_name: 'word/styles.xml', preservation: 'preserve-verbatim', message: 'The referenced table style is missing and was not guessed' })
+      return request
+    }
+    const qualify = (request: NativeDocxPaginationRequestV1) => qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines, true)
+    expect(qualify(dangling())).toMatchObject({ status: 'qualified' })
+
+    // Every condition that proves the absence carried no formatting is load-bearing.
+    for (const mutate of [
+      (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.tables[0]!.borders = { top: { style: 'single' as const, size_eighth_points: 8, color_rgb: '112233' } } },
+      (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.tables[0]!.cell_shading_rgb = 'FFFF00' },
+      (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.tables[0]!.geometry = { layout: 'fixed', alignment: 'left', width_type: 'dxa', width_value: 400, indent_twips: 0, cell_margins: { top_twips: 10, right_twips: 10, bottom_twips: 10, left_twips: 10 } } },
+      (request: NativeDocxPaginationRequestV1) => { delete request.resolved_layout.tables[0]!.style_id },
+      (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.diagnostics[0]!.part_name = 'word/document.xml' },
+      (request: NativeDocxPaginationRequestV1) => { delete request.resolved_layout.diagnostics[0]!.part_name },
+      (request: NativeDocxPaginationRequestV1) => { request.resolved_layout.diagnostics[0]!.path = '/w:styles[1]/w:style[5]' },
+    ]) {
+      const request = dangling()
+      mutate(request)
+      expect(qualify(request).status).toBe('refused')
+    }
+
+    // The same table style existing but carrying unreproducible effects still refuses.
+    const effects = dangling()
+    effects.resolved_layout.diagnostics.push({ code: 'TABLE_STYLE_EFFECTS_PRESERVED', severity: 'unsupported', scope_id: 'table:1', part_name: 'word/styles.xml', path: '/w:styles[1]/w:style[5]/w:tblPr[1]', preservation: 'preserve-verbatim', message: 'Table-style effects are preserved' })
+    expect(qualify(effects).status).toBe('refused')
+
+    // Strict qualification keeps its blanket rule: any resolved-layout
+    // diagnostic touching a table still refuses exact paint.
+    expect(qualifyNativeDocxTablesV1(dangling().document, dangling().resolved_layout).status).toBe('refused')
+  })
+
+  // The same absence reaches the compiler's blocking-diagnostic gate as well,
+  // and twice: `resolveTableGeometry` walks the style chain for the geometry
+  // the style might have carried, and the first hop of that walk is the named
+  // style itself, so its absence is reported a second time in basedOn terms.
+  // There is no ancestor and no dropped layer, so neither report blocks a page.
+  it('reads a dangling table style reference and its restated basedOn report as render-neutral', () => {
+    const resolved = fixture().resolved_layout
+    resolved.source_parts.styles_part = 'word/styles.xml'
+    resolved.tables[0]!.style_id = 'Tabellengitternetz'
+    const missingStyle = { code: 'MISSING_TABLE_STYLE', severity: 'unsupported' as const, scope_id: 'table:1', part_name: 'word/styles.xml', preservation: 'preserve-verbatim' as const, message: 'The referenced table style is missing and was not guessed' }
+    const missingAncestor = { ...missingStyle, code: 'MISSING_STYLE_REFERENCE', message: 'The missing basedOn ancestor was ignored; available descendant layers were retained' }
+    resolved.diagnostics.push(missingStyle, missingAncestor)
+    expect(isRenderNeutralLayoutDiagnostic(missingStyle, resolved)).toBe(true)
+    expect(isRenderNeutralLayoutDiagnostic(missingAncestor, resolved)).toBe(true)
+
+    // A missing basedOn ancestor of a style that does exist is a dropped layer,
+    // not an unresolvable reference, and keeps blocking.
+    const ancestorOnly = fixture().resolved_layout
+    ancestorOnly.source_parts.styles_part = 'word/styles.xml'
+    ancestorOnly.tables[0]!.style_id = 'TableGrid'
+    ancestorOnly.diagnostics.push(missingAncestor)
+    expect(isRenderNeutralLayoutDiagnostic(missingAncestor, ancestorOnly)).toBe(false)
+
+    // Any resolved style effect on the table disqualifies both exemptions.
+    const shaded = fixture().resolved_layout
+    shaded.source_parts.styles_part = 'word/styles.xml'
+    shaded.tables[0]!.style_id = 'Tabellengitternetz'
+    shaded.tables[0]!.cell_shading_rgb = 'FFFF00'
+    shaded.diagnostics.push(missingStyle, missingAncestor)
+    expect(isRenderNeutralLayoutDiagnostic(missingStyle, shaded)).toBe(false)
+    expect(isRenderNeutralLayoutDiagnostic(missingAncestor, shaded)).toBe(false)
   })
 })
