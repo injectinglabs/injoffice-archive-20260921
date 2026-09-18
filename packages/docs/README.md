@@ -491,13 +491,18 @@ the decoder rejects an envelope whose `content_status` disagrees with these
 lists, so a blank painted page can never decode as complete. `status: 'painted'`
 is kept for compatibility and only attests that painting finished.
 
-Eligible mode-12 previews can also carry `legacy_table_origins` source facts.
+Eligible mode-12 and mode-14 previews can also carry `legacy_table_origins`
+source facts.
 For a qualified unmerged, left-aligned table in a single page column, the
 read-only `legacy-content-aligned-origin-v1` policy shifts the table and its
 cell content left by its explicitly authored leading cell margin. It does not
 change widths, row heights, source indents, or document bytes. The source
 indent/margin paths and part digests enter the table projection hash; placement
-is re-derived and bounded against the page. Mode 14/15, ambiguous source
+is re-derived and bounded against the page. What `w:tblInd` measures is what
+changes between the modes: Microsoft Word places the leading cell's content at
+the text margin plus `w:tblInd` in mode 12 and 14 (and when a package attests no
+mode at all, which this tier reads as 12), and places the table's own leading
+edge there in mode 15. Mode 15, ambiguous source
 properties, and page-underflow cases do not receive this policy. The output
 retains the facts and a visible approximation warning, including when combined
 with automatic-border preview. This is not a Word-layout equivalence claim.
