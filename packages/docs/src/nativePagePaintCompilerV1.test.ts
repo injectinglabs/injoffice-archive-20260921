@@ -915,6 +915,60 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(JSON.stringify(strictAfter)).toBe(JSON.stringify(strict))
   }, 30000)
 
+  // Measured against Word 16.112.4's own PDF export of tdf125469_singleSpacing.docx:
+  // only an EXACT rule can compress - the shaper resolves "atLeast" to the
+  // greater of the authored measurement and the natural height, so it never
+  // produces a box shorter than the shaped line.
+  // Its spacing-exact style states w:line="240" w:lineRule="exact" at a 36 pt
+  // font whose natural line box is 43.95 pt, and Word puts that paragraph's two
+  // lines 12.00 pt apart, overlapping. A fixed line rule that COMPRESSES the box
+  // is therefore Word's own result, seated the same way an expanded one is -
+  // descent on the box bottom, ascent overflowing upward. The approximate tier
+  // paints it; the strict tier keeps refusing it; a compressed AUTOMATIC box
+  // keeps refusing on both tiers, because this tier has no reference for how
+  // Word distributes a sub-single multiple.
+  it('seats a compressed exact line box on its bottom while strict still refuses it', async () => {
+    const rule = 'exact' as const
+    const input = fixture(), resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    const outlines = createHarfBuzzOutlineProviderV1({bytes:FONT_BYTES,contentDigest:FONT_DIGEST})
+    const provider = {providerId:input.outline_provider.provider_id,providerRevision:input.outline_provider.provider_revision,getGlyphOutline(request:any){const outline=outlines.outline(request.glyph_id);return outline.path.length ? {status:'outlined' as const,...request,...outline} : {status:'empty' as const,...request,units_per_em:outline.units_per_em}}}
+    const naturalPrepared = await prepareNativeDocxPagePaintV1(fixture())
+    const shapedLine = naturalPrepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!.lines[0]!
+    // Ask for a box half the shaped line's natural height.
+    const twips = Math.floor(shapedLine.line_height_millipoints / 2 / 50)
+    const compressed = twips * 50
+    expect(compressed).toBeLessThan(shapedLine.line_height_millipoints)
+    resolved.paragraphs[0]!.properties = {...resolved.paragraphs[0]!.properties, line_rule: rule, line: twips}
+    const original = structuredClone(input)
+    const {compileNativeDocxPagePaintV1} = await import('./nativePagePaintV1.js')
+    const strict = await compileNativeDocxPagePaintV1((await prepareNativeDocxPagePaintV1(input)).page_paint_request,provider)
+    expect(strict.ok && strict.value.status).toBe('refused')
+    const settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+    settings.profile='unsupported';delete settings.compatibility_mode
+    settings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy layout'}]
+    const eligibility={protocol:'injoffice.docx.approximation-eligibility',version:1,document_id:settings.document_id,revision:settings.revision,package_sha256:settings.package_sha256,settings_sha256:settings.settings_sha256,status:'eligible',legacy_compatibility_mode:12,reasons:['Legacy layout approximation']}
+    const approximate = await renderNativeDocxApproximatePagePreviewV1(input,eligibility,provider)
+    expect(approximate.status).toBe('painted')
+    if (approximate.status !== 'painted') return
+    const painted = approximate.pages[0]!.lines[0]!
+    expect(painted.height_millipoints).toBe(compressed)
+    // Descent seated on the box bottom, exactly as for an expanded box, so the
+    // ascent overflows above the box and the lines overlap - Word's own result.
+    expect(painted.baseline_y_millipoints - painted.y_millipoints).toBe(compressed + shapedLine.descent_millipoints)
+    expect(painted.baseline_y_millipoints - painted.y_millipoints).toBeLessThan(shapedLine.ascent_millipoints)
+    expect(approximate.reasons.some(reason=>reason.includes('compresses the lines and lets the glyphs overlap'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(approximate).ok).toBe(true)
+    // A compressed AUTOMATIC box refuses on both tiers.
+    const automatic = structuredClone(original)
+    ;(automatic.resolved_layout as NativeDocxResolvedLayoutInputV1).paragraphs[0]!.properties = {...(automatic.resolved_layout as NativeDocxResolvedLayoutInputV1).paragraphs[0]!.properties, line_rule:'auto', line: 120}
+    const automaticSettings = automatic.pagination_settings as NativeDocxPaginationSettingsV1
+    automaticSettings.profile='unsupported';delete automaticSettings.compatibility_mode
+    automaticSettings.diagnostics=[{code:'COMPATIBILITY_SETTING_UNSUPPORTED',severity:'unsupported',part_name:SETTINGS_PART,path:'/w:settings[1]/w:compat[1]',preservation:'preserve-verbatim',message:'Legacy layout'}]
+    expect((await renderNativeDocxApproximatePagePreviewV1(automatic,eligibility as never,provider)).status).toBe('refused')
+    expect(input.resolved_layout).toEqual(original.resolved_layout)
+    expect(input.document).toEqual(original.document)
+  }, 30000)
+
   it.each([120, 480])('keeps strict line-box guards and discloses approximate expanded baseline placement (%s)', async (line) => {
     const input = fixture(), resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     resolved.paragraphs[0]!.properties = {...resolved.paragraphs[0]!.properties, line_rule:'auto', line}

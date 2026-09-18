@@ -152,7 +152,7 @@ export const DOCX_APPROXIMATE_PAINT_REFUSED_MAX_REASONS = 8
 export function nativeDocxApproximatePaintRefusalReason(diagnostic: NativeDocxPagePaintV1['diagnostics'][number]): string {
   return `Approximate paint refused (${diagnostic.code} at ${diagnostic.scope_id}): ${diagnostic.message}`
 }
-export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of an expanded automatic line box, leaving extra leading below the text; an expanded exact or at-least line box instead seats the descent on the box bottom, leaving the leading above the text. Compressed line boxes remain unsupported.' as const
+export const DOCX_APPROXIMATE_LINE_BOX_WARNING = 'Current-layout policy places natural ascent at the top of an expanded automatic line box, leaving extra leading below the text; an exact or at-least line box instead seats the descent on the box bottom, so a box shorter than the shaped line compresses the lines and lets the glyphs overlap the line above, as Word does. A compressed automatic line box remains unsupported.' as const
 export interface NativeDocxApproximationEligibilityV1 {
   protocol: 'injoffice.docx.approximation-eligibility'
   version: 1
