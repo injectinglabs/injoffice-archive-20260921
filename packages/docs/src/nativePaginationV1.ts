@@ -1196,6 +1196,12 @@ function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSec
   return banded
 }
 
+/** The left and right edges of a section's body box, or undefined when its geometry does not qualify. */
+function bodySides(section: NativeDocxSectionV1): string | undefined {
+  const qualified = qualifyNativeDocxSectionColumnsV1(section, { allowUnequalWidths: true })
+  return qualified.ok ? `${qualified.value.body_x_millipoints}:${qualified.value.body_width_millipoints}` : undefined
+}
+
 function ensurePageSectionColumns(context: PaginationContext, section: NativeDocxSectionV1, bandTop?: number): boolean {
   const page = context.currentPage
   if (!page) return false
@@ -1306,16 +1312,26 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
       return
     }
     // A continuous break is Word's way of changing the column division part-way
-    // down a page, so for that break the division alone may differ; the shared
-    // physical page and its header/footer references still have to agree.
+    // down a page, and equally its way of indenting the rest of one, so for that
+    // break the division and the body box's two sides may differ; the shared
+    // physical sheet, the top and height of the body box and the page's
+    // header/footer identity still have to agree.
     //
     // The new section opens a band whenever either side of the break has more
     // than one column, including when the two agree on the count: the preceding
     // fragment was balanced, so where it stopped is the deepest of its columns
     // and not the one the cursor happens to sit in. Only a single column
     // continuing into a single column can carry that cursor straight across.
-    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && (previousSection.page.columns > 1 || section.page.columns > 1)
-    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition })) {
+    //
+    // A change of left/right margin opens a band for a different reason: the
+    // cursor cannot cross it at all, because the column it sits in is not the
+    // column the next line belongs to. The band's own columns come from the new
+    // section's geometry and run from where the previous section stopped to the
+    // foot of the body box, which is what Word paints in
+    // `office-hard-v2/pdf/endingSectionProps.pdf`.
+    const differentBodySides = previousSection !== undefined && bodySides(previousSection) !== bodySides(section)
+    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && (previousSection.page.columns > 1 || section.page.columns > 1 || differentBodySides)
+    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition, allow_different_body_sides: bandTransition })) {
       refuse(context, 'section-geometry-invalid', section.id, `${section.break_type} requires identical page, column, margin, and header/footer geometry across the shared physical page`)
       return
     }

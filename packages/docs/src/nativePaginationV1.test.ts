@@ -1090,6 +1090,63 @@ describe('native DOCX pagination v1', () => {
     expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
   })
 
+  /**
+   * A continuous break is equally how Word indents the rest of a page. The
+   * continuing section keeps the sheet and the vertical body box but brings its
+   * own left and right margins, so it opens a band at its own sides rather than
+   * carrying the cursor across. `office-hard-v2/pdf/endingSectionProps.pdf`
+   * paints that on a single landscape page: a 1134-twip section, then a
+   * continuous 2574-twip one whose only line runs to 466.57 pt, the right edge
+   * of its own body box (595.3 pt page less 128.7 pt margin), one line below
+   * the line above it.
+   */
+  it('opens a continuous left/right margin change as a band at the new section body sides', () => {
+    const request = fixture({ lineCounts: [1, 1], sections: [
+      { start: 0, breakType: 'next-page' },
+      { start: 1, breakType: 'continuous' },
+    ] })
+    const indented = request.document.sections[1]!
+    indented.page.margins.left_twips = 200
+    indented.page.margins.right_twips = 200
+    for (const line of request.shaped_lines.paragraphs[1]!.lines) line.available_width_millipoints = 30_000
+    const output = paginated(request)
+    expect(output.pages).toHaveLength(1)
+    expect(output.pages[0]!.section_ids).toEqual(['section:1', 'section:2'])
+    expect(output.pages[0]!.columns.map((column) => [column.section_id, column.x_millipoints, column.y_millipoints, column.width_millipoints, column.height_millipoints])).toEqual([
+      ['section:1', 5_000, 5_000, 40_000, 40_000],
+      ['section:2', 10_000, 15_000, 30_000, 30_000],
+    ])
+    expect(output.pages[0]!.lines.map((line) => [line.section_id, line.x_millipoints, line.y_millipoints])).toEqual([
+      ['section:1', 5_000, 5_000],
+      ['section:2', 10_000, 15_000],
+    ])
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output, request).ok).toBe(true)
+  })
+
+  /**
+   * The shared page's header/footer stories and its first-page policy belong to
+   * the section that opened it. A continuing section that names no stories of
+   * its own inherits them (ECMA-376 17.10.1) and so cannot contradict the page;
+   * in `endingSectionProps.pdf` the shared page carries section 1's first-page
+   * footer although the continuing section sets no `titlePg` at all. One that
+   * names its own stories must state the same page.
+   */
+  it('lets a continuing section inherit the shared page stories but not restate them differently', () => {
+    const inherited = fixture({ lineCounts: [1, 1], sections: [{ start: 0 }, { start: 1, breakType: 'continuous' }] })
+    const story = (id: string, part: string) => ({ id, kind: 'header' as const, part_name: part, anchor: { part_name: part, path: '/w:hdr[1]', start_byte: 10, end_byte: 20, xml_sha256: HASH }, blocks: [] })
+    inherited.document.headers = [story('story:first-header', 'word/header1.xml')]
+    inherited.document.sections[0]!.title_page = true
+    inherited.document.sections[0]!.header_refs = [{ kind: 'first', relationship_id: 'rId3', story_id: 'story:first-header' }]
+    expect(paginated(inherited).pages[0]!.section_ids).toEqual(['section:1', 'section:2'])
+
+    const restated = structuredClone(inherited)
+    restated.document.headers.push(story('story:other-header', 'word/header2.xml'))
+    restated.document.sections[1]!.header_refs = [{ kind: 'first', relationship_id: 'rId7', story_id: 'story:other-header' }]
+    expect(paginateNativeDocxV1(restated)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({
+      status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]),
+    }) }))
+  })
+
   it('refuses a continuous transition that changes the shared page itself', () => {
     const differentPage = fixture({ lineCounts: [1, 1], sections: [
       { start: 0, breakType: 'next-page', bodyHeight: 40_000 },
@@ -1245,9 +1302,11 @@ describe('native DOCX pagination v1', () => {
     unequal.document.sections[0]!.page.column_definitions[1]!.width_twips! += 1
     expect(paginateNativeDocxV1(unequal)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
 
+    // The sides of the body box may move across a continuous break, but its top
+    // and its height may not: those are what fixes the shared physical sheet.
     const continuousGeometry = fixture({ lineCounts: [1, 1], sections: [{ start: 0 }, { start: 1, breakType: 'continuous' }] })
-    continuousGeometry.document.sections[1]!.page.margins.right_twips += 1
-    expect(paginateNativeDocxV1(continuousGeometry)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [] }) }))
+    continuousGeometry.document.sections[1]!.page.margins.top_twips += 1
+    expect(paginateNativeDocxV1(continuousGeometry)).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ status: 'refused', pages: [], sections: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]) }) }))
 
     const headerGeometry = fixture({ lineCounts: [1, 1], sections: [{ start: 0 }, { start: 1, breakType: 'continuous' }] })
     headerGeometry.document.sections[1]!.page.margins.header_twips += 1
