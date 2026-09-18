@@ -20,6 +20,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // A React component's test is a .tsx file. Matching only .test.ts silently
+    // excluded three of them, so they had never run in CI.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 })
