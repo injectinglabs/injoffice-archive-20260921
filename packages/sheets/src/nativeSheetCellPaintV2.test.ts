@@ -158,7 +158,10 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const first = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
     const second = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
     expect(JSON.stringify(first)).toBe(JSON.stringify(second))
-    expect(first.paint_sha256).toBe('sha256:5afe82c23cf8577608db52eb20edabdcc019be0baf865148124c9ac9b57a50e8')
+    // Bound to the pinned shaper configuration revision, which this change bumps
+    // (implicit directional marks are now resolved rather than refused), so the
+    // plan digest moves with it exactly as the provenance design intends.
+    expect(first.paint_sha256).toBe('sha256:422ff239c6c4054e0281d038fe535e19c4f8a44fa7622dde43ca10c0821e5082')
     expect(first.capabilities).toEqual([{ name: 'native-cell-glyphs', level: 'exact' }])
     expect(first.gutter_emu).toBe(19_050)
     expect(first.coordinate_space).toBe('viewport-local')
@@ -177,7 +180,7 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const commands = record(first)
     expect(commands[0]).toMatchObject({ kind: 'beginCellPaint', protocol: 'injoffice.xlsx.sheet-cell-paint', version: 1 })
     expect(commands.map((command) => command.kind)).toContain('fillGlyphPath')
-    expect(commandDigest(commands)).toBe('e0c46bfae8631a3b6d374bff8026b93f701fa008e33dc6682e12b5a45d9900aa')
+    expect(commandDigest(commands)).toBe('4478cd2c58e6bf00e22418b9a714c69bcbb46b7df13fbec73eb21f92ba1ee20a')
     expect(commandDigest(commands)).toBe(commandDigest(record(second)))
     expect(Object.isFrozen(first)).toBe(true)
     expect(Object.isFrozen(first.glyphs[0]?.path)).toBe(true)
