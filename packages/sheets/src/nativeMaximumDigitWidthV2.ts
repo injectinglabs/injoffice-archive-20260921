@@ -5,10 +5,33 @@ import type { NativeMaximumDigitWidthAuthorityV2 } from './nativeSheetGeometryV2
 import { sha256Hex, sha256HexBytes } from './nativeSha256.js'
 
 export const NATIVE_XLSX_MDW_PROVIDER_ID = 'injoffice.sfnt-maximum-digit-width'
-export const NATIVE_XLSX_MDW_PROVIDER_REVISION = `sha256:${sha256Hex('injoffice.sfnt-maximum-digit-width.v1\0fixed-truetype;unicode-cmap-4-12;integer-css-pixel-round;96dpi')}`
+export const NATIVE_XLSX_MDW_PROVIDER_REVISION = `sha256:${sha256Hex('injoffice.sfnt-maximum-digit-width.v1\0fixed-truetype;unicode-cmap-4-12;integer-css-pixel-round;96dpi\0integer-page-point-round;72dpi')}`
 const maximumFontBytes = 64 * 1024 * 1024
 const metricAuthorities = new WeakSet<object>()
 
+/**
+ * Excel's grid lattice is a property of the OUTPUT DEVICE, not of the workbook.
+ * The maximum digit width is rounded to a whole device unit and every column
+ * width is then floored to a whole device unit (§18.3.1.13), so the same stored
+ * `width` yields a different absolute size on a 96-unit-per-inch screen and on
+ * a 72-unit-per-inch printed page. This authority therefore mints BOTH: the
+ * 96-dpi CSS-pixel metric Excel shows on screen, and the 72-dpi point metric
+ * Excel lays the printed page out on. They genuinely disagree - Calibri 11
+ * rounds to 7 px on screen and 6 pt on the page, which turns the default
+ * `baseColWidth` 8 column into 45.75 pt of screen grid and 53 pt of printed
+ * grid, a 15.8% difference that decides page breaks.
+ *
+ * Measured against Excel 16.112.4's own PDF export of the local hard-v2 corpus,
+ * read off its clip and fill rectangles rather than inferred: Calibri 11 with
+ * no `<col>` prints 53 pt columns (`pivot_dark1`, `cond_format_theme_color3`,
+ * `condformat_theme_color`, `new_cond_format_test`), Arial 10 at
+ * `width="11.5204081632653"` prints 69 pt (`databar`, `colorscale`), Times New
+ * Roman 10 at `width="25.5"`/`"30.664062"` prints 127 pt + 153 pt
+ * (`tdf130104_indent`, whose two-column page clip is exactly 280 pt), and
+ * Liberation Sans 11 at `width="10.625"` prints 64 pt (`autofilter-colors`).
+ * Every one of those is reproduced exactly by rounding the digit advance to a
+ * whole point and running the unchanged ECMA-376 lattice on it.
+ */
 export function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkbookRenderModelV2, fontBytes: Uint8Array): NativeMaximumDigitWidthAuthorityV2 {
   if (!isProjectedNativeWorkbookV2(workbook)) throw metricError('$.workbook', 'workbook must be the branded frozen result of projectNativeWorkbookV2')
   const normal = workbook.normal_style
@@ -21,7 +44,9 @@ export function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkboo
   if (!parsed.names.some((name) => normalizeFontName(name) === normalizedExpected)) throw metricError('$.font_bytes', 'font name table does not match the projected Normal font')
   if (parsed.bold !== normal.font_bold || parsed.italic !== normal.font_italic) throw metricError('$.font_bytes', 'font style bits do not match the projected Normal font')
   const maximumDigitWidthPixels = Math.round(parsed.maximumAdvance * normal.font_size_points * 96 / (72 * parsed.unitsPerEm))
+  const maximumDigitWidthPoints = Math.round(parsed.maximumAdvance * normal.font_size_points / parsed.unitsPerEm)
   if (!Number.isSafeInteger(maximumDigitWidthPixels) || maximumDigitWidthPixels < 1 || maximumDigitWidthPixels > 512) throw metricError('$.font_bytes', 'computed maximum digit width is outside the qualified integer-pixel range')
+  if (!Number.isSafeInteger(maximumDigitWidthPoints) || maximumDigitWidthPoints < 1 || maximumDigitWidthPoints > 512) throw metricError('$.font_bytes', 'computed page maximum digit width is outside the qualified integer-point range')
   const authority: NativeMaximumDigitWidthAuthorityV2 = {
     source_revision: workbook.revision,
     source_package_sha256: workbook.source.package_sha256,
@@ -37,6 +62,8 @@ export function createNativeMaximumDigitWidthAuthorityV2(workbook: NativeWorkboo
     provider_revision: NATIVE_XLSX_MDW_PROVIDER_REVISION,
     measurement_dpi: 96,
     maximum_digit_width_pixels: maximumDigitWidthPixels,
+    page_measurement_dpi: 72,
+    page_maximum_digit_width_points: maximumDigitWidthPoints,
   }
   const frozen = Object.freeze(authority)
   metricAuthorities.add(frozen)

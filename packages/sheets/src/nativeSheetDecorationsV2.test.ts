@@ -155,9 +155,9 @@ describe('native XLSX exact fill and border decorations', () => {
     expect(first.decoration_sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(first.fills).toEqual([{
       cell_ref: 'B1', row: 0, column: 1, style_id: 1, fill_id: 1, fill_record_sha256: `sha256:${'4'.repeat(64)}`,
-      rect: { x_emu: 1_066_800, y_emu: 0, width_emu: 1_066_800, height_emu: 231_775 }, color: '#DDEEFF',
+      rect: { x_emu: 1_104_900, y_emu: 0, width_emu: 1_104_900, height_emu: 231_775 }, color: '#DDEEFF',
     }])
-    const join = first.border_segments.find((segment) => segment.x1_emu === 1_066_800 && segment.x2_emu === 1_066_800)
+    const join = first.border_segments.find((segment) => segment.x1_emu === 1_104_900 && segment.x2_emu === 1_104_900)
     expect(join).toMatchObject({ orientation: 'vertical', y1_emu: 0, y2_emu: 231_775, border_style: 'thin', color: '#102030' })
     expect(join?.sources).toEqual([
       { cell_ref: 'A1', edge: 'right', style_id: 0, border_id: 0, border_record_sha256: `sha256:${'1'.repeat(64)}` },
