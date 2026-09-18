@@ -16,6 +16,7 @@ import { DOCX_SHAPED_LINES_PROTOCOL, DOCX_SHAPED_LINES_VERSION } from './nativeS
 import { asciiLowerNative, compareNativeValidationIssues } from './nativeDeterminism.js'
 import {decodeNativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
+import {nativeDocxUnplaceableFloatingTableFrameV1} from './nativeFloatingTableV1.js'
 
 export type DecodeNativeDocxPaginatedLayoutResult =
   | { ok: true; value: NativeDocxPaginatedLayoutV1 }
@@ -517,7 +518,7 @@ export function decodeNativeDocxPaginatedLayout(value: unknown): DecodeNativeDoc
   return decodePaginatedLayoutForPolicyShape(value, false)
 }
 
-function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolean,legacyRows:ReadonlyMap<string,{x:number;width:number}>=new Map()): DecodeNativeDocxPaginatedLayoutResult {
+function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolean,legacyRows:ReadonlyMap<string,{x:number;width:number}>=new Map(),floatingTables:ReadonlySet<string>=new Set()): DecodeNativeDocxPaginatedLayoutResult {
   const issues: NativeDocxValidationIssue[] = []
   const preflightState = { nodes: 0, bounded: true }
   preflight(value, '', 0, new WeakSet(), preflightState, issues)
@@ -595,7 +596,7 @@ function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolea
   const referencedLineIDs = new Set<string>()
   const paragraphSlices = new Map<string, SliceValidation[]>()
   const pageResults = pageList.map((page, index) => validatePage(page, `/pages/${index}`, index, issues, pageIDs, placedLineIDs, noteSourceLineIDs, noteHistory, sliceIDs, referencedLineIDs, paragraphSlices))
-  validateTableRowFragments(pageList, issues,legacyRows)
+  validateTableRowFragments(pageList, issues,legacyRows,floatingTables)
   const sectionIDs = new Set<string>()
   const sectionOrder: string[] = []
   const sectionBreaks = new Map<string, string>()
@@ -677,7 +678,7 @@ function decodePaginatedLayoutForPolicyShape(value: unknown, approximate: boolea
   return issues.length > 0 ? { ok: false, issues: issues.slice(0, DOCX_NATIVE_LIMITS.maxIssues) } : { ok: true, value: value as NativeDocxPaginatedLayoutV1 }
 }
 
-function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidationIssue[],legacyRows:ReadonlyMap<string,{x:number;width:number}>): void {
+function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidationIssue[],legacyRows:ReadonlyMap<string,{x:number;width:number}>,floatingTables:ReadonlySet<string>): void {
   const rows = new Map<string,{ ordinal:number; end:number; height:number; page:number; rowOrdinal:number; sectionID:string; path:string }>()
   let count = 0
   for (const [pageIndex,pageValue] of pages.entries()) {
@@ -700,7 +701,12 @@ function validateTableRowFragments(pages: unknown[], issues: NativeDocxValidatio
         // Only the independently reproduced legacy table origin may cross the
         // column's horizontal edge. Vertical containment and page bounds stay exact.
         const qualifiedLegacy=legacy!==undefined&&x===(column.x_millipoints as number)+legacy.x&&width===legacy.width&&x>=0&&x+width<=(pageValue.width_millipoints as number)
-        if((!qualifiedLegacy&&(x<(column.x_millipoints as number)||x+width>(column.x_millipoints as number)+(column.width_millipoints as number)))||y<(column.y_millipoints as number)||y+height>(column.y_millipoints as number)+(column.height_millipoints as number))add(issues,'OUT_OF_RANGE',rowPath,'row fragment exceeds its exact page column')
+        // A floating table's frame is measured from the anchor box its own
+        // w:tblpPr names, so it may legitimately cross the text column's edges;
+        // Word honours the authored width of such a table even when it
+        // overhangs the body box. The page still bounds it exactly.
+        const qualifiedFloat=typeof tableID==='string'&&floatingTables.has(tableID)&&x>=0&&x+width<=(pageValue.width_millipoints as number)
+        if((!qualifiedLegacy&&!qualifiedFloat&&(x<(column.x_millipoints as number)||x+width>(column.x_millipoints as number)+(column.width_millipoints as number)))||y<(column.y_millipoints as number)||y+height>(column.y_millipoints as number)+(column.height_millipoints as number))add(issues,'OUT_OF_RANGE',rowPath,'row fragment exceeds its exact page column')
       }
       if(tableID&&rowID&&sectionID&&ordinal!==undefined&&rowOrdinal!==undefined&&sourceY!==undefined&&sourceHeight!==undefined&&height!==undefined) {
         const key=JSON.stringify([tableID,rowID]),previous=rows.get(key)
@@ -733,7 +739,12 @@ function decodePaginatedLayoutForPolicy(value: unknown, requestValue: unknown, e
       if(qualified.status==='qualified')for(const table of qualified.tables)if(table.origin_policy)legacyRows.set(table.table.id,{x:table.x_millipoints,width:table.width_millipoints})
     }catch(error){return {ok:false,issues:[{code:'BROKEN_REFERENCE',path:'/eligibility',message:error instanceof Error?error.message:'Invalid source-qualified table origin'}]}}
   }
-  const output = decodePaginatedLayoutForPolicyShape(value, eligibility !== undefined,legacyRows)
+  const floatingTables=new Set<string>()
+  if(request.ok)for(const block of request.value.document.body.blocks){
+    const position=block.table?.floating_position
+    if(block.table&&position&&nativeDocxUnplaceableFloatingTableFrameV1(position)===undefined)floatingTables.add(block.table.id)
+  }
+  const output = decodePaginatedLayoutForPolicyShape(value, eligibility !== undefined,legacyRows,floatingTables)
   if (!request.ok || !output.ok) {
     const issues: NativeDocxValidationIssue[] = []
     if (!request.ok) issues.push(...request.issues.map((entry) => ({ ...entry, path: `/request${entry.path}` })))

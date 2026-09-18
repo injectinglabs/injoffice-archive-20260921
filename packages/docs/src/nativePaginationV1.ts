@@ -20,6 +20,7 @@ import {
   type NativeDocxBlockV1,
   type NativeDocxParagraphV1,
   type NativeDocxSectionV1,
+  type NativeDocxTableV1,
   type NativeDocxValidationIssue,
 } from './nativeContract.js'
 import {
@@ -54,7 +55,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
 import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1, nativeDocxApproximateNoteOmissionsV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
-import { placeNativeDocxFloatingTableV1 } from './nativeFloatingTableV1.js'
+import { nativeDocxUnplaceableFloatingTableFrameV1, placeNativeDocxFloatingTableV1 } from './nativeFloatingTableV1.js'
 
 export const DOCX_PAGINATION_REQUEST_PROTOCOL = 'injoffice.docx.pagination-request'
 export const DOCX_PAGINATION_REQUEST_VERSION = 1 as const
@@ -360,6 +361,9 @@ interface PaginationContext {
   containingTableIDs?: Map<string, string>
   lastSliceLocation: Map<string, { pageOrdinal: number; columnOrdinal: number }>
   shapedSectionWidths?: Map<string, Set<number>>
+  /** Boxes placed floating tables occupy, in absolute page coordinates. A body
+   * line whose own band meets one of them resumes at the box's bottom edge. */
+  floatBoxes?: Array<{ page_ordinal: number; top: number; bottom: number; left: number; right: number }>
 }
 
 function issue(code: NativeDocxValidationIssue['code'], path: string, message: string): NativeDocxValidationIssue {
@@ -1541,6 +1545,29 @@ function lineGeometryValid(context: PaginationContext, paragraph: NativeDocxShap
   return true
 }
 
+/** A floating table displaces the body text it meets rather than overprinting
+ * it, and `w:bottomFromText` adds nothing below, so a line whose own band meets
+ * a placed float resumes at the float's bottom edge. Word applies this across
+ * every column the float spans, not only the column it is anchored in. */
+function belowFloatBoxes(context: PaginationContext, column: NativeDocxPageColumnV1, lineY: number, lineHeight: number): number {
+  const boxes = context.floatBoxes
+  if (!boxes?.length || !context.currentPage) return lineY
+  let y = lineY
+  for (let pass = 0; pass < boxes.length; pass += 1) {
+    let moved = false
+    for (const box of boxes) {
+      if (box.page_ordinal !== context.currentPage.ordinal) continue
+      if (box.left >= column.x_millipoints + column.width_millipoints || box.right <= column.x_millipoints) continue
+      const top = column.y_millipoints + y
+      if (top >= box.bottom || top + lineHeight <= box.top) continue
+      y = box.bottom - column.y_millipoints
+      moved = true
+    }
+    if (!moved) break
+  }
+  return y
+}
+
 function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParagraphV1, start: number, count: number, spaceBefore: number): void {
   const page = context.currentPage
   const section = context.currentSection
@@ -1562,6 +1589,7 @@ function placeSlice(context: PaginationContext, paragraph: NativeDocxShapedParag
     if (line.exclusion_end_millipoints !== undefined && lineY < line.exclusion_end_millipoints) {
       lineY = line.exclusion_end_millipoints
     }
+    lineY = belowFloatBoxes(context, column, lineY, line.line_height_millipoints)
     if (!lineGeometryValid(context, paragraph, line)) return
     const x = checkedSum(column.x_millipoints, line.inline_offset_millipoints)
     const y = checkedSum(column.y_millipoints, lineY)
@@ -1896,6 +1924,7 @@ function floatingTablePlacement(context: PaginationContext, table: NativeDocxQua
   }
   context.cursorY = top
   context.previousAfter = 0
+  ;(context.floatBoxes ??= []).push({ page_ordinal: page.ordinal, top: column.y_millipoints + top, bottom: column.y_millipoints + top, left: placement.x_millipoints, right: placement.x_millipoints + table.width_millipoints })
   return { ...table, x_millipoints: placement.x_millipoints - column.x_millipoints, floating: true }
 }
 
@@ -1904,6 +1933,13 @@ function paginateTable(context: PaginationContext, inlineTable: NativeDocxQualif
   if (context.refused) return
   const table = floatingTablePlacement(context, inlineTable)
   if (context.refused) return
+  paginateTableRows(context, table, shaped)
+  const box = table.floating ? context.floatBoxes?.at(-1) : undefined
+  const column = currentColumn(context)
+  if (box && column && !context.refused) box.bottom = column.y_millipoints + context.cursorY
+}
+
+function paginateTableRows(context: PaginationContext, table: NativeDocxQualifiedTableV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
   const rows = layoutNativeDocxTableRowsV1(table, context.request.shaped_lines)
   if (!rows) { refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs'); return }
   if (table.table.rows.some((row) => row.cant_split !== true)) { paginateSplittableTable(context, table, rows, shaped); return }
@@ -2327,19 +2363,88 @@ function fillBalancedColumns(units: readonly BalanceUnit[], start: number, colum
  * widow_control, and any paragraph carrying a keep_next or a page_break_before,
  * still refuse rather than move lines heuristically.
  */
+/** Whether a table's own `w:tblpPr` frame is one pagination v1 can place. */
+function placeableFloatingTable(table: NativeDocxTableV1): boolean {
+  return table.floating_position !== undefined && nativeDocxUnplaceableFloatingTableFrameV1(table.floating_position) === undefined
+}
+
+/**
+ * Places the floating tables of a balanced multi-column fragment.
+ *
+ * Word balances the paragraphs as if the float were not there, then anchors the
+ * float to the top it would have had inline at its own point in that balance,
+ * and finally moves every body line the float's box meets below it -- in every
+ * column the box spans, not just the anchoring one.
+ *
+ * `office-hard-v2/pdf/floating-table-section-columns.pdf` is the oracle: four
+ * paragraphs balance 2/2 over a two-column section, a table authored between
+ * the second and the third floats at `w:tblpY="-87"` against the margin, and
+ * Word paints the second line of BOTH columns at the float's bottom edge.
+ */
+function placeBalancedFloats(
+  context: PaginationContext,
+  floats: ReadonlyArray<{ table: NativeDocxQualifiedTableV1; after_entries: number }>,
+  fragment: readonly BalanceUnit[],
+  counts: readonly number[],
+  openingGap: number,
+  shaped: Map<string, NativeDocxShapedParagraphV1>,
+): void {
+  // The unobstructed cumulative bottom of each entry, read off the same fill
+  // the placement loop is about to reproduce.
+  const bottoms = new Map<number, { column: number; y: number }>()
+  let unitIndex = 0
+  for (let columnIndex = 0; columnIndex < counts.length; columnIndex += 1) {
+    let cursor = 0
+    for (let placedInColumn = 0; placedInColumn < counts[columnIndex]!; placedInColumn += 1) {
+      const unit = fragment[unitIndex]!
+      cursor += (placedInColumn === 0 ? (columnIndex === 0 ? openingGap : 0) : unit.gap) + unit.height
+      bottoms.set(unit.entryIndex, { column: columnIndex, y: cursor })
+      unitIndex += 1
+    }
+  }
+  const page = context.currentPage
+  for (const float of floats) {
+    const anchor = float.after_entries === 0 ? { column: 0, y: 0 } : bottoms.get(float.after_entries - 1)
+    if (!anchor) { refuse(context, 'body-table-unsupported', float.table.table.id, 'A floating table anchors to a balanced paragraph this page did not place'); return }
+    context.currentColumnOrdinal = anchor.column
+    context.cursorY = anchor.y
+    context.previousAfter = 0
+    paginateTable(context, float.table, shaped)
+    if (context.refused) return
+    if (context.currentPage !== page || context.currentColumnOrdinal !== anchor.column) {
+      refuse(context, 'body-table-unsupported', float.table.table.id, 'A floating table that leaves its own balanced column has no exact continuation')
+      return
+    }
+  }
+  context.currentColumnOrdinal = 0
+  context.cursorY = 0
+  context.previousAfter = 0
+}
+
 function paginateExactlyBalancedGroup(
   context: PaginationContext,
   group: SectionGroup,
   resolved: Map<string, NativeDocxResolvedParagraphV1>,
   shaped: Map<string, NativeDocxShapedParagraphV1>,
 ): void {
-  const entries = group.blocks.flatMap((block) => {
-    if (!block.paragraph) return []
+  const entries: Array<{ native: NativeDocxParagraphV1; resolved: NativeDocxResolvedParagraphV1; shaped: NativeDocxShapedParagraphV1 }> = []
+  // A floating table is not balanced with the paragraphs: it is lifted out of
+  // the flow at its own anchor. Record where in the flow that anchor is, so the
+  // natural top it would have had can be read off the finished balance plan.
+  const floats: Array<{ table: NativeDocxQualifiedTableV1; after_entries: number }> = []
+  for (const block of group.blocks) {
+    if (block.table) {
+      const qualified = context.qualifiedTables?.get(block.table.id)
+      if (!qualified) { refuse(context, 'body-table-unsupported', block.table.id, 'Table was not present in the qualified table inventory'); return }
+      floats.push({ table: qualified, after_entries: entries.length })
+      continue
+    }
+    if (!block.paragraph) continue
     const shapedParagraph = shaped.get(block.paragraph.id)
     const resolvedParagraph = resolved.get(block.paragraph.id)
-    if (!shapedParagraph || !resolvedParagraph) return []
-    return [{ native: block.paragraph, resolved: resolvedParagraph, shaped: shapedParagraph }]
-  })
+    if (!shapedParagraph || !resolvedParagraph) continue
+    entries.push({ native: block.paragraph, resolved: resolvedParagraph, shaped: shapedParagraph })
+  }
   if (entries.some((entry) => entry.shaped.lines.length === 0 || entry.resolved.properties.keep_next === true ||
     entry.resolved.properties.page_break_before === true)) {
     refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing has no single fill plan across a keep_next or a page_break_before')
@@ -2404,6 +2509,14 @@ function paginateExactlyBalancedGroup(
           else low = middle + 1
         }
         counts = fillBalancedColumns(fragment, consumedUnits, participating, low, openingGap)!.counts
+      }
+      if (floats.length) {
+        if (fragmentStart !== 0 || fragmentEnd !== units.length || consumedUnits !== 0 || !firstPage || context.currentColumnOrdinal !== 0 || participating !== columns) {
+          refuse(context, 'body-table-unsupported', group.section.id, 'A floating table is placed in a balanced multi-column section only when the whole balanced fragment opens and fits one page')
+          return
+        }
+        placeBalancedFloats(context, floats, fragment, counts, openingGap, shaped)
+        if (context.refused) return
       }
       for (let columnIndex = 0; columnIndex < participating && consumedUnits < fragment.length; columnIndex += 1) {
         let quota = counts[columnIndex]!
@@ -2539,8 +2652,11 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
       }
       continue
     }
-    const hasTable = group.blocks.some((block) => block.table !== undefined)
-    if (hasTable && group.section.page.columns > 1) {
+    // A table that flows through a multi-column section still has no exact
+    // geometry here. A floating one does not flow through the columns at all:
+    // its frame states where it goes, so the columns keep their own geometry
+    // and only have to make room for the box the float occupies.
+    if (group.section.page.columns > 1 && group.blocks.some((block) => block.table && !placeableFloatingTable(block.table))) {
       refuse(context, 'body-table-unsupported', group.section.id, 'Table pagination is exact only in single-column sections; multi-column table geometry is outside pagination v1')
       return
     }
