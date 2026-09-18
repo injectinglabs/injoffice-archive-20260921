@@ -209,6 +209,32 @@ func TestNativeNumberingRootSemanticsDeferUntilConcreteNumIDReference(t *testing
 	}
 }
 
+// w:numIdMacAtCleanup (ECMA-376 17.9.16) names the last numbering instance an
+// application had already reviewed when it last cleaned up numbering.xml. It is
+// bookkeeping about a past editing pass, applies to no paragraph, and selects no
+// counter, format, level text or geometry, so it must not defer a refusal onto
+// every numbered paragraph the way an unknown root element does.
+func TestNativeNumberingCleanupBookkeepingRootIsNotUnmodeled(t *testing.T) {
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="360" w:hanging="180"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num><w:numIdMacAtCleanup w:val="142"/></w:numbering>`
+	referenced := resolveNumberingFixture(t, numbering, numberedParagraph("2", 0, "numbered"))
+	if referenced.Paragraphs[0].Numbering == nil {
+		t.Fatalf("cleanup bookkeeping dropped the marker: %#v", referenced)
+	}
+	if hasResolutionDiagnostic(referenced, "UNMODELED_NUMBERING_ROOT") {
+		t.Fatalf("cleanup bookkeeping was deferred as unknown numbering-root semantics: %#v", referenced.Diagnostics)
+	}
+	// An unknown w: root element still defers to its concrete reference.
+	unknownPart := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="360" w:hanging="180"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num><w:mystery w:val="1"/></w:numbering>`
+	if unknown := resolveNumberingFixture(t, unknownPart, numberedParagraph("2", 0, "numbered")); !hasResolutionDiagnostic(unknown, "UNMODELED_NUMBERING_ROOT") {
+		t.Fatalf("an unknown numbering-root element stopped deferring: %#v", unknown.Diagnostics)
+	}
+	// A foreign-namespace element borrowing the local name is still foreign.
+	foreignPart := `<w:numbering xmlns:w="` + wordMLTransitional + `" xmlns:x="urn:foreign-numbering"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="360" w:hanging="180"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num><x:numIdMacAtCleanup x:val="142"/></w:numbering>`
+	if alien := resolveNumberingFixture(t, foreignPart, numberedParagraph("2", 0, "numbered")); !hasResolutionDiagnostic(alien, "FOREIGN_NUMBERING_ROOT") || hasResolutionDiagnostic(alien, "UNMODELED_NUMBERING_ROOT") {
+		t.Fatalf("a foreign-namespace element borrowing the local name stopped being preserved as foreign: %#v", alien.Diagnostics)
+	}
+}
+
 func TestNativeResolvedTwipsAreBoundedBeforeMilliPointConversion(t *testing.T) {
 	maximum := nativeMaxTwipsForMilliPoints
 	properties := NativeResolvedParagraphPropertiesV1{
