@@ -261,6 +261,98 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(paginated.layout.pages.length).toBe(1)
   })
 
+  /** tdf135943_shapeWithText_LayoutInCell0_compat15.docx: w:tblW 5000 pct on a
+   * 6123-twip text column with an authored grid of 3006 + 3111 = 6117 and cells
+   * whose w:tcW state 3007 and 3115. The exact policy refuses twice over -- the
+   * proportional split is 3008.95 / 3114.05, and the cell preferences disagree
+   * with their grid slices -- so the approximate lane paints the authored grid,
+   * which is what Word paints: measured on Word's own PDF export, the rule
+   * between the cells is at 207.00 pt = the 56.7 pt margin plus 3006 twips, and
+   * the right edge at 362.52 pt against 362.55 pt for 6117 twips, where the
+   * stretched grid would put them at 207.15 pt and 362.85 pt. */
+  function percentFixture(percent: number, grid: number[], cellWidths: number[], page: { width: number; height: number; margin: number }): NativeDocxPaginationRequestV1 {
+    const request = autoGridFixture(grid)
+    const table = request.document.body.blocks[0]!.table!
+    delete table.table_style_id
+    delete table.layout
+    table.width_percent_fiftieths = percent
+    for (const row of table.rows) for (const [index, cell] of row.cells.entries()) cell.width_twips = cellWidths[index]!
+    const geometry = request.document.sections[0]!.page
+    geometry.width_twips = page.width; geometry.height_twips = page.height
+    geometry.orientation = page.height >= page.width ? 'portrait' : 'landscape'
+    geometry.margins = { ...geometry.margins, left_twips: page.margin, right_twips: page.margin }
+    request.resolved_layout.tables = [{ table_id: table.id }]
+    return request
+  }
+
+  it('approximate preview paints a percentage table at its authored grid, as Word does', () => {
+    const request = percentFixture(5000, [3006, 3111], [3007, 3115], { width: 8391, height: 5953, margin: 1134 })
+    const original = structuredClone(request.document)
+    const strict = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(strict).toMatchObject({ status: 'refused', diagnostics: [{ message: expect.stringContaining('Percentage table width requires') }] })
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    const [entry] = approximate.tables
+    expect(entry!.width_policy).toEqual({
+      name: 'approximate-percent-authored-grid-v1', section_id: 'section:1', container_width_twips: 6123, percent_fiftieths: 5000,
+      percent_width_twips: 6123, percent_width_exact: true, source_grid_widths_twips: [3006, 3111],
+      source_cell_widths_twips: [[3007, 3115], [3007, 3115]], painted_grid_widths_twips: [3006, 3111], painted_width_twips: 6117,
+    })
+    // 56.7 pt margin + 3006 twips = 207.00 pt, Word's own interior rule.
+    expect(entry!.grid_widths_millipoints).toEqual([3006 * 50, 3111 * 50])
+    expect(entry!.width_millipoints).toBe(6117 * 50)
+    expect(entry!.rows[0]!.cells.map((cell) => cell.x_millipoints)).toEqual([0, 3006 * 50])
+    expect(entry!.table.rows[0]!.cells.map((cell) => cell.width_twips)).toEqual([3006, 3111])
+    expect(request.document).toEqual(original)
+  })
+
+  /** lvlPicBulletId.docx: w:tblW 4850 pct on a 9360-twip text column, so the
+   * percentage is 9079.2 twips and the exact policy refuses on the fraction.
+   * Word truncated its own resolution when it authored the file -- the gridCol
+   * is 9079 -- and paints the table 454.0 pt wide, so the authored grid is both
+   * what Word states and what Word draws. */
+  it('records but does not resolve a percentage that is not a whole twip', () => {
+    const request = percentFixture(4850, [9079], [0], { width: 12240, height: 15840, margin: 1440 })
+    for (const row of request.document.body.blocks[0]!.table!.rows) delete row.cells[0]!.width_twips
+    expect(qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines).status).toBe('refused')
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.width_policy).toMatchObject({ container_width_twips: 9360, percent_width_twips: 9079, percent_width_exact: false, painted_width_twips: 9079 })
+    expect(approximate.tables[0]!.width_millipoints).toBe(9079 * 50)
+    // A percentage table whose authored grid does not fit its column has no
+    // lawful placement and keeps the existing refusal on both tiers.
+    const oversized = percentFixture(5000, [9400], [9400], { width: 12240, height: 15840, margin: 1440 })
+    expect(qualifyApproximateLegacyTables(oversized.document, oversized.resolved_layout, oversized.shaped_lines, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+  })
+
+  /** The same file's cells each state w:tcBorders single/sz=2/000000 on all four
+   * edges against a table that states none, so every shared edge is stated twice
+   * with the same value and there is no conflict to resolve. Word draws exactly
+   * that grid: 0.24 pt bars centred on x = 56.76, 207.00, 362.52 pt. */
+  it('approximate preview projects one uniform cell border set onto a table that states none', () => {
+    const request = percentFixture(5000, [3006, 3111], [3007, 3115], { width: 8391, height: 5953, margin: 1134 })
+    const table = request.document.body.blocks[0]!.table!
+    delete table.borders
+    const border = { style: 'single' as const, size_eighth_points: 2, color_rgb: '000000' }
+    for (const row of table.rows) for (const cell of row.cells) cell.borders = { top: { ...border }, right: { ...border }, bottom: { ...border }, left: { ...border } }
+    const strict = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(strict).toMatchObject({ status: 'refused' })
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    const [entry] = approximate.tables
+    expect(entry!.cell_border_policy).toEqual({ name: 'approximate-uniform-cell-borders-projected-v1', source_border: border, source_cell_count: 4 })
+    expect(entry!.table.borders).toEqual({ top: border, right: border, bottom: border, left: border, inside_horizontal: border, inside_vertical: border })
+    expect(entry!.table.rows.every((row) => row.cells.every((cell) => cell.borders === undefined))).toBe(true)
+    // Two cells that disagree on their shared edge are a real conflict and keep
+    // the existing refusal on both lanes, as does a table that states its own.
+    const conflicting = structuredClone(request)
+    conflicting.document.body.blocks[0]!.table!.rows[0]!.cells[1]!.borders!.left = { style: 'single', size_eighth_points: 8, color_rgb: '000000' }
+    expect(qualifyApproximateLegacyTables(conflicting.document, conflicting.resolved_layout, conflicting.shaped_lines, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+    const partial = structuredClone(request)
+    delete partial.document.body.blocks[0]!.table!.rows[0]!.cells[0]!.borders!.top
+    expect(qualifyApproximateLegacyTables(partial.document, partial.resolved_layout, partial.shaped_lines, { legacy_compatibility_mode: 14 }).status).toBe('refused')
+  })
+
   it('uses authored tblGrid as approximate fixed width when source layout is auto', () => {
     const request = fixture()
     const table = request.document.body.blocks[0]!.table!

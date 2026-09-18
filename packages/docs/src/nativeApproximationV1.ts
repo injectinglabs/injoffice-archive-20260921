@@ -1,5 +1,5 @@
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
-import {validLegacyTableOrigins,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,type NativeDocxLegacyTableOriginV1} from './nativeLegacyTableOriginV1.js'
+import {validLegacyTableOrigins,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING,type NativeDocxLegacyTableOriginV1} from './nativeLegacyTableOriginV1.js'
 import type { NativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 import { preflightWire, decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION } from './nativePagePaintWireV1.js'
 import type { NativeDocxValidationIssue } from './nativeContract.js'
@@ -249,7 +249,7 @@ export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSet
     table_width_policy:'approximate-authored-grid-fitted-v1',
     status: paint.status,
     source: { document_id: settings.document_id, revision: settings.revision, package_sha256: settings.package_sha256, settings_sha256: settings.settings_sha256 ?? null },
-    reasons: boundedApproximateReasons([...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[]),...(omissions.omitted_content.length||omissions.unpainted_pages.length?[DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING]:[])], refused),
+    reasons: boundedApproximateReasons([...eligibility.reasons, DOCX_APPROXIMATE_PREVIEW_WARNING, DOCX_APPROXIMATE_LINE_BOX_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING,...(eligibility.legacy_table_origins?.length?[DOCX_LEGACY_TABLE_ORIGIN_WARNING]:[]),...(omissions.omitted_content.length||omissions.unpainted_pages.length?[DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING]:[])], refused),
     ...(eligibility.legacy_table_origins?{legacy_table_origins:structuredClone(eligibility.legacy_table_origins)}:{}),
     source_settings_diagnostics: structuredClone(settings.diagnostics),
     ...(eligibility.approximated_settings ? { approximated_settings: structuredClone(eligibility.approximated_settings) } : {}),
