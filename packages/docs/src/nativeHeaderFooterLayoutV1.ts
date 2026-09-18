@@ -130,6 +130,41 @@ export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<stri
   'HYPERLINK_SEMANTICS',
 ])
 
+/** Section-scoped source codes approximate header/footer placement omits instead of
+ * declaring the page geometry unavailable. The filter below exists to catch section
+ * properties that genuinely move the header band or the body box, so membership is by
+ * name and every other `sections` code still refuses.
+ *
+ * UNMODELED_SECTION_PROPERTY is a section property the extractor could not read at all;
+ * the approximate tier already paints the geometry it did read and discloses the rest.
+ *
+ * COLUMN_SEPARATOR_UNSUPPORTED is the vertical rule `w:cols w:sep="1"` asks for, and it
+ * is provably ink-only. Measured on Word 16.112.4's own export of
+ * multi-column-separator-with-line.docx: the rule is a *filled* bar, not a stroked line,
+ * from x=305.52 pt to x=306.48 pt - 0.96 pt wide, centred on 306.0 pt - running one line
+ * advance down from the top of the text area, while Word's column text origins are
+ * 50.3999 pt and 324.0 pt. Those are value-for-value the equal-width boxes this model
+ * derives from w:pgSz w=12240, w:pgMar left/right=1008 and w:cols space=720 with w:sep
+ * ignored: (511.2 - 36) / 2 = 237.6 pt wide at 50.4 pt and 324.0 pt. So w:sep adds about
+ * 24.4 pt^2 of ink in the gutter and changes no column box, no line and no page - and a
+ * code that only omits gutter ink cannot invalidate header/footer page geometry.
+ *
+ * Both codes are members of the paint tier's DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED,
+ * so the two tiers agree rather than diverge, and COLUMN_SEPARATOR_UNSUPPORTED is
+ * additionally a member of DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, so the dropped bar is
+ * disclosed as omitted content and never leaves the page silently. The strict tier keeps
+ * refusing both, because this set is only ever consulted behind
+ * `omit_unmodeled_section_geometry`, which only the approximate paint sets.
+ *
+ * Deliberately NOT included: AMBIGUOUS_COLUMN_SPACING (`w:cols` with no `w:space` leaves
+ * the column width itself underdetermined, which moves every column box, so it refuses on
+ * both tiers), UNEQUAL_SECTION_COLUMNS (qualified separately above, against a replayed
+ * pagination), and every other `sections` code. */
+export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE: ReadonlySet<string> = new Set([
+  'UNMODELED_SECTION_PROPERTY',
+  'COLUMN_SEPARATOR_UNSUPPORTED',
+])
+
 /** Declared approximate header/footer policies; each is disclosed as an envelope reason. */
 export const DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING = 'Approximate read-only preview: a header or footer story taller than its reserved band is painted at the authored header/footer distance and may overlap the body box; Word moves the body instead.' as const
 export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING = 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.' as const
@@ -423,7 +458,7 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
       const section = sections.get(page.section_id)
       const variants = effective.get(page.section_id)
       if (!section || !variants) { diagnostics.push(diagnostic('selected-story-missing', page.section_id, 'Paginated page has no exact native section')); continue }
-      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS') && !(input.omit_unmodeled_section_geometry && entry.code === 'UNMODELED_SECTION_PROPERTY') && entry.code !== 'REDUNDANT_SECTION_PROPERTY')
+      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS') && !(input.omit_unmodeled_section_geometry && DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE.has(entry.code)) && entry.code !== 'REDUNDANT_SECTION_PROPERTY')
       for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
       if (section.page.orientation === 'portrait' ? section.page.width_twips > section.page.height_twips : section.page.width_twips < section.page.height_twips) diagnostics.push(diagnostic('section-geometry-invalid', section.id, 'Section orientation contradicts its exact page width and height'))
       const kind = selectedKind(section, page, input.pagination_settings)

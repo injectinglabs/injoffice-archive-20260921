@@ -3,6 +3,7 @@ import {
   DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
   DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE,
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
   layoutNativeDocxHeadersFootersV1,
@@ -12,6 +13,7 @@ import {
   type NativeDocxHeaderFooterLayoutSuccessV1,
 } from './nativeHeaderFooterLayoutV1.js'
 import { DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, nativeDocxOmittedContentCategoryV1 } from './nativeApproximateOmittedContentV1.js'
+import { DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 
@@ -141,6 +143,51 @@ describe('native DOCX header/footer layout v1', () => {
     const value = layoutNativeDocxHeadersFootersV1(input)
     expect(value.status).toBe('placed')
     expect(value.diagnostics).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]))
+  })
+
+  it('paints a section whose only unsupported property is the vertical rule w:cols w:sep asks for', () => {
+    // `w:cols w:sep="1"` is ink in the gutter and nothing else. Measured on Word 16.112.4's
+    // own export of multi-column-separator-with-line.docx: the rule is a filled bar from
+    // x=305.52 pt to x=306.48 pt, 0.96 pt wide and centred on 306.0 pt, running one line
+    // advance down from the top of the text area, while Word's own column text origins are
+    // 50.3999 pt and 324.0 pt - the equal-width boxes derived from pgSz 12240, pgMar
+    // left/right 1008 and cols space 720 with w:sep ignored. It moves no column box, so it
+    // cannot make the header/footer band geometry unavailable. Every other `sections` code
+    // still does, AMBIGUOUS_COLUMN_SPACING above all: with no `w:space` the column width
+    // itself is underdetermined.
+    const sectionEntry = (code: string) => ({ id: `unsupported:${code}`, code, capability: 'sections', scope_id: 'section:1', preservation: 'refuse-mutation', message: code })
+    const approximate = fixture()
+    approximate.omit_unmodeled_section_geometry = true
+    approximate.document.unsupported.push(sectionEntry('COLUMN_SEPARATOR_UNSUPPORTED') as never)
+    const placed = layoutNativeDocxHeadersFootersV1(approximate)
+    expect(placed.status).toBe('placed')
+    expect(placed.diagnostics).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]))
+    // The strict tier never sets the omit flag, so it keeps refusing the same section.
+    const strict = fixture()
+    strict.document.unsupported.push(sectionEntry('COLUMN_SEPARATOR_UNSUPPORTED') as never)
+    expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid', scope_id: 'section:1' })]) }))
+    // Exempted by name only: every other `sections` code still refuses on both tiers.
+    for (const code of ['AMBIGUOUS_COLUMN_SPACING', 'UNEQUAL_SECTION_COLUMNS', 'UNMODELED_TABLE_PROPERTY', 'SECTION_TYPE_UNSUPPORTED'] as const) {
+      expect(DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE.has(code), code).toBe(false)
+      const blocked = fixture()
+      blocked.omit_unmodeled_section_geometry = true
+      blocked.document.unsupported.push(sectionEntry(code) as never)
+      expect(layoutNativeDocxHeadersFootersV1(blocked), code).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid', scope_id: 'section:1' })]) }))
+    }
+  })
+
+  it('keeps the section-geometry exemption identical to the judgement the paint tier already made', () => {
+    // #349 expressed the same judgement about w:cols w:sep on the paint tier. Pin the two
+    // tiers together so a later edit to either set cannot let them diverge silently.
+    expect([...DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE].length).toBeGreaterThan(0)
+    for (const code of DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE) {
+      expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(true)
+    }
+    // The only member that drops visible ink is additionally disclosed as omitted content.
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('COLUMN_SEPARATOR_UNSUPPORTED')).toBe(true)
+    // #349's own negative case is in neither set, on either tier.
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('AMBIGUOUS_COLUMN_SPACING')).toBe(false)
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('AMBIGUOUS_COLUMN_SPACING')).toBe(false)
   })
 
   it('refuses inconsistent relationship-id reuse before returning any placement', () => {
