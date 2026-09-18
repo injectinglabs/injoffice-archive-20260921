@@ -3744,6 +3744,16 @@
               "signature": "export declare const DOCX_EMBEDDED_FONT_RESOLVER_ID = \"injoffice.docx.embedded-fonts\""
             },
             {
+              "name": "DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT",
+              "kind": "const",
+              "signature": "export declare const DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT: 'Cambria'"
+            },
+            {
+              "name": "DOCX_ENCLOSED_MARKER_FONT_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_ENCLOSED_MARKER_FONT_WARNING: \"Approximate read-only preview: a list marker whose generated text uses Enclosed Alphanumerics (U+2460..U+24FF) is painted in the declared Cambria host family instead of the face its High ANSI font slot resolves, because this tier reads no cmap and cannot attest that face's repertoire. The substituted family is a preview-host choice, is not the authored face and is not validated against Microsoft Word; its advances and glyph design are not Word's.\""
+            },
+            {
               "name": "DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL",
               "kind": "const",
               "signature": "export declare const DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL: 'injoffice.docx.font-substitution-preview'"
@@ -4159,6 +4169,11 @@
               "signature": "NativeDocxApproximateChartTitleV1"
             },
             {
+              "name": "NativeDocxApproximatedEnclosedMarkerFontV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedEnclosedMarkerFontV1"
+            },
+            {
               "name": "NativeDocxApproximatedFontFamilyV1",
               "kind": "type",
               "signature": "export interface NativeDocxApproximatedFontFamilyV1 extends NativeDocxAbsentFontFamilyV1"
@@ -4457,6 +4472,11 @@
               "name": "NativeDOCXEmbeddedFontSourceV1",
               "kind": "interface",
               "signature": "export interface NativeDOCXEmbeddedFontSourceV1"
+            },
+            {
+              "name": "NativeDocxEnclosedMarkerFontV1",
+              "kind": "type",
+              "signature": "NativeDocxEnclosedMarkerFontV1"
             },
             {
               "name": "NativeDocxEquationContextNoticeV1",
@@ -5599,6 +5619,11 @@
               "signature": "export declare function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shapes: NativeDocxApproximateDrawingShapesV1): NativeDocxApproximateInlineShapeProjectionV1"
             },
             {
+              "name": "projectNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxEnclosedMarkerFontsV1(documentValue: unknown, resolvedValue: unknown, facts: readonly NativeDocxEnclosedMarkerFontV1[], attested?: AttestedFaceFn):"
+            },
+            {
               "name": "projectNativeDocxTextboxPagesV2",
               "kind": "function",
               "signature": "export declare function projectNativeDocxTextboxPagesV2(source: unknown, evidence: unknown):"
@@ -5679,6 +5704,11 @@
               "signature": "export declare function shapeNativeDocxLinesWithParagraphWidthsV1(value: unknown, providers: NativeDocxShapingProviders, paragraphWidths: ReadonlyMap<string, number>, lineIntervals?: NativeDocxLineIntervalPlanV1, nonblockingResolution?: ReadonlySet<string>): Promise<ShapeNativeDocxLinesResult>"
             },
             {
+              "name": "stripNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function stripNativeDocxEnclosedMarkerFontsV1(resolved: NativeDocxResolvedLayoutInputV1, facts: readonly NativeDocxEnclosedMarkerFontV1[]): NativeDocxResolvedLayoutInputV1"
+            },
+            {
               "name": "twipsToMilliPoints",
               "kind": "function",
               "signature": "export declare function twipsToMilliPoints(twips: number): number"
@@ -5704,6 +5734,11 @@
               "signature": "validNativeDocxAbsentFontFamiliesV1"
             },
             {
+              "name": "validNativeDocxApproximatedEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxApproximatedEnclosedMarkerFontsV1(value: unknown, source: readonly NativeDocxEnclosedMarkerFontV1[], packageSHA256: string): value is NativeDocxApproximatedEnclosedMarkerFontV1[]"
+            },
+            {
               "name": "validNativeDocxApproximatedFontFacesV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedFontFacesV1(value: unknown, source: readonly NativeDocxLatinFontFallbackV1[], packageSHA256: string): value is NativeDocxLatinFontFallbackV1[]"
@@ -5717,6 +5752,11 @@
               "name": "validNativeDocxApproximatedImageExtentsV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
+            },
+            {
+              "name": "validNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxEnclosedMarkerFontsV1(value: unknown, packageSHA256: string): value is NativeDocxEnclosedMarkerFontV1[]"
             },
             {
               "name": "validNativeDocxHostDefaultFamilyPolicyV1",
@@ -6676,6 +6716,16 @@
               "signature": "export declare const DOCX_EMBEDDED_FONT_RESOLVER_ID = \"injoffice.docx.embedded-fonts\""
             },
             {
+              "name": "DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT",
+              "kind": "const",
+              "signature": "export declare const DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT: 'Cambria'"
+            },
+            {
+              "name": "DOCX_ENCLOSED_MARKER_FONT_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_ENCLOSED_MARKER_FONT_WARNING: \"Approximate read-only preview: a list marker whose generated text uses Enclosed Alphanumerics (U+2460..U+24FF) is painted in the declared Cambria host family instead of the face its High ANSI font slot resolves, because this tier reads no cmap and cannot attest that face's repertoire. The substituted family is a preview-host choice, is not the authored face and is not validated against Microsoft Word; its advances and glyph design are not Word's.\""
+            },
+            {
               "name": "DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL",
               "kind": "const",
               "signature": "export declare const DOCX_FONT_SUBSTITUTION_PREVIEW_PROTOCOL: 'injoffice.docx.font-substitution-preview'"
@@ -6774,6 +6824,11 @@
               "name": "NativeDocxApproximateChartTitleV1",
               "kind": "type",
               "signature": "NativeDocxApproximateChartTitleV1"
+            },
+            {
+              "name": "NativeDocxApproximatedEnclosedMarkerFontV1",
+              "kind": "type",
+              "signature": "NativeDocxApproximatedEnclosedMarkerFontV1"
             },
             {
               "name": "NativeDocxApproximatedFontFamilyV1",
@@ -6991,6 +7046,11 @@
               "signature": "NativeDocxAutomaticBorderPreviewV1"
             },
             {
+              "name": "NativeDocxEnclosedMarkerFontV1",
+              "kind": "type",
+              "signature": "NativeDocxEnclosedMarkerFontV1"
+            },
+            {
               "name": "NativeDocxFontSubstitutionPreviewV1",
               "kind": "type",
               "signature": "NativeDocxFontSubstitutionPreviewV1"
@@ -7111,6 +7171,11 @@
               "signature": "export declare function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxDocumentV1, resolved: NativeDocxResolvedLayoutInputV1, shapes: NativeDocxApproximateDrawingShapesV1): NativeDocxApproximateInlineShapeProjectionV1"
             },
             {
+              "name": "projectNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function projectNativeDocxEnclosedMarkerFontsV1(documentValue: unknown, resolvedValue: unknown, facts: readonly NativeDocxEnclosedMarkerFontV1[], attested?: AttestedFaceFn):"
+            },
+            {
               "name": "renderNativeDocxApproximatePagePreviewV1",
               "kind": "function",
               "signature": "export declare function renderNativeDocxApproximatePagePreviewV1(input: NativeDocxPagePaintPrepareInputV1, eligibilityValue: unknown, outlineProvider: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineProviderV1, runtime?: NativeDocxApproximateRuntimeV1): Promise<import('./nativeApproximationV1.js').NativeDocxApproximatePagePreviewV1>"
@@ -7131,9 +7196,19 @@
               "signature": "export declare function selectNativeDocxApproximateMathFaceV1(manifest: NativeFontManifest, requested: NativeDocxApproximateEquationFontV1, textFamily: string | undefined): NativeDocxApproximateMathFaceChoiceV1 | undefined"
             },
             {
+              "name": "stripNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function stripNativeDocxEnclosedMarkerFontsV1(resolved: NativeDocxResolvedLayoutInputV1, facts: readonly NativeDocxEnclosedMarkerFontV1[]): NativeDocxResolvedLayoutInputV1"
+            },
+            {
               "name": "validNativeDocxAbsentFontFamiliesV1",
               "kind": "export",
               "signature": "validNativeDocxAbsentFontFamiliesV1"
+            },
+            {
+              "name": "validNativeDocxApproximatedEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxApproximatedEnclosedMarkerFontsV1(value: unknown, source: readonly NativeDocxEnclosedMarkerFontV1[], packageSHA256: string): value is NativeDocxApproximatedEnclosedMarkerFontV1[]"
             },
             {
               "name": "validNativeDocxApproximatedFontFamiliesV1",
@@ -7144,6 +7219,11 @@
               "name": "validNativeDocxApproximatedImageExtentsV1",
               "kind": "function",
               "signature": "export declare function validNativeDocxApproximatedImageExtentsV1(value: unknown): value is NativeDocxApproximatedImageExtentV1[]"
+            },
+            {
+              "name": "validNativeDocxEnclosedMarkerFontsV1",
+              "kind": "function",
+              "signature": "export declare function validNativeDocxEnclosedMarkerFontsV1(value: unknown, packageSHA256: string): value is NativeDocxEnclosedMarkerFontV1[]"
             },
             {
               "name": "validNativeDocxHostDefaultFamilyPolicyV1",
