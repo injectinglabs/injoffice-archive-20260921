@@ -14010,6 +14010,11 @@
               "signature": "export declare function layoutNativeDrawingObjectsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedDrawingV1[]"
             },
             {
+              "name": "layoutNativeFormControlsV1",
+              "kind": "function",
+              "signature": "export declare function layoutNativeFormControlsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedFormControlV1[]"
+            },
+            {
               "name": "MAX_WORKBOOK_MUTATIONS",
               "kind": "const",
               "signature": "export declare const MAX_WORKBOOK_MUTATIONS = 10000"
@@ -14072,7 +14077,7 @@
             {
               "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES",
               "kind": "const",
-              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"FOREIGN_WORKSHEET_MARKUP\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
             },
             {
               "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY",
@@ -14250,6 +14255,16 @@
               "signature": "export interface NativeDrawingObjectV1"
             },
             {
+              "name": "NativeFormControlCaptionBoxV1",
+              "kind": "type",
+              "signature": "NativeFormControlCaptionBoxV1"
+            },
+            {
+              "name": "NativeFormControlV1",
+              "kind": "type",
+              "signature": "export interface NativeFormControlV1"
+            },
+            {
               "name": "NativeFormulaType",
               "kind": "type",
               "signature": "NativeFormulaType"
@@ -14308,6 +14323,11 @@
               "name": "NativePositionedDrawingV1",
               "kind": "type",
               "signature": "NativePositionedDrawingV1"
+            },
+            {
+              "name": "NativePositionedFormControlV1",
+              "kind": "type",
+              "signature": "NativePositionedFormControlV1"
             },
             {
               "name": "NativeRenderCellContentV1",
@@ -15576,9 +15596,14 @@
               "signature": "export declare function layoutNativeDrawingObjectsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedDrawingV1[]"
             },
             {
+              "name": "layoutNativeFormControlsV1",
+              "kind": "function",
+              "signature": "export declare function layoutNativeFormControlsV1(geometry: NativeSheetGeometryV2, objects: NativeWorkbookObjectsV1): NativePositionedFormControlV1[]"
+            },
+            {
               "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES",
               "kind": "const",
-              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
+              "signature": "export declare const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES: readonly [\"COLS_ATTRIBUTES\", \"COLUMN_DIMENSION_EXTRAS\", \"FOREIGN_WORKSHEET_MARKUP\", \"ROW_DIMENSION_EXTRAS\", \"SHEET_FORMAT_EXTRAS\", \"SHEET_VIEW_GEOMETRY\", \"WORKSHEET_ATTRIBUTES\"]"
             },
             {
               "name": "NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY",
@@ -15651,6 +15676,16 @@
               "signature": "export interface NativeDrawingObjectV1"
             },
             {
+              "name": "NativeFormControlCaptionBoxV1",
+              "kind": "type",
+              "signature": "NativeFormControlCaptionBoxV1"
+            },
+            {
+              "name": "NativeFormControlV1",
+              "kind": "type",
+              "signature": "export interface NativeFormControlV1"
+            },
+            {
               "name": "nativeNormalFontDescentEmV1",
               "kind": "function",
               "signature": "export declare function nativeNormalFontDescentEmV1(fontBytes: Uint8Array): number"
@@ -15659,6 +15694,11 @@
               "name": "NativePositionedDrawingV1",
               "kind": "type",
               "signature": "NativePositionedDrawingV1"
+            },
+            {
+              "name": "NativePositionedFormControlV1",
+              "kind": "type",
+              "signature": "NativePositionedFormControlV1"
             },
             {
               "name": "NativeRichTextCellV1",

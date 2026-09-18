@@ -3,7 +3,7 @@ import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import {
   projectNativeWorkbookV2, createNativeMaximumDigitWidthAuthorityV2, nativeNormalFontDescentEmV1,
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
-  layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1,
+  layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1, layoutNativeFormControlsV1,
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
   compileNativeSheetPrintPagePreviewV1, type NativeSheetPrintPagePreviewV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
@@ -11,7 +11,7 @@ import {
   selectNativeRichTextPreviewV1, type NativeRichTextPreviewV1,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2, type NativeSheetViewportV2,
   type NativeSheetPagePreviewV1, type NativeSheetHostPagePolicyV1,
-  type NativePositionedDrawingV1, type NativeChartPreviewV1,
+  type NativePositionedDrawingV1, type NativeChartPreviewV1, type NativePositionedFormControlV1,
 } from '@injoffice/sheets/browser'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
 import { nativeSheetPageCellPreview } from '../nativeSheetPageCellPreview'
@@ -30,7 +30,7 @@ const MAX_FONT_BYTES = 32 * 1024 * 1024
 const MAX_PREVIEW_ROWS = 64
 const MAX_PREVIEW_COLUMNS = 40
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
-type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; descentEm?: number; drawings?: NativePositionedDrawingV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
+type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; descentEm?: number; drawings?: NativePositionedDrawingV1[]; formControls?: NativePositionedFormControlV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
 
 function cellAddress(row: number, column: number) {
   let letters = '', index = column + 1
@@ -130,8 +130,9 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       })()
       const layouts = geometries.map((geometry, index) => {
         const plan = plans[index]!, drawings = layoutNativeDrawingObjectsV1(geometry, objects)
+        const formControls = layoutNativeFormControlsV1(geometry, objects)
         if (repeatHeadings) assertNativeSheetHeadingDrawings(plan, drawings)
-        return { geometry, plan, drawings, selectedViewport: viewports[index]! }
+        return { geometry, plan, drawings, formControls, selectedViewport: viewports[index]! }
       })
       const fontFamily = `injoffice-sheet-${instance}-${token}`
       loaded = await new FontFace(fontFamily, bytes.buffer, {
@@ -206,6 +207,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       <p className="ds-muted">Page order: {result.plan.settings.page_order === 'overThenDown' ? 'across, then down' : 'down, then across'}.</p>
       {result.plan.pages.some(page => page.regions) && <p>Saved print headings and source-positioned drawing fragments repeat on each page. Page captions list body rows and columns; heading cells are shown separately.</p>}
       <details><summary>Page preview limitations</summary><ul>{result.plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}<li>Text is single-line and clipped to cells; wrapping, rotation and text overflow are not reproduced. Unsupported styles and rich runs may differ. Cell text longer than 2,048 characters is truncated in this view.</li></ul></details>
+      {!!result.formControls?.length && <details open><summary>Form control coverage ({result.formControls.length})</summary><ul>{result.formControls.map((control, index) => <li key={index}>{control.source.name || `Form control ${index + 1}`}: {control.status === 'positioned' ? `saved position available; ${control.checked ? 'checked' : 'unchecked'} checkbox` : control.status}. {control.warning} {control.source.warnings.join(' ')}</li>)}</ul></details>}
       {!!result.drawings?.length && <details open><summary>Drawing coverage ({result.drawings.length})</summary><ul>{result.drawings.map((drawing, index) => <li key={index}>{drawing.source.kind === 'chart' ? `Chart ${index + 1}` : `Drawing ${index + 1}`}: {drawing.status === 'positioned' ? 'saved position available' : drawing.status}. {drawing.warning} {drawing.source.warnings.join(' ')}</li>)}</ul></details>}
       <NativeSheetPageImages {...{workbook, sheet, objects}} {...result}/>
     </div>)}
@@ -221,7 +223,7 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, descentEm, drawings = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, descentEm, drawings = [], formControls = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   let conditional: NativeConditionalFillPreviewV1 | undefined
@@ -292,6 +294,28 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
               <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined}/>
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - descentPx(size)} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{richRuns && richCells.get(address(cell.row, cell.column))?.status === 'available' ? <NativeRichTextSpans entry={richCells.get(address(cell.row, cell.column))!} base={cell.style ?? {}} normal={workbook.normal_style} loadedFont={fontFamily}/> : cell.display.text.slice(0, 2048)}</text>
+            </g>
+          })}
+          {formControls.filter(c => c.status === 'positioned' && c.box && c.caption && c.clip).map((control, index) => {
+            const b = control.box!, cap = control.caption!, c = control.clip!, p = region.source_clip
+            const left = Math.max(c.x_emu, p.x_emu), top = Math.max(c.y_emu, p.y_emu), right = Math.min(c.x_emu + c.width_emu, p.x_emu + p.width_emu), bottom = Math.min(c.y_emu + c.height_emu, p.y_emu + p.height_emu)
+            if (right <= left || bottom <= top) return null
+            const id = `${clip}-control-${index}`
+            const bx = b.x_emu / EMU_PER_PIXEL, by = b.y_emu / EMU_PER_PIXEL, bw = b.width_emu / EMU_PER_PIXEL, bh = b.height_emu / EMU_PER_PIXEL
+            const cx = cap.rect.x_emu / EMU_PER_PIXEL, cy = cap.rect.y_emu / EMU_PER_PIXEL, cw = cap.rect.width_emu / EMU_PER_PIXEL, ch = cap.rect.height_emu / EMU_PER_PIXEL
+            const size = cap.size_points * 96 / 72
+            // The caption sits in the control's text area exactly as a cell's
+            // text sits in its cell: the same baseline conventions, so one
+            // descent rule serves both.
+            const baseline = cap.valign === 'top' ? cy + size : cap.valign === 'center' ? cy + (ch + size) / 2 - 2 : cy + ch - descentPx(size)
+            return <g key={index} aria-label={`Source-positioned form control ${index + 1}`}>
+              <clipPath id={id}><rect x={left / EMU_PER_PIXEL} y={top / EMU_PER_PIXEL} width={(right - left) / EMU_PER_PIXEL} height={(bottom - top) / EMU_PER_PIXEL}/></clipPath>
+              <g clipPath={`url(#${id})`}>
+                <title>{`${control.source.name}: ${control.checked ? 'checked' : 'unchecked'} checkbox — ${cap.text}`}</title>
+                <rect x={bx} y={by} width={bw} height={bh} fill="#FFFFFF" stroke="#000000" strokeWidth={96 / 72}/>
+                {control.checked && <path d={`M ${bx + bw * 0.2} ${by + bh * 0.52} L ${bx + bw * 0.42} ${by + bh * 0.76} L ${bx + bw * 0.8} ${by + bh * 0.24}`} fill="none" stroke="#000000" strokeWidth={96 / 72 * 1.5}/>}
+                <text x={cap.align === 'right' ? cx + cw : cap.align === 'center' ? cx + cw / 2 : cx} y={baseline} textAnchor={cap.align === 'right' ? 'end' : cap.align === 'center' ? 'middle' : 'start'} fontFamily="sans-serif" fontSize={size} fill="#000000">{cap.text}</text>
+              </g>
             </g>
           })}
           {drawings.filter(d => d.status === 'positioned' && d.rect && d.clip).map((drawing, index) => {
