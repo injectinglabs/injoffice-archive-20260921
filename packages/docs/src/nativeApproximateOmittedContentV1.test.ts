@@ -153,6 +153,23 @@ describe('approximate omitted-content disclosure', () => {
     expect(result).toMatchObject({ content_status: 'partial', omitted_content_total: 1 })
     expect(result.omitted_content).toEqual([expect.objectContaining({ code: 'NEGATIVE_LINE_SPACING_UNAPPLIED', origin: 'source', category: 'text', scope_id: 'paragraph:1', count: 1 })])
   })
+  it('discloses an empty picture bullet as a marker the page does not carry, and keeps a real one refusing', () => {
+    // ECMA-376 17.9.21: a w:numPicBullet that names no relationship anywhere in
+    // its subtree carries no picture, so the level defines a marker with no
+    // image in it and the paragraph is painted with no marker at all. Word's own
+    // PDF export of lvlPicBulletId.docx paints that document's eight bulleted
+    // markers as a single ArialMT glyph whose ToUnicode maps it to U+0020, so
+    // there is no bullet ink on Word's page either - but the source still asks
+    // for a bullet, so the omission is named rather than left silent.
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('EMPTY_PICTURE_BULLET_UNPAINTED')).toBe(true)
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('EMPTY_PICTURE_BULLET_UNPAINTED')).toBe(true)
+    expect(nativeDocxOmittedContentCategoryV1('EMPTY_PICTURE_BULLET_UNPAINTED', undefined)).toBe('text')
+    // A picture bullet that does name an image relationship is a graphic this
+    // tier cannot paint, and stays outside both sets so it keeps refusing.
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('PICTURE_BULLET_PRESERVED')).toBe(false)
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('PICTURE_BULLET_PRESERVED')).toBe(false)
+  })
+
   it('never lets the paint set admit a run-typography code the discloser does not report', () => {
     // The invariant PR #334 documented, applied to this slice: a code the
     // approximate tier lays out around must either leave the painted content

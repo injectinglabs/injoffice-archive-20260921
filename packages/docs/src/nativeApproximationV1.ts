@@ -142,6 +142,18 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // FOREIGN_RUN_PROPERTY and still refuses on both tiers.
   'RUN_EFFECT_ABSENT_PRESERVED',
   'STYLISTIC_SET_ABSENT_PRESERVED',
+  // A w:numPicBullet that names no relationship anywhere in its subtree carries
+  // no picture, so the level referencing it through w:lvlPicBulletId defines a
+  // marker with no image in it. This tier has no marker-image input, so it
+  // paints the paragraph with no marker at all - which is what Word's own PDF
+  // export of lvlPicBulletId.docx does: the markers of that document's eight
+  // bulleted paragraphs are a single ArialMT glyph whose ToUnicode maps it to
+  // U+0020, and the page carries no bullet ink. The source still asks for a
+  // bullet, so it is disclosed as omitted content and the strict tier keeps
+  // refusing. A picture bullet that does name a relationship is a graphic this
+  // tier cannot paint and stays PICTURE_BULLET_PRESERVED, refusing on both
+  // tiers rather than dropping it in silence.
+  'EMPTY_PICTURE_BULLET_UNPAINTED',
   // w:tcPr/w:textDirection asks for the cell's text to be rotated 90 or 270
   // degrees, or stacked vertically. This tier lays the cell out and paints it
   // horizontally, so the cell's glyphs are present but the rotation is not:
