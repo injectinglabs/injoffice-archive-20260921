@@ -41,6 +41,15 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   'NUMBER_FORM_UNAPPLIED',
   'NUMBER_SPACING_UNAPPLIED',
   'TEXT_EFFECT_3D_UNAPPLIED',
+  // The rest of the Word 2010 run decorations - w14:glow, w14:shadow,
+  // w14:reflection, w14:textOutline, w14:scene3d - and a DISABLED w14:cntxtAlts.
+  // The decorations are ink Word draws around or through glyphs this tier paints
+  // bare; the disabled contextual alternates leave the run painted WITH calt,
+  // which selects glyph forms Word does not paint. Each is a visible mark absent
+  // from the painted page, so it is named here and the preview reports
+  // content_status 'partial'.
+  'TEXT_DECORATION_UNAPPLIED',
+  'CONTEXTUAL_ALTERNATES_UNAPPLIED',
   // A rotated cell's text is painted, but not where or how Word paints it: the
   // lines run along the other axis, wrap against the row height rather than the
   // cell width, and Word clips whatever overflows the cell. That is a visual
@@ -123,7 +132,7 @@ export function nativeDocxOmittedContentCategoryV1(code: string, path: string | 
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
   // A run-typography feature the painted run does not carry is a deviation in
   // painted text, so it is disclosed under the text category next to it.
-  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED') return 'text'
+  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'TEXT_DECORATION_UNAPPLIED' || code === 'CONTEXTUAL_ALTERNATES_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED') return 'text'
   return 'other'
 }
 

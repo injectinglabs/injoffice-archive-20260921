@@ -116,6 +116,18 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'NUMBER_FORM_UNAPPLIED',
   'NUMBER_SPACING_UNAPPLIED',
   'TEXT_EFFECT_3D_UNAPPLIED',
+  // The rest of the Word 2010 run decorations: w14:glow, w14:shadow,
+  // w14:reflection, w14:textOutline and w14:scene3d. Like w14:props3d each one
+  // decorates glyphs that are already selected and already placed - none names
+  // an OpenType feature and none carries an advance - so the page is painted at
+  // this tier's own glyphs and advances with exactly the decoration ink missing.
+  'TEXT_DECORATION_UNAPPLIED',
+  // A DISABLED w14:cntxtAlts. The enabled form states shaping this tier already
+  // performs and carries CONTEXTUAL_ALTERNATES_MATCH_SHAPER instead; turning the
+  // feature off is something the declared HarfBuzz defaults do not offer, so the
+  // run is painted WITH calt and its advances are measurably not Word's wherever
+  // the face carries a calt rule for the text.
+  'CONTEXTUAL_ALTERNATES_UNAPPLIED',
   // Run properties that state the absence of their own effect. Word writes a
   // numbering level's or a style's run properties out in full, one element per
   // property at the value that means "off": w:caps, w:smallCaps, w:strike,
