@@ -42,6 +42,7 @@ import {
   DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS,
   DOCX_PAGE_PAINT_REQUEST_VERSION,
   DOCX_PAGE_PAINT_V1_BINDING_FIELDS,
+  nativeDocxPlacedGlyphOutlineV1,
   compileNativeDocxPagePaintV1,
   compileNativeDocxApproximatePagePreviewV1,
   decodeNativeDocxPagePaintForRequestV1,
@@ -738,8 +739,9 @@ describe('native DOCX page-paint v1', () => {
     expect(fields(line)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BodyLineV1].sort())
     expect(fields(command)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GlyphCommandV1].sort())
     expect(fields(command.face)).toEqual(['content_digest', 'face_id'])
-    expect(fields(command.path[0]!)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.PathMoveV1].sort())
-    expect(fields(command.path.at(-1)!)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.PathCloseV1].sort())
+    expect(fields(page.glyph_outlines[0]!)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GlyphOutlineV1].sort())
+    expect(fields(nativeDocxPlacedGlyphOutlineV1(page, command)[0]!)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.PathMoveV1].sort())
+    expect(fields(nativeDocxPlacedGlyphOutlineV1(page, command).at(-1)!)).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.PathCloseV1].sort())
   })
 
   it('emits non-empty absolute integer glyph paths, explicit page geometry, and caches exact face/glyph keys', async () => {
@@ -752,12 +754,38 @@ describe('native DOCX page-paint v1', () => {
     const command = value.pages[0]!.commands[0]!
     if (command.kind !== 'fill_glyph_path') throw new Error('expected glyph command')
     expect(command).toMatchObject({ glyph_id: 7, font_size_millipoints: 10_000, fill_rgb: '123456', outline_kind: 'path' })
-    expect(command.path[0]).toEqual({ kind: 'move_to', x_millipoints: 5_000, y_millipoints: 13_000 })
-    expect(command.path.some((entry) => entry.kind === 'line_to')).toBe(true)
+    const placed = nativeDocxPlacedGlyphOutlineV1(value.pages[0]!, command)
+    expect(placed[0]).toEqual({ kind: 'move_to', x_millipoints: 5_000, y_millipoints: 13_000 })
+    expect(placed.some((entry) => entry.kind === 'line_to')).toBe(true)
+    // One shared outline per distinct face/glyph/size, referenced by origin only.
+    expect(value.pages[0]!.glyph_outlines).toHaveLength(1)
+    expect(value.pages[0]!.glyph_outlines[0]!.path[0]).toEqual({ kind: 'move_to', x_millipoints: 0, y_millipoints: 0 })
     expect(provider.calls).toBe(1)
     expect(decodeNativeDocxPagePaintV1(value).ok).toBe(true)
     expect(decodeNativeDocxPagePaintForRequestV1(value, request, { provider_id: provider.providerId, provider_revision: provider.providerRevision }).ok).toBe(true)
     expect((await validateNativeDocxPagePaintForRequestV1(value, request, new FixtureProvider())).ok).toBe(true)
+  })
+
+  it('transports one shared outline per distinct glyph and places every repetition by exact integer translation', async () => {
+    const request = fixture()
+    const { value } = await painted(request)
+    if (value.status !== 'painted') throw new Error('expected a painted page')
+    const page = value.pages[0]!
+    const glyphs = page.commands.flatMap((command) => command.kind === 'fill_glyph_path' ? [command] : [])
+    expect(glyphs.length).toBeGreaterThan(1)
+    // Every repetition of one face/glyph/size shares a single stored contour.
+    expect(page.glyph_outlines).toHaveLength(new Set(glyphs.map((glyph) => `${glyph.face.content_digest}|${glyph.glyph_id}|${glyph.font_size_millipoints}`)).size)
+    expect(new Set(glyphs.map((glyph) => glyph.outline_index)).size).toBe(page.glyph_outlines.length)
+    // Placing a repetition is integer addition of its origin, so two occurrences of the
+    // same outline differ by exactly their origin delta and by nothing else.
+    const [first, second] = glyphs
+    expect(second!.outline_index).toBe(first!.outline_index)
+    const shift = { x: second!.origin_x_millipoints - first!.origin_x_millipoints, y: second!.origin_y_millipoints - first!.origin_y_millipoints }
+    expect(nativeDocxPlacedGlyphOutlineV1(page, second!)).toEqual(nativeDocxPlacedGlyphOutlineV1(page, first!).map((part) => Object.fromEntries(Object.entries(part).map(([key, entry]) => [key, key.endsWith('x_millipoints') ? (entry as number) + shift.x : key.endsWith('y_millipoints') ? (entry as number) + shift.y : entry]))))
+    // The shared table is what makes the wire smaller: a page carrying each placed path
+    // inline is strictly larger than the same page carrying the table plus origins.
+    const inline = JSON.stringify(glyphs.map((glyph) => nativeDocxPlacedGlyphOutlineV1(page, glyph))).length
+    expect(JSON.stringify(page.glyph_outlines).length + JSON.stringify(glyphs.map((glyph) => [glyph.outline_index, glyph.origin_x_millipoints, glyph.origin_y_millipoints])).length).toBeLessThan(inline)
   })
 
   it('paints exact native list-marker glyphs with marker font/color and carries numbering hashes through provenance', async () => {
@@ -876,9 +904,28 @@ describe('native DOCX page-paint v1', () => {
     const { value } = await painted(request)
     expect(Object.keys(value).sort()).toEqual([...DOCX_PAGE_PAINT_V1_BINDING_FIELDS.OutputV1].sort())
     const tampered: any = structuredClone(value)
+    // The shared outline carries the glyph identity too, so a command must be re-pointed
+    // consistently to stay structurally valid; only the request join can then reject it.
+    tampered.pages[0].glyph_outlines.push({ ...structuredClone(tampered.pages[0].glyph_outlines[tampered.pages[0].commands[0].outline_index]), glyph_id: 8 })
     tampered.pages[0].commands[0].glyph_id = 8
+    tampered.pages[0].commands[0].outline_index = tampered.pages[0].glyph_outlines.length - 1
     expect(decodeNativeDocxPagePaintV1(tampered).ok).toBe(true)
     expect(decodeNativeDocxPagePaintForRequestV1(tampered, request, { provider_id: 'outline:test', provider_revision: '1' }).ok).toBe(false)
+
+    // A glyph command that no longer agrees with the outline it points at, or points past
+    // the page's table, is a structural failure: a viewer must never quietly paint the
+    // wrong contour or drop one.
+    for (const mutate of [
+      (output: any) => { output.pages[0].commands[0].glyph_id = 8 },
+      (output: any) => { output.pages[0].commands[0].font_size_millipoints += 1000 },
+      (output: any) => { output.pages[0].commands[0].outline_kind = 'empty' },
+      (output: any) => { output.pages[0].commands[0].outline_index = output.pages[0].glyph_outlines.length },
+      (output: any) => { output.pages[0].glyph_outlines[0].face.content_digest = `sha256:${'c'.repeat(64)}` },
+    ]) {
+      const broken: any = structuredClone(value)
+      mutate(broken)
+      expect(decodeNativeDocxPagePaintV1(broken).ok).toBe(false)
+    }
 
     for (const mutate of [
       (output: any) => { output.pages[0].commands[0].face.content_digest = `sha256:${'c'.repeat(64)}` },
@@ -903,8 +950,8 @@ describe('native DOCX page-paint v1', () => {
       (output: any) => { output.pages[0].columns[0].x_millipoints = output.pages[0].width_millipoints },
       (output: any) => { output.pages[0].lines[0].x_millipoints = output.pages[0].columns[0].x_millipoints + output.pages[0].columns[0].width_millipoints },
       (output: any) => { output.pages[0].commands[0].fill_rule = 'evenodd' },
-      (output: any) => { output.pages[0].commands[0].path[0].x_millipoints = -0 },
-      (output: any) => { output.pages[0].commands[0].path.pop() },
+      (output: any) => { output.pages[0].glyph_outlines[0].path[0].x_millipoints = -0 },
+      (output: any) => { output.pages[0].glyph_outlines[0].path.pop() },
     ]) {
       const invalid: any = structuredClone(value)
       mutate(invalid)
@@ -915,7 +962,7 @@ describe('native DOCX page-paint v1', () => {
     cyclicRequest.loop = cyclicRequest
     expect(decodeNativeDocxPagePaintRequestV1(cyclicRequest).ok).toBe(false)
     const cyclicOutput: any = structuredClone(value)
-    cyclicOutput.pages[0].commands[0].path.push(cyclicOutput)
+    cyclicOutput.pages[0].glyph_outlines[0].path.push(cyclicOutput)
     expect(decodeNativeDocxPagePaintV1(cyclicOutput).ok).toBe(false)
   })
 

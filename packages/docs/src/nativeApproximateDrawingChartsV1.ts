@@ -27,7 +27,7 @@ import type { NativeDocxDocumentV1, NativeDocxRunV1, NativeDocxSourceAnchorV1, N
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
 import { ID, RGB, preflightWire, paintCommandID } from './nativePagePaintWireV1.js'
-import { nativeDocxPlaceGlyphPathV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1 } from './nativePagePaintV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1 } from './nativePagePaintV1.js'
 import { textboxAnchorLine, type TextboxAnchorContext } from './nativeTextboxAnchorLineV2.js'
 import { resolveTextboxPosition } from './nativeTextboxPositionV2.js'
 import type { NativeDocxTextboxGeometryItemV1 } from './nativeTextboxGeometryPreviewV1.js'
@@ -463,6 +463,8 @@ class ChartTextPainter {
   private readonly resources = new Map<string, Promise<{ resource: FontResource; face: ResolvedFontFace } | undefined>>()
   private readonly shaped = new Map<string, Promise<ShapedText | undefined>>()
   private readonly outlines = new Map<string, NativeDocxGlyphOutlineResultV1>()
+  // One shared outline table per page, so repeated label glyphs are transported once.
+  private readonly registries = new Map<string, ReturnType<typeof nativeDocxPageGlyphOutlineRegistryV1>>()
   private readonly substituted = new Set<string>()
   glyphBudget = MAX_CHART_GLYPHS
   dropped = 0
@@ -534,7 +536,9 @@ class ChartTextPainter {
   }
 
   /** Glyph paths for one shaped label at pen origin `x` and `baseline`. */
-  async paint(shaped: ShapedText, x: number, baseline: number, rgb: string, line: NativeDocxPaintLineV1, fragmentID: string, sourceID: string): Promise<NativeDocxFillGlyphPathCommandV1[]> {
+  async paint(shaped: ShapedText, x: number, baseline: number, rgb: string, page: NativeDocxPaintPageV1, line: NativeDocxPaintLineV1, fragmentID: string, sourceID: string): Promise<NativeDocxFillGlyphPathCommandV1[]> {
+    const registry = this.registries.get(page.id) ?? nativeDocxPageGlyphOutlineRegistryV1(page)
+    this.registries.set(page.id, registry)
     const commands: NativeDocxFillGlyphPathCommandV1[] = []
     let penX = x
     for (const [glyphIndex, glyph] of shaped.segment.glyphs.entries()) {
@@ -548,10 +552,10 @@ class ChartTextPainter {
         this.outlines.set(cacheKey, outline)
       }
       if (outline.status === 'outlined') {
-        const path = nativeDocxPlaceGlyphPathV1(outline.path, Math.round(penX + glyph.offsetXMilliPoints), Math.round(baseline - glyph.offsetYMilliPoints), shaped.fontSize, outline.units_per_em)
-        if (path) {
+        const placement = nativeDocxRegisterGlyphOutlineV1(registry, shaped.face, glyph.glyphId, shaped.fontSize, Math.round(penX + glyph.offsetXMilliPoints), Math.round(baseline - glyph.offsetYMilliPoints), { kind: 'path', path: outline.path, units_per_em: outline.units_per_em, scale_x: shaped.fontSize, scale_y: shaped.fontSize })
+        if (placement) {
           this.glyphBudget -= 1
-          commands.push({ kind: 'fill_glyph_path', id: paintCommandID(line.placed_line_id, fragmentID, glyphIndex), line_id: line.line_id, fragment_id: fragmentID, source_id: sourceID, glyph_index: glyphIndex, face: shaped.face, glyph_id: glyph.glyphId, font_size_millipoints: shaped.fontSize, fill_rgb: rgb, fill_rule: 'nonzero', outline_kind: 'path', path })
+          commands.push({ kind: 'fill_glyph_path', id: paintCommandID(line.placed_line_id, fragmentID, glyphIndex), line_id: line.line_id, fragment_id: fragmentID, source_id: sourceID, glyph_index: glyphIndex, face: shaped.face, glyph_id: glyph.glyphId, font_size_millipoints: shaped.fontSize, fill_rgb: rgb, fill_rule: 'nonzero', outline_kind: 'path', ...placement })
         }
       }
       penX += glyph.advanceXMilliPoints
@@ -660,7 +664,7 @@ async function paintChart(entry: PlacedChart, ordinal: number, text: ChartTextPa
   let fragment = 0
   const label = async (shaped: ShapedText | undefined, x: number, baseline: number, rgb: string) => {
     if (!shaped) return
-    const painted = await text.paint(shaped, x, baseline, rgb, line, `ch${ordinal}.${fragment++}`, chartID)
+    const painted = await text.paint(shaped, x, baseline, rgb, page, line, `ch${ordinal}.${fragment++}`, chartID)
     glyphs.push(...painted)
   }
   const lineHeight = (shaped: ShapedText | undefined, font: NativeDocxApproximateChartFontV1) => shaped ? shaped.ascent + shaped.descent : Math.round(font.size_hundredth_pt * 12)
