@@ -505,22 +505,49 @@ func (context *nativeApproximateShapeContext) describeGroup(base NativeApproxima
 		}
 	}
 	extent, childExtent, childOffset := firstDirectNativeChild(xfrm, a, "ext"), firstDirectNativeChild(xfrm, a, "chExt"), firstDirectNativeChild(xfrm, a, "chOff")
-	if extent == nil || childExtent == nil || childOffset == nil {
+	if extent == nil {
 		return omit("missing-child-coordinate-space")
 	}
-	placedCX, okCX := nativePositiveInt64Attr(extent, "", "cx")
-	placedCY, okCY := nativePositiveInt64Attr(extent, "", "cy")
-	if !okCX || !okCY || placedCX != base.WidthEMU || placedCY != base.HeightEMU {
-		// wp:extent is the displayed size of the object; a group whose own
-		// extent disagrees cannot be mapped without choosing one of the two.
-		return omit("group-extent-mismatch")
-	}
-	spanCX, okSX := nativePositiveInt64Attr(childExtent, "", "cx")
-	spanCY, okSY := nativePositiveInt64Attr(childExtent, "", "cy")
-	originX, okOX := nativeInt64Attr(childOffset, "", "x")
-	originY, okOY := nativeInt64Attr(childOffset, "", "y")
-	if !okSX || !okSY || !okOX || !okOY || spanCX > nativeApproximateEMULimit || spanCY > nativeApproximateEMULimit || !nativeApproximateWithinEMU(originX) || !nativeApproximateWithinEMU(originY) {
+	groupCX, okCX := nativePositiveInt64Attr(extent, "", "cx")
+	groupCY, okCY := nativePositiveInt64Attr(extent, "", "cy")
+	if !okCX || !okCY || groupCX > nativeApproximateEMULimit || groupCY > nativeApproximateEMULimit {
 		return omit("invalid-child-coordinate-space")
+	}
+	placedCX, placedCY := groupCX, groupCY
+	var spanCX, spanCY, originX, originY int64
+	if childExtent != nil || childOffset != nil {
+		// A stated child coordinate space maps children onto the object's
+		// displayed size, so wp:extent and the group's own a:ext must agree
+		// before either can be chosen as that size.
+		if childExtent == nil || childOffset == nil {
+			return omit("missing-child-coordinate-space")
+		}
+		if groupCX != base.WidthEMU || groupCY != base.HeightEMU {
+			return omit("group-extent-mismatch")
+		}
+		placedCX, placedCY = base.WidthEMU, base.HeightEMU
+		var okSX, okSY, okOX, okOY bool
+		spanCX, okSX = nativePositiveInt64Attr(childExtent, "", "cx")
+		spanCY, okSY = nativePositiveInt64Attr(childExtent, "", "cy")
+		originX, okOX = nativeInt64Attr(childOffset, "", "x")
+		originY, okOY = nativeInt64Attr(childOffset, "", "y")
+		if !okSX || !okSY || !okOX || !okOY || spanCX > nativeApproximateEMULimit || spanCY > nativeApproximateEMULimit || !nativeApproximateWithinEMU(originX) || !nativeApproximateWithinEMU(originY) {
+			return omit("invalid-child-coordinate-space")
+		}
+	} else {
+		// ECMA-376 Part 1 §20.1.7.6 makes a:chOff and a:chExt optional. A group
+		// that states neither leaves its children in the group's own coordinate
+		// space: the child origin is (0, 0) and the child span is a:ext, so the
+		// mapping below is the identity and wp:extent is only the wrap box.
+		// Word paints such a group at a:ext — checked against its own PDF export
+		// of dml-groupshape-childposition, whose 193680x9125640 EMU child fills
+		// exactly 15.2504x718.554 pt with no wp:extent rescale. Stating one of
+		// the pair without the other leaves half the mapping unattested, so that
+		// keeps refusing above.
+		spanCX, spanCY = groupCX, groupCY
+		if groupCX != base.WidthEMU || groupCY != base.HeightEMU {
+			base.Notes = append(base.Notes, "group has no child coordinate space and is painted at its own a:ext; wp:extent differs and bounds only the wrap region")
+		}
 	}
 	scaled := placedCX != spanCX || placedCY != spanCY
 	pending := &base
