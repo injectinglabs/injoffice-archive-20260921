@@ -3645,6 +3645,45 @@ describe('source-anchored textbox page composition',()=>{
     expect(wrapped.reasons).toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
     expect(wrapped.reasons.filter((r) => r === DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)).toHaveLength(1)
   }, 20000)
+
+  // A shaped line records `inline_offset` as the paragraph indent plus its own
+  // ST_Jc alignment offset, so a centred indented cell line sits to the right of
+  // the box it belongs to. Reading that offset as the indent made the indented
+  // box look wider than the cell and refused a line that is entirely inside it.
+  it.each([true, false])('places a centred indented table-cell line inside its indented box (cant_split=%s)', async (cantSplit) => {
+    const centred = async (indentTwips: number) => {
+      const input = tableFixture(), document = input.document as NativeDocxDocumentV1, resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1, settings = input.pagination_settings as NativeDocxPaginationSettingsV1
+      document.body.blocks[0]!.table!.rows[0]!.cant_split = cantSplit
+      const paragraph = document.body.blocks[0]!.table!.rows[0]!.cells[0]!.paragraphs[0]!
+      const properties = resolved.paragraphs.find((entry) => entry.paragraph_id === paragraph.id)!.properties
+      properties.alignment = 'center'
+      if (indentTwips > 0) properties.indent_left_twips = indentTwips
+      settings.profile = 'unsupported'; delete settings.compatibility_mode
+      settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy12' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: settings.document_id, revision: settings.revision, package_sha256: HASH, settings_sha256: settings.settings_sha256, status: 'eligible', legacy_compatibility_mode: 12, reasons: ['Legacy12'] }
+      const outlines = createHarfBuzzOutlineProviderV1({ bytes: FONT_BYTES, contentDigest: FONT_DIGEST })
+      const provider = { providerId: input.outline_provider.provider_id, providerRevision: input.outline_provider.provider_revision, getGlyphOutline(request: import('./nativePagePaintV1.js').NativeDocxGlyphOutlineRequestV1) { const o = outlines.outline(request.glyph_id); return o.path.length ? { status: 'outlined' as const, ...request, ...o } : { status: 'empty' as const, ...request, units_per_em: o.units_per_em } } }
+      const result = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, provider)
+      return { result, paragraph, page: result.pages[0] }
+    }
+    // Control: centred with no indent is a full-width line box, so it paints on
+    // both tiers and fixes the cell content box this fixture actually offers.
+    const control = await centred(0)
+    expect(control.result.status).toBe('painted')
+    const contentX = control.page!.body_box.x_millipoints + 100 * 50
+    const controlLine = control.page!.lines.find((line) => line.paragraph_id === control.paragraph.id)!
+    const contentWidth = 2 * (controlLine.x_millipoints - contentX) + controlLine.width_millipoints
+    const indented = await centred(360)
+    expect(indented.result.status).toBe('painted')
+    expect(indented.result.reasons).toContain(DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING)
+    const line = indented.page!.lines.find((entry) => entry.paragraph_id === indented.paragraph.id)!
+    // Centred inside [indent, content width], not inside the whole content box
+    // and not flush against the indent.
+    expect(line.x_millipoints).toBe(contentX + 360 * 50 + Math.round((contentWidth - 360 * 50 - line.width_millipoints) / 2))
+    expect(line.x_millipoints).toBeGreaterThan(contentX + 360 * 50)
+    expect(line.x_millipoints + line.width_millipoints).toBeLessThanOrEqual(contentX + contentWidth)
+    expect(decodeNativeDocxApproximatePagePreviewV1(indented.result).ok).toBe(true)
+  }, 20000)
 })
 
 describe('approximate DrawingML shapes', () => {
