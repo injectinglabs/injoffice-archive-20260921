@@ -1994,6 +1994,26 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
   return { ends, contentHeights, pageBreakConflicts, atomic }
 }
 
+// The gap the chain's first paragraph opens above itself: the collapsed
+// before/after pair on a populated column, the retained before-spacing at the
+// very first content column of the section, nothing elsewhere.
+function keepChainInitialGap(context: PaginationContext, first: NativeDocxShapedParagraphV1, onPopulatedColumn: boolean): number {
+  if (onPopulatedColumn) return Math.max(context.previousAfter, first.spacing_before_millipoints)
+  if (context.currentPage?.section_page_ordinal === 0 && context.currentColumnOrdinal === 0) return first.spacing_before_millipoints
+  return 0
+}
+
+// Whether every line of the keep_next chain starting at `index` already fits in
+// what is left of the current column. Such a chain is placed by the ordinary
+// paragraph path without ever reaching a boundary, so keep-with-next holds
+// without any split having to be planned.
+function keepChainFitsWhereItStands(context: PaginationContext, plan: KeepChainPlan, index: number, first: NativeDocxShapedParagraphV1): boolean {
+  const contentHeight = plan.contentHeights[index]
+  if (contentHeight === undefined) return false
+  const chainHeight = checkedSum(keepChainInitialGap(context, first, columnHasContent(context)), contentHeight)
+  return chainHeight !== undefined && chainHeight <= remainingHeight(context)
+}
+
 /** Declared approximate pagination policies. Each deferred 'source-diagnostic'
  * carrying one of these messages is surfaced verbatim as an envelope reason. */
 export const DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING = 'Approximate read-only preview: footnote/endnote separator stories with unmodeled markup are omitted because the document has no footnote or endnote references; nothing is painted for them.' as const
@@ -2479,8 +2499,15 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
         if (context.refused || !context.currentPage) return
         const chainEnd = keepPlan.ends[index]!
         if (chainEnd > index) {
-          if (!keepPlan.atomic[index]) {
-            refuse(context, 'keep-chain-unsatisfiable', nativeParagraph.id, 'A keep_next chain contains a multiline paragraph that is not keep_lines; v1 refuses because keep-with-next constrains the boundary and requires boundary-aware split planning')
+          // A keep_next chain only needs boundary-aware split planning when it
+          // actually reaches a boundary. Word binds the last line of each member
+          // to the first line of the next, so a chain whose every line already
+          // fits where it stands satisfies the constraint by being placed
+          // unchanged, whatever its members say about keep_lines. v1 still
+          // refuses the chain that has to be split: which lines Word carries
+          // across the break is the part this tier cannot plan.
+          if (!keepPlan.atomic[index] && !keepChainFitsWhereItStands(context, keepPlan, index, shapedParagraph)) {
+            refuse(context, 'keep-chain-unsatisfiable', nativeParagraph.id, 'A keep_next chain that does not fit where it stands contains a multiline paragraph that is not keep_lines; v1 refuses because keep-with-next constrains the boundary and splitting it requires boundary-aware split planning')
             return
           }
           const conflict = keepPlan.pageBreakConflicts[index]
@@ -2488,9 +2515,7 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
           if (context.refused || !context.currentPage) return
           const contentHeight = keepPlan.contentHeights[index]
           const onPopulatedColumn = columnHasContent(context)
-          const initialGap = onPopulatedColumn
-            ? Math.max(context.previousAfter, shapedParagraph.spacing_before_millipoints)
-            : context.currentPage.section_page_ordinal === 0 && context.currentColumnOrdinal === 0 ? shapedParagraph.spacing_before_millipoints : 0
+          const initialGap = keepChainInitialGap(context, shapedParagraph, onPopulatedColumn)
           const chainHeight = contentHeight === undefined ? undefined : checkedSum(initialGap, contentHeight)
           const freshChainHeight = contentHeight
           if (freshChainHeight === undefined || chainHeight === undefined) {
