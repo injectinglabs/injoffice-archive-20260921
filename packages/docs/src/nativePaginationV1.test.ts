@@ -847,6 +847,29 @@ describe('native DOCX pagination v1', () => {
     ])
   })
 
+  it('places a splittable keep_next chain that never reaches a boundary and still refuses the one that does', () => {
+    // A heading that keeps with a multiline follower, both fitting the page:
+    // Word places them together and never has to split the follower, so there
+    // is no boundary for keep-with-next to constrain. StyleRef-DE.docx is this
+    // shape, and Word's own export puts the pair at the top of its first page.
+    const fits = paginated(fixture({ lineCounts: [1, 3], bodyHeight: 40_000, properties: [{ keep_next: true }, {}] }))
+    expect(fits.pages.map((page) => page.lines.map((line) => line.line_id))).toEqual([
+      ['line:paragraph:1:0', 'line:paragraph:2:0', 'line:paragraph:2:1', 'line:paragraph:2:2'],
+    ])
+
+    // The same chain one line too tall for what is left of the column does
+    // reach a boundary, and which lines Word carries across it is the part v1
+    // cannot plan, so it stays refused.
+    const splits = paginateNativeDocxV1(fixture({ lineCounts: [1, 1, 3], bodyHeight: 40_000, properties: [{}, { keep_next: true }, {}] }))
+    expect(splits).toEqual(expect.objectContaining({
+      ok: true,
+      value: expect.objectContaining({
+        status: 'refused', pages: [],
+        diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'keep-chain-unsatisfiable' })]),
+      }),
+    }))
+  })
+
   it('refuses splittable multiline keep_next chains but accepts explicitly indivisible members', () => {
     const splittable = fixture({ lineCounts: [1, 3, 1], bodyHeight: 40_000, properties: [{}, { keep_next: true }, {}] })
     const refused = paginateNativeDocxV1(splittable)
