@@ -143,7 +143,6 @@ export interface HarfBuzzFontMetricsRequestV1 {
 }
 
 interface TableRecord {
-  checksum: number
   offset: number
   length: number
 }
@@ -263,22 +262,33 @@ function checkedRange(bytes: Uint8Array, offset: number, length: number): boolea
   return Number.isSafeInteger(offset) && Number.isSafeInteger(length) && offset >= 0 && length >= 0 && offset <= bytes.byteLength && length <= bytes.byteLength - offset
 }
 
-function tableChecksum(bytes: Uint8Array, tableTag: string, record: TableRecord): number {
-  let checksum = 0
-  for (let relative = 0; relative < record.length; relative += 4) {
-    let word = 0
-    for (let byte = 0; byte < 4; byte++) {
-      const tableIndex = relative + byte
-      const value = tableIndex < record.length && !(tableTag === 'head' && tableIndex >= 8 && tableIndex < 12)
-        ? bytes[record.offset + tableIndex]!
-        : 0
-      word = (word * 256 + value) >>> 0
-    }
-    checksum = (checksum + word) >>> 0
-  }
-  return checksum
-}
-
+/**
+ * Bounded structural qualification of sfnt bytes, run before HarfBuzz sees them.
+ *
+ * What it guarantees: every table record lies inside the supplied bytes, is
+ * four-byte aligned, is non-empty when the contract requires it, is named once,
+ * does not overlap the face directory and does not overlap another table; the
+ * required tables are present; `head` carries the sfnt magic and a bounded
+ * unitsPerEm; `maxp` a non-zero glyph count; `hmtx` a length consistent with
+ * `hhea.numberOfHMetrics` and that glyph count; `cmap` a structurally walkable
+ * header with at least one Unicode format 4 or 12 subtable whose own length,
+ * segment count and group ranges are checked; `loca` offsets that ascend, stay
+ * inside `glyf` and leave room for each glyph header; and the outline flavor is
+ * fixed TrueType `glyf`/`loca` with no variation tables. Anything it admits,
+ * every parser downstream can walk.
+ *
+ * What it deliberately does not check: the stored per-table checksums of the
+ * sfnt directory. They are advisory build metadata, not a parse precondition -
+ * a table with a stale checksum is exactly as walkable as one without, and real
+ * shipped fonts carry stale ones (Word 16's own `symbol.ttf` states
+ * `0x42f6990a` for a `cmap` that sums to `0x2796fb28`, and it is the only face
+ * on the machine that maps the Symbol bullet U+F0B7). Integrity of the bytes is
+ * not this function's job either: every caller binds the bytes to a caller-pinned
+ * `contentDigest` and `digestBytes` verifies that sha-256 before and after this
+ * preflight, which is strictly stronger than a sum of 32-bit words and is what
+ * actually refuses altered bytes. Refusing a stale checksum bought no integrity
+ * and cost a face no other font can replace.
+ */
 function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | undefined): SfntPreflight | string {
   if (bytes.byteLength < 12) return 'font bytes are shorter than an sfnt header'
   const flavor = u32(bytes, 0)
@@ -306,7 +316,6 @@ function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | und
   for (let index = 0; index < numTables; index++) {
     const recordOffset = sfntOffset + 12 + index * 16
     const tableTag = tag(bytes, recordOffset)
-    const checksum = u32(bytes, recordOffset + 4)
     const offset = u32(bytes, recordOffset + 8)
     const length = u32(bytes, recordOffset + 12)
     if (tables.has(tableTag)) return `sfnt table ${JSON.stringify(tableTag)} is duplicated`
@@ -314,12 +323,11 @@ function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | und
     // Optional tables (prep/fpgm/cvt) may have length 0; required and glyf/loca may not.
     if (length === 0 && NONEMPTY_TABLES.has(tableTag)) return `sfnt table ${JSON.stringify(tableTag)} is empty or outside the font bytes`
     if (!checkedRange(bytes, offset, length)) return `sfnt table ${JSON.stringify(tableTag)} is empty or outside the font bytes`
-    tables.set(tableTag, { checksum, offset, length })
+    tables.set(tableTag, { offset, length })
   }
   const directoryEnd = sfntOffset + 12 + numTables * 16
   for (const [tableTag, record] of tables) {
     if (record.length > 0 && record.offset < directoryEnd && record.offset + record.length > sfntOffset) return `sfnt table ${JSON.stringify(tableTag)} overlaps its face directory`
-    if (tableChecksum(bytes, tableTag, record) !== record.checksum) return `sfnt table ${JSON.stringify(tableTag)} checksum is invalid`
   }
   const orderedTables = [...tables.entries()].sort((left, right) => left[1].offset - right[1].offset || compareCodeUnits(left[0], right[0]))
   for (let index = 1; index < orderedTables.length; index++) {
