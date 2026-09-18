@@ -79,6 +79,7 @@ export {
   type NativeDocxGlyphOutlineResultV1,
   type NativeDocxGlyphOutlineProviderV1,
   type NativeDocxPaintPathCommandV1,
+  type NativeDocxGlyphOutlineV1,
   type NativeDocxFillGlyphPathCommandV1,
   type NativeDocxFillTableCellCommandV1,
   type NativeDocxStrokeTableBorderCommandV1,

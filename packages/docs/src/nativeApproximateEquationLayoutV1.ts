@@ -17,7 +17,7 @@ import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, Nati
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { ID, RGB, preflightWire, paintCommandID } from './nativePagePaintWireV1.js'
-import { nativeDocxPlaceGlyphPathV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphDesignPathCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1 } from './nativePagePaintV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphDesignPathCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1 } from './nativePagePaintV1.js'
 import { qualifyNativeDocxInlineTextboxV1 } from './nativeTextboxInlineV1.js'
 import { asciiLowerNative } from './nativeDeterminism.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1 } from './nativeApproximateOmittedContentV1.js'
@@ -843,6 +843,8 @@ export function paintNativeDocxApproximateEquationsV1(paint: Pick<NativeDocxPage
   const extraByPage = new Map<string, Map<string, NativeDocxPagePaintCommandV1>>()
   const rulesByPage = new Map<string, NativeDocxPagePaintCommandV1[]>()
   const removed = new Set<string>()
+  // One shared outline table per page, so a repeated equation glyph is transported once.
+  const registries = new Map<string, ReturnType<typeof nativeDocxPageGlyphOutlineRegistryV1>>()
   let byteBudget = MAX_ENVELOPE_BYTES - JSON.stringify(paint.pages).length
   let droppedGlyphs = 0
   for (const equation of equations.items) {
@@ -862,11 +864,15 @@ export function paintNativeDocxApproximateEquationsV1(paint: Pick<NativeDocxPage
     const fragmentID = `${equation.id}:eq`
     const maxX = page.width_millipoints, maxY = page.height_millipoints
     let glyphIndex = 0
+    const registry = registries.get(page.id) ?? nativeDocxPageGlyphOutlineRegistryV1(page)
+    registries.set(page.id, registry)
     for (const glyph of layout.glyphs) {
-      const path = nativeDocxPlaceGlyphPathV1(glyph.path, Math.round(originX + glyph.x), Math.round(baselineY + glyph.y), glyph.size, glyph.units_per_em)
-      if (!path) continue
-      const paintCommand: NativeDocxFillGlyphPathCommandV1 = { kind: 'fill_glyph_path', id: paintCommandID(line.placed_line_id, fragmentID, glyphIndex), line_id: line.line_id, fragment_id: fragmentID, source_id: runID!, glyph_index: glyphIndex, face: glyph.face, glyph_id: glyph.glyph_id, font_size_millipoints: glyph.size, fill_rgb: glyph.color, fill_rule: 'nonzero', outline_kind: 'path', path }
-      const bytes = JSON.stringify(paintCommand).length + 1
+      const stored = registry.outlines.length
+      const placement = nativeDocxRegisterGlyphOutlineV1(registry, glyph.face, glyph.glyph_id, glyph.size, Math.round(originX + glyph.x), Math.round(baselineY + glyph.y), { kind: 'path', path: glyph.path, units_per_em: glyph.units_per_em, scale_x: glyph.size, scale_y: glyph.size })
+      if (!placement) continue
+      const paintCommand: NativeDocxFillGlyphPathCommandV1 = { kind: 'fill_glyph_path', id: paintCommandID(line.placed_line_id, fragmentID, glyphIndex), line_id: line.line_id, fragment_id: fragmentID, source_id: runID!, glyph_index: glyphIndex, face: glyph.face, glyph_id: glyph.glyph_id, font_size_millipoints: glyph.size, fill_rgb: glyph.color, fill_rule: 'nonzero', outline_kind: 'path', ...placement }
+      // The envelope budget charges the shared outline the first time only.
+      const bytes = JSON.stringify(paintCommand).length + 1 + (registry.outlines.length > stored ? JSON.stringify(registry.outlines[placement.outline_index]).length + 1 : 0)
       if (bytes > byteBudget) { droppedGlyphs += 1; continue }
       byteBudget -= bytes
       glyphIndex += 1

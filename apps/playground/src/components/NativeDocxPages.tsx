@@ -1,7 +1,7 @@
 import {decodeTextboxesPageResponse,NativeDocxTextboxOnPage,textboxLayer,type TextboxPlacement} from './NativeDocxTextboxPage'
 import { useEffect, useRef, useState } from 'react'
 import type { NativeDocxPagePaintV1, NativeDocxPaintPathCommandV1, NativeDocxPaintInlineImageCommandV1, NativeDocxPaintFloatingImageCommandV1, NativeDocxStrokeTableBorderCommandV1 } from '../../../../packages/docs/src/nativePagePaintV1'
-import { decodeNativeDocxPagePaintV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
+import { decodeNativeDocxPagePaintV1, nativeDocxPlacedGlyphOutlineV1 } from '../../../../packages/docs/src/nativePagePaintOutputV1'
 import { decodeNativeDocxApproximatePagePreviewV1, decodeNativeDocxAutomaticBorderPreviewV1, DOCX_AUTO_BORDER_PREVIEW_PROTOCOL, nativeDocxOmittedContentSummaryV1, type NativeDocxApproximateOmissionsV1 } from '@injoffice/docs/native-page-paint-output'
 import {decodeNativeDocxFontSubstitutionPreviewV1,DOCX_FONT_SUBSTITUTION_WARNING,type NativeDocxFontSubstitutionPreviewV1} from '@injoffice/docs/native-page-paint-output'
 import { DsButton } from '../design-system/primitives'
@@ -184,7 +184,10 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
       }
       if (token !== generation.current) return
       if (!nativeDocxImagesWithinBudget(next.resources)) throw new Error('Native images exceed the interactive viewer pixel budget.')
-      if (next.status === 'painted' && next.pages.some((page) => page.commands.length > 20_000 || page.commands.reduce((count, command) => count + (command.kind === 'fill_glyph_path' ? command.path.length : 0), 0) > 200_000)) throw new Error('Native page geometry exceeds the interactive viewer budget.')
+      // Resolving every glyph against its page's shared outline table here, inside the
+      // reporting boundary, both measures the painted geometry and proves each reference:
+      // a page that could not resolve one says so instead of silently painting fewer glyphs.
+      if (next.status === 'painted' && next.pages.some((page) => page.commands.length > 20_000 || page.commands.reduce((count, command) => count + (command.kind === 'fill_glyph_path' ? nativeDocxPlacedGlyphOutlineV1(page, command).length : 0), 0) > 200_000)) throw new Error('Native page geometry exceeds the interactive viewer budget.')
       await decodeNativeDocxImages(next.resources, controller.signal)
       if (token !== generation.current) return
       setPaint(next); setPageIndex(0)
@@ -219,7 +222,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
         {textboxLayer(paint.textboxes,true).map(textbox=><NativeDocxTextboxOnPage key={textbox.paint.diagnostic_id} textbox={textbox} pageID={page.id}/>)}
         {page.commands.map((command) => {
           switch (command.kind) {
-            case 'fill_glyph_path': return <path key={command.id} d={nativeDocxSVGPath(command.path)} fill={`#${command.fill_rgb}`} fillRule="nonzero" />
+            case 'fill_glyph_path': return <path key={command.id} d={nativeDocxSVGPath(nativeDocxPlacedGlyphOutlineV1(page, command))} fill={`#${command.fill_rgb}`} fillRule="nonzero" />
             case 'fill_text_highlight': return <rect key={command.id} data-native-highlight="true" x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'fill_table_cell': return <rect key={command.id} x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'stroke_table_border': {

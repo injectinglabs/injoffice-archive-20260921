@@ -6,7 +6,7 @@ import { DOCX_NATIVE_LIMITS, type NativeDocxValidationIssue } from './nativeCont
 import { decodeNativeDocxPaginationSettings } from './nativePaginationSettings.js'
 import { decodeNativeDocxPagePaintResourceListV1, type NativeDocxPagePaintMediaAssetV1 } from './nativeImagePagePaintV1.js'
 import { asciiLowerNative, compareNativeValidationIssues } from './nativeDeterminism.js'
-import type { DecodeNativeDocxPagePaintV1Result, NativeDocxContentAddressedFaceV1, NativeDocxPagePaintDiagnosticCode, NativeDocxPagePaintRefusedV1, NativeDocxPagePaintSuccessV1 } from './nativePagePaintV1.js'
+import type { DecodeNativeDocxPagePaintV1Result, NativeDocxContentAddressedFaceV1, NativeDocxFillGlyphPathCommandV1, NativeDocxGlyphOutlineV1, NativeDocxPagePaintDiagnosticCode, NativeDocxPagePaintRefusedV1, NativeDocxPagePaintSuccessV1, NativeDocxPaintPathCommandV1 } from './nativePagePaintV1.js'
 
 export const DOCX_PAGE_PAINT_REQUEST_PROTOCOL = 'injoffice.docx.page-paint-request'
 export const DOCX_PAGE_PAINT_REQUEST_VERSION = 1 as const
@@ -42,7 +42,8 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   PathQuadraticV1: ['kind', 'control_x_millipoints', 'control_y_millipoints', 'x_millipoints', 'y_millipoints'],
   PathCubicV1: ['kind', 'control_1_x_millipoints', 'control_1_y_millipoints', 'control_2_x_millipoints', 'control_2_y_millipoints', 'x_millipoints', 'y_millipoints'],
   PathCloseV1: ['kind'],
-  GlyphCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'glyph_index', 'face', 'glyph_id', 'font_size_millipoints', 'fill_rgb', 'fill_rule', 'outline_kind', 'path'],
+  GlyphOutlineV1: ['face', 'glyph_id', 'font_size_millipoints', 'outline_kind', 'path'],
+  GlyphCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'glyph_index', 'face', 'glyph_id', 'font_size_millipoints', 'fill_rgb', 'fill_rule', 'outline_kind', 'outline_index', 'origin_x_millipoints', 'origin_y_millipoints'],
   HighlightCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   UnderlineCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'stroke_index', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   CellFillCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
@@ -58,7 +59,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   BodyBoxV1: ['x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
   ClipBoxV1: ['x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
   ColumnV1: ['id', 'section_id', 'ordinal', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints'],
-  PageV1: ['id', 'ordinal', 'section_id', 'section_ids', 'kind', 'width_millipoints', 'height_millipoints', 'body_box', 'columns', 'background_rgb', 'clip_box', 'lines', 'commands'],
+  PageV1: ['id', 'ordinal', 'section_id', 'section_ids', 'kind', 'width_millipoints', 'height_millipoints', 'body_box', 'columns', 'background_rgb', 'clip_box', 'lines', 'glyph_outlines', 'commands'],
   ShapedSourceV1: ['protocol', 'version', 'available_width_millipoints', 'tab_interval_millipoints', 'sha256'],
   PaginatedSourceV1: ['protocol', 'version', 'sha256'],
   HeaderFooterSourceV1: ['protocol', 'version', 'sha256'],
@@ -284,12 +285,12 @@ export function validateFace(value: unknown, path: string, issues: NativeDocxVal
   return faceID && digest ? { face_id: faceID, content_digest: digest, ...(collection !== undefined ? { collection_index: collection } : {}) } : undefined
 }
 
-export function validatePaintPath(value: unknown, path: string, outlineKind: string | undefined, issues: NativeDocxValidationIssue[], state: { pathCommands: number; nodes: number }): void {
-  if (!Array.isArray(value)) { add(issues, value === undefined ? 'REQUIRED' : 'INVALID_TYPE', path, 'must be an array'); return }
+/** Validates one shared glyph outline and returns its origin-relative bounds, which the
+ * referencing commands translate to prove their absolute page coordinates. */
+export function validatePaintPath(value: unknown, path: string, outlineKind: string | undefined, issues: NativeDocxValidationIssue[]): { minX: number; maxX: number; minY: number; maxY: number } | undefined {
+  if (!Array.isArray(value)) { add(issues, value === undefined ? 'REQUIRED' : 'INVALID_TYPE', path, 'must be an array'); return undefined }
   if ((outlineKind === 'path' && value.length === 0) || (outlineKind === 'empty' && value.length !== 0)) add(issues, 'INVALID_UNION', path, 'path presence must exactly match outline_kind')
   if (value.length > DOCX_PAGE_PAINT_LIMITS.maxPathCommandsPerGlyph) add(issues, 'LIMIT_EXCEEDED', path, `must contain at most ${DOCX_PAGE_PAINT_LIMITS.maxPathCommandsPerGlyph} commands`)
-  state.pathCommands += value.length
-  if (state.pathCommands > DOCX_PAGE_PAINT_LIMITS.maxPathCommands) add(issues, 'LIMIT_EXCEEDED', path, `paint paths exceed ${DOCX_PAGE_PAINT_LIMITS.maxPathCommands} commands`)
   let open = false
   let drawn = false
   let minX = Infinity
@@ -312,6 +313,25 @@ export function validatePaintPath(value: unknown, path: string, outlineKind: str
   })
   if (open) add(issues, 'INVALID_VALUE', path, 'every glyph contour must close')
   if (outlineKind === 'path' && !(maxX > minX && maxY > minY)) add(issues, 'INVALID_VALUE', path, 'outlined glyph path must have non-degenerate two-dimensional bounds')
+  return outlineKind === 'path' && Number.isFinite(minX) && Number.isFinite(maxX) && Number.isFinite(minY) && Number.isFinite(maxY) ? { minX, maxX, minY, maxY } : undefined
+}
+
+/** Absolute page coordinates for one glyph command, from its page's shared outline table.
+ * Translation is exact integer addition, so this reproduces the placed path a command used
+ * to carry inline, coordinate for coordinate. It throws on a reference the page cannot
+ * satisfy: a renderer must fail loudly rather than quietly paint one glyph fewer. */
+export function nativeDocxPlacedGlyphOutlineV1(page: { readonly glyph_outlines: readonly NativeDocxGlyphOutlineV1[] }, command: Pick<NativeDocxFillGlyphPathCommandV1, 'outline_index' | 'origin_x_millipoints' | 'origin_y_millipoints' | 'glyph_id' | 'font_size_millipoints' | 'outline_kind'>): NativeDocxPaintPathCommandV1[] {
+  const outline = page.glyph_outlines[command.outline_index]
+  if (!outline || outline.glyph_id !== command.glyph_id || outline.font_size_millipoints !== command.font_size_millipoints || outline.outline_kind !== command.outline_kind) throw new TypeError('glyph command does not reference a matching shared outline on its own page')
+  const x = command.origin_x_millipoints, y = command.origin_y_millipoints
+  return outline.path.map((entry) => {
+    switch (entry.kind) {
+      case 'close_path': return entry
+      case 'move_to': case 'line_to': return { kind: entry.kind, x_millipoints: x + entry.x_millipoints, y_millipoints: y + entry.y_millipoints }
+      case 'quadratic_to': return { kind: 'quadratic_to', control_x_millipoints: x + entry.control_x_millipoints, control_y_millipoints: y + entry.control_y_millipoints, x_millipoints: x + entry.x_millipoints, y_millipoints: y + entry.y_millipoints }
+      case 'cubic_to': return { kind: 'cubic_to', control_1_x_millipoints: x + entry.control_1_x_millipoints, control_1_y_millipoints: y + entry.control_1_y_millipoints, control_2_x_millipoints: x + entry.control_2_x_millipoints, control_2_y_millipoints: y + entry.control_2_y_millipoints, x_millipoints: x + entry.x_millipoints, y_millipoints: y + entry.y_millipoints }
+    }
+  })
 }
 
 /** Strict structural decoder for stored or transported paint output. */
@@ -491,6 +511,24 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         }
       })
     })
+    // One shared outline table per page: a glyph command carries only its origin, so the
+    // same contour is transported once however often the page repeats that glyph.
+    const outlineValues = Array.isArray(page.glyph_outlines) ? page.glyph_outlines : []
+    if (!Array.isArray(page.glyph_outlines)) add(issues, page.glyph_outlines === undefined ? 'REQUIRED' : 'INVALID_TYPE', `${path}/glyph_outlines`, 'must be an array')
+    if (outlineValues.length > DOCX_PAGE_PAINT_LIMITS.maxUniqueGlyphOutlines) add(issues, 'LIMIT_EXCEEDED', `${path}/glyph_outlines`, `must contain at most ${DOCX_PAGE_PAINT_LIMITS.maxUniqueGlyphOutlines} outlines`)
+    const pageOutlines: Array<{ face: string; glyphID: number | undefined; fontSize: number | undefined; kind: string | undefined; length: number; bounds: { minX: number; maxX: number; minY: number; maxY: number } | undefined }> = []
+    outlineValues.slice(0, DOCX_PAGE_PAINT_LIMITS.maxUniqueGlyphOutlines).forEach((outlineValue, outlineIndex) => {
+      const outlinePath = `${path}/glyph_outlines/${outlineIndex}`
+      const outline = exactObject(outlineValue, outlinePath, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GlyphOutlineV1, issues)
+      if (!outline) { pageOutlines.push({ face: '', glyphID: undefined, fontSize: undefined, kind: undefined, length: 0, bounds: undefined }); return }
+      const outlineFace = validateFace(outline.face, `${outlinePath}/face`, issues)
+      const outlineGlyphID = integer(outline.glyph_id, `${outlinePath}/glyph_id`, issues, 0, 0xffffffff)
+      const outlineFontSize = integer(outline.font_size_millipoints, `${outlinePath}/font_size_millipoints`, issues, 1, 1_638_000)
+      const outlineKind = outline.outline_kind === 'path' || outline.outline_kind === 'empty' ? outline.outline_kind : undefined
+      if (!outlineKind) add(issues, 'INVALID_VALUE', `${outlinePath}/outline_kind`, 'must be path or empty')
+      const bounds = validatePaintPath(outline.path, `${outlinePath}/path`, outlineKind, issues)
+      pageOutlines.push({ face: outlineFace ? JSON.stringify([outlineFace.face_id, outlineFace.content_digest, outlineFace.collection_index ?? null]) : '', glyphID: outlineGlyphID, fontSize: outlineFontSize, kind: outlineKind, length: Array.isArray(outline.path) ? outline.path.length : 0, bounds })
+    })
     const commands = Array.isArray(page.commands) ? page.commands : []
     if (!Array.isArray(page.commands)) add(issues, page.commands === undefined ? 'REQUIRED' : 'INVALID_TYPE', `${path}/commands`, 'must be an array')
     commands.slice(0, DOCX_PAGE_PAINT_LIMITS.maxGlyphs).forEach((commandValue, commandIndex) => {
@@ -562,14 +600,29 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         glyphs += 1
         const glyphIndex = integer(command.glyph_index, `${commandPath}/glyph_index`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxGlyphs)
         if (commandID && fragmentID && glyphIndex !== undefined && commandPlacementID && commandID !== paintCommandID(commandPlacementID, fragmentID, glyphIndex)) add(issues, 'INVALID_VALUE', `${commandPath}/id`, 'paint command id must derive from placed line, fragment id, and glyph index')
-        validateFace(command.face, `${commandPath}/face`, issues)
-        integer(command.glyph_id, `${commandPath}/glyph_id`, issues, 0, 0xffffffff)
-        integer(command.font_size_millipoints, `${commandPath}/font_size_millipoints`, issues, 1, 1_638_000)
+        const commandFace = validateFace(command.face, `${commandPath}/face`, issues)
+        const commandGlyphID = integer(command.glyph_id, `${commandPath}/glyph_id`, issues, 0, 0xffffffff)
+        const commandFontSize = integer(command.font_size_millipoints, `${commandPath}/font_size_millipoints`, issues, 1, 1_638_000)
         stringValue(command.fill_rgb, `${commandPath}/fill_rgb`, issues, RGB, 6)
         if (command.fill_rule !== 'nonzero') add(issues, 'INVALID_VALUE', `${commandPath}/fill_rule`, 'must equal nonzero')
         const outlineKind = command.outline_kind === 'path' || command.outline_kind === 'empty' ? command.outline_kind : undefined
         if (!outlineKind) add(issues, 'INVALID_VALUE', `${commandPath}/outline_kind`, 'must be path or empty')
-        validatePaintPath(command.path, `${commandPath}/path`, outlineKind, issues, state)
+        const originX = integer(command.origin_x_millipoints, `${commandPath}/origin_x_millipoints`, issues, -DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        const originY = integer(command.origin_y_millipoints, `${commandPath}/origin_y_millipoints`, issues, -DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        const outlineIndex = integer(command.outline_index, `${commandPath}/outline_index`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxUniqueGlyphOutlines)
+        const referenced = outlineIndex !== undefined && outlineIndex < pageOutlines.length ? pageOutlines[outlineIndex] : undefined
+        if (outlineIndex !== undefined && !referenced) add(issues, 'BROKEN_REFERENCE', `${commandPath}/outline_index`, 'glyph command must reference one shared outline of its own page')
+        if (referenced) {
+          // The budget still counts painted path commands, not stored ones, so sharing an
+          // outline can never raise how much a page is allowed to paint.
+          state.pathCommands += referenced.length
+          if (state.pathCommands > DOCX_PAGE_PAINT_LIMITS.maxPathCommands) add(issues, 'LIMIT_EXCEEDED', `${commandPath}/outline_index`, `paint paths exceed ${DOCX_PAGE_PAINT_LIMITS.maxPathCommands} commands`)
+          const commandFaceKey = commandFace ? JSON.stringify([commandFace.face_id, commandFace.content_digest, commandFace.collection_index ?? null]) : ''
+          if (referenced.face !== commandFaceKey || referenced.glyphID !== commandGlyphID || referenced.fontSize !== commandFontSize || referenced.kind !== outlineKind) add(issues, 'BROKEN_REFERENCE', `${commandPath}/outline_index`, 'glyph command must reference the shared outline of its own face content address, glyph, size and outline kind')
+          // Translation by a safe integer is monotone, so the outline's translated extremes
+          // bound every coordinate this command paints.
+          if (referenced.bounds && originX !== undefined && originY !== undefined && [originX + referenced.bounds.minX, originX + referenced.bounds.maxX, originY + referenced.bounds.minY, originY + referenced.bounds.maxY].some((value) => !Number.isSafeInteger(value) || Math.abs(value) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)) add(issues, 'OUT_OF_RANGE', commandPath, 'placed glyph outline exceeds bounded integer page coordinates')
+        }
       } else {
         if (kind === 'paint_floating_image') {
           if (command.layer !== 'behind' && command.layer !== 'front') add(issues, 'INVALID_VALUE', `${commandPath}/layer`, 'must be behind or front')
@@ -613,7 +666,7 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
     const front = sourceOrderedFloating.filter(command => command.layer === 'front').sort((a,b) => (a.stacking_order as number)-(b.stacking_order as number))
     const replay = [...behind, ...commands.filter(command => !isObject(command) || command.kind !== 'paint_floating_image'), ...front]
     if (commands.some((command,index) => command !== replay[index])) add(issues, 'BROKEN_REFERENCE', `${path}/commands`, 'floating layers must bracket page content in stacking order with source-order ties')
-    if (page.kind === 'parity-blank' && (commands.length > 0 || lines.length > 0)) add(issues, 'INVALID_UNION', path, 'parity-blank pages cannot contain lines or paint commands')
+    if (page.kind === 'parity-blank' && (commands.length > 0 || lines.length > 0 || outlineValues.length > 0)) add(issues, 'INVALID_UNION', path, 'parity-blank pages cannot contain lines, glyph outlines or paint commands')
     if (!pageID) return
   })
   if (glyphs > DOCX_PAGE_PAINT_LIMITS.maxGlyphs) add(issues, 'LIMIT_EXCEEDED', '/pages', `glyph commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxGlyphs}`)

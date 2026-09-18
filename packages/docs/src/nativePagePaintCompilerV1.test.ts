@@ -25,6 +25,7 @@ import {
   decodeNativeDocxApproximatePagePreviewV1,
   type NativeDocxPagePaintPrepareInputV1,
 } from './nativePagePaintCompilerV1.js'
+import { nativeDocxPlacedGlyphOutlineV1 } from './nativePagePaintV1.js'
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1 } from './nativeImagePagePaintV1.js'
 import { paginateNativeDocxV1, paginateNativeDocxApproximateLegacyV1 } from './nativePaginationV1.js'
@@ -492,7 +493,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1({...paint,reasons:paint.reasons.filter(r=>r!==DOCX_TABLE_BORDER_RESERVATION_WARNING)}).ok).toBe(false)
     const glyphs=paint.pages[0]!.commands.filter(c=>c.kind==='fill_glyph_path'),oldGlyphs=baseline.pages[0]!.commands.filter(c=>c.kind==='fill_glyph_path')
     expect(glyphs.length).toBeGreaterThan(1)
-    for(const [i,g]of glyphs.entries())expect(g.path).toEqual(oldGlyphs[i]!.path.map(part=>Object.fromEntries(Object.entries(part).map(([k,v])=>[k,k.endsWith('y_millipoints')?(v as number)+500:v]))))
+    for(const [i,g]of glyphs.entries())expect(nativeDocxPlacedGlyphOutlineV1(paint.pages[0]!,g)).toEqual(nativeDocxPlacedGlyphOutlineV1(baseline.pages[0]!,oldGlyphs[i]!).map(part=>Object.fromEntries(Object.entries(part).map(([k,v])=>[k,k.endsWith('y_millipoints')?(v as number)+500:v]))))
     const strict=await prepareNativeDocxPagePaintV1(input),request=structuredClone(strict.page_paint_request)
     expect(request.paginated_layout.status).toBe('refused')
     const q=qualifyApproximateLegacyTables(document,resolved,request.pagination_request.shaped_lines,eligibility)
@@ -707,7 +708,7 @@ describe('native DOCX page-paint compiler v1', () => {
     for(const [index,command] of shifted.pages[0]!.commands.entries()){
       const original=baseline.pages[0]!.commands[index]!
       if(command.kind==='fill_glyph_path'&&original.kind==='fill_glyph_path'){
-        expect(command.path).toEqual(original.path.map(part=>Object.fromEntries(Object.entries(part).map(([key,value])=>[key,key.endsWith('x_millipoints')?(value as number)-5000:value]))))
+        expect(nativeDocxPlacedGlyphOutlineV1(shifted.pages[0]!,command)).toEqual(nativeDocxPlacedGlyphOutlineV1(baseline.pages[0]!,original).map(part=>Object.fromEntries(Object.entries(part).map(([key,value])=>[key,key.endsWith('x_millipoints')?(value as number)-5000:value]))))
       }else if(command.kind==='stroke_table_border'&&original.kind==='stroke_table_border'){
         expect(command).toEqual({...original,x1_millipoints:original.x1_millipoints-5000,x2_millipoints:original.x2_millipoints-5000})
       }else if(command.kind==='fill_table_cell'&&original.kind==='fill_table_cell'){
@@ -1957,7 +1958,7 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(commands.map((command) => command.kind)).toEqual(['fill_text_highlight', 'fill_text_highlight', 'fill_glyph_path', 'fill_glyph_path'])
     const background = commands[0]!, glyph = commands[2]!
     if (background.kind !== 'fill_text_highlight' || glyph.kind !== 'fill_glyph_path') throw new Error('missing commands')
-    expect(glyph.path.some((point) => 'x_millipoints' in point && point.x_millipoints > background.x_millipoints + background.width_millipoints)).toBe(true)
+    expect(nativeDocxPlacedGlyphOutlineV1(completed.page_paint_output.pages[0]!, glyph).some((point) => 'x_millipoints' in point && point.x_millipoints > background.x_millipoints + background.width_millipoints)).toBe(true)
   })
   it('deterministically joins real HarfBuzz shaping, pagination, and all-or-nothing page paint', async () => {
     const first = await prepareNativeDocxPagePaintV1(fixture())
@@ -3897,8 +3898,8 @@ describe('approximate DrawingML shapes', () => {
     expect(boxGlyphs.length).toBeGreaterThan(20)
     const line = page.lines[0]!
     for (const glyph of boxGlyphs) { expect(glyph.line_id).toBe(line.line_id); expect(line.command_ids).toContain(glyph.id) }
-    const xs = boxGlyphs.flatMap(g => g.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
-    const ys = boxGlyphs.flatMap(g => g.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+    const xs = boxGlyphs.flatMap(g => nativeDocxPlacedGlyphOutlineV1(page, g).flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
+    const ys = boxGlyphs.flatMap(g => nativeDocxPlacedGlyphOutlineV1(page, g).flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(72_000 + 7_200 - 1_000); expect(Math.max(...xs)).toBeLessThanOrEqual(72_000 + 216_000)
     expect(Math.min(...ys)).toBeGreaterThanOrEqual(144_000); expect(Math.max(...ys)).toBeLessThanOrEqual(144_000 + 72_000)
     expect(page.commands.some(c => c.kind === 'stroke_text_underline' && c.source_id === 'approximate-drawing-shape:test:1:p0:r0')).toBe(true)
@@ -4193,8 +4194,8 @@ describe('approximate DrawingML charts', () => {
     // Category labels, six tick labels and two legend entries; the automatic title paints no text.
     expect(glyphs.length).toBeGreaterThan(20)
     for (const glyph of glyphs) { expect(glyph.line_id).toBe(line.line_id); expect(line.command_ids).toContain(glyph.id); expect(glyph.fill_rgb).toBe('595959') }
-    const xs = glyphs.flatMap(g => g.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
-    const ys = glyphs.flatMap(g => g.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+    const xs = glyphs.flatMap(g => nativeDocxPlacedGlyphOutlineV1(page, g).flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
+    const ys = glyphs.flatMap(g => nativeDocxPlacedGlyphOutlineV1(page, g).flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(area.x_millipoints); expect(Math.max(...xs)).toBeLessThanOrEqual(area.x_millipoints + area.width_millipoints)
     expect(Math.min(...ys)).toBeGreaterThanOrEqual(area.y_millipoints); expect(Math.max(...ys)).toBeLessThanOrEqual(area.y_millipoints + area.height_millipoints)
     // Chart text paints after the chart's own fills and strokes, so labels stay visible over the area fill.

@@ -35,6 +35,7 @@ export {
   DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION, DOCX_PAGE_PAINT_LIMITS,
   DOCX_PAGE_PAINT_REQUEST_V1_BINDING_FIELDS, DOCX_PAGE_PAINT_V1_BINDING_FIELDS,
   decodeNativeDocxPagePaintV1,
+  nativeDocxPlacedGlyphOutlineV1,
 } from './nativePagePaintWireV1.js'
 
 import {
@@ -156,6 +157,19 @@ export type NativeDocxPaintPathCommandV1 =
   | { kind: 'cubic_to'; control_1_x_millipoints: number; control_1_y_millipoints: number; control_2_x_millipoints: number; control_2_y_millipoints: number; x_millipoints: number; y_millipoints: number }
   | { kind: 'close_path' }
 
+/** One glyph outline, shared by every command on its page that paints the same face,
+ * glyph, nominal size and script scale. `path` is expressed in page axes relative to the
+ * glyph origin, so a command's absolute page coordinates are its origin plus each
+ * coordinate here: exact integer addition, never a second rounding or rescale. */
+export interface NativeDocxGlyphOutlineV1 {
+  face: NativeDocxContentAddressedFaceV1
+  glyph_id: number
+  font_size_millipoints: number
+  outline_kind: 'path' | 'empty'
+  /** Origin-relative page coordinates. Empty only when outline_kind is `empty`. */
+  path: NativeDocxPaintPathCommandV1[]
+}
+
 export interface NativeDocxFillGlyphPathCommandV1 {
   kind: 'fill_glyph_path'
   id: string
@@ -169,8 +183,11 @@ export interface NativeDocxFillGlyphPathCommandV1 {
   fill_rgb: string
   fill_rule: 'nonzero'
   outline_kind: 'path' | 'empty'
-  /** Absolute page coordinates. Empty only when outline_kind is `empty`. */
-  path: NativeDocxPaintPathCommandV1[]
+  /** Index of this glyph's shared outline in its own page's `glyph_outlines`. */
+  outline_index: number
+  /** Absolute page coordinates of the glyph origin; the shared outline is relative to it. */
+  origin_x_millipoints: number
+  origin_y_millipoints: number
 }
 
 export interface NativeDocxFillTableCellCommandV1 {
@@ -301,6 +318,8 @@ export interface NativeDocxPaintPageV1 {
   background_rgb: 'FFFFFF'
   clip_box: { x_millipoints: 0; y_millipoints: 0; width_millipoints: number; height_millipoints: number }
   lines: NativeDocxPaintLineV1[]
+  /** Every distinct glyph outline this page's commands reference, in first-use order. */
+  glyph_outlines: NativeDocxGlyphOutlineV1[]
   commands: NativeDocxPagePaintCommandV1[]
 }
 
@@ -685,52 +704,111 @@ function captureOutline(value: unknown, expectedFace: NativeDocxContentAddressed
   return undefined
 }
 
-function coordinate(origin: number, design: number, fontSize: number, unitsPerEm: number, invertY = false): number | undefined {
-  let scaled: number
-  try { scaled = scaleFontUnits(design, unitsPerEm, fontSize) } catch { return undefined }
-  const result = origin + (invertY ? -scaled : scaled)
-  return Number.isSafeInteger(result) && Math.abs(result) <= DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints ? result : undefined
-}
-
-function placePath(path: NativeDocxGlyphDesignPathCommandV1[], originX: number, originY: number, fontSize: number, unitsPerEm: number, fontSizeY = fontSize): NativeDocxPaintPathCommandV1[] | undefined {
+/** Scales one design-space outline into page axes around a zero origin. Identical to the
+ * Every coordinate is `scaleFontUnits`, which already returns a safe integer, so placing it
+ * at a glyph origin later is exact integer addition. The bounds come back with it, because
+ * the page-coordinate budget is then proved once against the translated extremes instead of
+ * once per repetition. */
+function localGlyphPath(path: NativeDocxGlyphDesignPathCommandV1[], fontSize: number, unitsPerEm: number, fontSizeY: number): { path: NativeDocxPaintPathCommandV1[]; minX: number; maxX: number; minY: number; maxY: number } | undefined {
+  // Rounding towards zero from below, and negating an exact zero, both produce negative
+  // zero, which the wire forbids. Translating it later gave the same number either way.
+  const zero = (value: number): number => value === 0 ? 0 : value
   const output: NativeDocxPaintPathCommandV1[] = []
-  for (const command of path) {
-    if (command.kind === 'close_path') { output.push(command); continue }
-    const x = coordinate(originX, command.x, fontSize, unitsPerEm)
-    const y = coordinate(originY, command.y, fontSizeY, unitsPerEm, true)
-    if (x === undefined || y === undefined) return undefined
-    if (command.kind === 'move_to' || command.kind === 'line_to') output.push({ kind: command.kind, x_millipoints: x, y_millipoints: y })
-    else if (command.kind === 'quadratic_to') {
-      const controlX = coordinate(originX, command.control_x, fontSize, unitsPerEm)
-      const controlY = coordinate(originY, command.control_y, fontSizeY, unitsPerEm, true)
-      if (controlX === undefined || controlY === undefined) return undefined
-      output.push({ kind: 'quadratic_to', control_x_millipoints: controlX, control_y_millipoints: controlY, x_millipoints: x, y_millipoints: y })
-    } else {
-      const control1X = coordinate(originX, command.control_1_x, fontSize, unitsPerEm)
-      const control1Y = coordinate(originY, command.control_1_y, fontSizeY, unitsPerEm, true)
-      const control2X = coordinate(originX, command.control_2_x, fontSize, unitsPerEm)
-      const control2Y = coordinate(originY, command.control_2_y, fontSizeY, unitsPerEm, true)
-      if (control1X === undefined || control1Y === undefined || control2X === undefined || control2Y === undefined) return undefined
-      output.push({ kind: 'cubic_to', control_1_x_millipoints: control1X, control_1_y_millipoints: control1Y, control_2_x_millipoints: control2X, control_2_y_millipoints: control2Y, x_millipoints: x, y_millipoints: y })
-    }
-  }
-  let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   const bounds = (x: number, y: number): void => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y) }
-  for (const command of output) {
-    if (command.kind === 'close_path') continue
-    if (command.kind === 'quadratic_to') bounds(command.control_x_millipoints, command.control_y_millipoints)
-    if (command.kind === 'cubic_to') {
-      bounds(command.control_1_x_millipoints, command.control_1_y_millipoints)
-      bounds(command.control_2_x_millipoints, command.control_2_y_millipoints)
+  try {
+    for (const command of path) {
+      if (command.kind === 'close_path') { output.push(command); continue }
+      const x = zero(scaleFontUnits(command.x, unitsPerEm, fontSize))
+      const y = zero(0 - scaleFontUnits(command.y, unitsPerEm, fontSizeY))
+      if (command.kind === 'move_to' || command.kind === 'line_to') output.push({ kind: command.kind, x_millipoints: x, y_millipoints: y })
+      else if (command.kind === 'quadratic_to') {
+        const controlX = zero(scaleFontUnits(command.control_x, unitsPerEm, fontSize))
+        const controlY = zero(0 - scaleFontUnits(command.control_y, unitsPerEm, fontSizeY))
+        bounds(controlX, controlY)
+        output.push({ kind: 'quadratic_to', control_x_millipoints: controlX, control_y_millipoints: controlY, x_millipoints: x, y_millipoints: y })
+      } else {
+        const control1X = zero(scaleFontUnits(command.control_1_x, unitsPerEm, fontSize))
+        const control1Y = zero(0 - scaleFontUnits(command.control_1_y, unitsPerEm, fontSizeY))
+        const control2X = zero(scaleFontUnits(command.control_2_x, unitsPerEm, fontSize))
+        const control2Y = zero(0 - scaleFontUnits(command.control_2_y, unitsPerEm, fontSizeY))
+        bounds(control1X, control1Y); bounds(control2X, control2Y)
+        output.push({ kind: 'cubic_to', control_1_x_millipoints: control1X, control_1_y_millipoints: control1Y, control_2_x_millipoints: control2X, control_2_y_millipoints: control2Y, x_millipoints: x, y_millipoints: y })
+      }
+      bounds(x, y)
     }
-    bounds(command.x_millipoints, command.y_millipoints)
-  }
-  return maxX > minX && maxY > minY ? output : undefined
+  } catch { return undefined }
+  // A glyph that collapses to a point or a line in page axes is not a fillable
+  // contour, exactly as the direct placement always refused.
+  return maxX > minX && maxY > minY ? { path: output, minX, maxX, minY, maxY } : undefined
 }
 
-/** @internal Shared glyph placement for the approximate drawing-shape module.
- * Strict paint keeps calling the private functions directly. */
-export const nativeDocxPlaceGlyphPathV1 = placePath
+/** A page's shared glyph-outline table plus the first-use index that builds it. */
+export interface NativeDocxGlyphOutlineRegistryV1 {
+  outlines: NativeDocxGlyphOutlineV1[]
+  index: Map<string, number>
+  bounds: Array<{ minX: number; maxX: number; minY: number; maxY: number }>
+}
+
+export function nativeDocxGlyphOutlineRegistryV1(): NativeDocxGlyphOutlineRegistryV1 {
+  return { outlines: [], index: new Map(), bounds: [] }
+}
+
+function pathBounds(path: readonly NativeDocxPaintPathCommandV1[]): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const command of path) {
+    if (command.kind === 'close_path') continue
+    const xs = command.kind === 'quadratic_to' ? [command.control_x_millipoints, command.x_millipoints] : command.kind === 'cubic_to' ? [command.control_1_x_millipoints, command.control_2_x_millipoints, command.x_millipoints] : [command.x_millipoints]
+    const ys = command.kind === 'quadratic_to' ? [command.control_y_millipoints, command.y_millipoints] : command.kind === 'cubic_to' ? [command.control_1_y_millipoints, command.control_2_y_millipoints, command.y_millipoints] : [command.y_millipoints]
+    for (const value of xs) { minX = Math.min(minX, value); maxX = Math.max(maxX, value) }
+    for (const value of ys) { minY = Math.min(minY, value); maxY = Math.max(maxY, value) }
+  }
+  return Number.isFinite(minX) ? { minX, maxX, minY, maxY } : { minX: 0, maxX: 0, minY: 0, maxY: 0 }
+}
+
+/** A registry that appends to a page's own shared outline table. Late approximate painters
+ * use it so every index they hand out belongs to the page they paint into; they do not
+ * re-key what the body already stored, so one glyph they share with the body may be stored
+ * twice, which costs one outline and never changes what is painted. */
+export function nativeDocxPageGlyphOutlineRegistryV1(page: { glyph_outlines: NativeDocxGlyphOutlineV1[] }): NativeDocxGlyphOutlineRegistryV1 {
+  return { outlines: page.glyph_outlines, index: new Map(), bounds: page.glyph_outlines.map((outline) => pathBounds(outline.path)) }
+}
+
+export interface NativeDocxGlyphOutlinePlacementV1 {
+  outline_index: number
+  origin_x_millipoints: number
+  origin_y_millipoints: number
+}
+
+/** Registers one glyph occurrence against its page's shared outline table and returns the
+ * command's reference. The outline itself is scaled exactly once per distinct face, glyph,
+ * nominal size and script scale; every later occurrence only carries its origin. The page
+ * coordinate budget is proved against the translated bounds, which contain every translated
+ * coordinate because translation by a safe integer is monotone. */
+export function nativeDocxRegisterGlyphOutlineV1(registry: NativeDocxGlyphOutlineRegistryV1, face: NativeDocxContentAddressedFaceV1, glyphID: number, fontSizeMillipoints: number, originX: number, originY: number, outline: { kind: 'empty' } | { kind: 'path'; path: NativeDocxGlyphDesignPathCommandV1[]; units_per_em: number; scale_x: number; scale_y: number }): NativeDocxGlyphOutlinePlacementV1 | undefined {
+  if (!Number.isSafeInteger(originX) || !Number.isSafeInteger(originY) || Math.abs(originX) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints || Math.abs(originY) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints) return undefined
+  const key = outline.kind === 'empty'
+    ? `empty\u0000${face.content_digest}\u0000${face.collection_index ?? ''}\u0000${glyphID}\u0000${fontSizeMillipoints}`
+    : `path\u0000${face.content_digest}\u0000${face.collection_index ?? ''}\u0000${glyphID}\u0000${fontSizeMillipoints}\u0000${outline.units_per_em}\u0000${outline.scale_x}\u0000${outline.scale_y}`
+  let index = registry.index.get(key)
+  if (index === undefined) {
+    const local = outline.kind === 'empty' ? { path: [] as NativeDocxPaintPathCommandV1[], minX: 0, maxX: 0, minY: 0, maxY: 0 } : localGlyphPath(outline.path, outline.scale_x, outline.units_per_em, outline.scale_y)
+    if (!local) return undefined
+    if (registry.outlines.length >= DOCX_PAGE_PAINT_LIMITS.maxUniqueGlyphOutlines) return undefined
+    index = registry.outlines.length
+    registry.index.set(key, index)
+    registry.outlines.push({ face: { ...face }, glyph_id: glyphID, font_size_millipoints: fontSizeMillipoints, outline_kind: outline.kind, path: local.path })
+    registry.bounds.push({ minX: local.minX, maxX: local.maxX, minY: local.minY, maxY: local.maxY })
+  }
+  const box = registry.bounds[index]!
+  if (registry.outlines[index]!.outline_kind === 'path') {
+    for (const value of [originX + box.minX, originX + box.maxX, originY + box.minY, originY + box.maxY]) {
+      if (!Number.isSafeInteger(value) || Math.abs(value) > DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints) return undefined
+    }
+  }
+  return { outline_index: index, origin_x_millipoints: originX, origin_y_millipoints: originY }
+}
+
 export const nativeDocxCaptureGlyphOutlineV1 = captureOutline
 
 function refusal(provenance: NativeDocxPagePaintProvenanceV1, code: NativeDocxPagePaintDiagnosticCode, scopeID: string, message: string): NativeDocxPagePaintRefusedV1 {
@@ -1090,6 +1168,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     const tableCommands = tableCommandsIndex.get(page.id)
     if (!tableCommands) return { ok: true, value: refusal(provenance, 'identity-mismatch', documentID, 'Table geometry could not exact-join paginated cell lines') }
     const contentCommands: Array<NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1> = []
+    const outlineRegistry = nativeDocxGlyphOutlineRegistryV1()
     const paintLines: NativeDocxPaintLineV1[] = []
     const headerFooterPage = headerFooterByPageID.get(page.id)
     if (!headerFooterPage) return { ok: true, value: refusal(provenance, 'incomplete-page', page.id, 'Header/footer layout does not exactly cover the paginated page') }
@@ -1296,9 +1375,13 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
           const originX = glyphX + glyph.offset_x_millipoints
           const originY = baselineY - glyph.offset_y_millipoints
           if (!Number.isSafeInteger(originX) || !Number.isSafeInteger(originY)) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, 'Glyph origin exceeds safe integer coordinates') }
-          const path = outline.status === 'empty' ? [] : placePath(outline.path, originX, originY, scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'x') : fontSize, outline.units_per_em, scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'y') : fontSize)
-          if (!path) return { ok: true, value: refusal(provenance, 'invalid-path', fragment.id, 'Scaled glyph path exceeds bounded integer page coordinates') }
-          pathCommandCount += path.length
+          const placement = nativeDocxRegisterGlyphOutlineV1(outlineRegistry, face, glyph.glyph_id, fontSize, originX, originY, outline.status === 'empty'
+            ? { kind: 'empty' }
+            : { kind: 'path', path: outline.path, units_per_em: outline.units_per_em, scale_x: scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'x') : fontSize, scale_y: scriptTransform ? nativeDocxScriptScaleV1(fontSize,scriptTransform,'y') : fontSize })
+          if (!placement) return { ok: true, value: refusal(provenance, 'invalid-path', fragment.id, 'Scaled glyph path exceeds bounded integer page coordinates') }
+          // The budget counts painted path commands, not stored ones: sharing an outline
+          // between repetitions of the same glyph must not raise what a page may paint.
+          pathCommandCount += outlineRegistry.outlines[placement.outline_index]!.path.length
           if (pathCommandCount > DOCX_PAGE_PAINT_LIMITS.maxPathCommands) return { ok: true, value: refusal(provenance, 'resource-limit', fragment.id, `Paint path commands exceed ${DOCX_PAGE_PAINT_LIMITS.maxPathCommands}`) }
           contentCommands.push({
             kind: 'fill_glyph_path',
@@ -1313,7 +1396,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             fill_rgb: fill,
             fill_rule: 'nonzero',
             outline_kind: outline.status === 'empty' ? 'empty' : 'path',
-            path,
+            ...placement,
           })
           glyphX += glyph.advance_x_millipoints
           glyphAdvance += glyph.advance_x_millipoints
@@ -1361,6 +1444,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       background_rgb: 'FFFFFF',
       clip_box: { x_millipoints: 0, y_millipoints: 0, width_millipoints: page.width_millipoints, height_millipoints: page.height_millipoints },
       lines: paintLines,
+      glyph_outlines: outlineRegistry.outlines,
       commands: [
         ...contentCommands.filter((command): command is NativeDocxPaintFloatingImageCommandV1 => command.kind === 'paint_floating_image' && command.layer === 'behind').sort((a,b) => a.stacking_order-b.stacking_order),
         ...tableCommands.fills, ...contentCommands.filter(command => command.kind !== 'paint_floating_image'), ...tableCommands.borders,
