@@ -18,6 +18,10 @@ describe('native rounded picture clip SVG',()=>{
   const clip=markup.match(/<clipPath id="([^"]+)" clipPathUnits="userSpaceOnUse"><path d="([^"]+)"><\/path><\/clipPath>/)
   expect(clip).not.toBeNull()
   expect(clip![2]).toBe('M 0 0.5 A 1 0.5 0 0 1 1 0 A 1 0.5 0 0 1 2 0.5 Z')
-  expect(markup).toContain(`url(#${clip![1]})`);expect(markup).not.toContain('<rect x="0" y="0" width="2" height="1" rx=')
+  // The CLIP must be the outline path, not a rectangle. The rect the fixture
+  // paints inside the clipped group is the content being clipped and has to
+  // stay; asserting the whole markup carried no rect forbade the fixture's own
+  // subject.
+  expect(markup).toContain(`url(#${clip![1]})`);expect(clip![0]).not.toContain('<rect')
  })
 })
