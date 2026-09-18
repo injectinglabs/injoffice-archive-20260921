@@ -46,7 +46,7 @@ export const HARFBUZZJS_ENTRY_SHA256 = 'sha256:04ece1914c8720ad96257728119c1bf24
 export const HARFBUZZJS_LOADER_SHA256 = 'sha256:ba43463df44851fd58211ef8c19aa7956965390857727ae867b70dc7b3682de1' as const
 export const HARFBUZZJS_MANIFEST_SHA256 = 'sha256:aa0da40ea2373b213631e1d73f09ddac08dfa3a6f8f5b52be97797c902f443ab' as const
 export const HARFBUZZ_UNICODE_DATA_VERSION = UNICODE_13_VERSION
-export const HARFBUZZ_SHAPER_CONFIG_REVISION = 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables.v4' as const
+export const HARFBUZZ_SHAPER_CONFIG_REVISION = 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables-letter-spacing.v5' as const
 
 export const HARFBUZZ_SHAPER_LIMITS = Object.freeze({
   maxFontBytes: 64 * 1024 * 1024,
@@ -123,7 +123,7 @@ export interface HarfBuzzShaperProvenanceV1 {
   default_feature_policy: 'harfbuzz-14.3.0-shape-defaults'
   feature_policy: 'explicit-qualified-kern-liga-only-applied-where-advertised'
   variation_policy: 'refuse'
-  spacing_policy: 'zero-only'
+  spacing_policy: 'letter-spacing-cluster-trailing-edge-v1-word-spacing-refused'
   font_policy: 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1'
   scale_policy: 'per-glyph-scaleFontUnits-then-sum-v1'
 }
@@ -646,7 +646,9 @@ function runPolicyRefusal(run: ShapeProviderRequest['run'], faceId: string): Nat
   if (!SUPPORTED_SCRIPT_SET.has(run.script)) return refusal('unsupported-script', `script ${JSON.stringify(run.script)} is outside the qualified canonical shaper v1 set`, faceId)
   const scalarIssue = validateQualifiedScalars(run.text, run.script)
   if (scalarIssue) return refusal('unsupported-script', scalarIssue, faceId, 0, run.text.length)
-  if ((run.letterSpacingMilliPoints ?? 0) !== 0 || (run.wordSpacingMilliPoints ?? 0) !== 0) return refusal('unsupported-feature', 'nonzero letter/word spacing is not qualified for canonical cluster-edge placement', faceId)
+  // Word spacing stays unqualified: it is a separate measure applied to word
+  // separators only, and nothing here models which separators Word counts.
+  if ((run.wordSpacingMilliPoints ?? 0) !== 0) return refusal('unsupported-feature', 'nonzero word spacing is not qualified for canonical cluster-edge placement', faceId)
   if ((run.variations?.length ?? 0) !== 0) return refusal('unsupported-feature', 'font variations require variation-qualified authoritative line metrics', faceId)
   for (const feature of run.features ?? []) {
     if (!QUALIFIED_FEATURE_SET.has(feature.tag)) return refusal('unsupported-feature', `OpenType feature ${JSON.stringify(feature.tag)} is outside the qualified explicit feature set`, faceId, feature.startUtf16, feature.endUtf16)
@@ -697,6 +699,20 @@ function shapeWithCachedFace(request: ShapeProviderRequest, cached: CachedFace, 
   const glyphs: ShapedGlyph[] = []
   const clusters: ShapedCluster[] = []
   let advanceInline = 0
+  // Character tracking (DOCX w:spacing on w:rPr, ECMA-376 17.3.2.35). Word's own
+  // export settles both open questions. In StyleRef-DE.docx the Subtitle style
+  // carries w:spacing w:val="15" (0.75 pt) and Word 16 writes that run, and only
+  // that run, with `0.0651 Tc` at Tm scale 46 under a 0.24 CTM; every other run
+  // in the file carries a small negative justification Tc. The run starts at
+  // x=300 and the next text object starts at x=1540.55, so Word's own advance
+  // for it is 1240.55 text-space units. Its 57 glyphs sum to 1070.01 units
+  // unspaced. Adding the delta after every glyph predicts 1240.70 (error 0.15,
+  // i.e. 0.012%, the size of the file's own /Widths rounding: the untracked
+  // control run in the same file misses by 0.03 over 10 glyphs). Adding it only
+  // between glyphs predicts 1237.70, missing by a full tracking step, 2.85.
+  // So: the delta lands at each cluster's TRAILING edge, including the run's
+  // last cluster, and a cluster's own shaped advance is never redistributed.
+  const letterSpacing = run.letterSpacingMilliPoints ?? 0
   for (let clusterIndex = 0; clusterIndex < logicalGroups.length; clusterIndex++) {
     const group = logicalGroups[clusterIndex]!
     const startUtf16 = group.startUtf16
@@ -733,6 +749,23 @@ function shapeWithCachedFace(request: ShapeProviderRequest, cached: CachedFace, 
     // authored content in the paragraph that carries LRM+RLM as it does in the
     // note-separator paragraph that carries neither. Hold the runtime to that.
     if (clusterAdvance !== 0 && isImplicitDirectionalMarkRange(run.text, startUtf16, endUtf16)) return refusal('provider-failure', 'an implicit directional mark must shape to a zero advance', request.font.face.faceId, startUtf16, endUtf16)
+    // Tracking accrues per painted glyph, so a cluster that shapes to no advance
+    // at all - an implicit directional mark, a zero-width joiner - takes none of
+    // it, exactly as it contributes no glyph to Word's own PDF text run.
+    if (letterSpacing !== 0 && clusterAdvance !== 0) {
+      // Cluster-edge placement is provably exact only where one cluster is one
+      // glyph, because that is the only case where "once per cluster" and the
+      // "once per shown glyph" Word's PDF measures above are the same count. A
+      // cluster that shapes to a base plus a mark would take one delta here and
+      // two in Word's text run, and no measurement settles which Word means, so
+      // it is refused rather than approximated silently.
+      if (glyphs.length - glyphStart !== 1) return refusal('unsupported-feature', 'character tracking is qualified only where each cluster shapes to exactly one glyph', request.font.face.faceId, startUtf16, endUtf16)
+      const tracked = clusterAdvance + letterSpacing
+      if (tracked < 0) return refusal('unsupported-feature', 'character tracking condenses this cluster past a zero advance', request.font.face.faceId, startUtf16, endUtf16)
+      glyphs[glyphStart] = Object.freeze({ ...glyphs[glyphStart]!, advanceXMilliPoints: tracked })
+      clusterAdvance += letterSpacing
+      if (!Number.isSafeInteger(clusterAdvance) || clusterAdvance > MAX_OUTPUT_MILLIPOINTS) return refusal('provider-failure', 'tracked cluster advance exceeds the page-paint provider bound', request.font.face.faceId)
+    }
     clusters.push(Object.freeze({
       startUtf16,
       endUtf16,
@@ -819,7 +852,7 @@ export function createHarfBuzzTextShaperV1(options: HarfBuzzShaperOptionsV1): Ha
     // elsewhere it is a no-op, not a refusal, because there is no lookup to run.
     feature_policy: 'explicit-qualified-kern-liga-only-applied-where-advertised',
     variation_policy: 'refuse',
-    spacing_policy: 'zero-only',
+    spacing_policy: 'letter-spacing-cluster-trailing-edge-v1-word-spacing-refused',
     font_policy: 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1',
     scale_policy: 'per-glyph-scaleFontUnits-then-sum-v1',
   })
@@ -936,7 +969,7 @@ export function isCanonicalHarfBuzzTextShaperV1(value: unknown, sourceRevision: 
     && provenance.default_feature_policy === 'harfbuzz-14.3.0-shape-defaults'
     && provenance.feature_policy === 'explicit-qualified-kern-liga-only-applied-where-advertised'
     && provenance.variation_policy === 'refuse'
-    && provenance.spacing_policy === 'zero-only'
+    && provenance.spacing_policy === 'letter-spacing-cluster-trailing-edge-v1-word-spacing-refused'
     && provenance.font_policy === 'bounded-fixed-truetype-sfnt-or-ttc-preflight-v1'
     && provenance.scale_policy === 'per-glyph-scaleFontUnits-then-sum-v1'
 }

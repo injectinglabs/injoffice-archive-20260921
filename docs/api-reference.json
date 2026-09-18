@@ -8130,7 +8130,7 @@
             {
               "name": "HARFBUZZ_SHAPER_CONFIG_REVISION",
               "kind": "const",
-              "signature": "export declare const HARFBUZZ_SHAPER_CONFIG_REVISION: 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables.v4'"
+              "signature": "export declare const HARFBUZZ_SHAPER_CONFIG_REVISION: 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables-letter-spacing.v5'"
             },
             {
               "name": "HARFBUZZ_SHAPER_LIMITS",

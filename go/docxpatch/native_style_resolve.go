@@ -124,6 +124,7 @@ type NativeResolvedRunPropertiesV1 struct {
 	EastAsiaLanguage         *string `json:"east_asia_language,omitempty"`
 	RTL                      *bool   `json:"rtl,omitempty"`
 	Hidden                   *bool   `json:"hidden,omitempty"`
+	LetterSpacingTwips       *int    `json:"letter_spacing_twips,omitempty"`
 }
 
 type NativeResolvedNumberingV1 struct {
@@ -364,6 +365,7 @@ type nativeRunProperties struct {
 	language          *string
 	rtl               nativeBoolProperty
 	hidden            nativeBoolProperty
+	letterSpacing     *int
 }
 
 type nativeParagraphProperties struct {
@@ -2290,6 +2292,19 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			} else {
 				resolver.addDiagnostic("INVALID_KERNING_THRESHOLD", scopeID, partName, child, "Kerning requires one exact bounded half-point threshold; unqualified values remain preserved")
 			}
+		case "spacing":
+			// Character tracking. An authored zero keeps the exact treatment it
+			// had before tracking was modeled: it states the absence of its own
+			// effect, adds nothing to any advance, and is preserved, not applied.
+			if nativeAbsentRunEffect(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("RUN_EFFECT_ABSENT_PRESERVED", scopeID, partName, child, "A run property that states the absence of its own effect is preserved and not applied; it selects the same glyphs at the same advances and paints the same ink as the same run without it, so it moves no line and no page")
+				continue
+			}
+			if value, ok := nativeCharacterSpacingTwips(child, node, resolver.wordNS); ok {
+				properties.letterSpacing = nativeInt(value)
+				continue
+			}
+			resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "This run property is preserved and not guessed")
 		case "sz":
 			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); ok && value <= 3276 {
 				properties.fontSize = nativeInt(value)
@@ -2833,6 +2848,12 @@ func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProper
 	if layer.kerningMinSize != nil {
 		target.kerningMinSize = nativeInt(*layer.kerningMinSize)
 	}
+	// w:spacing is a measurement, not a toggle: ECMA-376 17.3.2.35 gives it a
+	// single ST_SignedTwipsMeasure value, so the nearest layer that states one
+	// wins outright, exactly as w:kern and w:sz do.
+	if layer.letterSpacing != nil {
+		target.letterSpacing = nativeInt(*layer.letterSpacing)
+	}
 	if len(layer.scriptProperties) > 0 {
 		merged := make(map[string]nativeDeferredNumberingDiagnostic, len(target.scriptProperties)+len(layer.scriptProperties))
 		for key, value := range target.scriptProperties {
@@ -2931,6 +2952,7 @@ func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRun
 		FontFamily:               properties.fontFamily, EastAsiaFontFamily: properties.eastAsiaFamily, FontSizeHalfPoint: properties.fontSize,
 		Underline: properties.underline, VerticalAlignment: properties.verticalAlignment, Color: properties.color, Highlight: properties.highlight,
 		Language: properties.language, EastAsiaLanguage: properties.eastAsiaLanguage,
+		LetterSpacingTwips: properties.letterSpacing,
 	}
 	if properties.bold.present {
 		result.Bold = nativeBool(properties.bold.value)
@@ -3294,6 +3316,9 @@ func validateNativeResolvedParagraphProperties(properties NativeResolvedParagrap
 func validateNativeResolvedRunProperties(properties NativeResolvedRunPropertiesV1) error {
 	if properties.KerningMinSizeHalfPoints != nil && (*properties.KerningMinSizeHalfPoints < 1 || *properties.KerningMinSizeHalfPoints > 3276) {
 		return fmt.Errorf("invalid kerning threshold")
+	}
+	if properties.LetterSpacingTwips != nil && (*properties.LetterSpacingTwips == 0 || *properties.LetterSpacingTwips < -NativeDOCXMaxCharacterSpacingTwips || *properties.LetterSpacingTwips > NativeDOCXMaxCharacterSpacingTwips) {
+		return fmt.Errorf("invalid character spacing")
 	}
 	if properties.FontFamily != nil && !nativeBoundedResolvedString(*properties.FontFamily, 256) {
 		return fmt.Errorf("invalid font family")
