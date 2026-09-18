@@ -122,6 +122,24 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // it is a visual result the preview does not produce, disclosed as omitted
   // content rather than a refusal that produces no page at all.
   'CELL_TEXT_DIRECTION_UNSUPPORTED',
+  // A negative w:line measurement. ECMA-376 17.3.1.33 types w:line as
+  // ST_SignedTwipsMeasure and Word reads a negative one as an EXACT line height
+  // of its absolute value, compressing the lines until they overlap and
+  // ignoring the authored w:lineRule. This tier has no compressed line box -
+  // DOCX_APPROXIMATE_LINE_BOX_WARNING already says so - so the resolver drops
+  // the measurement and the paragraph keeps the line spacing it inherits. The
+  // page is painted with the compression UNAPPLIED and its lines sit further
+  // apart than Word's, by the difference between the inherited spacing and the
+  // absolute authored value. Measured on Word's own export of
+  // tdf125469_singleSpacing.docx: Word puts that document's paragraphs at
+  // baselines 32.64, 46.56 and 29.28 pt apart where the inherited spacing this
+  // tier keeps is a 43.95 pt natural line box at 36 pt. Admitted here only
+  // because it is also a member of
+  // DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, so the unapplied compression is
+  // named in omitted_content; the strict tier keeps refusing it, and a negative
+  // w:before or w:after, or any unparseable measurement, stays
+  // UNMODELED_PARAGRAPH_SPACING / INVALID_LINE_SPACING and refuses on both.
+  'NEGATIVE_LINE_SPACING_UNAPPLIED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal

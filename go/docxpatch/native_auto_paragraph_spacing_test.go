@@ -105,8 +105,15 @@ func TestNativeAutomaticParagraphSpacingIgnoresOnlyItsCompanionMeasurement(t *te
 // line rule without a measurement.
 func TestNativeUnreadableParagraphSpacingStillRefuses(t *testing.T) {
 	for _, spacing := range []string{
-		`<w:spacing w:line="-240"/>`,
+		// `<w:spacing w:line="-240"/>` used to live here. A negative w:line is a
+		// measurement Word reads, not unknown structure, so it now carries
+		// NEGATIVE_LINE_SPACING_UNAPPLIED and the approximate tier paints the
+		// paragraph and discloses the unapplied compression - see
+		// native_negative_line_spacing_test.go, which also pins that a negative
+		// w:before or w:after, and a negative w:line beside an invalid rule,
+		// stay unmodeled and keep refusing.
 		`<w:spacing w:before="-240" w:beforeAutospacing="1"/>`,
+		`<w:spacing w:after="-240" w:line="-240"/>`,
 		`<w:spacing w:before="auto" w:beforeAutospacing="1"/>`,
 		`<w:spacing w:beforeLines="150" w:afterLines="175"/>`,
 		`<w:spacing w:beforeAutospacing="maybe"/>`,

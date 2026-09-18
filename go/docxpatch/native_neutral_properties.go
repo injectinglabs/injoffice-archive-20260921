@@ -270,3 +270,14 @@ func nativeWordML2010Subtree(node *nativeXMLNode) bool {
 	}
 	return true
 }
+
+// What a reader of a painted page must be told when a negative w:line was
+// dropped. ECMA-376 17.3.1.33 types w:line as ST_SignedTwipsMeasure, and Word
+// reads a negative one as an EXACT line height of its absolute value: it
+// compresses the lines and lets them overlap, ignoring the authored w:lineRule.
+// This tier has no compressed line box (the approximate envelope already
+// declares that in DOCX_APPROXIMATE_LINE_BOX_WARNING), so it drops the
+// measurement and the paragraph keeps the line spacing it inherits from its
+// style. The painted lines are therefore FURTHER APART than Word's, by the
+// difference between the inherited spacing and |w:line|.
+const negativeLineSpacingDisclosure = "A negative w:line measurement is preserved and NOT applied: Word reads it as an exact line height of its absolute value, compressing the lines until they overlap, and this tier has no compressed line box. The paragraph keeps the line spacing it inherits instead, so its painted lines sit FURTHER APART than Word's by the difference between that inherited spacing and the absolute authored value"

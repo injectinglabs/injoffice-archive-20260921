@@ -122,6 +122,7 @@ describe('approximate omitted-content disclosure', () => {
     for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED']) {
       expect(nativeDocxOmittedContentCategoryV1(code, '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/nsdbbea4e0:numForm[1]'), code).toBe('text')
     }
+    expect(nativeDocxOmittedContentCategoryV1('NEGATIVE_LINE_SPACING_UNAPPLIED', '/w:document[1]/w:body[1]/w:p[1]/w:pPr[1]/w:spacing[1]')).toBe('text')
   })
   it('discloses every run-typography feature the approximate tier paints without', () => {
     // The approximate tier paints these runs with the feature unapplied, so the
@@ -141,16 +142,28 @@ describe('approximate omitted-content disclosure', () => {
     const applied = [{ id: 'u:1', code: 'LIGATURE_MODE_MATCHES_SHAPER', capability: 'run-properties', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/nsdbbea4e0:ligatures[1]'), preservation: 'preserve-verbatim', message: 'already applied' }]
     expect(collectNativeDocxApproximateOmissionsV1(source({ unsupported: applied }), { status: 'painted', pages: [page('page:1', 2)] })).toMatchObject({ content_status: 'complete', omitted_content: [], omitted_content_total: 0 })
   })
+  it('discloses a negative line measurement the approximate tier painted without', () => {
+    // Word reads a negative w:line as an exact line height of its absolute
+    // value and compresses the lines until they overlap. This tier drops the
+    // measurement, so the paragraph keeps the spacing it inherits and its lines
+    // sit further apart; the compressed line box Word draws is absent from the
+    // page, so it belongs in omitted_content.
+    const unsupported = [{ id: 'u:1', code: 'NEGATIVE_LINE_SPACING_UNAPPLIED', capability: 'paragraph-properties', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:pPr[1]/w:spacing[1]'), preservation: 'preserve-verbatim', message: 'A negative w:line measurement is preserved and NOT applied' }]
+    const result = collectNativeDocxApproximateOmissionsV1(source({ unsupported }), { status: 'painted', pages: [page('page:1', 2)] })
+    expect(result).toMatchObject({ content_status: 'partial', omitted_content_total: 1 })
+    expect(result.omitted_content).toEqual([expect.objectContaining({ code: 'NEGATIVE_LINE_SPACING_UNAPPLIED', origin: 'source', category: 'text', scope_id: 'paragraph:1', count: 1 })])
+  })
   it('never lets the paint set admit a run-typography code the discloser does not report', () => {
     // The invariant PR #334 documented, applied to this slice: a code the
     // approximate tier lays out around must either leave the painted content
     // intact or be named here, or the drop is silent.
-    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED']) {
+    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED', 'NEGATIVE_LINE_SPACING_UNAPPLIED']) {
       expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(true)
       expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(true)
     }
-    // Every other foreign run property stays outside both sets and keeps refusing.
-    for (const code of ['FOREIGN_RUN_PROPERTY', 'UNMODELED_RUN_PROPERTY']) {
+    // Every other foreign run property, and every spacing shape this tier cannot
+    // read at all, stays outside both sets and keeps refusing.
+    for (const code of ['FOREIGN_RUN_PROPERTY', 'UNMODELED_RUN_PROPERTY', 'UNMODELED_PARAGRAPH_SPACING', 'INVALID_LINE_SPACING']) {
       expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(false)
       expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(false)
     }
