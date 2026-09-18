@@ -32,6 +32,9 @@ const (
 	// nativeDiagramDrawingPolicy names the declared read-only preview policy.
 	nativeDiagramDrawingPolicy          = "diagram-drawing-fallback-v1"
 	nativeDiagramDrawingTextOmittedCode = "pptx.diagram-drawing-text-unavailable"
+	// nativeDiagramDrawingUnavailableCode marks every refusal raised because the
+	// package has no usable pre-laid-out drawing part.
+	nativeDiagramDrawingUnavailableCode = "pptx.diagram-drawing-unavailable"
 	nativeMaxDiagramDrawingShapes       = 2048
 )
 
@@ -94,6 +97,16 @@ func (extractor *nativeExtractor) extractNativeDiagramGraphicFrame(node *nativeX
 	}
 	drawingRel, err := extractor.resolveNativeDiagramDrawingRelationship(relationships, dataRelationshipID, dialect)
 	if err != nil {
+		// A package that never stored a drawing fallback is the SAME situation
+		// as one that stored an empty drawing: there is nothing source-backed
+		// to paint verbatim, and the opt-in approximate tier lays the diagram
+		// out from its four parts instead (native_diagram_layout.go). Only the
+		// drawing relationship is allowed to be absent here; a missing or
+		// malformed dgm:dataModel still refuses, because the layout evaluator
+		// reads the same data part.
+		if extractor.options.AllowInheritedTextPreview && nativeDiagramRefusalCode(err) == nativeDiagramDrawingUnavailableCode {
+			return extractor.extractNativeDiagramLayoutGraphicFrame(node, graphic, slidePart, slideID, relationships, dialect, objectID, name, transform)
+		}
 		return NativeElement{}, err
 	}
 	shapes, drawingPayload, err := extractor.parseNativeDiagramDrawingShapes(drawingRel.Part)
@@ -263,7 +276,7 @@ func (extractor *nativeExtractor) resolveNativeDiagramDrawingRelationship(relati
 			return nativeExtractRelationship{}, err
 		}
 		if selected == nil || selected.Type != relDiagramDrawing {
-			return nativeExtractRelationship{}, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram data names a drawing relationship that is missing or not a diagram drawing; diagram layout is not evaluated")
+			return nativeExtractRelationship{}, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram data names a drawing relationship that is missing or not a diagram drawing; diagram layout is not evaluated")
 		}
 	} else {
 		for index := range relationships {
@@ -271,19 +284,19 @@ func (extractor *nativeExtractor) resolveNativeDiagramDrawingRelationship(relati
 				continue
 			}
 			if selected != nil {
-				return nativeExtractRelationship{}, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram has no unambiguous pre-laid-out drawing part; diagram layout is not evaluated")
+				return nativeExtractRelationship{}, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram has no unambiguous pre-laid-out drawing part; diagram layout is not evaluated")
 			}
 			selected = &relationships[index]
 		}
 		if selected == nil {
-			return nativeExtractRelationship{}, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram has no pre-laid-out drawing part; diagram layout is not evaluated")
+			return nativeExtractRelationship{}, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram has no pre-laid-out drawing part; diagram layout is not evaluated")
 		}
 	}
 	if !selected.internal() || selected.Part == "" {
-		return nativeExtractRelationship{}, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram drawing relationship is external")
+		return nativeExtractRelationship{}, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram drawing relationship is external")
 	}
 	if !asciiEqualFoldNative(extractor.pkg.contentTypes.forPart(selected.Part), contentTypeDiagramDrawing) {
-		return nativeExtractRelationship{}, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram drawing part has an unexpected content type")
+		return nativeExtractRelationship{}, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram drawing part has an unexpected content type")
 	}
 	return *selected, nil
 }
@@ -308,7 +321,7 @@ func nativeDiagramDrawingRelationshipID(dataRoot *nativeXMLNode, dialect nativeE
 func (extractor *nativeExtractor) parseNativeDiagramDrawingShapes(part string) ([]*nativeXMLNode, []byte, error) {
 	payload := extractor.pkg.parts[part]
 	if len(payload) == 0 {
-		return nil, nil, refuseNativeDiagram("pptx.diagram-drawing-unavailable", "diagram drawing part is missing or empty")
+		return nil, nil, refuseNativeDiagram(nativeDiagramDrawingUnavailableCode, "diagram drawing part is missing or empty")
 	}
 	root, err := parseNativeXML(payload, part)
 	if err != nil || root.Name != (xml.Name{Space: nsDiagramDrawing, Local: "drawing"}) {
