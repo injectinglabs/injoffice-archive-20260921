@@ -44,7 +44,7 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # that figure was never reproduced and is wrong. Measure, do not assume.
 max_size=$((13 * 1024 * 1024 / 2 + 192 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 160 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 192 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2
