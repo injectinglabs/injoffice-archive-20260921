@@ -8320,6 +8320,11 @@
               "signature": "export declare function isUnicode13DefaultIgnorable(codePoint: number): boolean"
             },
             {
+              "name": "isUnicode13PrivateUse",
+              "kind": "function",
+              "signature": "export declare function isUnicode13PrivateUse(codePoint: number): boolean"
+            },
+            {
               "name": "isUnicode13TextWhiteSpace",
               "kind": "function",
               "signature": "export declare function isUnicode13TextWhiteSpace(text: string): boolean"

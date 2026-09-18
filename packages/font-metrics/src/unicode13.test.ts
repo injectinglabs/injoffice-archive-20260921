@@ -10,6 +10,7 @@ import {
   UNICODE_13_VERSION,
   isUnicode13Control,
   isUnicode13DefaultIgnorable,
+  isUnicode13PrivateUse,
   isUnicode13TextWhiteSpace,
   unicode13Punctuation,
   unicode13Script,
@@ -53,6 +54,24 @@ describe('generated Unicode 13 classification boundary', () => {
     expect(isUnicode13DefaultIgnorable(0x200d)).toBe(true)
     expect(isUnicode13Control(0x2028)).toBe(true)
     expect(isUnicode13Control(0x0041)).toBe(false)
+  })
+
+  // Private Use is normative and version-independent, so it is a range test
+  // rather than a table lookup: `Scripts.txt` lists no script for it at all,
+  // which is why `unicode13Script` answers `'Other'` there. That answer must
+  // not be read as "a script this build does not classify".
+  it('separates Private Use from a script the pinned tables do not classify', () => {
+    for (const codePoint of [0xe000, 0xf0a7, 0xf0b7, 0xf8ff, 0xf0000, 0xffffd, 0x100000, 0x10fffd]) {
+      expect(isUnicode13PrivateUse(codePoint), codePoint.toString(16)).toBe(true)
+      expect(unicode13Script(codePoint), codePoint.toString(16)).toBe('Other')
+    }
+    for (const codePoint of [0xdfff, 0xf900, 0xeffff, 0x100000 - 1, 0xffffe, 0x10fffe, 0x0e01, 0x0041, -1, 0x110000]) {
+      expect(isUnicode13PrivateUse(codePoint), codePoint.toString(16)).toBe(false)
+    }
+    // Thai is the contrast case: a real script this build does not classify,
+    // which answers 'Other' for a reason Private Use never does.
+    expect(unicode13Script(0x0e01)).toBe('Other')
+    expect(isUnicode13PrivateUse(0x0e01)).toBe(false)
   })
 
   it('keeps authoritative native text modules free of host Unicode and locale classification', () => {
