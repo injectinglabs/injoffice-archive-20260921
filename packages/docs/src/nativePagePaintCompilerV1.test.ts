@@ -836,6 +836,41 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(projectNativeDocxAutomaticBordersV1(doc, input.resolved_layout).document.unsupported.map(d => d.code)).toEqual(['UNKNOWN_SOURCE'])
   })
 
+  // The policy needs a white page behind the table, and only a drawing can put
+  // ink there. A header, footer, note or comment that draws nothing leaves the
+  // page white, so its existence alone must not refuse the projection.
+  it('asks every story for drawings instead of excluding it for existing', () => {
+    const storyPart = 'word/header1.xml'
+    const at = (path: string) => ({ part_name: storyPart, path, start_byte: 1, end_byte: 100, xml_sha256: HASH })
+    const story = (drawing: boolean) => {
+      const run = drawing
+        ? {
+            kind: 'drawing' as const, id: 'run:story:1', anchor: at('/w:hdr[1]/w:p[1]/w:r[1]'),
+            drawing: {
+              id: 'drawing:story:1', anchor: at('/w:hdr[1]/w:p[1]/w:r[1]/w:drawing[1]'),
+              relationship_id: 'rStoryImage', media_part: 'word/media/image.png', content_type: 'image/png', placement: 'inline' as const,
+              width_emu: 127_000, height_emu: 127_000,
+              edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'EXTRACT_ONLY', message: 'Fixture drawing is immutable.', preservation: 'refuse-mutation' as const } },
+            },
+          }
+        : { kind: 'text' as const, id: 'run:story:1', anchor: at('/w:hdr[1]/w:p[1]/w:r[1]'), text: 'Header' }
+      const paragraph = {
+        id: 'paragraph:story:1', anchor: at('/w:hdr[1]/w:p[1]'),
+        edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'NATIVE_READ_ONLY', message: 'Fixture is immutable.', preservation: 'refuse-mutation' as const } },
+        properties: {}, runs: [run],
+      }
+      return { id: 'story:header:1', kind: 'header' as const, part_name: storyPart, anchor: at('/w:hdr[1]'), blocks: [{ kind: 'paragraph' as const, id: paragraph.id, paragraph }] }
+    }
+    for (const drawing of [false, true]) {
+      const input = autoBorderFixture(), document = input.document as NativeDocxDocumentV1
+      document.headers.push(story(drawing) as unknown as NativeDocxDocumentV1['headers'][number])
+      document.passthrough_parts.push({ part_name: 'word/media/image.png', content_type: 'image/png', byte_length: PNG_BYTES.byteLength, sha256: PNG_DIGEST, policy: 'preserve-verbatim' })
+      const run = () => projectNativeDocxAutomaticBordersV1(document, input.resolved_layout)
+      if (drawing) expect(run).toThrow('exclude drawings')
+      else expect(run().facts.length).toBe(1)
+    }
+  })
+
   // Measured against a genuine Microsoft Word 16.112.4 render of
   // NumberedList.docx at 96 DPI: a fixed (exact / at-least) line box puts the
   // surplus leading above the text and seats the descent on the box bottom,

@@ -97,24 +97,35 @@ export function projectNativeDocxAutomaticBordersV1(
     original.source.main_part !== originalResolved.source_parts.main_part
   )
     throw new TypeError("Automatic-border source identity does not exact-join");
-  const allParagraphs = original.body.blocks.flatMap((block) =>
-    block.paragraph
-      ? [block.paragraph]
-      : (block.table?.rows.flatMap((row) =>
-          row.cells.flatMap((cell) => cell.paragraphs),
-        ) ?? []),
+  const paragraphsOf = (blocks: NativeDocxDocumentV1["body"]["blocks"]) =>
+    blocks.flatMap((block) =>
+      block.paragraph
+        ? [block.paragraph]
+        : (block.table?.rows.flatMap((row) =>
+            row.cells.flatMap((cell) => cell.paragraphs),
+          ) ?? []),
+    );
+  const allParagraphs = paragraphsOf(original.body.blocks);
+  // What this policy needs is a white page behind the table. Only a drawing can
+  // put ink there, so every story is asked that one question rather than being
+  // excluded for existing: a header, footer, note or comment that draws nothing
+  // leaves the page white. The producer proves the same thing over the source
+  // bytes, including the markup this model does not carry.
+  const storyParagraphs = paragraphsOf(
+    [
+      ...original.headers,
+      ...original.footers,
+      ...original.notes,
+      ...original.comment_stories,
+    ].flatMap((story) => story.blocks),
   );
   if (
-    original.headers.length ||
-    original.footers.length ||
-    original.notes.length ||
-    original.comment_stories.length ||
-    allParagraphs.some((paragraph) =>
+    [...allParagraphs, ...storyParagraphs].some((paragraph) =>
       paragraph.runs.some((run) => run.drawing !== undefined),
     )
   )
     throw new TypeError(
-      "Automatic-border backgrounds exclude other stories and drawings in this policy",
+      "Automatic-border backgrounds exclude drawings in this policy",
     );
   const document = structuredClone(original),
     resolved = structuredClone(originalResolved);

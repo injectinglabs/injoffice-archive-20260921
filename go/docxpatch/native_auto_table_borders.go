@@ -179,7 +179,11 @@ func (resolver *nativeLayoutResolver) automaticBorderWhitePage() bool {
 	}
 	resolver.autoBorderWhiteChecked = true
 	root := resolver.mainRoot
-	if len(resolver.doc.Headers)+len(resolver.doc.Footers)+len(resolver.doc.Notes)+len(resolver.doc.CommentStories) > 0 || root == nil || root.Name != (xml.Name{Space: resolver.wordNS, Local: "document"}) || !nativeExactContainer(root) || len(root.Children) != 1 || root.Children[0].Name != (xml.Name{Space: resolver.wordNS, Local: "body"}) || !nativeExactContainer(root.Children[0]) {
+	// mc:Ignorable names the namespaces a consumer may ignore. It declares no
+	// content and cannot paint, and Word writes it on the main part of every
+	// package it saves; the pagination settings reader and the document
+	// defaults reader already accept it on a part root.
+	if root == nil || root.Name != (xml.Name{Space: resolver.wordNS, Local: "document"}) || !nativeExactContainer(root, xml.Name{Space: nativeMCNamespace, Local: "Ignorable"}) || len(root.Children) != 1 || root.Children[0].Name != (xml.Name{Space: resolver.wordNS, Local: "body"}) || !nativeExactContainer(root.Children[0]) {
 		return false
 	}
 	var drawing func(*nativeXMLNode) bool
@@ -200,6 +204,24 @@ func (resolver *nativeLayoutResolver) automaticBorderWhitePage() bool {
 	for _, child := range root.Children[0].Children {
 		if child.Name.Space != resolver.wordNS || child.Name.Local != "p" && child.Name.Local != "tbl" && child.Name.Local != "sectPr" {
 			return false
+		}
+	}
+	// The other stories are asked the one question that matters here. A header,
+	// footer, note or comment paints its own text inside its own frame; only a
+	// drawing, a picture, an embedded object or a page background can put ink
+	// behind this table, which is exactly what the main part was just tested
+	// for. A story whose source states none of them leaves the page white, and
+	// a story this resolver did not index is not evidence of anything.
+	for _, stories := range [][]NativeStoryV1{resolver.doc.Headers, resolver.doc.Footers, resolver.doc.Notes, resolver.doc.CommentStories} {
+		for i := range stories {
+			anchor := stories[i].Anchor
+			if anchor == nil {
+				return false
+			}
+			node := resolver.nodeForAnchor(*anchor)
+			if node == nil || drawing(node) {
+				return false
+			}
 		}
 	}
 	resolver.autoBorderWhite = true
