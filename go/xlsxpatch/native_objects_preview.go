@@ -203,6 +203,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	workbookXML := pkg.files[workbookPart.part]
 	result.PrintAreaSets = previewNativePrintAreaSets(workbookXML, workbook.Sheets, newNativePrintCountaSourceContext(workbook, workbookXML, result.PackageSHA256))
 	printNames, _, namesOK := collectNativePrintNames(workbookXML, workbook.Sheets)
+	dimensionDerived := map[int]string{}
 	for i := range result.PrintAreaSets {
 		if result.PrintAreaSets[i].Status == "available" || i >= len(workbook.Sheets) {
 			continue
@@ -230,6 +231,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 			result.PrintAreaSets[i].Status = "available"
 			result.PrintAreaSets[i].Areas = areas
 			result.PrintAreaSets[i].Warnings = []string{warning}
+			dimensionDerived[i] = workbook.Sheets[i].PartName
 		}
 	}
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
@@ -346,6 +348,32 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	result.DrawingObjects, err = previewNativeDrawings(pkg, workbook.Sheets, result.Charts)
 	if err != nil {
 		return nil, err
+	}
+	// The dimension element states the used range of cells alone. Excel's
+	// printed used range also covers the sheet's anchored drawings, so a
+	// worksheet whose picture or shape sits past the last cell prints the pages
+	// that object reaches. The anchor is source-qualified either way; a drawing
+	// this tier cannot paint still occupies the page it is anchored to, and the
+	// page rectangle is what this tier states.
+	for i, part := range dimensionDerived {
+		if len(result.PrintAreaSets[i].Areas) != 1 {
+			continue
+		}
+		extended := nativeDrawingPrintArea(result.DrawingObjects, part)
+		if extended == nil {
+			continue
+		}
+		area := &result.PrintAreaSets[i].Areas[0]
+		if extended.EndRow <= area.EndRow && extended.EndColumn <= area.EndColumn {
+			continue
+		}
+		if extended.EndRow > area.EndRow {
+			area.EndRow = extended.EndRow
+		}
+		if extended.EndColumn > area.EndColumn {
+			area.EndColumn = extended.EndColumn
+		}
+		result.PrintAreaSets[i].Warnings[0] += " Extended to cover this sheet's source-qualified drawing anchors: Excel's printed used range includes its anchored objects, whether or not this tier paints them."
 	}
 	for _, chart := range result.Charts {
 		for _, series := range chart.Series {
