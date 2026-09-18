@@ -551,8 +551,16 @@ func (resolver *nativeLayoutResolver) resolveNumberingGeometry(numbering *Native
 		if numbering.Marker.Language != nil {
 			language = strings.ToLower(*numbering.Marker.Language)
 		}
-		if language != "und" && language != "en" && !strings.HasPrefix(language, "en-") {
-			resolver.addDiagnostic("UNSUPPORTED_NUMBERING_LANGUAGE", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "Letter numbering is exact only for the attested English/und ASCII alphabet")
+		// BCP 47 / ISO 639-2 register `zxx` for "no linguistic content, not
+		// applicable". A marker whose language states that makes no
+		// language-specific claim about its alphabet at all, which is exactly
+		// what `und` (undetermined) already attests here, so it resolves from
+		// the same ASCII alphabet. Word's own PDF export of
+		// `tdf118812_tableStyles-comprehensive.docx` pins it: that package's
+		// `w:docDefaults` states `w:lang w:val="zxx"` and Word still prints the
+		// ilvl 0 upperLetter marker of its `numId` 9 list as `A.`.
+		if language != "und" && language != "zxx" && language != "en" && !strings.HasPrefix(language, "en-") {
+			resolver.addDiagnostic("UNSUPPORTED_NUMBERING_LANGUAGE", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "Letter numbering is exact only for the attested English, undetermined or no-linguistic-content ASCII alphabet")
 		}
 	}
 	return true
