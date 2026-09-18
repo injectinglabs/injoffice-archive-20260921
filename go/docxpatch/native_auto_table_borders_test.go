@@ -208,3 +208,55 @@ func TestAutomaticTableBorderEvidenceAdmitsIgnorableRootAndNonDrawingStories(t *
 		})
 	}
 }
+
+// A range endpoint sitting between two body blocks is an empty delimiter. It
+// states where a bookmark, comment, permission or tracked move begins or ends
+// and paints nothing, so it is not evidence against the white page the
+// automatic-border contrast policy needs. Anything that can carry content --
+// including a marker with a child or a foreign attribute this layer has not
+// read -- still disqualifies it.
+func TestAutomaticTableBorderEvidenceAdmitsBodyRangeMarkers(t *testing.T) {
+	for _, test := range []struct {
+		name, marker string
+		valid        bool
+	}{
+		{name: "no marker", valid: true},
+		{name: "move from range end", marker: `<w:moveFromRangeEnd w:id="1"/>`, valid: true},
+		{name: "move to range pair", marker: `<w:moveToRangeStart w:id="2" w:name="m"/><w:moveToRangeEnd w:id="2"/>`, valid: true},
+		{name: "bookmark pair", marker: `<w:bookmarkStart w:id="0" w:name="_GoBack"/><w:bookmarkEnd w:id="0"/>`, valid: true},
+		{name: "comment range pair", marker: `<w:commentRangeStart w:id="3"/><w:commentRangeEnd w:id="3"/>`, valid: true},
+		{name: "permission pair", marker: `<w:permStart w:id="4" w:edGrp="everyone"/><w:permEnd w:id="4"/>`, valid: true},
+		{name: "proof error", marker: `<w:proofErr w:type="spellStart"/>`, valid: true},
+		{name: "foreign attribute marker", marker: `<w:bookmarkEnd xmlns:x="urn:foreign" x:flag="1" w:id="0"/>`},
+		{name: "marker with child", marker: `<w:permStart w:id="5"><w:p/></w:permStart>`},
+		{name: "marker with text", marker: `<w:bookmarkEnd w:id="0">visible</w:bookmarkEnd>`},
+		{name: "unknown body block", marker: `<w:sdt><w:sdtContent><w:p/></w:sdtContent></w:sdt>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			borders := `<w:tblBorders>`
+			for _, edge := range []string{"top", "right", "bottom", "left", "insideH", "insideV"} {
+				borders += `<w:` + edge + ` w:val="single" w:sz="4" w:color="auto"/>`
+			}
+			borders += `</w:tblBorders>`
+			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="table" w:styleId="Grid"><w:tblPr>` + borders + `</w:tblPr></w:style></w:styles>`)
+			section := `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `" xmlns:r="` + testR + `"><w:body><w:tbl><w:tblPr><w:tblStyle w:val="Grid"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="4000"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>` + test.marker + `<w:p/>` + section + `</w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			before := string(data)
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fact := layout.Tables[0].AutomaticBorderPreview
+			if (fact != nil) != test.valid {
+				t.Fatalf("qualification = %v; want %v", fact != nil, test.valid)
+			}
+			if fact != nil && (len(fact.AutomaticEdges) != 6 || layout.Tables[0].Borders != nil) {
+				t.Fatalf("invalid evidence %#v", fact)
+			}
+			if string(data) != before {
+				t.Fatal("source bytes changed")
+			}
+		})
+	}
+}
