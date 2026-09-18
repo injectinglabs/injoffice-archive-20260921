@@ -128,7 +128,9 @@ func TestNativeBasicLatinFontSlotsRespectCascadeAndRefuseMixedScripts(t *testing
 				if font != nil {
 					t.Fatalf("guessed font %q", *font)
 				}
-				if len(resolved.Diagnostics) == 0 || resolved.Diagnostics[0].Code != "SCRIPT_DEPENDENT_LATIN_FONT" {
+				// A complex-script run now also refuses its own slot, so the
+				// Latin-slot refusal is no longer necessarily the first record.
+				if !hasResolutionDiagnostic(resolved, "SCRIPT_DEPENDENT_LATIN_FONT") {
 					t.Fatalf("missing slot refusal: %#v", resolved.Diagnostics)
 				}
 			} else if font == nil || *font != test.font || len(resolved.Diagnostics) != 0 {
@@ -285,7 +287,13 @@ func TestResolveNativeDocumentLayoutV1StrictRelocatedThemeAndFontTable(t *testin
 	if paragraph.Bidi == nil || !*paragraph.Bidi || paragraph.IndentStartTwips == nil || *paragraph.IndentStartTwips != 900 || paragraph.IndentEndTwips == nil || *paragraph.IndentEndTwips != -120 {
 		t.Fatalf("paragraph bidi/logical indents were dropped: %#v", paragraph)
 	}
-	for _, code := range []string{"THEME_FONT_PRESERVED", "THEME_COLOR_PRESERVED", "SCRIPT_FONT_PRESERVED", "SCRIPT_LANGUAGE_PRESERVED", "UNSUPPORTED_HIGHLIGHT", "FOREIGN_FONT_TABLE_MARKUP", "FONT_MATCHING_METADATA_PRESERVED"} {
+	// This run states w:rtl, so it is complex-script, not East-Asian: its
+	// w:lang/@w:eastAsia states formatting for text that is not here and no
+	// longer defers, while its unresolved complex-script font slot still does.
+	if run.EastAsiaLanguage != nil || run.EastAsiaFontFamily != nil || hasResolutionDiagnostic(resolved, "SCRIPT_LANGUAGE_PRESERVED") {
+		t.Fatalf("East-Asian slot spoke for complex-script text: %#v", run)
+	}
+	for _, code := range []string{"THEME_FONT_PRESERVED", "THEME_COLOR_PRESERVED", "SCRIPT_FONT_PRESERVED", "UNSUPPORTED_HIGHLIGHT", "FOREIGN_FONT_TABLE_MARKUP", "FONT_MATCHING_METADATA_PRESERVED"} {
 		if !hasResolutionDiagnostic(resolved, code) {
 			t.Fatalf("missing %s diagnostic: %#v", code, resolved.Diagnostics)
 		}

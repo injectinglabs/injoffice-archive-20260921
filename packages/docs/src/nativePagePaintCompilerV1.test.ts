@@ -2089,7 +2089,7 @@ describe('native DOCX page-paint compiler v1', () => {
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     document.body.blocks[0]!.paragraph!.runs[1]!.text = 'אב'
     resolved.paragraphs[0]!.properties = { bidi: true, alignment: 'start' }
-    resolved.runs[1]!.properties = { ...resolved.runs[1]!.properties, language: 'he-IL' }
+    resolved.runs[1]!.properties = { ...resolved.runs[1]!.properties, complex_script_font_family: 'DejaVu Sans', language: 'he-IL' }
 
     const prepared = await prepareNativeDocxPagePaintV1(input)
     const shaped = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!
@@ -2111,7 +2111,7 @@ describe('native DOCX page-paint compiler v1', () => {
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     document.body.blocks[0]!.paragraph!.runs[1]!.text = 'אב'
     resolved.paragraphs[0]!.properties = { bidi: true, alignment: 'start' }
-    resolved.runs[1]!.properties = { ...resolved.runs[1]!.properties, language: 'he-IL' }
+    resolved.runs[1]!.properties = { ...resolved.runs[1]!.properties, complex_script_font_family: 'DejaVu Sans', language: 'he-IL' }
     const prepared = await prepareNativeDocxPagePaintV1(input)
 
     const tampered = structuredClone(prepared.page_paint_request.pagination_request)
@@ -2304,7 +2304,7 @@ describe('native DOCX page-paint compiler v1', () => {
     paragraph.runs[0]!.text = 'אב 12'
     const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
     resolved.paragraphs[0]!.properties = { bidi: true, alignment: 'start' }
-    resolved.runs[0]!.properties = { ...resolved.runs[0]!.properties, language: 'he-IL' }
+    resolved.runs[0]!.properties = { ...resolved.runs[0]!.properties, complex_script_font_family: 'DejaVu Sans', language: 'he-IL' }
     const prepared = await prepareNativeDocxPagePaintV1(input)
     const shaped = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs[0]!
     expect(shaped.direction).toBe('rtl')
@@ -3525,6 +3525,8 @@ describe('source-anchored textbox page composition',()=>{
   const {renderNativeDocxTextboxPagesPreviewV2:render}=await import('./nativeTextboxPagesCompilerV2.js')
   const f=lateTextboxFixture('אבג'),resolved=f.input.resolved_layout as NativeDocxResolvedLayoutInputV1
   resolved.paragraphs[0]!.properties={bidi:true,alignment:'start'}
+  // The complex-script slot names the same face this fixture's ascii slot does.
+  for(const run of resolved.runs)run.properties={...run.properties,complex_script_font_family:run.properties.font_family}
   f.evidence.items[0]!.owner.paragraphs=['Box'];Object.assign(f.evidence.items[0]!.geometry!,{width_emu:609600,height_emu:457200})
   const result=await render(f.input,f.evidence,[FONT_BYTES],provider),line=result.body_paint.pages[0]!.lines[0]!
   expect(result.textboxes[0]!.x_millipoints).toBe(line.x_millipoints)

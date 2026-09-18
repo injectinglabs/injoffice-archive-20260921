@@ -84,6 +84,11 @@ describe('pinned native Unicode bidi boundary', () => {
     for (const control of ['\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069']) {
       expect(resolveNativeBidiParagraphV1({ text: `\u0627\u0644${control}abc`, baseDirection: 'rtl' }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
       expect(resolveNativeBidiParagraphV1({ text: `a${control}\u0627\u0644`, baseDirection: 'ltr', explicitRanges: [{ startUtf16: 2, endUtf16: 4, direction: 'rtl' }] }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
+      // An authored initiator INSIDE a w:rtl range would nest across the
+      // isolate this projection synthesizes for that range, and one that
+      // straddles its boundary would cross it. Both stay refused.
+      expect(resolveNativeBidiParagraphV1({ text: `ab${control}\u0627\u0644`, baseDirection: 'rtl', explicitRanges: [{ startUtf16: 2, endUtf16: 5, direction: 'rtl' }] }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
+      expect(resolveNativeBidiParagraphV1({ text: `ab${control}\u0627\u0644`, baseDirection: 'rtl', explicitRanges: [{ startUtf16: 0, endUtf16: 3, direction: 'ltr' }, { startUtf16: 3, endUtf16: 5, direction: 'rtl' }] }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
     }
   })
 
