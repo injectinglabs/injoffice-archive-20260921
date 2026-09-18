@@ -629,3 +629,49 @@ func TestExtractNativePPTXDiagramLayoutHangingLeafChildrenDeclareTheTLDeviation(
 		t.Fatalf("invalid deck: %#v", issues)
 	}
 }
+
+// dgm:forEach and dgm:presOf declare axis (ST_AxisTypes), ptType
+// (ST_ElementTypes), st and step (ST_Ints) and cnt (ST_UnsignedInts) — every
+// one of them a LIST whose entries pair up with the axis steps (ECMA-376
+// Part 1 §21.4.7.6, §21.4.7.40, §21.4.7.63). st, cnt and step used to be
+// parsed as single integers and applied once after the whole chain, so a
+// perfectly ordinary two-axis selection refused the diagram outright. Two
+// SmartArt decks in the hard-v2 corpus are written this way.
+func TestExtractNativePPTXDiagramLayoutPairsSelectionListsWithAxes(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramLayoutLayoutXML(nativeDiagramURITransitional)
+	const single = `<dgm:forEach name="rep2a" axis="ch" ptType="nonAsst">`
+	if !strings.Contains(layout, single) {
+		t.Fatal("layout fixture drifted: the rep2a forEach is gone")
+	}
+	children := func(t *testing.T, selection string) int {
+		t.Helper()
+		fixture := nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+			layout: strings.Replace(layout, single, selection, 1),
+		})
+		deck, err := ExtractNativePPTX(fixture, nativeDiagramLayoutApproximateOptions())
+		if err != nil {
+			t.Fatalf("extract diagram with selection %q: %v", selection, err)
+		}
+		group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+		if group.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+			t.Fatalf("selection %q refused the diagram: %s", selection, nativeDiagramLayoutCodes(group))
+		}
+		return len(group.Children)
+	}
+
+	// "ch self" with a per-axis window that trims nothing selects exactly what
+	// the one-axis form does.
+	all := children(t, `<dgm:forEach name="rep2a" axis="ch self" ptType="nonAsst node" st="1 1" cnt="0 0" step="1 1">`)
+	if all != 8 {
+		t.Fatalf("a no-op two-axis window changed the selection: %d children, want 8", all)
+	}
+
+	// cnt="1 0" keeps one point at the FIRST axis step and everything at the
+	// second. Applying the window once after the chain — or reading only the
+	// last entry — would leave the selection untrimmed at 8.
+	trimmed := children(t, `<dgm:forEach name="rep2a" axis="ch self" ptType="nonAsst node" st="1 1" cnt="1 0">`)
+	if trimmed >= all {
+		t.Fatalf("cnt=\"1 0\" did not trim the first axis step: %d children, want fewer than %d", trimmed, all)
+	}
+}
