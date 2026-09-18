@@ -202,9 +202,20 @@ func (resolver *nativeLayoutResolver) automaticBorderWhitePage() bool {
 		return false
 	}
 	for _, child := range root.Children[0].Children {
-		if child.Name.Space != resolver.wordNS || child.Name.Local != "p" && child.Name.Local != "tbl" && child.Name.Local != "sectPr" {
-			return false
+		if child.Name.Space == resolver.wordNS && (child.Name.Local == "p" || child.Name.Local == "tbl" || child.Name.Local == "sectPr") {
+			continue
 		}
+		// A range endpoint between two body blocks is an empty delimiter: it
+		// states where a bookmark, comment, permission or tracked move begins
+		// or ends and carries no content of its own (ECMA-376 §17.13.5). It
+		// cannot put ink behind the table, so it is not evidence against a
+		// white page. `nativeNonVisualRangeMarker` is the same exact reading
+		// the tracked-move row gate uses: word-namespace, empty, and with no
+		// foreign attribute that could carry something this layer has not read.
+		if nativeNonVisualRangeMarker(child, resolver.wordNS) {
+			continue
+		}
+		return false
 	}
 	// The other stories are asked the one question that matters here. A header,
 	// footer, note or comment paints its own text inside its own frame; only a
