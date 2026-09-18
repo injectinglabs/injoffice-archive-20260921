@@ -376,6 +376,18 @@ func (resolver *nativeLayoutResolver) materializeNativeNumbering(instance *nativ
 		return nil
 	}
 	if level.picture {
+		// A w:numPicBullet that names no relationship anywhere in its subtree
+		// carries no picture, so the marker it defines draws nothing. Word's own
+		// PDF export of `lvlPicBulletId.docx` paints the markers of that
+		// document's eight bulleted paragraphs as a single ArialMT glyph whose
+		// ToUnicode maps it to U+0020 -- no bullet ink at all. That is a marker
+		// this tier can leave unpainted and disclose; a picture bullet that does
+		// name a relationship is a graphic it has no marker-image input for, and
+		// keeps refusing rather than dropping the graphic in silence.
+		if !level.pictureIDUnreadable && level.pictureID != nil && resolver.emptyPictureBullets[*level.pictureID] {
+			resolver.addDiagnostic("EMPTY_PICTURE_BULLET_UNPAINTED", scopeID, level.partName, level.node, "The picture bullet this level names carries no picture, so no marker is painted for it; the paragraph is painted without its bullet")
+			return nil
+		}
 		resolver.addDiagnostic("PICTURE_BULLET_PRESERVED", scopeID, level.partName, level.node, "Picture-bullet marker semantics are preserved and not guessed")
 		return nil
 	}
