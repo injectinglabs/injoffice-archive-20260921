@@ -275,6 +275,7 @@ type nativeLayoutResolver struct {
 	deferredNumbering        *[]nativeDeferredNumberingDiagnostic
 	deferredDiagnosticCount  int
 	numberingRootDeferred    []nativeDeferredNumberingDiagnostic
+	emptyPictureBullets      map[int]bool
 	nodeByAnchor             map[string]*nativeXMLNode
 	mainRoot                 *nativeXMLNode
 	autoBorderWhiteChecked   bool
@@ -321,23 +322,26 @@ type nativeNumberingOverride struct {
 }
 
 type nativeNumberingLevel struct {
-	level          int
-	start          *int
-	format         *string
-	text           *string
-	suffix         *string
-	alignment      *string
-	p              nativeParagraphProperties
-	r              nativeRunProperties
-	picture        bool
-	legal          bool
-	restart        *int
-	numTab         *int64
-	styleLinks     []string
-	styleLinkCount int
-	deferred       []nativeDeferredNumberingDiagnostic
-	partName       string
-	node           *nativeXMLNode
+	level     int
+	start     *int
+	format    *string
+	text      *string
+	suffix    *string
+	alignment *string
+	p         nativeParagraphProperties
+	r         nativeRunProperties
+	picture   bool
+	// The w:numPicBullet this level names, when it names exactly one readable id.
+	pictureID           *int
+	pictureIDUnreadable bool
+	legal               bool
+	restart             *int
+	numTab              *int64
+	styleLinks          []string
+	styleLinkCount      int
+	deferred            []nativeDeferredNumberingDiagnostic
+	partName            string
+	node                *nativeXMLNode
 }
 
 type nativeBoolProperty struct {
@@ -1016,6 +1020,22 @@ func (resolver *nativeLayoutResolver) loadNumbering(partName string) error {
 		case "numPicBullet":
 			// The concrete lvlPicBulletId reference carries the refusal. Merely
 			// declaring an unused picture-bullet resource is not a document semantic.
+			// Whether this one has a picture in it at all is recorded, so that a
+			// level naming it can tell a marker graphic this tier cannot paint
+			// from a marker that states no graphic and draws nothing anywhere.
+			if id, ok := nativeDecimalIDAttr(child, resolver.wordNS, "numPicBulletId"); ok {
+				if resolver.emptyPictureBullets == nil {
+					resolver.emptyPictureBullets = map[int]bool{}
+				}
+				value, err := strconv.Atoi(id)
+				if err == nil {
+					if _, duplicate := resolver.emptyPictureBullets[value]; duplicate {
+						resolver.emptyPictureBullets[value] = false
+					} else {
+						resolver.emptyPictureBullets[value] = nativeAbsentPictureBullet(child)
+					}
+				}
+			}
 		case "abstractNum":
 			id, ok := nativeDecimalIDAttr(child, resolver.wordNS, "abstractNumId")
 			if !ok {
@@ -1223,6 +1243,12 @@ func (resolver *nativeLayoutResolver) parseNumberingLevel(partName string, node 
 			level.r = resolver.parseRunProperties(partName, child, scopeID)
 		case "lvlPicBulletId":
 			level.picture = true
+			if value, valid := nativeNonnegativeIntAttr(child, resolver.wordNS, "val"); valid && level.pictureID == nil {
+				level.pictureID = nativeInt(value)
+			} else {
+				level.pictureID = nil
+				level.pictureIDUnreadable = true
+			}
 		case "lvlRestart":
 			value, valid := nativeNonnegativeIntAttr(child, resolver.wordNS, "val")
 			if !valid || value > 7 {

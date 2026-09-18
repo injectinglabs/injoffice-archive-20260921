@@ -50,6 +50,11 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   // content_status 'partial'.
   'TEXT_DECORATION_UNAPPLIED',
   'CONTEXTUAL_ALTERNATES_UNAPPLIED',
+  // The level's picture bullet is a marker the source asks for and the painted
+  // page does not carry: the paragraph is painted with no marker at all. Word
+  // paints no bullet ink for an empty one either, but the request is still a
+  // mark this preview does not produce, so it is named here.
+  'EMPTY_PICTURE_BULLET_UNPAINTED',
   // A rotated cell's text is painted, but not where or how Word paints it: the
   // lines run along the other axis, wrap against the row height rather than the
   // cell width, and Word clips whatever overflows the cell. That is a visual
@@ -132,7 +137,7 @@ export function nativeDocxOmittedContentCategoryV1(code: string, path: string | 
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
   // A run-typography feature the painted run does not carry is a deviation in
   // painted text, so it is disclosed under the text category next to it.
-  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'TEXT_DECORATION_UNAPPLIED' || code === 'CONTEXTUAL_ALTERNATES_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED') return 'text'
+  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'TEXT_DECORATION_UNAPPLIED' || code === 'CONTEXTUAL_ALTERNATES_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED' || code === 'EMPTY_PICTURE_BULLET_UNPAINTED') return 'text'
   return 'other'
 }
 
