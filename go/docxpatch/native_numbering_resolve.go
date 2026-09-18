@@ -320,15 +320,21 @@ func (resolver *nativeLayoutResolver) resolveLevelText(instance *nativeNumbering
 		if referenced > currentLevel {
 			return "", nil, fmt.Errorf("lvlText references a deeper numbering level")
 		}
-		value, present := values[referenced]
-		if !present {
-			return "", nil, fmt.Errorf("lvlText references an uninitialized parent counter")
-		}
 		definition := resolver.effectiveNumberingLevel(instance, abstract, referenced)
 		if definition == nil {
 			return "", nil, fmt.Errorf("lvlText references a missing numbering level")
 		}
-		_, referencedFormat, _, _, _ := nativeNumberingDefaults(definition)
+		// ECMA-376 17.9.26: w:start states the number the first paragraph at
+		// that level uses, so a parent counter no paragraph has reached yet is
+		// AT its start rather than absent. Word prints that: a Heading 2 whose
+		// lvlText is "%1.%2" is "1.1" when no Heading 1 has come before it, not
+		// a refusal. The level definition is looked up first so the same
+		// definition supplies both the default and the format it renders in.
+		start, referencedFormat, _, _, _ := nativeNumberingDefaults(definition)
+		value, present := values[referenced]
+		if !present {
+			value = start
+		}
 		if legal && referenced < currentLevel {
 			referencedFormat = "decimal"
 		}
