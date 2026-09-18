@@ -2237,7 +2237,9 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 					return false
 				}
 			}
-		case "sz", "b", "i", "rtl", "vanish", "color":
+		case "sz", "b", "i", "cs", "rtl", "vanish", "color":
+			// w:cs joins them now that the resolver models it as the switch
+			// ECMA-376 17.3.2.7 states rather than as unknown markup.
 			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "val"}) {
 				return false
 			}
@@ -3528,6 +3530,16 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 			if !ok || value > 3276 || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || len(directNativeChildren(node, extractor.wordNS, "szCs")) != 1 {
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Complex-script size is malformed, duplicate or outside the bounded whole half-point subset")
+			}
+		case "cs":
+			// ECMA-376 17.3.2.7: the switch that applies the complex-script
+			// bold, italic and size attributes to this run's contents. The
+			// style resolver models it, so extraction records it as preserved
+			// rather than as unmodeled markup. Never expose it for edits.
+			preserveOnly = true
+			if _, ok := nativeOnOff(child, extractor.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || len(directNativeChildren(node, extractor.wordNS, "cs")) != 1 {
+				unsafe = true
+				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Complex-script switch is malformed, duplicate or outside the bounded on/off subset")
 			}
 		case "bCs", "iCs":
 			// The complex-script companions of b/i. The style resolver already

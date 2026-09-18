@@ -374,6 +374,8 @@ interface SourceSpan {
   script: string
   /** The resolved-layout font slot this span's runes belong to (MS-OI29500 17.3.2.26). */
   eastAsiaSlot: boolean
+  /** The complex-script slot, either by rune or by the run-level w:cs/w:rtl switch. */
+  complexSlot: boolean
   direction: 'ltr' | 'rtl'
   bidiLevel: number
   language: string
@@ -743,7 +745,23 @@ function eastAsiaSlotCodePoint(codePoint: number): boolean {
     || (codePoint >= 0x20000 && codePoint <= 0x2fa1f)
 }
 
-function shapingSpans(text: string, language: string, sourceOffset: number, paragraphOffset: number, levels: readonly number[]): SourceSpan[] {
+/**
+ * Mirrors Go docxpatch.nativeComplexScriptSlotRune: the Hebrew and Arabic
+ * blocks MS-OI29500 17.3.2.26 assigns to the complex-script font slot, narrowed
+ * to the scripts the pinned shaper qualifies. A run-level w:cs or w:rtl puts
+ * every rune of its run in this slot regardless of this table.
+ */
+function complexSlotCodePoint(codePoint: number): boolean {
+  return (codePoint >= 0x0590 && codePoint <= 0x05ff)
+    || (codePoint >= 0x0600 && codePoint <= 0x06ff)
+    || (codePoint >= 0x0750 && codePoint <= 0x077f)
+    || (codePoint >= 0x08a0 && codePoint <= 0x08ff)
+    || (codePoint >= 0xfb1d && codePoint <= 0xfb4f)
+    || (codePoint >= 0xfb50 && codePoint <= 0xfdff)
+    || (codePoint >= 0xfe70 && codePoint <= 0xfefc)
+}
+
+function shapingSpans(text: string, language: string, sourceOffset: number, paragraphOffset: number, levels: readonly number[], forceComplexSlot = false): SourceSpan[] {
   const spans: SourceSpan[] = []
   let current: SourceSpan | undefined
   for (let offset = 0; offset < text.length;) {
@@ -752,14 +770,15 @@ function shapingSpans(text: string, language: string, sourceOffset: number, para
     const character = String.fromCodePoint(codePoint)
     const next = offset + character.length
     let script = scriptForCharacter(character)
-    const eastAsiaSlot = eastAsiaSlotCodePoint(codePoint)
+    const complexSlot = forceComplexSlot || complexSlotCodePoint(codePoint)
+    const eastAsiaSlot = !complexSlot && eastAsiaSlotCodePoint(codePoint)
     const bidiLevel = levels[paragraphOffset + offset]
     if (!Number.isSafeInteger(bidiLevel) || bidiLevel! < 0 || bidiLevel! > 125) return []
     for (let unit = offset + 1; unit < next; unit++) if (levels[paragraphOffset + unit] !== bidiLevel) return []
     const direction = (bidiLevel! & 1) === 1 ? 'rtl' : 'ltr'
     if (script === 'Zinh' && current) script = current.script
-    if (!current || current.script !== script || current.eastAsiaSlot !== eastAsiaSlot || current.direction !== direction || current.bidiLevel !== bidiLevel) {
-      current = { text: character, startUtf16: sourceOffset + offset, endUtf16: sourceOffset + next, script, eastAsiaSlot, direction, bidiLevel: bidiLevel!, language }
+    if (!current || current.script !== script || current.eastAsiaSlot !== eastAsiaSlot || current.complexSlot !== complexSlot || current.direction !== direction || current.bidiLevel !== bidiLevel) {
+      current = { text: character, startUtf16: sourceOffset + offset, endUtf16: sourceOffset + next, script, eastAsiaSlot, complexSlot, direction, bidiLevel: bidiLevel!, language }
       spans.push(current)
     } else {
       current.text += character
@@ -791,26 +810,45 @@ function familyCandidates(family: string, aliases: Map<string, string>): string[
   return values
 }
 
+/**
+ * The slot a span belongs to selects its whole typographic identity, not only
+ * its face. ECMA-376 17.3.2.7 says w:cs applies "the bold, italic and font size
+ * properties from the complex script attributes", so a complex-script span is
+ * measured with w:szCs, w:bCs, w:iCs and w:lang/@w:bidi where they are stated.
+ */
+function slotFontSizeHalfPoints(span: { complexSlot: boolean }, properties: NativeDocxResolvedRunPropertiesV1): number | undefined {
+  return (span.complexSlot ? properties.complex_script_font_size_half_points : undefined) ?? properties.font_size_half_points
+}
+
+function slotFamily(span: SourceSpan, properties: NativeDocxResolvedRunPropertiesV1): string | undefined {
+  if (span.complexSlot) return properties.complex_script_font_family
+  if (span.eastAsiaSlot) return properties.east_asia_font_family
+  return properties.font_family
+}
+
 function textRunInput(span: SourceSpan, properties: NativeDocxResolvedRunPropertiesV1, aliases: Map<string, string>): TextRunInput | null {
-  // A run carries one face per slot, not one face. The resolver only emits the
-  // East-Asian slot for text that reaches it, so a span in that slot without a
+  // A run carries one face per slot, not one face. The resolver only emits a
+  // script slot for text that reaches it, so a span in that slot without a
   // face has already been refused upstream and must not fall back to ascii.
-  const family = span.eastAsiaSlot ? properties.east_asia_font_family : properties.font_family
-  const language = (span.eastAsiaSlot ? properties.east_asia_language : undefined) ?? span.language
-  if (!family || !properties.font_size_half_points) return null
+  const family = slotFamily(span, properties)
+  const language = (span.eastAsiaSlot ? properties.east_asia_language : span.complexSlot ? properties.complex_script_language : undefined) ?? span.language
+  const sizeHalfPoints = slotFontSizeHalfPoints(span, properties)
+  const bold = (span.complexSlot ? properties.complex_script_bold : undefined) ?? properties.bold
+  const italic = (span.complexSlot ? properties.complex_script_italic : undefined) ?? properties.italic
+  if (!family || !sizeHalfPoints) return null
   return deepFreezeWire({
     version: NATIVE_TEXT_LAYOUT_VERSION,
     text: span.text,
-    fontSizeMilliPoints: halfPointsToMilliPoints(properties.font_size_half_points),
-    features: [{ tag: 'kern', value: properties.kerning_min_size_half_points !== undefined && properties.font_size_half_points >= properties.kerning_min_size_half_points ? 1 : 0 }],
+    fontSizeMilliPoints: halfPointsToMilliPoints(sizeHalfPoints),
+    features: [{ tag: 'kern', value: properties.kerning_min_size_half_points !== undefined && sizeHalfPoints >= properties.kerning_min_size_half_points ? 1 : 0 }],
     // Character tracking. The field is omitted rather than sent as zero so that
     // every run without w:spacing keeps the exact request, cache key and shaped
     // geometry it had before tracking was modeled.
     ...(properties.letter_spacing_twips === undefined ? {} : { letterSpacingMilliPoints: twipsToMilliPoints(properties.letter_spacing_twips) }),
     font: {
       families: familyCandidates(family, aliases),
-      weight: properties.bold ? 700 : 400,
-      style: properties.italic ? 'italic' : 'normal',
+      weight: bold ? 700 : 400,
+      style: italic ? 'italic' : 'normal',
       stretch: 100,
     },
     script: span.script,
@@ -1298,14 +1336,14 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
     return []
   }
   context.shapedCodeUnits += span.text.length
-  // The slot the span belongs to is the one that must name a face. An
-  // East-Asian span with no East-Asian slot refuses here rather than being
-  // dropped silently or painted in the ascii face.
-  if (!(span.eastAsiaSlot ? properties.east_asia_font_family : properties.font_family)) {
-    addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: span.eastAsiaSlot ? 'Resolved East-Asian font slot is absent; shaping was refused instead of painting East-Asian text in the ascii face' : 'Resolved font family is absent; shaping was refused instead of guessing a platform font' })
+  // The slot the span belongs to is the one that must name a face. A span in a
+  // script slot with no face refuses here rather than being dropped silently or
+  // painted in the ascii face.
+  if (!slotFamily(span, properties)) {
+    addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: span.complexSlot ? 'Resolved complex-script font slot is absent; shaping was refused instead of painting complex-script text in the ascii face' : span.eastAsiaSlot ? 'Resolved East-Asian font slot is absent; shaping was refused instead of painting East-Asian text in the ascii face' : 'Resolved font family is absent; shaping was refused instead of guessing a platform font' })
     return []
   }
-  if (!properties.font_size_half_points) {
+  if (!slotFontSizeHalfPoints(span, properties)) {
     addDiagnostic(context, { code: 'missing-run-size', severity: 'unsupported', scope_id: sourceID, source_id: sourceID, message: 'Resolved font size is absent; shaping was refused instead of guessing a Word default' })
     return []
   }
@@ -1406,7 +1444,10 @@ async function resolveParagraphMarkMetrics(context: NativeShapingContext, paragr
     return null
   }
   const markDirection = properties.rtl ? 'rtl' : direction
-  const span: SourceSpan = { text: '', startUtf16: 0, endUtf16: 0, script: 'Zyyy', eastAsiaSlot: false, direction: markDirection, bidiLevel: markDirection === 'rtl' ? 1 : 0, language: properties.language ?? 'und' }
+  // A paragraph mark carries no text, so only the run-level w:cs/w:rtl switch
+  // can put it in the complex-script slot.
+  const markComplexSlot = properties.complex_script_slot === true
+  const span: SourceSpan = { text: '', startUtf16: 0, endUtf16: 0, script: 'Zyyy', eastAsiaSlot: false, complexSlot: markComplexSlot, direction: markDirection, bidiLevel: markDirection === 'rtl' ? 1 : 0, language: properties.language ?? 'und' }
   const run = textRunInput(span, properties, context.fontAliases)
   if (!run) return null
   const validation = validateTextRunInput(run)
@@ -1599,6 +1640,14 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
     const paragraphOffset = plan.runStarts.get(run.id)
     if (paragraphOffset === undefined) return []
     const events: ParagraphEvent[] = []
+    // The note reference mark is generated, not authored: Word's own export of
+    // tdf118361_RTLfootnoteSeparator paints its decimal "1" in Calibri, the
+    // ascii face, although the reference run states <w:rtl/> and its character
+    // style states w:cs="Times New Roman" - while the authored U+0020 of the
+    // <w:rtl/> run beside it is painted in ArialMT, the w:cs face. So the
+    // run-level switch does not reach generated marker text. A marker whose own
+    // number format produces complex-script runes still reaches the slot by the
+    // per-rune table, which is what routes it.
     for (const span of shapingSpans(text, resolved.properties.language ?? 'und', 0, paragraphOffset, plan.paragraph.levels)) {
       const atoms = await shapeSpan(context, span, resolved.properties, 'run', run.id)
       events.push(...atoms.map((atom) => ({ kind: 'atom', atom }) as const))
@@ -1627,7 +1676,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
       continue
     }
     const paragraphOffset = (plan.runStarts.get(run.id) ?? 0) + chunk.start
-    const spans = shapingSpans(chunk.text ?? '', resolved.properties.language ?? 'und', chunk.start, paragraphOffset, plan.paragraph.levels)
+    const spans = shapingSpans(chunk.text ?? '', resolved.properties.language ?? 'und', chunk.start, paragraphOffset, plan.paragraph.levels, resolved.properties.complex_script_slot === true)
     if ((chunk.text?.length ?? 0) > 0 && spans.length === 0) {
       addDiagnostic(context, { code: 'bidi-resolution-refusal', severity: 'unsupported', scope_id: paragraphID, source_id: run.id, message: 'Resolved bidi levels split or failed to cover one Unicode scalar' })
       return []
@@ -1685,6 +1734,8 @@ async function markerEvents(context: NativeShapingContext, paragraph: NativeDocx
     return { events: [] }
   }
   const markerAtoms: FragmentAtom[] = []
+  // Generated list-marker text, like a generated note reference mark, is not
+  // reached by the run-level w:cs/w:rtl switch; its own runes still are.
   for (const span of shapingSpans(text, language, 0, 0, bidi.value.levels)) {
     if (context.activeParagraphFailed || context.resourceExceeded) break
     const atoms = await shapeSpan(context, span, properties, 'list-marker', paragraph.paragraph_id)
@@ -1708,7 +1759,7 @@ async function markerEvents(context: NativeShapingContext, paragraph: NativeDocx
   let textStart = markerStart + markerAdvance
   if (paragraph.numbering.suffix === 'space') {
     const level = direction === 'rtl' ? 1 : 0
-    const span: SourceSpan = { text: ' ', startUtf16: text.length, endUtf16: text.length + 1, script: 'Zyyy', eastAsiaSlot: false, direction, bidiLevel: level, language }
+    const span: SourceSpan = { text: ' ', startUtf16: text.length, endUtf16: text.length + 1, script: 'Zyyy', eastAsiaSlot: false, complexSlot: false, direction, bidiLevel: level, language }
     const suffixAtoms = await shapeSpan(context, span, properties, 'list-marker', paragraph.paragraph_id)
     atoms.push(...suffixAtoms)
     textStart += suffixAtoms.reduce((sum, atom) => sum + atom.advance, 0)

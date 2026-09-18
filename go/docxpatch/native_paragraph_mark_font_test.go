@@ -16,8 +16,12 @@ func TestParagraphMarkComplexFontSlotStaysScriptQualified(t *testing.T) {
 		{"latin", "ABC", "", "", "Arial", true, false},
 		{"empty", "", "", "", "Arial", true, false},
 		{"paragraph bidi", "ABC", "<w:bidi/>", "", "Arial", true, false},
-		{"mark rtl", "ABC", "", "<w:rtl/>", "Arial", true, true},
-		{"paragraph bidi with mark rtl", "ABC", "<w:bidi/>", "<w:rtl/>", "Arial", true, true},
+		// The mark's own switch still selects the complex-script slot, and the
+		// mark's w:cs names the face it selects, so it resolves instead of
+		// refusing. A switch with no face in the slot still refuses.
+		{"mark rtl", "ABC", "", "<w:rtl/>", "Arial", true, false},
+		{"paragraph bidi with mark rtl", "ABC", "<w:bidi/>", "<w:rtl/>", "Arial", true, false},
+		{"mark cs switch", "ABC", "", "<w:cs/>", "Arial", true, false},
 		{"mixed", "A漢", "", "", "Arial", true, true},
 		{"invalid", "ABC", "", "", "", false, false},
 	} {

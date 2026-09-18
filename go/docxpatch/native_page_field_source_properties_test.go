@@ -72,7 +72,13 @@ func TestPageFieldSourcePropertiesPreserveResultAuthority(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if hasResolutionDiagnostic(layout, "COMPLEX_SCRIPT_SIZE_PRESERVED") != (variant == "rtl") {
+				// w:rtl switches the run into the complex-script slot; this
+				// package names no w:cs face, so the slot is refused. Its
+				// w:szCs is applied rather than preserved.
+				if hasResolutionDiagnostic(layout, "COMPLEX_SCRIPT_SIZE_PRESERVED") {
+					t.Fatalf("complex-script size still preserved: %#v", layout.Diagnostics)
+				}
+				if hasResolutionDiagnostic(layout, "SCRIPT_FONT_PRESERVED") != (variant == "rtl") {
 					t.Fatalf("script guard wrong: %s %#v", variant, layout.Diagnostics)
 				}
 			}

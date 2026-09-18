@@ -710,11 +710,17 @@ function resolvedFontReferences(resolved: NativeDocxResolvedLayoutInputV1): Nati
     if (!entry) { entry = { family, weight, style, scopes: new Set() }; references.set(key, entry) }
     entry.scopes.add(scope)
   }
-  // The East-Asian slot is carried only by text that reaches it, so its face is
-  // a font the document genuinely needs, exactly like font_family.
+  // A script slot is carried only by text that reaches it, so its face is a font
+  // the document genuinely needs, exactly like font_family. The complex-script
+  // slot carries its own weight and style (w:bCs/w:iCs), so it is asked for
+  // under the ones it will actually be shaped with.
   const add = (properties: NativeDocxResolvedRunPropertiesV1, scope: string) => {
     addFamily(properties.font_family, properties, scope)
     addFamily(properties.east_asia_font_family, properties, scope)
+    addFamily(properties.complex_script_font_family, {
+      bold: properties.complex_script_bold ?? properties.bold,
+      italic: properties.complex_script_italic ?? properties.italic,
+    }, scope)
   }
   for (const run of resolved.runs) add(run.properties, run.run_id)
   for (const paragraph of resolved.paragraphs) {

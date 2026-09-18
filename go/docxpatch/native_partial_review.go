@@ -34,7 +34,7 @@ func nativePartialReviewRunProperties(n *nativeXMLNode, ns string) bool {
 		seen[child.Name.Local] = true
 		attrs := []string{}
 		switch child.Name.Local {
-		case "rStyle", "sz", "szCs", "b", "i", "bCs", "iCs", "rtl", "vanish", "u", "highlight", "vertAlign", "kern":
+		case "rStyle", "sz", "szCs", "b", "i", "cs", "bCs", "iCs", "rtl", "vanish", "u", "highlight", "vertAlign", "kern":
 			attrs = []string{"val"}
 		case "rFonts":
 			attrs = []string{"ascii", "hAnsi", "asciiTheme", "hAnsiTheme", "eastAsia", "eastAsiaTheme", "cs", "cstheme", "hint"}

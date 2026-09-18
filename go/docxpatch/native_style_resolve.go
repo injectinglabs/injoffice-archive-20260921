@@ -113,7 +113,11 @@ type NativeResolvedRunPropertiesV1 struct {
 	KerningMinSizeHalfPoints *int    `json:"kerning_min_size_half_points,omitempty"`
 	FontFamily               *string `json:"font_family,omitempty"`
 	EastAsiaFontFamily       *string `json:"east_asia_font_family,omitempty"`
+	ComplexFontFamily        *string `json:"complex_script_font_family,omitempty"`
 	FontSizeHalfPoint        *int    `json:"font_size_half_points,omitempty"`
+	ComplexFontSizeHalfPoint *int    `json:"complex_script_font_size_half_points,omitempty"`
+	ComplexBold              *bool   `json:"complex_script_bold,omitempty"`
+	ComplexItalic            *bool   `json:"complex_script_italic,omitempty"`
 	Bold                     *bool   `json:"bold,omitempty"`
 	Italic                   *bool   `json:"italic,omitempty"`
 	Underline                *string `json:"underline,omitempty"`
@@ -122,9 +126,14 @@ type NativeResolvedRunPropertiesV1 struct {
 	Highlight                *string `json:"highlight,omitempty"`
 	Language                 *string `json:"language,omitempty"`
 	EastAsiaLanguage         *string `json:"east_asia_language,omitempty"`
-	RTL                      *bool   `json:"rtl,omitempty"`
-	Hidden                   *bool   `json:"hidden,omitempty"`
-	LetterSpacingTwips       *int    `json:"letter_spacing_twips,omitempty"`
+	ComplexLanguage          *string `json:"complex_script_language,omitempty"`
+	// ComplexScriptSlot is the run-level switch ECMA-376 17.3.2.7 (w:cs) and
+	// 17.3.2.30 (w:rtl) state: every rune of this run resolves through the
+	// complex-script slot, not only the runes 17.3.2.26 assigns to it.
+	ComplexScriptSlot  *bool `json:"complex_script_slot,omitempty"`
+	RTL                *bool `json:"rtl,omitempty"`
+	Hidden             *bool `json:"hidden,omitempty"`
+	LetterSpacingTwips *int  `json:"letter_spacing_twips,omitempty"`
 }
 
 type NativeResolvedNumberingV1 struct {
@@ -359,6 +368,12 @@ type nativeRunProperties struct {
 	eastAsiaFamily    *string
 	eastAsiaLanguage  *string
 	eastAsiaHint      *bool
+	complexFamily     *string
+	complexLanguage   *string
+	complexSize       *int
+	complexBold       nativeBoolProperty
+	complexItalic     nativeBoolProperty
+	complexToggle     nativeBoolProperty
 	fontSize          *int
 	bold              nativeBoolProperty
 	italic            nativeBoolProperty
@@ -2070,7 +2085,13 @@ func (resolver *nativeLayoutResolver) flushScriptProperties(properties *nativeRu
 					continue
 				}
 			case nativeComplexSlotKey:
-				continue
+				// The complex-script slot is modelled now. Its size, toggles
+				// and language are applied rather than preserved, so only the
+				// font slot can still fail to resolve, and it speaks only for
+				// a run whose own text actually reaches the slot.
+				if !use.complex || key != nativeComplexSlotKey+":fonts" || properties.complexFamily != nil {
+					continue
+				}
 			case nativeHintSlotKey:
 				// w:hint decides the slot only for the ambiguous ranges. It
 				// changes nothing for Basic Latin or for a rune this tier
@@ -2110,9 +2131,17 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 	for _, extra := range contextUse {
 		use = use.merge(extra)
 	}
-	if properties.rtl.value {
-		// A forced complex-script run leaves no slot this tier resolves.
-		use.unmodelled = true
+	// ECMA-376 17.3.2.7 states w:cs as a switch, not a sibling of w:bCs/w:iCs/
+	// w:szCs: it "specifies that the bold, italic and font size properties from
+	// the complex script attributes shall be applied to the contents of this
+	// run". 17.3.2.30 says the same of w:rtl. Either one therefore puts the
+	// WHOLE run in the complex-script slot, not only the runes 17.3.2.26
+	// assigns to it. Word's own export of tdf118361_RTLfootnoteSeparator
+	// attests it directly: the authored U+0020 of a <w:rtl/> run is painted in
+	// ArialMT, the w:cs face, while the paragraph mark beside it - same
+	// paragraph, no w:rtl - is painted in Calibri, the ascii face.
+	if properties.complexToggle.value || properties.rtl.value {
+		use.complex = true
 	}
 	// w:hint="eastAsia" is the Private Use Area's one documented escape from
 	// the High ANSI slot. A package that states it keeps the refusal it had
@@ -2128,6 +2157,13 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 	if !use.eastAsia || use.unmodelled {
 		properties.eastAsiaFamily, properties.eastAsiaLanguage = nil, nil
 	}
+	// Symmetric with the East-Asian slot: a package that merely inherits a
+	// w:cs face from w:docDefaults, and never writes a complex-script rune,
+	// asks for no complex-script face and its font inventory is unchanged.
+	if !use.complex || use.unmodelled {
+		properties.complexFamily, properties.complexLanguage, properties.complexSize = nil, nil, nil
+		properties.complexBold, properties.complexItalic, properties.complexToggle = nativeBoolProperty{}, nativeBoolProperty{}, nativeBoolProperty{}
+	}
 	resolver.flushScriptProperties(properties, use, scopeID)
 	// Text in the East-Asian slot with nothing in that slot has no font at all.
 	// A stated slot already carries its own anchored refusal above; an unstated
@@ -2135,6 +2171,14 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 	if use.eastAsia && !use.unmodelled && properties.eastAsiaFamily == nil {
 		if _, stated := properties.scriptProperties[nativeEastAsiaSlotKey+":fonts"]; !stated {
 			resolver.addDiagnostic("SCRIPT_FONT_PRESERVED", scopeID, partName, nil, "East-Asian text has no East-Asian font slot to resolve and is not guessed")
+		}
+	}
+	// The same rule for the complex-script slot: complex-script text with
+	// nothing in that slot has no font at all and is refused rather than
+	// painted in the ascii face.
+	if use.complex && !use.unmodelled && properties.complexFamily == nil {
+		if _, stated := properties.scriptProperties[nativeComplexSlotKey+":fonts"]; !stated {
+			resolver.addDiagnostic("SCRIPT_FONT_PRESERVED", scopeID, partName, nil, "Complex-script text has no complex-script font slot to resolve and is not guessed")
 		}
 	}
 	ascii, hAnsi := properties.asciiFamily, properties.hAnsiFamily
@@ -2178,7 +2222,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 	reportedDuplicate := map[string]bool{}
 	modeledSingleton := map[string]bool{
 		"rStyle": true, "rFonts": true, "sz": true, "szCs": true, "b": true, "i": true,
-		"rtl": true, "vanish": true, "bCs": true, "iCs": true, "u": true, "color": true,
+		"rtl": true, "vanish": true, "cs": true, "bCs": true, "iCs": true, "u": true, "color": true,
 		"highlight": true, "lang": true, "vertAlign": true, "kern": true,
 	}
 	for _, child := range node.Children {
@@ -2227,7 +2271,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			hAnsiTheme, hasHAnsiTheme := nativeAttr(child, resolver.wordNS, "hAnsiTheme")
 			eastAsiaValue, eastAsia := nativeAttr(child, resolver.wordNS, "eastAsia")
 			eastAsiaTheme, hasEastAsiaTheme := nativeAttr(child, resolver.wordNS, "eastAsiaTheme")
-			_, cs := nativeAttr(child, resolver.wordNS, "cs")
+			csValue, cs := nativeAttr(child, resolver.wordNS, "cs")
 			_, csTheme := nativeAttr(child, resolver.wordNS, "cstheme")
 			hintValue, hint := nativeAttr(child, resolver.wordNS, "hint")
 			validScript := true
@@ -2276,7 +2320,19 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				// flushScriptProperties is where that is known.
 				properties.deferScriptProperty(nativeEastAsiaSlotKey+":fonts", "SCRIPT_FONT_PRESERVED", partName, child, "East-Asian font selection requires script shaping and is not guessed")
 			}
+			// 17.3.2.26 names the complex-script face directly (w:cs) or through
+			// a theme slot (w:cstheme). Only the direct name is resolved: no
+			// corpus package reaches the complex slot through a theme, and a
+			// cstheme-only slot keeps the refusal it has today rather than
+			// re-pointing a face with no reference export to check it against.
+			if cs && csValue != "" && nativeBoundedResolvedString(csValue, 256) && !csTheme {
+				properties.complexFamily = nativeString(csValue)
+			}
 			if cs || csTheme {
+				// Deferred even when the slot resolved, exactly like the
+				// East-Asian slot: the resolution holds only for text that
+				// actually reaches the complex-script slot, and
+				// flushScriptProperties is where that is known.
 				properties.deferScriptProperty(nativeComplexSlotKey+":fonts", "SCRIPT_FONT_PRESERVED", partName, child, "Complex-script font selection requires script shaping and is not guessed")
 			}
 			if hint {
@@ -2348,6 +2404,7 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			if value, ok := nativePositiveIntAttr(child, resolver.wordNS, "val"); !ok || value > 3276 || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
 				resolver.addDiagnostic("INVALID_FONT_SIZE", scopeID, partName, child, "Invalid complex-script size is preserved and not resolved")
 			} else {
+				properties.complexSize = nativeInt(value)
 				properties.deferScriptProperty(nativeComplexSlotKey+":size", "COMPLEX_SCRIPT_SIZE_PRESERVED", partName, child, "Complex-script font size is preserved for a future shaper")
 			}
 		case "b", "i", "rtl", "vanish":
@@ -2367,10 +2424,26 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			case "vanish":
 				properties.hidden = property
 			}
+		case "cs":
+			// ECMA-376 17.3.2.7. The switch that turns the complex-script
+			// attributes on for this run, not a fourth complex-script
+			// attribute beside w:bCs/w:iCs/w:szCs.
+			value, ok := nativeOnOff(child, resolver.wordNS)
+			if !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
+				resolver.addDiagnostic("INVALID_ON_OFF_PROPERTY", scopeID, partName, child, "Invalid complex-script switch is preserved and ignored")
+				continue
+			}
+			properties.complexToggle = nativeBoolProperty{present: true, value: value}
 		case "bCs", "iCs":
-			if _, ok := nativeOnOff(child, resolver.wordNS); !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
+			value, ok := nativeOnOff(child, resolver.wordNS)
+			if !ok || !nativeExactLeaf(child, xml.Name{Space: resolver.wordNS, Local: "val"}) {
 				resolver.addDiagnostic("INVALID_ON_OFF_PROPERTY", scopeID, partName, child, "Invalid complex-script toggle is preserved and not resolved")
 			} else {
+				if child.Name.Local == "bCs" {
+					properties.complexBold = nativeBoolProperty{present: true, value: value}
+				} else {
+					properties.complexItalic = nativeBoolProperty{present: true, value: value}
+				}
 				properties.deferScriptProperty(nativeComplexSlotKey+":"+child.Name.Local, "COMPLEX_SCRIPT_TOGGLE_PRESERVED", partName, child, "Complex-script toggles are preserved for a future shaper")
 			}
 		case "u":
@@ -2431,7 +2504,8 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 						// that reaches the East-Asian slot, deferred otherwise.
 						properties.deferScriptProperty(nativeEastAsiaSlotKey+":language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "East-Asian language metadata is preserved for script shaping")
 					}
-					if bidi {
+					if value, present := nativeAttr(child, resolver.wordNS, "bidi"); present {
+						properties.complexLanguage = nativeString(value)
 						properties.deferScriptProperty(nativeComplexSlotKey+":language", "SCRIPT_LANGUAGE_PRESERVED", partName, child, "Complex-script language metadata is preserved for script shaping")
 					}
 				}
@@ -2919,6 +2993,24 @@ func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProper
 	if layer.eastAsiaHint != nil {
 		target.eastAsiaHint = nativeBool(*layer.eastAsiaHint)
 	}
+	if layer.complexFamily != nil {
+		target.complexFamily = nativeString(*layer.complexFamily)
+	}
+	if layer.complexLanguage != nil {
+		target.complexLanguage = nativeString(*layer.complexLanguage)
+	}
+	if layer.complexSize != nil {
+		target.complexSize = nativeInt(*layer.complexSize)
+	}
+	if layer.complexBold.present {
+		target.complexBold = layer.complexBold
+	}
+	if layer.complexItalic.present {
+		target.complexItalic = layer.complexItalic
+	}
+	if layer.complexToggle.present {
+		target.complexToggle = layer.complexToggle
+	}
 	if layer.fontSize != nil {
 		target.fontSize = nativeInt(*layer.fontSize)
 	}
@@ -2983,9 +3075,21 @@ func nativeExportRunProperties(properties nativeRunProperties) NativeResolvedRun
 	result := NativeResolvedRunPropertiesV1{
 		KerningMinSizeHalfPoints: properties.kerningMinSize,
 		FontFamily:               properties.fontFamily, EastAsiaFontFamily: properties.eastAsiaFamily, FontSizeHalfPoint: properties.fontSize,
+		ComplexFontFamily: properties.complexFamily, ComplexFontSizeHalfPoint: properties.complexSize,
 		Underline: properties.underline, VerticalAlignment: properties.verticalAlignment, Color: properties.color, Highlight: properties.highlight,
-		Language: properties.language, EastAsiaLanguage: properties.eastAsiaLanguage,
+		Language: properties.language, EastAsiaLanguage: properties.eastAsiaLanguage, ComplexLanguage: properties.complexLanguage,
 		LetterSpacingTwips: properties.letterSpacing,
+	}
+	if properties.complexBold.present {
+		result.ComplexBold = nativeBool(properties.complexBold.value)
+	}
+	if properties.complexItalic.present {
+		result.ComplexItalic = nativeBool(properties.complexItalic.value)
+	}
+	// Exported only with a face to switch to: resolveLatinRunFont has already
+	// refused a run that reaches this slot and resolves no complex-script font.
+	if (properties.complexToggle.value || properties.rtl.value) && properties.complexFamily != nil {
+		result.ComplexScriptSlot = nativeBool(true)
 	}
 	if properties.bold.present {
 		result.Bold = nativeBool(properties.bold.value)
@@ -3078,7 +3182,7 @@ func rejectNativeStyleNamespaceSpoofing(root *nativeXMLNode, wordNS string) erro
 		"styles": true, "docDefaults": true, "rPrDefault": true, "pPrDefault": true,
 		"style": true, "basedOn": true, "pPr": true, "rPr": true, "name": true,
 		"pStyle": true, "numPr": true, "rStyle": true, "rFonts": true, "sz": true,
-		"szCs": true, "b": true, "i": true, "bCs": true, "iCs": true, "rtl": true,
+		"szCs": true, "b": true, "i": true, "cs": true, "bCs": true, "iCs": true, "rtl": true,
 		"vanish": true, "u": true, "color": true, "highlight": true, "lang": true,
 		"vertAlign": true,
 		"jc":        true, "spacing": true, "ind": true, "keepNext": true, "keepLines": true,
@@ -3379,6 +3483,15 @@ func validateNativeResolvedRunProperties(properties NativeResolvedRunPropertiesV
 	}
 	if properties.EastAsiaLanguage != nil && !nativeScriptLanguageTag(*properties.EastAsiaLanguage) {
 		return fmt.Errorf("invalid east-asian language")
+	}
+	if properties.ComplexFontFamily != nil && !nativeBoundedResolvedString(*properties.ComplexFontFamily, 256) {
+		return fmt.Errorf("invalid complex-script font family")
+	}
+	if properties.ComplexLanguage != nil && !nativeScriptLanguageTag(*properties.ComplexLanguage) {
+		return fmt.Errorf("invalid complex-script language")
+	}
+	if properties.ComplexFontSizeHalfPoint != nil && (*properties.ComplexFontSizeHalfPoint < 1 || *properties.ComplexFontSizeHalfPoint > 3276) {
+		return fmt.Errorf("invalid complex-script font size")
 	}
 	return nil
 }

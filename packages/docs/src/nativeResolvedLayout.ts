@@ -62,7 +62,15 @@ export interface NativeDocxResolvedRunPropertiesV1 {
   font_family?: string
   /** The East-Asian slot's face, present only when the run's own text reaches that slot. */
   east_asia_font_family?: string
+  /** The complex-script slot's face, present only when the run's own text reaches that slot. */
+  complex_script_font_family?: string
   font_size_half_points?: number
+  /** w:szCs, applied to the complex-script slot's text only. */
+  complex_script_font_size_half_points?: number
+  /** w:bCs, applied to the complex-script slot's text only. */
+  complex_script_bold?: boolean
+  /** w:iCs, applied to the complex-script slot's text only. */
+  complex_script_italic?: boolean
   bold?: boolean
   italic?: boolean
   underline?: 'none' | 'single' | 'double' | 'words'
@@ -71,6 +79,13 @@ export interface NativeDocxResolvedRunPropertiesV1 {
   highlight?: string
   language?: string
   east_asia_language?: string
+  complex_script_language?: string
+  /**
+   * ECMA-376 17.3.2.7 (w:cs) and 17.3.2.30 (w:rtl): the run-level switch that
+   * puts every rune of this run in the complex-script slot, not only the runes
+   * MS-OI29500 17.3.2.26 assigns to it.
+   */
+  complex_script_slot?: boolean
   rtl?: boolean
   hidden?: boolean
   /**
@@ -179,7 +194,7 @@ export const DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS = {
   SourcePartsV1: ['main_part', 'styles_part', 'numbering_part', 'theme_part', 'font_table_part', 'settings_part'],
   NumberingSourceV1: ['relationships_part', 'relationships_sha256', 'relationship_id', 'relationship_type', 'relationship_target', 'part_name', 'content_type', 'part_sha256', 'model_sha256'],
   ParagraphPropertiesV1: ['alignment', 'spacing_before_twips', 'spacing_after_twips', 'line', 'line_rule', 'indent_left_twips', 'indent_right_twips', 'indent_start_twips', 'indent_end_twips', 'first_line_twips', 'hanging_twips', 'bidi', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
-  RunPropertiesV1: ['font_family', 'east_asia_font_family', 'font_size_half_points', 'kerning_min_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'east_asia_language', 'rtl', 'hidden', 'letter_spacing_twips'],
+  RunPropertiesV1: ['font_family', 'east_asia_font_family', 'complex_script_font_family', 'font_size_half_points', 'complex_script_font_size_half_points', 'complex_script_bold', 'complex_script_italic', 'kerning_min_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'east_asia_language', 'complex_script_language', 'complex_script_slot', 'rtl', 'hidden', 'letter_spacing_twips'],
   CounterValueV1: ['level', 'value', 'format'],
   NumberingV1: ['marker_id', 'definition_sha256', 'num_id', 'abstract_num_id', 'level', 'level_style_id', 'start', 'format', 'text', 'suffix', 'alignment', 'restart_after_level', 'never_restart', 'counter_value', 'counter_values', 'resolved_text', 'label_start_twips', 'label_end_twips', 'text_start_twips', 'numbering_tab_twips', 'marker_properties'],
   ParagraphV1: ['paragraph_id', 'style_id', 'applied_styles', 'properties', 'paragraph_mark_properties', 'numbering'],
@@ -345,19 +360,22 @@ function validateRunProperties(value: unknown, path: string, issues: NativeDocxV
   if (!entry) return
   optionalString(entry.font_family, `${path}/font_family`, issues, /[\s\S]+/, 256)
   optionalString(entry.east_asia_font_family, `${path}/east_asia_font_family`, issues, /[\s\S]+/, 256)
+  optionalString(entry.complex_script_font_family, `${path}/complex_script_font_family`, issues, /[\s\S]+/, 256)
   integer(entry.font_size_half_points, `${path}/font_size_half_points`, issues, 1, 3276)
+  integer(entry.complex_script_font_size_half_points, `${path}/complex_script_font_size_half_points`, issues, 1, 3276)
   integer(entry.kerning_min_size_half_points, `${path}/kerning_min_size_half_points`, issues, 1, 3276)
   // Signed: a negative tracking condenses. Zero never reaches the wire, because
   // an authored zero adds nothing and is resolved as the absent form instead.
   integer(entry.letter_spacing_twips, `${path}/letter_spacing_twips`, issues, -31_680, 31_680)
   if (entry.letter_spacing_twips === 0) issues.push({ code: 'OUT_OF_RANGE', path: `${path}/letter_spacing_twips`, message: 'character tracking must be a nonzero signed twip measurement' })
-  for (const key of ['bold', 'italic', 'rtl', 'hidden']) booleanValue(entry[key], `${path}/${key}`, issues)
+  for (const key of ['bold', 'italic', 'complex_script_bold', 'complex_script_italic', 'complex_script_slot', 'rtl', 'hidden']) booleanValue(entry[key], `${path}/${key}`, issues)
   if (entry.underline !== undefined) enumValue(entry.underline, `${path}/underline`, ['none', 'single', 'double', 'words'], issues)
   if (entry.vertical_alignment !== undefined) enumValue(entry.vertical_alignment, `${path}/vertical_alignment`, ['baseline', 'subscript', 'superscript'], issues)
   optionalString(entry.color, `${path}/color`, issues, COLOR, 6)
   if (entry.highlight !== undefined) enumValue(entry.highlight, `${path}/highlight`, ['none', 'black', 'blue', 'cyan', 'green', 'magenta', 'red', 'yellow', 'white', 'darkBlue', 'darkCyan', 'darkGreen', 'darkMagenta', 'darkRed', 'darkYellow', 'darkGray', 'lightGray'], issues)
   optionalString(entry.language, `${path}/language`, issues, /[\s\S]+/, 256)
   optionalString(entry.east_asia_language, `${path}/east_asia_language`, issues, /[\s\S]+/, 256)
+  optionalString(entry.complex_script_language, `${path}/complex_script_language`, issues, /[\s\S]+/, 256)
 }
 
 function validateParagraphProperties(value: unknown, path: string, issues: NativeDocxValidationIssue[]): void {
@@ -447,7 +465,7 @@ function unicodeScalarLength(value: string): number | undefined {
 }
 
 function goOrderedRunProperties(properties: NativeDocxResolvedRunPropertiesV1): Record<string, unknown> {
-  return Object.fromEntries((['font_family', 'east_asia_font_family', 'font_size_half_points', 'kerning_min_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'east_asia_language', 'rtl', 'hidden', 'letter_spacing_twips'] as const)
+  return Object.fromEntries((['font_family', 'east_asia_font_family', 'complex_script_font_family', 'font_size_half_points', 'complex_script_font_size_half_points', 'complex_script_bold', 'complex_script_italic', 'kerning_min_size_half_points', 'bold', 'italic', 'underline', 'vertical_alignment', 'color', 'highlight', 'language', 'east_asia_language', 'complex_script_language', 'complex_script_slot', 'rtl', 'hidden', 'letter_spacing_twips'] as const)
     .flatMap((key) => properties[key] === undefined ? [] : [[key, properties[key]]]))
 }
 
