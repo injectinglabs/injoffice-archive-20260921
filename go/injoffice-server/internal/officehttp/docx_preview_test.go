@@ -387,9 +387,12 @@ func assertDOCXPreviewPainted(t *testing.T, data []byte, options DOCXPreviewOpti
 			PackageSHA256 string `json:"package_sha256"`
 		} `json:"provenance"`
 		Pages []struct {
+			GlyphOutlines []struct {
+				Path []any `json:"path"`
+			} `json:"glyph_outlines"`
 			Commands []struct {
-				Kind string `json:"kind"`
-				Path []any  `json:"path"`
+				Kind         string `json:"kind"`
+				OutlineIndex int    `json:"outline_index"`
 			} `json:"commands"`
 		} `json:"pages"`
 	}
@@ -405,7 +408,12 @@ func assertDOCXPreviewPainted(t *testing.T, data []byte, options DOCXPreviewOpti
 	for _, page := range output.Pages {
 		glyphs := 0
 		for _, command := range page.Commands {
-			if command.Kind == "fill_glyph_path" && len(command.Path) > 0 {
+			if command.Kind != "fill_glyph_path" || command.OutlineIndex >= len(page.GlyphOutlines) {
+				continue
+			}
+			// Contours are shared per page; a glyph paints ink when the outline it
+			// references does.
+			if len(page.GlyphOutlines[command.OutlineIndex].Path) > 0 {
 				glyphs++
 			}
 		}

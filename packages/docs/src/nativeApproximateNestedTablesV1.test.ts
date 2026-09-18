@@ -8,6 +8,7 @@ import { DOCX_NATIVE_PROTOCOL, DOCX_NATIVE_VERSION, type NativeDocxDocumentV1, t
 import { DOCX_RESOLVED_LAYOUT_PROTOCOL, DOCX_RESOLVED_LAYOUT_VERSION, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import { DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION, type NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
 import { DOCX_PAGE_PAINT_COMPILER_PROTOCOL, DOCX_PAGE_PAINT_COMPILER_VERSION, prepareNativeDocxPagePaintV1, renderNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximatePagePreviewV1, type NativeDocxPagePaintPrepareInputV1 } from './nativePagePaintCompilerV1.js'
+import { nativeDocxPlacedGlyphOutlineV1 } from './nativePagePaintV1.js'
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxApproximateNestedTablesV1, DOCX_APPROXIMATE_NESTED_TABLE_CODE, DOCX_APPROXIMATE_NESTED_TABLE_FONT_CODE, DOCX_APPROXIMATE_NESTED_TABLE_LAYOUT_POLICY, DOCX_APPROXIMATE_NESTED_TABLE_OMITTED_CODE, DOCX_APPROXIMATE_NESTED_TABLE_SIDECAR_REFUSED, DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID, DOCX_APPROXIMATE_NESTED_TABLE_WARNING, type NativeDocxApproximateNestedTablesV1 } from './nativeApproximateNestedTablesV1.js'
 import type { NativeDocxFillTableCellCommandV1, NativeDocxGlyphOutlineRequestV1, NativeDocxStrokeTableBorderCommandV1 } from './nativePagePaintV1.js'
@@ -302,7 +303,7 @@ describe('approximate nested tables', () => {
       const ys: number[] = []
       for (const command of paint.pages[0]!.commands) {
         if (command.kind !== 'fill_glyph_path' || !command.source_id.startsWith(`${ITEM}:r0c0`)) continue
-        for (const segment of command.path) for (const [key, value] of Object.entries(segment)) if (key.endsWith('y_millipoints')) ys.push(value as number)
+        for (const segment of nativeDocxPlacedGlyphOutlineV1(paint.pages[0]!, command)) for (const [key, value] of Object.entries(segment)) if (key.endsWith('y_millipoints')) ys.push(value as number)
       }
       const strokes = paint.pages[0]!.commands.filter((c): c is NativeDocxStrokeTableBorderCommandV1 => c.kind === 'stroke_table_border' && c.table_id === DOCX_APPROXIMATE_NESTED_TABLE_TABLE_ID)
       return { top: Math.min(...ys), bottom: Math.max(...strokes.map(c => Math.max(c.y1_millipoints, c.y2_millipoints))) }

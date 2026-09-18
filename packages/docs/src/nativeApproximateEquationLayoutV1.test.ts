@@ -10,7 +10,8 @@ import { DOCX_PAGINATION_SETTINGS_PROTOCOL, DOCX_PAGINATION_SETTINGS_VERSION, ty
 import { DOCX_PAGE_PAINT_COMPILER_PROTOCOL, DOCX_PAGE_PAINT_COMPILER_VERSION, prepareNativeDocxPagePaintV1, renderNativeDocxApproximatePagePreviewV1, decodeNativeDocxApproximatePagePreviewV1, type NativeDocxPagePaintPrepareInputV1 } from './nativePagePaintCompilerV1.js'
 import { encodeNativeDOCXFontInventoryV1, nativeDOCXCanonicalWireSHA256V1, type NativeDOCXFontInventoryV1 } from './nativeFontInventoryV1.js'
 import { decodeNativeDocxApproximateEquationsV1, selectNativeDocxApproximateMathFaceV1, DOCX_APPROXIMATE_EQUATION_CODE, DOCX_APPROXIMATE_EQUATION_FONT_CODE, DOCX_APPROXIMATE_EQUATION_OMITTED_CODE, DOCX_APPROXIMATE_EQUATION_TABLE_ID, DOCX_APPROXIMATE_EQUATION_WARNING, type NativeDocxApproximateEquationsV1, type NativeDocxApproximateMathNodeV1, type NativeDocxApproximateMathRunV1 } from './nativeApproximateEquationLayoutV1.js'
-import type { NativeDocxFillGlyphPathCommandV1, NativeDocxFillTableCellCommandV1, NativeDocxGlyphOutlineRequestV1 } from './nativePagePaintV1.js'
+import { nativeDocxPlacedGlyphOutlineV1 } from './nativePagePaintV1.js'
+import type { NativeDocxFillGlyphPathCommandV1, NativeDocxFillTableCellCommandV1, NativeDocxGlyphOutlineRequestV1, NativeDocxPaintPageV1 } from './nativePagePaintV1.js'
 
 const require = createRequire(import.meta.url)
 const FONT_BYTES = new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf')))
@@ -123,9 +124,10 @@ function sidecar(lines: NativeDocxApproximateMathNodeV1[], overrides: Record<str
   }
 }
 type Glyph = NativeDocxFillGlyphPathCommandV1
-const glyphTop = (glyph: Glyph) => Math.min(...glyph.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
-const glyphBottom = (glyph: Glyph) => Math.max(...glyph.path.flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
-const glyphLeft = (glyph: Glyph) => Math.min(...glyph.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
+type GlyphPage = { glyph_outlines: NativeDocxPaintPageV1['glyph_outlines'] }
+const glyphTop = (page: GlyphPage, glyph: Glyph) => Math.min(...nativeDocxPlacedGlyphOutlineV1(page, glyph).flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+const glyphBottom = (page: GlyphPage, glyph: Glyph) => Math.max(...nativeDocxPlacedGlyphOutlineV1(page, glyph).flatMap(p => 'y_millipoints' in p ? [p.y_millipoints] : []))
+const glyphLeft = (page: GlyphPage, glyph: Glyph) => Math.min(...nativeDocxPlacedGlyphOutlineV1(page, glyph).flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : []))
 
 describe('approximate OMML equations', () => {
   it('lays the binomial theorem out as a centered display block with recognizable fraction, script and n-ary structure', async () => {
@@ -143,25 +145,25 @@ describe('approximate OMML equations', () => {
     for (const glyph of glyphs) { expect(glyph.line_id).toBe(line.line_id); expect(line.command_ids).toContain(glyph.id); expect(glyph.fill_rgb).toBe('4F81BD') }
     expect(page.commands.some(c => c.kind === 'fill_text_highlight')).toBe(false)
     // The equation is centered in the column and sits inside its own reserved line.
-    const left = Math.min(...glyphs.map(glyphLeft)), right = Math.max(...glyphs.flatMap(g => g.path.flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : [])))
+    const left = Math.min(...glyphs.map(glyph => glyphLeft(page, glyph))), right = Math.max(...glyphs.flatMap(g => nativeDocxPlacedGlyphOutlineV1(page, g).flatMap(p => 'x_millipoints' in p ? [p.x_millipoints] : [])))
     const column = page.columns[0]!
     expect(left).toBeGreaterThan(column.x_millipoints + column.width_millipoints * 0.2)
     expect(right).toBeLessThan(column.x_millipoints + column.width_millipoints * 0.8)
     expect(Math.abs((left + right) / 2 - (column.x_millipoints + column.width_millipoints / 2))).toBeLessThan(6_000)
-    expect(Math.min(...glyphs.map(glyphTop))).toBeGreaterThanOrEqual(line.y_millipoints - 1)
-    expect(Math.max(...glyphs.map(glyphBottom))).toBeLessThanOrEqual(line.y_millipoints + line.height_millipoints + 1)
+    expect(Math.min(...glyphs.map(g => glyphTop(page, g)))).toBeGreaterThanOrEqual(line.y_millipoints - 1)
+    expect(Math.max(...glyphs.map(g => glyphBottom(page, g)))).toBeLessThanOrEqual(line.y_millipoints + line.height_millipoints + 1)
     // The display n-ary operator is enlarged, and its limits sit above and below it.
     const sizes = new Set(glyphs.map(g => g.font_size_millipoints))
     expect(sizes.has(10_000)).toBe(true); expect(sizes.has(7_000)).toBe(true); expect(sizes.has(14_000)).toBe(true)
     const sigma = glyphs.find(g => g.font_size_millipoints === 14_000)!
     const scripts = glyphs.filter(g => g.font_size_millipoints === 7_000)
-    const above = scripts.filter(s => glyphBottom(s) <= glyphTop(sigma) && Math.abs(glyphLeft(s) - glyphLeft(sigma)) < 12_000)
-    const below = scripts.filter(s => glyphTop(s) >= glyphBottom(sigma) && Math.abs(glyphLeft(s) - glyphLeft(sigma)) < 12_000)
+    const above = scripts.filter(s => glyphBottom(page, s) <= glyphTop(page, sigma) && Math.abs(glyphLeft(page, s) - glyphLeft(page, sigma)) < 12_000)
+    const below = scripts.filter(s => glyphTop(page, s) >= glyphBottom(page, sigma) && Math.abs(glyphLeft(page, s) - glyphLeft(page, sigma)) < 12_000)
     expect(above.length).toBe(1); expect(below.length).toBe(3)
     // Superscripts rise above the baseline glyphs; the noBar binomial paints no rule.
     const base = glyphs.filter(g => g.font_size_millipoints === 10_000)
-    const baseBaseline = Math.max(...base.map(glyphBottom))
-    const raisedScripts = scripts.filter(s => glyphBottom(s) < baseBaseline - 2_000)
+    const baseBaseline = Math.max(...base.map(g => glyphBottom(page, g)))
+    const raisedScripts = scripts.filter(s => glyphBottom(page, s) < baseBaseline - 2_000)
     expect(raisedScripts.length).toBeGreaterThanOrEqual(4)
     expect(page.commands.some(c => c.kind === 'fill_table_cell')).toBe(false)
     expect(paint.reasons).toContain(DOCX_APPROXIMATE_EQUATION_WARNING)
@@ -185,17 +187,17 @@ describe('approximate OMML equations', () => {
     // Paint order follows layout order: numerator, denominator, '+', the radical sign, then the radicand.
     const [a, b, plus, sign, two] = ['a', 'b', '+', '√', '2'].map((_, index) => glyphs[index]!)
     expect(glyphs).toHaveLength(5)
-    expect(glyphLeft(sign)).toBeLessThan(glyphLeft(two))
-    const bar = rules.find(rule => rule.width_millipoints > rule.height_millipoints * 5 && rule.x_millipoints < glyphLeft(plus!))!
-    expect(glyphBottom(a!)).toBeLessThan(bar.y_millipoints)
-    expect(glyphTop(b!)).toBeGreaterThan(bar.y_millipoints + bar.height_millipoints)
+    expect(glyphLeft(page, sign)).toBeLessThan(glyphLeft(page, two))
+    const bar = rules.find(rule => rule.width_millipoints > rule.height_millipoints * 5 && rule.x_millipoints < glyphLeft(page, plus!))!
+    expect(glyphBottom(page, a!)).toBeLessThan(bar.y_millipoints)
+    expect(glyphTop(page, b!)).toBeGreaterThan(bar.y_millipoints + bar.height_millipoints)
     // The fraction rule sits near the axis of the '+' sign.
-    expect(Math.abs(bar.y_millipoints - (glyphTop(plus!) + glyphBottom(plus!)) / 2)).toBeLessThan(1_500)
+    expect(Math.abs(bar.y_millipoints - (glyphTop(page, plus!) + glyphBottom(page, plus!)) / 2)).toBeLessThan(1_500)
     // Display fractions keep the text size for numerator and denominator.
     expect(a!.font_size_millipoints).toBe(10_000); expect(b!.font_size_millipoints).toBe(10_000)
     const overbar = rules.find(rule => rule !== bar)!
-    expect(overbar.y_millipoints).toBeLessThan(glyphTop(two!))
-    expect(overbar.x_millipoints + overbar.width_millipoints).toBeGreaterThanOrEqual(glyphLeft(two!))
+    expect(overbar.y_millipoints).toBeLessThan(glyphTop(page, two!))
+    expect(overbar.x_millipoints + overbar.width_millipoints).toBeGreaterThanOrEqual(glyphLeft(page, two!))
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 30000)
 
@@ -214,11 +216,11 @@ describe('approximate OMML equations', () => {
     const textGlyph = page.commands.find((c): c is Glyph => c.kind === 'fill_glyph_path' && c.source_id === 'run:1')!
     const inline = page.commands.filter((c): c is Glyph => c.kind === 'fill_glyph_path' && c.source_id === 'approximate-equation:test:2:run')
     expect(inline.length).toBe(2)
-    expect(Math.min(...inline.map(glyphLeft))).toBeGreaterThan(glyphLeft(textGlyph))
+    expect(Math.min(...inline.map(g => glyphLeft(page, g)))).toBeGreaterThan(glyphLeft(page, textGlyph))
     expect(inline.every(g => g.line_id === first.line_id)).toBe(true)
     // The subscript is smaller and lower than its base.
     const [base, sub] = inline
-    expect(sub!.font_size_millipoints).toBe(7_000); expect(glyphBottom(sub!)).toBeGreaterThan(glyphBottom(base!))
+    expect(sub!.font_size_millipoints).toBe(7_000); expect(glyphBottom(page, sub!)).toBeGreaterThan(glyphBottom(page, base!))
     // Inline equations keep the paragraph alignment; only the empty display paragraph is centered.
     expect(paint.reasons.some(r => r.includes('approximate-equation:test:2: display'))).toBe(false)
     expect(paint.reasons.some(r => r.includes('painted 2 of 2'))).toBe(true)

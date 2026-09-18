@@ -4534,6 +4534,11 @@
               "signature": "export type NativeDocxGlyphOutlineResultV1 ="
             },
             {
+              "name": "NativeDocxGlyphOutlineV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxGlyphOutlineV1"
+            },
+            {
               "name": "NativeDocxHardBreakV1",
               "kind": "type",
               "signature": "export interface NativeDocxHardBreakV1"
@@ -7282,6 +7287,11 @@
               "signature": "NativeDocxAutomaticBorderPreviewV1"
             },
             {
+              "name": "NativeDocxFillGlyphPathCommandV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxFillGlyphPathCommandV1"
+            },
+            {
               "name": "NativeDocxFillTextHighlightCommandV1",
               "kind": "type",
               "signature": "export interface NativeDocxFillTextHighlightCommandV1"
@@ -7290,6 +7300,11 @@
               "name": "NativeDocxFontSubstitutionPreviewV1",
               "kind": "type",
               "signature": "NativeDocxFontSubstitutionPreviewV1"
+            },
+            {
+              "name": "NativeDocxGlyphOutlineV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxGlyphOutlineV1"
             },
             {
               "name": "NativeDocxOmittedContentCategoryV1",
@@ -7335,6 +7350,11 @@
               "name": "NativeDocxPaintPathCommandV1",
               "kind": "type",
               "signature": "export type NativeDocxPaintPathCommandV1 ="
+            },
+            {
+              "name": "nativeDocxPlacedGlyphOutlineV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxPlacedGlyphOutlineV1(page: { readonly glyph_outlines: readonly NativeDocxGlyphOutlineV1[]; }, command: Pick<NativeDocxFillGlyphPathCommandV1, 'outline_index' | 'origin_x_millipoints' | 'origin_y_millipoints' | 'glyph_id' | 'font_size_millipoints' | 'outline_kind'>): NativeDocxPaintPathCommandV1[]"
             },
             {
               "name": "NativeDocxStrokeTextUnderlineCommandV1",

@@ -19,7 +19,7 @@ import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.
 import type { NativeDocxShapedLinesV1, NativeDocxLineFragmentV1 } from './nativeShapingLines.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
 import { ID, RGB, preflightWire, paintCommandID, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
-import { nativeDocxPlaceGlyphPathV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { textboxAnchorLine, type TextboxAnchorContext } from './nativeTextboxAnchorLineV2.js'
@@ -461,6 +461,8 @@ async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxP
     chains.set(key, [...(chains.get(key) ?? []), entry])
   }
   const outlineCache = new Map<string, NativeDocxGlyphOutlineResultV1>()
+  // One shared outline table per page, so a text box repeating a glyph transports it once.
+  const registries = new Map<string, ReturnType<typeof nativeDocxPageGlyphOutlineRegistryV1>>()
   let glyphBudget = MAX_TEXTBOX_GLYPHS
   // Glyph paths dominate the wire; measure the body paint once and spend only
   // the remaining viewer budget on text box glyphs. Excess is disclosed.
@@ -483,7 +485,7 @@ async function paintTextboxes(placed: PlacedShape[], pages: readonly NativeDocxP
         const free = frames[0]!.inner_height_millipoints - overflow.used_height_millipoints[0]!
         if (free > 0 && anchor !== 't') { const shift = anchor === 'ctr' ? Math.floor(free / 2) : free; for (const placement of overflow.placements) placement.y_millipoints += shift }
       }
-      glyphBudget = await placeTextboxLines(overflow.placements, boxes, frames, chainOrdinal, resolved, runtime, extra, outlineCache, outcome, glyphBudget)
+      glyphBudget = await placeTextboxLines(overflow.placements, boxes, frames, chainOrdinal, resolved, runtime, extra, outlineCache, registries, outcome, glyphBudget)
     } catch (error) {
       outcome.failures.push(`${head.shape.id}: ${(error instanceof Error ? error.message : 'shaping failed').slice(0, 200)}`)
     }
@@ -540,7 +542,7 @@ async function shapeTextbox(story: NativeDocxApproximateLinkedOverflowStoryV1, w
   return shaped.value
 }
 
-async function placeTextboxLines(placements: NativeDocxApproximateLinkedOverflowPlacementV1<NativeDocxShapedLinesV1['paragraphs'][number]['lines'][number]>[], boxes: PlacedShape[], frames: ReturnType<typeof nativeDocxApproximateTextboxInnerFrameV1>[], chainOrdinal: number, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, outlineCache: Map<string, NativeDocxGlyphOutlineResultV1>, outcome: TextboxPaintOutcome, glyphBudget: number): Promise<number> {
+async function placeTextboxLines(placements: NativeDocxApproximateLinkedOverflowPlacementV1<NativeDocxShapedLinesV1['paragraphs'][number]['lines'][number]>[], boxes: PlacedShape[], frames: ReturnType<typeof nativeDocxApproximateTextboxInnerFrameV1>[], chainOrdinal: number, resolved: NativeDocxResolvedLayoutInputV1, runtime: NativeDocxApproximateShapePaintRuntimeV1, extra: Map<string, NativeDocxPagePaintCommandV1>, outlineCache: Map<string, NativeDocxGlyphOutlineResultV1>, registries: Map<string, ReturnType<typeof nativeDocxPageGlyphOutlineRegistryV1>>, outcome: TextboxPaintOutcome, glyphBudget: number): Promise<number> {
   const resolvedRuns = new Map(resolved.runs.map(run => [run.run_id, run]))
   const resolvedParagraphs = new Map(resolved.paragraphs.map(paragraph => [paragraph.paragraph_id, paragraph]))
   const faces = new Map(runtime.manifest.faces.map(face => [face.faceId, face]))
@@ -580,10 +582,14 @@ async function placeTextboxLines(placements: NativeDocxApproximateLinkedOverflow
               outlineCache.set(cacheKey, outline)
             }
             if (outline.status === 'outlined') {
-              const path = nativeDocxPlaceGlyphPathV1(outline.path, Math.round(glyphX + glyph.offset_x_millipoints), Math.round(baseline - glyph.offset_y_millipoints), fontSize, outline.units_per_em)
-              if (path) {
-                const command: NativeDocxFillGlyphPathCommandV1 = { kind: 'fill_glyph_path', id: paintCommandID(placedID, fragment.id, glyphIndex), line_id: paintLine.line_id, fragment_id: fragment.id, source_id: fragment.source_id, glyph_index: glyphIndex, face, glyph_id: glyph.glyph_id, font_size_millipoints: fontSize, fill_rgb: fill, fill_rule: 'nonzero', outline_kind: 'path', path }
-                const bytes = JSON.stringify(command).length + 1
+              const registry = registries.get(page.id) ?? nativeDocxPageGlyphOutlineRegistryV1(page)
+              registries.set(page.id, registry)
+              const stored = registry.outlines.length
+              const placement = nativeDocxRegisterGlyphOutlineV1(registry, face, glyph.glyph_id, fontSize, Math.round(glyphX + glyph.offset_x_millipoints), Math.round(baseline - glyph.offset_y_millipoints), { kind: 'path', path: outline.path, units_per_em: outline.units_per_em, scale_x: fontSize, scale_y: fontSize })
+              if (placement) {
+                const command: NativeDocxFillGlyphPathCommandV1 = { kind: 'fill_glyph_path', id: paintCommandID(placedID, fragment.id, glyphIndex), line_id: paintLine.line_id, fragment_id: fragment.id, source_id: fragment.source_id, glyph_index: glyphIndex, face, glyph_id: glyph.glyph_id, font_size_millipoints: fontSize, fill_rgb: fill, fill_rule: 'nonzero', outline_kind: 'path', ...placement }
+                // The envelope budget charges the shared outline the first time only.
+                const bytes = JSON.stringify(command).length + 1 + (registry.outlines.length > stored ? JSON.stringify(registry.outlines[placement.outline_index]).length + 1 : 0)
                 if (bytes > outcome.byteBudget) { outcome.droppedGlyphs += 1; glyphIndexBudget = 0; glyphX += glyph.advance_x_millipoints; continue } else {
                   outcome.byteBudget -= bytes
                   glyphIndexBudget -= 1
