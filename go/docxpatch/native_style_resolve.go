@@ -353,6 +353,7 @@ type nativeRunProperties struct {
 	hAnsiFamily       *string
 	eastAsiaFamily    *string
 	eastAsiaLanguage  *string
+	eastAsiaHint      *bool
 	fontSize          *int
 	bold              nativeBoolProperty
 	italic            nativeBoolProperty
@@ -1970,9 +1971,36 @@ func nativeRequiresScriptShaping(character rune) bool {
 	case character >= 0x2000 && character <= 0x206f:
 		// General Punctuation: quotation marks, dashes, ellipsis.
 		return false
+	case character >= 0xe000 && character <= 0xf8ff:
+		// Private Use Area. The rFonts range table gives it the High ANSI
+		// slot, with w:hint="eastAsia" as its one escape, so a symbol-font
+		// code point resolves through ascii/hAnsi like any other High ANSI
+		// rune. Word's own export attests this directly: the U+F0B7 list
+		// bullets of tdf118812_tableStyles-comprehensive.docx, whose level
+		// states w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default",
+		// are painted in SymbolMT - the hAnsi face - and that document's PDF
+		// carries no East-Asian face at all.
+		//
+		// This range is decided here only for the hint it is not given:
+		// resolveLatinRunFont restores the previous refusal for a run that
+		// states w:hint="eastAsia", which is the escape. Plane 15 and 16
+		// private use are outside the table's rows and keep deferring.
+		return false
 	default:
 		return true
 	}
+}
+
+// nativeTextUsesPrivateUseArea reports whether the run's own text contains a
+// Basic Multilingual Plane Private Use Area scalar, the range whose slot
+// w:hint="eastAsia" moves.
+func nativeTextUsesPrivateUseArea(text string) bool {
+	for _, character := range text {
+		if character >= 0xe000 && character <= 0xf8ff {
+			return true
+		}
+	}
+	return false
 }
 
 // flushScriptProperties reports the run-property layers that were deferred
@@ -2041,6 +2069,14 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 	}
 	if properties.rtl.value {
 		// A forced complex-script run leaves no slot this tier resolves.
+		use.unmodelled = true
+	}
+	// w:hint="eastAsia" is the Private Use Area's one documented escape from
+	// the High ANSI slot. A package that states it keeps the refusal it had
+	// before that range was read as High ANSI, so this reading can only
+	// narrow what refuses and never routes a rune Word paints in the
+	// East-Asian face through ascii/hAnsi.
+	if properties.eastAsiaHint != nil && *properties.eastAsiaHint && nativeTextUsesPrivateUseArea(text) {
 		use.unmodelled = true
 	}
 	// The East-Asian slot is carried only for text that actually uses it, so a
@@ -2194,6 +2230,9 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 			}
 			if hint {
 				properties.deferScriptProperty(nativeHintSlotKey+":hint", "FONT_HINT_PRESERVED", partName, child, "Font hint selection is preserved for a future script-aware shaper")
+				// The value is kept, not only the fact of the hint: it is what
+				// moves a Private Use Area rune out of the High ANSI slot.
+				properties.eastAsiaHint = nativeBool(hintValue == "eastAsia")
 			}
 			validASCII := !hasASCII || nativeBoundedResolvedString(ascii, 256)
 			validHAnsi := !hasHAnsi || nativeBoundedResolvedString(hAnsi, 256)
@@ -2789,6 +2828,9 @@ func applyNativeRunProperties(target *nativeRunProperties, layer nativeRunProper
 	}
 	if layer.eastAsiaLanguage != nil {
 		target.eastAsiaLanguage = nativeString(*layer.eastAsiaLanguage)
+	}
+	if layer.eastAsiaHint != nil {
+		target.eastAsiaHint = nativeBool(*layer.eastAsiaHint)
 	}
 	if layer.fontSize != nil {
 		target.fontSize = nativeInt(*layer.fontSize)

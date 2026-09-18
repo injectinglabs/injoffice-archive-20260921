@@ -156,6 +156,13 @@ func TestNativeRequiresScriptShapingByUnicodeRange(t *testing.T) {
 		{"General Punctuation upper bound", 0x206f, false},
 		{"Superscripts stay deferred", 0x2070, true},
 		{"CJK stays deferred", 0x4f60, true},
+		{"just below the Private Use Area stays deferred", 0xdfff, true},
+		{"Private Use Area lower bound", 0xe000, false},
+		{"Symbol font bullet", 0xf0b7, false},
+		{"Private Use Area upper bound", 0xf8ff, false},
+		{"CJK Compatibility Ideographs above the Private Use Area stay deferred", 0xf900, true},
+		{"Enclosed Alphanumerics stay deferred", 0x2460, true},
+		{"supplementary Private Use Area stays deferred", 0xf0000, true},
 	} {
 		if got := nativeRequiresScriptShaping(tc.char); got != tc.want {
 			t.Fatalf("%s (U+%04X): requires script shaping %v, want %v", tc.name, tc.char, got, tc.want)
