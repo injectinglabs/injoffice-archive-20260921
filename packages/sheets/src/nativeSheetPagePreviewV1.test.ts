@@ -2,8 +2,9 @@ import {createRequire} from 'node:module'
 import {createHash} from 'node:crypto'
 import {readFileSync} from 'node:fs'
 import {describe,it,expect} from 'vitest'
-import {projectNativeWorkbookV2,createNativeMaximumDigitWidthAuthorityV2,compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeSheetGeometryV2,validateNativeSheetGeometryV2,compileNativeSheetPagePreviewV1,selectNativeSheetPrintTitleViewportV1,type NativeWorkbookV2,type NativeWorkbookObjectsV1} from './index.js'
+import {projectNativeWorkbookV2,createNativeMaximumDigitWidthAuthorityV2,compileNativeSheetGeometryV2,compileNativeStoredRowSheetGeometryV1,isCompiledNativeSheetGeometryV2,validateNativeSheetGeometryV2,compileNativeSheetPagePreviewV1,selectNativeSheetPrintTitleViewportV1,type NativeWorkbookV2,type NativeWorkbookObjectsV1,type NativeSheetPreviewPageV1} from './index.js'
 const require=createRequire(import.meta.url)
+const column=(index:number,width:number)=>({column:index,end_column:index,width,hidden:false,custom_width:true,best_fit:false})
 function fixture(change?:(workbook:NativeWorkbookV2)=>void){
  const workbook=JSON.parse(readFileSync(new URL('../../../go/xlsxpatch/testdata/native-xlsx-v2/valid/lexical-render.json',import.meta.url),'utf8')) as NativeWorkbookV2
  Object.assign(workbook,{normal_style:{style_xf_id:0,font_id:0,font_name:'DejaVu Sans',font_size_points:11,font_bold:false,font_italic:false,font_record_sha256:`sha256:${'e'.repeat(64)}`}})
@@ -322,11 +323,47 @@ describe('source-bound selected worksheet page geometry',()=>{
   expect(p.settings_origin).toBe('explicit-host');expect(p.pages[0]).toMatchObject({width_emu:10692000,height_emu:7560000,scale:.5})
   expect(p.warnings.join(' ')).toContain('not authored')
  })
- it('refuses stale, forged geometry and an oversized column rather than clipping',()=>{
+ it('refuses stale and forged geometry',()=>{
   const {geometry,objects}=fixture()
   expect(()=>compileNativeSheetPagePreviewV1({...geometry},objects)).toThrow('compiled')
   expect(()=>compileNativeSheetPagePreviewV1(geometry,{...objects,package_sha256:`sha256:${'b'.repeat(64)}`})).toThrow()
-  objects.page_settings![0]!.settings!.left_inches=4;objects.page_settings![0]!.settings!.right_inches=4
-  expect(()=>compileNativeSheetPagePreviewV1(geometry,objects)).toThrow('exceeds one page')
+ })
+ // Excel breaks pages on whole column boundaries and clips the single column
+ // that alone exceeds the printable area rather than dropping the page, so the
+ // oversize band keeps a whole-band range and only its painted extent is cut.
+ it('clips a single oversized column into its own whole-band page and names the cut',()=>{
+  const {geometry,objects}=fixture(workbook=>{Object.assign(workbook.sheets[0]!,{columns:[...workbook.sheets[0]!.columns,column(2,100)]})})
+  const cw=7772400-2*914400
+  const oversize=geometry.columns.find(c=>c.width_emu>cw)!
+  expect(oversize.column).toBe(2)
+  const p=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(p.policy).toBe('whole-bands-down-then-over-clipped-oversize-band-v1')
+  expect(p.pages).toHaveLength(2)
+  const [first,second]=p.pages as [NativeSheetPreviewPageV1,NativeSheetPreviewPageV1]
+  expect(first.columns).toEqual({start:0,end:1});expect(second.columns).toEqual({start:2,end:2})
+  expect(first.rows).toEqual(second.rows)
+  expect(first.source_clip.width_emu).toBe(geometry.columns[0]!.width_emu+geometry.columns[1]!.width_emu)
+  expect(second.source_clip).toEqual({x_emu:oversize.x_emu,y_emu:0,width_emu:cw,height_emu:first.source_clip.height_emu})
+  // The page body itself is untouched and the clipped band still starts at the left margin.
+  expect(second.content_clip).toEqual(first.content_clip)
+  expect(second.translate_x_emu+second.source_clip.x_emu*second.scale).toBe(914400)
+  expect(p.warnings.join(' ')).toContain(`Column 3 is ${oversize.width_emu} EMU where this page allows ${cw}, so ${oversize.width_emu-cw} EMU are cut from its trailing edge`)
+  expect(p.warnings.join(' ')).toContain('not recoverable from this preview')
+ })
+ it('refuses an oversized repeated print-title band and never reaches the clip from fit-to-page',()=>{
+  // A clipped repeated title would be truncated on every page it repeats onto.
+  const title=fixture(workbook=>{Object.assign(workbook.sheets[0]!,{columns:[column(0,100),column(1,12.5)]})})
+  title.objects.print_titles=[{sheet_id:'7',sheet_part:'Worksheets/Sheet1.xml',status:'available',columns:{start:0,end:0},warnings:['Source']}]
+  expect(()=>compileNativeSheetPagePreviewV1(title.geometry,title.objects,undefined,{repeat_print_titles:true})).toThrow('exceeds one page')
+  // Fit-to-page only ever selects a shrink that needs no clipping, and refuses when none exists.
+  const wide=()=>{
+   const f=fixture(workbook=>{Object.assign(workbook.sheets[0]!,{columns:[...workbook.sheets[0]!.columns,column(2,130)]})})
+   Object.assign(f.objects.page_settings![0]!.settings!,{left_inches:3.8,right_inches:3.8})
+   return f
+  }
+  const fit=wide();Object.assign(fit.objects.page_settings![0]!.settings!,{fit_to_page:{width:1,height:1}})
+  expect(()=>compileNativeSheetPagePreviewV1(fit.geometry,fit.objects)).toThrow('Fit-to-page target cannot be met')
+  const authored=wide()
+  expect(compileNativeSheetPagePreviewV1(authored.geometry,authored.objects).policy).toBe('whole-bands-down-then-over-clipped-oversize-band-v1')
  })
 })

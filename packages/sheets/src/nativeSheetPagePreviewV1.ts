@@ -29,7 +29,11 @@ export interface NativeSheetPagePreviewV1 {
  fidelity:'approximate';read_only:true;
  document_id:string;sheet_id:string;source_revision:string;source_package_sha256:string;
  geometry_sha256:string;
- policy:'whole-bands-down-then-over-v1'|'whole-bands-over-then-down-v1';
+ /** The `-clipped-oversize-band-v1` policies additionally cut the painted extent of
+  * a single row or column that alone exceeds the printable area. Band ranges,
+  * merges and page counts stay whole-band; only `source_clip` is truncated. */
+ policy:'whole-bands-down-then-over-v1'|'whole-bands-over-then-down-v1'
+  |'whole-bands-down-then-over-clipped-oversize-band-v1'|'whole-bands-over-then-down-clipped-oversize-band-v1';
  settings_origin:'source'|'explicit-host';settings:NativeSheetPageConfigV1;
  warnings:string[];pages:NativeSheetPreviewPageV1[];
 }
@@ -83,12 +87,22 @@ export function compileNativeSheetPagePreviewV1(
  const cw=width-left-right,ch=height-top-bottom
  let scale=settings.scale/100
  if(cw<=0||ch<=0)throw new RangeError('Page margins leave no printable area')
- const split=(bands:readonly {index:number;at:number;length:number}[],capacity:number)=>{
-  const result:{start:number;end:number;at:number;length:number}[]=[]
+ // Excel breaks pages on whole row and column boundaries and clips only the
+ // single band that alone exceeds the printable area, so a clipped group is
+ // still a whole band range: `length` stays logical for merges, band ranges and
+ // page counts, and `clipped` cuts the painted extent alone. Clipping is offered
+ // to the authored-scale pass only, so the fit-to-page search never reaches it.
+ const split=(bands:readonly {index:number;at:number;length:number}[],capacity:number,clip=false)=>{
+  const result:{start:number;end:number;at:number;length:number;clipped?:number}[]=[]
   let current:typeof result[number]|undefined
   for(const b of bands){
    if(b.length===0)continue
-   if(b.length>capacity)throw new RangeError('A source row or column exceeds one page; no silent clipping or rescaling')
+   if(b.length>capacity){
+    if(!clip)throw new RangeError('A source row or column exceeds one page; no silent clipping or rescaling')
+    result.push({start:b.index,end:b.index,at:b.at,length:b.length,clipped:capacity})
+    current=undefined
+    continue
+   }
    if(!current||b.at>current.at+current.length||b.at+b.length-current.at>capacity){current={start:b.index,end:b.index,at:b.at,length:b.length};result.push(current)}
    else {current.end=b.index;current.length=b.at+b.length-current.at}
   }
@@ -130,18 +144,25 @@ export function compileNativeSheetPagePreviewV1(
   }
   if(!found)throw new RangeError('Fit-to-page target cannot be met between 10% and 100% within the 100-page preview budget without splitting merged cells')
  }
- const rows=split(rowBands,Math.floor(ch/scale)-titleHeight)
- const columns=split(columnBands,Math.floor(cw/scale)-titleWidth)
+ const rowCapacity=Math.floor(ch/scale)-titleHeight,columnCapacity=Math.floor(cw/scale)-titleWidth
+ // A repeated print-title band that alone fills the page would be truncated on
+ // every page it is repeated onto, so it refuses rather than clipping.
+ if(rowCapacity<=0||columnCapacity<=0)throw new RangeError(`${titles?'A repeated print-title row or column':'The page scale and margins leave no band capacity; a source row or column'} exceeds one page; no silent clipping or rescaling`)
+ const rows=split(rowBands,rowCapacity,!fit)
+ const columns=split(columnBands,columnCapacity,!fit)
  if(rows.length*columns.length>100)throw new RangeError('Worksheet page preview exceeds 100 pages')
  if(!mergesFit(rows,columns))throw new RangeError('A merged cell crosses a preview page boundary')
  const pages:NativeSheetPreviewPageV1[]=[]
  const addPage=(c:typeof columns[number],r:typeof rows[number])=>{
-  const region=(kind:NativeSheetPreviewRegionV1['kind'],x:typeof c,y:typeof r,dx:number,dy:number):NativeSheetPreviewRegionV1=>({kind,source_clip:{x_emu:x.at,y_emu:y.at,width_emu:x.length,height_emu:y.length},translate_x_emu:left+(dx-x.at)*scale,translate_y_emu:top+(dy-y.at)*scale,rows:{start:y.start,end:y.end},columns:{start:x.start,end:x.end}})
+  const region=(kind:NativeSheetPreviewRegionV1['kind'],x:typeof c,y:typeof r,dx:number,dy:number):NativeSheetPreviewRegionV1=>({kind,source_clip:{x_emu:x.at,y_emu:y.at,width_emu:x.clipped??x.length,height_emu:y.clipped??y.length},translate_x_emu:left+(dx-x.at)*scale,translate_y_emu:top+(dy-y.at)*scale,rows:{start:y.start,end:y.end},columns:{start:x.start,end:x.end}})
   const {kind:_,...body}=region('body',c,r,titleWidth,titleHeight)
   pages.push({number:pages.length+1,width_emu:width,height_emu:height,content_clip:{x_emu:left,y_emu:top,width_emu:cw,height_emu:ch},source_clip:body.source_clip,scale,translate_x_emu:body.translate_x_emu,translate_y_emu:body.translate_y_emu,rows:body.rows,columns:body.columns,...(titles?{regions:[{kind:'body' as const,...body},...(tr?[region('repeat-rows',c,tr,titleWidth,0)]:[]),...(tc?[region('repeat-columns',tc,r,0,titleHeight)]:[]),...(tr&&tc?[region('repeat-corner',tc,tr,0,0)]:[])]}: {})})
  }
  if(settings.page_order==='overThenDown'){for(const r of rows)for(const c of columns)addPage(c,r)}
  else {for(const c of columns)for(const r of rows)addPage(c,r)}
- const policy=settings.page_order==='overThenDown'?'whole-bands-over-then-down-v1':'whole-bands-down-then-over-v1'
- return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(fit?[`Approximate fit-to-page: greatest whole-percent shrink from 100% to 10% meeting the selected-range whole-band targets. Effective scale is ${Math.round(scale*100)}%; stored percentage is not applied. This is not Excel's fit algorithm.`]:[]),...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),...(titles?[...titles.warnings,'Explicit source-title repetition reserves saved row and column bands on every page. Hosts must paint each returned region once, including the corner. Hosts may intersect source-positioned drawings with these regions. Disconnected body bands start separate page sequences; gap cells are not printed. This is not Excel print fidelity.']:[]),(titles?'Only the supplied range is paginated. Saved print titles are repeated; headers and printer-specific layout are not reproduced. Chart and drawing paint is supplied separately by the host. Whole source rows/columns are kept together; this is not Excel pagination fidelity.':'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.'),...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
+ const clipped=[...columns.filter(b=>b.clipped!==undefined).map(b=>({axis:'Column',b})),...rows.filter(b=>b.clipped!==undefined).map(b=>({axis:'Row',b}))]
+ const order=settings.page_order==='overThenDown'?'whole-bands-over-then-down':'whole-bands-down-then-over'
+ const policy=(clipped.length?`${order}-clipped-oversize-band-v1`:`${order}-v1`) as NativeSheetPagePreviewV1['policy']
+ const clipDisclosure=clipped.length?[`Oversize band clipping: ${clipped.map(({axis,b})=>`${axis} ${b.start+1} is ${b.length} EMU where this page allows ${b.clipped}, so ${b.length-b.clipped!} EMU are cut from its trailing edge`).join('; ')}. Excel breaks pages on whole row and column boundaries and clips the one band that alone exceeds the printable area; this preview clips at the authored printable size rather than Excel's printer-dependent one. Clipped content is not printed and is not recoverable from this preview.`]:[]
+ return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(fit?[`Approximate fit-to-page: greatest whole-percent shrink from 100% to 10% meeting the selected-range whole-band targets. Effective scale is ${Math.round(scale*100)}%; stored percentage is not applied. This is not Excel's fit algorithm.`]:[]),...clipDisclosure,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),...(titles?[...titles.warnings,'Explicit source-title repetition reserves saved row and column bands on every page. Hosts must paint each returned region once, including the corner. Hosts may intersect source-positioned drawings with these regions. Disconnected body bands start separate page sequences; gap cells are not printed. This is not Excel print fidelity.']:[]),(titles?'Only the supplied range is paginated. Saved print titles are repeated; headers and printer-specific layout are not reproduced. Chart and drawing paint is supplied separately by the host. Whole source rows/columns are kept together; this is not Excel pagination fidelity.':'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.'),...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
 }
