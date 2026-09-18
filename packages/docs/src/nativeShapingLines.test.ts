@@ -1465,6 +1465,37 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(approximate.ok && approximate.value.paragraphs.length).toBeGreaterThan(0)
   })
 
+  /**
+   * A w:softHyphen is a conditional break point. Word paints nothing for it
+   * unless a line actually breaks there, and shaping already models it as a
+   * glyphless zero-advance break opportunity. What is deferred is the
+   * conditional hyphen glyph when a break IS taken, so the diagnostic states an
+   * unsupported deviation: the approximate tier paints the paragraph and
+   * discloses it as omitted content, while the exact tier still drops the
+   * paragraph and refuses.
+   */
+  it('keeps a soft hyphen as a glyphless zero-advance break opportunity in approximate and drops the paragraph in exact', async () => {
+    const document = nativeDocument()
+    const paragraph = document.body.blocks[0]!.paragraph!
+    const hyphen: NativeDocxRunV1 = { kind: 'control', id: 'run:intro:shy', anchor: structuredClone(paragraph.runs[1]!.anchor), control: 'soft-hyphen' }
+    makeTextOnly(document, 'ab')
+    paragraph.runs = [paragraph.runs[0]!, hyphen]
+    const resolved = resolvedLayout(document)
+    const strict = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders([]))
+    expect(strict.ok, JSON.stringify((strict as any).issues)).toBe(true)
+    if (!strict.ok) return
+    expect(strict.value.paragraphs).toEqual([])
+    expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'soft-hyphen-deferred', severity: 'unsupported', source_id: hyphen.id })]))
+    const approximate = await shapeNativeDocxLinesWithParagraphWidthsV1(request(document, resolved), fakeProviders([]), new Map(), undefined, new Set(['PARTIAL_RUN_PROPERTIES']))
+    expect(approximate.ok).toBe(true)
+    if (!approximate.ok) return
+    expect(approximate.value.paragraphs.map((entry) => entry.paragraph_id)).toEqual([paragraph.id])
+    const fragment = approximate.value.paragraphs[0]!.lines.flatMap((line) => line.fragments).find((entry) => entry.source_id === hyphen.id)
+    expect(fragment).toMatchObject({ source_kind: 'run', text: '', start_utf16: 0, end_utf16: 0, advance_inline_millipoints: 0, glyphs: [] })
+    // The deviation is still reported, so the approximate preview can disclose it.
+    expect(approximate.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'soft-hyphen-deferred', severity: 'unsupported', source_id: hyphen.id })]))
+  })
+
   it('allows exact latent style behavior metadata only at its bound document scope', async () => {
     for (const variant of ['qualified', 'old-code', 'run-scope', 'wrong-part', 'wrong-path', 'active-style'] as const) {
       const document = nativeDocument()

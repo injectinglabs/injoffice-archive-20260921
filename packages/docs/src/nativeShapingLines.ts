@@ -674,7 +674,12 @@ function canonicalOPCPartKey(value: string): string {
 }
 
 function addDiagnostic(context: NativeShapingContext, diagnostic: NativeDocxShapingDiagnosticV1): void {
-  const skipParagraphFailure = context.nonblockingResolution !== undefined && (diagnostic.code === 'drawing-layout-unsupported' || diagnostic.code === 'reference-layout-unsupported')
+  // `soft-hyphen-deferred` states that the conditional hyphen glyph is not
+  // inserted when a line does break at the control. The approximate tier keeps
+  // painting the paragraph and discloses that deferral as omitted content;
+  // strict shaping still fails the paragraph, so the exact tier refuses the
+  // document exactly as it did when pagination rejected the control.
+  const skipParagraphFailure = context.nonblockingResolution !== undefined && (diagnostic.code === 'drawing-layout-unsupported' || diagnostic.code === 'reference-layout-unsupported' || diagnostic.code === 'soft-hyphen-deferred')
   if (context.activeParagraphID !== undefined && diagnostic.severity === 'unsupported' && !skipParagraphFailure) context.activeParagraphFailed = true
   const key = `${diagnostic.code}\u0000${diagnostic.scope_id}\u0000${diagnostic.source_id ?? ''}\u0000${diagnostic.message}`
   if (context.diagnosticKeys.has(key)) return
@@ -1586,7 +1591,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
     const direction = (level & 1) === 1 ? 'rtl' : 'ltr'
     if (run.control === 'tab') return reserveVirtualAtom(context, paragraphID, run.id) ? [{ kind: 'atom', atom: tabAtom(run.id, 'run', direction, level, resolved.properties.language ?? 'und') }] : []
     if (run.control === 'soft-hyphen') {
-      addDiagnostic(context, { code: 'soft-hyphen-deferred', severity: 'deferred', scope_id: paragraphID, source_id: run.id, message: 'Conditional soft-hyphen glyph insertion is deferred; the source control remains a zero-width break opportunity' })
+      addDiagnostic(context, { code: 'soft-hyphen-deferred', severity: 'unsupported', scope_id: paragraphID, source_id: run.id, message: 'Conditional soft-hyphen glyph insertion is deferred; the source control remains a zero-width break opportunity' })
       return reserveVirtualAtom(context, paragraphID, run.id) ? [{ kind: 'atom', atom: zeroWidthBreakAtom(run.id, direction, level, resolved.properties.language ?? 'und') }] : []
     }
     if ((run.control === 'page-break' || run.control === 'column-break') && context.shapedFlowBreakRunIDs.has(run.id)) return [{ kind: 'hard-break', runID: run.id, control: run.control }]

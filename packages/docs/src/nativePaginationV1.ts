@@ -1047,7 +1047,18 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     }
   }
   for (const paragraph of bodyParagraphs(document)) for (const run of paragraph.runs) {
-    if (run.control && UNSUPPORTED_CONTROLS.has(run.control) && context.flowBreaks.get(paragraph.id) !== run.control && context.shapedFlowBreaks.get(run.id) !== run.control) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
+    // A w:softHyphen is a conditional break point: it paints nothing unless the
+    // line breaks there, and Word's own export of the one corpus document that
+    // carries them paints no hyphen glyph for any of its four. Shaping already
+    // models it exactly that way -- a zero-advance, glyphless break opportunity
+    // -- and both the authoritative bidi projection and the fragment identity
+    // join below already spell out that representation, so the approximate tier
+    // paginates it instead of refusing the page. The deferred part is the
+    // conditional glyph when a break IS taken there; shaping discloses that as
+    // omitted content. Strict pagination still refuses.
+    if (run.control === 'soft-hyphen' && context.approximateLegacySettings) {
+      addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: run.id, message: 'Approximate preview paginates a native soft hyphen as a zero-width break opportunity and paints no conditional hyphen glyph' })
+    } else if (run.control && UNSUPPORTED_CONTROLS.has(run.control) && context.flowBreaks.get(paragraph.id) !== run.control && context.shapedFlowBreaks.get(run.id) !== run.control) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
     if (run.drawing) {
       const image = qualifyNativeDocxInlineImageV1(document, run.id, run.drawing)
       if (!image.ok) {

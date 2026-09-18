@@ -1138,9 +1138,14 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             // range must spell its own text out of the marker -- and require the
             // fragments to partition the whole marker in the coverage pass below.
             const exactMarker = noteMarker !== undefined && fragment.end_utf16 <= noteMarker.length && fragment.start_utf16 < fragment.end_utf16 && noteMarker.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
-            if (!exactText && !exactMarker) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Run fragment text and UTF-16 range must exactly match native text or its placed note number') }
+            // A soft hyphen reaches paint as the glyphless, zero-advance break
+            // opportunity shaping produced for it, spelled exactly as the
+            // pagination fragment join already requires. It contributes no ink
+            // and no advance, so it takes no source interval of its own.
+            const exactSoftHyphen = Boolean(approximateLegacySettings) && nativeRun.kind === 'control' && nativeRun.control === 'soft-hyphen' && fragment.text === '' && fragment.start_utf16 === 0 && fragment.end_utf16 === 0 && fragment.glyphs.length === 0 && fragment.advance_inline_millipoints === 0
+            if (!exactText && !exactMarker && !exactSoftHyphen) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Run fragment text and UTF-16 range must exactly match native text or its placed note number') }
             if (fragment.text.length > 0 && fragment.glyphs.length === 0) return { ok: true, value: refusal(provenance, 'missing-glyph', fragment.id, 'A non-empty visible run fragment cannot paint without glyphs') }
-            if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) {
+            if (!exactSoftHyphen && !coveredFragmentIDs.has(coveragePrefix + fragment.id)) {
               const intervals = sourceIntervals.get(coveragePrefix + nativeRun.id) ?? []
               intervals.push({ start: fragment.start_utf16, end: fragment.end_utf16 })
               sourceIntervals.set(coveragePrefix + nativeRun.id, intervals)
@@ -1358,7 +1363,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       const approximateOmittedDrawing = Boolean(approximateLegacySettings) && (sourceImageCounts.get(coverageID) ?? 0) === 0
         && (!nativeRun.drawing || (!qualifyNativeDocxInlineTextboxV1(pagination.document, nativeRun.id, nativeRun.drawing).ok && !qualifyNativeDocxInlineImageV1(pagination.document, nativeRun.id, nativeRun.drawing).ok))
       if (!approximateOmittedDrawing) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native image must have exactly one visual fragment') }
-    } else if (nativeRun.kind === 'control' && nativeRun.control === 'soft-hyphen') {
+    } else if (nativeRun.kind === 'control' && nativeRun.control === 'soft-hyphen' && !approximateLegacySettings) {
       return { ok: true, value: refusal(provenance, 'unsupported-source', nativeRun.id, 'Conditional soft-hyphen painting is outside page-paint v1') }
     }
   }
