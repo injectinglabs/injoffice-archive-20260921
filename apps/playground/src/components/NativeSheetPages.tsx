@@ -23,12 +23,20 @@ const EMU_PER_PIXEL = 9525
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 // Demo responsiveness bound, not a library one: packages/sheets paginates any
 // range the source authors, and neither it nor the Go tier carries a row or
-// column cap. This one only keeps a single browser layout pass small. The
-// largest saved print area in the hard-v2 corpus is 34 rows (A1:H34) and the
-// widest is 28 columns, so 64 x 40 clears the corpus with room to spare while
-// staying an order of magnitude below a full worksheet.
-const MAX_PREVIEW_ROWS = 64
-const MAX_PREVIEW_COLUMNS = 40
+// column cap. This one only keeps a single browser layout pass small, and what
+// it has to bound is the number of cells laid out in that pass, not either axis
+// on its own. MAX_PREVIEW_CELLS is the exact worst case the previous 64 x 40
+// pair allowed, so the pass this demo can ask for is no larger than before.
+// The axis caps stay as the range-entry contract and as a guard on either side
+// running away. Rows go to 128 because a saved or derived print area can be
+// tall and narrow: the largest area in the hard-v2 corpus is now 72 rows x 10
+// columns (`testShapeRotationImport`, whose print area is derived from a
+// cell-anchored drawing ending at row 72), which is 720 cells but was refused
+// by a 64-row cap written when the corpus's tallest area was 34 rows (A1:H34).
+// The widest is still 28 columns (`pivot_table_first_header_row`).
+export const MAX_PREVIEW_ROWS = 128
+export const MAX_PREVIEW_COLUMNS = 40
+export const MAX_PREVIEW_CELLS = 64 * 40
 type Props = { workbook: NativeWorkbook; sheet: NativeSheet; objects: NativeWorkbookObjectsV1; rows: number; columns: number }
 type Result = { selectedViewport?: NativeSheetViewportV2; geometry: NativeSheetGeometryV2; plan: NativeSheetPagePreviewV1; fontFamily: string; descentEm?: number; drawings?: NativePositionedDrawingV1[]; formControls?: NativePositionedFormControlV1[]; compactGeneral?: boolean; rangeOrigin?: 'source-print-area' | 'explicit-host'; areaIndex?: number; conditionalFills?: boolean; richRuns?: boolean; printPage?: NativeSheetPrintPagePreviewV1 }
 
@@ -100,11 +108,12 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       }]
       const geometries = viewports.map((viewport, index) => {
       const selectedRows = viewport.end_row - viewport.row + 1, selectedColumns = viewport.end_column - viewport.column + 1
-      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > MAX_PREVIEW_ROWS || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > MAX_PREVIEW_COLUMNS) throw new Error(usePrintArea || sourcePrintPage
-        ? `The saved print area${viewports.length > 1 ? ` ${index + 1}` : ''} exceeds this demo’s ${MAX_PREVIEW_ROWS}-row or ${MAX_PREVIEW_COLUMNS}-column limit. No areas were previewed. Choose a range from A1 instead; saved areas are not changed.`
-        : `Choose 1–${MAX_PREVIEW_ROWS} rows and 1–${MAX_PREVIEW_COLUMNS} columns for this bounded preview.`)
+      if (!Number.isInteger(selectedRows) || selectedRows < 1 || selectedRows > MAX_PREVIEW_ROWS || !Number.isInteger(selectedColumns) || selectedColumns < 1 || selectedColumns > MAX_PREVIEW_COLUMNS || selectedRows * selectedColumns > MAX_PREVIEW_CELLS) throw new Error(usePrintArea || sourcePrintPage
+        ? `The saved print area${viewports.length > 1 ? ` ${index + 1}` : ''} exceeds this demo’s ${MAX_PREVIEW_ROWS}-row, ${MAX_PREVIEW_COLUMNS}-column or ${MAX_PREVIEW_CELLS}-cell limit. No areas were previewed. Choose a range from A1 instead; saved areas are not changed.`
+        : `Choose 1–${MAX_PREVIEW_ROWS} rows and 1–${MAX_PREVIEW_COLUMNS} columns, up to ${MAX_PREVIEW_CELLS} cells, for this bounded preview.`)
       const geometryViewport = repeatHeadings ? selectNativeSheetPrintTitleViewportV1(model, sheet.id, viewport, objects) : viewport
-      if (geometryViewport.end_row - geometryViewport.row + 1 > MAX_PREVIEW_ROWS || geometryViewport.end_column - geometryViewport.column + 1 > MAX_PREVIEW_COLUMNS) throw new Error(`The selected range and saved headings together exceed this demo’s ${MAX_PREVIEW_ROWS}-row or ${MAX_PREVIEW_COLUMNS}-column geometry limit. No areas were previewed.`)
+      const geometryRows = geometryViewport.end_row - geometryViewport.row + 1, geometryColumns = geometryViewport.end_column - geometryViewport.column + 1
+      if (geometryRows > MAX_PREVIEW_ROWS || geometryColumns > MAX_PREVIEW_COLUMNS || geometryRows * geometryColumns > MAX_PREVIEW_CELLS) throw new Error(`The selected range and saved headings together exceed this demo’s ${MAX_PREVIEW_ROWS}-row, ${MAX_PREVIEW_COLUMNS}-column or ${MAX_PREVIEW_CELLS}-cell geometry limit. No areas were previewed.`)
       return useStoredRows
         ? compileNativeStoredRowSheetGeometryV1(model, sheet.id, geometryViewport, authority, objects)
         : compileNativeSheetGeometryV2(model, sheet.id, geometryViewport, authority, objects)
@@ -158,7 +167,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
     <div className="native-sheet-page-controls">
       <label>Preview range<DsSelect aria-label="Preview range" value={usePrintArea || printPagePreview ? 'saved' : 'a1'} onChange={event => { invalidate(); setUsePrintArea(event.target.value === 'saved') }}><option value="a1">Choose a range from A1</option><option value="saved">Use saved print area</option></DsSelect></label>
       {usePrintArea || printPagePreview ? <p className="ds-muted">{savedRanges.length
-        ? `Saved print area${savedRanges.length > 1 ? 's' : ''}: ${savedRanges.map(area => `${cellAddress(area.row, area.column)}:${cellAddress(area.end_row, area.end_column)}`).join(', ')}. Each area supports at most ${MAX_PREVIEW_ROWS} rows and ${MAX_PREVIEW_COLUMNS} columns; none are cropped automatically. Fit limits apply separately to each area, with at most 100 pages in total.`
+        ? `Saved print area${savedRanges.length > 1 ? 's' : ''}: ${savedRanges.map(area => `${cellAddress(area.row, area.column)}:${cellAddress(area.end_row, area.end_column)}`).join(', ')}. Each area supports at most ${MAX_PREVIEW_ROWS} rows, ${MAX_PREVIEW_COLUMNS} columns and ${MAX_PREVIEW_CELLS} cells; none are cropped automatically. Fit limits apply separately to each area, with at most 100 pages in total.`
         : `No supported saved print area is available. ${(savedSet ?? savedArea)?.warnings.join(' ') ?? ''} Choose a range from A1 to continue.`}</p> : <>
         <label>Rows<DsInput type="number" min={1} max={MAX_PREVIEW_ROWS} step={1} value={rangeRows} onChange={event => { invalidate(); setRangeRows(event.target.value) }}/></label>
         <label>Columns<DsInput type="number" min={1} max={MAX_PREVIEW_COLUMNS} step={1} value={rangeColumns} onChange={event => { invalidate(); setRangeColumns(event.target.value) }}/></label>
@@ -171,7 +180,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       {compactGeneral && <p className="ds-muted">Your display choice rounds General numbers to seven significant digits, with scientific notation below 0.000001 or at 10000000 and above. This is not Excel General formatting. Stored values and formula caches are unchanged.</p>}
       <label><input type="checkbox" checked={useSource} onChange={event => { invalidate(); setUseSource(event.target.checked) }}/> Use saved page settings</label>
       <label><input type="checkbox" checked={repeatHeadings} onChange={event => { invalidate(); setRepeatHeadings(event.target.checked) }}/> Repeat saved print headings</label>
-      <p className="ds-muted">{repeatHeadings ? `Saved heading rows and columns may lie inside or outside the selected range. The combined geometry must fit ${MAX_PREVIEW_ROWS} rows and ${MAX_PREVIEW_COLUMNS} columns. Only the selected body and heading bands are printed; intervening cells are omitted. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.` : 'Saved print headings are not repeated unless you select this option.'}</p>
+      <p className="ds-muted">{repeatHeadings ? `Saved heading rows and columns may lie inside or outside the selected range. The combined geometry must fit ${MAX_PREVIEW_ROWS} rows, ${MAX_PREVIEW_COLUMNS} columns and ${MAX_PREVIEW_CELLS} cells. Only the selected body and heading bands are printed; intervening cells are omitted. Source-positioned chart previews and drawing placeholders repeat with the heading regions. Drawings crossing a region boundary are clipped into separate pieces; their plots remain approximate.` : 'Saved print headings are not repeated unless you select this option.'}</p>
       {!useSource && !printPagePreview && <>
         <label>Paper<DsSelect value={paper} onChange={event => { invalidate(); setPaper(event.target.value as 'A4' | 'Letter') }}><option>A4</option><option>Letter</option></DsSelect></label>
         <label>Orientation<DsSelect value={orientation} onChange={event => { invalidate(); setOrientation(event.target.value as 'portrait' | 'landscape') }}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></DsSelect></label>
