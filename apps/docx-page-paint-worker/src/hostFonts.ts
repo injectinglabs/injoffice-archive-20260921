@@ -62,7 +62,7 @@ function admitConfiguredFace(index:number,f:HostFontConfiguredFace,faces:NativeF
 export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path:string,allowSubstitution:HostFontLoadMode=false,extraReferences:readonly HostFontReference[]=[]):Promise<NativeDocxLoadedHostFontsV1> {
  const inventory=decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
  const config=JSON.parse(Buffer.from(file(path,65536)).toString('utf8'))
- if(!config||Object.keys(config).filter(k=>k!=='substitutions').sort().join(',')!=='faces,version'||config.version!==1||!Array.isArray(config.faces)||config.faces.length>32)throw new Error('Invalid host font manifest')
+ if(!config||Object.keys(config).filter(k=>k!=='substitutions').sort().join(',')!=='faces,version'||config.version!==1||!Array.isArray(config.faces)||config.faces.length>64)throw new Error('Invalid host font manifest')
  const configuredPolicy=config.substitutions===undefined?undefined:decodeExplicitFontPolicyV1(config.substitutions)
  const explicit=allowSubstitution===true,approximate=allowSubstitution==='approximate'
  const policy=explicit?configuredPolicy:undefined
