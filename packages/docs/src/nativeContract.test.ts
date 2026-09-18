@@ -128,6 +128,40 @@ describe('native DOCX contract v1', () => {
     }
   })
 
+  it('accepts a floating table frame and rejects an ambiguous or unbounded one', () => {
+    const floating = structuredClone(fixture)
+    floating.body.blocks[1]!.table!.floating_position = {
+      horizontal_anchor: 'margin', vertical_anchor: 'text', y_twips: -87,
+      left_from_text_twips: 180, right_from_text_twips: 180, top_from_text_twips: 0, bottom_from_text_twips: 0,
+    }
+    expect(decodeNativeDocxDocument(floating)).toEqual(expect.objectContaining({ ok: true }))
+
+    const centred = structuredClone(floating)
+    delete centred.body.blocks[1]!.table!.floating_position!.y_twips
+    centred.body.blocks[1]!.table!.floating_position!.x_alignment = 'center'
+    expect(decodeNativeDocxDocument(centred)).toEqual(expect.objectContaining({ ok: true }))
+
+    for (const [mutate, code, suffix] of [
+      [(value: any) => { value.x_twips = 100; value.x_alignment = 'center' }, 'INVALID_UNION', ''],
+      [(value: any) => { value.y_alignment = 'top' }, 'INVALID_UNION', ''],
+      [(value: any) => { value.vertical_anchor = 'paragraph' }, 'INVALID_VALUE', '/vertical_anchor'],
+      [(value: any) => { value.y_alignment = 'up'; delete value.y_twips }, 'INVALID_VALUE', '/y_alignment'],
+      [(value: any) => { value.y_twips = -DOCX_MAX_TWIPS_FOR_MILLIPOINTS - 1 }, 'OUT_OF_RANGE', '/y_twips'],
+      [(value: any) => { value.y_twips = DOCX_MAX_TWIPS_FOR_MILLIPOINTS + 1 }, 'OUT_OF_RANGE', '/y_twips'],
+      [(value: any) => { value.left_from_text_twips = -1 }, 'OUT_OF_RANGE', '/left_from_text_twips'],
+      [(value: any) => { delete value.bottom_from_text_twips }, 'REQUIRED', ''],
+      [(value: any) => { value.tblp_y = 1 }, 'UNKNOWN_FIELD', ''],
+    ] as const) {
+      const invalid = structuredClone(floating)
+      mutate(invalid.body.blocks[1]!.table!.floating_position as any)
+      const decoded = decodeNativeDocxDocument(invalid)
+      expect(decoded.ok, JSON.stringify(invalid.body.blocks[1]!.table!.floating_position)).toBe(false)
+      if (decoded.ok) continue
+      expect(decoded.issues.map((entry) => entry.code)).toContain(code)
+      if (suffix) expect(decoded.issues.map((entry) => entry.path)).toContain(`/body/blocks/1/table/floating_position${suffix}`)
+    }
+  })
+
   it('rejects unknown fields at modeled nesting levels', () => {
     const value = structuredClone(fixture) as unknown as Record<string, any>
     value.extra = true
