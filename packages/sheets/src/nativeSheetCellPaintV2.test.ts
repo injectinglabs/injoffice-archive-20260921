@@ -163,7 +163,7 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     // than refused), so the plan digest moves with it exactly as the provenance
     // design intends. No painted cell geometry changes: no sheet run carries a
     // letter-spacing measurement, so every glyph origin below is unchanged.
-    expect(first.paint_sha256).toBe('sha256:0fed0cec30b768c2c27c4b5b53faa7bc438f75ebbb157f1712765d8f170abf0d')
+    expect(first.paint_sha256).toBe('sha256:0133194c51a87055ee6d8fc24e143f8bec07b6834bfd7203fdb39b2457d2bca8')
     expect(first.capabilities).toEqual([{ name: 'native-cell-glyphs', level: 'exact' }])
     expect(first.gutter_emu).toBe(19_050)
     expect(first.coordinate_space).toBe('viewport-local')
@@ -182,7 +182,7 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const commands = record(first)
     expect(commands[0]).toMatchObject({ kind: 'beginCellPaint', protocol: 'injoffice.xlsx.sheet-cell-paint', version: 1 })
     expect(commands.map((command) => command.kind)).toContain('fillGlyphPath')
-    expect(commandDigest(commands)).toBe('f6dd9fddbdfb02798648a8ef1d87805c77a51056e5dc8b3a2c95ae141330418e')
+    expect(commandDigest(commands)).toBe('31a458a33536e3c348646567a63634a1b43bd1af12e8be1dcf4b88d50fdf2ab6')
     expect(commandDigest(commands)).toBe(commandDigest(record(second)))
     expect(Object.isFrozen(first)).toBe(true)
     expect(Object.isFrozen(first.glyphs[0]?.path)).toBe(true)
