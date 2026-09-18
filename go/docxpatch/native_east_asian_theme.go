@@ -182,6 +182,10 @@ type nativeScriptSlotUse struct {
 	// eastAsia: at least one rune MS-OI29500 17.3.2.26 assigns to the
 	// East-Asian slot with no dependence on w:hint.
 	eastAsia bool
+	// complex: at least one rune MS-OI29500 17.3.2.26 assigns to the
+	// complex-script slot, narrowed to the scripts this tier's pinned shaper
+	// qualifies. See nativeClassifyScriptSlots.
+	complex bool
 	// hintBound: at least one rune whose slot w:hint would change.
 	hintBound bool
 	// unmodelled: at least one rune this tier assigns to no slot, which keeps
@@ -190,7 +194,7 @@ type nativeScriptSlotUse struct {
 }
 
 func (use nativeScriptSlotUse) merge(other nativeScriptSlotUse) nativeScriptSlotUse {
-	return nativeScriptSlotUse{use.eastAsia || other.eastAsia, use.hintBound || other.hintBound, use.unmodelled || other.unmodelled}
+	return nativeScriptSlotUse{use.eastAsia || other.eastAsia, use.complex || other.complex, use.hintBound || other.hintBound, use.unmodelled || other.unmodelled}
 }
 
 // The ambiguous ranges this tier already routes through ascii/hAnsi (Latin-1
@@ -217,9 +221,40 @@ func nativeClassifyScriptSlots(text string) nativeScriptSlotUse {
 			character >= 0xff00 && character <= 0xffef, // Halfwidth and Fullwidth Forms
 			character >= 0x20000 && character <= 0x2fa1f: // Supplementary Ideographic Plane
 			use.eastAsia = true
+		case nativeComplexScriptSlotRune(character):
+			use.complex = true
 		default:
 			use.unmodelled = true
 		}
 	}
 	return use
+}
+
+// nativeComplexScriptSlotRune reports whether MS-OI29500 17.3.2.26 assigns a
+// rune to the complex-script font slot (w:rFonts/@w:cs), narrowed to the
+// Hebrew and Arabic blocks whose Unicode script this tier's pinned HarfBuzz
+// provider qualifies.
+//
+// The narrowing is deliberate and is what bounds this slot's blast radius.
+// Syriac, Thaana, NKo and the Indic, Thai and Khmer ranges are complex scripts
+// too, but the provider refuses their script names, so routing them here would
+// only move a refusal from one code to another while re-pointing their font
+// selection with no reference export to check it against. They stay unmodelled
+// and keep the refusal they have today.
+//
+// U+FEFD..U+FEFF are excluded: U+FEFF is the byte-order mark, script Common,
+// and is not complex-script text.
+func nativeComplexScriptSlotRune(character rune) bool {
+	switch {
+	case character >= 0x0590 && character <= 0x05ff, // Hebrew
+		character >= 0x0600 && character <= 0x06ff, // Arabic
+		character >= 0x0750 && character <= 0x077f, // Arabic Supplement
+		character >= 0x08a0 && character <= 0x08ff, // Arabic Extended-A
+		character >= 0xfb1d && character <= 0xfb4f, // Hebrew Presentation Forms
+		character >= 0xfb50 && character <= 0xfdff, // Arabic Presentation Forms-A
+		character >= 0xfe70 && character <= 0xfefc: // Arabic Presentation Forms-B
+		return true
+	default:
+		return false
+	}
 }

@@ -569,15 +569,21 @@ func nativeDOCXFontReferences(resolved *NativeResolvedLayoutInputV1) []NativeDOC
 		// The East-Asian slot is carried only for text that reaches it, so it
 		// is a face the document genuinely needs, exactly like font_family.
 		add(run.Properties.EastAsiaFontFamily, run.Properties.Bold, run.Properties.Italic, run.RunID)
+		// The complex-script slot is carried only for text that reaches it, and
+		// its bold/italic are its own (w:bCs/w:iCs), so it is asked for under
+		// the weight and style it will actually be shaped with.
+		add(run.Properties.ComplexFontFamily, nativeComplexBold(run.Properties), nativeComplexItalic(run.Properties), run.RunID)
 	}
 	for _, paragraph := range resolved.Paragraphs {
 		properties := paragraph.ParagraphMarkProperties
 		add(properties.FontFamily, properties.Bold, properties.Italic, paragraph.ParagraphID)
 		add(properties.EastAsiaFontFamily, properties.Bold, properties.Italic, paragraph.ParagraphID)
+		add(properties.ComplexFontFamily, nativeComplexBold(properties), nativeComplexItalic(properties), paragraph.ParagraphID)
 		if paragraph.Numbering != nil {
 			marker := paragraph.Numbering.Marker
 			add(marker.FontFamily, marker.Bold, marker.Italic, paragraph.ParagraphID)
 			add(marker.EastAsiaFontFamily, marker.Bold, marker.Italic, paragraph.ParagraphID)
+			add(marker.ComplexFontFamily, nativeComplexBold(marker), nativeComplexItalic(marker), paragraph.ParagraphID)
 		}
 	}
 	result := make([]NativeDOCXFontReferenceV1, 0, len(refs))
@@ -1012,4 +1018,20 @@ func nativeDOCXResolvedFontAssetFromPackage(pkg *nativePackage, selected *Native
 		return nil, &NativeDOCXFontResolutionError{Code: "MALFORMED_FONT", Message: err.Error()}
 	}
 	return &NativeDOCXResolvedFontAssetV1{Face: *selected, Bytes: content, Licensing: selected.Source.Licensing}, nil
+}
+
+// The complex-script slot's weight and style come from w:bCs/w:iCs when they
+// are stated and fall back to the run's own w:b/w:i when they are not.
+func nativeComplexBold(properties NativeResolvedRunPropertiesV1) *bool {
+	if properties.ComplexBold != nil {
+		return properties.ComplexBold
+	}
+	return properties.Bold
+}
+
+func nativeComplexItalic(properties NativeResolvedRunPropertiesV1) *bool {
+	if properties.ComplexItalic != nil {
+		return properties.ComplexItalic
+	}
+	return properties.Italic
 }

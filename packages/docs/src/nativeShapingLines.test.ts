@@ -89,7 +89,11 @@ function nativeDocument(text = 'ab cd'): NativeDocxDocumentV1 {
 }
 
 function properties(overrides: Partial<NativeDocxResolvedRunPropertiesV1> = {}): NativeDocxResolvedRunPropertiesV1 {
-  return { font_family: 'Carlito', font_size_half_points: 20, language: 'en-US', ...overrides }
+  // The fixture package names the same face in its ascii and complex-script
+  // slots, the way a w:docDefaults that states one w:rFonts family does, so
+  // complex-script text reaches a resolved slot and these fixtures stay about
+  // what they test.
+  return { font_family: 'Carlito', complex_script_font_family: 'Carlito', font_size_half_points: 20, language: 'en-US', ...overrides }
 }
 
 function resolvedNumbering(paragraphID: string, counterValue: number, resolvedText: string, suffix: NativeDocxResolvedNumberingV1['suffix'] = 'tab'): NativeDocxResolvedNumberingV1 {
@@ -581,6 +585,106 @@ describe('shapeNativeDocxLinesV1', () => {
     // The ascii face is never a stand-in for the slot: that span is not shaped.
     expect(calls.some((call) => call.text === '\u7532')).toBe(false)
     expect(result.value.diagnostics.some((diagnostic) => diagnostic.code === 'missing-run-font')).toBe(true)
+  })
+
+  it('shapes a complex-script span through the complex-script slot, with its own size, weight and language', async () => {
+    // ECMA-376 17.3.2.26 gives the Arabic block its own font slot, and 17.3.2.7
+    // says w:cs applies "the bold, italic and font size properties from the
+    // complex script attributes", so the slot carries a whole typographic
+    // identity - face, w:szCs, w:bCs/w:iCs and w:lang/@w:bidi - not just a face.
+    const arabicFace: ResolvedFontFace = { ...face, faceId: 'arial.regular', family: 'Arial', resourceId: 'fonts/arial.ttf', matchedFamily: 'Arial' }
+    const document = nativeDocument()
+    makeTextOnly(document, 'A\u0645')
+    const resolved = resolvedLayout(document)
+    for (const run of resolved.runs) Object.assign(run.properties, {
+      complex_script_font_family: 'Arial', complex_script_language: 'ar-OM',
+      complex_script_font_size_half_points: 28, complex_script_bold: true,
+    })
+    const shapingRequest = request(document, resolved)
+    shapingRequest.font_manifest = { ...manifest, faces: [...manifest.faces, { faceId: arabicFace.faceId, family: arabicFace.family, weight: 700, style: 'normal', stretch: 100, source: { kind: 'bundled', resourceId: arabicFace.resourceId, contentDigest: digest } }] }
+    const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+    const details: Array<{ language: string; weight: number }> = []
+    const providers = fakeProviders(calls)
+    const resolve = providers.resolver.resolve.bind(providers.resolver)
+    const load = providers.resolver.load.bind(providers.resolver)
+    const shape = providers.shaper.shape.bind(providers.shaper)
+    providers.resolver.resolve = (input) => {
+      details.push({ language: input.run.language, weight: input.run.font.weight })
+      resolve(input)
+      const chosen = input.run.font.families[0] === 'Arial' ? arabicFace : face
+      return { status: 'resolved', face: chosen, attemptedFaceIds: [chosen.faceId], decisions: [] }
+    }
+    providers.resolver.load = async (requested) => ({ ...await load(requested), face: requested }) as FontResource
+    providers.shaper.shape = async (input) => ({ ...await shape(input), face: input.font.face }) as ShapedSegment
+    const result = await shapeNativeDocxLinesV1(shapingRequest, providers)
+    expect(result.ok).toBe(true)
+    const painted = calls.map((call, index) => ({ ...call, ...details[index]! })).filter((call) => call.text !== '')
+    expect(painted.map((call) => [call.text, call.family, call.script, call.size, call.weight, call.language])).toEqual([
+      ['A', 'Carlito', 'Latn', 10_000, 400, 'en-US'],
+      ['\u0645', 'Arial', 'Arab', 14_000, 700, 'ar-OM'],
+    ])
+  })
+
+  it('puts a whole run in the complex-script slot when w:cs or w:rtl states the switch', async () => {
+    // Word's own export of tdf118361_RTLfootnoteSeparator paints the authored
+    // U+0020 of a <w:rtl/> run in ArialMT, the w:cs face, while the paragraph
+    // mark beside it - same paragraph, no switch - is painted in Calibri.
+    const arabicFace: ResolvedFontFace = { ...face, faceId: 'arial.regular', family: 'Arial', resourceId: 'fonts/arial.ttf', matchedFamily: 'Arial' }
+    for (const switched of [false, true]) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'A')
+      const resolved = resolvedLayout(document)
+      for (const run of resolved.runs) Object.assign(run.properties, { complex_script_font_family: 'Arial', ...(switched ? { complex_script_slot: true } : {}) })
+      const shapingRequest = request(document, resolved)
+      shapingRequest.font_manifest = { ...manifest, faces: [...manifest.faces, { faceId: arabicFace.faceId, family: arabicFace.family, weight: 400, style: 'normal', stretch: 100, source: { kind: 'bundled', resourceId: arabicFace.resourceId, contentDigest: digest } }] }
+      const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+      const providers = fakeProviders(calls)
+      const resolve = providers.resolver.resolve.bind(providers.resolver)
+      const load = providers.resolver.load.bind(providers.resolver)
+      const shape = providers.shaper.shape.bind(providers.shaper)
+      providers.resolver.resolve = (input) => {
+        resolve(input)
+        const chosen = input.run.font.families[0] === 'Arial' ? arabicFace : face
+        return { status: 'resolved', face: chosen, attemptedFaceIds: [chosen.faceId], decisions: [] }
+      }
+      providers.resolver.load = async (requested) => ({ ...await load(requested), face: requested }) as FontResource
+      providers.shaper.shape = async (input) => ({ ...await shape(input), face: input.font.face }) as ShapedSegment
+      const result = await shapeNativeDocxLinesV1(shapingRequest, providers)
+      expect(result.ok).toBe(true)
+      expect(calls.filter((call) => call.text === 'A').map((call) => call.family)).toEqual([switched ? 'Arial' : 'Carlito'])
+    }
+  })
+
+  it('refuses a span in the complex-script slot that the resolved layout left without a face', async () => {
+    const document = nativeDocument()
+    makeTextOnly(document, '\u0645')
+    const resolved = resolvedLayout(document)
+    for (const run of resolved.runs) delete run.properties.complex_script_font_family
+    const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+    const result = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders(calls))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // The ascii face is never a stand-in for the slot: that span is not shaped.
+    expect(calls.some((call) => call.text === '\u0645')).toBe(false)
+    expect(result.value.diagnostics.some((diagnostic) => diagnostic.code === 'missing-run-font')).toBe(true)
+  })
+
+  it('keeps refusing authored bidi scope controls inside a complex-script run', async () => {
+    // The projection synthesizes isolates for every w:rtl range, so an authored
+    // initiator could nest across one. All nine embedding, override and isolate
+    // controls stay refused ahead of any shaping, switch or no switch.
+    for (const control of ['\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069']) {
+      const document = nativeDocument()
+      makeTextOnly(document, `\u0645${control}A`)
+      const resolved = resolvedLayout(document)
+      for (const run of resolved.runs) Object.assign(run.properties, { complex_script_font_family: 'Arial', complex_script_slot: true, rtl: true })
+      const calls: Array<{ text: string; family: string; size: number; script: string; direction: string }> = []
+      const result = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders(calls))
+      expect(result.ok, control).toBe(true)
+      if (!result.ok) return
+      expect(calls, control).toEqual([])
+      expect(result.value.diagnostics.some((diagnostic) => diagnostic.code === 'bidi-resolution-refusal'), control).toBe(true)
+    }
   })
 
   it('rejects unstable provider identities before invoking provider code', async () => {

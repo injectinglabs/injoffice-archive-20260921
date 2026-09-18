@@ -339,7 +339,7 @@ func (r *nativeLayoutResolver) absentOwnerRunSize(owner *nativeXMLNode) bool {
 			return false
 		}
 		switch child.Name.Local {
-		case "rStyle", "rFonts", "b", "i", "rtl", "vanish", "bCs", "iCs", "u", "color", "highlight", "lang", "vertAlign", "kern", "noProof":
+		case "rStyle", "rFonts", "b", "i", "cs", "rtl", "vanish", "bCs", "iCs", "u", "color", "highlight", "lang", "vertAlign", "kern", "noProof":
 			// Their independently retained diagnostics still qualify or refuse
 			// actual rendering. No unknown/complex-size override is bypassed.
 		default:
