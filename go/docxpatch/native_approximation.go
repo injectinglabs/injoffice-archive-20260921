@@ -123,7 +123,22 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 	if err != nil {
 		return nil, err
 	}
-	if mode == 12 {
+	// What w:tblInd measures changed in Word's compatibilityMode 15. Measured
+	// against Microsoft Word 16.112.4's own PDF exports of the rendering corpus,
+	// a mode 12 or mode 14 package (and a package that attests no mode at all,
+	// which this extractor reads as 12) places the leading cell's *content* at
+	// the text margin plus w:tblInd, so the table's leading edge sits one left
+	// cell margin further left; a mode 15 package places the table's leading
+	// edge there instead. The controlled pairs are identical but for the mode:
+	// tdf118812_tableStyles-comprehensive (no attestation) against
+	// tdf118947_tableStyle (15), and Table_cell_auto_width_fdo69656 (14) against
+	// fdo80800b_tableStyle (15) -- same TableGrid style, w:tblInd 0 and a 108
+	// twip left cell margin in each, Word's leading border centred one cell
+	// margin left of the text margin in the first of each pair and on the text
+	// margin in the second. So the evidence is collected for every legacy mode
+	// and withheld only from 15, whose current-layout origin this tier already
+	// paints.
+	if mode != 15 {
 		result.LegacyTableOrigins, err = nativeLegacyTableOrigins(data)
 		if err != nil {
 			return nil, err

@@ -1,5 +1,5 @@
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
-import {validLegacyTableOrigins,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING,type NativeDocxLegacyTableOriginV1} from './nativeLegacyTableOriginV1.js'
+import {validLegacyTableOrigins,nativeDocxLegacyContentAlignedOriginV1,DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING,type NativeDocxLegacyTableOriginV1} from './nativeLegacyTableOriginV1.js'
 import type { NativeDocxPagePaintV1 } from './nativePagePaintV1.js'
 import { preflightWire, decodeNativeDocxPagePaintV1, DOCX_PAGE_PAINT_PROTOCOL, DOCX_PAGE_PAINT_VERSION } from './nativePagePaintWireV1.js'
 import type { NativeDocxValidationIssue } from './nativeContract.js'
@@ -278,7 +278,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
     || !Array.isArray(input.reasons) || input.reasons.length > 256 || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)
     || input.document_id !== settings.document_id || input.revision !== settings.revision || input.package_sha256 !== settings.package_sha256 || input.settings_sha256 !== (settings.settings_sha256 ?? null)) throw new TypeError('approximation eligibility does not exact-join original settings')
   const facts = input.approximated_settings ?? []
-  if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,input.package_sha256)||input.legacy_compatibility_mode!==12||input.status!=='eligible'))throw new TypeError('Invalid legacy table origin evidence')
+  if(input.legacy_table_origins!==undefined&&(!validLegacyTableOrigins(input.legacy_table_origins,input.package_sha256)||!nativeDocxLegacyContentAlignedOriginV1(input.legacy_compatibility_mode)||input.status!=='eligible'))throw new TypeError('Invalid legacy table origin evidence')
   if (input.absent_font_sizes !== undefined && !validNativeDocxAbsentFontSizesV1(input.absent_font_sizes, input.package_sha256)) throw new TypeError('Invalid source-absent font-size evidence')
   if ((input.absent_font_size_shape !== undefined) !== ((input.absent_font_sizes?.length ?? 0) > 0) || (input.absent_font_size_shape !== undefined && !validNativeDocxAbsentDefaultSizeShapeV1(input.absent_font_size_shape))) throw new TypeError('Invalid source-absent font-size shape')
   if (input.absent_font_families !== undefined && !validNativeDocxAbsentFontFamiliesV1(input.absent_font_families, input.package_sha256)) throw new TypeError('Invalid source-absent font-family evidence')

@@ -730,7 +730,13 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(decode({...shifted,reasons:[...maximumReasons,...Array(301).fill('excess')]}).ok).toBe(false)
     expect(decode({...shifted,reasons:shifted.reasons.filter(r=>r!==DOCX_LEGACY_TABLE_ORIGIN_WARNING)}).ok).toBe(false)
     for(const changed of [{...fact,left_margin_twips:101},{...fact,table_id:'other'},{...fact,source_margin:{...fact.source_margin,path:'/wrong'}}])await expect(render({...eligibility,legacy_table_origins:[changed]})).rejects.toThrow()
-    await expect(render({...eligibility,legacy_compatibility_mode:14})).rejects.toThrow()
+    // Word measures w:tblInd to the leading cell's content edge in mode 14 as
+    // well as in 12, so the same evidence shifts the same table there; mode 15
+    // measures it to the table's own leading edge and takes no evidence at all.
+    const legacyFourteen=await render({...eligibility,legacy_compatibility_mode:14})
+    expect(legacyFourteen.status).toBe('painted')
+    expect(legacyFourteen.reasons).toContain(DOCX_LEGACY_TABLE_ORIGIN_WARNING)
+    expect(border(legacyFourteen)).toMatchObject({x1_millipoints:(b as any).x1_millipoints-5000,x2_millipoints:(b as any).x2_millipoints-5000})
     if(!automatic){
       const strict=await prepareNativeDocxPagePaintV1(input)
       expect(strict.page_paint_request.paginated_layout.status).toBe('refused')
@@ -740,6 +746,8 @@ describe('native DOCX page-paint compiler v1', () => {
       expect(approximateTables).toMatchObject({status:'qualified',tables:[{x_millipoints:-5000}]})
       if(approximateTables.status!=='qualified')throw new Error('Expected approximate table')
       expect((await render({...eligibility,legacy_table_origins:[]})).status).toBe('painted')
+      expect(qualifyApproximateLegacyTables(document,resolved,strict.page_paint_request.pagination_request.shaped_lines,{...eligibility,legacy_compatibility_mode:14})).toMatchObject({status:'qualified',tables:[{x_millipoints:-5000}]})
+      expect(()=>qualifyApproximateLegacyTables(document,resolved,strict.page_paint_request.pagination_request.shaped_lines,{...eligibility,legacy_compatibility_mode:15})).toThrow('Invalid legacy table origin eligibility')
       const computed=structuredClone(strict.page_paint_request)
       computed.paginated_layout=paginateNativeDocxApproximateLegacyV1(computed.pagination_request,eligibility).layout
       computed.integrity.paginated_layout_sha256=nativeDocxPagePaintPaginatedLayoutSha256V1(computed.paginated_layout)
