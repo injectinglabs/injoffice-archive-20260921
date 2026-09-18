@@ -20,6 +20,18 @@ function paragraph(id: string, ordinal: number): NativeDocxParagraphV1 {
   return { id, anchor: anchor(`/w:document[1]/w:body[1]/w:tbl[1]/w:tr[${ordinal + 1}]/w:tc[1]/w:p[1]`, 100 + ordinal * 40, 110 + ordinal * 40), edit_policy: { ...policy, allowed_operations: [] }, properties: {}, runs: [] }
 }
 
+/** Re-states a fixture table at a narrower authored width and indent, so the
+ * text column and the margin box are distinguishable anchor boxes. */
+function narrow(request: NativeDocxPaginationRequestV1, widthTwips: number, indentTwips: number): void {
+  const table = request.document.body.blocks[0]!.table!
+  table.width_twips = widthTwips
+  table.grid_widths_twips = [widthTwips]
+  table.indent_twips = indentTwips
+  for (const row of table.rows) { row.cells[0]!.width_twips = widthTwips; row.cant_split = false }
+  const content = (widthTwips - 2 * table.cell_margins!.left_twips) * 50
+  for (const entry of request.shaped_lines.paragraphs) for (const line of entry.lines) line.available_width_millipoints = content
+}
+
 function fixture(bodyHeight = 10_000): NativeDocxPaginationRequestV1 {
   const paragraphs = [paragraph('paragraph:cell:1', 0), paragraph('paragraph:cell:2', 1)]
   const table = {
@@ -461,6 +473,74 @@ describe('bounded native DOCX table page-paint geometry', () => {
       expect(decodeNativeDocxResolvedLayout(invalid).ok).toBe(false)
     }
   })
+  /**
+   * `w:tblpPr` with `vertAnchor="text"`: the float keeps the top it would have
+   * had inline and is displaced by `w:tblpY`, and its left edge comes from the
+   * anchor box `w:horzAnchor` names rather than from the text column.
+   * Validated against Microsoft Word 16.112.4 PDF exports of the three hard-v2
+   * packages carrying such a frame, to 0.12 pt or better.
+   */
+  it('lifts a w:tblpPr table out of the inline flow at its own anchor', () => {
+    const inline = fixture(), inlineTable = inline.document.body.blocks[0]!.table!
+    narrow(inline, 300, 40)
+    const inlineRows = paginateNativeDocxV1(inline)
+    expect(inlineRows).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!inlineRows.ok) throw new Error('invalid request')
+    const inlineFirst = inlineRows.value.pages[0]!.table_rows![0]!
+    // The inline table sits at the column origin plus its own w:tblInd.
+    expect([inlineFirst.x_millipoints, inlineFirst.y_millipoints]).toEqual([3_000, 1_000])
+
+    const floated = structuredClone(inline)
+    floated.document.body.blocks[0]!.table!.floating_position = {
+      horizontal_anchor: 'margin', vertical_anchor: 'text', y_twips: 12,
+      left_from_text_twips: 180, right_from_text_twips: 180, top_from_text_twips: 0, bottom_from_text_twips: 0,
+    }
+    const result = paginateNativeDocxV1(floated)
+    expect(result).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!result.ok) throw new Error('invalid request')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, floated)).toMatchObject({ ok: true })
+    const rows = result.value.pages[0]!.table_rows!
+    // The frame replaces w:tblInd with the margin box, and 12 twips displaces
+    // the float 600 milli-points below the top it would have had inline.
+    expect([rows[0]!.x_millipoints, rows[0]!.y_millipoints]).toEqual([1_000, 1_600])
+    // Every row moves with the float; nothing else about the table changes.
+    expect(rows.map((row) => row.y_millipoints - inlineRows.value.pages[0]!.table_rows![row.row_ordinal]!.y_millipoints)).toEqual(rows.map(() => 600))
+
+    // A frame that would lift the float off its own page is refused, not clamped.
+    const offPage = structuredClone(floated)
+    offPage.document.body.blocks[0]!.table!.floating_position!.y_twips = -12
+    expect(paginateNativeDocxV1(offPage)).toMatchObject({ ok: true, value: { status: 'refused' } })
+
+    const centred = structuredClone(floated)
+    centred.document.body.blocks[0]!.table!.floating_position!.x_alignment = 'center'
+    delete centred.document.body.blocks[0]!.table!.floating_position!.y_twips
+    const centredResult = paginateNativeDocxV1(centred)
+    if (!centredResult.ok) throw new Error('invalid request')
+    // Body box 20,000 wide from x 1,000; the 15,000-wide table centres on it.
+    expect(centredResult.value.pages[0]!.table_rows![0]!.x_millipoints).toBe(3_500)
+  })
+
+  it('discloses a w:tblpPr frame it cannot place and keeps the table inline', () => {
+    const request = fixture()
+    narrow(request, 300, 40)
+    const inlineY = paginateNativeDocxV1(request)
+    if (!inlineY.ok) throw new Error('invalid request')
+    const baseline = inlineY.value.pages[0]!.table_rows!.map((row) => [row.x_millipoints, row.y_millipoints])
+
+    const deferred = structuredClone(request)
+    deferred.document.body.blocks[0]!.table!.floating_position = {
+      horizontal_anchor: 'margin', vertical_anchor: 'page', y_twips: 200,
+      left_from_text_twips: 0, right_from_text_twips: 0, top_from_text_twips: 0, bottom_from_text_twips: 0,
+    }
+    const result = paginateNativeDocxV1(deferred)
+    expect(result).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!result.ok) throw new Error('invalid request')
+    expect(result.value.pages[0]!.table_rows!.map((row) => [row.x_millipoints, row.y_millipoints])).toEqual(baseline)
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'body-table-unsupported', severity: 'deferred', scope_id: 'table:1',
+    })]))
+  })
+
   it('fragments natural rows at complete lines while repeating headers and preserving source coverage', () => {
     const request = fixture(20_000), table = request.document.body.blocks[0]!.table!
     table.rows[0]!.repeat_header = true

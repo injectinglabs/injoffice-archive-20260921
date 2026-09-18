@@ -55,6 +55,10 @@ export interface NativeDocxQualifiedTableV1 {
   cell_border_policy?: NativeDocxApproximateUniformCellBorderPolicyV1
   width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1 | NativeDocxApproximateTableGridPolicyV1 | NativeDocxApproximatePercentTablePolicyV1
   table: NativeDocxTableV1
+  /** Set by pagination when a `w:tblpPr` frame has been applied: `x_millipoints`
+   * then measures from the anchor box, so the table may legitimately overhang
+   * the text column Word itself computed it against. */
+  floating?: true
   width_millipoints: number
   x_millipoints: number
   grid_widths_millipoints: number[]

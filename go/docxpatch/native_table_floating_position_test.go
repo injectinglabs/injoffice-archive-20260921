@@ -62,16 +62,12 @@ func TestNativeTableFloatingPositionProjectsQualifiedFrames(t *testing.T) {
 				position.TopFromTextTwips != testCase.want.TopFromTextTwips || position.BottomFromTextTwips != testCase.want.BottomFromTextTwips {
 				t.Fatalf("projected %#v, want %#v", *position, testCase.want)
 			}
-			// Page paint still lays a floating table out inline, so the frame
-			// is projected and the verbatim disclosure is still published.
-			found := false
+			// A projected frame is placed by pagination, so it publishes no
+			// "preserved verbatim" disclosure of its own.
 			for _, entry := range unsupported {
 				if entry.Code == "UNMODELED_TABLE_PROPERTY" && strings.HasSuffix(entry.Anchor.Path, "/w:tblpPr[1]") {
-					found = true
+					t.Fatal("a projected frame still published a verbatim disclosure")
 				}
-			}
-			if !found {
-				t.Fatal("projection dropped the verbatim disclosure before placement applies the frame")
 			}
 		})
 	}

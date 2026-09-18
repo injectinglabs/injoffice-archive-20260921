@@ -54,6 +54,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
 import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1, nativeDocxApproximateNoteOmissionsV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
+import { placeNativeDocxFloatingTableV1 } from './nativeFloatingTableV1.js'
 
 export const DOCX_PAGINATION_REQUEST_PROTOCOL = 'injoffice.docx.pagination-request'
 export const DOCX_PAGINATION_REQUEST_VERSION = 1 as const
@@ -1766,6 +1767,15 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   context.previousAfter = paragraph.spacing_after_millipoints
 }
 
+/** An inline table is bounded by its text column. A placed float is bounded by
+ * the page instead: Word honours the authored `w:tblW` of a floating table even
+ * when it overhangs the body box, and clamping it would move every column. */
+function tableWithinItsContainer(page: NativeDocxPaginatedPageV1, column: { x_millipoints: number; width_millipoints: number }, table: NativeDocxQualifiedTableV1): boolean {
+  if (!table.floating) return table.x_millipoints + table.width_millipoints <= column.width_millipoints
+  const left = column.x_millipoints + table.x_millipoints
+  return left >= 0 && left + table.width_millipoints <= page.width_millipoints
+}
+
 function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTableV1, geometry: NativeDocxTableRowGeometryV1, shaped: Map<string, NativeDocxShapedParagraphV1>, repeated = false): void {
   const page = context.currentPage
   const column = currentColumn(context)
@@ -1774,7 +1784,7 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
     refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs')
     return
   }
-  if (table.x_millipoints + table.width_millipoints > column.width_millipoints || geometry.height_millipoints > column.height_millipoints) {
+  if (!tableWithinItsContainer(page, column, table) || geometry.height_millipoints > column.height_millipoints) {
     refuse(context, 'line-geometry-invalid', geometry.row_id, 'Table row exceeds the exact section column')
     return
   }
@@ -1853,8 +1863,46 @@ function applyApproximateTableSpaceBefore(context: PaginationContext, table: Nat
   context.previousAfter = 0
 }
 
-function paginateTable(context: PaginationContext, table: NativeDocxQualifiedTableV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
-  applyApproximateTableSpaceBefore(context, table)
+/**
+ * Lifts a `w:tblpPr` table out of the inline flow.
+ *
+ * The float keeps the top it would have had inline at this point -- the cursor
+ * the caller has already advanced past the preceding block and its space-after
+ * -- displaced by `w:tblpY`, and takes its left edge from the anchor box its
+ * `w:horzAnchor` names rather than from the text column. Nothing is added below
+ * it: the block after a float resumes at the float's own bottom edge, which is
+ * exactly where row placement leaves the cursor, so the push needs no code.
+ *
+ * A frame this version cannot place is disclosed and the table stays inline.
+ */
+function floatingTablePlacement(context: PaginationContext, table: NativeDocxQualifiedTableV1): NativeDocxQualifiedTableV1 {
+  const position = table.table.floating_position
+  const page = context.currentPage
+  const column = currentColumn(context)
+  if (!position || !page || !column) return table
+  const placement = placeNativeDocxFloatingTableV1(position, {
+    page: { x_millipoints: 0, width_millipoints: page.width_millipoints },
+    margin: { x_millipoints: page.body_box.x_millipoints, width_millipoints: page.body_box.width_millipoints },
+    text: { x_millipoints: column.x_millipoints, width_millipoints: column.width_millipoints },
+  }, table.width_millipoints)
+  if ('unsupported' in placement) {
+    addDiagnostic(context, { code: 'body-table-unsupported', severity: 'deferred', scope_id: table.table.id, message: `Floating table frame is preserved but not placed: pagination v1 does not model ${placement.unsupported}; the table is laid out inline` })
+    return table
+  }
+  const top = checkedSum(context.cursorY, placement.y_offset_millipoints)
+  if (top === undefined || top < 0 || placement.x_millipoints < 0) {
+    refuse(context, 'line-geometry-invalid', table.table.id, 'Floating table frame places the table outside its page')
+    return table
+  }
+  context.cursorY = top
+  context.previousAfter = 0
+  return { ...table, x_millipoints: placement.x_millipoints - column.x_millipoints, floating: true }
+}
+
+function paginateTable(context: PaginationContext, inlineTable: NativeDocxQualifiedTableV1, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
+  applyApproximateTableSpaceBefore(context, inlineTable)
+  if (context.refused) return
+  const table = floatingTablePlacement(context, inlineTable)
   if (context.refused) return
   const rows = layoutNativeDocxTableRowsV1(table, context.request.shaped_lines)
   if (!rows) { refuse(context, 'line-geometry-invalid', table.table.id, 'Qualified table row geometry could not be derived from exact shaped cell paragraphs'); return }
@@ -1946,7 +1994,7 @@ function paginateSplittableTable(context: PaginationContext, table: NativeDocxQu
   // Never strand an initial/repeated heading without the next complete source
   // line group. A group taller than the remaining body refuses atomically.
   const column = currentColumn(context)
-  if (!column || table.x_millipoints+table.width_millipoints>column.width_millipoints || headerHeight+firstMinimum>column.height_millipoints) { refuse(context,'line-geometry-invalid',table.table.id,'Header prefix and first indivisible cell line group cannot fit on an empty page'); return }
+  if (!column || !context.currentPage || !tableWithinItsContainer(context.currentPage, column, table) || headerHeight+firstMinimum>column.height_millipoints) { refuse(context,'line-geometry-invalid',table.table.id,'Header prefix and first indivisible cell line group cannot fit on an empty page'); return }
   if(headerHeight+firstMinimum>remainingHeight(context))startNextFlowColumn(context)
   for(let index=0;index<headers&&!context.refused;index+=1)placeTableRow(context,table,rows[index]!,shaped)
   for(let index=headers;index<rows.length&&!context.refused;index+=1) {
