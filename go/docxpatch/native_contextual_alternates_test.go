@@ -8,27 +8,29 @@ import (
 const nativeContextualAlternatesTestNSDecl = ` xmlns:w14="` + nativeWordML2010 + `"`
 
 // A docDefaults contextual-alternates request is scoped to the document, so
-// refusing it blocks every paragraph. Only an enabled request is accepted: it
-// names the calt the declared shaper defaults already apply. Disabling calt
-// turns a default feature off, which v1 has no input for.
+// refusing it blocks every paragraph. Only an enabled request STATES the calt
+// the declared shaper defaults already apply. Disabling calt turns a default
+// feature off, which v1 has no input for, so the run is painted WITH calt and
+// the unapplied property is disclosed instead; malformed markup stays foreign.
 func TestNativeContextualAlternatesDocDefaults(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		markup   string
 		accepted bool
+		code     string
 	}{
-		{"absent value defaults on", `<w14:cntxtAlts/>`, true},
-		{"explicit true", `<w14:cntxtAlts w14:val="true"/>`, true},
-		{"explicit 1", `<w14:cntxtAlts w14:val="1"/>`, true},
-		{"explicit on", `<w14:cntxtAlts w14:val="on"/>`, true},
-		{"explicit false", `<w14:cntxtAlts w14:val="false"/>`, false},
-		{"explicit 0", `<w14:cntxtAlts w14:val="0"/>`, false},
-		{"explicit off", `<w14:cntxtAlts w14:val="off"/>`, false},
-		{"invalid value", `<w14:cntxtAlts w14:val="maybe"/>`, false},
-		{"foreign value attribute", `<w14:cntxtAlts w:val="true"/>`, false},
-		{"extra attribute", `<w14:cntxtAlts w14:val="true" w14:extra="1"/>`, false},
-		{"nested markup", `<w14:cntxtAlts><w14:x/></w14:cntxtAlts>`, false},
-		{"duplicate element", `<w14:cntxtAlts/><w14:cntxtAlts/>`, false},
+		{"absent value defaults on", `<w14:cntxtAlts/>`, true, ""},
+		{"explicit true", `<w14:cntxtAlts w14:val="true"/>`, true, ""},
+		{"explicit 1", `<w14:cntxtAlts w14:val="1"/>`, true, ""},
+		{"explicit on", `<w14:cntxtAlts w14:val="on"/>`, true, ""},
+		{"explicit false", `<w14:cntxtAlts w14:val="false"/>`, false, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
+		{"explicit 0", `<w14:cntxtAlts w14:val="0"/>`, false, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
+		{"explicit off", `<w14:cntxtAlts w14:val="off"/>`, false, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
+		{"invalid value", `<w14:cntxtAlts w14:val="maybe"/>`, false, "FOREIGN_RUN_PROPERTY"},
+		{"foreign value attribute", `<w14:cntxtAlts w:val="true"/>`, false, "FOREIGN_RUN_PROPERTY"},
+		{"extra attribute", `<w14:cntxtAlts w14:val="true" w14:extra="1"/>`, false, "FOREIGN_RUN_PROPERTY"},
+		{"nested markup", `<w14:cntxtAlts><w14:x/></w14:cntxtAlts>`, false, "FOREIGN_RUN_PROPERTY"},
+		{"duplicate element", `<w14:cntxtAlts/><w14:cntxtAlts/>`, false, "FOREIGN_RUN_PROPERTY"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			styles := `<w:styles xmlns:w="` + wordMLTransitional + `"` + nativeContextualAlternatesTestNSDecl + `><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/>` + tc.markup + `</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`
@@ -39,8 +41,11 @@ func TestNativeContextualAlternatesDocDefaults(t *testing.T) {
 			if got := hasResolutionDiagnostic(resolved, "CONTEXTUAL_ALTERNATES_MATCH_SHAPER"); got != tc.accepted {
 				t.Fatalf("CONTEXTUAL_ALTERNATES_MATCH_SHAPER=%v, want %v: %#v", got, tc.accepted, resolved.Diagnostics)
 			}
-			if got := hasResolutionDiagnostic(resolved, "FOREIGN_RUN_PROPERTY"); got == tc.accepted {
-				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, !tc.accepted, resolved.Diagnostics)
+			if tc.code != "" && !hasResolutionDiagnostic(resolved, tc.code) {
+				t.Fatalf("resolver did not record %s: %#v", tc.code, resolved.Diagnostics)
+			}
+			if got := hasResolutionDiagnostic(resolved, "FOREIGN_RUN_PROPERTY"); got != (tc.code == "FOREIGN_RUN_PROPERTY") {
+				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, tc.code == "FOREIGN_RUN_PROPERTY", resolved.Diagnostics)
 			}
 			for _, diagnostic := range resolved.Diagnostics {
 				if diagnostic.Code != "CONTEXTUAL_ALTERNATES_MATCH_SHAPER" {
@@ -55,12 +60,19 @@ func TestNativeContextualAlternatesDocDefaults(t *testing.T) {
 }
 
 // The enabled request on a direct run rPr is accepted by the extractor without
-// marking the run's properties partial; disabling calt stays foreign.
+// marking the run's properties partial; disabling calt is disclosed as an
+// unapplied property instead, and malformed markup stays foreign.
 func TestNativeContextualAlternatesDirectRunProperties(t *testing.T) {
 	for _, tc := range []struct {
 		markup   string
 		accepted bool
-	}{{`<w14:cntxtAlts/>`, true}, {`<w14:cntxtAlts w14:val="1"/>`, true}, {`<w14:cntxtAlts w14:val="0"/>`, false}} {
+		code     string
+	}{
+		{`<w14:cntxtAlts/>`, true, ""},
+		{`<w14:cntxtAlts w14:val="1"/>`, true, ""},
+		{`<w14:cntxtAlts w14:val="0"/>`, false, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
+		{`<w14:cntxtAlts w14:val="maybe"/>`, false, "FOREIGN_RUN_PROPERTY"},
+	} {
 		t.Run(tc.markup, func(t *testing.T) {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
 			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"` + nativeContextualAlternatesTestNSDecl + `><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/>` + tc.markup + `</w:rPr><w:t>Alternates</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
@@ -71,10 +83,14 @@ func TestNativeContextualAlternatesDirectRunProperties(t *testing.T) {
 			if got := hasUnsupportedCode(doc, "CONTEXTUAL_ALTERNATES_MATCH_SHAPER"); got != tc.accepted {
 				t.Fatalf("CONTEXTUAL_ALTERNATES_MATCH_SHAPER=%v, want %v: %#v", got, tc.accepted, doc.Unsupported)
 			}
-			for _, code := range []string{"FOREIGN_RUN_PROPERTY", "PARTIAL_RUN_PROPERTIES"} {
-				if got := hasUnsupportedCode(doc, code); got == tc.accepted {
-					t.Fatalf("%s=%v, want %v: %#v", code, got, !tc.accepted, doc.Unsupported)
-				}
+			if tc.code != "" && !hasUnsupportedCode(doc, tc.code) {
+				t.Fatalf("extractor did not record %s: %#v", tc.code, doc.Unsupported)
+			}
+			if got := hasUnsupportedCode(doc, "FOREIGN_RUN_PROPERTY"); got != (tc.code == "FOREIGN_RUN_PROPERTY") {
+				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, tc.code == "FOREIGN_RUN_PROPERTY", doc.Unsupported)
+			}
+			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
+				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
 			}
 		})
 	}
