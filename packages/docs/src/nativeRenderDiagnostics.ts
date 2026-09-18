@@ -62,6 +62,14 @@ export function isRenderNeutralLayoutDiagnostic(
   // missing, the chain is empty, and no layer was dropped. Exempt it only while
   // the table's own MISSING_TABLE_STYLE is itself exempt, which is what proves
   // the head -- and therefore the whole chain -- resolved to nothing.
+  // ECMA-376 17.7.2 says a w:pStyle or w:rStyle naming a style the package does
+  // not define is ignored, so the consumer cascades from the document defaults
+  // and no layer was dropped. The resolver states exactly that case under its
+  // own code, at the styles part of the scope that referenced it.
+  if (diagnostic.code === 'UNDEFINED_STYLE_REFERENCE') return diagnostic.severity === 'unsupported'
+    && diagnostic.preservation === 'preserve-verbatim'
+    && diagnostic.part_name !== undefined && diagnostic.part_name === resolved.source_parts.styles_part
+    && diagnostic.path === undefined
   if (diagnostic.code === 'MISSING_STYLE_REFERENCE') return diagnostic.severity === 'unsupported'
     && diagnostic.preservation === 'preserve-verbatim'
     && diagnostic.part_name !== undefined && diagnostic.part_name === resolved.source_parts.styles_part
