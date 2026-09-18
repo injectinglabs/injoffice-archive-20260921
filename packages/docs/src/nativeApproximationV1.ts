@@ -116,6 +116,20 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'NUMBER_FORM_UNAPPLIED',
   'NUMBER_SPACING_UNAPPLIED',
   'TEXT_EFFECT_3D_UNAPPLIED',
+  // Run properties that state the absence of their own effect. Word writes a
+  // numbering level's or a style's run properties out in full, one element per
+  // property at the value that means "off": w:caps, w:smallCaps, w:strike,
+  // w:dstrike and w:specVanish as an explicit CT_OnOff false, w:spacing and
+  // w:position as 0, w:effect and w:em as "none", and a w14:stylisticSets that
+  // names no set. Each asks for exactly the glyphs, advances and ink an omitted
+  // element already produces, so the run occupies the same box as the same run
+  // without it and cannot move a line or a page. Unlike the UNAPPLIED codes
+  // above, neither is omitted content: nothing the source draws is missing, so
+  // they are not members of DOCX_APPROXIMATE_OMITTED_CONTENT_CODES. Any other
+  // value of these properties stays UNMODELED_RUN_PROPERTY or
+  // FOREIGN_RUN_PROPERTY and still refuses on both tiers.
+  'RUN_EFFECT_ABSENT_PRESERVED',
+  'STYLISTIC_SET_ABSENT_PRESERVED',
   // w:tcPr/w:textDirection asks for the cell's text to be rotated 90 or 270
   // degrees, or stacked vertically. This tier lays the cell out and paints it
   // horizontally, so the cell's glyphs are present but the rotation is not:
