@@ -151,3 +151,60 @@ func TestAutomaticTableBorderEvidencePreservesStrictSource(t *testing.T) {
 		}
 	}
 }
+
+// Two source facts that say nothing about what is painted behind a table kept
+// this policy off every Word-authored package: mc:Ignorable on the main part
+// root, which Word writes on everything it saves, and the mere existence of a
+// header, footer or note story. Only a drawing, picture, embedded object or
+// page background can put ink behind the table, and each story is now asked
+// that one question instead of being excluded for existing.
+func TestAutomaticTableBorderEvidenceAdmitsIgnorableRootAndNonDrawingStories(t *testing.T) {
+	const mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+	for _, test := range []struct {
+		name, rootAttrs, header string
+		valid                   bool
+	}{
+		{name: "bare root", valid: true},
+		{name: "ignorable root", rootAttrs: ` xmlns:mc="` + mc + `" mc:Ignorable="w14 wp14"`, valid: true},
+		{name: "foreign root attribute", rootAttrs: ` xmlns:x="urn:foreign" x:flag="1"`},
+		{name: "empty header", header: `<w:p/>`, valid: true},
+		{name: "text header", header: `<w:p><w:r><w:t>page one</w:t></w:r></w:p>`, valid: true},
+		{name: "header drawing", header: `<w:p><w:r><w:drawing/></w:r></w:p>`},
+		{name: "header picture", header: `<w:p><w:r><w:pict/></w:r></w:p>`},
+		{name: "header object", header: `<w:p><w:r><w:object/></w:r></w:p>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			borders := `<w:tblBorders>`
+			for _, edge := range []string{"top", "right", "bottom", "left", "insideH", "insideV"} {
+				borders += `<w:` + edge + ` w:val="single" w:sz="4" w:color="auto"/>`
+			}
+			borders += `</w:tblBorders>`
+			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="table" w:styleId="Grid"><w:tblPr>` + borders + `</w:tblPr></w:style></w:styles>`)
+			section := `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`
+			if test.header != "" {
+				section += `<w:headerReference w:type="default" r:id="rHeader"/>`
+				parts["word/header1.xml"] = `<w:hdr xmlns:w="` + wordMLTransitional + `">` + test.header + `</w:hdr>`
+				parts["word/_rels/document.xml.rels"] = strings.Replace(parts["word/_rels/document.xml.rels"], `</Relationships>`, `<Relationship Id="rHeader" Type="`+relBaseTransitional+`header" Target="header1.xml"/></Relationships>`, 1)
+				parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>`, 1)
+			}
+			section += `</w:sectPr>`
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `" xmlns:r="` + testR + `"` + test.rootAttrs + `><w:body><w:tbl><w:tblPr><w:tblStyle w:val="Grid"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="4000"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl><w:p/>` + section + `</w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			before := string(data)
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fact := layout.Tables[0].AutomaticBorderPreview
+			if (fact != nil) != test.valid {
+				t.Fatalf("qualification = %v; want %v", fact != nil, test.valid)
+			}
+			if fact != nil && (len(fact.AutomaticEdges) != 6 || layout.Tables[0].Borders != nil) {
+				t.Fatalf("invalid evidence %#v", fact)
+			}
+			if string(data) != before {
+				t.Fatal("source bytes changed")
+			}
+		})
+	}
+}
