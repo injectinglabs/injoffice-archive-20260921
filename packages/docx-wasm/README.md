@@ -9,10 +9,10 @@ and independently hashes an owned byte snapshot. It returns
 The response is bounded to 16 MiB and malformed/mismatched responses retire the
 worker. Existing extract/apply request and response contracts are unchanged.
 
-The shared build script enforces a 6.5 MiB + 160 KiB uncompressed WASM ceiling locally and
+The shared build script enforces a 6.5 MiB + 224 KiB uncompressed WASM ceiling locally and
 in CI; `build.sh` records what each raise bought. The CI toolchain builds this
-module about 28 KiB larger than a local darwin/arm64 build, so measure against
-the CI number before spending headroom. Adding same-byte style resolution and bounded equation inspection grew
+module about 5.4 KiB larger than a local darwin/arm64 build (measured on three
+commits), so measure against the CI number before spending headroom. Adding same-byte style resolution and bounded equation inspection grew
 the Go 1.23.0 build from 5,712,884 to 6,451,172 bytes (gzip level 9: 1,543,731 to
 1,734,771 bytes). The Go 1.23.12 CI build measured 6,456,859 bytes. Compression
 depends on deployment; the engine remains lazy-loaded in its browser worker.

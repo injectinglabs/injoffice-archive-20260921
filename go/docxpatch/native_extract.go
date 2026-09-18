@@ -4041,6 +4041,24 @@ func (extractor *nativeExtractor) extractTableCell(partName, tableID string, nod
 				continue
 			}
 			seen[property.Name.Local] = true
+			// ECMA-376 17.4.69/17.18.93. lrTb is the horizontal flow this tier
+			// already lays out, so an explicit lrTb states the cell it already
+			// has and is applied. Every other ST_TextDirection member rotates or
+			// re-stacks the cell's text, which v1 has no layout or paint input
+			// for: the cell's glyphs are still painted, in the cell's horizontal
+			// box, so the rotation is recorded as a visual result this tier did
+			// not produce rather than guessed at. Anything else about the
+			// element stays unknown cell markup below.
+			if direction, ok := nativeAttr(property, extractor.wordNS, "val"); ok && property.Name == (xml.Name{Space: extractor.wordNS, Local: "textDirection"}) && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+				if direction == "lrTb" {
+					continue
+				}
+				if direction == "tbRl" || direction == "btLr" || direction == "lrTbV" || direction == "tbRlV" || direction == "tbLrV" {
+					unsafe = true
+					extractor.addUnsupported("CELL_TEXT_DIRECTION_UNSUPPORTED", "table-properties", tableID, partName, property, "Rotated cell text direction "+direction+" is recorded and not applied; the cell's text is laid out and painted horizontally")
+					continue
+				}
+			}
 			switch {
 			case property.Name == (xml.Name{Space: extractor.wordNS, Local: "tcW"}):
 				value, widthOK := nativeNonnegativeInt64Attr(property, extractor.wordNS, "w")

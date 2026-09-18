@@ -116,6 +116,12 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'NUMBER_FORM_UNAPPLIED',
   'NUMBER_SPACING_UNAPPLIED',
   'TEXT_EFFECT_3D_UNAPPLIED',
+  // w:tcPr/w:textDirection asks for the cell's text to be rotated 90 or 270
+  // degrees, or stacked vertically. This tier lays the cell out and paints it
+  // horizontally, so the cell's glyphs are present but the rotation is not:
+  // it is a visual result the preview does not produce, disclosed as omitted
+  // content rather than a refusal that produces no page at all.
+  'CELL_TEXT_DIRECTION_UNSUPPORTED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal

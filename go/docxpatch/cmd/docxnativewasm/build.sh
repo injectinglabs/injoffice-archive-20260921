@@ -38,13 +38,25 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # waiver and multi-column band geometry (#353-#360), which together left only
 # 584 bytes of CI headroom and forced one PR to be rewritten to fit.
 #
+# A further 32 KiB covers the table-cell text-direction read: w:tcPr/w:textDirection
+# is now a modeled property (an explicit lrTb is applied, and each rotated or
+# vertically stacked value is recorded under its own diagnostic code so the
+# approximate tier can paint the cell and disclose the rotation it did not
+# apply). Measured on this branch: +3,057 bytes over 7,005,596. That did not
+# fit: two other lanes had just taken the previous 32 KiB, leaving 1,320 bytes
+# of CI headroom, and the addition cannot be made smaller -- a probe that keeps
+# only the three-line horizontal-direction branch, with no new code string and
+# no new message, still measures +1,813 bytes, because this module's link
+# layout does not grow linearly with the source it gains.
+#
 # The CI toolchain builds this module larger than a local darwin/arm64 build,
-# so the local number is not the one this gate sees. Measured CI-local on one
-# commit: +5,401 bytes. An earlier note in this file put that gap at ~28 KiB;
-# that figure was never reproduced and is wrong. Measure, do not assume.
-max_size=$((13 * 1024 * 1024 / 2 + 192 * 1024))
+# so the local number is not the one this gate sees. Measured CI-local on three
+# commits: +5,401, +5,395 and +5,436 bytes. An earlier note in this file put
+# that gap at ~28 KiB; that figure was never reproduced and is wrong. Measure,
+# do not assume.
+max_size=$((13 * 1024 * 1024 / 2 + 224 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 192 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 224 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2
