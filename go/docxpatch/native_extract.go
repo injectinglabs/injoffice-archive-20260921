@@ -256,7 +256,7 @@ func ExtractNativeDocumentV1WithOptions(data []byte, options NativeExtractionOpt
 			{Name: "full-document-regeneration", Level: "unsupported", Detail: nativeString("Unmodeled OOXML is preserved verbatim and must not be flattened")},
 		},
 		PassthroughParts: extractor.passthroughParts(), Unsupported: extractor.unsupported,
-		NoteNumbering:    extractor.nativeNoteNumberingRecords(),
+		NoteNumbering: extractor.nativeNoteNumberingRecords(),
 	}
 	if issues := ValidateNativeDocumentV1(doc); len(issues) > 0 {
 		return nil, fmt.Errorf("docxpatch: native extract produced invalid contract: %w", &NativeValidationError{Issues: issues})
@@ -3814,6 +3814,74 @@ func (extractor *nativeExtractor) extractCellShading(node *nativeXMLNode) (*stri
 	return nativeExtractCellShading(node, extractor.wordNS, extractor.resolveThemeSrgb)
 }
 
+// extractTableFloatingPosition reads w:tblpPr into the modelled frame. Every
+// attribute must be a value this version can state exactly: an unknown
+// attribute, an out-of-enumeration anchor or alignment, or a position that
+// names both an offset and an alignment on one axis leaves the frame absent,
+// and the property stays a verbatim disclosure.
+func (extractor *nativeExtractor) extractTableFloatingPosition(node *nativeXMLNode) (*NativeTableFloatingPositionV1, bool) {
+	name := func(local string) xml.Name { return xml.Name{Space: extractor.wordNS, Local: local} }
+	if !nativeExactLeaf(node, name("leftFromText"), name("rightFromText"), name("topFromText"), name("bottomFromText"), name("vertAnchor"), name("horzAnchor"), name("tblpX"), name("tblpXSpec"), name("tblpY"), name("tblpYSpec")) {
+		return nil, false
+	}
+	anchor := func(local string) (string, bool) {
+		value, ok := nativeAttr(node, extractor.wordNS, local)
+		if !ok {
+			return "text", true
+		}
+		return value, value == "text" || value == "margin" || value == "page"
+	}
+	distance := func(local string) (int64, bool) {
+		if _, present := nativeAttr(node, extractor.wordNS, local); !present {
+			return 0, true
+		}
+		return nativeNonnegativeInt64Attr(node, extractor.wordNS, local)
+	}
+	offset := func(local string) (*int64, bool) {
+		if _, present := nativeAttr(node, extractor.wordNS, local); !present {
+			return nil, true
+		}
+		value, ok := nativeInt64Attr(node, extractor.wordNS, local)
+		if !ok {
+			return nil, false
+		}
+		return nativeInt64(value), true
+	}
+	align := func(local string, allowed ...string) (*string, bool) {
+		value, ok := nativeAttr(node, extractor.wordNS, local)
+		if !ok {
+			return nil, true
+		}
+		for _, candidate := range allowed {
+			if value == candidate {
+				return nativeString(value), true
+			}
+		}
+		return nil, false
+	}
+	position := &NativeTableFloatingPositionV1{}
+	var ok [10]bool
+	position.HorizontalAnchor, ok[0] = anchor("horzAnchor")
+	position.VerticalAnchor, ok[1] = anchor("vertAnchor")
+	position.LeftFromTextTwips, ok[2] = distance("leftFromText")
+	position.RightFromTextTwips, ok[3] = distance("rightFromText")
+	position.TopFromTextTwips, ok[4] = distance("topFromText")
+	position.BottomFromTextTwips, ok[5] = distance("bottomFromText")
+	position.XTwips, ok[6] = offset("tblpX")
+	position.YTwips, ok[7] = offset("tblpY")
+	position.XAlignment, ok[8] = align("tblpXSpec", "left", "center", "right", "inside", "outside")
+	position.YAlignment, ok[9] = align("tblpYSpec", "top", "center", "bottom", "inside", "outside")
+	for _, valid := range ok {
+		if !valid {
+			return nil, false
+		}
+	}
+	if (position.XTwips != nil && position.XAlignment != nil) || (position.YTwips != nil && position.YAlignment != nil) {
+		return nil, false
+	}
+	return position, true
+}
+
 func (extractor *nativeExtractor) extractTableCellMargins(node *nativeXMLNode) (*NativeTableCellMarginsV1, bool) {
 	if !nativeExactContainer(node) {
 		return nil, false
@@ -3904,6 +3972,16 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 				} else {
 					unsafe = true
 				}
+			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblpPr"}) {
+				// The frame is modelled, but this extractor still refuses to
+				// mutate a floating table, and page paint still lays the table
+				// out inline, so the verbatim disclosure stays until placement
+				// applies the projected frame.
+				unsafe = true
+				if position, ok := extractor.extractTableFloatingPosition(property); ok {
+					table.FloatingPosition = position
+				}
+				extractor.addUnsupported("UNMODELED_TABLE_PROPERTY", "table-properties", id, partName, property, "This table property is preserved verbatim")
 			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblCellMar"}) {
 				if margins, ok := extractor.extractTableCellMargins(property); ok {
 					table.CellMargins = margins

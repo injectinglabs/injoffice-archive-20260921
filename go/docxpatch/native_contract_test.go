@@ -276,6 +276,7 @@ func TestNativeDOCXGoBindingsMatchCanonicalSchema(t *testing.T) {
 		"TableBorderV1":           reflect.TypeOf(NativeTableBorderV1{}),
 		"TableBordersV1":          reflect.TypeOf(NativeTableBordersV1{}),
 		"TableCellMarginsV1":      reflect.TypeOf(NativeTableCellMarginsV1{}),
+		"TableFloatingPositionV1": reflect.TypeOf(NativeTableFloatingPositionV1{}),
 		"TableCellV1":             reflect.TypeOf(NativeTableCellV1{}),
 		"TableRowV1":              reflect.TypeOf(NativeTableRowV1{}),
 		"TableV1":                 reflect.TypeOf(NativeTableV1{}),

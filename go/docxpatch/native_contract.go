@@ -205,20 +205,38 @@ type NativeTableCellMarginsV1 struct {
 	LeftTwips   int64 `json:"left_twips"`
 }
 
+// NativeTableFloatingPositionV1 is the modelled w:tblpPr frame of a floating
+// table. Each anchor and offset is the source value: an absent w:tblpX or
+// w:tblpY is an absent offset, never a zero, because Word reads an absent
+// offset against the anchor rather than as a zero displacement.
+type NativeTableFloatingPositionV1 struct {
+	HorizontalAnchor    string  `json:"horizontal_anchor"`
+	VerticalAnchor      string  `json:"vertical_anchor"`
+	XTwips              *int64  `json:"x_twips,omitempty"`
+	XAlignment          *string `json:"x_alignment,omitempty"`
+	YTwips              *int64  `json:"y_twips,omitempty"`
+	YAlignment          *string `json:"y_alignment,omitempty"`
+	LeftFromTextTwips   int64   `json:"left_from_text_twips"`
+	RightFromTextTwips  int64   `json:"right_from_text_twips"`
+	TopFromTextTwips    int64   `json:"top_from_text_twips"`
+	BottomFromTextTwips int64   `json:"bottom_from_text_twips"`
+}
+
 type NativeTableV1 struct {
-	ID                    string                    `json:"id"`
-	Anchor                NativeSourceAnchorV1      `json:"anchor"`
-	EditPolicy            NativeEditPolicyV1        `json:"edit_policy"`
-	TableStyleID          *string                   `json:"table_style_id,omitempty"`
-	WidthTwips            *int64                    `json:"width_twips,omitempty"`
-	WidthPercentFiftieths *int64                    `json:"width_percent_fiftieths,omitempty"`
-	Layout                *string                   `json:"layout,omitempty"`
-	Alignment             *string                   `json:"alignment,omitempty"`
-	IndentTwips           *int64                    `json:"indent_twips,omitempty"`
-	GridWidthsTwips       []int64                   `json:"grid_widths_twips,omitempty"`
-	CellMargins           *NativeTableCellMarginsV1 `json:"cell_margins,omitempty"`
-	Borders               *NativeTableBordersV1     `json:"borders,omitempty"`
-	Rows                  []NativeTableRowV1        `json:"rows"`
+	ID                    string                         `json:"id"`
+	Anchor                NativeSourceAnchorV1           `json:"anchor"`
+	EditPolicy            NativeEditPolicyV1             `json:"edit_policy"`
+	TableStyleID          *string                        `json:"table_style_id,omitempty"`
+	WidthTwips            *int64                         `json:"width_twips,omitempty"`
+	WidthPercentFiftieths *int64                         `json:"width_percent_fiftieths,omitempty"`
+	Layout                *string                        `json:"layout,omitempty"`
+	Alignment             *string                        `json:"alignment,omitempty"`
+	IndentTwips           *int64                         `json:"indent_twips,omitempty"`
+	GridWidthsTwips       []int64                        `json:"grid_widths_twips,omitempty"`
+	CellMargins           *NativeTableCellMarginsV1      `json:"cell_margins,omitempty"`
+	Borders               *NativeTableBordersV1          `json:"borders,omitempty"`
+	FloatingPosition      *NativeTableFloatingPositionV1 `json:"floating_position,omitempty"`
+	Rows                  []NativeTableRowV1             `json:"rows"`
 }
 
 type NativeBlockV1 struct {
@@ -949,6 +967,29 @@ func (v *nativeValidator) table(table *NativeTableV1, path string, track bool, o
 	for i := range table.GridWidthsTwips {
 		v.twips(&table.GridWidthsTwips[i], fmt.Sprintf("%s/grid_widths_twips/%d", path, i), 1)
 	}
+	if float := table.FloatingPosition; float != nil {
+		floatPath := path + "/floating_position"
+		v.oneOf(float.HorizontalAnchor, floatPath+"/horizontal_anchor", "text", "margin", "page")
+		v.oneOf(float.VerticalAnchor, floatPath+"/vertical_anchor", "text", "margin", "page")
+		v.signedTwips(float.XTwips, floatPath+"/x_twips")
+		v.signedTwips(float.YTwips, floatPath+"/y_twips")
+		if float.XAlignment != nil {
+			v.oneOf(*float.XAlignment, floatPath+"/x_alignment", "left", "center", "right", "inside", "outside")
+		}
+		if float.YAlignment != nil {
+			v.oneOf(*float.YAlignment, floatPath+"/y_alignment", "top", "center", "bottom", "inside", "outside")
+		}
+		if float.XTwips != nil && float.XAlignment != nil {
+			v.add("INVALID_UNION", floatPath, "a floating table selects its horizontal position by offset or by alignment, never both")
+		}
+		if float.YTwips != nil && float.YAlignment != nil {
+			v.add("INVALID_UNION", floatPath, "a floating table selects its vertical position by offset or by alignment, never both")
+		}
+		v.twips(&float.LeftFromTextTwips, floatPath+"/left_from_text_twips", 0)
+		v.twips(&float.RightFromTextTwips, floatPath+"/right_from_text_twips", 0)
+		v.twips(&float.TopFromTextTwips, floatPath+"/top_from_text_twips", 0)
+		v.twips(&float.BottomFromTextTwips, floatPath+"/bottom_from_text_twips", 0)
+	}
 	if table.CellMargins != nil {
 		v.twips(&table.CellMargins.TopTwips, path+"/cell_margins/top_twips", 0)
 		v.twips(&table.CellMargins.RightTwips, path+"/cell_margins/right_twips", 0)
@@ -1451,6 +1492,13 @@ func (v *nativeValidator) optionalSafe(value *int64, path string) {
 func (v *nativeValidator) optionalTwips(value *int64, path string, minimum int64) {
 	if value != nil && (*value < minimum || *value > nativeMaxTwipsForMilliPoints) {
 		v.add("OUT_OF_RANGE", path, fmt.Sprintf("must be an integer from %d through %d before milli-point conversion", minimum, nativeMaxTwipsForMilliPoints))
+	}
+}
+
+// A floating table offset is a displacement from its anchor, so it is signed.
+func (v *nativeValidator) signedTwips(value *int64, path string) {
+	if value != nil && (*value < -nativeMaxTwipsForMilliPoints || *value > nativeMaxTwipsForMilliPoints) {
+		v.add("OUT_OF_RANGE", path, fmt.Sprintf("must be an integer from %d through %d before milli-point conversion", -nativeMaxTwipsForMilliPoints, nativeMaxTwipsForMilliPoints))
 	}
 }
 func (v *nativeValidator) twips(value *int64, path string, minimum int64) {

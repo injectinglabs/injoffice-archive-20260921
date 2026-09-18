@@ -5339,6 +5339,11 @@
               "signature": "export interface NativeDocxTableCellV1"
             },
             {
+              "name": "NativeDocxTableFloatingPositionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTableFloatingPositionV1"
+            },
+            {
               "name": "nativeDocxTableGeometryV1",
               "kind": "function",
               "signature": "export declare function nativeDocxTableGeometryV1(table: NativeDocxTableV1, resolved: NativeDocxResolvedLayoutInputV1): NativeDocxTableV1"
@@ -6308,6 +6313,11 @@
               "name": "NativeDocxTableCellV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTableCellV1"
+            },
+            {
+              "name": "NativeDocxTableFloatingPositionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTableFloatingPositionV1"
             },
             {
               "name": "NativeDocxTableRowV1",
