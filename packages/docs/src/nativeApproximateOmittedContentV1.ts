@@ -41,6 +41,12 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   'NUMBER_FORM_UNAPPLIED',
   'NUMBER_SPACING_UNAPPLIED',
   'TEXT_EFFECT_3D_UNAPPLIED',
+  // A rotated cell's text is painted, but not where or how Word paints it: the
+  // lines run along the other axis, wrap against the row height rather than the
+  // cell width, and Word clips whatever overflows the cell. That is a visual
+  // result this preview does not produce, so it is disclosed here rather than
+  // left to a formatting-only note.
+  'CELL_TEXT_DIRECTION_UNSUPPORTED',
 ])
 
 /** Shaping diagnostics approximate preview ignores; strict paint refuses them. */

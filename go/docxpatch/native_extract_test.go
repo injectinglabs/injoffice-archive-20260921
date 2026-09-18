@@ -1375,19 +1375,63 @@ func TestExtractNativeDocumentAdmitsOnlyTheDefaultSectionTextDirection(t *testin
 }
 
 // A table cell's own w:textDirection is a different property in a different
-// container: tblr-height.docx rotates two cells through 90 and 270 degrees and
-// must keep refusing, whatever the section-level rule admits.
-func TestExtractNativeDocumentRefusesRotatedCellTextDirection(t *testing.T) {
-	for _, value := range []string{"btLr", "tbRl", "lrTb"} {
+// container. lrTb states the horizontal flow this tier already lays out, so it
+// is applied; tblr-height.docx rotates two cells through 90 and 270 degrees,
+// which is recorded as its own code rather than as unknown markup, so the
+// approximate tier can paint the cell's text and disclose the rotation it did
+// not apply while the strict tier keeps refusing.
+func TestExtractNativeDocumentRecordsRotatedCellTextDirection(t *testing.T) {
+	cellTextDirectionDocument := func(direction string) map[string]string {
+		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+		parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/>` + direction + `</w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`
+		return parts
+	}
+	extract := func(t *testing.T, direction string) *NativeDocumentV1 {
+		t.Helper()
+		doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(cellTextDirectionDocument(direction))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	for _, value := range []string{"btLr", "tbRl", "lrTbV", "tbRlV", "tbLrV"} {
 		t.Run(value, func(t *testing.T) {
-			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
-			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:textDirection w:val="` + value + `"/></w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`
-			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
-			if err != nil {
-				t.Fatal(err)
+			doc := extract(t, `<w:textDirection w:val="`+value+`"/>`)
+			if !hasUnsupportedCode(doc, "CELL_TEXT_DIRECTION_UNSUPPORTED") || hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+				t.Fatalf("cell text direction %q must be recorded as its own code: %#v", value, doc.Unsupported)
 			}
-			if !hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
-				t.Fatalf("cell text direction %q was admitted: %#v", value, doc.Unsupported)
+			named := false
+			for _, entry := range doc.Unsupported {
+				if entry.Code == "CELL_TEXT_DIRECTION_UNSUPPORTED" {
+					named = named || strings.Contains(entry.Message, value)
+					if entry.Anchor == nil || !strings.Contains(entry.Anchor.Path, "textDirection") {
+						t.Fatalf("the disclosure must anchor the exact property: %#v", entry)
+					}
+				}
+			}
+			if !named {
+				t.Fatalf("the disclosure must name the direction it did not apply: %#v", doc.Unsupported)
+			}
+			if doc.Body.Blocks[0].Table == nil || doc.Body.Blocks[0].Table.EditPolicy.Mode != "read-only" {
+				t.Fatalf("a table this tier cannot lay out must stay read-only: %#v", doc.Body.Blocks[0].Table)
+			}
+		})
+	}
+	t.Run("lrTb is applied", func(t *testing.T) {
+		doc := extract(t, `<w:textDirection w:val="lrTb"/>`)
+		if hasUnsupportedCode(doc, "CELL_TEXT_DIRECTION_UNSUPPORTED") || hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+			t.Fatalf("an explicit horizontal cell direction states the flow this tier lays out: %#v", doc.Unsupported)
+		}
+	})
+	for name, markup := range map[string]string{
+		"unknown value": `<w:textDirection w:val="sideways"/>`,
+		"missing value": `<w:textDirection/>`,
+		"extra child":   `<w:textDirection w:val="btLr"><w:val/></w:textDirection>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := extract(t, markup)
+			if !hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") || hasUnsupportedCode(doc, "CELL_TEXT_DIRECTION_UNSUPPORTED") {
+				t.Fatalf("%s must stay unknown cell markup: %#v", name, doc.Unsupported)
 			}
 		})
 	}
