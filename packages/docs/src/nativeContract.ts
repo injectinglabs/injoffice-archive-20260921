@@ -377,6 +377,18 @@ export interface NativeDocxDocumentV1 {
   capabilities: NativeDocxCapabilityV1[]
   passthrough_parts: NativeDocxPassthroughPartV1[]
   unsupported: NativeDocxUnsupportedCapabilityV1[]
+  /** Present only for a note kind whose sections state one exact modeled
+   * w:numFmt (ECMA-376 17.11.17/17.11.18). `labels[i]` is the label for
+   * counter value `i + 1`; the extractor formats them with the one counter
+   * implementation this codebase has, so no tier re-derives them. */
+  note_numbering?: NativeDocxNoteNumberingV1[]
+}
+
+export interface NativeDocxNoteNumberingV1 {
+  kind: 'footnote' | 'endnote'
+  /** The authored ST_NumberFormat value, e.g. 'lowerRoman'. */
+  format: string
+  labels: string[]
 }
 
 export type NativeDocxIssueCode =
@@ -446,10 +458,15 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   SectionV1: ['id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
   CommentV1: ['id', 'native_comment_id', 'author', 'initials', 'created_at', 'anchor', 'body_story_id'],
   UnsupportedCapabilityV1: ['id', 'code', 'capability', 'scope_id', 'anchor', 'preservation', 'message'],
-  DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported'],
+  DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported', 'note_numbering'],
+  NoteNumberingV1: ['kind', 'format', 'labels'],
 } as const
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
+/** A painted note label: any single-line, non-empty, bounded marker text. */
+const NOTE_LABEL = /^[^\u0000\r\n]{1,64}$/
+/** Mirrors the extractor's nativeNoteNumberingMaxLabels. */
+export const DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS = 4096
 const NOTE_CONTENT_ID = /^[1-9][0-9]{0,18}$/
 /** Reserved separator stories carry a producer-chosen id, not a fixed literal:
  * Word writes -1/0 and LibreOffice writes 0/1 for the same two w:type roles. The
@@ -1185,6 +1202,23 @@ export function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult
     enumValue(entry.preservation, `${path}/preservation`, ['preserve-verbatim', 'refuse-mutation'], issues)
     stringValue(entry.message, `${path}/message`, issues)
   })
+  if (root.note_numbering !== undefined) {
+    const kinds = new Set<string>()
+    array(root.note_numbering, '/note_numbering', issues, 2).forEach((entryValue, index) => {
+      const path = `/note_numbering/${index}`
+      const entry = object(entryValue, path, DOCX_NATIVE_V1_BINDING_FIELDS.NoteNumberingV1, issues)
+      if (!entry) return
+      const kind = enumValue(entry.kind, `${path}/kind`, ['footnote', 'endnote'], issues)
+      if (kind !== null) {
+        if (kinds.has(kind)) add(issues, 'DUPLICATE_ID', `${path}/kind`, 'one note kind states at most one numbering record')
+        kinds.add(kind)
+      }
+      stringValue(entry.format, `${path}/format`, issues, ID)
+      const labels = array(entry.labels, `${path}/labels`, issues, DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS)
+      if (labels.length === 0) add(issues, 'REQUIRED', `${path}/labels`, 'a numbering record requires at least one label')
+      labels.forEach((label, labelIndex) => stringValue(label, `${path}/labels/${labelIndex}`, issues, NOTE_LABEL))
+    })
+  }
   const targets: Record<ReferenceTarget, Set<string>> = {
     'modeled-id': ids,
     'body-block': bodyBlockIds,

@@ -358,6 +358,16 @@
         }
       ]
     },
+    "NoteNumberingV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "format", "labels"],
+      "properties": {
+        "kind": { "enum": ["footnote", "endnote"] },
+        "format": { "$ref": "#/$defs/Identifier" },
+        "labels": { "type": "array", "minItems": 1, "maxItems": 4096, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000\\r\\n]+$" } }
+      }
+    },
     "HeaderFooterReferenceV1": {
       "type": "object",
       "additionalProperties": false,
@@ -472,7 +482,8 @@
         "comments": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/CommentV1" } },
         "capabilities": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/CapabilityV1" } },
         "passthrough_parts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/PassthroughPartV1" } },
-        "unsupported": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/UnsupportedCapabilityV1" } }
+        "unsupported": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/UnsupportedCapabilityV1" } },
+        "note_numbering": { "type": "array", "maxItems": 2, "items": { "$ref": "#/$defs/NoteNumberingV1" } }
       }
     }
   }

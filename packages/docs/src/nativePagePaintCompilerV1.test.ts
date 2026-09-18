@@ -2781,6 +2781,27 @@ describe('native DOCX page-paint compiler v1', () => {
     }
   })
 
+  it('paints a multi-character source note label as the clusters the shaper produced', async () => {
+    // Word's decimalZero prints the first note as "01" and lowerRoman prints the
+    // second as "ii". A marker longer than one character shapes into more than
+    // one visual cluster, so the painter has to hold each fragment to its own
+    // slice of the marker and require the fragments to cover the whole label.
+    const input = noteFixture()
+    ;(input.document as NativeDocxDocumentV1).note_numbering = [{ kind: 'footnote', format: 'decimalZero', labels: ['01'] }]
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const markerFragments = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs
+      .flatMap((paragraph) => paragraph.lines).flatMap((line) => line.fragments)
+      .filter((fragment) => fragment.source_id === 'run:1' || fragment.source_id === 'run:footnote-label-1')
+    expect(markerFragments.length).toBeGreaterThan(0)
+    expect(markerFragments.map((fragment) => fragment.text).join('')).toBe('0101')
+    const outlineResults = prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to' as const, x: 0, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 1_000 }, { kind: 'close_path' as const }],
+    }))
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: outlineResults })
+    expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output.diagnostics)).toBe('painted')
+  })
+
   it('composes exact note shaping, bottom placement, paint, and paginated-layout attestation', async () => {
     const prepared = await prepareNativeDocxPagePaintV1(noteFixture())
     expect(prepared.page_paint_request.paginated_layout.status).toBe('paginated')

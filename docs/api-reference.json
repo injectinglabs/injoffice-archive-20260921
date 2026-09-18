@@ -3694,6 +3694,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_NESTED_TABLES_PROTOCOL: 'injoffice.docx.approximate-nested-tables'"
             },
             {
+              "name": "DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING: 'Approximate read-only preview: footnote/endnote stories are placed although the source states run, paragraph or resolution properties this tier omits; the note text and its numbering are painted, those properties are not applied.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_PREVIEW_POLICY",
               "kind": "export",
               "signature": "DOCX_APPROXIMATE_PREVIEW_POLICY"
@@ -3777,6 +3782,11 @@
               "name": "DOCX_NATIVE_LIMITS",
               "kind": "const",
               "signature": "export declare const DOCX_NATIVE_LIMITS:"
+            },
+            {
+              "name": "DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS",
+              "kind": "const",
+              "signature": "export declare const DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS = 4096"
             },
             {
               "name": "DOCX_NATIVE_PROTOCOL",
@@ -4652,6 +4662,11 @@
               "name": "NativeDocxNestedTextInventoryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNestedTextInventoryV1"
+            },
+            {
+              "name": "NativeDocxNoteNumberingV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNoteNumberingV1"
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
@@ -5840,6 +5855,11 @@
               "signature": "export declare const DOCX_NATIVE_LIMITS:"
             },
             {
+              "name": "DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS",
+              "kind": "const",
+              "signature": "export declare const DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS = 4096"
+            },
+            {
               "name": "DOCX_NATIVE_PROTOCOL",
               "kind": "const",
               "signature": "export declare const DOCX_NATIVE_PROTOCOL = \"injoffice.docx.native\""
@@ -6008,6 +6028,11 @@
               "name": "NativeDocxNestedTextInventoryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNestedTextInventoryV1"
+            },
+            {
+              "name": "NativeDocxNoteNumberingV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNoteNumberingV1"
             },
             {
               "name": "NativeDocxNumberingReferenceV1",
