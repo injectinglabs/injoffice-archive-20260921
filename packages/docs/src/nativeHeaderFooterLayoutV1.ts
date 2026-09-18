@@ -15,6 +15,7 @@ import type {
   NativeDocxHeaderFooterReferenceV1,
   NativeDocxSectionV1,
   NativeDocxStoryV1,
+  NativeDocxUnsupportedCapabilityV1,
 } from './nativeContract.js'
 import { DOCX_MAX_TWIPS_FOR_MILLIPOINTS } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
@@ -98,7 +99,9 @@ export interface NativeDocxHeaderFooterPageLayoutV1 {
  * separately as UNMODELED_PARAGRAPH_CONTENT, so this member cannot hide one either.
  *
  * Deliberately NOT included: FIELD_SEMANTICS (complex fields keep stale cached result
- * text, so the story must refuse rather than paint it), UNMODELED_SECTION_PROPERTY
+ * text, so the story must refuse rather than paint it; the one simple STYLEREF field
+ * whose whole element the extractor drops is admitted by name below, never by code),
+ * UNMODELED_SECTION_PROPERTY
  * (section geometry has its own omit flag), UNMODELED_BODY_BLOCK /
  * NESTED_TABLE_OR_CELL_MARKUP / UNMODELED_TABLE_PROPERTY (header/footer tables always
  * refuse), and every other drawing-refusal code the omitted-content discloser does not
@@ -129,6 +132,57 @@ export const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<stri
   'NUMBERING_STYLE_PRESERVED',
   'HYPERLINK_SEMANTICS',
 ])
+
+/** The extractor's own sentence for a `w:fldSimple` whose instruction keyword is
+ * STYLEREF, mirrored verbatim from `nativeStyleReferenceFieldMessage` in
+ * go/docxpatch/native_flat_page_field.go. It is the only FIELD_SEMANTICS message that
+ * names STYLEREF, and it is produced from exactly one site: the simple-field branch. */
+export const DOCX_STYLE_REFERENCE_FIELD_MESSAGE = "STYLEREF repeats the nearest paragraph of a named style after pagination and resolves that name against the authoring application's localized style table, so no result follows from the package alone" as const
+
+/** `/w:hdr[1]/w:p[1]/w:fldSimple[1]` and friends; parser-owned namespace prefixes are
+ * hashed for unknown namespaces, so the local name decides, exactly as the approximate
+ * omitted-content classifier already does. */
+const SIMPLE_FIELD_PATH = /\/(?:[A-Za-z0-9_.-]+:)?fldSimple\[/
+
+/** A FIELD_SEMANTICS record the approximate header/footer tier lays out around instead
+ * of refusing the whole document, admitted one field keyword at a time.
+ *
+ * STYLEREF is admitted, and only when the record anchors on a `w:fldSimple`. That is the
+ * one field shape the extractor drops *whole*: `extractParagraphRuns` records this code
+ * and `continue`s past the element, so neither the instruction nor the cached result run
+ * reaches `NativeDocxParagraphV1.runs`. The paragraph's literal runs - `First page
+ * styleref: ` in StyleRef-DE.docx - are ordinary text that owes nothing to any locale and
+ * shapes normally, so the header is painted from them with the field result absent rather
+ * than the whole five-page document refusing.
+ *
+ * The result is NOT resolved, NOT taken from the cache, and NOT replaced by Word's error
+ * string, and that is deliberate. `word/styles.xml` states the built-in English names
+ * (`heading 1`, `Subtitle`, `Intense Emphasis`) while the fields ask for German display
+ * names that appear nowhere in the package, so the result is a function of the rendering
+ * application's UI locale rather than of the document: the authoring German Word prints
+ * real paragraph text, an English Word prints `Error! Use the Home tab to apply
+ * Überschrift 1 ...`, and this package alone determines neither. The caches are stale by
+ * construction on top of that - `header2.xml` carries page 5's answer - so painting them
+ * would put page 5's text on page 3.
+ *
+ * Every other field keeps refusing, by construction and not by omission. A *complex*
+ * field (`w:fldChar`/`w:instrText`) is recorded with a different sentence and its runs
+ * ARE extracted individually, so its stale cached result survives as ordinary text and
+ * must still refuse the story; requiring the `w:fldSimple` anchor makes that structural
+ * rather than a matter of wording. Every non-STYLEREF simple field is recorded with
+ * `nativeUnmodeledPageFieldMessage` and does not match. PAGE and NUMPAGES never reach
+ * here at all: they are modeled, and their variants are validated per page.
+ *
+ * FIELD_SEMANTICS is a member of DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, so the dropped
+ * field is reported by the approximate omitted-content discloser under the `field`
+ * category and the drop is never silent - the invariant #334 established. Strict keeps
+ * refusing, because this predicate is only ever consulted behind
+ * `approximate_nonblocking_source`, which only the approximate paint sets. */
+export function nativeDocxApproximateOmittedHeaderFooterFieldV1(entry: NativeDocxUnsupportedCapabilityV1): boolean {
+  return entry.code === 'FIELD_SEMANTICS' && entry.capability === 'fields'
+    && entry.message === DOCX_STYLE_REFERENCE_FIELD_MESSAGE
+    && SIMPLE_FIELD_PATH.test(entry.anchor?.path ?? '')
+}
 
 /** Section-scoped source codes approximate header/footer placement omits instead of
  * declaring the page geometry unavailable. The filter below exists to catch section
@@ -168,7 +222,8 @@ export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE: ReadonlySet<
 /** Declared approximate header/footer policies; each is disclosed as an envelope reason. */
 export const DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING = 'Approximate read-only preview: a header or footer story taller than its reserved band is painted at the authored header/footer distance and may overlap the body box; Word moves the body instead.' as const
 export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING = 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.' as const
-export type NativeDocxHeaderFooterApproximationPolicyV1 = 'band-overflow' | 'omitted-paragraph'
+export const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING = 'Approximate read-only preview: a header/footer STYLEREF field result is omitted because it follows from the rendering application’s localized style table rather than the package; the paragraph is painted from its remaining literal runs and the omission stays disclosed as omitted content.' as const
+export type NativeDocxHeaderFooterApproximationPolicyV1 = 'band-overflow' | 'omitted-paragraph' | 'omitted-field'
 export interface NativeDocxHeaderFooterApproximationV1 {
   policy: NativeDocxHeaderFooterApproximationPolicyV1
   scope_id: string
@@ -314,7 +369,7 @@ function selectedStory(document: NativeDocxDocumentV1, region: NativeDocxHeaderF
   return story
 }
 
-function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[]): void {
+function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[],approximations?:NativeDocxHeaderFooterApproximationV1[]): void {
   const selectedScopes = scopes(story)
   for (const block of story.blocks) {
     if (block.kind === 'table') diagnostics.push(diagnostic('selected-story-table', block.id, 'Selected header/footer tables require native table grid layout and are refused'))
@@ -329,6 +384,13 @@ function validateSelectedStory(input: NativeDocxHeaderFooterLayoutInputV1, story
   }
   const nonblocking = input.approximate_nonblocking_source
   for (const unsupported of input.document.unsupported) if (selectedScopes.has(unsupported.scope_id) && !nonblocking?.has(unsupported.code)) {
+    // Approximate only, one field keyword at a time: the dropped STYLEREF result is
+    // declared as an applied policy here and disclosed as omitted content downstream,
+    // and the paragraph's own literal runs still paint.
+    if (approximations && nativeDocxApproximateOmittedHeaderFooterFieldV1(unsupported)) {
+      approximations.push({ policy: 'omitted-field', scope_id: unsupported.scope_id, message: DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING })
+      continue
+    }
     const code = unsupported.code === 'FIELD_SEMANTICS' ? 'selected-story-field' : 'selected-story-unsupported'
     diagnostics.push(diagnostic(code, unsupported.scope_id, `Selected header/footer source is preserve-only: ${unsupported.code}: ${unsupported.message}`))
   }
@@ -391,7 +453,7 @@ function storyLineOffsets(story: NativeDocxStoryV1, shaped: Map<string, NativeDo
 }
 
 function placeStory(input: NativeDocxHeaderFooterLayoutInputV1, page: NativeDocxPaginatedPageV1, section: NativeDocxSectionV1, region: NativeDocxHeaderFooterRegionV1, reference: NativeDocxHeaderFooterReferenceV1, story: NativeDocxStoryV1, diagnostics: NativeDocxHeaderFooterDiagnosticV1[],fontRecords?:readonly NativeDocxFontSubstitutionV1[],approximations?:NativeDocxHeaderFooterApproximationV1[]): NativeDocxPlacedHeaderFooterLineV1[] {
-  validateSelectedStory(input, story, diagnostics,fontRecords)
+  validateSelectedStory(input, story, diagnostics,fontRecords,approximations)
   const shaped = new Map((input.page_field_variants?.find((variant) => variant.page_id === page.id)?.shaped_lines ?? input.shaped_lines).paragraphs.map((entry) => [entry.paragraph_id, entry]))
   const offsets = storyLineOffsets(story, shaped, input.resolved_layout, diagnostics, approximations)
   if (!offsets || diagnostics.length > 0) return []
@@ -500,7 +562,9 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
 export function nativeDocxApproximateHeaderFooterPolicyReasonsV1(layout: NativeDocxHeaderFooterLayoutV1): string[] {
   const reasons: string[] = []
   for (const entry of layout.approximations ?? []) {
-    const reason = entry.policy === 'band-overflow' ? DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING : DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING
+    const reason = entry.policy === 'band-overflow' ? DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING
+      : entry.policy === 'omitted-field' ? DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING
+        : DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING
     if (!reasons.includes(reason)) reasons.push(reason)
   }
   return reasons

@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
+  DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE,
+  DOCX_STYLE_REFERENCE_FIELD_MESSAGE,
+  nativeDocxApproximateOmittedHeaderFooterFieldV1,
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
   layoutNativeDocxHeadersFootersV1,
@@ -322,5 +325,74 @@ describe('approximate header/footer placement policy', () => {
     const story = withText.document.footers[0]!
     ;(story.blocks[0]!.paragraph!.runs as unknown[]).push({ kind: 'text', id: 'run:footer-text', anchor: anchor(story.part_name, '/w:ftr[1]/w:p[1]/w:r[1]'), text: 'Page' })
     expect(layoutNativeDocxHeadersFootersV1(withText)).toEqual(expect.objectContaining({ status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-paragraph-missing' })]) }))
+  })
+
+  // StyleRef-DE.docx: three header parts, each `<literal runs><w:fldSimple STYLEREF>`.
+  // The extractor drops the whole `w:fldSimple`, so the cached result never reaches the
+  // model and the literal prefix ("First page styleref: ") is ordinary text.
+  const styleReferenceField = (part: string, scope: string) => ({
+    id: `unsupported:styleref:${scope}`, code: 'FIELD_SEMANTICS', capability: 'fields', scope_id: scope,
+    anchor: anchor(part, '/w:hdr[1]/w:p[1]/w:fldSimple[1]'), preservation: 'refuse-mutation',
+    message: DOCX_STYLE_REFERENCE_FIELD_MESSAGE,
+  })
+
+  it('paints a header whose dropped STYLEREF simple field is omitted, and keeps the strict tier refusing', () => {
+    const record = styleReferenceField('word/header-first.xml', 'paragraph:header-first')
+    const strict = fixture(); strict.document.unsupported.push(record as never)
+    expect(layoutNativeDocxHeadersFootersV1(strict)).toEqual(expect.objectContaining({
+      status: 'refused', pages: [],
+      diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-field', scope_id: 'paragraph:header-first' })]),
+    }))
+    const tolerated = approximate(fixture()); tolerated.document.unsupported.push(record as never)
+    const placed = layoutNativeDocxHeadersFootersV1(tolerated)
+    expect(placed.status).toBe('placed')
+    // The header still paints, from its own literal runs, at the authored band origin.
+    expect(placed.pages[0]!.lines.find((line) => line.region === 'header')).toEqual(expect.objectContaining({ paragraph_id: 'paragraph:header-first', x_millipoints: 72_000, y_millipoints: 36_000 }))
+    expect(placed.approximations).toEqual([{ policy: 'omitted-field', scope_id: 'paragraph:header-first', message: DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING }])
+    expect(nativeDocxApproximateHeaderFooterPolicyReasonsV1(placed)).toEqual([DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING])
+    // The applied policy is part of the canonical layout hash, exactly like the others.
+    expect(placed.sha256).not.toBe(layoutNativeDocxHeadersFootersV1(approximate(fixture())).sha256)
+  })
+
+  it('never admits the code, only that one field record, so every other field keeps refusing', () => {
+    // FIELD_SEMANTICS itself stays out of the allowlist: admitting the code would also
+    // admit a complex field, whose stale cached result IS extracted as ordinary text.
+    expect(NONBLOCKING.has('FIELD_SEMANTICS')).toBe(false)
+    const record = styleReferenceField('word/header-first.xml', 'paragraph:header-first')
+    expect(nativeDocxApproximateOmittedHeaderFooterFieldV1(record as never)).toBe(true)
+    const negatives: Array<[string, Record<string, unknown>]> = [
+      // The complex-field sentence, on the same anchor: a different field shape.
+      ['complex field', { ...record, message: 'Complex page fields require an exact flat begin/instruction/separate/result/end run sequence' }],
+      // Every non-STYLEREF simple field carries the page-field sentence instead.
+      ['other simple field', { ...record, message: 'Only an unlocked simple decimal PAGE or NUMPAGES field with one text result run is modeled' }],
+      // The instruction/boundary runs of a complex field, which are extracted one by one.
+      ['field boundary run', { ...record, message: 'Field instructions and boundaries are preserved verbatim', anchor: anchor('word/header-first.xml', '/w:hdr[1]/w:p[1]/w:r[7]/w:fldChar[1]') }],
+      // The STYLEREF sentence on anything but a w:fldSimple: not the dropped-whole shape.
+      ['non-simple anchor', { ...record, anchor: anchor('word/header-first.xml', '/w:hdr[1]/w:p[1]/w:r[7]/w:instrText[1]') }],
+      ['no anchor', { id: record.id, code: record.code, capability: record.capability, scope_id: record.scope_id, preservation: record.preservation, message: record.message }],
+      // A record that names STYLEREF under some other capability is not this one.
+      ['other capability', { ...record, capability: 'runs' }],
+    ]
+    for (const [name, entry] of negatives) {
+      expect(nativeDocxApproximateOmittedHeaderFooterFieldV1(entry as never), name).toBe(false)
+      const blocking = approximate(fixture())
+      blocking.document.unsupported.push(entry as never)
+      expect(layoutNativeDocxHeadersFootersV1(blocking), name).toEqual(expect.objectContaining({
+        status: 'refused', pages: [],
+        diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'selected-story-field', scope_id: 'paragraph:header-first' })]),
+      }))
+    }
+  })
+
+  it('keeps the omitted STYLEREF field reportable by the omitted-content discloser', () => {
+    // INERTNESS GUARD: every assertion here already holds on the parent commit. It pins
+    // the precondition this change depends on rather than the change itself, so a later
+    // edit that drops FIELD_SEMANTICS from either disclosure set fails here instead of
+    // silently turning the omission below into an undisclosed one.
+    // The invariant #334 established: this tier may lay out around a source record only
+    // when the approximate omitted-content discloser names it, or the drop is silent.
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('FIELD_SEMANTICS')).toBe(true)
+    expect(nativeDocxOmittedContentCategoryV1('FIELD_SEMANTICS', '/w:hdr[1]/w:p[1]/w:fldSimple[1]')).toBe('field')
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('FIELD_SEMANTICS')).toBe(true)
   })
 })
