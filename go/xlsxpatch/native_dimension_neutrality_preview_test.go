@@ -46,12 +46,15 @@ func hasNeutralCode(codes []string, code string) bool {
 func TestDimensionNeutralityQualifiesNonDimensionalMarkup(t *testing.T) {
 	for _, ns := range []string{spreadsheetMLTransitional, spreadsheetMLStrict} {
 		codes := neutralityCodes(t, neutralitySource(ns))
-		for _, want := range []string{"COLS_ATTRIBUTES", "COLUMN_DIMENSION_EXTRAS", "ROW_DIMENSION_EXTRAS", "SHEET_FORMAT_EXTRAS", "SHEET_VIEW_GEOMETRY", "WORKSHEET_ATTRIBUTES"} {
+		// A worksheet with no foreign child at all raises no foreign markup
+		// and clears the code harmlessly, the same way an absent sheetViews
+		// clears SHEET_VIEW_GEOMETRY.
+		for _, want := range []string{"COLS_ATTRIBUTES", "COLUMN_DIMENSION_EXTRAS", "FOREIGN_WORKSHEET_MARKUP", "ROW_DIMENSION_EXTRAS", "SHEET_FORMAT_EXTRAS", "SHEET_VIEW_GEOMETRY", "WORKSHEET_ATTRIBUTES"} {
 			if !hasNeutralCode(codes, want) {
 				t.Fatalf("%s was not cleared for %s: %v", want, ns, codes)
 			}
 		}
-		if len(codes) != 6 {
+		if len(codes) != 7 {
 			t.Fatalf("unexpected cleared codes for %s: %v", ns, codes)
 		}
 	}
@@ -131,7 +134,7 @@ func TestDimensionNeutralityJoinsWorksheetParts(t *testing.T) {
 		seen[entry.SheetPart] = true
 		for _, code := range entry.Codes {
 			switch code {
-			case "COLS_ATTRIBUTES", "COLUMN_DIMENSION_EXTRAS", "ROW_DIMENSION_EXTRAS", "SHEET_FORMAT_EXTRAS", "SHEET_VIEW_GEOMETRY", "WORKSHEET_ATTRIBUTES":
+			case "COLS_ATTRIBUTES", "COLUMN_DIMENSION_EXTRAS", "FOREIGN_WORKSHEET_MARKUP", "ROW_DIMENSION_EXTRAS", "SHEET_FORMAT_EXTRAS", "SHEET_VIEW_GEOMETRY", "WORKSHEET_ATTRIBUTES":
 			default:
 				t.Fatalf("evidence cleared a code outside the policy: %s", code)
 			}

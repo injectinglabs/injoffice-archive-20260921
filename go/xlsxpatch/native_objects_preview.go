@@ -27,6 +27,7 @@ type NativeWorkbookObjectsV1 struct {
 	DimensionNeutrality []NativeSheetDimensionNeutralityV1 `json:"dimension_neutrality,omitempty"`
 	PageSettings        []NativeSheetPageSettingsV1        `json:"page_settings,omitempty"`
 	DrawingObjects      []NativeDrawingObjectV1            `json:"drawing_objects,omitempty"`
+	FormControls        []NativeFormControlV1              `json:"form_controls,omitempty"`
 	PrintAreas          []NativeSheetPrintAreaV1           `json:"print_areas,omitempty"`
 	PrintAreaSets       []NativeSheetPrintAreaSetV1        `json:"print_area_sets,omitempty"`
 	PrintTitles         []NativeSheetPrintTitlesV1         `json:"print_titles,omitempty"`
@@ -194,6 +195,10 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	if err != nil {
 		return nil, err
 	}
+	result.FormControls, err = previewNativeFormControls(pkg, workbook.Sheets)
+	if err != nil {
+		return nil, err
+	}
 	result.PrintAreas = previewNativePrintAreas(pkg.files[workbookPart.part], workbook.Sheets)
 	workbookXML := pkg.files[workbookPart.part]
 	result.PrintAreaSets = previewNativePrintAreaSets(workbookXML, workbook.Sheets, newNativePrintCountaSourceContext(workbook, workbookXML, result.PackageSHA256))
@@ -206,9 +211,25 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 			continue
 		}
 		if areas := previewNativeDimensionPrintArea(pkg.files[workbook.Sheets[i].PartName]); len(areas) == 1 {
+			warning := "Read-only print area from the worksheet dimension element, anchored at A1. ECMA-376 prints the used range when _xlnm.Print_Area is absent, and the used range starts at A1: leading empty rows and columns are printed, not skipped. Not Excel printer calibration."
+			// The dimension element states the used range of cells. Excel's
+			// printed used range also covers its anchored objects, so a
+			// worksheet whose only content is form controls would otherwise
+			// print an empty page. Only controls this tier paints extend it.
+			if extended := nativeFormControlPrintArea(result.FormControls, workbook.Sheets[i].PartName); extended != nil {
+				if extended.EndRow > areas[0].EndRow || extended.EndColumn > areas[0].EndColumn {
+					if extended.EndRow > areas[0].EndRow {
+						areas[0].EndRow = extended.EndRow
+					}
+					if extended.EndColumn > areas[0].EndColumn {
+						areas[0].EndColumn = extended.EndColumn
+					}
+					warning += " Extended to cover this sheet's source-qualified form controls: Excel's printed used range includes its anchored objects."
+				}
+			}
 			result.PrintAreaSets[i].Status = "available"
 			result.PrintAreaSets[i].Areas = areas
-			result.PrintAreaSets[i].Warnings = []string{"Read-only print area from the worksheet dimension element, anchored at A1. ECMA-376 prints the used range when _xlnm.Print_Area is absent, and the used range starts at A1: leading empty rows and columns are printed, not skipped. Not Excel printer calibration."}
+			result.PrintAreaSets[i].Warnings = []string{warning}
 		}
 	}
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)

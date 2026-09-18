@@ -1,6 +1,7 @@
 package xlsxpatch
 
 import (
+	"encoding/xml"
 	"sort"
 	"strings"
 )
@@ -22,9 +23,14 @@ const nativeDimensionNeutralityPolicy = "non-dimensional-worksheet-markup-v1"
 // separates the two cases so that "we did not model it" stops being read as
 // "the dimensions may be wrong".
 //
+// FOREIGN_WORKSHEET_MARKUP is the one code here that names markup outside
+// SpreadsheetML entirely, and it is cleared only for anchored form controls
+// (see nativeNeutralForeignMarkup).
+//
 // Nothing here reproduces the markup it clears. Frozen panes, zoom, gridline
-// visibility, outline levels, thick-edge flags and descent metadata stay
-// omitted and stay disclosed. A code that is absent from Codes keeps refusing.
+// visibility, outline levels, thick-edge flags, descent metadata and the
+// controls themselves stay omitted and stay disclosed. A code that is absent
+// from Codes keeps refusing.
 type NativeSheetDimensionNeutralityV1 struct {
 	SheetPart string   `json:"sheet_part"`
 	Policy    string   `json:"policy"`
@@ -110,6 +116,9 @@ func previewNativeDimensionNeutrality(raw []byte, part string) NativeSheetDimens
 	if data := root.child("sheetData"); data != nil && nativeNeutralRows(root, data) {
 		codes["ROW_DIMENSION_EXTRAS"] = true
 	}
+	if nativeNeutralForeignMarkup(root) {
+		codes["FOREIGN_WORKSHEET_MARKUP"] = true
+	}
 	ordered := make([]string, 0, len(codes))
 	for code := range codes {
 		ordered = append(ordered, code)
@@ -118,6 +127,56 @@ func previewNativeDimensionNeutrality(raw []byte, part string) NativeSheetDimens
 	result.Codes = ordered
 	result.Warnings = []string{nativeDimensionNeutralityAvailable}
 	return result
+}
+
+// nativeNeutralForeignMarkup accepts a worksheet whose only foreign-namespace
+// direct children are markup-compatibility AlternateContent blocks holding
+// nothing but a SpreadsheetML <controls> block.
+//
+// FOREIGN_WORKSHEET_MARKUP is raised by any direct child of CT_Worksheet
+// outside the SpreadsheetML namespace, which is how Excel writes the form
+// controls block: mc:AlternateContent wrapping mc:Choice Requires="x14". The
+// controls inside are anchored objects. ECMA-376 gives CT_ObjectAnchor no role
+// in a row height, a column width or a merged rectangle - the anchor is read
+// from the grid, not written to it - so the bounded dimension projection is
+// unchanged. An mc:Fallback is accepted only when it is empty, because a
+// Fallback with content states an alternative this reader is not applying.
+//
+// Nothing here reproduces the markup it clears. A worksheet carrying any other
+// foreign child, or an AlternateContent holding anything but controls, keeps
+// the code refusing.
+func nativeNeutralForeignMarkup(root *previewXML) bool {
+	for _, child := range root.children {
+		if child.name.Space == root.name.Space {
+			continue
+		}
+		if child.name != (xml.Name{Space: nativeMarkupCompatibilityNamespace, Local: "AlternateContent"}) {
+			return false
+		}
+		if !nativeNeutralPreviewAttributesEmpty(child) || strings.TrimSpace(child.text) != "" {
+			return false
+		}
+		for _, branch := range child.children {
+			if branch.name == (xml.Name{Space: nativeMarkupCompatibilityNamespace, Local: "Fallback"}) {
+				if len(branch.children) != 0 || strings.TrimSpace(branch.text) != "" {
+					return false
+				}
+				continue
+			}
+			if branch.name != (xml.Name{Space: nativeMarkupCompatibilityNamespace, Local: "Choice"}) {
+				return false
+			}
+			if strings.TrimSpace(branch.text) != "" {
+				return false
+			}
+			for _, block := range branch.children {
+				if block.name != (xml.Name{Space: root.name.Space, Local: "controls"}) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 // nativeNeutralPreviewLeaf accepts an attribute-only element whose attributes

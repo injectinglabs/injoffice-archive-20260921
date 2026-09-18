@@ -28,6 +28,7 @@ const GATED=[
  {code:'COLUMN_DIMENSION_EXTRAS',capability:'dimensions',message:'outline, collapsed, phonetic, or unmodeled column attributes are preserved'},
  {code:'COLS_ATTRIBUTES',capability:'dimensions',message:'unmodeled column-container attributes are preserved exactly'},
  {code:'WORKSHEET_ATTRIBUTES',capability:'worksheet-features',message:'unmodeled worksheet attributes remain authority-bound to the source package'},
+ {code:'FOREIGN_WORKSHEET_MARKUP',capability:'extensions',message:'foreign worksheet markup remains source-authoritative'},
 ] as const
 
 function unsupportedID(code:string,capability:string):string{
@@ -111,10 +112,23 @@ describe('non-dimensional worksheet markup evidence',()=>{
   expect(()=>compileNativeSheetGeometryV2(model,'7',area,authority,partial)).toThrow('ROW_DIMENSION_EXTRAS are not projected exactly')
  })
 
- it('never waives markup outside the bounded projection vocabulary',()=>{
+ // FOREIGN_WORKSHEET_MARKUP joined the policy's list for the one shape the Go
+ // tier qualifies: a worksheet whose every foreign child is a
+ // markup-compatibility block holding nothing but anchored form controls.
+ // Evidence that does not list it leaves that refusal standing, and evidence
+ // naming a code the policy never lists is not evidence at all.
+ it('waives foreign worksheet markup only when the evidence lists it',()=>{
   const {model,authority}=fixture([{code:'FOREIGN_WORKSHEET_MARKUP',capability:'extensions',message:'foreign worksheet markup remains source-authoritative'}])
-  expect(()=>compileNativeSheetGeometryV2(model,'7',area,authority,objects(model,[evidence()])))
+  const silent=objects(model,[evidence({codes:['SHEET_VIEW_GEOMETRY']})])
+  expect(()=>compileNativeSheetGeometryV2(model,'7',area,authority,silent))
    .toThrow('FOREIGN_WORKSHEET_MARKUP are not projected exactly')
+  expect(()=>compileNativeSheetGeometryV2(model,'7',area,authority,objects(model,[evidence()]))).not.toThrow()
+ })
+
+ it('never accepts evidence for a code outside the bounded projection vocabulary',()=>{
+  for(const code of ['DRAWING_REFERENCE','MERGED_CELLS','WORKSHEET_EXTENSIONS']){
+   expect(()=>decodeNativeSheetDimensionNeutralityV1([evidence({codes:[code] as never})])).toThrow()
+  }
  })
 
  it('refuses evidence that does not join this worksheet part',()=>{
