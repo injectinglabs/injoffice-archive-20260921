@@ -1810,9 +1810,17 @@ describe('native DOCX pagination v1', () => {
   it('paints a paragraph whose spacing Word determines automatically', () => {
     // w:beforeAutospacing/w:afterAutospacing is an exact source shape whose
     // measurement Word determines; the resolved layout owns that value and the
-    // approximate tier already paints it. Spacing structure the resolved-layout
-    // subset cannot read at all still refuses in both tiers.
-    for (const code of ['AUTO_PARAGRAPH_SPACING_PRESERVED', 'UNMODELED_PARAGRAPH_SPACING'] as const) {
+    // approximate tier already paints it.
+    //
+    // A NEGATIVE w:line is also a measurement Word reads - it applies the
+    // absolute value as an exact line height and compresses the lines until
+    // they overlap - so THE PAGE IS PAINTED WITH THE COMPRESSION UNAPPLIED: the
+    // paragraph keeps the spacing it inherits and its lines sit further apart
+    // than Word's. Measured on Word's own export of tdf125469_singleSpacing.docx,
+    // Word puts the two lines of the last paragraph 12.00 pt apart. The strict
+    // tier keeps refusing it, and spacing structure the resolved-layout subset
+    // cannot read at all still refuses on both tiers.
+    for (const code of ['AUTO_PARAGRAPH_SPACING_PRESERVED', 'NEGATIVE_LINE_SPACING_UNAPPLIED', 'UNMODELED_PARAGRAPH_SPACING', 'INVALID_LINE_SPACING'] as const) {
       const request = fixture({ lineCounts: [1, 1] })
       const marked = request.document.body.blocks[0]!.paragraph!
       request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'paragraph-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
@@ -1822,7 +1830,7 @@ describe('native DOCX pagination v1', () => {
       const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
       expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
       const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
-      if (code === 'UNMODELED_PARAGRAPH_SPACING') {
+      if (code === 'UNMODELED_PARAGRAPH_SPACING' || code === 'INVALID_LINE_SPACING') {
         expect(approximate.layout.status, code).toBe('refused')
         continue
       }

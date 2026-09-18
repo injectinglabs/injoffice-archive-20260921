@@ -47,6 +47,11 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   // result this preview does not produce, so it is disclosed here rather than
   // left to a formatting-only note.
   'CELL_TEXT_DIRECTION_UNSUPPORTED',
+  // Word compresses a paragraph whose w:line is negative until its lines
+  // overlap; this tier paints them at the inherited spacing instead. The
+  // compressed line box Word draws is absent from the page, so it is disclosed
+  // here rather than left as an approximated property of painted content.
+  'NEGATIVE_LINE_SPACING_UNAPPLIED',
 ])
 
 /** Shaping diagnostics approximate preview ignores; strict paint refuses them. */
@@ -118,7 +123,7 @@ export function nativeDocxOmittedContentCategoryV1(code: string, path: string | 
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
   // A run-typography feature the painted run does not carry is a deviation in
   // painted text, so it is disclosed under the text category next to it.
-  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED') return 'text'
+  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED') return 'text'
   return 'other'
 }
 
