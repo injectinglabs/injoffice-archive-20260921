@@ -330,6 +330,7 @@ interface PaginationContext {
   columnFlow?: NativeDocxColumnParagraphFlowV1
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   flowBreaks: Map<string, NativeDocxFlowBreakControlV1>
+  shapedFlowBreaks: Map<string, NativeDocxFlowBreakControlV1>
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
   diagnostics: NativeDocxPaginationDiagnosticV1[]
@@ -876,6 +877,32 @@ function bodyFlowBreaks(document: NativeDocxDocumentV1): Map<string, NativeDocxF
   return breaks
 }
 
+/**
+ * The flow break of a shaped line, if it carries one. A `line-break` ends a line
+ * inside the same column and is not a flow control.
+ */
+function lineFlowBreak(line: NativeDocxShapedLineV1): NativeDocxFlowBreakControlV1 | undefined {
+  const control = line.hard_break_after?.control
+  return control === 'page-break' || control === 'column-break' ? control : undefined
+}
+
+/**
+ * The flow breaks the shaped-lines input itself places. A mid-paragraph page or
+ * column break follows shaped content, so the shaper knows which line it ends
+ * and marks it as `hard_break_after`; pagination then splits at that line
+ * instead of refusing the control as unrepresented. `bodyFlowBreaks` keeps the
+ * separate case of a break that opens its own paragraph, where no shaped line
+ * marks the position and the whole paragraph moves.
+ */
+function shapedFlowBreakRuns(shaped: NativeDocxShapedLinesV1): Map<string, NativeDocxFlowBreakControlV1> {
+  const runs = new Map<string, NativeDocxFlowBreakControlV1>()
+  for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) {
+    const control = lineFlowBreak(line)
+    if (control && line.hard_break_after) runs.set(line.hard_break_after.source_run_id, control)
+  }
+  return runs
+}
+
 function blockParagraphs(block: NativeDocxBlockV1): NativeDocxParagraphV1[] {
   return block.paragraph ? [block.paragraph] : block.table ? block.table.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs)) : []
 }
@@ -1020,7 +1047,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     }
   }
   for (const paragraph of bodyParagraphs(document)) for (const run of paragraph.runs) {
-    if (run.control && UNSUPPORTED_CONTROLS.has(run.control) && context.flowBreaks.get(paragraph.id) !== run.control) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
+    if (run.control && UNSUPPORTED_CONTROLS.has(run.control) && context.flowBreaks.get(paragraph.id) !== run.control && context.shapedFlowBreaks.get(run.id) !== run.control) refuse(context, 'source-control-unsupported', run.id, `Native ${run.control} is not represented by the shaped-lines v1 pagination input`)
     if (run.drawing) {
       const image = qualifyNativeDocxInlineImageV1(document, run.id, run.drawing)
       if (!image.ok) {
@@ -1037,6 +1064,16 @@ function refuseUnsupportedSource(context: PaginationContext): void {
       } else {
         refuse(context, 'body-structure-unsupported', run.id, `Native ${run.reference.kind} reference placement is not represented by the shaped-lines v1 pagination input`)
       }
+    }
+  }
+  // Only the top-level body flow can honour a flow break: a table cell, a
+  // header, a footer and a note each lay their story out inside a box this
+  // paginator does not re-flow, so a break placed there would be silently lost.
+  const topLevelBodyParagraphIDs = new Set(document.body.blocks.flatMap((block) => block.kind === 'paragraph' && block.paragraph ? [block.paragraph.id] : []))
+  for (const paragraph of shaped.paragraphs) for (const line of paragraph.lines) {
+    const control = lineFlowBreak(line)
+    if (control && !topLevelBodyParagraphIDs.has(paragraph.paragraph_id)) {
+      refuse(context, 'source-control-unsupported', line.id, `Shaped ${control} outside a top-level body paragraph has no modeled flow in pagination v1`)
     }
   }
   for (const diagnostic of shaped.diagnostics) {
@@ -1539,11 +1576,11 @@ function sumLineHeights(lines: readonly NativeDocxShapedLineV1[], start = 0, end
   return result
 }
 
-function maxLinesThatFit(lines: readonly NativeDocxShapedLineV1[], start: number, available: number, initialY = 0): number {
+function maxLinesThatFit(lines: readonly NativeDocxShapedLineV1[], start: number, available: number, initialY = 0, end = lines.length): number {
   let height = 0
   let lineY = initialY
   let count = 0
-  for (let index = start; index < lines.length; index += 1) {
+  for (let index = start; index < end; index += 1) {
     const line = lines[index]!
     const effectiveY = Math.max(lineY, line.exclusion_end_millipoints ?? lineY)
     const next = checkedSum(effectiveY, line.line_height_millipoints)
@@ -1581,6 +1618,10 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   }
   const initialGap = paragraphGap(context, paragraph, false)
   const keepLines = resolved.properties.keep_lines === true
+  if (keepLines && paragraph.lines.some((line) => lineFlowBreak(line) !== undefined)) {
+    refuse(context, 'keep-lines-unsatisfiable', paragraph.paragraph_id, 'keep_lines cannot hold a paragraph in one column across its own page or column break')
+    return
+  }
   if (keepLines) {
     const requiredLines = flowHeight(paragraph.lines, context.cursorY + initialGap)
     const required = requiredLines === undefined ? undefined : checkedSum(initialGap, requiredLines)
@@ -1602,10 +1643,16 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   }
   let start = 0
   while (start < paragraph.lines.length && !context.refused) {
+    // A flow break ends its line, so the lines up to and including it are the
+    // only ones that can share a column with the current cursor. Fitting, widow
+    // control and the slice all stop there; the break itself then moves the
+    // rest of the paragraph.
+    const breakIndex = paragraph.lines.findIndex((line, index) => index >= start && lineFlowBreak(line) !== undefined)
+    const segmentEnd = breakIndex === -1 ? paragraph.lines.length : breakIndex + 1
     const continuation = start > 0
     const gap = paragraphGap(context, paragraph, continuation)
     const available = remainingHeight(context) - gap
-    let fit = maxLinesThatFit(paragraph.lines, start, available, context.cursorY + gap)
+    let fit = maxLinesThatFit(paragraph.lines, start, available, context.cursorY + gap, segmentEnd)
     if (fit === 0) {
       if (columnHasContent(context)) {
         startNextFlowColumn(context)
@@ -1618,7 +1665,7 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
       refuse(context, 'line-geometry-invalid', paragraph.paragraph_id, 'The next shaped line plus required paragraph spacing cannot fit an empty section body box')
       return
     }
-    const remainingLines = paragraph.lines.length - start
+    const remainingLines = segmentEnd - start
     if (fit < remainingLines && (resolved.properties.widow_control ?? true)) {
       if (fit === 1) {
         if (columnHasContent(context)) {
@@ -1644,7 +1691,10 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
     }
     placeSlice(context, paragraph, start, fit, gap)
     start += fit
-    if (start < paragraph.lines.length) startNextFlowColumn(context)
+    const placedBreak = lineFlowBreak(paragraph.lines[start - 1]!)
+    if (placedBreak === 'page-break') startNextContentPage(context)
+    else if (placedBreak === 'column-break') startNextFlowColumn(context)
+    else if (start < paragraph.lines.length) startNextFlowColumn(context)
   }
   context.previousAfter = paragraph.spacing_after_millipoints
 }
@@ -2116,9 +2166,17 @@ function fillBalancedColumns(units: readonly BalanceUnit[], start: number, colum
  * The balance height is searched, not guessed: feasibility is monotone in the
  * height, so a bisection over the column height finds the one height Word's
  * rule names. Pages before the last one fill to the column height, which is the
- * same fill with the search skipped. A split that would violate keep_lines or
- * widow_control, and any paragraph carrying a keep_next, an explicit page break
- * or a flow break, still refuse rather than move lines heuristically.
+ * same fill with the search skipped.
+ *
+ * An explicit page or column break cuts the section into fragments, and a
+ * fragment a break ENDS is filled rather than balanced -- only the fragment the
+ * section itself ends is balanced. `office-hard-v2/pdf/columnbreak.pdf` is the
+ * oracle: its one two-column section holds a page break and then a column
+ * break, and Word paints both of the first fragment's lines in column 1 of page
+ * 1 with column 2 left empty, which is a fill; balancing that fragment would
+ * have painted one line per column. A split that would violate keep_lines or
+ * widow_control, and any paragraph carrying a keep_next or a page_break_before,
+ * still refuse rather than move lines heuristically.
  */
 function paginateExactlyBalancedGroup(
   context: PaginationContext,
@@ -2134,71 +2192,101 @@ function paginateExactlyBalancedGroup(
     return [{ native: block.paragraph, resolved: resolvedParagraph, shaped: shapedParagraph }]
   })
   if (entries.some((entry) => entry.shaped.lines.length === 0 || entry.resolved.properties.keep_next === true ||
-    entry.resolved.properties.page_break_before === true || context.flowBreaks.has(entry.native.id))) {
-    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing has no single fill plan across a keep_next, an explicit page break or a flow break')
+    entry.resolved.properties.page_break_before === true)) {
+    refuse(context, 'column-balance-ambiguous', group.section.id, 'Multi-column balancing has no single fill plan across a keep_next or a page_break_before')
     return
   }
   const units: BalanceUnit[] = []
+  // `breaks[i]` is the flow break that ends the fragment at `units[i]`. A break
+  // that opens its own paragraph ends the fragment at the unit before it, which
+  // is the same boundary expressed from the other side.
+  const breaks: (NativeDocxFlowBreakControlV1 | undefined)[] = []
   for (const [entryIndex, entry] of entries.entries()) {
+    const leading = context.flowBreaks.get(entry.native.id)
+    if (leading !== undefined) {
+      if (units.length === 0) {
+        refuse(context, 'column-balance-ambiguous', entry.native.id, 'A flow break that opens the multi-column fragment ends no fragment of it')
+        return
+      }
+      breaks[units.length - 1] = leading
+    }
     for (const [lineIndex, line] of entry.shaped.lines.entries()) {
       units.push({
         entryIndex, lineIndex, height: line.line_height_millipoints,
         gap: lineIndex > 0 ? 0 : Math.max(entries[entryIndex - 1]?.shaped.spacing_after_millipoints ?? 0, entry.shaped.spacing_before_millipoints),
       })
+      breaks[units.length - 1] = lineFlowBreak(line) ?? breaks[units.length - 1]
     }
   }
   const columns = group.section.page.columns
   let index = 0
   let sourceLine = 0
-  let consumedUnits = 0
-  let firstPage = true
-  while (consumedUnits < units.length && !context.refused) {
-    const participating = firstPage ? columns - context.currentColumnOrdinal : columns
-    const height = currentColumn(context)?.height_millipoints ?? 0
-    const openingGap = firstPage && consumedUnits === 0 && entries[0] ? paragraphGap(context, entries[0].shaped, false) : 0
-    const full = fillBalancedColumns(units, consumedUnits, participating, height, openingGap)
-    if (!full || participating < 1) {
-      refuse(context, 'column-balance-ambiguous', group.section.id, 'A shaped line of the balanced fragment is taller than the section column it would open')
-      return
-    }
-    let counts = full.counts
-    if (full.consumed === units.length - consumedUnits) {
-      // The fragment ends on this page, so Word balances it. Feasibility only
-      // improves with height, so bisect for the smallest height that still fits.
-      let low = 1
-      let high = height
-      while (low < high) {
-        const middle = low + Math.floor((high - low) / 2)
-        const plan = fillBalancedColumns(units, consumedUnits, participating, middle, openingGap)
-        if (plan && plan.consumed === units.length - consumedUnits) high = middle
-        else low = middle + 1
+  let fragmentStart = 0
+  while (fragmentStart < units.length && !context.refused) {
+    let last = fragmentStart
+    while (last < units.length && breaks[last] === undefined) last += 1
+    const terminator = last < units.length ? breaks[last] : undefined
+    const fragmentEnd = last < units.length ? last + 1 : units.length
+    const fragment = units.slice(fragmentStart, fragmentEnd)
+    let consumedUnits = 0
+    let firstPage = true
+    while (consumedUnits < fragment.length && !context.refused) {
+      const participating = firstPage ? columns - context.currentColumnOrdinal : columns
+      const height = currentColumn(context)?.height_millipoints ?? 0
+      const openingGap = fragmentStart === 0 && firstPage && consumedUnits === 0 && entries[0] ? paragraphGap(context, entries[0].shaped, false) : 0
+      const full = fillBalancedColumns(fragment, consumedUnits, participating, height, openingGap)
+      if (!full || participating < 1) {
+        refuse(context, 'column-balance-ambiguous', group.section.id, 'A shaped line of the balanced fragment is taller than the section column it would open')
+        return
       }
-      counts = fillBalancedColumns(units, consumedUnits, participating, low, openingGap)!.counts
-    }
-    for (let columnIndex = 0; columnIndex < participating && consumedUnits < units.length; columnIndex += 1) {
-      let quota = counts[columnIndex]!
-      while (quota > 0 && !context.refused) {
-        const entry = entries[index]!
-        const count = Math.min(quota, entry.shaped.lines.length - sourceLine)
-        const split = sourceLine > 0 || count < entry.shaped.lines.length
-        if (split && (entry.resolved.properties.keep_lines === true ||
-          ((entry.resolved.properties.widow_control ?? true) && count < 2))) {
-          refuse(context, 'column-balance-ambiguous', entry.native.id, 'The balanced column height would violate paragraph keep_lines or widow_control; constrained rebalancing is outside the bounded slice')
-          return
+      let counts = full.counts
+      if (terminator === undefined && full.consumed === fragment.length - consumedUnits) {
+        // The fragment ends on this page and no break ends it, so Word balances
+        // it. Feasibility only improves with height, so bisect for the smallest
+        // height that still fits.
+        let low = 1
+        let high = height
+        while (low < high) {
+          const middle = low + Math.floor((high - low) / 2)
+          const plan = fillBalancedColumns(fragment, consumedUnits, participating, middle, openingGap)
+          if (plan && plan.consumed === fragment.length - consumedUnits) high = middle
+          else low = middle + 1
         }
-        placeSlice(context, entry.shaped, sourceLine, count, paragraphGap(context, entry.shaped, sourceLine > 0))
-        context.previousAfter = entry.shaped.spacing_after_millipoints
-        sourceLine += count
-        consumedUnits += count
-        quota -= count
-        if (sourceLine === entry.shaped.lines.length) {
-          index += 1
-          sourceLine = 0
-        }
+        counts = fillBalancedColumns(fragment, consumedUnits, participating, low, openingGap)!.counts
       }
-      if (consumedUnits < units.length && !context.refused) startNextFlowColumn(context)
+      for (let columnIndex = 0; columnIndex < participating && consumedUnits < fragment.length; columnIndex += 1) {
+        let quota = counts[columnIndex]!
+        while (quota > 0 && !context.refused) {
+          const entry = entries[index]!
+          const count = Math.min(quota, entry.shaped.lines.length - sourceLine)
+          const split = sourceLine > 0 || count < entry.shaped.lines.length
+          // Widow/orphan control constrains where PAGINATION may cut a
+          // paragraph; an authored break already names the cut, so a slice that
+          // starts or ends on one is not a widow decision at all.
+          const forced = (sourceLine > 0 && lineFlowBreak(entry.shaped.lines[sourceLine - 1]!) !== undefined) || lineFlowBreak(entry.shaped.lines[sourceLine + count - 1]!) !== undefined
+          if (split && (entry.resolved.properties.keep_lines === true ||
+            (!forced && (entry.resolved.properties.widow_control ?? true) && count < 2))) {
+            refuse(context, 'column-balance-ambiguous', entry.native.id, 'The balanced column height would violate paragraph keep_lines or widow_control; constrained rebalancing is outside the bounded slice')
+            return
+          }
+          placeSlice(context, entry.shaped, sourceLine, count, paragraphGap(context, entry.shaped, sourceLine > 0))
+          context.previousAfter = entry.shaped.spacing_after_millipoints
+          sourceLine += count
+          consumedUnits += count
+          quota -= count
+          if (sourceLine === entry.shaped.lines.length) {
+            index += 1
+            sourceLine = 0
+          }
+        }
+        if (consumedUnits < fragment.length && !context.refused) startNextFlowColumn(context)
+      }
+      firstPage = false
     }
-    firstPage = false
+    fragmentStart = fragmentEnd
+    if (context.refused) return
+    if (terminator === 'page-break') startNextContentPage(context)
+    else if (terminator === 'column-break') startNextFlowColumn(context)
   }
 }
 
@@ -2397,6 +2485,7 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
   const context: PaginationContext = {
     approximateLegacySettings,
     flowBreaks: bodyFlowBreaks(request.document),
+    shapedFlowBreaks: shapedFlowBreakRuns(request.shaped_lines),
     ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     request,
     provenance: provenance(request),
@@ -2527,6 +2616,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
     ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     approximateLegacySettings,
     flowBreaks: bodyFlowBreaks(request.document),
+    shapedFlowBreaks: shapedFlowBreakRuns(request.shaped_lines),
     request, provenance: provenance(request), diagnostics: [], diagnosticKeys: new Set(), refused: false,
     pages: [], sections: [], cursorY: 0, previousAfter: 0, sectionPageOrdinal: 0, currentColumnOrdinal: 0,
     sliceCount: 0, linePlacementCount: 0, sliceCountForParagraph: new Map(), lastSliceLocation: new Map(),
