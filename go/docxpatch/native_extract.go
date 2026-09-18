@@ -3973,15 +3973,15 @@ func (extractor *nativeExtractor) extractTable(partName string, node *nativeXMLN
 					unsafe = true
 				}
 			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblpPr"}) {
-				// The frame is modelled, but this extractor still refuses to
-				// mutate a floating table, and page paint still lays the table
-				// out inline, so the verbatim disclosure stays until placement
-				// applies the projected frame.
+				// A projected frame is stated on the wire and placed by
+				// pagination, so it publishes no verbatim disclosure; the table
+				// itself stays read-only either way.
 				unsafe = true
 				if position, ok := extractor.extractTableFloatingPosition(property); ok {
 					table.FloatingPosition = position
+				} else {
+					extractor.addUnsupported("UNMODELED_TABLE_PROPERTY", "table-properties", id, partName, property, "This table property is preserved verbatim")
 				}
-				extractor.addUnsupported("UNMODELED_TABLE_PROPERTY", "table-properties", id, partName, property, "This table property is preserved verbatim")
 			} else if property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblCellMar"}) {
 				if margins, ok := extractor.extractTableCellMargins(property); ok {
 					table.CellMargins = margins
