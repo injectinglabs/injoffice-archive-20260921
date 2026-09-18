@@ -5216,7 +5216,7 @@
             {
               "name": "NativeDocxShapingDiagnosticCode",
               "kind": "type",
-              "signature": "export type NativeDocxShapingDiagnosticCode = 'font-substitution-approximate' | 'provider-refusal' | 'provider-decision' | 'provider-failure' | 'invalid-provider-output' | 'missing-run-font' | 'missing-run-size' | 'unresolved-layout-diagnostic' | 'paint-diagnostic-preserved' | 'bidi-resolution-refusal' | 'justification-unsupported' | 'table-layout-unsupported' | 'drawing-layout-unsupported' | 'reference-layout-unsupported' | 'page-control-deferred' | 'soft-hyphen-deferred' | 'unsupported-numbering-text' | 'unsupported-numbering-format' | 'list-marker-alignment-deferred' | 'list-marker-tab-deferred' | 'numbering-state-invalidated' | 'empty-line-metrics-unresolved' | 'cluster-overflow' | 'resource-limit' | 'diagnostic-overflow'"
+              "signature": "export type NativeDocxShapingDiagnosticCode = 'font-substitution-approximate' | 'provider-refusal' | 'provider-decision' | 'provider-failure' | 'invalid-provider-output' | 'missing-run-font' | 'missing-run-size' | 'unresolved-layout-diagnostic' | 'paint-diagnostic-preserved' | 'bidi-resolution-refusal' | 'justification-unsupported' | 'table-layout-unsupported' | 'drawing-layout-unsupported' | 'reference-layout-unsupported' | 'page-control-deferred' | 'soft-hyphen-deferred' | 'paragraph-mark-script-alignment-unapplied' | 'unsupported-numbering-text' | 'unsupported-numbering-format' | 'list-marker-alignment-deferred' | 'list-marker-tab-deferred' | 'numbering-state-invalidated' | 'empty-line-metrics-unresolved' | 'cluster-overflow' | 'resource-limit' | 'diagnostic-overflow'"
             },
             {
               "name": "NativeDocxShapingDiagnosticV1",
