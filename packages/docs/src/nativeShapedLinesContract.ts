@@ -163,7 +163,6 @@ function validateListMarker(value: unknown, path: string, issues: NativeDocxVali
   const markerAdvance = integer(entry.marker_advance_millipoints, `${path}/marker_advance_millipoints`, issues, 1, MAX_METRIC)
   const textStart = integer(entry.text_start_millipoints, `${path}/text_start_millipoints`, issues, 1, MAX_METRIC)
   if (labelStart !== undefined && labelEnd !== undefined && labelEnd <= labelStart) add(issues, 'INVALID_VALUE', `${path}/label_end_millipoints`, 'must follow the label start')
-  if (markerStart !== undefined && markerAdvance !== undefined && labelEnd !== undefined && markerStart + markerAdvance > labelEnd) add(issues, 'OUT_OF_RANGE', `${path}/marker_advance_millipoints`, 'shaped marker must fit the attested label region')
   if (markerStart !== undefined && markerAdvance !== undefined && textStart !== undefined && textStart < markerStart + markerAdvance) add(issues, 'OUT_OF_RANGE', `${path}/text_start_millipoints`, 'body text must not overlap the shaped marker')
 }
 

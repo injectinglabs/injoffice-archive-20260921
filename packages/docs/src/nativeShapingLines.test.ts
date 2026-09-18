@@ -930,6 +930,68 @@ describe('shapeNativeDocxLinesV1', () => {
     }
   })
 
+  /** `cjklist34/35/44.docx` all state `w:ind w:left="480" w:hanging="480"` — a
+   * 24 pt label region — under an ideographic format whose marker reaches three
+   * full-width glyphs plus a stop (`壹拾壹.`, 39.029 pt at 12 pt PMingLiU). Word's
+   * PDF keeps every marker at the anchor and moves only the body text: items 1
+   * (15.029 pt), 10 (27.029 pt) and 11 (39.029 pt) start their text at 24, 48 and
+   * 48 pt past the margin, so the two overrunning markers share one stop and the
+   * text is NOT offset by a fixed gap from the marker end. Mirrored here on the
+   * fixture shaper's 1 pt-per-character scale with a 3 pt label region: a marker
+   * that fits takes the hanging stop, and one that reaches or passes it takes the
+   * next stop on the default grid. */
+  it('keeps an overrunning CJK-width marker on its anchor and tabs the body text to the next default stop', async () => {
+    for (const [resolvedText, expectedTextStart] of [['壹.', 3_000], ['壹拾.', 6_000], ['壹拾壹.', 6_000]] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'body')
+      const resolved = resolvedLayout(document)
+      resolved.paragraphs[0]!.properties = { indent_start_twips: 60, hanging_twips: 60 }
+      resolved.paragraphs[0]!.numbering = { ...resolvedNumbering('paragraph:intro', 11, resolvedText), alignment: 'left', label_start_twips: 0, label_end_twips: 60, text_start_twips: 60, marker_properties: properties({ bold: true, east_asia_font_family: 'Carlito' }) }
+      attestNumbering(document, resolved)
+      const value = request(document, resolved)
+      value.available_width_millipoints = 60_000
+      value.tab_interval_millipoints = 3_000
+      const result = await shapeNativeDocxLinesV1(value, fakeProviders([]))
+      expect(result.ok, resolvedText).toBe(true)
+      if (!result.ok) continue
+      expect(result.value.diagnostics.map((diagnostic) => diagnostic.code), resolvedText).not.toContain('list-marker-alignment-deferred')
+      const paragraph = result.value.paragraphs[0]!
+      expect(paragraph.list_marker!.marker_start_millipoints, resolvedText).toBe(0)
+      expect(paragraph.list_marker!.marker_advance_millipoints, resolvedText).toBe(resolvedText.length * 1_000)
+      expect(paragraph.list_marker!.text_start_millipoints, resolvedText).toBe(expectedTextStart)
+      expect(paragraph.lines[0]!.inline_offset_millipoints, resolvedText).toBe(0)
+      expect(paragraph.lines[0]!.fragments.find((fragment) => fragment.text === '\t')?.advance_inline_millipoints, resolvedText).toBe(expectedTextStart - resolvedText.length * 1_000)
+      expect(paragraph.lines[0]!.fragments.map((fragment) => fragment.text).join(''), resolvedText).toBe(`${resolvedText}\tbody`)
+      expect(decodeNativeDocxShapedLines(structuredClone(result.value)).ok, `${resolvedText} contract`).toBe(true)
+    }
+  })
+
+  /** `w:suff` is not a tab everywhere: `comment-annotationref.docx`,
+   * `listWithLgl.docx` and `numbering-circle.docx` state `w:val="nothing"`, and
+   * `"space"` is its own case. Neither may borrow the tab's grid — an overrunning
+   * marker must leave the text hard against the marker end (plus one space),
+   * never at 6 pt. */
+  it('never advances a non-tab numbering suffix to the default grid when the marker overruns', async () => {
+    for (const [suffix, expectedTextStart] of [['nothing', 4_000], ['space', 5_000]] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'body')
+      const resolved = resolvedLayout(document)
+      resolved.paragraphs[0]!.properties = { indent_start_twips: 60, hanging_twips: 60 }
+      resolved.paragraphs[0]!.numbering = { ...resolvedNumbering('paragraph:intro', 11, '壹拾壹.', suffix), alignment: 'left', label_start_twips: 0, label_end_twips: 60, text_start_twips: 60, marker_properties: properties({ bold: true, east_asia_font_family: 'Carlito' }) }
+      attestNumbering(document, resolved)
+      const value = request(document, resolved)
+      value.available_width_millipoints = 60_000
+      value.tab_interval_millipoints = 3_000
+      const result = await shapeNativeDocxLinesV1(value, fakeProviders([]))
+      expect(result.ok, suffix).toBe(true)
+      if (!result.ok) continue
+      const paragraph = result.value.paragraphs[0]!
+      expect(paragraph.list_marker!.text_start_millipoints, suffix).toBe(expectedTextStart)
+      expect(paragraph.lines[0]!.fragments.some((fragment) => fragment.text === '\t'), suffix).toBe(false)
+      expect(decodeNativeDocxShapedLines(structuredClone(result.value)).ok, `${suffix} contract`).toBe(true)
+    }
+  })
+
   it('rejects numbering model, raw-part, and relationship hash substitutions before shaping', async () => {
     const make = () => {
       const document = nativeDocument()
