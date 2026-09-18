@@ -209,6 +209,20 @@ export interface NativeDocxTableRowV1 {
   cells: NativeDocxTableCellV1[]
 }
 
+/** The modelled `w:tblpPr` frame of a floating table. An absent offset is absent, never zero. */
+export interface NativeDocxTableFloatingPositionV1 {
+  horizontal_anchor: 'text' | 'margin' | 'page'
+  vertical_anchor: 'text' | 'margin' | 'page'
+  x_twips?: number
+  x_alignment?: 'left' | 'center' | 'right' | 'inside' | 'outside'
+  y_twips?: number
+  y_alignment?: 'top' | 'center' | 'bottom' | 'inside' | 'outside'
+  left_from_text_twips: number
+  right_from_text_twips: number
+  top_from_text_twips: number
+  bottom_from_text_twips: number
+}
+
 export interface NativeDocxTableV1 {
   id: string
   anchor: NativeDocxSourceAnchorV1
@@ -222,6 +236,7 @@ export interface NativeDocxTableV1 {
   grid_widths_twips?: number[]
   cell_margins?: NativeDocxTableCellMarginsV1
   borders?: NativeDocxTableBordersV1
+  floating_position?: NativeDocxTableFloatingPositionV1
   rows: NativeDocxTableRowV1[]
 }
 
@@ -446,9 +461,10 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   TableBorderV1: ['style', 'size_eighth_points', 'color_rgb'],
   TableBordersV1: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
   TableCellMarginsV1: ['top_twips', 'right_twips', 'bottom_twips', 'left_twips'],
+  TableFloatingPositionV1: ['horizontal_anchor', 'vertical_anchor', 'x_twips', 'x_alignment', 'y_twips', 'y_alignment', 'left_from_text_twips', 'right_from_text_twips', 'top_from_text_twips', 'bottom_from_text_twips'],
   TableCellV1: ['id', 'anchor', 'width_twips', 'grid_span', 'vertical_merge', 'borders', 'shading_rgb', 'paragraphs'],
   TableRowV1: ['id', 'anchor', 'height_twips', 'height_rule', 'repeat_header', 'cant_split', 'cells'],
-  TableV1: ['id', 'anchor', 'edit_policy', 'table_style_id', 'width_twips', 'layout', 'alignment', 'indent_twips', 'grid_widths_twips', 'cell_margins', 'borders', 'rows', 'width_percent_fiftieths'],
+  TableV1: ['id', 'anchor', 'edit_policy', 'table_style_id', 'width_twips', 'layout', 'alignment', 'indent_twips', 'grid_widths_twips', 'cell_margins', 'borders', 'floating_position', 'rows', 'width_percent_fiftieths'],
   BlockV1: ['kind', 'id', 'paragraph', 'table'],
   StoryV1: ['id', 'kind', 'part_name', 'native_story_id', 'relationship_id', 'note_role', 'anchor', 'blocks'],
   HeaderFooterReferenceV1: ['kind', 'story_id', 'relationship_id'],
@@ -570,6 +586,16 @@ function integer(value: unknown, path: string, issues: NativeDocxValidationIssue
 
 function twipsInteger(value: unknown, path: string, issues: NativeDocxValidationIssue[], min = 0, required = true): number | undefined {
   const parsed = integer(value, path, issues, min, required)
+  if (parsed !== undefined && parsed > DOCX_MAX_TWIPS_FOR_MILLIPOINTS) {
+    add(issues, 'OUT_OF_RANGE', path, `must not exceed ${DOCX_MAX_TWIPS_FOR_MILLIPOINTS} before milli-point conversion`)
+    return undefined
+  }
+  return parsed
+}
+
+// A floating-table offset is a displacement from its anchor, so it is signed.
+function signedTwipsInteger(value: unknown, path: string, issues: NativeDocxValidationIssue[]): number | undefined {
+  const parsed = integer(value, path, issues, -DOCX_MAX_TWIPS_FOR_MILLIPOINTS, false)
   if (parsed !== undefined && parsed > DOCX_MAX_TWIPS_FOR_MILLIPOINTS) {
     add(issues, 'OUT_OF_RANGE', path, `must not exceed ${DOCX_MAX_TWIPS_FOR_MILLIPOINTS} before milli-point conversion`)
     return undefined
@@ -849,6 +875,20 @@ function validateCellMargins(value: unknown, path: string, issues: NativeDocxVal
   for (const key of DOCX_NATIVE_V1_BINDING_FIELDS.TableCellMarginsV1) twipsInteger(entry[key], `${path}/${key}`, issues, 0)
 }
 
+function validateFloatingPosition(value: unknown, path: string, issues: NativeDocxValidationIssue[]): void {
+  const entry = object(value, path, DOCX_NATIVE_V1_BINDING_FIELDS.TableFloatingPositionV1, issues)
+  if (!entry) return
+  enumValue(entry.horizontal_anchor, `${path}/horizontal_anchor`, ['text', 'margin', 'page'], issues)
+  enumValue(entry.vertical_anchor, `${path}/vertical_anchor`, ['text', 'margin', 'page'], issues)
+  if (entry.x_twips !== undefined) signedTwipsInteger(entry.x_twips, `${path}/x_twips`, issues)
+  if (entry.y_twips !== undefined) signedTwipsInteger(entry.y_twips, `${path}/y_twips`, issues)
+  if (entry.x_alignment !== undefined) enumValue(entry.x_alignment, `${path}/x_alignment`, ['left', 'center', 'right', 'inside', 'outside'], issues)
+  if (entry.y_alignment !== undefined) enumValue(entry.y_alignment, `${path}/y_alignment`, ['top', 'center', 'bottom', 'inside', 'outside'], issues)
+  if (entry.x_twips !== undefined && entry.x_alignment !== undefined) add(issues, 'INVALID_UNION', path, 'a floating table selects its horizontal position by offset or by alignment, never both')
+  if (entry.y_twips !== undefined && entry.y_alignment !== undefined) add(issues, 'INVALID_UNION', path, 'a floating table selects its vertical position by offset or by alignment, never both')
+  for (const key of ['left_from_text_twips', 'right_from_text_twips', 'top_from_text_twips', 'bottom_from_text_twips'] as const) twipsInteger(entry[key], `${path}/${key}`, issues, 0)
+}
+
 function validateTable(value: unknown, path: string, issues: NativeDocxValidationIssue[], ids: Set<string>, refs: PendingReference[], ownerPart: string | null, parentAnchor: AnchorBounds | null, trackIdentity = true): void {
   const entry = object(value, path, DOCX_NATIVE_V1_BINDING_FIELDS.TableV1, issues)
   if (!entry) return
@@ -869,6 +909,7 @@ function validateTable(value: unknown, path: string, issues: NativeDocxValidatio
   if (entry.grid_widths_twips !== undefined) array(entry.grid_widths_twips, `${path}/grid_widths_twips`, issues).forEach((width, index) => twipsInteger(width, `${path}/grid_widths_twips/${index}`, issues, 1))
   if (entry.cell_margins !== undefined) validateCellMargins(entry.cell_margins, `${path}/cell_margins`, issues)
   if (entry.borders !== undefined) validateTableBorders(entry.borders, `${path}/borders`, issues)
+  if (entry.floating_position !== undefined) validateFloatingPosition(entry.floating_position, `${path}/floating_position`, issues)
   array(entry.rows, `${path}/rows`, issues).forEach((rowValue, rowIndex) => {
     const rowPath = `${path}/rows/${rowIndex}`
     const row = object(rowValue, rowPath, DOCX_NATIVE_V1_BINDING_FIELDS.TableRowV1, issues)
