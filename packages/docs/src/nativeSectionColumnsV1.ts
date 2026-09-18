@@ -142,6 +142,20 @@ function sameRefs(left: readonly NativeDocxHeaderFooterReferenceV1[], right: rea
  * a page — it is how an index is set in columns and then returned to one — so
  * the division is exactly what such a break is allowed to change.
  *
+ * `allow_different_body_vertical` drops the `body_y`/`body_height`
+ * comparison — the top and bottom margins. The physical sheet's vertical frame
+ * belongs to the section that opened the page: ECMA-376 17.6.11 gives `w:pgMar`
+ * per section, but a `continuous` break does not start a page, so the top and
+ * bottom margins of the continuing section have no page of their own to apply
+ * to and the shared sheet keeps the frame it was opened with. Only the
+ * horizontal geometry — the body box's sides and the column division — is
+ * expressed mid-page. `office-hard-v2/pdf/floating-table-section-columns.pdf`
+ * paints exactly that: a `pgMar 720` two-column section and a `pgMar`
+ * top/bottom 1440, left/right 1080 single-column continuing section share
+ * **one** 612 x 792 page (`/Type /Pages … /Count 1`), and the continuing
+ * section's line is anchored at x = 54 pt — its own 1080-twip left margin —
+ * below the two-column content rather than at its own 72 pt body top.
+ *
  * `allow_different_body_sides` additionally drops the left/right comparison —
  * the body box's origin and width — because a continuous break is equally
  * Word's way of indenting the remainder of a page. Only the sides move: the
@@ -159,7 +173,7 @@ function sameRefs(left: readonly NativeDocxHeaderFooterReferenceV1[], right: rea
  * section 1's first-page footer although the continuing section sets no
  * `titlePg` and names no stories.
  */
-export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean }): boolean {
+export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean; allow_different_body_vertical?: boolean }): boolean {
   const left = qualifyNativeDocxSectionColumnsV1(previous)
   const right = qualifyNativeDocxSectionColumnsV1(next)
   if (!left.ok || !right.ok) return false
@@ -170,10 +184,11 @@ export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1
     return other !== undefined && column.x_millipoints === other.x_millipoints && column.y_millipoints === other.y_millipoints && column.width_millipoints === other.width_millipoints && column.height_millipoints === other.height_millipoints
   })
   const sameSides = a.body_x_millipoints === b.body_x_millipoints && a.body_width_millipoints === b.body_width_millipoints
+  const sameVertical = a.body_y_millipoints === b.body_y_millipoints && a.body_height_millipoints === b.body_height_millipoints
   const inheritsStories = next.header_refs.length === 0 && next.footer_refs.length === 0
   const sameStories = inheritsStories || (previous.title_page === next.title_page && sameRefs(previous.header_refs, next.header_refs) && sameRefs(previous.footer_refs, next.footer_refs))
   return a.page_width_millipoints === b.page_width_millipoints && a.page_height_millipoints === b.page_height_millipoints &&
-    a.body_y_millipoints === b.body_y_millipoints && a.body_height_millipoints === b.body_height_millipoints &&
+    (sameVertical || options?.allow_different_body_vertical === true) &&
     (sameSides || options?.allow_different_body_sides === true) &&
     previous.page.margins.header_twips === next.page.margins.header_twips && previous.page.margins.footer_twips === next.page.margins.footer_twips &&
     (sameColumns || options?.allow_different_columns === true) && sameStories

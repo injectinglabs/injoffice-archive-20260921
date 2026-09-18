@@ -5186,7 +5186,7 @@
             {
               "name": "nativeDocxSectionsShareExactPageV1",
               "kind": "function",
-              "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean; }): boolean"
+              "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean; allow_different_body_vertical?: boolean; }): boolean"
             },
             {
               "name": "NativeDocxSectionV1",
