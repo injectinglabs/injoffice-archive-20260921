@@ -408,6 +408,40 @@ describe('bounded native DOCX table page-paint geometry', () => {
       .toEqual(qualifyNativeDocxTablesV1(stated.document, stated.resolved_layout, stated.shaped_lines))
   })
 
+  /** floating-table-section-columns.docx: w:tblPr states w:tblW 10998 dxa and
+   * w:tblLayout fixed, and states no w:jc, no w:tblInd and no w:tblCellMar --
+   * the twin of the case above, where the width is stated and the placement is
+   * left to the cascade. The three cascade defaults of ECMA-376 17.4 (left
+   * alignment, zero indent, Word's default cell margin) are the same three the
+   * auto-width and percentage policies already apply, so a stated width was the
+   * one shape whose silence still discarded the whole document body. */
+  it('applies the cascade placement defaults to a fixed dxa table that states none', () => {
+    const request = fixture()
+    const table = request.document.body.blocks[0]!.table!
+    table.layout = 'fixed'
+    table.width_twips = 400
+    table.grid_widths_twips = [400]
+    delete table.alignment
+    delete table.indent_twips
+    delete table.cell_margins
+    const original = structuredClone(request.document)
+    const strict = qualifyNativeDocxTablesV1(request.document, request.resolved_layout, request.shaped_lines)
+    expect(strict).toMatchObject({ status: 'refused', diagnostics: [{ message: 'Table requires explicit fixed dxa width, left alignment, indent, and all four cell margins' }] })
+    const approximate = qualifyApproximateLegacyTables(request.document, request.resolved_layout, request.shaped_lines, { legacy_compatibility_mode: 14 })
+    expect(approximate.status).toBe('qualified')
+    expect(approximate.tables[0]!.table.width_twips).toBe(400)
+    expect(approximate.tables[0]!.table.alignment).toBe('left')
+    expect(approximate.tables[0]!.table.indent_twips).toBe(0)
+    expect(approximate.tables[0]!.table.cell_margins).toEqual({ top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 })
+    expect(approximate.tables[0]!.x_millipoints).toBe(0)
+    expect(request.document).toEqual(original)
+    // A table that states all three keeps exactly what it states, on both lanes.
+    const authored = fixture()
+    authored.document.body.blocks[0]!.table!.indent_twips = 7
+    expect(qualifyApproximateLegacyTables(authored.document, authored.resolved_layout, authored.shaped_lines, { legacy_compatibility_mode: 14 }))
+      .toEqual(qualifyNativeDocxTablesV1(authored.document, authored.resolved_layout, authored.shaped_lines))
+  })
+
   it('uses bounded resolved geometry without changing source or overriding direct properties', () => {
     const request=fixture(), table=request.document.body.blocks[0]!.table!
     const expected=structuredClone(qualifyNativeDocxTablesV1(request.document,request.resolved_layout))
