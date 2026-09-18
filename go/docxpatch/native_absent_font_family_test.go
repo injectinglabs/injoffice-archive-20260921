@@ -99,22 +99,53 @@ func TestAbsentFontFamilyRefusesAnyStatedFontSelection(t *testing.T) {
 
 // A numbered paragraph also needs a marker face this evidence does not cover, so
 // none of its scopes qualify.
-func TestAbsentFontFamilySkipsNumberedParagraphs(t *testing.T) {
-	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
-	parts := resolvedNumberingTestParts(numbering)
-	parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Numbered</w:t></w:r></w:p><w:p><w:r><w:t>Plain</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
-	data := buildNativeDOCX(t, nativeEntries(parts))
-	eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, fact := range eligibility.AbsentFontFamilies {
-		if strings.Contains(fact.Path, "w:p[1]") {
-			t.Fatalf("numbered paragraph qualified: %#v", fact)
-		}
-	}
-	if len(eligibility.AbsentFontFamilies) != 2 {
-		t.Fatalf("facts=%d want 2 (the unnumbered paragraph and its run): %#v", len(eligibility.AbsentFontFamilies), eligibility.AbsentFontFamilies)
+// A numbered paragraph is covered whole, marker included. The whole-package
+// gate already proves the marker carries no family either -- it refuses any
+// package whose resolved list marker has one -- so the marker is the same
+// omission as the paragraph mark beside it and gets its own scope. Before it
+// had one the paragraph was skipped whole, which left listWithLgl.docx, where
+// every paragraph is numbered, with no evidence at all.
+func TestAbsentFontFamilyCoversTheListMarkerScope(t *testing.T) {
+	level := `<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>`
+	for _, tc := range []struct {
+		name, numID string
+		want        []string
+	}{
+		// The numbered paragraph contributes a mark, a marker and its run; the
+		// plain paragraph beside it contributes a mark and its run.
+		{name: "numbered", numID: "1", want: []string{"paragraph-mark", "numbering-marker", "run", "paragraph-mark", "run"}},
+		// A reference that resolves to no marker paints no marker, so there is
+		// no marker scope to approximate -- and the paragraph is still covered.
+		{name: "unresolved instance", numID: "7", want: []string{"paragraph-mark", "run", "paragraph-mark", "run"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="0">` + level + `</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
+			parts := resolvedNumberingTestParts(numbering)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="` + tc.numID + `"/></w:numPr></w:pPr><w:r><w:t>Numbered</w:t></w:r></w:p><w:p><w:r><w:t>Plain</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			kinds := []string{}
+			for _, fact := range eligibility.AbsentFontFamilies {
+				kinds = append(kinds, fact.ScopeKind)
+			}
+			if strings.Join(kinds, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("scopes=%v want %v: %#v", kinds, tc.want, eligibility.AbsentFontFamilies)
+			}
+			// The marker shares its paragraph's anchor and id, so the pair
+			// (scope_kind, scope_id) is what keeps the two facts distinct.
+			for _, fact := range eligibility.AbsentFontFamilies {
+				if fact.ScopeKind != "numbering-marker" {
+					continue
+				}
+				mark := eligibility.AbsentFontFamilies[0]
+				if fact.ScopeID != mark.ScopeID || fact.Path != mark.Path || fact.PartName != mark.PartName {
+					t.Fatalf("marker scope does not name its own paragraph: %#v vs %#v", fact, mark)
+				}
+			}
+		})
 	}
 }
 

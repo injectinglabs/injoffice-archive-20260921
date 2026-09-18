@@ -4419,6 +4419,11 @@
               "signature": "export interface NativeDocxContentAddressedFaceV1"
             },
             {
+              "name": "nativeDocxDefaultSectionGeometryV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxDefaultSectionGeometryV1(section: NativeDocxSectionV1, code: 'MISSING_PAGE_SIZE' | 'MISSING_PAGE_MARGINS'): boolean"
+            },
+            {
               "name": "NativeDocxDocumentV1",
               "kind": "interface",
               "signature": "export interface NativeDocxDocumentV1"

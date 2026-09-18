@@ -495,6 +495,47 @@ func TestNativeNumberingUnsupportedGeometryReturnsDiagnostic(t *testing.T) {
 	}
 }
 
+// Word's own PDF export of listWithLgl.docx fixes this geometry exactly:
+// MediaBox [0 0 612 792], the ilvl=0 marker origin at x = 72.0 pt (the 1 inch
+// left margin, i.e. offset 0 from the text margin) and the ilvl=1 marker at
+// x = 108.0 pt (offset 720 twips = 36 pt, its w:firstLine). Both levels state
+// w:ind w:left="0" and no hanging indent at all.
+func TestNativeNumberingCollapsedLabelRegionWithoutHangingIndent(t *testing.T) {
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1">` +
+		`<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="upperRoman"/><w:suff w:val="nothing"/><w:lvlText w:val="CH %1"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr></w:lvl>` +
+		`<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimalZero"/><w:lvlText w:val="Sect %1.%2"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="0" w:firstLine="720"/></w:pPr></w:lvl>` +
+		`</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	resolved := resolveNumberingFixture(t, numbering, numberedParagraph("2", 0, "chapter")+numberedParagraph("2", 1, "section"))
+	root := resolved.Paragraphs[0].Numbering
+	if root == nil || root.ResolvedText != "CH I" || root.Suffix != "nothing" || root.LabelStartTwips != 0 || root.LabelEndTwips != 0 || root.TextStartTwips != 0 {
+		t.Fatalf("zero first-line marker geometry was not modelled: %#v", root)
+	}
+	child := resolved.Paragraphs[1].Numbering
+	if child == nil || child.LabelStartTwips != 720 || child.LabelEndTwips != 720 || child.TextStartTwips != 720 {
+		t.Fatalf("first-line marker geometry was not modelled: %#v", child)
+	}
+	if hasResolutionDiagnostic(resolved, "UNSUPPORTED_NUMBERING_GEOMETRY") {
+		t.Fatalf("a legal zero hanging indent was refused: %#v", resolved)
+	}
+}
+
+func TestNativeNumberingRefusesNegativeAndMalformedLabelGeometry(t *testing.T) {
+	for _, indent := range []string{
+		`<w:ind w:left="-360" w:firstLine="0"/>`,
+		`<w:ind w:left="-360"/>`,
+		`<w:ind w:left="360" w:hanging="720"/>`,
+		`<w:ind w:left="not-a-number"/>`,
+		`<w:ind w:left="0x10" w:hanging="360"/>`,
+		`<w:ind w:left="180143985094819" w:firstLine="1"/>`,
+	} {
+		numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr>` + indent + `</w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+		resolved := resolveNumberingFixture(t, numbering, numberedParagraph("2", 0, "refused"))
+		if resolved.Paragraphs[0].Numbering != nil || !hasResolutionDiagnostic(resolved, "UNSUPPORTED_NUMBERING_GEOMETRY") {
+			t.Fatalf("invalid marker geometry %s was accepted: %#v", indent, resolved.Paragraphs[0].Numbering)
+		}
+	}
+}
+
 func TestNativeNumberingOmittedAndMalformedLevelAlignment(t *testing.T) {
 	base := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/>ALIGN<w:pPr><w:ind w:start="360" w:hanging="180"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
 	omitted := resolveNumberingFixture(t, strings.Replace(base, "ALIGN", "", 1), numberedParagraph("2", 0, "default"))

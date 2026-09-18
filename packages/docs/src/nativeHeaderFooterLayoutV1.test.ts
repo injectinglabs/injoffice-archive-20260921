@@ -176,6 +176,33 @@ describe('native DOCX header/footer layout v1', () => {
     }
   })
 
+  it('places the bands of a section whose page geometry is the schema-optional Word default', () => {
+    // ECMA-376 17.6.13 and 17.6.11 make w:pgSz and w:pgMar optional, and #346
+    // already reads their absence as silence on both tiers while the exposed
+    // geometry is value-for-value Word's default. The header and footer bands
+    // are cut out of that same page box, so the absence says exactly as little
+    // here. listWithLgl.docx is the package that showed the two disagreeing: its
+    // body is an empty <w:sectPr/>, pagination deferred it and the band gate
+    // refused it, so the file produced no page at all.
+    const sectionEntry = (code: string) => ({ id: `unsupported:${code}`, code, capability: 'sections', scope_id: 'section:1', preservation: 'refuse-mutation', message: code })
+    for (const code of ['MISSING_PAGE_SIZE', 'MISSING_PAGE_MARGINS'] as const) {
+      // Neither tier needs the approximate omit flag: this is the same silence
+      // strict pagination already reads, not an approximate omission.
+      const input = fixture()
+      input.document.unsupported.push(sectionEntry(code) as never)
+      const placed = layoutNativeDocxHeadersFootersV1(input)
+      expect(placed.status, code).toBe('placed')
+      expect(placed.diagnostics).not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid' })]))
+      // Negative: geometry that is not the Word default keeps refusing, so a
+      // derived or partially authored page box can never ride in on the record.
+      const derived = fixture()
+      derived.document.unsupported.push(sectionEntry(code) as never)
+      if (code === 'MISSING_PAGE_SIZE') derived.document.sections[0]!.page.height_twips = 16_840
+      else derived.document.sections[0]!.page.margins.right_twips = 1_008
+      expect(layoutNativeDocxHeadersFootersV1(derived), code).toEqual(expect.objectContaining({ status: 'refused', pages: [], diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'section-geometry-invalid', scope_id: 'section:1' })]) }))
+    }
+  })
+
   it('keeps the section-geometry exemption identical to the judgement the paint tier already made', () => {
     // #349 expressed the same judgement about w:cols w:sep on the paint tier. Pin the two
     // tiers together so a later edit to either set cannot let them diverge silently.
