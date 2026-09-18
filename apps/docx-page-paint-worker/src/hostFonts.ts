@@ -1,7 +1,7 @@
 import {readFileSync, statSync} from 'node:fs'
 import {isAbsolute} from 'node:path'
 import {createHash} from 'node:crypto'
-import {createNativeDocxEmbeddedFontResolverV1, type NativeDocxPagePaintPrepareInputV1, type NativeDocxHostFontsV1} from '@injoffice/docs/native-page-paint-compiler'
+import {createNativeDocxEmbeddedFontResolverV1, NativeDocxPreviewRefusalV1, type NativeDocxPagePaintPrepareInputV1, type NativeDocxHostFontsV1} from '@injoffice/docs/native-page-paint-compiler'
 import {decodeNativeDOCXFontInventoryV1} from '@injoffice/docs/native-page-paint-compiler'
 import {HARFBUZZ_SHAPER_LIMITS,inspectHarfBuzzFontMetricsV1} from '@injoffice/font-metrics/harfbuzz'
 import type {FontResource, NativeFontManifest, ResolvedFontFace} from '@injoffice/font-metrics/layout'
@@ -52,7 +52,16 @@ function admitConfiguredFace(index:number,f:HostFontConfiguredFace,faces:NativeF
  // The pinned HarfBuzz preflight is the only authority on the ttcf wrapper: it
  // refuses an index outside the collection and a collectionIndex on a
  // standalone sfnt, and reports that face's own design metrics.
- resources.set(faceId,{face,bytes,metrics:inspectHarfBuzzFontMetricsV1({bytes,contentDigest:f.sha256,...collection})})
+ // A face it refuses is an unusable entry in the operator's own font manifest.
+ // Letting the raw preflight sentence escape made the whole request fail under
+ // the blanket COMPILATION_REFUSED code, with a message that named an sfnt table
+ // and no face: the operator could not tell which of up to 64 configured files
+ // to replace, and a reader could mistake it for a fact about the document.
+ // Name the face and give the failure its own branchable code instead.
+ let metrics:FontResource['metrics']
+ try{metrics=inspectHarfBuzzFontMetricsV1({bytes,contentDigest:f.sha256,...collection})}
+ catch(error){throw new NativeDocxPreviewRefusalV1('HOST_FONT_UNQUALIFIED',faceId,`Host font face ${f.family} / ${f.weight} / ${f.style}${f.collectionIndex===undefined?'':` / collection index ${f.collectionIndex}`} is not a qualified font face: ${error instanceof Error?error.message:String(error)}`)}
+ resources.set(faceId,{face,bytes,metrics})
  faces.push({faceId,family:f.family,weight:f.weight,style:f.style,stretch:100,source:{kind:'host',resourceId:faceId,contentDigest:f.sha256,...collection}})
  occupied.add(key(f.family,f.weight,f.style))
  return total
