@@ -316,6 +316,12 @@ const LAYOUT_NEUTRAL_SOURCE_UNSUPPORTED = new Set([
   // depends on which of the two Word reads. A repeat that states anything else
   // stays DUPLICATE_SECTION_PROPERTY and still refuses.
   'REDUNDANT_SECTION_PROPERTY',
+  // A row's w:tblCellSpacing stating w:w="0" on the dxa width type. The
+  // extractor emits this code only for that value, and zero spacing is what a
+  // row that omits the element already lays out with, so no cell box, row
+  // height or page advance depends on it. Non-zero spacing, and any other
+  // width type, stays UNMODELED_ROW_PROPERTY and still refuses.
+  'DEFAULT_ROW_CELL_SPACING',
 ])
 
 const SAFE_INTEGER_MILLI_POINT_FACTOR = 50

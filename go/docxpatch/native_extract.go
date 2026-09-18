@@ -4011,6 +4011,23 @@ func (extractor *nativeExtractor) extractTableRow(partName, tableID string, node
 				} else {
 					unsafe = true
 				}
+			// w:tblCellSpacing is a CT_TblWidth stating the space Word inserts
+			// between this row's cells. w:w="0" with the dxa type - or with the
+			// type omitted, which CT_TblWidth defaults to dxa - asks for none,
+			// which is exactly the spacing a row that omits the element already
+			// gets. No cell box, no row height and no page advance depends on
+			// it, so it is recorded under its own code and pagination restates
+			// it as a deferred source diagnostic. Any non-zero spacing, and any
+			// other width type, stays UNMODELED_ROW_PROPERTY and still refuses.
+			case property.Name == (xml.Name{Space: extractor.wordNS, Local: "tblCellSpacing"}):
+				unsafe = true
+				spacing, spacingOK := nativeNonnegativeInt64Attr(property, extractor.wordNS, "w")
+				typeValue, typeOK := nativeAttr(property, extractor.wordNS, "type")
+				if spacingOK && spacing == 0 && (!typeOK || typeValue == "dxa") && nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "w"}, xml.Name{Space: extractor.wordNS, Local: "type"}) {
+					extractor.addUnsupported("DEFAULT_ROW_CELL_SPACING", "table-properties", tableID, partName, property, "Row cell spacing states the zero spacing a row without the element already has and is preserved verbatim")
+				} else {
+					extractor.addUnsupported("UNMODELED_ROW_PROPERTY", "table-properties", tableID, partName, property, "This table-row property is preserved verbatim")
+				}
 			default:
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_ROW_PROPERTY", "table-properties", tableID, partName, property, "This table-row property is preserved verbatim")
@@ -4159,6 +4176,50 @@ func (extractor *nativeExtractor) extractTableCell(partName, tableID string, nod
 				} else {
 					unsafe = true
 				}
+			// CT_VerticalJc. `top` is the alignment Word applies when the element
+			// is absent and the one this tier already lays cells out with, so an
+			// explicit `top` states the cell it already has and is applied. The
+			// other members distribute the difference between the row's height
+			// and the cell's content height, which this tier has no cell-height
+			// input for: the cell's paragraphs are still shaped, placed and
+			// painted, from the top of the cell box, so the alignment is recorded
+			// as a visual result this tier did not produce rather than guessed
+			// at. Anything else about the element stays unknown cell markup.
+			case property.Name == (xml.Name{Space: extractor.wordNS, Local: "vAlign"}):
+				alignment, alignmentOK := nativeAttr(property, extractor.wordNS, "val")
+				if !alignmentOK || !nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+					unsafe = true
+					extractor.addUnsupported("UNMODELED_CELL_PROPERTY", "table-properties", tableID, partName, property, "This table-cell property is preserved verbatim")
+					break
+				}
+				if alignment == "top" {
+					break
+				}
+				unsafe = true
+				if alignment != "center" && alignment != "bottom" && alignment != "both" {
+					extractor.addUnsupported("UNMODELED_CELL_PROPERTY", "table-properties", tableID, partName, property, "This table-cell property is preserved verbatim")
+					break
+				}
+				extractor.addUnsupported("CELL_VERTICAL_ALIGNMENT_UNSUPPORTED", "table-properties", tableID, partName, property, "Vertical cell alignment "+alignment+" is recorded and not applied; the cell's paragraphs are laid out and painted from the top of the cell")
+			// w:hideMark asks Word to leave the cell's end-of-cell marker out of
+			// the row-height calculation, which can only shrink a row whose height
+			// that marker alone sets. This tier measures a row from the shaped
+			// lines of its cells and carries no separate end-of-cell marker to
+			// exclude, so the request is recorded and not applied and the cell's
+			// paragraphs are shaped, placed and painted either way. An explicitly
+			// disabled w:hideMark asks for the default and states nothing.
+			case property.Name == (xml.Name{Space: extractor.wordNS, Local: "hideMark"}):
+				hidden, hiddenOK := nativeOnOff(property, extractor.wordNS)
+				if !hiddenOK || !nativeExactLeaf(property, xml.Name{Space: extractor.wordNS, Local: "val"}) {
+					unsafe = true
+					extractor.addUnsupported("UNMODELED_CELL_PROPERTY", "table-properties", tableID, partName, property, "This table-cell property is preserved verbatim")
+					break
+				}
+				if !hidden {
+					break
+				}
+				unsafe = true
+				extractor.addUnsupported("CELL_HIDE_END_MARK_UNSUPPORTED", "table-properties", tableID, partName, property, "Ignoring the end-of-cell marker in the row-height calculation is recorded and not applied; the row is measured from the shaped lines of its cells")
 			default:
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_CELL_PROPERTY", "table-properties", tableID, partName, property, "This table-cell property is preserved verbatim")
