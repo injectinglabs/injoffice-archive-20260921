@@ -338,3 +338,84 @@ func nativeFixtureAutoShapes(slide NativeSlide) []NativeElement {
 	}
 	return result
 }
+
+// nativeEffectShapeStatus extracts one AutoShape carrying the given spPr
+// effect markup and reports its compatibility status and diagnostic codes.
+func nativeEffectShapeStatus(t *testing.T, effects string, approximate bool) (NativeCompatibilityStatus, map[string]NativeDiagnosticSeverity) {
+	t.Helper()
+	shape := nativeAutoShapeXMLWithNameAndGeometry(3, "Effect Shape",
+		`<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`,
+		`<a:solidFill><a:srgbClr val="AA00FF"/></a:solidFill>`,
+		nativeAutoShapeSolidLine("12700", "flat", "<a:round/>", "112233")+effects, "")
+	options := nativeTestExtractOptions()
+	options.AllowInheritedTextPreview = approximate
+	deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), options)
+	if err != nil {
+		t.Fatalf("extract shape with effects %q: %v", effects, err)
+	}
+	shapes := nativeFixtureAutoShapes(deck.Slides[0])
+	if len(shapes) != 1 {
+		t.Fatalf("shape with effects %q disappeared: %#v", effects, deck.Slides[0].Elements)
+	}
+	codes := map[string]NativeDiagnosticSeverity{}
+	for _, diagnostic := range shapes[0].Compatibility.Diagnostics {
+		codes[diagnostic.Code] = diagnostic.Severity
+	}
+	return shapes[0].Compatibility.Status, codes
+}
+
+// A childless <a:effectLst/> is how PowerPoint says "this shape has explicitly
+// no effects", most often when a shape overrides an inherited style's effect
+// reference. Refusing it painted nothing where PowerPoint paints the shape.
+func TestExtractNativePPTXAutoShapeEmptyEffectListIsNotAnEffect(t *testing.T) {
+	t.Parallel()
+	for _, approximate := range []bool{false, true} {
+		approximate := approximate
+		t.Run(map[bool]string{false: "exact", true: "approximate"}[approximate], func(t *testing.T) {
+			t.Parallel()
+			status, codes := nativeEffectShapeStatus(t, `<a:effectLst/>`, approximate)
+			if status == NativeCompatibilityStatusRefused {
+				t.Fatalf("an empty effect list refused the shape: %v", codes)
+			}
+			if _, present := codes["pptx.autoshape-effects-unavailable"]; present {
+				t.Fatalf("an empty effect list reported an effects gap: %v", codes)
+			}
+		})
+	}
+}
+
+// Shadows, glows and soft edges paint around or behind the shape without
+// touching its own path, fill, outline or text, so the approximate tier
+// discloses the omission and paints the shape. The exact tier still refuses,
+// and an effect that rewrites the shape's own pixels still refuses on both.
+func TestExtractNativePPTXAutoShapeHaloEffectsAreDisclosedNotRefused(t *testing.T) {
+	t.Parallel()
+	halo := `<a:effectLst><a:glow rad="139700"><a:schemeClr val="accent4"/></a:glow><a:outerShdw blurRad="76200"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`
+
+	status, codes := nativeEffectShapeStatus(t, halo, true)
+	if status == NativeCompatibilityStatusRefused {
+		t.Fatalf("approximate tier refused a shape whose only gap is a glow and a shadow: %v", codes)
+	}
+	if severity, present := codes["pptx.autoshape-effects-approximate"]; !present || severity != NativeDiagnosticSeverityWarning {
+		t.Fatalf("omitted halo effects were not disclosed as a warning: %v", codes)
+	}
+
+	if status, codes := nativeEffectShapeStatus(t, halo, false); status != NativeCompatibilityStatusRefused || codes["pptx.autoshape-effects-unavailable"] != NativeDiagnosticSeverityRefusal {
+		t.Fatalf("exact tier stopped refusing halo effects: status=%v codes=%v", status, codes)
+	}
+
+	// a:blur rewrites the shape's own pixels and a:fillOverlay repaints its
+	// fill, so omitting either would misstate the shape rather than
+	// under-decorate it. Both keep refusing on every tier.
+	for _, effect := range []string{
+		`<a:effectLst><a:blur rad="50800"/></a:effectLst>`,
+		`<a:effectLst><a:glow rad="139700"><a:schemeClr val="accent4"/></a:glow><a:fillOverlay blend="over"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay></a:effectLst>`,
+	} {
+		for _, approximate := range []bool{false, true} {
+			status, codes := nativeEffectShapeStatus(t, effect, approximate)
+			if status != NativeCompatibilityStatusRefused || codes["pptx.autoshape-effects-unavailable"] != NativeDiagnosticSeverityRefusal {
+				t.Fatalf("shape-altering effect %q was not refused (approximate=%v): status=%v codes=%v", effect, approximate, status, codes)
+			}
+		}
+	}
+}
