@@ -803,6 +803,10 @@ function textRunInput(span: SourceSpan, properties: NativeDocxResolvedRunPropert
     text: span.text,
     fontSizeMilliPoints: halfPointsToMilliPoints(properties.font_size_half_points),
     features: [{ tag: 'kern', value: properties.kerning_min_size_half_points !== undefined && properties.font_size_half_points >= properties.kerning_min_size_half_points ? 1 : 0 }],
+    // Character tracking. The field is omitted rather than sent as zero so that
+    // every run without w:spacing keeps the exact request, cache key and shaped
+    // geometry it had before tracking was modeled.
+    ...(properties.letter_spacing_twips === undefined ? {} : { letterSpacingMilliPoints: twipsToMilliPoints(properties.letter_spacing_twips) }),
     font: {
       families: familyCandidates(family, aliases),
       weight: properties.bold ? 700 : 400,

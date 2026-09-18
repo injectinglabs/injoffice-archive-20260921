@@ -403,11 +403,78 @@ describe('canonical HarfBuzz text shaper v1', () => {
     // A scalar that does not belong to the declared East-Asian script still refuses as one.
     expect(refusalCode(shape('あ', { script: 'Hani' }))).toBe('unsupported-script')
     expect(refusalCode(shape('abc', { variations: [{ tag: 'wght', value: 500 }] }))).toBe('unsupported-feature')
-    expect(refusalCode(shape('abc', { letterSpacingMilliPoints: 1 }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', { wordSpacingMilliPoints: 1 }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', { features: [{ tag: 'zzzz', value: 1 }] }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', { features: [{ tag: 'calt', value: 0 }] }))).toBe('unsupported-feature')
     expect(refusalCode(shape('abc', {}, { ...font, face: { ...face, sourceKind: 'system' } }))).toBe('unsupported-font-format')
+  })
+
+  // Character tracking: DOCX w:spacing on w:rPr (ECMA-376 17.3.2.35).
+  //
+  // Word 16's own export of StyleRef-DE.docx settles where the delta goes. The
+  // Subtitle style there carries w:spacing w:val="15" (15 twips = 0.75 pt) and
+  // Word writes that one run with `0.0651 Tc` at Tm scale 46 under a 0.24 CTM,
+  // against a small negative justification Tc on every other run in the file.
+  // The run begins at x=300 and the next text object begins at x=1540.55, so
+  // Word's own advance for its 57 glyphs is 1240.55 text-space units against
+  // 1070.01 unspaced. A delta after EVERY glyph predicts 1240.70, out by 0.15,
+  // which is the file's own /Widths quantisation (the untracked control run in
+  // the same file is out by 0.03 over 10 glyphs). A delta only BETWEEN glyphs
+  // predicts 1237.70, out by 2.85 - a whole tracking step. Word uses the first.
+  it('places character tracking at every cluster trailing edge, including the last', () => {
+    const text = 'Handgloves'
+    const untracked = shape(text)
+    if ('status' in untracked) throw new Error('baseline run must shape')
+    const delta = 750 // 15 twips, the measured StyleRef-DE Subtitle tracking
+    const tracked = shape(text, { letterSpacingMilliPoints: delta })
+    if ('status' in tracked) throw new Error('tracked run must shape')
+
+    // n, not n-1: the run grows by one delta per cluster, the last one included.
+    expect(tracked.clusters).toHaveLength(untracked.clusters.length)
+    expect(tracked.advanceInlineMilliPoints).toBe(untracked.advanceInlineMilliPoints + delta * untracked.clusters.length)
+    expect(tracked.advanceInlineMilliPoints).not.toBe(untracked.advanceInlineMilliPoints + delta * (untracked.clusters.length - 1))
+
+    // The delta sits between clusters, never inside one: every cluster keeps its
+    // own shaped advance plus exactly one delta, and no glyph is redistributed.
+    for (const [index, cluster] of tracked.clusters.entries()) {
+      expect(cluster.advanceInlineMilliPoints).toBe(untracked.clusters[index]!.advanceInlineMilliPoints + delta)
+      expect(cluster.startUtf16).toBe(untracked.clusters[index]!.startUtf16)
+      expect(cluster.endUtf16).toBe(untracked.clusters[index]!.endUtf16)
+    }
+    expect(tracked.glyphs.map((glyph) => glyph.glyphId)).toEqual(untracked.glyphs.map((glyph) => glyph.glyphId))
+    expect(tracked.glyphs.map((glyph) => [glyph.offsetXMilliPoints, glyph.offsetYMilliPoints]))
+      .toEqual(untracked.glyphs.map((glyph) => [glyph.offsetXMilliPoints, glyph.offsetYMilliPoints]))
+    expect(tracked.metrics).toEqual(untracked.metrics)
+
+    // Word's measure is signed: a negative w:spacing condenses by the same rule.
+    const condensed = shape(text, { letterSpacingMilliPoints: -delta })
+    if ('status' in condensed) throw new Error('condensed run must shape')
+    expect(condensed.advanceInlineMilliPoints).toBe(untracked.advanceInlineMilliPoints - delta * untracked.clusters.length)
+  })
+
+  it('leaves an absent or zero character tracking exactly as inert as it was', () => {
+    const text = 'Handgloves'
+    const untracked = shape(text)
+    if ('status' in untracked) throw new Error('baseline run must shape')
+    for (const zero of [{ letterSpacingMilliPoints: 0 }, {}] as const) {
+      const result = shape(text, zero)
+      if ('status' in result) throw new Error('inert run must shape')
+      expect(result).toEqual(untracked)
+    }
+  })
+
+  it('refuses the tracking it cannot place at a cluster edge exactly', () => {
+    // A zero-advance cluster takes no delta, so an implicit directional mark
+    // keeps the zero advance the Unicode core specification requires of it.
+    const marked = shape('a\u200eb', { letterSpacingMilliPoints: 750 })
+    if ('status' in marked) throw new Error('implicit-mark run must shape')
+    const mark = marked.clusters.find((cluster) => cluster.startUtf16 === 1)
+    expect(mark?.advanceInlineMilliPoints).toBe(0)
+
+    // Condensing a cluster past a zero advance has no cluster edge to place.
+    expect(refusalCode(shape('Handgloves', { letterSpacingMilliPoints: -1_000_000 }))).toBe('unsupported-feature')
+    // Word spacing is still not modeled and still refuses, tracking or not.
+    expect(refusalCode(shape('Handgloves', { letterSpacingMilliPoints: 750, wordSpacingMilliPoints: 1 }))).toBe('unsupported-feature')
   })
 
   it('copies and hashes a face once per cached face, not once per shaped run', () => {

@@ -13,35 +13,44 @@ import (
 // w:effect, w:em and w:specVanish, every one of them at its off value, and each
 // refused the whole document as UNMODELED_RUN_PROPERTY. Every other value does
 // change glyphs, advances or ink and keeps refusing.
+//
+// One exception is now modeled rather than refused: a nonzero w:spacing is
+// character tracking, which the resolver resolves into a painted advance (see
+// native_character_spacing_test.go). The writable v1 contract still exposes no
+// tracking, so the extractor keeps reporting it as an unmodeled run property -
+// `resolverModels` below is exactly that split.
 func TestNativeAbsentRunEffectProperty(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		markup   string
 		accepted bool
+		// True when the resolver resolves the property into layout instead of
+		// leaving it unmodeled. Only nonzero character tracking does.
+		resolverModels bool
 	}{
-		{"caps off", `<w:caps w:val="0"/>`, true},
-		{"caps off spelled false", `<w:caps w:val="false"/>`, true},
-		{"small caps off", `<w:smallCaps w:val="off"/>`, true},
-		{"strike off", `<w:strike w:val="0"/>`, true},
-		{"double strike off", `<w:dstrike w:val="0"/>`, true},
-		{"special vanish off", `<w:specVanish w:val="0"/>`, true},
-		{"zero character spacing", `<w:spacing w:val="0"/>`, true},
-		{"zero baseline position", `<w:position w:val="0"/>`, true},
-		{"no text effect", `<w:effect w:val="none"/>`, true},
-		{"no emphasis mark", `<w:em w:val="none"/>`, true},
+		{"caps off", `<w:caps w:val="0"/>`, true, false},
+		{"caps off spelled false", `<w:caps w:val="false"/>`, true, false},
+		{"small caps off", `<w:smallCaps w:val="off"/>`, true, false},
+		{"strike off", `<w:strike w:val="0"/>`, true, false},
+		{"double strike off", `<w:dstrike w:val="0"/>`, true, false},
+		{"special vanish off", `<w:specVanish w:val="0"/>`, true, false},
+		{"zero character spacing", `<w:spacing w:val="0"/>`, true, false},
+		{"zero baseline position", `<w:position w:val="0"/>`, true, false},
+		{"no text effect", `<w:effect w:val="none"/>`, true, false},
+		{"no emphasis mark", `<w:em w:val="none"/>`, true, false},
 
-		{"caps on", `<w:caps w:val="1"/>`, false},
-		{"caps by omission", `<w:caps/>`, false},
-		{"small caps on", `<w:smallCaps w:val="true"/>`, false},
-		{"strike on", `<w:strike w:val="on"/>`, false},
-		{"positive character spacing", `<w:spacing w:val="20"/>`, false},
-		{"negative character spacing", `<w:spacing w:val="-20"/>`, false},
-		{"raised baseline", `<w:position w:val="6"/>`, false},
-		{"blinking text effect", `<w:effect w:val="blinkBackground"/>`, false},
-		{"dot emphasis mark", `<w:em w:val="dot"/>`, false},
-		{"unknown attribute", `<w:caps w:val="0" w:other="1"/>`, false},
-		{"nested markup", `<w:caps w:val="0"><w:b/></w:caps>`, false},
-		{"duplicate", `<w:caps w:val="0"/><w:caps w:val="0"/>`, false},
+		{"caps on", `<w:caps w:val="1"/>`, false, false},
+		{"caps by omission", `<w:caps/>`, false, false},
+		{"small caps on", `<w:smallCaps w:val="true"/>`, false, false},
+		{"strike on", `<w:strike w:val="on"/>`, false, false},
+		{"positive character spacing", `<w:spacing w:val="20"/>`, false, true},
+		{"negative character spacing", `<w:spacing w:val="-20"/>`, false, true},
+		{"raised baseline", `<w:position w:val="6"/>`, false, false},
+		{"blinking text effect", `<w:effect w:val="blinkBackground"/>`, false, false},
+		{"dot emphasis mark", `<w:em w:val="dot"/>`, false, false},
+		{"unknown attribute", `<w:caps w:val="0" w:other="1"/>`, false, false},
+		{"nested markup", `<w:caps w:val="0"><w:b/></w:caps>`, false, false},
+		{"duplicate", `<w:caps w:val="0"/><w:caps w:val="0"/>`, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
@@ -64,8 +73,11 @@ func TestNativeAbsentRunEffectProperty(t *testing.T) {
 			if got := hasUnsupportedCode(doc, "UNMODELED_RUN_PROPERTY"); got == tc.accepted {
 				t.Fatalf("extract UNMODELED_RUN_PROPERTY=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
 			}
-			if got := hasResolutionDiagnostic(resolved, "UNMODELED_RUN_PROPERTY"); got == tc.accepted {
-				t.Fatalf("resolve UNMODELED_RUN_PROPERTY=%v, want %v: %#v", got, !tc.accepted, resolved.Diagnostics)
+			if want := !tc.accepted && !tc.resolverModels; hasResolutionDiagnostic(resolved, "UNMODELED_RUN_PROPERTY") != want {
+				t.Fatalf("resolve UNMODELED_RUN_PROPERTY want %v: %#v", want, resolved.Diagnostics)
+			}
+			if got := resolved.Runs[0].Properties.LetterSpacingTwips != nil; got != tc.resolverModels {
+				t.Fatalf("resolve letter_spacing_twips=%v, want %v", got, tc.resolverModels)
 			}
 			// The accepted leaf is disclosed without making the run's exposed
 			// properties partial, and never makes the source writable.
