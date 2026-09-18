@@ -212,16 +212,16 @@ func (resolver *nativeLayoutResolver) automaticBorderWhitePage() bool {
 	// behind this table, which is exactly what the main part was just tested
 	// for. A story whose source states none of them leaves the page white, and
 	// a story this resolver did not index is not evidence of anything.
-	for _, story := range resolver.allStories() {
-		if story.PartName == resolver.mainPart {
-			continue
-		}
-		if story.Anchor == nil {
-			return false
-		}
-		node := resolver.nodeForAnchor(*story.Anchor)
-		if node == nil || drawing(node) {
-			return false
+	for _, stories := range [][]NativeStoryV1{resolver.doc.Headers, resolver.doc.Footers, resolver.doc.Notes, resolver.doc.CommentStories} {
+		for i := range stories {
+			anchor := stories[i].Anchor
+			if anchor == nil {
+				return false
+			}
+			node := resolver.nodeForAnchor(*anchor)
+			if node == nil || drawing(node) {
+				return false
+			}
 		}
 	}
 	resolver.autoBorderWhite = true
