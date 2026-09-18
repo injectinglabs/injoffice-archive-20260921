@@ -2054,6 +2054,56 @@ describe('native DOCX pagination v1', () => {
     expect(omissions.omitted_content).toEqual([expect.objectContaining({ code, origin: 'source', scope_id: marked.id })])
   })
 
+  it('paints a vertically aligned or hide-mark cell in approximate layout and keeps refusing it in strict', () => {
+    // lvlPicBulletId.docx states w:vAlign="center" and w:hideMark on the single
+    // cell that holds its whole body. This tier paints a cell's paragraphs from
+    // the top of the cell box and measures a row from its cells' shaped lines,
+    // so neither can be applied: the approximate tier paints the text and
+    // discloses what it did not apply, and the strict tier still has no page.
+    for (const [code, omitted] of [['CELL_VERTICAL_ALIGNMENT_UNSUPPORTED', true], ['CELL_HIDE_END_MARK_UNSUPPORTED', false]] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'table-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      const strict = paginateNativeDocxV1(structuredClone(request))
+      expect(strict, code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', scope_id: marked.id })]))
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap((page) => page.lines.map((line) => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+      // Vertical alignment moves painted content to a place this preview does
+      // not put it, so it is disclosed as omitted content. w:hideMark only
+      // shortens a row whose height the end-of-cell marker alone sets, so it
+      // drops nothing the source asked to paint and stays a formatting note.
+      const omissions = collectNativeDocxApproximateOmissionsV1(
+        { document: request.document, resolved_layout: request.resolved_layout, shaped_lines: request.shaped_lines },
+        { status: 'painted', pages: [] })
+      expect(omissions.content_status, code).toBe(omitted ? 'partial' : 'complete')
+      expect(omissions.omitted_content, code).toEqual(omitted ? [expect.objectContaining({ code, origin: 'source', scope_id: marked.id })] : [])
+    }
+  })
+
+  it('paginates a row whose cell spacing states the zero spacing it would have anyway', () => {
+    // A w:trPr/w:tblCellSpacing of w:w="0" on the dxa width type asks for the
+    // spacing a row without the element already lays out with, so it is neutral
+    // on both tiers - unlike the cell properties above, the strict tier keeps
+    // its page and only restates the record as a deferred source diagnostic.
+    const code = 'DEFAULT_ROW_CELL_SPACING'
+    const request = fixture({ lineCounts: [1, 1] })
+    const marked = request.document.body.blocks[0]!.paragraph!
+    request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'table-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: 'Row cell spacing states the zero spacing a row without the element already has' })
+    const strict = paginateNativeDocxV1(structuredClone(request))
+    expect(strict).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'source-diagnostic', severity: 'deferred', source_code: code })]))
+    // Any other spacing is still unknown row markup and still refuses.
+    const refused = fixture({ lineCounts: [1, 1] })
+    refused.document.unsupported.push({ id: 'unsupported:UNMODELED_ROW_PROPERTY', code: 'UNMODELED_ROW_PROPERTY', capability: 'table-properties', scope_id: refused.document.body.blocks[0]!.paragraph!.id, preservation: 'refuse-mutation', message: 'This table-row property is preserved verbatim' })
+    expect(paginateNativeDocxV1(refused)).toMatchObject({ ok: true, value: { status: 'refused' } })
+  })
+
   it('omits an unshaped empty-run sibling paragraph in approximate layout and keeps the sibling paragraph', () => {
     const request = fixture({ lineCounts: [1, 1] })
     const dropped = request.document.body.blocks[0]!.paragraph!

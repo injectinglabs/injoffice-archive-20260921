@@ -1436,3 +1436,110 @@ func TestExtractNativeDocumentRecordsRotatedCellTextDirection(t *testing.T) {
 		})
 	}
 }
+
+// A cell's w:vAlign and w:hideMark, and a row's w:tblCellSpacing, each stop the
+// whole document at pagination as unknown cell/row markup. Two of the three are
+// visual results this tier does not produce and one is provably the spacing a
+// row without the element already has, so each gets its own code: the
+// approximate tier can then paint the table and disclose what it did not apply,
+// and the zero spacing is admitted on both tiers.
+func TestExtractNativeDocumentRecordsCellAlignmentHideMarkAndDefaultRowCellSpacing(t *testing.T) {
+	tableDocument := func(rowProperties, cellProperties string) map[string]string {
+		parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
+		parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr>` + rowProperties + `<w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/>` + cellProperties + `</w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`
+		return parts
+	}
+	extract := func(t *testing.T, rowProperties, cellProperties string) *NativeDocumentV1 {
+		t.Helper()
+		doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(tableDocument(rowProperties, cellProperties))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	anchored := func(t *testing.T, doc *NativeDocumentV1, code, element, named string) {
+		t.Helper()
+		found := false
+		for _, entry := range doc.Unsupported {
+			if entry.Code != code {
+				continue
+			}
+			found = true
+			if entry.Anchor == nil || !strings.Contains(entry.Anchor.Path, element) {
+				t.Fatalf("the disclosure must anchor the exact property: %#v", entry)
+			}
+			if named != "" && !strings.Contains(entry.Message, named) {
+				t.Fatalf("the disclosure must name what it did not apply: %#v", entry)
+			}
+		}
+		if !found {
+			t.Fatalf("expected %s: %#v", code, doc.Unsupported)
+		}
+	}
+	for _, value := range []string{"center", "bottom", "both"} {
+		t.Run("vAlign "+value, func(t *testing.T) {
+			doc := extract(t, "", `<w:vAlign w:val="`+value+`"/>`)
+			if hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+				t.Fatalf("vertical alignment %q must be recorded as its own code: %#v", value, doc.Unsupported)
+			}
+			anchored(t, doc, "CELL_VERTICAL_ALIGNMENT_UNSUPPORTED", "vAlign", value)
+			if doc.Body.Blocks[0].Table == nil || doc.Body.Blocks[0].Table.EditPolicy.Mode != "read-only" {
+				t.Fatalf("a table carrying a property this tier cannot apply must stay read-only: %#v", doc.Body.Blocks[0].Table)
+			}
+		})
+	}
+	t.Run("vAlign top is applied", func(t *testing.T) {
+		doc := extract(t, "", `<w:vAlign w:val="top"/>`)
+		if hasUnsupportedCode(doc, "CELL_VERTICAL_ALIGNMENT_UNSUPPORTED") || hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+			t.Fatalf("an explicit top alignment states the placement this tier already paints: %#v", doc.Unsupported)
+		}
+	})
+	t.Run("hideMark", func(t *testing.T) {
+		doc := extract(t, "", `<w:hideMark/>`)
+		if hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+			t.Fatalf("w:hideMark must be recorded as its own code: %#v", doc.Unsupported)
+		}
+		anchored(t, doc, "CELL_HIDE_END_MARK_UNSUPPORTED", "hideMark", "")
+	})
+	t.Run("hideMark disabled states nothing", func(t *testing.T) {
+		doc := extract(t, "", `<w:hideMark w:val="0"/>`)
+		if hasUnsupportedCode(doc, "CELL_HIDE_END_MARK_UNSUPPORTED") || hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") {
+			t.Fatalf("a disabled w:hideMark asks for the default: %#v", doc.Unsupported)
+		}
+	})
+	t.Run("zero row cell spacing", func(t *testing.T) {
+		for _, markup := range []string{`<w:trPr><w:tblCellSpacing w:w="0" w:type="dxa"/></w:trPr>`, `<w:trPr><w:tblCellSpacing w:w="0"/></w:trPr>`} {
+			doc := extract(t, markup, "")
+			if hasUnsupportedCode(doc, "UNMODELED_ROW_PROPERTY") {
+				t.Fatalf("zero row cell spacing must be recorded as its own code: %#v", doc.Unsupported)
+			}
+			anchored(t, doc, "DEFAULT_ROW_CELL_SPACING", "tblCellSpacing", "")
+		}
+	})
+	for name, markup := range map[string]string{
+		"non-zero spacing": `<w:trPr><w:tblCellSpacing w:w="72" w:type="dxa"/></w:trPr>`,
+		"percentage width": `<w:trPr><w:tblCellSpacing w:w="0" w:type="pct"/></w:trPr>`,
+		"missing width":    `<w:trPr><w:tblCellSpacing w:type="dxa"/></w:trPr>`,
+		"extra child":      `<w:trPr><w:tblCellSpacing w:w="0" w:type="dxa"><w:w/></w:tblCellSpacing></w:trPr>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := extract(t, markup, "")
+			if !hasUnsupportedCode(doc, "UNMODELED_ROW_PROPERTY") || hasUnsupportedCode(doc, "DEFAULT_ROW_CELL_SPACING") {
+				t.Fatalf("%s must stay unknown row markup: %#v", name, doc.Unsupported)
+			}
+		})
+	}
+	for name, markup := range map[string]string{
+		"unknown alignment":   `<w:vAlign w:val="middle"/>`,
+		"missing alignment":   `<w:vAlign/>`,
+		"alignment extra kid": `<w:vAlign w:val="center"><w:val/></w:vAlign>`,
+		"hideMark extra kid":  `<w:hideMark><w:val/></w:hideMark>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := extract(t, "", markup)
+			if !hasUnsupportedCode(doc, "UNMODELED_CELL_PROPERTY") || hasUnsupportedCode(doc, "CELL_VERTICAL_ALIGNMENT_UNSUPPORTED") || hasUnsupportedCode(doc, "CELL_HIDE_END_MARK_UNSUPPORTED") {
+				t.Fatalf("%s must stay unknown cell markup: %#v", name, doc.Unsupported)
+			}
+		})
+	}
+}

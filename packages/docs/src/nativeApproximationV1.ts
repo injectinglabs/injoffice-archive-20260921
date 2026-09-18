@@ -160,6 +160,22 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // it is a visual result the preview does not produce, disclosed as omitted
   // content rather than a refusal that produces no page at all.
   'CELL_TEXT_DIRECTION_UNSUPPORTED',
+  // w:tcPr/w:vAlign asks for the cell's content to be centred or seated on the
+  // cell's bottom. This tier lays the cell out and paints its paragraphs from
+  // the top of the cell box, so the cell's glyphs are present but the vertical
+  // distribution is not: a visual result the preview does not produce,
+  // disclosed as omitted content rather than a refusal that produces no page
+  // at all. An explicit `top` is the default this tier already applies and
+  // never reaches this set.
+  'CELL_VERTICAL_ALIGNMENT_UNSUPPORTED',
+  // w:tcPr/w:hideMark asks Word to leave the cell's end-of-cell marker out of
+  // the row-height calculation. This tier measures a row from the shaped lines
+  // of its cells and has no separate end-of-cell marker to exclude, so the
+  // request cannot be applied. Nothing the source asks to paint is dropped -
+  // the rule only shortens a row whose height that marker alone sets - so it
+  // is an approximated property of painted content, disclosed here and not in
+  // the omitted-content list.
+  'CELL_HIDE_END_MARK_UNSUPPORTED',
   // A negative w:line measurement. ECMA-376 17.3.1.33 types w:line as
   // ST_SignedTwipsMeasure and Word reads a negative one as an EXACT line height
   // of its absolute value, compressing the lines until they overlap and

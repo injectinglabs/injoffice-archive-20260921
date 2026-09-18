@@ -61,6 +61,12 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   // result this preview does not produce, so it is disclosed here rather than
   // left to a formatting-only note.
   'CELL_TEXT_DIRECTION_UNSUPPORTED',
+  // A vertically centred or bottom-seated cell's paragraphs are painted, but
+  // not where Word paints them: they sit at the top of the cell box instead of
+  // being distributed against the row's height. That is a visual result this
+  // preview does not produce, so it is disclosed here rather than left to a
+  // formatting-only note.
+  'CELL_VERTICAL_ALIGNMENT_UNSUPPORTED',
   // Word compresses a paragraph whose w:line is negative until its lines
   // overlap; this tier paints them at the inherited spacing instead. The
   // compressed line box Word draws is absent from the page, so it is disclosed
