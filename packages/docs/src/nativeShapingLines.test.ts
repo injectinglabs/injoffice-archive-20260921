@@ -930,6 +930,61 @@ describe('shapeNativeDocxLinesV1', () => {
     }
   })
 
+  /** Every paragraph inside the table of `tdf118812_tableStyles-comprehensive.docx`
+   * is centred by the table style's `w:jc w:val="center"`, and Word centres the
+   * marker, its suffix tab and the body text together inside a region that
+   * starts at the FIRST-LINE ORIGIN rather than at the text margin. In that
+   * document's cell content box [90.0 pt, 381.2 pt] the `1.` row takes `w:ind`
+   * from its level (left 720, hanging 360, no right indent), so the region
+   * starts at the 18.0 pt origin and offers 273.2 pt for a 75.2502 pt line;
+   * Word's own PDF export puts the marker origin at 206.9749 pt, the suffix at
+   * 213.0491 pt and the text origin at 224.9748 pt, which is
+   * 90.0 + 18.0 + (273.2 - 75.2502) / 2 to the milli-point. The `A.` row, whose
+   * style adds `w:ind w:right="1440"`, lands the same way at
+   * 112.7834 / 128.3381 / 130.7834 pt. Centring from the text margin instead
+   * would move both by the hanging indent. Mirrored here on the fixture
+   * shaper's 1 pt-per-character scale: a 291.2 pt content box, an 18 pt
+   * first-line origin, a 36 pt text margin and a 22 pt assembled first line. */
+  it('places a numbered first line by its paragraph alignment inside the region that starts at the marker anchor', async () => {
+    for (const [alignment, indentEnd, expectedOffset] of [
+      ['start', 0, 18_000],
+      ['left', 0, 18_000],
+      ['center', 0, 143_600],
+      ['right', 0, 269_200],
+      ['end', 0, 269_200],
+      ['center', 72_000, 107_600],
+      ['right', 72_000, 197_200],
+    ] as const) {
+      const label = `${alignment}/${indentEnd}`
+      const document = nativeDocument()
+      makeTextOnly(document, 'body')
+      const resolved = resolvedLayout(document)
+      resolved.paragraphs[0]!.properties = { indent_start_twips: 720, hanging_twips: 360, indent_end_twips: indentEnd / 50, alignment }
+      resolved.paragraphs[0]!.numbering = { ...resolvedNumbering('paragraph:intro', 1, '1.'), alignment: 'start', label_start_twips: 360, label_end_twips: 720, text_start_twips: 720 }
+      attestNumbering(document, resolved)
+      const value = request(document, resolved)
+      value.available_width_millipoints = 291_200
+      value.tab_interval_millipoints = 36_000
+      const result = await shapeNativeDocxLinesV1(value, fakeProviders([]))
+      expect(result.ok, label).toBe(true)
+      if (!result.ok) continue
+      expect(result.value.diagnostics.map((diagnostic) => diagnostic.code), label).not.toContain('list-marker-alignment-deferred')
+      const paragraph = result.value.paragraphs[0]!
+      // The marker's own geometry stays on the paragraph's indents: Word resolves
+      // the marker and its suffix tab there and only then places the whole line.
+      expect(paragraph.list_marker!.marker_start_millipoints, label).toBe(18_000)
+      expect(paragraph.list_marker!.text_start_millipoints, label).toBe(36_000)
+      expect(paragraph.lines[0]!.available_width_millipoints, label).toBe(291_200 - 18_000 - indentEnd)
+      expect(paragraph.lines[0]!.advance_inline_millipoints, label).toBe(22_000)
+      expect(paragraph.lines[0]!.inline_offset_millipoints, label).toBe(expectedOffset)
+      expect(paragraph.lines[0]!.fragments.map((fragment) => fragment.text).join(''), label).toBe('1.\tbody')
+      expect(decodeNativeDocxShapedLines(structuredClone(result.value)).ok, `${label} contract`).toBe(true)
+      const shifted = structuredClone(result.value)
+      shifted.paragraphs[0]!.lines[0]!.inline_offset_millipoints += 1
+      expect(decodeNativeDocxShapedLines(shifted).ok, `${label} shifted`).toBe(false)
+    }
+  })
+
   /** `cjklist34/35/44.docx` all state `w:ind w:left="480" w:hanging="480"` — a
    * 24 pt label region — under an ideographic format whose marker reaches three
    * full-width glyphs plus a stop (`壹拾壹.`, 39.029 pt at 12 pt PMingLiU). Word's

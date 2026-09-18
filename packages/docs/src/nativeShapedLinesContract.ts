@@ -370,6 +370,22 @@ function validateLine(value: unknown, path: string, issues: NativeDocxValidation
   return height ?? null
 }
 
+/** The first-line origin a list marker's paragraph-relative geometry is measured
+ * from. A numbered paragraph's first line is offered an interval that begins at
+ * the marker anchor instead of the text margin, and it materializes at that
+ * anchor plus the paragraph's own alignment offset -- Word centres, right-aligns
+ * or justifies marker, suffix and body text together, and the marker leaves the
+ * indent with them. So the anchor is the recorded inline offset with that same
+ * canonical alignment offset removed, and a leading-aligned line is unchanged. */
+function firstLineMarkerOrigin(line: JsonObject, alignment: string | undefined, direction: string | undefined): number | undefined {
+  const offset = line.inline_offset_millipoints
+  const available = line.available_width_millipoints
+  const advance = line.advance_inline_millipoints
+  if (!alignment || !direction || !Number.isSafeInteger(offset) || !Number.isSafeInteger(available) || !Number.isSafeInteger(advance)) return undefined
+  const resolved = alignment === 'both' && line.justified === false ? 'start' : alignment
+  return (offset as number) - canonicalAlignmentOffset(resolved, direction, available as number, advance as number)
+}
+
 function validateParagraph(value: unknown, path: string, issues: NativeDocxValidationIssue[], state: ShapedDecodeState, paragraphIDs: Set<string>, lineIDs: Set<string>): void {
   const entry = object(value, path, DOCX_SHAPED_LINES_V1_BINDING_FIELDS.ParagraphV1, issues)
   if (!entry) return
@@ -418,7 +434,8 @@ function validateParagraph(value: unknown, path: string, issues: NativeDocxValid
       const markerPrefix = Array.isArray(lines[0].fragments) ? lines[0].fragments.filter((fragment) => isObject(fragment) && fragment.source_kind === 'list-marker') : []
       if (Array.isArray(lines[0].fragments) && !lines[0].fragments.slice(0, markerPrefix.length).every((fragment) => isObject(fragment) && fragment.source_kind === 'list-marker')) add(issues, 'BROKEN_REFERENCE', `${path}/lines/0/fragments`, 'list-marker fragments must form one contiguous first-line prefix')
       const advance = markerPrefix.reduce((sum, fragment) => sum + (isObject(fragment) && Number.isSafeInteger(fragment.advance_inline_millipoints) ? fragment.advance_inline_millipoints as number : 0), 0)
-      if (Number.isSafeInteger(lines[0].inline_offset_millipoints) && Number.isSafeInteger(entry.list_marker.text_start_millipoints) && advance !== (entry.list_marker.text_start_millipoints as number) - (lines[0].inline_offset_millipoints as number)) {
+      const markerOrigin = firstLineMarkerOrigin(lines[0], alignment, direction)
+      if (markerOrigin !== undefined && Number.isSafeInteger(entry.list_marker.text_start_millipoints) && advance !== (entry.list_marker.text_start_millipoints as number) - markerOrigin) {
         add(issues, 'BROKEN_REFERENCE', `${path}/list_marker/text_start_millipoints`, 'must equal the first-line origin plus the exact shaped marker-prefix advance')
       }
       const markerText = typeof entry.list_marker.text === 'string' ? entry.list_marker.text : undefined
@@ -452,7 +469,7 @@ function validateParagraph(value: unknown, path: string, issues: NativeDocxValid
             continue
           }
           visibleStarted = true
-          if (cursor === 0 && Number.isSafeInteger(lines[0].inline_offset_millipoints) && Number.isSafeInteger(entry.list_marker.marker_start_millipoints) && (lines[0].inline_offset_millipoints as number) + prefixAdvance !== entry.list_marker.marker_start_millipoints) add(issues, 'BROKEN_REFERENCE', `${path}/list_marker/marker_start_millipoints`, 'must equal the first-line origin plus the exact virtual marker prefix')
+          if (cursor === 0 && markerOrigin !== undefined && Number.isSafeInteger(entry.list_marker.marker_start_millipoints) && markerOrigin + prefixAdvance !== entry.list_marker.marker_start_millipoints) add(issues, 'BROKEN_REFERENCE', `${path}/list_marker/marker_start_millipoints`, 'must equal the first-line origin plus the exact virtual marker prefix')
           cursor = fragment.end_utf16 as number
         }
         if (cursor !== markerText.length) add(issues, 'BROKEN_REFERENCE', `${path}/list_marker/text`, 'visible list-marker fragments must cover the complete marker text')
