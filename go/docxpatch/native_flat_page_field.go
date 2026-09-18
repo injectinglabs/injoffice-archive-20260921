@@ -183,3 +183,44 @@ func nativeExactPageFieldProperties(node *nativeXMLNode, wordNS string) bool {
 	}
 	return nativeExactParagraphMarkProperties(&projection, wordNS)
 }
+
+// The reason a simple field is not one of this tier's modeled page fields.
+const nativeUnmodeledPageFieldMessage = "Only an unlocked simple decimal PAGE or NUMPAGES field with one text result run is modeled"
+
+// STYLEREF earns a reason of its own because the page-field sentence above
+// reads, on the one field it also fits, as though a page-field fix would admit
+// it. STYLEREF repeats the nearest paragraph carrying a named style on the page
+// it is painted on, so its result is pagination-dependent AND arbitrary
+// paragraph text that re-breaks the header line. It also names the style by the
+// authoring application's localized display name, which a package's own style
+// table need not define, so two applications resolve one field differently. No
+// result follows from the package alone and none is painted.
+const nativeStyleReferenceFieldMessage = "STYLEREF repeats the nearest paragraph of a named style after pagination and resolves that name against the authoring application's localized style table, so no result follows from the package alone"
+
+func nativeUnmodeledSimpleFieldMessage(instruction string) string {
+	if nativeFieldKeyword(instruction) == "STYLEREF" {
+		return nativeStyleReferenceFieldMessage
+	}
+	return nativeUnmodeledPageFieldMessage
+}
+
+// The leading whitespace-delimited token of a field instruction, upper-cased.
+// A token longer than any ECMA-376 field keyword is reported as none.
+func nativeFieldKeyword(instruction string) string {
+	start := 0
+	for start < len(instruction) && nativeFieldSeparator(instruction[start]) {
+		start++
+	}
+	end := start
+	for end < len(instruction) && !nativeFieldSeparator(instruction[end]) {
+		end++
+	}
+	if end-start > 64 {
+		return ""
+	}
+	return strings.ToUpper(instruction[start:end])
+}
+
+func nativeFieldSeparator(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
+}
