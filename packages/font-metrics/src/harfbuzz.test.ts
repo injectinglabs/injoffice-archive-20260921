@@ -547,11 +547,44 @@ describe('canonical HarfBuzz text shaper v1', () => {
         bytes[locaOffset + glyphCount * 2 + 1] = 0
       }
     })
-    const badChecksum = mutatedResource((bytes) => {
-      const hmtxOffset = readU32(bytes, tableRecord(bytes, 'hmtx') + 8)
-      bytes[hmtxOffset] ^= 1
+    // A table record whose length no longer covers its own header: the cmap
+    // becomes unwalkable, which is the integrity the preflight actually depends on.
+    const truncatedTable = mutatedResource((bytes) => {
+      writeU32(bytes, tableRecord(bytes, 'cmap') + 12, 8)
     })
-    for (const resource of [badMagic, overlapping, descendingLoca, badChecksum]) expect(refusalCode(shape('abc', {}, resource))).toBe('unsupported-font-format')
+    // A four-byte-aligned table offset that leaves the font bytes entirely.
+    const offsetOutsideBytes = mutatedResource((bytes) => {
+      writeU32(bytes, tableRecord(bytes, 'maxp') + 8, bytes.byteLength - (bytes.byteLength % 4))
+    })
+    // `hhea.numberOfHMetrics` claiming more metrics than `hmtx` can hold.
+    const inconsistentHmtx = mutatedResource((bytes) => {
+      writeU32(bytes, tableRecord(bytes, 'hmtx') + 12, 8)
+    })
+    for (const resource of [badMagic, overlapping, descendingLoca, truncatedTable, offsetOutsideBytes, inconsistentHmtx]) expect(refusalCode(shape('abc', {}, resource))).toBe('unsupported-font-format')
+  })
+
+  it('admits a face whose sfnt directory states a stale table checksum', () => {
+    // sfnt table checksums are advisory build metadata, not a parse
+    // precondition. Word 16 ships `symbol.ttf` with a `cmap` record stating
+    // 0x42f6990a over bytes that sum to 0x2796fb28, and that face is the only
+    // one on a stock macOS install that maps the Symbol bullet U+F0B7, so
+    // refusing it substituted nothing - it removed the document. The bytes are
+    // still pinned: `contentDigest` is a sha-256 over the whole file, verified
+    // before and after the preflight, which is strictly stronger than the sum.
+    const staleChecksum = mutatedResource((bytes) => {
+      const record = tableRecord(bytes, 'cmap')
+      writeU32(bytes, record + 4, (readU32(bytes, record + 4) ^ 0xdead_beef) >>> 0)
+    })
+    expect(inspectHarfBuzzFontMetricsV1({ bytes: staleChecksum.bytes, contentDigest: staleChecksum.face.contentDigest })).toEqual(font.metrics)
+    const stale = shape('office bullets', {}, staleChecksum)
+    const pristine = shape('office bullets')
+    expect('status' in stale).toBe(false)
+    expect('status' in pristine).toBe(false)
+    // The table bytes are untouched, so the face shapes exactly as it does when
+    // the advisory number agrees.
+    expect((stale as ShapedSegment).glyphs).toEqual((pristine as ShapedSegment).glyphs)
+    expect((stale as ShapedSegment).clusters).toEqual((pristine as ShapedSegment).clusters)
+    expect((stale as ShapedSegment).advanceInlineMilliPoints).toBe((pristine as ShapedSegment).advanceInlineMilliPoints)
   })
 
   it('accepts an empty optional prep table, including when it shares loca\'s offset', () => {
