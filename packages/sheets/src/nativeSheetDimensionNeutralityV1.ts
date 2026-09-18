@@ -10,8 +10,14 @@
  * evidence separates "we did not model it" from "the dimensions may be wrong".
  *
  * It never reproduces what it clears, and it never clears a code it does not
- * list: FOREIGN_WORKSHEET_MARKUP, zeroHeight and unqualified metrics keep
- * refusing exactly as before.
+ * list: zeroHeight and unqualified metrics keep refusing exactly as before.
+ *
+ * FOREIGN_WORKSHEET_MARKUP is cleared only for the one shape the Go tier
+ * qualifies: a worksheet whose every foreign-namespace child is a
+ * markup-compatibility AlternateContent holding nothing but a SpreadsheetML
+ * <controls> block. Those are anchored form controls, and ECMA-376 gives
+ * CT_ObjectAnchor no role in a row height, a column width or a merged
+ * rectangle. Any other foreign child keeps the code refusing.
  */
 export const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY = 'non-dimensional-worksheet-markup-v1' as const
 
@@ -19,6 +25,7 @@ export const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_POLICY = 'non-dimensional-work
 export const NATIVE_SHEET_DIMENSION_NEUTRALITY_V1_CODES = Object.freeze([
   'COLS_ATTRIBUTES',
   'COLUMN_DIMENSION_EXTRAS',
+  'FOREIGN_WORKSHEET_MARKUP',
   'ROW_DIMENSION_EXTRAS',
   'SHEET_FORMAT_EXTRAS',
   'SHEET_VIEW_GEOMETRY',

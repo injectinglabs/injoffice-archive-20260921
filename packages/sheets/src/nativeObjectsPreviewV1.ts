@@ -5,6 +5,7 @@ import { decodeNativeSheetDimensionNeutralityV1, type NativeSheetDimensionNeutra
 import { snapshotNativePlainData } from "./nativePlainData.js";
 import {decodeNativeSheetPageSettingsV1,type NativeSheetPageSettingsV1} from './nativeSheetPageSettingsV1.js';
 import {decodeNativeDrawingObjectsV1,type NativeDrawingObjectV1} from './nativeDrawingObjectsV1.js';
+import {decodeNativeFormControlsV1,type NativeFormControlV1} from './nativeFormControlObjectsV1.js';
 import {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js';
 import {decodeNativeSheetPrintAreaSetsV1,type NativeSheetPrintAreaSetV1} from './nativeSheetPrintAreaSetsV1.js';
 import {decodeNativeSheetPrintTitlesV1,type NativeSheetPrintTitlesV1} from './nativeSheetPrintTitlesV1.js';
@@ -22,6 +23,7 @@ export interface NativeWorkbookObjectsV1 {
   print_area_sets?: NativeSheetPrintAreaSetV1[];
   print_titles?: NativeSheetPrintTitlesV1[];
   drawing_objects?: NativeDrawingObjectV1[];
+  form_controls?: NativeFormControlV1[];
   rich_text?: NativeRichTextPreviewV1;
   conditional_fills?: NativeConditionalFillPreviewV1[];
 }
@@ -126,6 +128,7 @@ export function decodeNativeWorkbookObjectsV1(
   const hasRichText = !!input && typeof input === "object" && Object.hasOwn(input, "rich_text");
   const hasConditionalFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_fills");
   const hasDrawings = !!input && typeof input === "object" && Object.hasOwn(input, "drawing_objects");
+  const hasFormControls = !!input && typeof input === "object" && Object.hasOwn(input, "form_controls");
   const value = obj(input, [
     "protocol",
     "version",
@@ -139,6 +142,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasPrintAreaSets ? ["print_area_sets"] : []),
     ...(hasPrintTitles ? ["print_titles"] : []),
     ...(hasDrawings ? ["drawing_objects"] : []),
+    ...(hasFormControls ? ["form_controls"] : []),
     ...(hasConditionalFills ? ["conditional_fills"] : []),
     ...(hasRichText ? ["rich_text"] : []),
   ]);
@@ -356,6 +360,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasRichText ? { rich_text: decodeNativeRichTextPreviewV1(value.rich_text) } : {}),
     ...(hasConditionalFills ? { conditional_fills: decodeNativeConditionalFillPreviewsV1(value.conditional_fills) } : {}),
     ...(hasDrawings ? { drawing_objects: decodeNativeDrawingObjectsV1(value.drawing_objects) } : {}),
+    ...(hasFormControls ? { form_controls: decodeNativeFormControlsV1(value.form_controls) } : {}),
   };
 }
 
