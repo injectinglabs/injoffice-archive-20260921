@@ -602,8 +602,12 @@ func TestResolveNativeDocumentLayoutV1KeepsTheFirstOfDuplicateFontTableEntries(t
 	})
 }
 
+// A picture bullet whose w:numPicBullet names an image relationship is a marker
+// graphic this tier has no input for, so it keeps refusing rather than dropping
+// the graphic. (One that names no relationship at all carries no picture and is
+// read by TestNativeEmptyPictureBulletIsUnpaintedAndDisclosed instead.)
 func TestResolveNativeDocumentLayoutV1PreservesPictureBullets(t *testing.T) {
-	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:numPicBullet w:numPicBulletId="1"><w:pict/></w:numPicBullet><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlPicBulletId w:val="1"/></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:r="` + relNSTransitional + `"><w:numPicBullet w:numPicBulletId="1"><w:pict><v:shape><v:imagedata r:id="rId1"/></v:shape></w:pict></w:numPicBullet><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlPicBulletId w:val="1"/></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
 	parts := resolvedNumberingTestParts(numbering)
 	parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:numId w:val="2"/></w:numPr></w:pPr><w:r><w:t>picture bullet</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
 	resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
