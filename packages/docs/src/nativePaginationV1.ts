@@ -36,7 +36,7 @@ import {
   type NativeDocxShapedParagraphV1,
 } from './nativeShapingLines.js'
 import { reorderNativeBidiLineV1 } from '@injoffice/font-metrics/bidi'
-import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
+import { decodeNativeDocxShapedLines, nativeDocxCanonicalAlignmentOffsetV1 } from './nativeShapedLinesContract.js'
 import { resolveNativeDocxParagraphBidiPlanV1 } from './nativeBidiPlanV1.js'
 import {
   DOCX_PAGINATION_SETTINGS_PROTOCOL,
@@ -1789,7 +1789,7 @@ function placeTableRow(context: PaginationContext, table: NativeDocxQualifiedTab
         const x = checkedSum(targetColumn.x_millipoints, cell.content_x_millipoints, line.inline_offset_millipoints)
         const y = checkedSum(targetColumn.y_millipoints, rowTop, localY)
         const bottomInset = table.border_reservation_policy ? table.table.cell_margins!.bottom_twips * 50 : cell.content_y_millipoints
-        if (x === undefined || y === undefined || !cellLineWithinContentWidth(context, line, cell.content_width_millipoints, paragraph.paragraph_id) || localY + line.line_height_millipoints > cell.height_millipoints - bottomInset) {
+        if (x === undefined || y === undefined || !cellLineWithinContentWidth(context, line, cell.content_width_millipoints, paragraph) || localY + line.line_height_millipoints > cell.height_millipoints - bottomInset) {
           refuse(context, 'line-geometry-invalid', line.id, 'Cell line escapes its exact qualified content box')
           return
         }
@@ -1897,7 +1897,7 @@ function placeRowFragment(context: PaginationContext, table: NativeDocxQualified
     if (context.sliceCount >= DOCX_PAGINATION_LIMITS.maxParagraphSlices || context.linePlacementCount + selected.length > DOCX_PAGINATION_LIMITS.maxLinePlacements) { refuse(context,'resource-limit',row.row_id,'Split row exceeds the bounded paragraph/line placement budget'); return }
     const placed: NativeDocxPlacedLineV1[] = []
     for (const { line,y } of selected) {
-      if (!cellLineWithinContentWidth(context, line, entry.content_width, paragraph.paragraph_id)) { refuse(context,'line-geometry-invalid',line.id,'Split cell line escapes the qualified content width'); return }
+      if (!cellLineWithinContentWidth(context, line, entry.content_width, paragraph)) { refuse(context,'line-geometry-invalid',line.id,'Split cell line escapes the qualified content width'); return }
       placed.push({ id:`placed:${line.id}`,line_id:line.id,paragraph_id:paragraph.paragraph_id,table_cell_id:entry.cell_id,section_id:section.id,column_id:column.id,column_ordinal:column.ordinal,source_line_ordinal:line.ordinal,x_millipoints:column.x_millipoints+entry.content_x+line.inline_offset_millipoints,y_millipoints:pageY+y-start,width_millipoints:line.advance_inline_millipoints,height_millipoints:line.line_height_millipoints })
     }
     const sliceOrdinal = context.sliceCountForParagraph?.get(paragraph.paragraph_id) ?? 0
@@ -2031,20 +2031,34 @@ export function nativeDocxApproximatePaginationPolicyReasonsV1(layout: NativeDoc
   return reasons
 }
 
+/**
+ * The origin of the indented box a shaped line was laid out in. A line records
+ * `inline_offset` as the paragraph indent (or a horizontal exclusion) plus its
+ * own ST_Jc alignment offset, so for a centred or end-aligned line the recorded
+ * offset sits strictly to the right of the box it belongs to. Removing the
+ * alignment offset again -- exactly as the shaped-lines contract derives it --
+ * recovers that origin.
+ */
+function cellLineIndentOrigin(line: NativeDocxShapedParagraphV1['lines'][number], paragraph: NativeDocxShapedParagraphV1): number {
+  const alignment = paragraph.alignment === 'both' && line.justified === false ? 'start' : paragraph.alignment
+  return line.inline_offset_millipoints - nativeDocxCanonicalAlignmentOffsetV1(alignment, paragraph.direction, line.available_width_millipoints, line.advance_inline_millipoints)
+}
+
 // Strict placement requires the shaped line box to equal the cell content
 // width exactly. Shaping reports the box after paragraph indents, so the
 // approximate preview instead requires the indented box (and its advance) to
 // stay inside the qualified content width; the indent itself is authored.
-function cellLineWithinContentWidth(context: PaginationContext, line: NativeDocxShapedParagraphV1['lines'][number], contentWidth: number, paragraphID: string): boolean {
+function cellLineWithinContentWidth(context: PaginationContext, line: NativeDocxShapedParagraphV1['lines'][number], contentWidth: number, paragraph: NativeDocxShapedParagraphV1): boolean {
   if (line.inline_offset_millipoints + line.advance_inline_millipoints > contentWidth) return false
   if (line.available_width_millipoints === contentWidth) return true
-  if (!context.approximateLegacySettings || line.inline_offset_millipoints < 0 || line.available_width_millipoints < 0 || line.inline_offset_millipoints + line.available_width_millipoints > contentWidth) return false
+  const origin = cellLineIndentOrigin(line, paragraph)
+  if (!context.approximateLegacySettings || origin < 0 || line.available_width_millipoints < 0 || origin + line.available_width_millipoints > contentWidth) return false
   // Disclosed once per paragraph on the first line that actually needs the policy
   // (a hanging indent leaves line 0 full-width and indents the rest).
   context.indentedCellDisclosures ??= new Set()
-  if (!context.indentedCellDisclosures.has(paragraphID)) {
-    context.indentedCellDisclosures.add(paragraphID)
-    addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: paragraphID, message: DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING })
+  if (!context.indentedCellDisclosures.has(paragraph.paragraph_id)) {
+    context.indentedCellDisclosures.add(paragraph.paragraph_id)
+    addDiagnostic(context, { code: 'source-diagnostic', severity: 'deferred', scope_id: paragraph.paragraph_id, message: DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING })
   }
   return true
 }

@@ -268,7 +268,13 @@ function validateFragment(value: unknown, path: string, issues: NativeDocxValida
   void logicalOrder
 }
 
-function canonicalAlignmentOffset(alignment: string, direction: string, available: number, advance: number): number {
+/**
+ * ECMA-376 17.18.44 ST_Jc: the inline distance a line's own alignment adds on
+ * top of the paragraph indent. A shaped line records `inline_offset` as indent
+ * plus this offset, so any consumer that wants the indented box origin back
+ * subtracts it rather than reading `inline_offset` as the indent itself.
+ */
+export function nativeDocxCanonicalAlignmentOffsetV1(alignment: string, direction: string, available: number, advance: number): number {
   const remaining = Math.max(0, available - advance)
   if (alignment === 'center') return Math.round(remaining / 2)
   if (alignment === 'both' || alignment === 'distribute') return 0
@@ -353,7 +359,7 @@ function validateLine(value: unknown, path: string, issues: NativeDocxValidation
       }
     }
     const alignment = paragraphAlignment === 'both' && entry.justified === false ? 'start' : paragraphAlignment
-    const expectedOffset = base + canonicalAlignmentOffset(alignment, paragraphDirection, available, lineAdvance)
+    const expectedOffset = base + nativeDocxCanonicalAlignmentOffsetV1(alignment, paragraphDirection, available, lineAdvance)
     if (inlineOffset !== expectedOffset) add(issues, 'INVALID_VALUE', `${path}/inline_offset_millipoints`, 'must equal the canonical physical/logical alignment offset for paragraph direction and indents')
   }
   if (entry.exclusion_end_millipoints !== undefined) {
@@ -383,7 +389,7 @@ function firstLineMarkerOrigin(line: JsonObject, alignment: string | undefined, 
   const advance = line.advance_inline_millipoints
   if (!alignment || !direction || !Number.isSafeInteger(offset) || !Number.isSafeInteger(available) || !Number.isSafeInteger(advance)) return undefined
   const resolved = alignment === 'both' && line.justified === false ? 'start' : alignment
-  return (offset as number) - canonicalAlignmentOffset(resolved, direction, available as number, advance as number)
+  return (offset as number) - nativeDocxCanonicalAlignmentOffsetV1(resolved, direction, available as number, advance as number)
 }
 
 function validateParagraph(value: unknown, path: string, issues: NativeDocxValidationIssue[], state: ShapedDecodeState, paragraphIDs: Set<string>, lineIDs: Set<string>): void {
