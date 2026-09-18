@@ -1770,6 +1770,52 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  /**
+   * A w:softHyphen paints nothing unless a line breaks at it, and shaping,
+   * the authoritative bidi projection and the fragment identity join already
+   * spell it out as a glyphless zero-advance break opportunity. The
+   * approximate tier paginates it; the exact tier still refuses the control.
+   */
+  it('paginates a native soft hyphen in the approximate tier and refuses it exactly', () => {
+    const request = fixture({ lineCounts: [1, 1] }) as any
+    const paragraph = request.document.body.blocks[0].paragraph
+    const previous = paragraph.runs[paragraph.runs.length - 1]
+    const hyphenID = `${previous.id}:shy`
+    paragraph.runs.push({ kind: 'control', control: 'soft-hyphen', id: hyphenID, anchor: { ...previous.anchor, path: `${previous.anchor.path}/w:softHyphen[1]`, start_byte: previous.anchor.end_byte + 1, end_byte: previous.anchor.end_byte + 2 } })
+    request.resolved_layout.runs.push({ run_id: hyphenID, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+    const line = request.shaped_lines.paragraphs[0].lines[0]
+    line.fragments = [{
+      id: `fragment:${paragraph.id}:0:0`, source_kind: 'run', source_id: hyphenID,
+      start_utf16: 0, end_utf16: 0, text: '', direction: 'ltr', bidi_level: 0, logical_order: 0, script: 'Zyyy', language: 'und', whitespace: false,
+      advance_inline_millipoints: 0, justification_expansion_millipoints: 0, ascent_millipoints: 0, descent_millipoints: 0, line_gap_millipoints: 0, glyphs: [],
+    }]
+    line.logical_to_visual = [0]
+    line.advance_inline_millipoints = 0
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(request)
+    expect(strict, JSON.stringify((strict as any).issues)).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'source-control-unsupported', scope_id: hyphenID })]))
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('paginated')
+    expect(approximate.layout.pages.flatMap((page: any) => page.lines.map((line: any) => line.paragraph_id))).toEqual(['paragraph:1', 'paragraph:2'])
+    // A page break and a column break stay refused in both tiers.
+    for (const control of ['page-break', 'column-break'] as const) {
+      const other = fixture({ lineCounts: [1, 1] }) as any
+      const target = other.document.body.blocks[0].paragraph
+      const last = target.runs[target.runs.length - 1]
+      const id = `${last.id}:${control}`
+      target.runs.push({ kind: 'control', control, id, anchor: { ...last.anchor, path: `${last.anchor.path}/w:br[1]`, start_byte: last.anchor.end_byte + 1, end_byte: last.anchor.end_byte + 2 } })
+      other.resolved_layout.runs.push({ run_id: id, paragraph_id: target.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+      other.pagination_settings.profile = 'unsupported'
+      delete other.pagination_settings.compatibility_mode
+      other.pagination_settings.diagnostics = request.pagination_settings.diagnostics
+      expect(paginateNativeDocxApproximateLegacyV1(other, eligibility).layout.status, control).toBe('refused')
+    }
+  })
+
   it('paints every paragraph under a document-scoped feature request the shaper already applies', () => {
     // w14:ligatures w14:val="standardContextual" and an enabled w14:cntxtAlts
     // sit in styles.xml docDefaults, so their record is scoped to the document
