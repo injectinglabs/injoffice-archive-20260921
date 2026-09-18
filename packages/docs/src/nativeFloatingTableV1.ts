@@ -28,15 +28,21 @@ export interface NativeDocxFloatingTablePlacementV1 {
  * left unplaced: a keep-out distance above or below the float moves where the
  * following text resumes, and no reference measurement fixes that here.
  */
+export function nativeDocxUnplaceableFloatingTableFrameV1(position: NativeDocxTableFloatingPositionV1): string | undefined {
+  if (position.vertical_anchor !== 'text') return `vertical anchor ${position.vertical_anchor}`
+  if (position.y_alignment !== undefined) return `vertical alignment ${position.y_alignment}`
+  if (position.top_from_text_twips !== 0 || position.bottom_from_text_twips !== 0) return 'a non-zero keep-out distance above or below the frame'
+  if (position.x_alignment !== undefined && !['left', 'center', 'right'].includes(position.x_alignment)) return `horizontal alignment ${position.x_alignment}`
+  return undefined
+}
+
 export function placeNativeDocxFloatingTableV1(
   position: NativeDocxTableFloatingPositionV1,
   anchors: NativeDocxFloatingTableAnchorsV1,
   tableWidthMilliPoints: number,
 ): NativeDocxFloatingTablePlacementV1 | { unsupported: string } {
-  if (position.vertical_anchor !== 'text') return { unsupported: `vertical anchor ${position.vertical_anchor}` }
-  if (position.y_alignment !== undefined) return { unsupported: `vertical alignment ${position.y_alignment}` }
-  if (position.top_from_text_twips !== 0 || position.bottom_from_text_twips !== 0) return { unsupported: 'a non-zero keep-out distance above or below the frame' }
-  if (position.x_alignment !== undefined && !['left', 'center', 'right'].includes(position.x_alignment)) return { unsupported: `horizontal alignment ${position.x_alignment}` }
+  const unplaceable = nativeDocxUnplaceableFloatingTableFrameV1(position)
+  if (unplaceable !== undefined) return { unsupported: unplaceable }
   const anchor = anchors[position.horizontal_anchor]
   let x = anchor.x_millipoints + (position.x_twips ?? 0) * 50
   if (position.x_alignment === 'center') x = anchor.x_millipoints + Math.round((anchor.width_millipoints - tableWidthMilliPoints) / 2)
