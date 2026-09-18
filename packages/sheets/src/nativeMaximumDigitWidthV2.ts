@@ -70,19 +70,48 @@ export function nativeNormalFontDescentEmV1(fontBytes: Uint8Array): number {
   return descentEm
 }
 
-type Table = { offset: number; length: number; checksum: number }
+type Table = { offset: number; length: number }
 
+/**
+ * The structural preconditions this reader needs, and nothing beyond them: a
+ * standalone fixed TrueType flavor, a bounded table directory, table records
+ * that are unique, four-byte aligned, non-empty and inside the font, the `head`
+ * magic and a bounded unitsPerEm, `hmtx` long enough for `hhea.numberOfHMetrics`,
+ * a walkable Unicode `cmap` covering U+0030..U+0039, and a `name` table with a
+ * usable family name. Every read below goes through `range`, so no value here
+ * is taken on trust.
+ *
+ * A table record's stored checksum is not one of those preconditions. It is
+ * advisory build metadata: a table whose producer never refreshed it is exactly
+ * as walkable as one whose producer did, and a sum of 32-bit words carries no
+ * authentication - anything that could corrupt the bytes could recompute it. It
+ * is measurably a false-positive detector instead. Of the 35 faces in the local
+ * host-font manifest, exactly one disagrees, and it is Word 16's own shipped
+ * Symbol (`cmap` states `0x42f6990a` for bytes summing to `0x2796fb28`,
+ * `off=7708 len=446`, the only one of its 18 tables that disagrees, and a search
+ * of every length and nearby offset finds no bytes the stored value describes).
+ * Refusing it costs the whole workbook preview an error about a font table
+ * rather than a fact about the source.
+ *
+ * It was also the last place that check survived. `preflightSfnt` stopped
+ * comparing stored checksums in #396 for the same reasons, so the very same
+ * bytes, in the very same preview, are already admitted by
+ * `compileNativeSheetCellPaintV2`'s `inspectHarfBuzzFontMetricsV1` call while
+ * being refused here - the glyph half of the XLSX preview accepting a face the
+ * metric half rejects. Unlike the DOCX path there is no caller-pinned digest to
+ * lean on at this point, because this is where the authority's `font_sha256` is
+ * minted; that is an argument about what replaces the check downstream, not
+ * about what the check was buying, which was nothing either way.
+ */
 function parseSfntDigitMetrics(bytes: Uint8Array): { unitsPerEm: number; maximumAdvance: number; descentEm: number; names: string[]; bold: boolean; italic: boolean } {
   if (u32(bytes, 0) !== 0x00010000 && u32(bytes, 0) !== 0x74727565) throw metricError('$.font_bytes', 'only standalone fixed TrueType sfnt fonts are qualified')
   const count = u16(bytes, 4)
   if (count < 1 || count > 64 || !range(bytes, 12, count * 16)) throw metricError('$.font_bytes', 'sfnt table directory is malformed or oversized')
   const tables = new Map<string, Table>()
   for (let index = 0; index < count; index++) {
-    const at = 12 + index * 16, name = ascii(bytes, at, 4), checksum = u32(bytes, at + 4), offset = u32(bytes, at + 8), length = u32(bytes, at + 12)
+    const at = 12 + index * 16, name = ascii(bytes, at, 4), offset = u32(bytes, at + 8), length = u32(bytes, at + 12)
     if (tables.has(name) || length < 1 || offset % 4 !== 0 || !range(bytes, offset, length)) throw metricError('$.font_bytes', 'sfnt table records are duplicate, misaligned, or out of range')
-    const table = { offset, length, checksum }
-    if (tableChecksum(bytes, name, table) !== checksum) throw metricError('$.font_bytes', `sfnt ${name} checksum is invalid`)
-    tables.set(name, table)
+    tables.set(name, { offset, length })
   }
   const head = requiredTable(tables, 'head', 54), hhea = requiredTable(tables, 'hhea', 36), hmtx = requiredTable(tables, 'hmtx', 4), maxp = requiredTable(tables, 'maxp', 6), cmap = requiredTable(tables, 'cmap', 12), name = requiredTable(tables, 'name', 6)
   if (u32(bytes, head.offset + 12) !== 0x5f0f3cf5) throw metricError('$.font_bytes', 'sfnt head magic is invalid')
@@ -147,7 +176,6 @@ function fontNames(bytes: Uint8Array, table: Table): string[] {
 }
 
 function requiredTable(tables: Map<string, Table>, name: string, minimum: number): Table { const value = tables.get(name); if (!value || value.length < minimum) throw metricError('$.font_bytes', `required sfnt ${name} table is missing or truncated`); return value }
-function tableChecksum(bytes: Uint8Array, name: string, table: Table): number { let sum = 0; for (let offset = 0; offset < table.length; offset += 4) { let word = 0; for (let byte = 0; byte < 4; byte++) { const index = offset + byte, value = index < table.length && !(name === 'head' && index >= 8 && index < 12) ? bytes[table.offset + index]! : 0; word = (word * 256 + value) >>> 0 } sum = (sum + word) >>> 0 } return sum }
 function normalizeFontName(value: string): string { return value.normalize('NFKC').toLowerCase().replace(/[\s_-]/g, '') }
 function range(bytes: Uint8Array, offset: number, length: number): boolean { return Number.isSafeInteger(offset) && Number.isSafeInteger(length) && offset >= 0 && length >= 0 && offset <= bytes.length && length <= bytes.length - offset }
 function u16(bytes: Uint8Array, offset: number): number { if (!range(bytes, offset, 2)) throw metricError('$.font_bytes', 'sfnt read exceeds font bytes'); return bytes[offset]! * 256 + bytes[offset + 1]! }

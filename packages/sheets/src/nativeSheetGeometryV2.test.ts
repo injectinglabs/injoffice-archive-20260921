@@ -33,6 +33,34 @@ const fixture = (): NativeWorkbookV2 => ({
 })
 const metric = (workbook: NativeWorkbookV2): NativeMaximumDigitWidthAuthorityV2 => createNativeMaximumDigitWidthAuthorityV2(projectNativeWorkbookV2(workbook), FONT_BYTES)
 
+/** Offset of the named table's 16-byte directory record in the fixture. */
+function tableRecordOffset(tag: string): number {
+  const count = FONT_BYTES[4]! * 256 + FONT_BYTES[5]!
+  for (let index = 0; index < count; index++) {
+    const at = 12 + index * 16
+    if (String.fromCharCode(FONT_BYTES[at]!, FONT_BYTES[at + 1]!, FONT_BYTES[at + 2]!, FONT_BYTES[at + 3]!) === tag) return at
+  }
+  throw new Error(`fixture has no ${tag} table`)
+}
+
+/** The fixture with one 32-bit field of one table record overwritten. */
+function editTableRecord(tag: string, fieldOffset: number, value: number): Uint8Array {
+  const bytes = new Uint8Array(FONT_BYTES)
+  const at = tableRecordOffset(tag) + fieldOffset
+  bytes[at] = (value >>> 24) & 0xff
+  bytes[at + 1] = (value >>> 16) & 0xff
+  bytes[at + 2] = (value >>> 8) & 0xff
+  bytes[at + 3] = value & 0xff
+  return bytes
+}
+
+/** The fixture with one table's STORED checksum made stale; no table byte moves. */
+function staleChecksumFont(tag: string): Uint8Array {
+  const at = tableRecordOffset(tag) + 4
+  const stored = ((FONT_BYTES[at]! * 0x1000000) + (FONT_BYTES[at + 1]! << 16) + (FONT_BYTES[at + 2]! << 8) + FONT_BYTES[at + 3]!) >>> 0
+  return editTableRecord(tag, 4, (stored ^ 0xa5a5a5a5) >>> 0)
+}
+
 function workbookWithMerge(): NativeWorkbookV2 {
   const workbook = structuredClone(fixture())
   const sheet = workbook.sheets[0] as unknown as { rows: unknown[]; merged_ranges: unknown[] }
@@ -249,5 +277,35 @@ describe('normal font descent', () => {
     expect(() => nativeNormalFontDescentEmV1(new Uint8Array(8))).toThrow(NativeSheetGeometryV2Error)
     expect(() => nativeNormalFontDescentEmV1(FONT_BYTES.subarray(0, 4096))).toThrow(NativeSheetGeometryV2Error)
     expect(() => nativeNormalFontDescentEmV1(new Uint8Array(readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf'))).fill(0, 0, 4))).toThrow(NativeSheetGeometryV2Error)
+  })
+
+  // A stale table checksum is advisory build metadata, not a parse
+  // precondition. Word 16's own shipped Symbol carries one on its `cmap`, and
+  // refusing it cost the whole workbook preview an error about a font table.
+  it('reads a face whose stored table checksum is stale exactly as it reads the pristine face', () => {
+    const stale = staleChecksumFont('cmap')
+    // Only the four stored checksum bytes differ; every table byte is identical.
+    expect(stale.length).toBe(FONT_BYTES.length)
+    expect(stale.reduce((count, byte, index) => byte === FONT_BYTES[index] ? count : count + 1, 0)).toBe(4)
+    expect(nativeNormalFontDescentEmV1(stale)).toBe(nativeNormalFontDescentEmV1(FONT_BYTES))
+    const pristine = metric(fixture())
+    const authority = createNativeMaximumDigitWidthAuthorityV2(projectNativeWorkbookV2(fixture()), stale)
+    expect(authority.maximum_digit_width_pixels).toBe(pristine.maximum_digit_width_pixels)
+    // Every table's record is advisory, `head` included.
+    expect(nativeNormalFontDescentEmV1(staleChecksumFont('head'))).toBe(nativeNormalFontDescentEmV1(FONT_BYTES))
+    expect(nativeNormalFontDescentEmV1(staleChecksumFont('hhea'))).toBe(nativeNormalFontDescentEmV1(FONT_BYTES))
+  })
+
+  // Inertness guard: these are the structural preconditions the checksum was
+  // never what caught, and each already refused before it was dropped.
+  it('keeps refusing sfnt structure the checksum was never what caught', () => {
+    // A table record whose four-byte-aligned offset lies outside the font.
+    expect(() => nativeNormalFontDescentEmV1(editTableRecord('cmap', 8, FONT_BYTES.length + 4))).toThrow(NativeSheetGeometryV2Error)
+    // A zero-length table record.
+    expect(() => nativeNormalFontDescentEmV1(editTableRecord('cmap', 12, 0))).toThrow(NativeSheetGeometryV2Error)
+    // A misaligned table offset.
+    expect(() => nativeNormalFontDescentEmV1(editTableRecord('cmap', 8, 13))).toThrow(NativeSheetGeometryV2Error)
+    // A collection, which is not a standalone fixed TrueType sfnt.
+    expect(() => nativeNormalFontDescentEmV1(new Uint8Array(FONT_BYTES).fill(0x74, 0, 4))).toThrow(NativeSheetGeometryV2Error)
   })
 })
