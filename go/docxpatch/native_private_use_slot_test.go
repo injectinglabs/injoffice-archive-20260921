@@ -33,7 +33,11 @@ func TestNativePrivateUseAreaResolvesThroughHighANSI(t *testing.T) {
 		// not cover, keep deferring.
 		{"just below the range", "퟿", "default", true},
 		{"cjk compatibility ideograph above the range", "豈", "default", true},
-		{"enclosed alphanumeric", "①", "default", true},
+		// Enclosed Alphanumerics is the other range MS-OI29500 17.3.2.26 gives
+		// High ANSI and the same w:hint="eastAsia" escape.
+		{"enclosed alphanumeric", "①", "default", false},
+		{"enclosed alphanumeric with east-asian hint", "①", "eastAsia", true},
+		{"box drawing above the range", "─", "default", true},
 		{"supplementary private use", "\U000f0000", "default", true},
 		{"arabic", "ا", "default", true},
 	} {

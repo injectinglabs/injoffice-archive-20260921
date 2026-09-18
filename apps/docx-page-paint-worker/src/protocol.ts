@@ -12,6 +12,7 @@ import {
   validNativeDocxHostDefaultSizePolicyV1,
   validNativeDocxHostDefaultFamilyPolicyV1,
   DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT,
+  DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT,
   type NativeDocxAuthoritativeFontAssetV1,
   type NativeDocxAuthoritativeMediaAssetV1,
   type NativeDocxPagePaintCompleteInputV1,
@@ -181,6 +182,23 @@ function hostDefaultFamilyReferences(input: NativeDocxPagePaintPrepareInputV1, e
   return references
 }
 
+/** Host faces the approximate preview may need to paint an enclosed-number list
+ * marker. The compiler re-validates every fact and repoints a marker only where
+ * the loaded manifest attests that exact face; an unavailable one is not a
+ * failure and the marker keeps the face its own font slot resolves. */
+function enclosedMarkerFontReferences(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown): HostFontReference[] {
+  if (!record(eligibility) || !Array.isArray(eligibility.enclosed_marker_fonts) || eligibility.enclosed_marker_fonts.length > 1000) return []
+  const layout = input.resolved_layout as { paragraphs?: Array<{ paragraph_id: string; numbering?: { marker_properties?: { bold?: boolean; italic?: boolean } } }> } | undefined
+  const references: HostFontReference[] = []
+  for (const fact of eligibility.enclosed_marker_fonts) {
+    if (!record(fact) || typeof fact.scope_id !== 'string') continue
+    const properties = layout?.paragraphs?.find((paragraph) => paragraph.paragraph_id === fact.scope_id)?.numbering?.marker_properties
+    if (!properties) continue
+    references.push({ family: DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT, weight: properties.bold === true ? 700 : 400, style: properties.italic === true ? 'italic' : 'normal' })
+  }
+  return references
+}
+
 function equationFontRequests(equations: unknown): HostFontReference[] {
   if (!record(equations) || !Array.isArray(equations.font_requests)) return []
   return equations.font_requests.slice(0, 32).flatMap((request): HostFontReference[] => record(request) && typeof request.family === 'string' && request.family.length > 0 && request.family.length <= 128 && (request.weight === 400 || request.weight === 700) && (request.style === 'normal' || request.style === 'italic') ? [{ family: request.family, weight: request.weight, style: request.style }] : [])
@@ -231,7 +249,7 @@ export async function dispatchNativeDocxPagePaintWorkerRequestV1(value: unknown,
       const input = prepareInput(value.input.prepare)
       if (input.outline_provider.provider_id !== 'injoffice.harfbuzz-outline' || input.outline_provider.provider_revision !== 'v1') throw new TypeError('approximate render requires the pinned outline provider')
       const evidence = value.op === 'render-approximate' ? value.input.eligibility : value.op === 'render-auto-borders' ? value.input.legacy_eligibility : undefined
-      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false, sidecarFontRequests(equationFontRequests(equations), latinFallbackReferences(input, evidence), hostDefaultFamilyReferences(input, evidence, fontFamilyPolicy))) : undefined
+      const fonts = hostFontManifestPath ? await loadHostFonts(input, hostFontManifestPath, fontOnly ? true : value.op === 'render-approximate' || value.op === 'render-auto-borders' ? 'approximate' : false, sidecarFontRequests(equationFontRequests(equations), latinFallbackReferences(input, evidence), hostDefaultFamilyReferences(input, evidence, fontFamilyPolicy), enclosedMarkerFontReferences(input, evidence))) : undefined
       if(fontOnly&&!fonts)throw new TypeError('Font preview requires explicit operator fonts')
       const providers = new Map<string, ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
       const outlineProvider: Parameters<typeof renderNativeDocxAutomaticBorderPreviewV1>[1] = {

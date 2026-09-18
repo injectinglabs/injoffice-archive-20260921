@@ -178,6 +178,9 @@ import { projectNativeDocxAbsentFontFamiliesV1, stripNativeDocxAbsentFontFamilie
 export type { NativeDocxHostDefaultFamilyPolicyV1, NativeDocxAbsentFontFamilyV1, NativeDocxApproximatedFontFamilyV1 } from './nativeAbsentFontFamilyV1.js'
 export { validNativeDocxHostDefaultFamilyPolicyV1, validNativeDocxAbsentFontFamiliesV1, validNativeDocxApproximatedFontFamiliesV1, DOCX_ABSENT_FONT_FAMILY_WARNING, DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT } from './nativeAbsentFontFamilyV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, projectNativeDocxLatinFontFallbacksV1, stripNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
+import { projectNativeDocxEnclosedMarkerFontsV1, stripNativeDocxEnclosedMarkerFontsV1, DOCX_ENCLOSED_MARKER_FONT_WARNING, type NativeDocxApproximatedEnclosedMarkerFontV1 } from './nativeEnclosedMarkerFontV1.js'
+export { projectNativeDocxEnclosedMarkerFontsV1, stripNativeDocxEnclosedMarkerFontsV1, validNativeDocxEnclosedMarkerFontsV1, validNativeDocxApproximatedEnclosedMarkerFontsV1, DOCX_ENCLOSED_MARKER_FONT_WARNING, DOCX_ENCLOSED_MARKER_FONT_HOST_DEFAULT } from './nativeEnclosedMarkerFontV1.js'
+export type { NativeDocxEnclosedMarkerFontV1, NativeDocxApproximatedEnclosedMarkerFontV1 } from './nativeEnclosedMarkerFontV1.js'
 export interface NativeDocxApproximateRuntimeV1 {
   createShaper?: (sourceRevision: string) => HarfBuzzTextShaperV1
   fonts?: NativeDocxHostFontsV1
@@ -323,6 +326,18 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     input = { ...input, resolved_layout: projected.resolved }
     applied = projected.applied
   }
+  // An enclosed-number marker is repointed at the declared host family before
+  // any other projection reads the layout, and only where the loaded host
+  // manifest attests that family at the marker's own weight and style.
+  let appliedEnclosedMarkers: NativeDocxApproximatedEnclosedMarkerFontV1[] = []
+  if ((eligibility.enclosed_marker_fonts ?? []).length !== 0) {
+    if (eligibility.status !== 'eligible') throw new TypeError('Enclosed-marker host family requires independently eligible approximate settings')
+    const enclosedFaces = runtime?.fonts?.manifest.faces ?? []
+    const enclosedAttested = (family: string, weight: 400 | 700, style: 'normal' | 'italic') => enclosedFaces.some((face) => face.weight === weight && face.style === style && face.stretch === 100 && [face.family, ...(face.aliases ?? [])].some((name) => asciiEqual(name, family)))
+    const projected = projectNativeDocxEnclosedMarkerFontsV1(input.document, input.resolved_layout, eligibility.enclosed_marker_fonts ?? [], enclosedAttested)
+    input = { ...input, resolved_layout: projected.resolved }
+    appliedEnclosedMarkers = projected.applied
+  }
   let appliedFamilies: NativeDocxApproximatedFontFamilyV1[] = []
   if (runtime?.fontFamilyPolicy !== undefined) {
     if (eligibility.status !== 'eligible') throw new TypeError('Host family policy requires independently eligible approximate settings')
@@ -442,6 +457,13 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
   if (appliedFamilies.length > 0) {
     result.approximated_font_families = appliedFamilies
     result.reasons.push(DOCX_ABSENT_FONT_FAMILY_WARNING)
+  }
+  // Only an applied substitution is disclosed: a manifest that does not attest
+  // the declared family leaves the marker on its authored face, and the page
+  // must not claim a substitution it did not make.
+  if (appliedEnclosedMarkers.length > 0) {
+    result.approximated_enclosed_marker_fonts = appliedEnclosedMarkers
+    result.reasons.push(DOCX_ENCLOSED_MARKER_FONT_WARNING)
   }
   if (appliedImageExtents.length > 0) {
     result.approximated_image_extents = appliedImageExtents
@@ -886,7 +908,7 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   // scopes strict resolution left unresolved; the strict inventory is joined against
   // the layout with those projections removed. Projected faces never add a reference.
   const approximateEvidence = approximateEligibility === undefined ? undefined : decodeNativeDocxApproximationEligibilityV1(approximateEligibility, settings.value)
-  const strictView = approximateEvidence === undefined ? resolved.value : stripNativeDocxAbsentFontFamiliesV1(stripNativeDocxLatinFontFallbacksV1(resolved.value, approximateEvidence.latin_font_fallbacks ?? []), approximateEvidence.absent_font_families ?? [])
+  const strictView = approximateEvidence === undefined ? resolved.value : stripNativeDocxEnclosedMarkerFontsV1(stripNativeDocxAbsentFontFamiliesV1(stripNativeDocxLatinFontFallbacksV1(resolved.value, approximateEvidence.latin_font_fallbacks ?? []), approximateEvidence.absent_font_families ?? []), approximateEvidence.enclosed_marker_fonts ?? [])
   if (JSON.stringify(inventory.references) !== JSON.stringify(resolvedFontReferences(strictView))) throw new TypeError('font inventory references do not exactly and completely cover the resolved document scopes')
   validateInventoryPackagePartJoins(inventory, document.value, settings.value)
   if (!inventory.native_text_manifest && !runtime?.fonts) throw new TypeError('document has no embedded fonts; configure explicit host fonts for native preview')
