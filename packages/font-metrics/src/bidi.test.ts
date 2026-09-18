@@ -59,6 +59,34 @@ describe('pinned native Unicode bidi boundary', () => {
     expect(explicit).toEqual(expect.objectContaining({ ok: true, value: expect.objectContaining({ baseLevel: 1, levels: [2, 2, 2] }) }))
   })
 
+  /**
+   * LRM, RLM and ALM are implicit strong characters with no scope and no
+   * terminator, so they cannot nest across the isolates this projection
+   * synthesizes for a DOCX w:rtl range. bidi-js resolves them as UAX #9
+   * requires, and they paint nothing, so they are resolved rather than
+   * refused. The embedding, override and isolate controls still refuse.
+   */
+  it('resolves the implicit directional marks and still refuses the scoped controls', () => {
+    // An authored RLM really does move the levels of the characters after it:
+    // this is resolution, not a claim that the marks are inert.
+    expect(resolveNativeBidiParagraphV1({ text: 'a 1', baseDirection: 'ltr' })).toMatchObject({ ok: true, value: { levels: [0, 0, 0] } })
+    expect(resolveNativeBidiParagraphV1({ text: 'a \u200f1', baseDirection: 'ltr' })).toMatchObject({ ok: true, value: { levels: [0, 0, 1, 2] } })
+    expect(resolveNativeBidiParagraphV1({ text: 'a\u061cb', baseDirection: 'ltr' })).toMatchObject({ ok: true, value: { levels: [0, 1, 0] } })
+    // The two marks tdf118361_RTLfootnoteSeparator.docx authors, in an RTL
+    // paragraph, alongside the explicit w:rtl ranges the projection injects.
+    expect(resolveNativeBidiParagraphV1({ text: '\u0627\u0644\u200e\u200f', baseDirection: 'rtl' })).toMatchObject({ ok: true, value: { levels: [1, 1, 2, 1] } })
+    expect(resolveNativeBidiParagraphV1({
+      text: '\u0627\u0644 \u200e\u200f', baseDirection: 'rtl',
+      explicitRanges: [{ startUtf16: 0, endUtf16: 3, direction: 'rtl' }, { startUtf16: 4, endUtf16: 5, direction: 'rtl' }],
+    })).toMatchObject({ ok: true })
+    // Every embedding, override and isolate control stays refused, including
+    // beside text that genuinely needs reordering and beside an explicit range.
+    for (const control of ['\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069']) {
+      expect(resolveNativeBidiParagraphV1({ text: `\u0627\u0644${control}abc`, baseDirection: 'rtl' }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
+      expect(resolveNativeBidiParagraphV1({ text: `a${control}\u0627\u0644`, baseDirection: 'ltr', explicitRanges: [{ startUtf16: 2, endUtf16: 4, direction: 'rtl' }] }), control).toMatchObject({ ok: false, code: 'unsupported-control' })
+    }
+  })
+
   it('fails closed on malformed UTF-16, authored controls, overlapping ranges, and hostile bounds', () => {
     expect(resolveNativeBidiParagraphV1({ text: '\ud800', baseDirection: 'ltr' })).toMatchObject({ ok: false, code: 'invalid-input' })
     expect(resolveNativeBidiParagraphV1({ text: 'a\u2067b', baseDirection: 'ltr' })).toMatchObject({ ok: false, code: 'unsupported-control' })

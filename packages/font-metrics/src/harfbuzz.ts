@@ -46,7 +46,7 @@ export const HARFBUZZJS_ENTRY_SHA256 = 'sha256:04ece1914c8720ad96257728119c1bf24
 export const HARFBUZZJS_LOADER_SHA256 = 'sha256:ba43463df44851fd58211ef8c19aa7956965390857727ae867b70dc7b3682de1' as const
 export const HARFBUZZJS_MANIFEST_SHA256 = 'sha256:aa0da40ea2373b213631e1d73f09ddac08dfa3a6f8f5b52be97797c902f443ab' as const
 export const HARFBUZZ_UNICODE_DATA_VERSION = UNICODE_13_VERSION
-export const HARFBUZZ_SHAPER_CONFIG_REVISION = 'injoffice.hb-horizontal-bidi-unicode13-tables.v3' as const
+export const HARFBUZZ_SHAPER_CONFIG_REVISION = 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables.v4' as const
 
 export const HARFBUZZ_SHAPER_LIMITS = Object.freeze({
   maxFontBytes: 64 * 1024 * 1024,
@@ -82,7 +82,7 @@ const PROVIDER_ID = 'injoffice.harfbuzzjs'
 const EXPECTED_WASM_BYTES = 421_964
 const MAX_ABS_DESIGN_VALUE = 1_000_000_000
 const MAX_OUTPUT_MILLIPOINTS = 1_000_000_000
-const BIDI_CONTROL_RE = /^[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]$/u
+const BIDI_SCOPE_CONTROL_RE = /^[\u202a-\u202e\u2066-\u2069]$/u
 
 function compareCodeUnits(left: string, right: string): number {
   if (left === right) return 0
@@ -538,8 +538,33 @@ function isFixedWhitespace(text: string, start: number, end: number): boolean {
   return end > start
 }
 
+/**
+ * LRM, RLM and ALM: the implicit directional marks. Each is one UAX #9 strong
+ * character with no scope and no terminator, so admitting them says nothing
+ * about the embedding, override and isolate controls, which stay refused.
+ * They are Default_Ignorable_Code_Point, and the Unicode core specification
+ * requires a renderer to give such a scalar no visible glyph and no advance.
+ * HarfBuzz 14.3.0 implements exactly that: it substitutes the face's space
+ * glyph and zeroes the advance, measured identical to the already-qualified
+ * ZWJ. `shapeWithCachedFace` re-checks that zero per cluster, so a runtime
+ * that ever advanced one would refuse instead of moving painted ink.
+ */
+function isImplicitDirectionalMark(codePoint: number): boolean {
+  return codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
+}
+
 function isQualifiedIgnorableClusterScalar(codePoint: number): boolean {
-  return codePoint === 0x200d || (codePoint >= 0xfe00 && codePoint <= 0xfe0f) || (codePoint >= 0xe0100 && codePoint <= 0xe01ef)
+  return codePoint === 0x200d || isImplicitDirectionalMark(codePoint) || (codePoint >= 0xfe00 && codePoint <= 0xfe0f) || (codePoint >= 0xe0100 && codePoint <= 0xe01ef)
+}
+
+/** True only when every scalar of the half-open range is an implicit mark. */
+function isImplicitDirectionalMarkRange(text: string, start: number, end: number): boolean {
+  for (let offset = start; offset < end;) {
+    const codePoint = text.codePointAt(offset)!
+    if (!isImplicitDirectionalMark(codePoint)) return false
+    offset += codePoint > 0xffff ? 2 : 1
+  }
+  return end > start
 }
 
 function validateQualifiedScalars(text: string, script: string): string | undefined {
@@ -572,8 +597,8 @@ function validateQualifiedScalars(text: string, script: string): string | undefi
   return undefined
 }
 
-function containsBidiControl(text: string): boolean {
-  return [...text].some((character) => BIDI_CONTROL_RE.test(character))
+function containsScopedBidiControl(text: string): boolean {
+  return [...text].some((character) => BIDI_SCOPE_CONTROL_RE.test(character))
 }
 
 function scaleDesignValue(value: number, unitsPerEm: number, fontSizeMilliPoints: number): number {
@@ -617,7 +642,7 @@ function canonicalFeatures(run: ShapeProviderRequest['run'], advertised: Readonl
 
 function runPolicyRefusal(run: ShapeProviderRequest['run'], faceId: string): NativeTextRefusal | undefined {
   if (run.direction !== 'ltr' && run.direction !== 'rtl') return refusal('unsupported-direction', 'canonical HarfBuzz provider v1 supports only explicit horizontal LTR/RTL runs', faceId)
-  if (containsBidiControl(run.text)) return refusal('unsupported-direction', 'bidi controls require the deferred authoritative bidi/itemization stage', faceId, 0, run.text.length)
+  if (containsScopedBidiControl(run.text)) return refusal('unsupported-direction', 'bidi embedding, override and isolate controls require the deferred authoritative bidi/itemization stage', faceId, 0, run.text.length)
   if (!SUPPORTED_SCRIPT_SET.has(run.script)) return refusal('unsupported-script', `script ${JSON.stringify(run.script)} is outside the qualified canonical shaper v1 set`, faceId)
   const scalarIssue = validateQualifiedScalars(run.text, run.script)
   if (scalarIssue) return refusal('unsupported-script', scalarIssue, faceId, 0, run.text.length)
@@ -702,6 +727,12 @@ function shapeWithCachedFace(request: ShapeProviderRequest, cached: CachedFace, 
       unsafeToBreak ||= (value.flags & hb.GlyphFlag.UNSAFE_TO_BREAK) !== 0
     }
     if (clusterAdvance < 0) return refusal('provider-failure', 'scaled horizontal cluster advance is negative', request.font.face.faceId)
+    // An implicit directional mark resolves a bidi level and paints nothing.
+    // Word's own export confirms the advance: in tdf118361_RTLfootnoteSeparator
+    // the trailing paragraph-mark glyph sits the same 6.43 pt after the last
+    // authored content in the paragraph that carries LRM+RLM as it does in the
+    // note-separator paragraph that carries neither. Hold the runtime to that.
+    if (clusterAdvance !== 0 && isImplicitDirectionalMarkRange(run.text, startUtf16, endUtf16)) return refusal('provider-failure', 'an implicit directional mark must shape to a zero advance', request.font.face.faceId, startUtf16, endUtf16)
     clusters.push(Object.freeze({
       startUtf16,
       endUtf16,
@@ -709,7 +740,11 @@ function shapeWithCachedFace(request: ShapeProviderRequest, cached: CachedFace, 
       glyphEnd: glyphs.length,
       advanceInlineMilliPoints: clusterAdvance,
       ...(unsafeToBreak ? { unsafeToBreak: true } : {}),
-      ...(isFixedWhitespace(run.text, startUtf16, endUtf16) ? { whitespace: true } : {}),
+      // An implicit directional mark shapes to the face's space glyph with a
+      // zero advance, so the cluster paints no ink exactly as a space cluster
+      // does. Reporting that lets the painter accept the empty outline instead
+      // of refusing the run as a visible glyph that cannot be drawn.
+      ...(isFixedWhitespace(run.text, startUtf16, endUtf16) || isImplicitDirectionalMarkRange(run.text, startUtf16, endUtf16) ? { whitespace: true } : {}),
     }))
     advanceInline += clusterAdvance
     if (!Number.isSafeInteger(advanceInline)) return refusal('provider-failure', 'scaled run advance exceeds deterministic integer precision', request.font.face.faceId)
