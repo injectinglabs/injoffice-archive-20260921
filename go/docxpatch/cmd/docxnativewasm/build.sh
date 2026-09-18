@@ -33,10 +33,16 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # A further 32 KiB covers the East-Asian theme font slot: the fontScheme <a:ea>
 # and script-table read, settings' w:themeFontLang and its bounded BCP-47 to
 # script map, and per-slot deferral of the script run properties (measured
-# +22,775 bytes into 14,380 bytes of CI headroom; note the CI toolchain builds
-# this module about 28 KiB larger than a local darwin/arm64 build, so the local
-# number is not the one this gate sees).
-max_size=$((13 * 1024 * 1024 / 2 + 160 * 1024))
+# +22,775 bytes into 14,380 bytes of CI headroom).
+# A further 32 KiB covers table-style border projection, the tblLook inert
+# waiver and multi-column band geometry (#353-#360), which together left only
+# 584 bytes of CI headroom and forced one PR to be rewritten to fit.
+#
+# The CI toolchain builds this module larger than a local darwin/arm64 build,
+# so the local number is not the one this gate sees. Measured CI-local on one
+# commit: +5,401 bytes. An earlier note in this file put that gap at ~28 KiB;
+# that figure was never reproduced and is wrong. Measure, do not assume.
+max_size=$((13 * 1024 * 1024 / 2 + 192 * 1024))
 if (( size > max_size )); then
   echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 160 KiB size ceiling ($max_size bytes)" >&2
   exit 1
