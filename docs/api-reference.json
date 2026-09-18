@@ -4389,6 +4389,11 @@
               "signature": "export interface NativeDocxBlockV1"
             },
             {
+              "name": "nativeDocxCanonicalAlignmentOffsetV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxCanonicalAlignmentOffsetV1(alignment: string, direction: string, available: number, advance: number): number"
+            },
+            {
               "name": "nativeDOCXCanonicalWireSHA256V1",
               "kind": "function",
               "signature": "export declare function nativeDOCXCanonicalWireSHA256V1(value: unknown): string"
