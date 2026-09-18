@@ -466,8 +466,13 @@ func (evaluator *nativeDiagramLayoutEvaluator) selectionBudget(cost int) error {
 }
 
 // selectPoints implements axis/ptType/st/cnt/step selection (§21.4.2.14,
-// §21.4.7.6). Axis and ptType lists pair up position-wise; missing ptTypes
-// select all.
+// §21.4.7.6). axis is ST_AxisTypes, ptType is ST_ElementTypes and st, cnt and
+// step are ST_Ints / ST_UnsignedInts (§21.4.7.40, §21.4.7.63) — every one of
+// them is a LIST, and the entries pair up position-wise with the axis steps.
+// So `axis="ch desOrSelf" st="1 1" cnt="1 0"` trims each traversal step
+// separately, and is not the same thing as trimming once at the end. A
+// single-axis selection, which is the overwhelmingly common form, behaves
+// exactly as it did when the trim ran once after the chain.
 func (evaluator *nativeDiagramLayoutEvaluator) selectPoints(context *nativeDiagramPoint, node *nativeXMLNode) ([]*nativeDiagramPoint, error) {
 	axisAttr, _ := exactNativeAttr(node, "", "axis")
 	ptTypeAttr, _ := exactNativeAttr(node, "", "ptType")
@@ -476,6 +481,18 @@ func (evaluator *nativeDiagramLayoutEvaluator) selectPoints(context *nativeDiagr
 		axes = []string{"self"}
 	}
 	ptTypes := strings.Fields(ptTypeAttr)
+	starts, err := nativeDiagramIntList(node, "st")
+	if err != nil {
+		return nil, err
+	}
+	counts, err := nativeDiagramIntList(node, "cnt")
+	if err != nil {
+		return nil, err
+	}
+	steps, err := nativeDiagramIntList(node, "step")
+	if err != nil {
+		return nil, err
+	}
 	current := []*nativeDiagramPoint{context}
 	for index, axis := range axes {
 		ptType := ""
@@ -499,24 +516,24 @@ func (evaluator *nativeDiagramLayoutEvaluator) selectPoints(context *nativeDiagr
 		if err := evaluator.selectionBudget(len(next) + 1); err != nil {
 			return nil, err
 		}
-		current = next
+		trimmed, err := nativeDiagramTrimSelection(next,
+			nativeDiagramListEntry(starts, index, 1),
+			nativeDiagramListEntry(counts, index, 0),
+			nativeDiagramListEntry(steps, index, 1))
+		if err != nil {
+			return nil, err
+		}
+		current = trimmed
 	}
-	start, err := nativeDiagramIntAttr(node, "st", 1)
-	if err != nil {
-		return nil, err
-	}
-	count, err := nativeDiagramIntAttr(node, "cnt", 0)
-	if err != nil {
-		return nil, err
-	}
-	step, err := nativeDiagramIntAttr(node, "step", 1)
-	if err != nil {
-		return nil, err
-	}
+	return current, nil
+}
+
+// nativeDiagramTrimSelection applies one axis step's st/cnt/step window.
+func nativeDiagramTrimSelection(points []*nativeDiagramPoint, start, count, step int64) ([]*nativeDiagramPoint, error) {
 	if step <= 0 {
 		return nil, nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram selection step must be positive")
 	}
-	total := int64(len(current))
+	total := int64(len(points))
 	if start < 0 {
 		start = total + start + 1
 	}
@@ -528,9 +545,38 @@ func (evaluator *nativeDiagramLayoutEvaluator) selectPoints(context *nativeDiagr
 		if count > 0 && int64(len(selected)) >= count {
 			break
 		}
-		selected = append(selected, current[index])
+		selected = append(selected, points[index])
 	}
 	return selected, nil
+}
+
+// nativeDiagramListEntry pairs a ST_Ints entry with an axis step. A list
+// shorter than the axis list leaves the remaining steps at their default, and
+// a one-entry list applies to the first step only, exactly as ptType does.
+func nativeDiagramListEntry(values []int64, index int, fallback int64) int64 {
+	if index < len(values) {
+		return values[index]
+	}
+	return fallback
+}
+
+// nativeDiagramIntList parses a ST_Ints / ST_UnsignedInts attribute. An absent
+// attribute yields no entries, so every axis step keeps its default.
+func nativeDiagramIntList(node *nativeXMLNode, local string) ([]int64, error) {
+	value, ok := exactNativeAttr(node, "", local)
+	if !ok || strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	fields := strings.Fields(value)
+	values := make([]int64, 0, len(fields))
+	for _, field := range fields {
+		parsed, err := strconv.ParseInt(field, 10, 32)
+		if err != nil {
+			return nil, nativeDiagramLayoutRefuse(nativeDiagramLayoutDefinitionCode, "diagram layout attribute "+local+" is non-canonical")
+		}
+		values = append(values, parsed)
+	}
+	return values, nil
 }
 
 func nativeDiagramIntAttr(node *nativeXMLNode, local string, fallback int64) (int64, error) {
