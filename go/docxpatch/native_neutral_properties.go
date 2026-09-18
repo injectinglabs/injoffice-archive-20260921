@@ -97,6 +97,20 @@ func nativeShaperDefaultContextualAlternates(node, owner *nativeXMLNode) bool {
 	return valid && enabled
 }
 
+// w14:stylisticSets names the OpenType stylistic sets Word applies to the run,
+// one w14:styleSet child per set. An element with no child names no set, so it
+// asks for exactly the face's default glyph forms - the forms this tier already
+// shapes with - and selects the same glyphs at the same advances as the same
+// run without the element. A stylisticSets that does name a set is a different
+// statement and is recorded by nativeUnappliedTypographicRunFeature instead.
+func nativeAbsentStylisticSetRequest(node, owner *nativeXMLNode) bool {
+	name := xml.Name{Space: nativeWordML2010, Local: "stylisticSets"}
+	if node.Name != name || len(directNativeChildren(owner, nativeWordML2010, "stylisticSets")) != 1 {
+		return false
+	}
+	return nativeExactContainer(node) && len(node.Children) == 0 && len(node.Attrs) == 0
+}
+
 // w:bdr states the border Word draws around a run. ECMA-376 17.18.2 gives
 // ST_Border both a "none" and a "nil" member, and both state the same thing:
 // no border. A run border that names one of them therefore selects exactly the
@@ -281,3 +295,51 @@ func nativeWordML2010Subtree(node *nativeXMLNode) bool {
 // style. The painted lines are therefore FURTHER APART than Word's, by the
 // difference between the inherited spacing and |w:line|.
 const negativeLineSpacingDisclosure = "A negative w:line measurement is preserved and NOT applied: Word reads it as an exact line height of its absolute value, compressing the lines until they overlap, and this tier has no compressed line box. The paragraph keeps the line spacing it inherits instead, so its painted lines sit FURTHER APART than Word's by the difference between that inherited spacing and the absolute authored value"
+
+// A run property whose authored value states the absence of its own effect.
+//
+// Word writes these out in full when it saves a numbering level's or a style's
+// run properties, one element per property, each carrying the value that means
+// "off": ECMA-376 types w:caps (17.3.2.5), w:smallCaps (17.3.2.33), w:strike
+// (17.3.2.37), w:dstrike (17.3.2.9) and w:specVanish (17.3.2.36) as CT_OnOff,
+// so an explicit false asks for exactly the glyphs, advances and ink an omitted
+// element already produces; w:spacing (17.3.2.35) adds its ST_SignedTwipsMeasure
+// to every character advance, so 0 adds nothing; w:position (17.3.2.24) raises
+// the baseline by its ST_SignedHpsMeasure, so 0 raises nothing; w:effect
+// (17.3.2.11) names an animated text effect and w:em (17.3.2.12) an emphasis
+// mark, and each has a "none" member that draws neither.
+//
+// So a run carrying only these values occupies the same box, selects the same
+// glyphs and paints the same ink as the same run without them, and cannot move
+// a line or a page. Every other value of these properties does change glyphs,
+// advances or ink, and stays unmodeled markup along with malformed, decorated,
+// repeated or attribute-decorated elements.
+func nativeAbsentRunEffect(node, owner *nativeXMLNode, ns string) bool {
+	if node.Name.Space != ns || len(directNativeChildren(owner, ns, node.Name.Local)) != 1 {
+		return false
+	}
+	value := xml.Name{Space: ns, Local: "val"}
+	if !nativeExactLeaf(node, value) {
+		return false
+	}
+	count, declared := 0, ""
+	for _, attr := range node.Attrs {
+		if attr.Name == value {
+			count++
+			declared = attr.Value
+		}
+	}
+	if count != 1 {
+		return false
+	}
+	switch node.Name.Local {
+	case "caps", "smallCaps", "strike", "dstrike", "specVanish":
+		state, valid := nativeOnOff(node, ns)
+		return valid && !state
+	case "spacing", "position":
+		return declared == "0"
+	case "effect", "em":
+		return declared == "none"
+	}
+	return false
+}

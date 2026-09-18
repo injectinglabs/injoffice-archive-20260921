@@ -3428,6 +3428,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 			// are still unsafe - but it carries its own code and a message
 			// naming the unapplied property, so the approximate tier can paint
 			// the run and disclose the deviation instead of dropping the page.
+			if nativeAbsentStylisticSetRequest(child, node) {
+				preserveOnly = true
+				extractor.addUnsupported("STYLISTIC_SET_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A stylistic-set request that names no set is preserved and not applied; it asks for the face's default glyph forms, which is what this tier shapes, so it selects the same glyphs at the same advances and moves no line and no page")
+				continue
+			}
 			if code, detail, ok := nativeUnappliedTypographicRunFeature(child, node); ok {
 				unsafe = true
 				extractor.addUnsupported(code, "run-properties", paragraphID, partName, child, detail)
@@ -3566,6 +3571,11 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported("VERTICAL_ALIGNMENT_UNSUPPORTED", "run-properties", paragraphID, partName, child, "Vertical alignment requires an exact baseline, subscript or superscript value")
 			}
 		default:
+			if nativeAbsentRunEffect(child, node, extractor.wordNS) {
+				preserveOnly = true
+				extractor.addUnsupported("RUN_EFFECT_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A run property that states the absence of its own effect is preserved and not applied; it selects the same glyphs at the same advances and paints the same ink as the same run without it, so it moves no line and no page")
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "This run property is preserved verbatim")
 		}
