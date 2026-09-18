@@ -211,7 +211,18 @@ describe('actual source-font native PPTX worker',()=>{
   expect(JSON.stringify(painted.nodes)).toContain('contentRun')
   expect(painted.font_digests).toEqual([digest])
   for(const run of request.deck.slides[0].elements[0].paragraphs[0].runs)run.fontFamily='Broken Host'
+  // The face WAS listed; it could not be inspected. Say so, or the operator
+  // reads "unavailable" as "you forgot to add it".
   await expect(compilePptxPreview(request)).rejects.toThrow('Exact operator font unavailable: Broken Host')
+  await expect(compilePptxPreview(request)).rejects.toThrow('could not be inspected: Broken Host')
+ })
+ it('names the manifest limit that failed', async () => {
+  const many = resolve(scratch, 'many.json')
+  writeFileSync(many, JSON.stringify({version:1, faces: Array.from({length:33},(_ ,i)=>({family:`F${i}`,weight:400,style:'normal',path:font,sha256:digest}))}))
+  await expect(compilePptxPreview({...input(), font_manifest_path:many})).rejects.toThrow('33 faces exceeds the 32-face limit')
+  const wrongVersion = resolve(scratch, 'v2.json')
+  writeFileSync(wrongVersion, JSON.stringify({version:2, faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest}]}))
+  await expect(compilePptxPreview({...input(), font_manifest_path:wrongVersion})).rejects.toThrow('version must be 1, got 2')
  })
  it('rejects hostile or unbounded vector paths before mounting',async()=>{const result=await compilePptxPreview(input());for(const d of ['M1e999 0','M0','<script>','M0 0LInfinity 1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'path',d,fill:'000000'}]})).toThrow()})
 })
