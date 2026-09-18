@@ -129,12 +129,18 @@ export function compileNativeSheetPagePreviewV1(
  const intersects=(start:number,end:number,bands:typeof activeRows)=>bands.some(b=>start<=b.end&&end>=b.start)
  const paintedMerges=geometry.merged_ranges.filter(m=>intersects(m.row,m.end_row,activeRows)&&intersects(m.column,m.end_column,activeColumns))
  if(titles&&paintedMerges.some(({rect:r})=>!activeRows.some(b=>r.y_emu>=b.at&&r.y_emu+r.height_emu<=b.at+b.length)||!activeColumns.some(b=>r.x_emu>=b.at&&r.x_emu+r.width_emu<=b.at+b.length)))throw new RangeError('A merged cell crosses a repeated-title region boundary')
- const mergesFit=(rows:ReturnType<typeof split>,columns:ReturnType<typeof split>)=>paintedMerges.every(({rect:r})=>
-  [...rows,...(tr?[tr]:[])].some(b=>r.y_emu>=b.at&&r.y_emu+r.height_emu<=b.at+b.length)&&[...columns,...(tc?[tc]:[])].some(b=>r.x_emu>=b.at&&r.x_emu+r.width_emu<=b.at+b.length))
+ const within=(bands:readonly {at:number;length:number}[],at:number,length:number)=>bands.some(b=>at>=b.at&&at+length<=b.at+b.length)
+ const mergeFits=(rows:ReturnType<typeof split>,columns:ReturnType<typeof split>,r:NativeSheetGeometryRectV2)=>
+  within([...rows,...(tr?[tr]:[])],r.y_emu,r.height_emu)&&within([...columns,...(tc?[tc]:[])],r.x_emu,r.width_emu)
+ const mergesFit=(rows:ReturnType<typeof split>,columns:ReturnType<typeof split>)=>paintedMerges.every(({rect})=>mergeFits(rows,columns,rect))
  const fit=settings.fit_to_page
  if(fit){
   // Bounded, explicit approximation: greatest whole-percent shrink satisfying
   // actual whole-band pagination. Source percentage is retained but not applied.
+  // This search still requires merged cells to stay whole, and says so when no
+  // scale meets the target: it chooses a scale rather than reproducing one, so
+  // there is no Excel output to tell it which split to prefer. The authored
+  // scale above has one, which is why only that path splits.
   let found=false
   for(let percent=100;percent>=10;percent--){
    const candidate=percent/100,rc=Math.floor(ch/candidate)-titleHeight,cc=Math.floor(cw/candidate)-titleWidth
@@ -151,7 +157,28 @@ export function compileNativeSheetPagePreviewV1(
  const rows=split(rowBands,rowCapacity,!fit)
  const columns=split(columnBands,columnCapacity,!fit)
  if(rows.length*columns.length>100)throw new RangeError('Worksheet page preview exceeds 100 pages')
- if(!mergesFit(rows,columns))throw new RangeError('A merged cell crosses a preview page boundary')
+ // Excel splits a merged cell that straddles a page break; it neither moves the
+ // merge nor drops the page. Its own export of the hard-v2 corpus workbook
+ // `cell-anchored-hidden-shapes` prints four pages whose cell-paint clips are
+ // 430.4 and 101.6 points at the authored 80% scale — 538 and 127 points of
+ // source, the same two whole-band columns this preview computes — and paints
+ // each full-width `A:H` merge on both column bands: the second band repeats
+ // the merge's fill from the page's own left edge and re-places its text at the
+ // merge origin, 538 source points off that edge, letting the page clip cut it.
+ // Hosts map viewport-local paint and clip it to each page's `source_clip`, so
+ // keeping the whole-band pages and naming the split reproduces exactly that.
+ // Refusing the worksheet did not: it produced no pages at all.
+ //
+ // A merge that no contiguous band run contains — one that leaves the compiled
+ // selection, or straddles a gap the repeated-title partition opens in the body
+ // — is not a page split: no page clip can place it, so it still refuses. For
+ // geometry this package compiled that is already unreachable (the compiler
+ // refuses `viewport clips merged range`, the validator refuses a rectangle
+ // that does not match its axis bands, and the repeated-title check above names
+ // the gap case first with its own message), so this is a retained invariant
+ // rather than a reachable refusal. Splitting merges must not widen it.
+ if(!mergesFit(split(rowBands,Infinity),split(columnBands,Infinity)))throw new RangeError('A merged cell leaves the compiled selection or crosses an omitted row or column gap')
+ const splitMerges=paintedMerges.filter(({rect})=>!mergeFits(rows,columns,rect))
  const pages:NativeSheetPreviewPageV1[]=[]
  const addPage=(c:typeof columns[number],r:typeof rows[number])=>{
   const region=(kind:NativeSheetPreviewRegionV1['kind'],x:typeof c,y:typeof r,dx:number,dy:number):NativeSheetPreviewRegionV1=>({kind,source_clip:{x_emu:x.at,y_emu:y.at,width_emu:x.clipped??x.length,height_emu:y.clipped??y.length},translate_x_emu:left+(dx-x.at)*scale,translate_y_emu:top+(dy-y.at)*scale,rows:{start:y.start,end:y.end},columns:{start:x.start,end:x.end}})
@@ -163,6 +190,8 @@ export function compileNativeSheetPagePreviewV1(
  const clipped=[...columns.filter(b=>b.clipped!==undefined).map(b=>({axis:'Column',b})),...rows.filter(b=>b.clipped!==undefined).map(b=>({axis:'Row',b}))]
  const order=settings.page_order==='overThenDown'?'whole-bands-over-then-down':'whole-bands-down-then-over'
  const policy=(clipped.length?`${order}-clipped-oversize-band-v1`:`${order}-v1`) as NativeSheetPagePreviewV1['policy']
+ const splitRefs=splitMerges.map(m=>m.ref),shownRefs=splitRefs.slice(0,8)
+ const mergeDisclosure=splitRefs.length?[`Merged cells split by a page boundary: ${shownRefs.join(', ')}${splitRefs.length>shownRefs.length?` and ${splitRefs.length-shownRefs.length} more`:''} (${splitRefs.length} of ${paintedMerges.length} painted merged ranges). Excel breaks pages on whole row and column boundaries and paints the part of a straddling merged cell that falls in each page's band, so these pages keep whole bands and the merge keeps its one source rectangle: a host that clips viewport-local paint to each page's source_clip paints each part once. No merged cell is moved, repeated whole, or re-wrapped to fit a single page, and the split is not Excel print fidelity.`]:[]
  const clipDisclosure=clipped.length?[`Oversize band clipping: ${clipped.map(({axis,b})=>`${axis} ${b.start+1} is ${b.length} EMU where this page allows ${b.clipped}, so ${b.length-b.clipped!} EMU are cut from its trailing edge`).join('; ')}. Excel breaks pages on whole row and column boundaries and clips the one band that alone exceeds the printable area; this preview clips at the authored printable size rather than Excel's printer-dependent one. Clipped content is not printed and is not recoverable from this preview.`]:[]
- return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(fit?[`Approximate fit-to-page: greatest whole-percent shrink from 100% to 10% meeting the selected-range whole-band targets. Effective scale is ${Math.round(scale*100)}%; stored percentage is not applied. This is not Excel's fit algorithm.`]:[]),...clipDisclosure,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),...(titles?[...titles.warnings,'Explicit source-title repetition reserves saved row and column bands on every page. Hosts must paint each returned region once, including the corner. Hosts may intersect source-positioned drawings with these regions. Disconnected body bands start separate page sequences; gap cells are not printed. This is not Excel print fidelity.']:[]),(titles?'Only the supplied range is paginated. Saved print titles are repeated; headers and printer-specific layout are not reproduced. Chart and drawing paint is supplied separately by the host. Whole source rows/columns are kept together; this is not Excel pagination fidelity.':'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.'),...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
+ return {protocol:'injoffice.xlsx.selected-range-pages',version:1,fidelity:'approximate',read_only:true,document_id:geometry.document_id,sheet_id:geometry.sheet_id,source_revision:geometry.source_revision,source_package_sha256:geometry.source_package_sha256,geometry_sha256:geometry.geometry_sha256,policy,settings_origin:hostPolicy?'explicit-host':'source',settings,warnings:[...pageSettings.warnings,...(fit?[`Approximate fit-to-page: greatest whole-percent shrink from 100% to 10% meeting the selected-range whole-band targets. Effective scale is ${Math.round(scale*100)}%; stored percentage is not applied. This is not Excel's fit algorithm.`]:[]),...clipDisclosure,...mergeDisclosure,...(isCompiledNativeStoredRowSheetGeometryV1(geometry)?['Stored row-height approximation: source descender metadata does not alter row boxes. Automatic text fitting and baselines are not qualified.']:[]),...(titles?[...titles.warnings,'Explicit source-title repetition reserves saved row and column bands on every page. Hosts must paint each returned region once, including the corner. Hosts may intersect source-positioned drawings with these regions. Disconnected body bands start separate page sequences; gap cells are not printed. This is not Excel print fidelity.']:[]),(titles?'Only the supplied range is paginated. Saved print titles are repeated; headers and printer-specific layout are not reproduced. Chart and drawing paint is supplied separately by the host. Whole source rows/columns are kept together; this is not Excel pagination fidelity.':'Only the supplied range is paginated; saved print-area selection is a separate source-bound step. Chart and drawing paint is supplied separately by the host. Headers, repeated print titles and printer-specific layout are not reproduced. Whole source rows/columns are kept together; this is not Excel pagination fidelity.'),...(hostPolicy?['Paper, margins and scale are explicit host choices, not authored workbook settings.']:[])],pages}
 }

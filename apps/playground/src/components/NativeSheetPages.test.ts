@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { NativeSheetPageImages, NativeSheetPages, NativePositionedChartPlot, assertNativeSheetHeadingDrawings } from './NativeSheetPages'
+import { NativeSheetPageImages, NativeSheetPages, NativePositionedChartPlot, assertNativeSheetHeadingDrawings, MAX_PREVIEW_ROWS, MAX_PREVIEW_COLUMNS, MAX_PREVIEW_CELLS } from './NativeSheetPages'
 import type { NativeWorkbook, NativeSheet } from '../nativeRoundTrip'
 import type { NativeWorkbookObjectsV1, NativeSheetGeometryV2, NativeSheetPagePreviewV1, NativeChartPreviewV1, NativePositionedDrawingV1 } from '@injoffice/sheets/browser'
 
@@ -126,11 +126,25 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('disabled=""')
     expect(html).toContain('not drawn here')
     expect(html).not.toContain('<svg')
-    // The demo's own responsiveness bound, not a library one: 64 rows and 40
-    // columns clear the largest saved print area in the hard-v2 corpus
-    // (34 rows, 28 columns), which the library already paginated.
-    expect(html).toContain('max="64"')
-    expect(html).toContain('max="40"')
+    // The demo's own responsiveness bound, not a library one. What it bounds is
+    // one browser layout pass, so the cell budget is the real limit and stays at
+    // the 2560 cells the previous 64 x 40 pair allowed; the row cap rises to 128
+    // because the tallest area in the hard-v2 corpus is now a drawing-derived
+    // 72 rows x 10 columns (720 cells) that a 64-row cap refused outright, while
+    // the widest is still 28 columns. The library already paginated both.
+    expect(html).toContain(`max="${MAX_PREVIEW_ROWS}"`)
+    expect(html).toContain(`max="${MAX_PREVIEW_COLUMNS}"`)
+    expect([MAX_PREVIEW_ROWS, MAX_PREVIEW_COLUMNS, MAX_PREVIEW_CELLS]).toEqual([128, 40, 2560])
+    // The budget is the bound, so neither axis cap may be spent in full: a
+    // 128 x 40 request is still refused, while the corpus's tallest derived
+    // print area (72 x 10, testShapeRotationImport) and its widest (8 x 28,
+    // pivot_table_first_header_row) both fit.
+    expect(MAX_PREVIEW_ROWS * MAX_PREVIEW_COLUMNS).toBeGreaterThan(MAX_PREVIEW_CELLS)
+    for (const [rows, columns] of [[72, 10], [8, 28], [34, 8]] as const) {
+      expect(rows).toBeLessThanOrEqual(MAX_PREVIEW_ROWS)
+      expect(columns).toBeLessThanOrEqual(MAX_PREVIEW_COLUMNS)
+      expect(rows * columns).toBeLessThanOrEqual(MAX_PREVIEW_CELLS)
+    }
     expect(html).toContain('Compact General numbers (host preview)')
     expect(html).not.toContain('checked=""/> Compact General')
   })
