@@ -49,9 +49,12 @@ import {
   paginateNativeDocxV1,
   paginateNativeDocxApproximateLegacyV1,
   DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING,
+  DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING,
   nativeDocxApproximatePaginationPolicyReasonsV1,
   type NativeDocxPaginationRequestV1,
 } from './nativePaginationV1.js'
+import { DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
+import { DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, collectNativeDocxApproximateOmissionsV1 } from './nativeApproximateOmittedContentV1.js'
 import { asciiLowerNative, asciiUpperNative, compareNativeCodeUnits } from './nativeDeterminism.js'
 import { placeNativeDocxNotesV1, DOCX_NOTE_PAGINATION_LIMITS } from './nativeNotePaginationV1.js'
 
@@ -2351,11 +2354,111 @@ describe('native DOCX pagination v1', () => {
       part_name: 'word/footnotes.xml', path: '/w:footnotes[1]/w:footnote[2]/w:p[1]/w:permStart[1]',
       preservation: 'preserve-verbatim', message: 'permission range',
     })
+    const strictRequest = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(strictRequest, '9', '1')
+    strictRequest.resolved_layout.diagnostics.push(structuredClone(request.resolved_layout.diagnostics.at(-1)!))
+    const strict = paginateNativeDocxV1(strictRequest)
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'note-structure-unsupported', scope_id: 'paragraph:footnote:1',
+      message: 'Unsupported note layout semantics: UNMODELED_PARAGRAPH_CONTENT: permission range',
+    })]))
+    // The approximate tier already omits and discloses this exact code on a body
+    // paragraph, so a note scope is no longer held to a stricter standard: the
+    // note is placed and the drop is restated as a declared policy reason. The
+    // code is content-dropping, so the omission disclosure has to report it too.
+    const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
+    expect(output.status).toBe('paginated')
+    expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'source-diagnostic', severity: 'deferred', scope_id: 'paragraph:footnote:1',
+      source_code: 'UNMODELED_PARAGRAPH_CONTENT', source_message: 'permission range',
+      message: DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING,
+    })]))
+    expect(nativeDocxApproximatePaginationPolicyReasonsV1(output)).toContain(DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING)
+  })
+
+  it('reports a note-scoped content drop it now admits in the omitted-content disclosure', () => {
+    // The relaxed gate may only admit a content-dropping code when the same run
+    // reaches omitted_content, so the page can never drop note content silently.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    request.resolved_layout.diagnostics.push({
+      code: 'UNMODELED_PARAGRAPH_CONTENT', severity: 'unsupported', scope_id: 'paragraph:footnote:1',
+      part_name: 'word/footnotes.xml', path: '/w:footnotes[1]/w:footnote[2]/w:p[1]/w:sdt[1]',
+      preservation: 'preserve-verbatim', message: 'structured document tag',
+    })
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('UNMODELED_PARAGRAPH_CONTENT')).toBe(true)
+    expect(paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout.status).toBe('paginated')
+    const omissions = collectNativeDocxApproximateOmissionsV1(
+      { document: request.document, resolved_layout: request.resolved_layout, shaped_lines: request.shaped_lines },
+      { status: 'painted', pages: [] })
+    expect(omissions.content_status).toBe('partial')
+    expect(omissions.omitted_content).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'UNMODELED_PARAGRAPH_CONTENT', origin: 'resolution', scope_id: 'paragraph:footnote:1' })]))
+  })
+
+  it('paints the source note numbering alphabet instead of the decimal counter', () => {
+    // tdf109310_endnoteStyleForMSO states <w:endnotePr><w:numFmt w:val="lowerRoman"/>
+    // and Word prints its two endnote anchors as i and ii. The extractor formats
+    // the label table with the one counter implementation in this codebase; the
+    // paginator only indexes it by the counter value it assigns.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    const retext = (marker: string) => {
+      for (const entry of [...request.shaped_lines.paragraphs, ...request.shaped_lines.paragraphs]) for (const line of entry.lines) for (const fragment of line.fragments) {
+        if (fragment.text === '1') { fragment.text = marker; fragment.end_utf16 = marker.length }
+      }
+    }
+    retext('i')
+    const decimal = paginateNativeDocxV1(structuredClone(request))
+    expect(decimal).toMatchObject({ ok: true, value: { status: 'refused' } })
+    request.document.note_numbering = [{ kind: 'footnote', format: 'lowerRoman', labels: ['i'] }]
+    const roman = paginateNativeDocxV1(structuredClone(request))
+    expect(roman).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    // A table that does not reach the assigned counter value is a refusal, never
+    // a silent fallback to the decimal spelling the package did not ask for.
+    const short = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(short, '9', '1')
+    addFootnote(short, '8', '2')
+    short.document.note_numbering = [{ kind: 'footnote', format: 'lowerRoman', labels: ['i'] }]
+    expect(paginateNativeDocxV1(short)).toMatchObject({ ok: true, value: { status: 'refused' } })
+    // An empty table never reaches the wire at all.
+    const empty = structuredClone(request)
+    empty.document.note_numbering = [{ kind: 'footnote', format: 'lowerRoman', labels: [] as string[] }]
+    expect(paginateNativeDocxV1(empty)).toMatchObject({ ok: false })
+  })
+
+  it('accepts the note part\u2019s own separator identity, not only Word\u2019s -1/0 pair', () => {
+    // CT_FtnEdn w:type is the only authority for which note id is a separator.
+    // Word writes -1 and 0, LibreOffice writes 0 and 1, and the document
+    // contract already accepts both; the placed-layout contract must not then
+    // reject the package the document model admitted.
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    const separator = request.document.notes.find((story) => story.note_role === 'separator')!
+    separator.native_story_id = '0'
+    const output = paginateNativeDocxV1(request)
+    expect(output).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!output.ok) return
+    expect(output.value.pages.flatMap((page) => (page.note_stories ?? []).map((note) => note.native_story_id))).toContain('0')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(output.value, request).ok).toBe(true)
+  })
+
+  it('still refuses a note-scoped resolved diagnostic the approximate tier does not omit', () => {
+    const request = fixture({ lineCounts: [1, 1], bodyHeight: 60_000 })
+    addFootnote(request, '9', '1')
+    approximateSettings(request)
+    request.resolved_layout.diagnostics.push({
+      code: 'UNSUPPORTED_PARAGRAPH_ALIGNMENT', severity: 'unsupported', scope_id: 'paragraph:footnote:1',
+      part_name: 'word/footnotes.xml', path: '/w:footnotes[1]/w:footnote[2]/w:p[1]/w:pPr[1]/w:jc[1]',
+      preservation: 'preserve-verbatim', message: 'distributed alignment',
+    })
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('UNSUPPORTED_PARAGRAPH_ALIGNMENT')).toBe(false)
     const output = paginateNativeDocxApproximateLegacyV1(request, approximateEligibility(request)).layout
     expect(output.status).toBe('refused')
     expect(output.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
       code: 'note-structure-unsupported', scope_id: 'paragraph:footnote:1',
-      message: 'Unsupported note layout semantics: UNMODELED_PARAGRAPH_CONTENT: permission range',
+      message: 'Unsupported note layout semantics: UNSUPPORTED_PARAGRAPH_ALIGNMENT: distributed alignment',
     })]))
   })
 

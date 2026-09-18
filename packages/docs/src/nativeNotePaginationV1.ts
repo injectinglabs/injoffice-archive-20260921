@@ -10,6 +10,7 @@ import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservat
  */
 
 import { nativeDocxSeparatorStoryProjectionV1, type NativeDocxDocumentV1, type NativeDocxParagraphV1, type NativeDocxStoryV1 } from './nativeContract.js'
+import { nativeDocxNoteLabelsV1, nativeDocxNoteLabelV1 } from './nativeNoteNumberingV1.js'
 import type { NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
 import { layoutNativeDocxTableRowsV1, qualifyNativeDocxTablesV1, type NativeDocxQualifiedTableV1 } from './nativeTablePagePaintV1.js'
@@ -458,6 +459,27 @@ function continueNote(
   return undefined
 }
 
+/** The note-scoped source, resolution and shaping diagnostics the approximate
+ * tier admits instead of refusing note placement. The caller discloses each of
+ * them, so nothing the gate lets through is silent. */
+export function nativeDocxApproximateNoteOmissionsV1(
+  document: NativeDocxDocumentV1,
+  resolved: NativeDocxResolvedLayoutInputV1,
+  shaped: NativeDocxShapedLinesV1,
+  codes: ReadonlySet<string>,
+): Array<{ scope_id: string; code: string; message: string }> {
+  const scopes = noteScopes(document)
+  const omissions: Array<{ scope_id: string; code: string; message: string }> = []
+  for (const entry of document.unsupported) if (scopes.has(entry.scope_id) && codes.has(entry.code)) omissions.push({ scope_id: entry.scope_id, code: entry.code, message: entry.message })
+  for (const entry of resolved.diagnostics) if (scopes.has(entry.scope_id) && codes.has(entry.code)) omissions.push({ scope_id: entry.scope_id, code: entry.code, message: entry.message })
+  for (const entry of shaped.diagnostics) {
+    if (!scopes.has(entry.scope_id) && !(entry.source_id !== undefined && scopes.has(entry.source_id))) continue
+    if (entry.severity !== 'deferred' || entry.source_diagnostic_code === undefined || !codes.has(entry.source_diagnostic_code)) continue
+    omissions.push({ scope_id: entry.scope_id, code: entry.source_diagnostic_code, message: entry.source_diagnostic_message ?? entry.message })
+  }
+  return omissions
+}
+
 /** Mutates only the caller-owned canonical success snapshot. */
 export function placeNativeDocxNotesV1(
   layout: NativeDocxPaginatedLayoutSuccessV1,
@@ -466,6 +488,12 @@ export function placeNativeDocxNotesV1(
   shaped: NativeDocxShapedLinesV1,
   reservation?: NativeDocxFootnoteReservationProfileV1,
   flowRequest?: NativeDocxPaginationRequestV1,
+  // The approximate tier's admitted omission codes, or undefined in the strict
+  // tier. A note scope is held to exactly the standard its body is: a source or
+  // resolution diagnostic the caller already omits and discloses for a body
+  // paragraph cannot be a note-placement refusal for the same markup, and every
+  // other diagnostic still refuses in both tiers.
+  approximateOmittedSourceCodes?: ReadonlySet<string>,
 ): NativeDocxNotePaginationRefusalV1 | undefined {
   // Reproduce qualification and measured pair fit from the actual placement inputs;
   // never trust a caller-supplied paragraph list or a decoded object's identity.
@@ -481,13 +509,14 @@ export function placeNativeDocxNotesV1(
   }
   const scopes = noteScopes(document)
   const resolvedParagraphs = new Map(resolved.paragraphs.map((paragraph) => [paragraph.paragraph_id, paragraph]))
-  const sourceFailure = document.unsupported.find((entry) => scopes.has(entry.scope_id))
+  const omitted = (code: string): boolean => approximateOmittedSourceCodes?.has(code) === true
+  const sourceFailure = document.unsupported.find((entry) => scopes.has(entry.scope_id) && !omitted(entry.code))
   if (sourceFailure) return { scope_id: sourceFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note source semantics: ${sourceFailure.code}: ${sourceFailure.message}` }
   // Name the diagnostic and scope it to the note that carries it, exactly as the
   // source-side refusal above does. The refusal is still the whole document's --
   // one unresolvable note scope leaves note numbering ambiguous everywhere -- but
   // an unnamed blanket refusal tells a caller nothing about which note, or why.
-  const resolvedFailure = resolved.diagnostics.find((entry) => scopes.has(entry.scope_id))
+  const resolvedFailure = resolved.diagnostics.find((entry) => scopes.has(entry.scope_id) && !omitted(entry.code))
   if (resolvedFailure) return { scope_id: resolvedFailure.scope_id, code: 'note-structure-unsupported', message: `Unsupported note layout semantics: ${resolvedFailure.code}: ${resolvedFailure.message}` }
 
   const content = new Map(document.notes.filter((story) => (story.note_role ?? 'content') === 'content').map((story) => [story.id, story]))
@@ -543,6 +572,11 @@ export function placeNativeDocxNotesV1(
   const shapedTextByRunID = shapedRunTextIndex(shaped)
   const shapedFailure = shaped.diagnostics.find((entry) => {
     if (!scopes.has(entry.scope_id) && !(entry.source_id !== undefined && scopes.has(entry.source_id))) return false
+    // A deferred shaping record that only carries forward a source diagnostic
+    // the approximate tier already omits and discloses states no advance the
+    // shaper did not take: the shaper itself declares it paint-only. Holding a
+    // note to a stricter reading than its own body paragraph is over-refusal.
+    if (entry.severity === 'deferred' && entry.source_diagnostic_code !== undefined && omitted(entry.source_diagnostic_code)) return false
     const properties = resolvedParagraphs.get(entry.scope_id)?.properties
     // Whole paragraphs satisfy keep_lines/widow control. Run page controls and
     // cross-paragraph constraints still need layout semantics outside this slice.
@@ -559,6 +593,7 @@ export function placeNativeDocxNotesV1(
   const references: NoteReference[] = []
   const seen = new Set<string>()
   const counters = new Map<NoteKind, number>([['footnote', 0], ['endnote', 0]])
+  const noteLabels = nativeDocxNoteLabelsV1(document)
   for (const paragraph of bodyParagraphs(document)) {
     const shapedParagraph = shapedByParagraph.get(paragraph.id)
     if (!shapedParagraph) continue
@@ -576,7 +611,8 @@ export function placeNativeDocxNotesV1(
       if (!ref || ref.role === 'label' || (ref.kind !== 'footnote' && ref.kind !== 'endnote')) continue
       const story = content.get(ref.target_id)
       const number = (counters.get(ref.kind) ?? 0) + 1
-      const marker = String(number)
+      const marker = nativeDocxNoteLabelV1(noteLabels, ref.kind, number)
+      if (marker === undefined) return { scope_id: run.id, code: 'note-reference-ambiguous', message: 'Source note numbering format states no label for this counter value' }
       const placements = runPlacements.get(run.id)
       const placement = placements?.size === 1 ? [...placements][0] : undefined
       const label = story ? labelsByStory.get(story.id) : undefined

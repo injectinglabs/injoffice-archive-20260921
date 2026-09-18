@@ -23,6 +23,7 @@ import {deriveNativeSquareWrapPlanV1, hasNativeSquareWrapV1} from './nativeSquar
 import {nativeDocxFloatingAnchorOriginsV1, resolveNativeDocxFloatingAnchorV1} from './nativeFloatingAnchorV1.js'
 import { hasNativeDocxPageFieldsV1 } from './nativePageFieldsV1.js'
 import { approximatePagePreviewEnvelope, decodeNativeDocxApproximationEligibilityV1, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED, type NativeDocxApproximatePagePreviewV1 } from './nativeApproximationV1.js'
+import { nativeDocxNoteLabelsV1, nativeDocxNoteLabelV1 } from './nativeNoteNumberingV1.js'
 import type {NativeDocxApproximationEligibilityV1} from './nativeApproximationV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,nativeDocxFontSubstitutionDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
@@ -1023,8 +1024,10 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
   const nativeParagraphs = nativePaintParagraphs(request)
   const nativeRuns = new Map([...nativeParagraphs.values()].flatMap((paragraph) => paragraph.runs.map((run) => [run.id, run] as const)))
   const noteNumbers = new Map<string, string>()
+  const noteLabels = nativeDocxNoteLabelsV1(pagination.document)
   for (const page of layout.pages) for (const placement of page.note_stories ?? []) if (placement.note_role === 'content' && placement.number !== undefined) {
-    const value = String(placement.number)
+    const value = nativeDocxNoteLabelV1(noteLabels, placement.story_kind, placement.number)
+    if (value === undefined) return { ok: true, value: refusal(provenance, 'identity-mismatch', placement.story_id, 'Source note numbering format states no label for this placed counter value') }
     const existing = noteNumbers.get(placement.story_id)
     if (existing !== undefined && existing !== value) return { ok: true, value: refusal(provenance, 'identity-mismatch', placement.story_id, 'One note story has inconsistent painted numbering') }
     noteNumbers.set(placement.story_id, value)
@@ -1117,7 +1120,13 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
             const noteMarker = nativeRun.kind === 'reference' && nativeRun.reference && (nativeRun.reference.kind === 'footnote' || nativeRun.reference.kind === 'endnote') ? noteNumbers.get(nativeRun.reference.target_id) : undefined
             const sourceText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? nativeDocxPageNumberV1(pagination.document,layout,page.ordinal) : layout.pages.length) : nativeRun.text
             const exactText = nativeRun.kind === 'text' && sourceText !== undefined && sourceText.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
-            const exactMarker = noteMarker !== undefined && fragment.start_utf16 === 0 && fragment.end_utf16 === noteMarker.length && fragment.text === noteMarker
+            // A placed note marker is shaped like any other text: the shaper may
+            // split it into several visual clusters, and a multi-character label
+            // (lowerRoman 'ii', decimalZero '01') routinely is. Hold each
+            // fragment to the same rule a text run's is held to -- its UTF-16
+            // range must spell its own text out of the marker -- and require the
+            // fragments to partition the whole marker in the coverage pass below.
+            const exactMarker = noteMarker !== undefined && fragment.end_utf16 <= noteMarker.length && fragment.start_utf16 < fragment.end_utf16 && noteMarker.slice(fragment.start_utf16, fragment.end_utf16) === fragment.text
             if (!exactText && !exactMarker) return { ok: true, value: refusal(provenance, 'identity-mismatch', fragment.id, 'Run fragment text and UTF-16 range must exactly match native text or its placed note number') }
             if (fragment.text.length > 0 && fragment.glyphs.length === 0) return { ok: true, value: refusal(provenance, 'missing-glyph', fragment.id, 'A non-empty visible run fragment cannot paint without glyphs') }
             if (!coveredFragmentIDs.has(coveragePrefix + fragment.id)) {
@@ -1311,14 +1320,15 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
     const coverageID = prefix + nativeRun.id
     const resolved = resolvedRuns.get(nativeRun.id)
     if (!resolved || resolved.properties.hidden) continue
-    if (nativeRun.kind === 'text' && nativeRun.text !== undefined) {
+    const noteMarker = nativeRun.kind === 'reference' && nativeRun.reference && (nativeRun.reference.kind === 'footnote' || nativeRun.reference.kind === 'endnote') ? noteNumbers.get(nativeRun.reference.target_id) : undefined
+    if ((nativeRun.kind === 'text' && nativeRun.text !== undefined) || noteMarker !== undefined) {
       const intervals = (sourceIntervals.get(coverageID) ?? []).sort((left, right) => left.start - right.start || left.end - right.end)
       let cursor = 0
       for (const interval of intervals) {
         if (interval.start !== cursor || interval.end <= interval.start) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must exactly partition their native text run in logical order') }
         cursor = interval.end
       }
-      const expectedText = nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? nativeDocxPageNumberV1(pagination.document,layout,ordinal) : layout.pages.length) : nativeRun.text
+      const expectedText = noteMarker !== undefined ? noteMarker : nativeRun.page_field ? String(nativeRun.page_field === 'PAGE' ? nativeDocxPageNumberV1(pagination.document,layout,ordinal) : layout.pages.length) : nativeRun.text!
       if (cursor !== expectedText.length) return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'Painted visual clusters must completely cover their native text run') }
     } else if (nativeRun.kind === 'control' && nativeRun.control === 'tab' && sourceControlCounts.get(coverageID) !== 1) {
       return { ok: true, value: refusal(provenance, 'identity-mismatch', nativeRun.id, 'A painted native tab must have exactly one visual fragment') }

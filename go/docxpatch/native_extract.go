@@ -131,6 +131,8 @@ type nativeExtractor struct {
 	noTblStylePrProven  bool
 	noEndnotesChecked   bool
 	noEndnotesProven    bool
+	noteNumberFormats   map[string]string
+	noteNumberConflicts map[string]bool
 }
 
 // NativeExtractionOptions lets a caller retain durable identity across source
@@ -254,6 +256,7 @@ func ExtractNativeDocumentV1WithOptions(data []byte, options NativeExtractionOpt
 			{Name: "full-document-regeneration", Level: "unsupported", Detail: nativeString("Unmodeled OOXML is preserved verbatim and must not be flattened")},
 		},
 		PassthroughParts: extractor.passthroughParts(), Unsupported: extractor.unsupported,
+		NoteNumbering:    extractor.nativeNoteNumberingRecords(),
 	}
 	if issues := ValidateNativeDocumentV1(doc); len(issues) > 0 {
 		return nil, fmt.Errorf("docxpatch: native extract produced invalid contract: %w", &NativeValidationError{Issues: issues})
@@ -4152,6 +4155,20 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 			if !present || value == "" || !valid || enabled || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) {
 				extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, "Only exact explicitly disabled section form protection is layout-neutral")
 			}
+		case "footnotePr", "endnotePr":
+			// ECMA-376 17.11.17/17.11.18. Only the counter alphabet is read;
+			// every other note property still states placement, restart or
+			// custom-mark semantics this tier has no input for.
+			kind := strings.TrimSuffix(child.Name.Local, "Pr")
+			format, modeled := nativeNoteNumberFormat(child, extractor.wordNS)
+			if modeled && extractor.recordNoteNumberFormat(kind, format) {
+				continue
+			}
+			message := "Note properties are modeled only as one exact numbering-format leaf"
+			if modeled {
+				message = "Sections state more than one numbering format for this note kind, so neither is applied"
+			}
+			extractor.addUnsupported("UNMODELED_SECTION_PROPERTY", "sections", id, extractor.mainPart, child, message)
 		case "noEndnote":
 			_, valid := nativeOnOff(child, extractor.wordNS)
 			if !valid || !nativeExactLeaf(child, xml.Name{Space: extractor.wordNS, Local: "val"}) || !extractor.proveNoContentEndnotes() {
