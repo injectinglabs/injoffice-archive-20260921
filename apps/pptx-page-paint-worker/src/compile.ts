@@ -24,10 +24,21 @@ export function previewStroke(stroke:RenderStroke):PreviewStroke {
 function fontProviders(path:string,allowSubstitution=false){
  if(!isAbsolute(path)||statSync(path).size>65536)throw new Error('Operator font manifest must be an absolute bounded local file')
  const config=object(JSON.parse(readFileSync(path,'utf8')))
- if(config.version!==1||!Array.isArray(config.faces)||config.faces.length>32)throw new Error('Invalid operator font manifest')
+ // One generic message for four distinct conditions makes an operator
+ // manifest that is merely too large indistinguishable from a corrupt one,
+ // and the slide only ever shows the 422 body. Name the limit that failed.
+ if(config.version!==1)throw new Error(`Invalid operator font manifest: version must be 1, got ${JSON.stringify(config.version)}`)
+ if(!Array.isArray(config.faces))throw new Error('Invalid operator font manifest: faces must be an array')
+ if(config.faces.length>32)throw new Error(`Invalid operator font manifest: ${config.faces.length} faces exceeds the 32-face limit`)
  const policy=config.substitutions===undefined?undefined:decodeExplicitFontPolicyV1(config.substitutions)
  const resources=new Map<string,FontResource>(),outlines=new Map<string,ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
  const faces:NativeFontManifest['faces'][number][]=[]
+ // Faces HarfBuzz cannot inspect are skipped rather than failing the slide
+ // (a manifest may carry a face this deck never uses). Their families are
+ // kept so a later "font unavailable" can say WHY the family is missing
+ // instead of looking like the manifest never listed it — TrueType
+ // collections (.ttc) land here.
+ const skipped:string[]=[]
  const manifest:NativeFontManifest={version:1,manifestId:'pptx-preview-fonts',revision:hash(Buffer.from(JSON.stringify(config))),faces,fallbackChains:[]}
  let total=0
  for(const [index,entry] of config.faces.entries()){
@@ -44,6 +55,7 @@ function fontProviders(path:string,allowSubstitution=false){
   try {
    metrics=inspectHarfBuzzFontMetricsV1(request)
   } catch {
+   skipped.push(`${f.family} (${f.path})`)
    continue
   }
   faces.push({faceId:id,family:face.family,weight:face.weight,style:face.style,stretch:100,source:{kind:'host',resourceId:id,contentDigest:digest}})
@@ -55,7 +67,14 @@ function fontProviders(path:string,allowSubstitution=false){
   const selected=selectExplicitFontV1(manifest,run,allowSubstitution?policy:undefined)
   return selected?{status:'resolved',face:selected.face,attemptedFaceIds:[selected.face.faceId],decisions:[]}:{status:'refused',attemptedFaceIds:[],decisions:[{code:'font-not-found',message:`Configured font unavailable: ${run.font.families.join(', ')} / ${run.font.weight} / ${run.font.style}`,recoverable:false}]}
  },load(face){const resource=resources.get(face.faceId);if(!resource||resource.face.contentDigest!==face.contentDigest||resource.face.family!==face.family||resource.face.weight!==face.weight||resource.face.style!==face.style)throw new Error('Unresolved font resource');return {...resource,face:{...face},bytes:resource.bytes.slice()}}}
- return {manifest,resolver,outlines,resources,policyDigest:policy?hash(Buffer.from(JSON.stringify(policy))):undefined}
+ return {manifest,resolver,outlines,resources,skipped,policyDigest:policy?hash(Buffer.from(JSON.stringify(policy))):undefined}
+}
+
+// uninspectable names the manifest faces that were dropped because HarfBuzz
+// could not read them, so a missing family reads as "the manifest listed it and
+// we could not load it" rather than "the manifest never listed it".
+function uninspectable(fonts:{skipped:readonly string[]}):string{
+ return fonts.skipped.length?`; ${fonts.skipped.length} operator face(s) were listed but could not be inspected: ${fonts.skipped.join(', ')}`:''
 }
 
 export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
@@ -73,8 +92,8 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
  if(deck.origin!=='parsed'||request.slide_index as number<0||request.slide_index as number>=deck.slides.length)throw new Error('Preview requires a parsed source slide')
  const workbookResolution=request.workbook_chart_preview===true?await workbookChartsForPreview(request.workbook_chart_data,deck,request.package_sha256):undefined
  const fonts=fontProviders(request.font_manifest_path,request.font_substitution_preview===true)
- const checkParagraphs=(paragraphs:readonly NativeParagraph[])=>{for(const paragraph of paragraphs)for(const run of paragraph.runs){if(![...fonts.resources.values()].some(r=>r.face.family===run.fontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator font unavailable: ${run.fontFamily??'unresolved family'} / ${run.bold?'bold':'regular'} / ${run.italic?'italic':'normal'}`)}}
- const checkMarkerFonts=(paragraphs:readonly NativeParagraph[])=>{for(const p of paragraphs){if(!p.bulletFontFamily)continue;const run=p.runs[0];if(!run||![...fonts.resources.values()].some(r=>r.face.family===p.bulletFontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator bullet font unavailable: ${p.bulletFontFamily}`)}}
+ const checkParagraphs=(paragraphs:readonly NativeParagraph[])=>{for(const paragraph of paragraphs)for(const run of paragraph.runs){if(![...fonts.resources.values()].some(r=>r.face.family===run.fontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator font unavailable: ${run.fontFamily??'unresolved family'} / ${run.bold?'bold':'regular'} / ${run.italic?'italic':'normal'}${uninspectable(fonts)}`)}}
+ const checkMarkerFonts=(paragraphs:readonly NativeParagraph[])=>{for(const p of paragraphs){if(!p.bulletFontFamily)continue;const run=p.runs[0];if(!run||![...fonts.resources.values()].some(r=>r.face.family===p.bulletFontFamily&&r.face.weight===(run.bold?700:400)&&r.face.style===(run.italic?'italic':'normal')))throw new Error(`Exact operator bullet font unavailable: ${p.bulletFontFamily}${uninspectable(fonts)}`)}}
  const checkElements=(elements:readonly NativeElement[])=>{for(const element of elements){if(element.kind==='text'||element.kind==='shape'){checkParagraphs(element.paragraphs);checkMarkerFonts(element.paragraphs)}if(element.kind==='group')checkElements(element.children);if(element.kind==='table')for(const row of element.table.rows)for(const cell of row)if(cell.paragraphs){checkParagraphs(cell.paragraphs);checkMarkerFonts(cell.paragraphs)}}}
  if(request.font_substitution_preview!==true)checkElements(deck.slides[request.slide_index as number]!.elements)
  // The v1 substitution evidence identifies text/shape runs, not table-cell
