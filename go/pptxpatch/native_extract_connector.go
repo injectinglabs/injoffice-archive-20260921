@@ -286,9 +286,11 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 		headArrow, tailArrow = head, tail
 	}
 	for _, name := range []string{"effectLst", "effectDag", "scene3d", "sp3d", "extLst"} {
-		if child, _ := nativeSingleton(node, dialect.drawing, name, false); child != nil {
-			gaps.add("pptx.connector-effects-unavailable", "connector effects, 3D, or extension markup is preserved but not approximated", true)
+		child, _ := nativeSingleton(node, dialect.drawing, name, false)
+		if child == nil || nativeDeclaresNoEffect(child) {
+			continue
 		}
+		gaps.add("pptx.connector-effects-unavailable", "connector effects, 3D, or extension markup is preserved but not approximated", true)
 	}
 	return transform, antiDiagonal, geometry, stroke, headArrow, tailArrow, nil
 }

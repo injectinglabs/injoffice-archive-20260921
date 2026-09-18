@@ -3,6 +3,7 @@ package pptxpatch
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 )
 
 type nativeShapeGap struct {
@@ -14,6 +15,12 @@ type nativeShapeGap struct {
 type nativeShapeGapSet struct {
 	values []nativeShapeGap
 	seen   map[string]bool
+	// approximate is the opt-in read-only preview tier
+	// (NativePPTXExtractOptions.AllowInheritedTextPreview). It never relaxes
+	// what native v1 claims to model; it only lets a gap be DISCLOSED instead
+	// of refused when refusing would paint nothing where PowerPoint paints the
+	// element.
+	approximate bool
 }
 
 func (gaps *nativeShapeGapSet) add(code, message string, refusal bool) {
@@ -71,7 +78,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 	if err := rejectNativeAutoShapeDialectMix(node, dialect); err != nil {
 		return NativeElement{}, err
 	}
-	gaps := nativeShapeGapSet{}
+	gaps := nativeShapeGapSet{approximate: extractor.options.AllowInheritedTextPreview}
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.autoshape-markup-unavailable", "shape root attributes are not representable in native PPTX v1", true)
 	}
@@ -459,9 +466,15 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 		return NativeTransform{}, nil, nil, nil, nil, err
 	}
 	for _, name := range []string{"effectLst", "effectDag", "scene3d", "sp3d", "extLst"} {
-		if child, _ := nativeSingleton(node, dialect.drawing, name, false); child != nil {
-			gaps.add("pptx.autoshape-effects-unavailable", "shape effects, 3D, or extension markup is preserved but not approximated", true)
+		child, _ := nativeSingleton(node, dialect.drawing, name, false)
+		if child == nil || nativeDeclaresNoEffect(child) {
+			continue
 		}
+		if gaps.approximate && nativeHaloOnlyEffectList(child, dialect.drawing) {
+			gaps.add("pptx.autoshape-effects-approximate", "shape shadow, glow or soft-edge effects are omitted from the read-only preview; the shape's own geometry, fill, outline and text are painted unchanged", false)
+			continue
+		}
+		gaps.add("pptx.autoshape-effects-unavailable", "shape effects, 3D, or extension markup is preserved but not approximated", true)
 	}
 	return transform, preset, geometry, fill, stroke, nil
 }
@@ -853,4 +866,55 @@ func nativeUnpaintedAutoShapeLine(line *nativeXMLNode, dialect nativeExtractDial
 		return true, nil
 	}
 	return true, nil
+}
+
+// nativeDeclaresNoEffect reports whether an a:effectLst carries no effect at
+// all. PowerPoint writes a childless <a:effectLst/> to mean "this shape has
+// explicitly no effects", most often when a shape overrides an inherited
+// style's effect reference. CT_EffectList declares no attributes
+// (ECMA-376 Part 1 §20.1.8.26), so an element with neither children nor
+// attributes says nothing that native v1 would have to approximate, and
+// refusing the whole shape for it paints nothing where PowerPoint paints the
+// shape. Only the empty list is exempt; any effect child still refuses.
+func nativeDeclaresNoEffect(node *nativeXMLNode) bool {
+	if node == nil || node.Name.Local != "effectLst" {
+		return false
+	}
+	return len(node.Children) == 0 && len(node.Attrs) == 0 && strings.TrimSpace(node.Text) == ""
+}
+
+// nativeHaloHhaloEffects are the CT_EffectList children (ECMA-376 Part 1
+// §20.1.8.26) that paint AROUND or BEHIND the shape without altering the
+// shape's own path, fill, outline or text. Omitting one leaves every pixel the
+// shape itself paints exactly where PowerPoint puts it and only drops the
+// decoration, so the approximate tier discloses them instead of refusing the
+// whole shape and painting nothing.
+//
+// a:blur and a:fillOverlay are deliberately NOT here: blur rewrites the
+// shape's own pixels and fillOverlay repaints its fill, so an omission would
+// misstate the shape rather than under-decorate it.
+var nativeHaloEffects = map[string]bool{
+	"glow":       true,
+	"innerShdw":  true,
+	"outerShdw":  true,
+	"prstShdw":   true,
+	"reflection": true,
+	"softEdge":   true,
+}
+
+// nativeHaloOnlyEffectList reports whether every child of an a:effectLst is a
+// halo effect. An effect list holding anything else still refuses.
+func nativeHaloOnlyEffectList(node *nativeXMLNode, drawingNS string) bool {
+	if node == nil || node.Name.Local != "effectLst" || len(node.Attrs) != 0 || strings.TrimSpace(node.Text) != "" {
+		return false
+	}
+	if len(node.Children) == 0 {
+		return false
+	}
+	for _, child := range node.Children {
+		if child.Name.Space != drawingNS || !nativeHaloEffects[child.Name.Local] {
+			return false
+		}
+	}
+	return true
 }
