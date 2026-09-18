@@ -450,7 +450,7 @@ describe('shapeNativeDocxLinesV1', () => {
     const resource: FontResource = {
       face: realFace,
       bytes,
-      metrics: { unitsPerEm: 2_048, ascender: 1_901, descender: -483, lineGap: 0, underlinePosition: -130, underlineThickness: 90 },
+      metrics: { unitsPerEm: 2_048, ascender: 1_901, descender: -483, lineGap: 0, underlinePosition: -130, underlineThickness: 90, strikeoutPosition: 530, strikeoutThickness: 102 },
     }
     const resolver: NativeFontResolver = {
       providerId: 'fixture.digest-resolver',

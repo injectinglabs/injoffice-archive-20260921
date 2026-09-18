@@ -258,6 +258,10 @@ export interface FontDesignMetrics {
   xHeight?: number
   underlinePosition?: number
   underlineThickness?: number
+  /** OS/2 yStrikeoutPosition: top of the strikeout bar above the baseline. */
+  strikeoutPosition?: number
+  /** OS/2 yStrikeoutSize. */
+  strikeoutThickness?: number
 }
 
 export interface FontResource {
@@ -327,6 +331,8 @@ export interface ScaledLineMetrics {
   xHeightMilliPoints?: number
   underlinePositionMilliPoints?: number
   underlineThicknessMilliPoints?: number
+  strikeoutPositionMilliPoints?: number
+  strikeoutThicknessMilliPoints?: number
 }
 
 export interface ShapedGlyph {
@@ -724,6 +730,8 @@ export function scaleLineMetrics(metrics: FontDesignMetrics, fontSizeMilliPoints
     xHeightMilliPoints: optional(metrics.xHeight),
     underlinePositionMilliPoints: optional(metrics.underlinePosition),
     underlineThicknessMilliPoints: optional(metrics.underlineThickness),
+    strikeoutPositionMilliPoints: optional(metrics.strikeoutPosition),
+    strikeoutThicknessMilliPoints: optional(metrics.strikeoutThickness),
   }
 }
 

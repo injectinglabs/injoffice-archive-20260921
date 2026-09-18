@@ -60,7 +60,7 @@ import {
   type NativeDocxPlacedNoteStoryV1,
 } from './nativePaginationV1.js'
 import { decodeNativeDocxPaginatedLayoutForRequest, decodeNativeDocxApproximatePaginatedLayoutForRequest } from './nativePaginatedLayoutContract.js'
-import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
+import type { NativeDocxShapedLineV1, NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import {
   DOCX_HEADER_FOOTER_LAYOUT_PROTOCOL,
   DOCX_HEADER_FOOTER_LAYOUT_VERSION,
@@ -855,12 +855,48 @@ function tableCommandsByPage(
   return commands
 }
 
-function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDocxPlacedLineV1, storyID: string, continuation = false): NativeDocxStrokeNoteSeparatorCommandV1 | undefined {
+/**
+ * Word paints a note separator as a filled bar seated exactly where the
+ * separator paragraph's own font would strike its text out: the bar's top edge
+ * is OS/2 `yStrikeoutPosition` above that paragraph's baseline and it is
+ * `yStrikeoutSize` thick.
+ *
+ * Measured off Word's own PDF exports (`office-hard-v2/pdf`), which quantise to
+ * 1/300 inch, the bar's top edge sits exactly `yStrikeoutPosition` above the
+ * baseline Word writes for that same separator paragraph:
+ *
+ *   tdf123262_textFootnoteSeparators  Arial 12 pt   3.120 pt measured, 3.105 stated
+ *   tdf82173_endnoteStyle             Arial 12 pt   3.120 pt measured, 3.105 stated
+ *   tdf82173_footnoteStyle            Arial 24 pt   6.240 pt measured, 6.211 stated
+ *   footnote, tdf118361_RTL…          Calibri 11 pt 2.880 pt measured, 2.750 stated
+ *
+ * and the bar's thickness is `yStrikeoutSize` at the same size — 0.48 pt at
+ * Arial 12 pt, 1.20 pt at Arial 24 pt and 0.72 pt at Calibri 11 pt. Those three
+ * values rule out both a constant and a single em fraction: Arial states
+ * 102/2048 em and Calibri 134/2048, and the Arial pair reproduces the
+ * unquantised doubling (2 and 5 grid steps, not 2 and 4).
+ *
+ * Word draws that bar as a filled path, not a stroke. The command stays a
+ * centred stroke of the same thickness because an SVG stroke centred on `y`
+ * covers the identical band; only the primitive differs, not the ink.
+ *
+ * The rule is seated on the caller's own baseline for that line, so a box a
+ * fixed `w:lineRule` bottom-anchored carries the rule with it. A face that
+ * states no strikeout metrics keeps the earlier line-box-relative offset rather
+ * than losing the rule.
+ */
+function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDocxPlacedLineV1, line: NativeDocxShapedLineV1 | undefined, baselineY: number | undefined, storyID: string, continuation = false): NativeDocxStrokeNoteSeparatorCommandV1 | undefined {
   const column = page.columns[placed.column_ordinal]
   if (!column || column.id !== placed.column_id || column.section_id !== placed.section_id || column.ordinal !== placed.column_ordinal) return undefined
   const x2 = Math.min(column.x_millipoints + column.width_millipoints, column.x_millipoints + (continuation ? column.width_millipoints : 144_000))
-  const y = placed.y_millipoints + Math.min(6_000, Math.floor(placed.height_millipoints / 2))
-  if (!Number.isSafeInteger(x2) || !Number.isSafeInteger(y) || x2 <= column.x_millipoints) return undefined
+  const position = line?.mark_strikeout_position_millipoints
+  const thickness = line?.mark_strikeout_thickness_millipoints
+  const seated = baselineY !== undefined && position !== undefined && thickness !== undefined
+  const y = seated
+    ? baselineY - position + Math.round(thickness / 2)
+    : placed.y_millipoints + Math.min(6_000, Math.floor(placed.height_millipoints / 2))
+  const width = seated ? thickness : 750
+  if (!Number.isSafeInteger(x2) || !Number.isSafeInteger(y) || !Number.isSafeInteger(width) || width <= 0 || x2 <= column.x_millipoints) return undefined
   return {
     kind: 'stroke_note_separator',
     id: paintNoteSeparatorCommandID(placed.id),
@@ -870,7 +906,7 @@ function noteSeparatorCommand(page: NativeDocxPaginatedPageV1, placed: NativeDoc
     y1_millipoints: y,
     x2_millipoints: x2,
     y2_millipoints: y,
-    width_millipoints: 750,
+    width_millipoints: width,
     stroke_rgb: '000000',
   }
 }
@@ -1105,7 +1141,7 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       const underlines: NativeDocxStrokeTextUnderlineCommandV1[] = []
       if ((noteStory?.note_role === 'separator' || noteStory?.note_role === 'continuation-separator') && noteStory.lines[0]?.id === placed.id) {
         if (line.fragments.length !== 0) return { ok: true, value: refusal(provenance, 'unsupported-source', noteStory.story_id, 'The note separator instruction line must paint exactly one derived rule and no text or glyph commands') }
-        const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, noteStory.story_id, noteStory.note_role === 'continuation-separator')
+        const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, line, baselineY, noteStory.story_id, noteStory.note_role === 'continuation-separator')
         if (!separator) return { ok: true, value: refusal(provenance, 'identity-mismatch', noteStory.story_id, 'Ordinary note separator cannot exact-join its placed line and column geometry') }
         contentCommands.push(separator)
       }
@@ -1435,7 +1471,16 @@ export function decodeNativeDocxPagePaintForRequestV1(value: unknown, requestVal
           // separator-story paragraph paints as ordinary text.
           const separatorStory = (indexedStory?.note_role === 'separator' || indexedStory?.note_role === 'continuation-separator') && indexedStory.lines[0]?.id === placed.id ? indexedStory : undefined
           if (separatorStory) {
-            const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, separatorStory.story_id, separatorStory.note_role === 'continuation-separator')
+            // Replay derives the same baseline the compiler seated the rule on:
+            // only a FIXED w:lineRule that changed the box height bottom-anchors
+            // it, and a strict-tier paint of such a line is already refused for
+            // its non-natural box before any rule is derived.
+            const naturalHeight = line ? line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints : 0
+            const separatorLineRule = resolvedParagraphs.get(placed.paragraph_id)?.properties?.line_rule
+            const separatorBottomAnchored = line !== undefined && (separatorLineRule === 'exact' || separatorLineRule === 'atLeast') && line.line_height_millipoints !== naturalHeight
+            const separatorBaselineY = line === undefined ? undefined
+              : separatorBottomAnchored ? placed.y_millipoints + line.line_height_millipoints + line.descent_millipoints : placed.y_millipoints + line.ascent_millipoints
+            const separator = noteSeparatorCommand(page, placed as NativeDocxPlacedLineV1, line, separatorBaselineY, separatorStory.story_id, separatorStory.note_role === 'continuation-separator')
             if (separator) expectedSeparators.push({ pageIndex, command: separator })
           }
           let fragmentX = placed.x_millipoints
