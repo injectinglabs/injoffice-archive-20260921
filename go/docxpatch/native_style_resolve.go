@@ -2001,7 +2001,19 @@ func (resolver *nativeLayoutResolver) styleChain(kind, id, scopeID string) []*na
 		}
 		definition := resolver.styles[key]
 		if definition == nil {
-			resolver.addDiagnostic("MISSING_STYLE_REFERENCE", scopeID, resolver.partsValue(resolver.parts.StylesPart), nil, "The missing basedOn ancestor was ignored; available descendant layers were retained")
+			// ECMA-376 17.7.2: a w:pStyle or w:rStyle naming a style the
+			// package does not define is ignored. Nothing was dropped -- there
+			// is no chain to drop a layer from -- so the reference is disclosed
+			// under its own code and the consumer cascades from the document
+			// defaults, which is what Word paints. A missing basedOn ancestor
+			// of a style that does exist did drop layers and keeps the code it
+			// has always had, as does an undefined table or numbering style,
+			// whose own neutrality is decided by the table's own diagnostic.
+			if len(chain) == 0 && (kind == "paragraph" || kind == "character") {
+				resolver.addDiagnostic("UNDEFINED_STYLE_REFERENCE", scopeID, resolver.partsValue(resolver.parts.StylesPart), nil, "The referenced "+kind+" style is not defined in this package; the reference is ignored and no style layer was dropped")
+			} else {
+				resolver.addDiagnostic("MISSING_STYLE_REFERENCE", scopeID, resolver.partsValue(resolver.parts.StylesPart), nil, "The missing basedOn ancestor was ignored; available descendant layers were retained")
+			}
 			break
 		}
 		chain = append(chain, definition)
