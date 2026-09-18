@@ -30,6 +30,7 @@ import { decodeNativeDocxPagePaintResourceListV1, qualifyNativeDocxInlineImageV1
 import { paginateNativeDocxV1, paginateNativeDocxApproximateLegacyV1 } from './nativePaginationV1.js'
 import { qualifyNativeDocxTablesV1,layoutNativeDocxTableRowsV1, nativeDocxTableProjectionSha256V1 } from './nativeTablePagePaintV1.js'
 import { decodeNativeDocxShapedLines } from './nativeShapedLinesContract.js'
+import type { NativeDocxShapingDiagnosticV1 } from './nativeShapingLines.js'
 import { decodeNativeDocxPagePaintForRequestV1, decodeNativeDocxPagePaintRequestV1, nativeDocxPagePaintShapedLinesSha256V1, decodeNativeDocxApproximateComputedPagePaintV1, nativeDocxPagePaintPaginatedLayoutSha256V1 } from './nativePagePaintV1.js'
 import { nativeDocxPageFieldDocumentV1 } from './nativePageFieldsV1.js'
 import {deriveNativeSquareWrapPlanV1} from './nativeSquareWrapV1.js'
@@ -1371,6 +1372,23 @@ describe('native DOCX page-paint compiler v1', () => {
     exactResolved.paragraphs.forEach(p=>{p.paragraph_mark_properties!.font_family='DejaVu Sans'})
     rewriteInventory(exactHeader,inventory=>{inventory.families[0]!.name='DejaVu Sans';inventory.references.forEach(r=>{r.family='DejaVu Sans'})})
     const exactPrepared=await prepareNativeDocxPagePaintV1(exactHeader,{fonts}),request=structuredClone(exactPrepared.page_paint_request.pagination_request),variants=structuredClone(exactPrepared.page_paint_request.page_field_variants!)
+    // A header/footer PAGE field is empty in the base shape (a blank line measured from
+    // paragraph-mark metrics) and a shaped run once expanded, so its shaping diagnostic
+    // legitimately moves from a `paragraph:` scope to a `run:` scope. The body/note invariant
+    // must not compare header/footer-scoped diagnostics; body-scoped ones still have to match.
+    {
+      const pageLayout=exactPrepared.page_paint_request.paginated_layout
+      const shaping=(scope_id:string):NativeDocxShapingDiagnosticV1=>({code:'missing-run-size',severity:'unsupported',scope_id,message:'Resolved font size is absent'})
+      const bodyParagraph=(exactHeader.document as NativeDocxDocumentV1).body.blocks.find(block=>block.paragraph)!.paragraph!
+      for (const [baseScope,variantScope,accepted] of [['paragraph:header','run:header',true],[bodyParagraph.id,bodyParagraph.runs[0]!.id,false]] as const) {
+        const base=structuredClone(exactPrepared.page_paint_request.pagination_request)
+        const scoped=structuredClone(exactPrepared.page_paint_request.page_field_variants!)
+        base.shaped_lines.diagnostics.push(shaping(baseScope))
+        for (const variant of scoped) variant.shaped_lines.diagnostics.push(shaping(variantScope))
+        if (accepted) expect(validateNativeDocxPageFieldVariantsV1(base,pageLayout,scoped)).toHaveLength(1)
+        else expect(()=>validateNativeDocxPageFieldVariantsV1(base,pageLayout,scoped)).toThrow(/body\/note shaping/)
+      }
+    }
     request.resolved_layout.runs.forEach(r=>{r.properties.font_family='Missing Family'})
     request.resolved_layout.paragraphs.forEach(p=>{p.paragraph_mark_properties!.font_family='Missing Family'})
     const attach=(shaped:typeof request.shaped_lines)=>{

@@ -2,7 +2,7 @@ import type { NativeDocxDocumentV1, NativeDocxStoryV1 } from './nativeContract.j
 import { decodeNativeDocxPaginationRequestV1, type NativeDocxPaginationRequestV1, type NativeDocxPaginatedLayoutV1 } from './nativePaginationV1.js'
 import type { NativeDocxShapedLinesV1 } from './nativeShapingLines.js'
 import { nativeDocxPageNumberV1 } from './nativePageNumbersV1.js'
-import {qualifyNativeDocxFontSubstitutionsV1,isQualifiedNativeDocxFontDiagnosticV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
+import {qualifyNativeDocxFontSubstitutionsV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
 import type {NativeFontManifest} from '@injoffice/font-metrics/layout'
 
 export interface NativeDocxFontVariantPolicyV1 {manifest:NativeFontManifest;policy:unknown;descriptors?:{eligibility:unknown;inventoryJSON:string}}
@@ -60,7 +60,14 @@ function validatePageFieldVariants(request: NativeDocxPaginationRequestV1, layou
   const baseRecords=qualify(request.shaped_lines,request.document)
   const choices=new Map(baseRecords.map(r=>[JSON.stringify([r.source_id,r.source_role]),JSON.stringify(r)]))
   const headerScopes=new Set([...request.document.headers,...request.document.footers].flatMap(s=>s.blocks.flatMap(b=>b.paragraph?[b.paragraph.id,...b.paragraph.runs.map(r=>r.id)]:[])))
-  const metadata=(shaped:NativeDocxShapedLinesV1,records:NativeDocxFontSubstitutionV1[])=>font?{...shaped,paragraphs:[],font_substitutions:records.filter(r=>!headerScopes.has(r.source_id)),diagnostics:shaped.diagnostics.filter(d=>!headerScopes.has(d.scope_id)||!isQualifiedNativeDocxFontDiagnosticV1(d,records))}:{...shaped,paragraphs:[]}
+  // Expanding a page field is *meant* to reshape the header/footer paragraph that carries it: an
+  // empty PAGE result is a blank line measured from paragraph-mark metrics, a filled one is a shaped
+  // run, so its shaping diagnostic legitimately moves from a `paragraph:` scope to a `run:` scope.
+  // This invariant covers body/note shaping, dimensions and provider identity, so header/footer
+  // scopes are excluded from the diagnostic comparison exactly as they already are from the font
+  // substitution records. Every other scope still has to match the base shape byte for byte.
+  const comparable=(shaped:NativeDocxShapedLinesV1)=>shaped.diagnostics.filter(d=>!headerScopes.has(d.scope_id))
+  const metadata=(shaped:NativeDocxShapedLinesV1,records:NativeDocxFontSubstitutionV1[])=>font?{...shaped,paragraphs:[],font_substitutions:records.filter(r=>!headerScopes.has(r.source_id)),diagnostics:comparable(shaped)}:{...shaped,paragraphs:[],diagnostics:comparable(shaped)}
   const hasFields = hasNativeDocxPageFieldsV1(request.document)
   if (!hasFields) { if (input !== undefined) throw new TypeError('Page-field variants require authored page fields'); return undefined }
   if (layout.status !== 'paginated') { if (input !== undefined) throw new TypeError('Refused pagination cannot carry field variants'); return undefined }
