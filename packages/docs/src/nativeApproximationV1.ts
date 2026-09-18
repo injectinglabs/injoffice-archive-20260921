@@ -6,6 +6,7 @@ import type { NativeDocxValidationIssue } from './nativeContract.js'
 import { nativeApproximationSettingReason, validNativeDocxApproximatedSettingV1, type NativeDocxApproximatedSettingV1 } from './nativeApproximationSettingsV1.js'
 import { DOCX_LATIN_FONT_FALLBACK_WARNING, validNativeDocxApproximatedFontFacesV1, validNativeDocxLatinFontFallbacksV1, type NativeDocxLatinFontFallbackV1 } from './nativeLatinFontFallbackV1.js'
 import { DOCX_ABSENT_FONT_SIZE_WARNING, validNativeDocxAbsentDefaultSizeShapeV1, validNativeDocxAbsentFontSizesV1, validNativeDocxApproximatedFontSizesV1, type NativeDocxAbsentDefaultSizeShapeV1, type NativeDocxAbsentFontSizeV1, type NativeDocxApproximatedFontSizeV1 } from './nativeAbsentFontSizeV1.js'
+import { DOCX_ENCLOSED_MARKER_FONT_WARNING, validNativeDocxEnclosedMarkerFontsV1, validNativeDocxApproximatedEnclosedMarkerFontsV1, type NativeDocxEnclosedMarkerFontV1, type NativeDocxApproximatedEnclosedMarkerFontV1 } from './nativeEnclosedMarkerFontV1.js'
 import { DOCX_ABSENT_FONT_FAMILY_WARNING, validNativeDocxAbsentFontFamiliesV1, validNativeDocxApproximatedFontFamiliesV1, type NativeDocxAbsentFontFamilyV1, type NativeDocxApproximatedFontFamilyV1 } from './nativeAbsentFontFamilyV1.js'
 import { DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING, DOCX_APPROXIMATE_MAX_IMAGE_EXTENT_FACTS, validNativeDocxApproximatedImageExtentsV1, type NativeDocxApproximatedImageExtentV1 } from './nativeApproximateImageExtentV1.js'
 import { collectNativeDocxApproximateOmissionsV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING, type NativeDocxApproximateOmissionsV1, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
@@ -55,6 +56,12 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   'FIELD_SEMANTICS',
   'WRAPPED_RUN_MARKUP',
   'NUMBERING_STYLE_PRESERVED',
+  // An enclosed-number list marker's font slot resolves the paragraph's Latin
+  // face for generated text outside that face's authored repertoire. Strict
+  // resolution preserves the face and refuses; the approximate tier paints the
+  // marker in a declared host family and discloses the substitution as omitted
+  // content, so this code is a member of both sets.
+  'ENCLOSED_NUMBER_MARKER_FONT_PRESERVED',
   // Tracked-move markup that states no content and no formatting: a
   // content-free range endpoint between table rows, and the CT_TrackChange
   // annotation that names which revision a paragraph mark belongs to. The
@@ -224,6 +231,7 @@ export interface NativeDocxApproximationEligibilityV1 {
   absent_font_size_shape?: NativeDocxAbsentDefaultSizeShapeV1
   absent_font_families?: NativeDocxAbsentFontFamilyV1[]
   latin_font_fallbacks?: NativeDocxLatinFontFallbackV1[]
+  enclosed_marker_fonts?: NativeDocxEnclosedMarkerFontV1[]
   legacy_table_origins?: NativeDocxLegacyTableOriginV1[]
 }
 
@@ -248,6 +256,8 @@ export interface NativeDocxApproximatePagePreviewV1 {
   source_absent_font_families?: NativeDocxAbsentFontFamilyV1[]
   approximated_font_families?: NativeDocxApproximatedFontFamilyV1[]
   source_latin_font_fallbacks?: NativeDocxLatinFontFallbackV1[]
+  source_enclosed_marker_fonts?: NativeDocxEnclosedMarkerFontV1[]
+  approximated_enclosed_marker_fonts?: NativeDocxApproximatedEnclosedMarkerFontV1[]
   approximated_font_faces?: NativeDocxLatinFontFallbackV1[]
   /** Picture extents this preview moved onto the milli-point lattice, with both
    * the authored and the painted EMU. Present only when one was moved. */
@@ -272,7 +282,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   const issues = preflightWire(value, 'approximation eligibility', 20_000, 1000).filter(issue => !(issue.code === 'INVALID_VALUE' && ((issue.path === '/settings_sha256' && candidate?.settings_sha256 === null) || (issue.path === '/legacy_compatibility_mode' && candidate?.legacy_compatibility_mode === null))))
   if (issues.length) throw new TypeError('invalid approximation eligibility wire')
   const input = structuredClone(value) as NativeDocxApproximationEligibilityV1
-  if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings' && key !== 'absent_font_sizes' && key !== 'absent_font_size_shape' && key !== 'absent_font_families' && key !== 'latin_font_fallbacks' && key !== 'legacy_table_origins').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
+  if (!input || typeof input !== 'object' || Object.keys(input).filter(key => key !== 'approximated_settings' && key !== 'absent_font_sizes' && key !== 'absent_font_size_shape' && key !== 'absent_font_families' && key !== 'latin_font_fallbacks' && key !== 'enclosed_marker_fonts' && key !== 'legacy_table_origins').sort().join(',') !== 'document_id,legacy_compatibility_mode,package_sha256,protocol,reasons,revision,settings_sha256,status,version'
     || input.protocol !== 'injoffice.docx.approximation-eligibility' || input.version !== 1
     || !['eligible', 'ineligible'].includes(input.status) || ![null, 12, 14, 15].includes(input.legacy_compatibility_mode)
     || !Array.isArray(input.reasons) || input.reasons.length > 256 || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)
@@ -283,6 +293,7 @@ export function decodeNativeDocxApproximationEligibilityV1(value: unknown, setti
   if ((input.absent_font_size_shape !== undefined) !== ((input.absent_font_sizes?.length ?? 0) > 0) || (input.absent_font_size_shape !== undefined && !validNativeDocxAbsentDefaultSizeShapeV1(input.absent_font_size_shape))) throw new TypeError('Invalid source-absent font-size shape')
   if (input.absent_font_families !== undefined && !validNativeDocxAbsentFontFamiliesV1(input.absent_font_families, input.package_sha256)) throw new TypeError('Invalid source-absent font-family evidence')
   if (input.latin_font_fallbacks !== undefined && !validNativeDocxLatinFontFallbacksV1(input.latin_font_fallbacks, input.package_sha256)) throw new TypeError('Invalid Latin font fallback evidence')
+  if (input.enclosed_marker_fonts !== undefined && !validNativeDocxEnclosedMarkerFontsV1(input.enclosed_marker_fonts, input.package_sha256)) throw new TypeError('Invalid enclosed-number marker font evidence')
   if (!Array.isArray(facts) || facts.length > DOCX_APPROXIMATE_MAX_SETTING_FACTS || facts.some(fact => !validNativeDocxApproximatedSettingV1(fact)) || new Set(facts.map(fact => fact.kind)).size !== facts.length || new Set(facts.map(fact => fact.path)).size !== facts.length) throw new TypeError('invalid approximated settings source facts')
   if (input.status === 'eligible' && (input.legacy_compatibility_mode === null || settings.profile === 'word-modern-default' || (input.legacy_compatibility_mode === 15) !== (settings.compatibility_mode === 15) || !coveredSettingsDiagnostics(settings, facts) || facts.some(fact => !input.reasons.includes(nativeApproximationSettingReason(fact))) || input.reasons.length === 0)) throw new TypeError('approximation eligibility conflicts with strict settings facts')
   return input
@@ -311,6 +322,7 @@ export function approximatePagePreviewEnvelope(settings: NativeDocxPaginationSet
     ...(eligibility.absent_font_size_shape ? { source_absent_font_size_shape: eligibility.absent_font_size_shape } : {}),
     ...(eligibility.absent_font_families ? { source_absent_font_families: structuredClone(eligibility.absent_font_families) } : {}),
     ...(eligibility.latin_font_fallbacks ? { source_latin_font_fallbacks: structuredClone(eligibility.latin_font_fallbacks) } : {}),
+    ...(eligibility.enclosed_marker_fonts ? { source_enclosed_marker_fonts: structuredClone(eligibility.enclosed_marker_fonts) } : {}),
     rendering_provenance: paint.provenance,
     diagnostics: paint.diagnostics, resources: paint.resources, pages: paint.pages,
     ...omissions,
@@ -326,7 +338,7 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     const issues = preflightWire(value, 'approximate page preview').filter(issue => !(issue.code === 'INVALID_VALUE' && issue.path === '/source/settings_sha256' && candidate?.source?.settings_sha256 === null))
     if (issues.length) return { ok: false, issues }
     const input = structuredClone(value) as NativeDocxApproximatePagePreviewV1
-    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'source_absent_font_size_shape', 'approximated_font_sizes', 'source_absent_font_families', 'approximated_font_families', 'source_latin_font_fallbacks', 'approximated_font_faces','approximated_image_extents','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
+    if (!input || typeof input !== 'object' || Object.keys(input).filter(key => !['approximated_settings', 'source_absent_font_sizes', 'source_absent_font_size_shape', 'approximated_font_sizes', 'source_absent_font_families', 'approximated_font_families', 'source_latin_font_fallbacks', 'source_enclosed_marker_fonts', 'approximated_enclosed_marker_fonts', 'approximated_font_faces','approximated_image_extents','legacy_table_origins','table_border_layout_policy','table_width_policy'].includes(key)).sort().join(',') !== 'content_status,diagnostics,fidelity,omitted_content,omitted_content_total,pages,policy,protocol,read_only,reasons,rendering_provenance,resources,source,source_settings_diagnostics,status,unpainted_pages,version'
       || input.protocol !== DOCX_APPROXIMATE_PREVIEW_PROTOCOL || input.version !== 1 || input.fidelity !== 'approximate' || input.policy !== DOCX_APPROXIMATE_PREVIEW_POLICY || input.read_only !== true
       || !Array.isArray(input.reasons) || input.reasons.length < 1 || input.reasons.length > 264 || !input.reasons.includes(DOCX_APPROXIMATE_PREVIEW_WARNING) || !input.reasons.includes(DOCX_APPROXIMATE_LINE_BOX_WARNING) || input.reasons.some(reason => typeof reason !== 'string' || reason.length > 8192)) return invalid('invalid approximate envelope or missing fidelity warning')
     // A refused approximate preview must say so in its reasons, and a painted one
@@ -349,6 +361,9 @@ export function decodeNativeDocxApproximatePagePreviewV1(value: unknown): { ok: 
     if (!validNativeDocxAbsentFontFamiliesV1(absentFamilies, settings.package_sha256)) return invalid('Invalid source font-family omissions')
     if (input.approximated_font_families !== undefined && (!validNativeDocxApproximatedFontFamiliesV1(input.approximated_font_families, absentFamilies, settings.package_sha256) || !input.reasons.includes(DOCX_ABSENT_FONT_FAMILY_WARNING))) return invalid('Applied host default families require retained source evidence and the declared warning')
     if (input.approximated_font_families === undefined && input.reasons.includes(DOCX_ABSENT_FONT_FAMILY_WARNING)) return invalid('Declared host default family requires its applied facts')
+    const enclosedMarkers = input.source_enclosed_marker_fonts ?? []
+    if (input.approximated_enclosed_marker_fonts !== undefined && (!validNativeDocxApproximatedEnclosedMarkerFontsV1(input.approximated_enclosed_marker_fonts, enclosedMarkers, settings.package_sha256) || !input.reasons.includes(DOCX_ENCLOSED_MARKER_FONT_WARNING))) return invalid('Applied enclosed-marker host families require retained source evidence and the declared warning')
+    if (input.approximated_enclosed_marker_fonts === undefined && input.reasons.includes(DOCX_ENCLOSED_MARKER_FONT_WARNING)) return invalid('Declared enclosed-marker host family requires its applied facts')
     const fallbacks = input.source_latin_font_fallbacks ?? []
     if (!validNativeDocxLatinFontFallbacksV1(fallbacks, settings.package_sha256)) return invalid('Invalid Latin font fallback evidence')
     if (input.approximated_font_faces !== undefined && (!validNativeDocxApproximatedFontFacesV1(input.approximated_font_faces, fallbacks, settings.package_sha256) || !input.reasons.includes(DOCX_LATIN_FONT_FALLBACK_WARNING))) return invalid('Applied Latin font fallbacks require retained source evidence and the declared warning')

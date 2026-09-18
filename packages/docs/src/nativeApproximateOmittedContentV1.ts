@@ -72,6 +72,13 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   // compressed line box Word draws is absent from the page, so it is disclosed
   // here rather than left as an approximated property of painted content.
   'NEGATIVE_LINE_SPACING_UNAPPLIED',
+  // A list marker whose generated text uses Enclosed Alphanumerics is painted,
+  // but not in the face the source resolves for it: the marker's font slot names
+  // the paragraph's Latin face and this tier reads no cmap, so it paints a
+  // declared host family instead. The glyph design and advances on the page are
+  // another face's, which is a visual result this preview does not source from
+  // the document, so it is named here and the preview reports 'partial'.
+  'ENCLOSED_NUMBER_MARKER_FONT_PRESERVED',
 ])
 
 /** Shaping diagnostics approximate preview ignores; strict paint refuses them. */
@@ -143,7 +150,7 @@ export function nativeDocxOmittedContentCategoryV1(code: string, path: string | 
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
   // A run-typography feature the painted run does not carry is a deviation in
   // painted text, so it is disclosed under the text category next to it.
-  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'TEXT_DECORATION_UNAPPLIED' || code === 'CONTEXTUAL_ALTERNATES_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED' || code === 'EMPTY_PICTURE_BULLET_UNPAINTED') return 'text'
+  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED' || code === 'TEXT_DECORATION_UNAPPLIED' || code === 'CONTEXTUAL_ALTERNATES_UNAPPLIED' || code === 'NEGATIVE_LINE_SPACING_UNAPPLIED' || code === 'EMPTY_PICTURE_BULLET_UNPAINTED' || code === 'ENCLOSED_NUMBER_MARKER_FONT_PRESERVED') return 'text'
   return 'other'
 }
 

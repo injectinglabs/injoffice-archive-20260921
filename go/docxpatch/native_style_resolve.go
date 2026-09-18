@@ -1737,6 +1737,20 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 		applyNativeRunProperties(&marker, markerR, false)
 		applyNativeRunProperties(&marker, directParagraphMark, false)
 		resolver.resolveLatinRunFont(&marker, resolvedNumbering.ResolvedText, paragraph.ID, paragraph.Anchor.PartName)
+		// The marker's generated text can leave the repertoire the face its slot
+		// names is authored for. ECMA-376 17.18.59 decimalEnclosedCircle emits
+		// U+2460..U+2473, which MS-OI29500 17.3.2.26 routes through the High ANSI
+		// slot like any other symbol: the level states no face of its own, so the
+		// marker takes the paragraph's Latin face whatever that face contains.
+		// This tier reads no cmap, so it cannot attest that the resolved face has
+		// the glyph and does not guess one. The fact is recorded here and the
+		// approximate tier is free to project a declared host family over it.
+		// A marker that states w:hint="eastAsia" took the block's documented
+		// escape and is still refused above, so it records nothing here: the
+		// fact is only about a marker this tier did resolve through High ANSI.
+		if marker.fontFamily != nil && nativeTextUsesEnclosedAlphanumerics(resolvedNumbering.ResolvedText) && (marker.eastAsiaHint == nil || !*marker.eastAsiaHint) {
+			resolver.addDiagnostic("ENCLOSED_NUMBER_MARKER_FONT_PRESERVED", paragraph.ID, paragraph.Anchor.PartName, paragraphNode, "Enclosed-number marker text resolves through the High ANSI slot to "+*marker.fontFamily+"; this tier cannot attest that face contains U+2460..U+24FF and does not guess another")
+		}
 		resolvedNumbering.Marker = nativeExportRunProperties(marker)
 		if !resolver.resolveNumberingGeometry(resolvedNumbering, p, paragraph.ID) {
 			resolvedNumbering = nil
@@ -2029,6 +2043,20 @@ func nativeRequiresScriptShaping(character rune) bool {
 	case character >= 0x2000 && character <= 0x206f:
 		// General Punctuation: quotation marks, dashes, ellipsis.
 		return false
+	case character >= 0x2460 && character <= 0x24ff:
+		// Enclosed Alphanumerics. MS-OI29500 17.3.2.26 gives this block the
+		// High ANSI slot and lists it among the ambiguous ranges whose one
+		// documented escape is w:hint="eastAsia"; resolveLatinRunFont restores
+		// the previous refusal for a run that states the hint, exactly as it
+		// does for the Private Use Area below.
+		//
+		// This block is what a decimalEnclosedCircle level generates
+		// (17.18.59: U+2460..U+2473), so before it was read the whole
+		// paragraph was stopped by a deferred w:cs/w:eastAsia face the marker
+		// never asked for. The face the slot names may still not contain the
+		// glyph; that is a font-repertoire fact, disclosed separately, not a
+		// slot decision.
+		return false
 	case character >= 0xe000 && character <= 0xf8ff:
 		// Private Use Area. The rFonts range table gives it the High ANSI
 		// slot, with w:hint="eastAsia" as its one escape, so a symbol-font
@@ -2059,6 +2087,27 @@ func nativeTextUsesPrivateUseArea(text string) bool {
 		}
 	}
 	return false
+}
+
+// nativeTextUsesEnclosedAlphanumerics reports whether the text contains a rune
+// of the Enclosed Alphanumerics block, the range a decimalEnclosedCircle level
+// generates.
+func nativeTextUsesEnclosedAlphanumerics(text string) bool {
+	for _, character := range text {
+		if character >= 0x2460 && character <= 0x24ff {
+			return true
+		}
+	}
+	return false
+}
+
+// nativeTextUsesHintAmbiguousRange reports whether the text contains a rune from
+// one of the ranges this tier reads as High ANSI but MS-OI29500 17.3.2.26 lists
+// as ambiguous, so w:hint="eastAsia" would move it to the East-Asian slot. Such
+// a run keeps the refusal it had before the range was read, which is what bounds
+// both readings: they can only narrow what refuses.
+func nativeTextUsesHintAmbiguousRange(text string) bool {
+	return nativeTextUsesPrivateUseArea(text) || nativeTextUsesEnclosedAlphanumerics(text)
 }
 
 // flushScriptProperties reports the run-property layers that were deferred
@@ -2148,7 +2197,7 @@ func (resolver *nativeLayoutResolver) resolveLatinRunFont(properties *nativeRunP
 	// before that range was read as High ANSI, so this reading can only
 	// narrow what refuses and never routes a rune Word paints in the
 	// East-Asian face through ascii/hAnsi.
-	if properties.eastAsiaHint != nil && *properties.eastAsiaHint && nativeTextUsesPrivateUseArea(text) {
+	if properties.eastAsiaHint != nil && *properties.eastAsiaHint && nativeTextUsesHintAmbiguousRange(text) {
 		use.unmodelled = true
 	}
 	// The East-Asian slot is carried only for text that actually uses it, so a

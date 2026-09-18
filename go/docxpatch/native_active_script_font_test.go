@@ -182,7 +182,8 @@ func TestNativeRequiresScriptShapingByUnicodeRange(t *testing.T) {
 		{"Symbol font bullet", 0xf0b7, false},
 		{"Private Use Area upper bound", 0xf8ff, false},
 		{"CJK Compatibility Ideographs above the Private Use Area stay deferred", 0xf900, true},
-		{"Enclosed Alphanumerics stay deferred", 0x2460, true},
+		{"Enclosed Alphanumerics resolve through High ANSI", 0x2460, false},
+		{"Box Drawing above Enclosed Alphanumerics stays deferred", 0x2500, true},
 		{"supplementary Private Use Area stays deferred", 0xf0000, true},
 	} {
 		if got := nativeRequiresScriptShaping(tc.char); got != tc.want {

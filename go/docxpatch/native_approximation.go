@@ -26,6 +26,9 @@ type NativeDocxApproximationEligibilityV1 struct {
 	AbsentFontSizeShape string                          `json:"absent_font_size_shape,omitempty"`
 	AbsentFontFamilies  []NativeDocxAbsentFontFamilyV1  `json:"absent_font_families,omitempty"`
 	LatinFontFallbacks  []NativeDocxLatinFontFallbackV1 `json:"latin_font_fallbacks,omitempty"`
+	// EnclosedMarkerFonts names numbered paragraphs whose generated marker text
+	// leaves the Latin repertoire of the face its own font slot resolves.
+	EnclosedMarkerFonts []NativeDocxEnclosedMarkerFontV1 `json:"enclosed_marker_fonts,omitempty"`
 	LegacyTableOrigins  []NativeDocxLegacyTableOriginV1 `json:"legacy_table_origins,omitempty"`
 }
 
@@ -120,6 +123,10 @@ func ExtractNativeDocxApproximationEligibilityV1(data []byte) (*NativeDocxApprox
 		return nil, err
 	}
 	result.LatinFontFallbacks, err = nativeLatinFontFallbacks(data)
+	if err != nil {
+		return nil, err
+	}
+	result.EnclosedMarkerFonts, err = nativeEnclosedMarkerFonts(data)
 	if err != nil {
 		return nil, err
 	}
