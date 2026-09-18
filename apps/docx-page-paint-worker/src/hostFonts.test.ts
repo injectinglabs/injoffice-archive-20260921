@@ -4,6 +4,7 @@ import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
 import {loadHostFonts} from './hostFonts.js'
+import {nativeDocxPagePaintWorkerErrorV1} from './protocol.js'
 import {encodeNativeDOCXFontInventoryV1,nativeDOCXCanonicalWireSHA256V1} from '../../../packages/docs/src/nativeFontInventoryV1.js'
 import type {NativeDocxPagePaintPrepareInputV1} from '@injoffice/docs/native-page-paint-compiler'
 
@@ -48,6 +49,28 @@ function collection(source:string,faceCount:number):{path:string,sha256:`sha256:
 const ttc=collection(path,2)
 const ttcEntry={family:'DejaVu Sans',weight:400,style:'normal',path:ttc.path,sha256:ttc.sha256,collectionIndex:1}
 describe('operator-owned DOCX fonts',()=>{
+ it('names the operator font face the pinned preflight refuses instead of failing the request unattributed',async()=>{
+  // An entry of the operator's own manifest whose bytes are not a font this
+  // engine can qualify. Before this was named, the preflight's own sentence
+  // escaped under the blanket COMPILATION_REFUSED code: the whole request
+  // failed on a message about an sfnt table, naming none of the up-to-64
+  // configured files and reading like a fact about the document.
+  const broken=Buffer.from(readFileSync(path))
+  const count=broken.readUInt16BE(4)
+  let record=-1
+  for(let index=0;index<count;index++){const at=12+index*16;if(broken.toString('latin1',at,at+4)==='cmap')record=at}
+  expect(record).toBeGreaterThan(0)
+  broken.writeUInt32BE(8,record+12)
+  const file=resolve(scratch,'unqualified.ttf')
+  writeFileSync(file,broken)
+  const p=config([{family:'DejaVu Sans',weight:400,style:'normal',path:file,sha256:`sha256:${createHash('sha256').update(broken).digest('hex')}`}])
+  // The prefix is what this test is about; the sentence after it is the
+  // preflight's own and is free to change.
+  await expect(loadHostFonts(input(),p)).rejects.toThrow(/^Host font face DejaVu Sans \/ 400 \/ normal is not a qualified font face: sfnt /)
+  const error=await loadHostFonts(input(),p).then(()=>undefined,(reason:unknown)=>reason)
+  expect(nativeDocxPagePaintWorkerErrorV1(error)).toEqual({code:'HOST_FONT_UNQUALIFIED',scope_id:expect.stringMatching(/^host-font-0-/),message:expect.stringContaining('DejaVu Sans / 400 / normal')})
+ })
+
  it('requires explicit opt-in, retains source family and binds selected bytes',async()=>{
   const value=input(),inventory=JSON.parse(value.font_inventory_json)
   inventory.references.forEach((r:any)=>{r.family='Missing Family'})
