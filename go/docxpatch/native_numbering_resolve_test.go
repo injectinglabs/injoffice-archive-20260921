@@ -979,3 +979,41 @@ func TestNativeNumberingNameIsAuthoringMetadata(t *testing.T) {
 		t.Fatal("unknown abstract numbering metadata is not modeled but was admitted")
 	}
 }
+
+// Letter numbering resolves from the plain ASCII alphabet, so it is exact only
+// where the marker's language attests that alphabet. BCP 47 / ISO 639-2
+// register `zxx` for "no linguistic content, not applicable": a marker whose
+// language states that makes no language-specific claim about its alphabet at
+// all, which is exactly what `und` already attests here. Word's own PDF export
+// of `tdf118812_tableStyles-comprehensive.docx` pins it -- that package's
+// `w:docDefaults` states `w:lang w:val="zxx"` and Word still prints the ilvl 0
+// upperLetter marker of its `numId` 9 list as `A.`. A language that does name a
+// script keeps refusing, and a non-letter format never consults the language.
+func TestNativeNumberingLetterAlphabetAttestation(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		format   string
+		language string
+		refused  bool
+	}{
+		{"no linguistic content", "upperLetter", `<w:lang w:val="zxx"/>`, false},
+		{"no linguistic content uppercase", "lowerLetter", `<w:lang w:val="ZXX"/>`, false},
+		{"undetermined", "upperLetter", `<w:lang w:val="und"/>`, false},
+		{"english", "lowerLetter", `<w:lang w:val="en-US"/>`, false},
+		{"absent language", "upperLetter", ``, false},
+		{"russian", "upperLetter", `<w:lang w:val="ru-RU"/>`, true},
+		{"japanese", "lowerLetter", `<w:lang w:val="ja-JP"/>`, true},
+		{"decimal ignores the language", "decimal", `<w:lang w:val="ru-RU"/>`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="` + tc.format + `"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr>` + tc.language + `</w:rPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+			resolved := resolveNumberingFixture(t, numbering, numberedParagraph("2", 0, "letter"))
+			if got := hasResolutionDiagnostic(resolved, "UNSUPPORTED_NUMBERING_LANGUAGE"); got != tc.refused {
+				t.Fatalf("UNSUPPORTED_NUMBERING_LANGUAGE = %v, want %v: %#v", got, tc.refused, resolved.Diagnostics)
+			}
+			if marker := resolved.Paragraphs[0].Numbering; marker == nil {
+				t.Fatalf("numbered paragraph resolved no marker: %#v", resolved.Diagnostics)
+			}
+		})
+	}
+}
