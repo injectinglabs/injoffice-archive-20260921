@@ -49,14 +49,22 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # no new message, still measures +1,813 bytes, because this module's link
 # layout does not grow linearly with the source it gains.
 #
+# A further 64 KiB covers the remaining hard-v2 coverage batch: note numFmt
+# counters, cell text-direction, unapplied-typography disclosure, negative line
+# spacing and the list-marker font scopes (#369-#375, which took local main from
+# 6,972,063 to 7,005,596 and put CI 1,686 bytes over the previous gate). The
+# ceiling has moved five times in one working session at roughly 32 KiB per
+# batch of coverage features; if it moves again, size the module deliberately
+# rather than raising the gate a sixth time.
+#
 # The CI toolchain builds this module larger than a local darwin/arm64 build,
 # so the local number is not the one this gate sees. Measured CI-local on three
 # commits: +5,401, +5,395 and +5,436 bytes. An earlier note in this file put
 # that gap at ~28 KiB; that figure was never reproduced and is wrong. Measure,
 # do not assume.
-max_size=$((13 * 1024 * 1024 / 2 + 224 * 1024))
+max_size=$((13 * 1024 * 1024 / 2 + 288 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 224 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 288 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2
