@@ -1073,3 +1073,81 @@ func TestNativeNumberingUninitializedParentCounterTakesLevelStart(t *testing.T) 
 		t.Fatalf("a placeholder for a missing level was guessed: %#v", resolved)
 	}
 }
+
+// styledNumberingTestParts builds a package whose paragraph is styled by
+// `Untertitel`, with `numbering` omitted entirely when it is empty. That is the
+// exact shape of the corpus file this covers: Word's built-in Subtitle style
+// carries a vestigial `<w:numPr><w:ilvl w:val="1"/></w:numPr>` and the package
+// has no numbering part at all.
+func styledNumberingTestParts(styleNumPr, numbering, paragraphNumPr string) map[string]string {
+	types := `<Types xmlns="` + opcContentTypesNS + `"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>`
+	rels := `<Relationships xmlns="` + opcRelationshipsNS + `"><Relationship Id="styles" Type="` + relBaseTransitional + `styles" Target="styles.xml"/>`
+	parts := map[string]string{
+		"_rels/.rels":       `<Relationships xmlns="` + opcRelationshipsNS + `"><Relationship Id="office" Type="` + relBaseTransitional + `officeDocument" Target="word/document.xml"/></Relationships>`,
+		"word/document.xml": `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:pStyle w:val="Untertitel"/>` + paragraphNumPr + `</w:pPr><w:r><w:t>Nunc viverra imperdiet enim.</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`,
+		"word/styles.xml":   `<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:styleId="Untertitel"><w:name w:val="Subtitle"/><w:pPr>` + styleNumPr + `</w:pPr></w:style></w:styles>`,
+	}
+	if numbering != "" {
+		types += `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`
+		rels += `<Relationship Id="numbering" Type="` + relBaseTransitional + `numbering" Target="numbering.xml"/>`
+		parts["word/numbering.xml"] = numbering
+	}
+	parts["[Content_Types].xml"] = types + `</Types>`
+	parts["word/_rels/document.xml.rels"] = rels + `</Relationships>`
+	return parts
+}
+
+// TestNativeNumberingLevelWithoutNumIDSelectsNoNumbering covers a `w:numPr`
+// that states only `w:ilvl`. ECMA-376 17.9.19 binds a paragraph to a numbering
+// definition instance through `w:numId`, so such a reference names no instance
+// and the paragraph is ordinary text. Word's own PDF export of
+// `StyleRef-DE.docx` prints that document's `Untertitel` paragraph at the same
+// 72 pt left edge as every body paragraph around it, with no marker and no
+// hanging indent.
+func TestNativeNumberingLevelWithoutNumIDSelectsNoNumbering(t *testing.T) {
+	definition := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2."/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	for _, tc := range []struct {
+		name         string
+		styleNumPr   string
+		numbering    string
+		paragraph    string
+		wantMarker   string
+		wantDiagnose string
+	}{
+		{name: "style level only, no numbering part", styleNumPr: `<w:numPr><w:ilvl w:val="1"/></w:numPr>`},
+		{name: "style level only beside a real definition", styleNumPr: `<w:numPr><w:ilvl w:val="1"/></w:numPr>`, numbering: definition},
+		{name: "direct level only", numbering: definition, paragraph: `<w:numPr><w:ilvl w:val="1"/></w:numPr>`},
+		{name: "empty numPr stays silent", styleNumPr: `<w:numPr/>`, numbering: definition},
+		// The inherited level is still read: a direct numId resolves against
+		// the style's ilvl, so dropping the diagnostic did not drop the layer.
+		{name: "style level with a direct numId still numbers", styleNumPr: `<w:numPr><w:ilvl w:val="1"/></w:numPr>`, numbering: definition, paragraph: `<w:numPr><w:numId w:val="2"/></w:numPr>`, wantMarker: "1.1."},
+		// Negatives: a numId that is present but names nothing, or is not a
+		// decimal id at all, keeps its own refusal.
+		{name: "level with a missing instance still refuses", styleNumPr: `<w:numPr><w:ilvl w:val="1"/><w:numId w:val="9"/></w:numPr>`, numbering: definition, wantDiagnose: "MISSING_NUMBERING_INSTANCE"},
+		{name: "level with an invalid numId still refuses", styleNumPr: `<w:numPr><w:ilvl w:val="1"/><w:numId w:val="x"/></w:numPr>`, numbering: definition, wantDiagnose: "INVALID_NUMBERING_REFERENCE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parts := styledNumberingTestParts(tc.styleNumPr, tc.numbering, tc.paragraph)
+			resolved, err := ResolveNativeDocumentLayoutV1(buildNativeDOCX(t, nativeEntries(parts)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasResolutionDiagnostic(resolved, "INCOMPLETE_NUMBERING_REFERENCE") {
+				t.Fatalf("a numPr stating no numId was reported an incomplete reference: %#v", resolved.Diagnostics)
+			}
+			if len(resolved.Paragraphs) != 1 {
+				t.Fatalf("paragraph count = %d", len(resolved.Paragraphs))
+			}
+			marker := ""
+			if resolved.Paragraphs[0].Numbering != nil {
+				marker = resolved.Paragraphs[0].Numbering.ResolvedText
+			}
+			if marker != tc.wantMarker {
+				t.Fatalf("marker = %q, want %q: %#v", marker, tc.wantMarker, resolved.Diagnostics)
+			}
+			if tc.wantDiagnose != "" && !hasResolutionDiagnostic(resolved, tc.wantDiagnose) {
+				t.Fatalf("want %s: %#v", tc.wantDiagnose, resolved.Diagnostics)
+			}
+		})
+	}
+}
