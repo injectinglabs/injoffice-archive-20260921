@@ -96,6 +96,26 @@ export const DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED = new Set([
   // one bar and nothing else; it is disclosed as omitted content and the
   // strict tier keeps refusing it.
   'COLUMN_SEPARATOR_UNSUPPORTED',
+  // Word 2010 run-typography extensions this tier records and does not apply:
+  // w14:stylisticSets, a w14:ligatures mode outside the shaper defaults,
+  // w14:numForm, w14:numSpacing and the 3D text effect w14:props3d. Unlike
+  // LIGATURE_MODE_MATCHES_SHAPER and CONTEXTUAL_ALTERNATES_MATCH_SHAPER, these
+  // do NOT state shaping this tier already performs - the page is painted with
+  // the feature unapplied, at advances that are measurably not Word's. Shaped
+  // with harfbuzzjs 1.6.0 over 224 face/sample pairs: ss02 changes 20 of them
+  // (Arial +28,745 font units across the sample), ss04 6 (Calibri +112),
+  // numForm="oldStyle" 68, numSpacing="proportional" 68 (a ten-digit Calibri
+  // run 312 font units narrower at 2048 upem). They are admitted here only
+  // because every one of them is also a member of
+  // DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, so each unapplied property is named
+  // in omitted_content and the preview reports content_status 'partial'; the
+  // strict tier keeps refusing all five. Any other foreign run property stays
+  // FOREIGN_RUN_PROPERTY and still refuses on both tiers.
+  'STYLISTIC_SET_UNAPPLIED',
+  'LIGATURE_MODE_UNAPPLIED',
+  'NUMBER_FORM_UNAPPLIED',
+  'NUMBER_SPACING_UNAPPLIED',
+  'TEXT_EFFECT_3D_UNAPPLIED',
 ])
 export const DOCX_APPROXIMATE_PREVIEW_WARNING = 'Approximate read-only preview: current InjOffice layout, not Microsoft Word compatibility-mode fidelity.' as const
 /** Declared whenever the approximate preview produced no page. The refusal

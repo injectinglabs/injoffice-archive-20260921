@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { collectNativeDocxApproximateOmissionsV1, nativeDocxOmittedContentCategoryV1, nativeDocxOmittedContentSummaryV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
+import { collectNativeDocxApproximateOmissionsV1, nativeDocxOmittedContentCategoryV1, nativeDocxOmittedContentSummaryV1, nativeDocxApproximateRefusalOmissionsV1, validNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_CODES, DOCX_APPROXIMATE_OMITTED_CONTENT_LIMIT, type NativeDocxApproximateOmissionSourceV1 } from './nativeApproximateOmittedContentV1.js'
+import { DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 
 const HASH = `sha256:${'a'.repeat(64)}`
 const anchor = (path: string) => ({ part_name: 'word/document.xml', path, start_byte: 1, end_byte: 2, xml_sha256: HASH })
@@ -102,6 +103,41 @@ describe('approximate omitted-content disclosure', () => {
     expect(nativeDocxOmittedContentCategoryV1('unsupported-numbering-text', undefined)).toBe('text')
     expect(nativeDocxOmittedContentCategoryV1('UNMODELED_PARAGRAPH_CONTENT', '/w:document[1]/w:body[1]/w:p[1]/ns1234abcd:oMathPara[1]')).toBe('equation')
     expect(nativeDocxOmittedContentCategoryV1('COLUMN_SEPARATOR_UNSUPPORTED', '/w:document[1]/w:body[1]/w:p[2]/w:pPr[1]/w:sectPr[1]/w:cols[1]')).toBe('other')
+    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED']) {
+      expect(nativeDocxOmittedContentCategoryV1(code, '/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/nsdbbea4e0:numForm[1]'), code).toBe('text')
+    }
+  })
+  it('discloses every run-typography feature the approximate tier paints without', () => {
+    // The approximate tier paints these runs with the feature unapplied, so the
+    // requested glyph forms and advances are absent from the page. That is a
+    // dropped visible mark, and this is the discloser that names it; the
+    // invariant below pins that the paint set may not admit one of these codes
+    // without this list reporting it.
+    const codes = ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED'] as const
+    for (const code of codes) {
+      const unsupported = [{ id: 'u:1', code, capability: 'run-properties', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/nsdbbea4e0:numForm[1]'), preservation: 'preserve-verbatim', message: `${code} is preserved and NOT applied` }]
+      const result = collectNativeDocxApproximateOmissionsV1(source({ unsupported }), { status: 'painted', pages: [page('page:1', 2)] })
+      expect(result, code).toMatchObject({ content_status: 'partial', omitted_content_total: 1 })
+      expect(result.omitted_content, code).toEqual([expect.objectContaining({ code, origin: 'source', category: 'text', scope_id: 'paragraph:1', count: 1 })])
+    }
+    // The property this tier does apply is not an omission: a ligature mode the
+    // declared shaper defaults already perform states no missing mark.
+    const applied = [{ id: 'u:1', code: 'LIGATURE_MODE_MATCHES_SHAPER', capability: 'run-properties', scope_id: 'paragraph:1', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:rPr[1]/nsdbbea4e0:ligatures[1]'), preservation: 'preserve-verbatim', message: 'already applied' }]
+    expect(collectNativeDocxApproximateOmissionsV1(source({ unsupported: applied }), { status: 'painted', pages: [page('page:1', 2)] })).toMatchObject({ content_status: 'complete', omitted_content: [], omitted_content_total: 0 })
+  })
+  it('never lets the paint set admit a run-typography code the discloser does not report', () => {
+    // The invariant PR #334 documented, applied to this slice: a code the
+    // approximate tier lays out around must either leave the painted content
+    // intact or be named here, or the drop is silent.
+    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED']) {
+      expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(true)
+      expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(true)
+    }
+    // Every other foreign run property stays outside both sets and keeps refusing.
+    for (const code of ['FOREIGN_RUN_PROPERTY', 'UNMODELED_RUN_PROPERTY']) {
+      expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(false)
+      expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(false)
+    }
   })
   it('records the column separator rule as dropped ink, not an approximated property', () => {
     // The rule w:cols w:sep asks for is ink Word draws in the inter-column gap

@@ -2156,6 +2156,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", scopeID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
 				continue
 			}
+			if code, detail, ok := nativeUnappliedTypographicRunFeature(child, node); ok {
+				resolver.addDiagnostic(code, scopeID, partName, child, detail)
+				continue
+			}
 			resolver.addDiagnostic("FOREIGN_RUN_PROPERTY", scopeID, partName, child, "Foreign run-property markup is preserved verbatim")
 			continue
 		}

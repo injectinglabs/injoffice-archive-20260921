@@ -1,6 +1,9 @@
 package docxpatch
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"strings"
+)
 
 // These source properties require preservation but no glyph/layout operation.
 // Enabled East Asian autospace remains unsupported; this only recognizes an
@@ -125,4 +128,145 @@ func nativeAbsentRunBorder(node, owner *nativeXMLNode, ns string) bool {
 		}
 	}
 	return count == 1 && (declared == "none" || declared == "nil")
+}
+
+// Word 2010 run-typography extensions this tier records and does not apply.
+//
+// Each one names an OpenType feature (or, for w14:props3d, a 3D paint effect)
+// that v1 has no shaping or paint input for. Recording them as foreign markup
+// refused the whole page; recording them under their own code lets the
+// approximate tier paint the run with the feature UNAPPLIED and disclose the
+// exact property it did not apply. The strict tier keeps refusing every one of
+// them, because the painted advances are measurably not Word's.
+//
+// Measured with harfbuzzjs 1.6.0 over 224 face/sample pairs drawn from the
+// manifest faces and Latin, Arabic and Hebrew samples: ss02 changes shaping for
+// 20 pairs (Arial: +28,745 font units across the sample), ss04 for 6 (Calibri:
+// +112), w14:numForm="oldStyle" for 68 and w14:numSpacing="proportional" for 68
+// (a ten-digit Calibri run shapes 312 font units narrower at 2048 upem than the
+// default advances this tier paints). So a page painted without them puts
+// glyphs at advances that differ from Word's by those amounts, and that is what
+// the returned message states.
+//
+// Only the closed set below qualifies. Any other foreign run property - and any
+// markup in this set carrying structure outside its own namespace - stays
+// FOREIGN_RUN_PROPERTY and keeps refusing on both tiers.
+func nativeUnappliedTypographicRunFeature(node, owner *nativeXMLNode) (string, string, bool) {
+	if node.Name.Space != nativeWordML2010 {
+		return "", "", false
+	}
+	if len(directNativeChildren(owner, nativeWordML2010, node.Name.Local)) != 1 {
+		return "", "", false
+	}
+	value := xml.Name{Space: nativeWordML2010, Local: "val"}
+	single := func() (string, bool) {
+		if !nativeExactLeaf(node, value) {
+			return "", false
+		}
+		count, declared := 0, ""
+		for _, attr := range node.Attrs {
+			if attr.Name == value {
+				count++
+				declared = attr.Value
+			}
+		}
+		return declared, count == 1
+	}
+	switch node.Name.Local {
+	case "stylisticSets":
+		if !nativeExactContainer(node) || len(node.Children) == 0 {
+			return "", "", false
+		}
+		id := xml.Name{Space: nativeWordML2010, Local: "id"}
+		sets := []string{}
+		for _, child := range node.Children {
+			if child.Name != (xml.Name{Space: nativeWordML2010, Local: "styleSet"}) || !nativeExactLeaf(child, id) {
+				return "", "", false
+			}
+			count, declared := 0, ""
+			for _, attr := range child.Attrs {
+				if attr.Name == id {
+					count++
+					declared = attr.Value
+				}
+			}
+			if count != 1 || !nativeStylisticSetID(declared) {
+				return "", "", false
+			}
+			// Word names the sets ss01..ss20; print the authored id in that form.
+			if len(declared) == 1 {
+				declared = "0" + declared
+			}
+			sets = append(sets, "ss"+declared)
+		}
+		return "STYLISTIC_SET_UNAPPLIED", "Stylistic set request " + strings.Join(sets, ", ") + " is preserved and NOT applied: the run is painted with the face's default glyph forms, at advances that are measurably not Word's. Shaped with harfbuzzjs 1.6.0 over 224 face/sample pairs, ss02 changes 20 of them (Arial: +28,745 font units across the sample) and ss04 changes 6 (Calibri: +112)", true
+	case "ligatures":
+		mode, ok := single()
+		if !ok || !nativeNamedLigatureMode(mode) || mode == "standardContextual" {
+			return "", "", false
+		}
+		return "LIGATURE_MODE_UNAPPLIED", "Ligature mode " + mode + " is preserved and NOT applied: the run is painted with this tier's declared HarfBuzz shaping defaults (liga, clig, calt), so every ligature set this mode adds or removes is absent from the painted glyphs and their advances", true
+	case "numForm":
+		form, ok := single()
+		if !ok || (form != "default" && form != "lining" && form != "oldStyle") {
+			return "", "", false
+		}
+		return "NUMBER_FORM_UNAPPLIED", "Number form " + form + " is preserved and NOT applied: digits are painted in the face's default form. Shaped with harfbuzzjs 1.6.0 over 224 face/sample pairs, w14:numForm=\"oldStyle\" changes 68 of them, so the painted digit glyphs and advances are measurably not Word's", true
+	case "numSpacing":
+		spacing, ok := single()
+		if !ok || (spacing != "default" && spacing != "proportional" && spacing != "tabular") {
+			return "", "", false
+		}
+		return "NUMBER_SPACING_UNAPPLIED", "Number spacing " + spacing + " is preserved and NOT applied: digits are painted at the face's default advances. Shaped with harfbuzzjs 1.6.0 over 224 face/sample pairs, w14:numSpacing=\"proportional\" changes 68 of them, and a ten-digit Calibri run shapes 312 font units narrower at 2048 upem than the default advances painted here", true
+	case "props3d":
+		if !nativeWordML2010Subtree(node) {
+			return "", "", false
+		}
+		return "TEXT_EFFECT_3D_UNAPPLIED", "The 3D text effect w14:props3d is preserved and NOT applied: the run's glyphs are painted flat, without the requested extrusion, bevel, contour or material ink. It selects no glyph and moves no advance, so the deviation is exactly the missing decoration - Word rasterises such a run into an image in its own PDF export", true
+	}
+	return "", "", false
+}
+
+// ECMA-376 ST_Ligatures. standardContextual is excluded by the caller because
+// nativeShaperDefaultLigatureMode already states it as shaping this tier
+// performs; the rest name feature sets v1 has no input for.
+func nativeNamedLigatureMode(mode string) bool {
+	switch mode {
+	case "none", "standard", "contextual", "historical", "discretional",
+		"standardContextual", "standardHistorical", "contextualHistorical",
+		"standardDiscretional", "contextualDiscretional", "historicalDiscretional",
+		"standardContextualHistorical", "standardContextualDiscretional",
+		"standardHistoricalDiscretional", "contextualHistoricalDiscretional", "all":
+		return true
+	}
+	return false
+}
+
+// w14:styleSet w14:id is ST_DecimalNumber; only a short unsigned decimal names
+// a stylistic set, and the disclosure prints it as ssNN.
+func nativeStylisticSetID(value string) bool {
+	if len(value) == 0 || len(value) > 3 {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// Every element of the subtree stays in the Word 2010 extension namespace, so
+// no WordprocessingML content, drawing or field can hide inside a property the
+// caller is about to record as entirely unapplied.
+func nativeWordML2010Subtree(node *nativeXMLNode) bool {
+	if node.Name.Space != nativeWordML2010 {
+		return false
+	}
+	for _, child := range node.Children {
+		if !nativeWordML2010Subtree(child) {
+			return false
+		}
+	}
+	return true
 }

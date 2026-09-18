@@ -3384,6 +3384,16 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", "run-properties", paragraphID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
 				continue
 			}
+			// A Word 2010 typography extension this tier records and does not
+			// apply. It stays out of the writable model - the run's properties
+			// are still unsafe - but it carries its own code and a message
+			// naming the unapplied property, so the approximate tier can paint
+			// the run and disclose the deviation instead of dropping the page.
+			if code, detail, ok := nativeUnappliedTypographicRunFeature(child, node); ok {
+				unsafe = true
+				extractor.addUnsupported(code, "run-properties", paragraphID, partName, child, detail)
+				continue
+			}
 			unsafe = true
 			extractor.addUnsupported("FOREIGN_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Foreign namespace run property is preserved verbatim")
 			continue
