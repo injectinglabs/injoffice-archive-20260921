@@ -1,5 +1,9 @@
 import { decodeNativeDocxDocument, nativeDocxSeparatorStoryProjectionV1 } from "./nativeContract.js";
-import { decodeNativeDocxResolvedLayout } from "./nativeResolvedLayout.js";
+import {
+  decodeNativeDocxResolvedLayout,
+  nativeDocxResolvedNumberingModelSha256V1,
+  type NativeDocxResolvedLayoutInputV1,
+} from "./nativeResolvedLayout.js";
 
 /** The single definition of the read-only host default size, one value per
  * proven source shape. Both numbers were read directly out of the `Tf`
@@ -35,7 +39,11 @@ export function validNativeDocxAbsentDefaultSizeShapeV1(
 export const DOCX_ABSENT_FONT_SIZE_WARNING =
   `Approximate read-only preview: source-absent font sizes use an explicitly selected host default of ${[...hostDefaultHalfPoints].sort((a, b) => a - b).map((halfPoints) => halfPoints / 2).join(" or ")} pt, selected per proven source shape from Microsoft Word 16.112 references; this is not an authored size.` as const;
 export interface NativeDocxAbsentFontSizeV1 {
-  scope_kind: "run" | "paragraph-mark";
+  /** `numbering-marker` names a numbered paragraph's own list-marker run
+   * properties, whose size the package omits for the same reason. Its
+   * `scope_id` is the paragraph id — a paragraph has exactly one marker, so the
+   * (scope_kind, scope_id) pair stays unique beside its `paragraph-mark`. */
+  scope_kind: "run" | "paragraph-mark" | "numbering-marker";
   scope_id: string;
   part_name: string;
   path: string;
@@ -73,7 +81,9 @@ export function validNativeDocxAbsentFontSizesV1(
       typeof fact !== "object" ||
       Object.keys(fact).sort().join(",") !==
         "package_sha256,part_name,path,scope_id,scope_kind" ||
-      !["run", "paragraph-mark"].includes(fact.scope_kind) ||
+      !["run", "paragraph-mark", "numbering-marker"].includes(
+        fact.scope_kind,
+      ) ||
       typeof fact.scope_id !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(fact.scope_id) ||
       fact.package_sha256 !== packageSHA256 ||
@@ -135,6 +145,26 @@ export function validNativeDocxApproximatedFontSizesV1(
   );
 }
 
+/** The one place a scope kind is turned into the resolved run properties it
+ * names. A `numbering-marker` fact names the marker's own properties, which
+ * only a numbered paragraph has, so the lookup may legitimately find none. */
+function target(
+  resolved: NativeDocxResolvedLayoutInputV1,
+  fact: NativeDocxAbsentFontSizeV1,
+) {
+  if (fact.scope_kind === "numbering-marker")
+    return resolved.paragraphs
+      .filter((p) => p.paragraph_id === fact.scope_id)
+      .map((p) => p.numbering?.marker_properties);
+  return fact.scope_kind === "paragraph-mark"
+    ? resolved.paragraphs
+        .filter((p) => p.paragraph_id === fact.scope_id)
+        .map((p) => p.paragraph_mark_properties)
+    : resolved.runs
+        .filter((r) => r.run_id === fact.scope_id)
+        .map((r) => r.properties);
+}
+
 /** @internal Applies an explicit host choice only to proven source omissions.
  * All original unsupported diagnostics survive in the private projection. */
 export function projectNativeDocxAbsentFontSizesV1(
@@ -192,25 +222,16 @@ export function projectNativeDocxAbsentFontSizesV1(
   const applied: NativeDocxApproximatedFontSizeV1[] = [];
   for (const fact of facts) {
     const candidates =
-      fact.scope_kind === "paragraph-mark"
-        ? paragraphs.filter((p) => p.id === fact.scope_id)
-        : paragraphs.flatMap((p) =>
-            p.runs.filter((r) => r.id === fact.scope_id),
-          );
+      fact.scope_kind === "run"
+        ? paragraphs.flatMap((p) => p.runs.filter((r) => r.id === fact.scope_id))
+        : paragraphs.filter((p) => p.id === fact.scope_id);
     if (
       candidates.length !== 1 ||
       candidates[0]!.anchor.part_name !== fact.part_name ||
       candidates[0]!.anchor.path !== fact.path
     )
       throw new TypeError("Missing-size scope anchor does not exact-join");
-    const targets =
-      fact.scope_kind === "paragraph-mark"
-        ? resolved.paragraphs
-            .filter((p) => p.paragraph_id === fact.scope_id)
-            .map((p) => p.paragraph_mark_properties)
-        : resolved.runs
-            .filter((r) => r.run_id === fact.scope_id)
-            .map((r) => r.properties);
+    const targets = target(resolved, fact);
     if (
       targets.length !== 1 ||
       !targets[0] ||
@@ -222,5 +243,17 @@ export function projectNativeDocxAbsentFontSizesV1(
     targets[0].font_size_half_points = policy.half_points;
     applied.push({ ...fact, chosen_half_points: policy.half_points });
   }
+  // A projected marker size is part of the resolved marker model, so the source
+  // attestation is recomputed over the projected markers rather than left
+  // describing markers this projection has already changed.
+  if (
+    resolved.numbering_source &&
+    applied.some((fact) => fact.scope_kind === "numbering-marker")
+  )
+    resolved.numbering_source.model_sha256 =
+      nativeDocxResolvedNumberingModelSha256V1(
+        resolved.paragraphs,
+        resolved.numbering_source,
+      );
   return { resolved, applied };
 }

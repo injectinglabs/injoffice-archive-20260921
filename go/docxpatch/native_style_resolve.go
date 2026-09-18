@@ -3364,7 +3364,9 @@ func validateNativeResolvedNumbering(numbering NativeResolvedNumberingV1, partSH
 		}
 		seen[counter.Level] = true
 	}
-	if numbering.LabelStartTwips < 0 || numbering.LabelEndTwips <= numbering.LabelStartTwips || numbering.TextStartTwips != numbering.LabelEndTwips || numbering.LabelStartTwips > nativeMaxTwipsForMilliPoints || numbering.LabelEndTwips > nativeMaxTwipsForMilliPoints {
+	// A list without a hanging indent collapses its label region onto the
+	// first-line origin, so a region of zero width is exact, not invalid.
+	if numbering.LabelStartTwips < 0 || numbering.LabelEndTwips < numbering.LabelStartTwips || numbering.TextStartTwips != numbering.LabelEndTwips || numbering.LabelStartTwips > nativeMaxTwipsForMilliPoints || numbering.LabelEndTwips > nativeMaxTwipsForMilliPoints {
 		return fmt.Errorf("invalid numbering label geometry")
 	}
 	if numbering.NumberingTabTwips != nil && (*numbering.NumberingTabTwips < 0 || *numbering.NumberingTabTwips > nativeMaxTwipsForMilliPoints) {

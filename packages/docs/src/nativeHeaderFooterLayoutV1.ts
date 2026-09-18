@@ -1,4 +1,4 @@
-import { decodeNativeDocxPaginationRequestV1, validateNativeDocxPaginatedLayoutSourceV1 } from './nativePaginationV1.js'
+import { decodeNativeDocxPaginationRequestV1, nativeDocxDefaultSectionGeometryV1, validateNativeDocxPaginatedLayoutSourceV1 } from './nativePaginationV1.js'
 /**
  * Exact, renderer-neutral header/footer selection and line placement.
  *
@@ -458,7 +458,14 @@ function layoutHeadersFooters(input:NativeDocxHeaderFooterLayoutInputV1,font?:Na
       const section = sections.get(page.section_id)
       const variants = effective.get(page.section_id)
       if (!section || !variants) { diagnostics.push(diagnostic('selected-story-missing', page.section_id, 'Paginated page has no exact native section')); continue }
-      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS') && !(input.omit_unmodeled_section_geometry && DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE.has(entry.code)) && entry.code !== 'REDUNDANT_SECTION_PROPERTY')
+      // A schema-optional w:pgSz or w:pgMar states no override, and pagination
+      // already admits that on both tiers while the exposed geometry is
+      // value-for-value Word's own default. The header and footer bands are cut
+      // out of that same exposed page box, so the absence says exactly as little
+      // here as it does there; reading it from the one shared definition keeps
+      // the two from disagreeing about which page box an empty w:sectPr means.
+      const sectionUnsupported = input.document.unsupported.filter((entry) => entry.scope_id === section.id && entry.capability === 'sections' && !(qualifiedColumns && entry.code === 'UNEQUAL_SECTION_COLUMNS') && !(input.omit_unmodeled_section_geometry && DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_SECTION_SOURCE.has(entry.code)) && entry.code !== 'REDUNDANT_SECTION_PROPERTY'
+        && !((entry.code === 'MISSING_PAGE_SIZE' || entry.code === 'MISSING_PAGE_MARGINS') && nativeDocxDefaultSectionGeometryV1(section, entry.code)))
       for (const entry of sectionUnsupported) diagnostics.push(diagnostic('section-geometry-invalid', section.id, `Exact header/footer page geometry is unavailable: ${entry.code}: ${entry.message}`))
       if (section.page.orientation === 'portrait' ? section.page.width_twips > section.page.height_twips : section.page.width_twips < section.page.height_twips) diagnostics.push(diagnostic('section-geometry-invalid', section.id, 'Section orientation contradicts its exact page width and height'))
       const kind = selectedKind(section, page, input.pagination_settings)

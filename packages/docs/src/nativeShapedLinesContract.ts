@@ -158,11 +158,13 @@ function validateListMarker(value: unknown, path: string, issues: NativeDocxVali
   enumValue(entry.suffix, `${path}/suffix`, ['tab', 'space', 'nothing'], issues)
   enumValue(entry.alignment, `${path}/alignment`, ['left', 'right', 'center', 'start', 'end'], issues)
   const labelStart = integer(entry.label_start_millipoints, `${path}/label_start_millipoints`, issues, 0, MAX_METRIC)
-  const labelEnd = integer(entry.label_end_millipoints, `${path}/label_end_millipoints`, issues, 1, MAX_METRIC)
+  // Zero is the collapsed label region a list without a hanging indent resolves
+  // to: the marker sits on the first-line origin and reserves nothing.
+  const labelEnd = integer(entry.label_end_millipoints, `${path}/label_end_millipoints`, issues, 0, MAX_METRIC)
   const markerStart = integer(entry.marker_start_millipoints, `${path}/marker_start_millipoints`, issues, 0, MAX_METRIC)
   const markerAdvance = integer(entry.marker_advance_millipoints, `${path}/marker_advance_millipoints`, issues, 1, MAX_METRIC)
   const textStart = integer(entry.text_start_millipoints, `${path}/text_start_millipoints`, issues, 1, MAX_METRIC)
-  if (labelStart !== undefined && labelEnd !== undefined && labelEnd <= labelStart) add(issues, 'INVALID_VALUE', `${path}/label_end_millipoints`, 'must follow the label start')
+  if (labelStart !== undefined && labelEnd !== undefined && labelEnd < labelStart) add(issues, 'INVALID_VALUE', `${path}/label_end_millipoints`, 'must not precede the label start')
   if (markerStart !== undefined && markerAdvance !== undefined && textStart !== undefined && textStart < markerStart + markerAdvance) add(issues, 'OUT_OF_RANGE', `${path}/text_start_millipoints`, 'body text must not overlap the shaped marker')
 }
 

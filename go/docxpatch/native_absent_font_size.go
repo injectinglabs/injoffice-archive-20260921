@@ -92,7 +92,7 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, string, e
 	}
 	consider := func(p *NativeParagraphV1) {
 		resolved, ok := paragraphs[p.ID]
-		if !ok || resolved.Numbering != nil || !r.absentStyleSize(resolved.AppliedStyles, "paragraph") {
+		if !ok || !r.absentStyleSize(resolved.AppliedStyles, "paragraph") {
 			return
 		}
 		node := r.nodeForAnchor(p.Anchor)
@@ -113,9 +113,17 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, string, e
 		if resolved.ParagraphMarkProperties.FontSizeHalfPoint == nil && r.absentOwnerRunSize(ppr) {
 			add("paragraph-mark", p.ID, p.Anchor)
 		}
+		// A numbered paragraph's marker is a run of its own and needs its own
+		// size. Its run layer is exactly three layers -- the paragraph style
+		// cascade, the numbering level's own w:rPr and the paragraph's direct
+		// mark rPr -- and the first and third are the same two the paragraph-mark
+		// arm above already proved size-free, so only the level is read here.
+		if resolved.Numbering != nil && resolved.Numbering.Marker.FontSizeHalfPoint == nil && r.absentOwnerRunSize(ppr) && r.absentNumberingLevelSize(resolved.Numbering) {
+			add("numbering-marker", p.ID, p.Anchor)
+		}
 		for _, run := range p.Runs {
 			rr, ok := runs[run.ID]
-			if !ok || rr.Properties.FontSizeHalfPoint != nil || !r.absentStyleSize(rr.AppliedCharacterStyles, "character") {
+			if !ok || rr.Properties.FontSizeHalfPoint != nil || !r.absentRunCharacterStyleSize(rr) {
 				continue
 			}
 			owner := r.nodeForAnchor(run.Anchor)
@@ -156,6 +164,50 @@ func nativeAbsentFontSizes(data []byte) ([]NativeDocxAbsentFontSizeV1, string, e
 		return nil, "", nil
 	}
 	return facts, shape, nil
+}
+
+// absentRunCharacterStyleSize proves the character layer of one run adds no run
+// size. An empty applied chain is read as complete only when the run resolved no
+// character style reference at all: resolution applies the package's declared
+// default character style to every run that states no w:rStyle, so a nil
+// resolved style is itself the proof that no default was declared and none was
+// dropped. A named style that resolved to an empty chain is an unresolved
+// reference and still refuses.
+func (r *nativeLayoutResolver) absentRunCharacterStyleSize(run NativeResolvedRunV1) bool {
+	if len(run.AppliedCharacterStyles) == 0 {
+		return run.CharacterStyle == nil
+	}
+	return r.absentStyleSize(run.AppliedCharacterStyles, "character")
+}
+
+// absentNumberingLevelSize proves the numbering level that supplies a marker
+// states no run size of its own. The level is re-read from the numbering part
+// by the ids the resolved marker carries rather than trusted from the resolved
+// value, so the source shape is the fact and a resolver that simply failed to
+// read a size cannot pass for an omission.
+func (r *nativeLayoutResolver) absentNumberingLevelSize(numbering *NativeResolvedNumberingV1) bool {
+	instance := r.nums[numbering.NumID]
+	if instance == nil || instance.abstractID != numbering.AbstractNumID {
+		return false
+	}
+	abstract := r.abstractNums[instance.abstractID]
+	if abstract == nil {
+		return false
+	}
+	level := r.effectiveNumberingLevel(instance, abstract, numbering.Level)
+	if level == nil || level.node == nil || level.node.Name != (xml.Name{Space: r.wordNS, Local: "lvl"}) {
+		return false
+	}
+	// A w:rStyle inside the level's run properties names a character style whose
+	// own size the marker cascade never reads, so its presence refuses rather
+	// than reporting an omission the style may fill. absentOwnerRunSize tolerates
+	// it for the run and paragraph-mark scopes, which resolve it separately.
+	for _, rpr := range directNativeChildren(level.node, r.wordNS, "rPr") {
+		if len(directNativeChildren(rpr, r.wordNS, "rStyle")) > 0 {
+			return false
+		}
+	}
+	return r.absentOwnerRunSize(level.node)
 }
 
 func (r *nativeLayoutResolver) absentDefaultSizeShape() string {

@@ -1,5 +1,5 @@
 import { decodeNativeDocxDocument, type NativeDocxDocumentV1, type NativeDocxParagraphV1 } from './nativeContract.js'
-import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
+import { decodeNativeDocxResolvedLayout, nativeDocxResolvedNumberingModelSha256V1, type NativeDocxResolvedLayoutInputV1 } from './nativeResolvedLayout.js'
 
 /** The explicitly selected host family for scopes a package leaves font-less.
  * The value is measured, not assumed: ink-cluster extents of Microsoft Word
@@ -14,7 +14,11 @@ export const DOCX_ABSENT_FONT_FAMILY_WARNING =
 /** Extractor evidence: the package carries no w:rFonts at all, so this scope has
  * no family to read. The source records the omission and never a face. */
 export interface NativeDocxAbsentFontFamilyV1 {
-  scope_kind: 'run' | 'paragraph-mark'
+  /** `numbering-marker` names a numbered paragraph's own list-marker run
+   * properties, whose family the package omits for the same reason. Its
+   * `scope_id` is the paragraph id -- a paragraph has exactly one marker, so the
+   * (scope_kind, scope_id) pair stays unique beside its `paragraph-mark`. */
+  scope_kind: 'run' | 'paragraph-mark' | 'numbering-marker'
   scope_id: string
   part_name: string
   path: string
@@ -43,7 +47,7 @@ export function validNativeDocxAbsentFontFamiliesV1(value: unknown, packageSHA25
   const ids = new Set<string>()
   for (const fact of value) {
     if (!fact || typeof fact !== 'object' || Object.keys(fact).sort().join(',') !== FACT_KEYS
-      || !['run', 'paragraph-mark'].includes(fact.scope_kind)
+      || !['run', 'paragraph-mark', 'numbering-marker'].includes(fact.scope_kind)
       || typeof fact.scope_id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(fact.scope_id)
       || fact.package_sha256 !== packageSHA256 || !/^sha256:[0-9a-f]{64}$/.test(fact.package_sha256)
       || typeof fact.part_name !== 'string' || fact.part_name.length < 1 || fact.part_name.length > 1024 || fact.part_name.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(fact.part_name) || fact.part_name.split('/').some((s: string) => !s || s === '.' || s === '..')
@@ -77,6 +81,7 @@ type ReferenceFn = (resolved: NativeDocxResolvedLayoutInputV1) => ReadonlyArray<
 export type AttestedFaceFn = (family: string, weight: 400 | 700, style: 'normal' | 'italic') => boolean
 
 function target(resolved: NativeDocxResolvedLayoutInputV1, fact: NativeDocxAbsentFontFamilyV1) {
+  if (fact.scope_kind === 'numbering-marker') return resolved.paragraphs.filter((p) => p.paragraph_id === fact.scope_id).map((p) => p.numbering?.marker_properties)
   return fact.scope_kind === 'paragraph-mark'
     ? resolved.paragraphs.filter((p) => p.paragraph_id === fact.scope_id).map((p) => p.paragraph_mark_properties)
     : resolved.runs.filter((r) => r.run_id === fact.scope_id).map((r) => r.properties)
@@ -98,7 +103,7 @@ export function projectNativeDocxAbsentFontFamiliesV1(documentValue: unknown, re
   if (references(resolved).length !== 0) throw new TypeError('Missing-family evidence requires a package that resolves no font reference at all')
   const applied: NativeDocxApproximatedFontFamilyV1[] = []
   for (const fact of facts) {
-    const candidates = fact.scope_kind === 'paragraph-mark' ? paragraphs.filter((p) => p.id === fact.scope_id) : paragraphs.flatMap((p) => p.runs.filter((r) => r.id === fact.scope_id))
+    const candidates = fact.scope_kind === 'run' ? paragraphs.flatMap((p) => p.runs.filter((r) => r.id === fact.scope_id)) : paragraphs.filter((p) => p.id === fact.scope_id)
     if (candidates.length !== 1 || candidates[0]!.anchor.part_name !== fact.part_name || candidates[0]!.anchor.path !== fact.path) throw new TypeError('Missing-family scope anchor does not exact-join')
     const targets = target(resolved, fact)
     if (targets.length !== 1 || !targets[0] || targets[0].font_family !== undefined) throw new TypeError('Host family policy cannot override an authored/resolved font family')
@@ -107,6 +112,10 @@ export function projectNativeDocxAbsentFontFamiliesV1(documentValue: unknown, re
     targets[0].font_family = policy.family
     applied.push({ ...fact, chosen_family: policy.family })
   }
+  // A projected marker family is part of the resolved marker model, so the source
+  // attestation is recomputed over the projected markers; the strict view below
+  // removes the projection and restores the original digest.
+  if (resolved.numbering_source && applied.some((fact) => fact.scope_kind === 'numbering-marker')) resolved.numbering_source.model_sha256 = nativeDocxResolvedNumberingModelSha256V1(resolved.paragraphs, resolved.numbering_source)
   return { resolved, applied }
 }
 
@@ -115,6 +124,7 @@ export function projectNativeDocxAbsentFontFamiliesV1(documentValue: unknown, re
 export function stripNativeDocxAbsentFontFamiliesV1(resolved: NativeDocxResolvedLayoutInputV1, facts: readonly NativeDocxAbsentFontFamilyV1[]): NativeDocxResolvedLayoutInputV1 {
   if (facts.length === 0) return resolved
   const stripped = structuredClone(resolved)
-  for (const fact of facts) for (const properties of target(stripped, fact)) if (properties.font_family === DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT) delete properties.font_family
+  for (const fact of facts) for (const properties of target(stripped, fact)) if (properties?.font_family === DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT) delete properties.font_family
+  if (stripped.numbering_source && facts.some((fact) => fact.scope_kind === 'numbering-marker')) stripped.numbering_source.model_sha256 = nativeDocxResolvedNumberingModelSha256V1(stripped.paragraphs, stripped.numbering_source)
   return stripped
 }

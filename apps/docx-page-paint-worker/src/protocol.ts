@@ -169,11 +169,12 @@ function prepareInput(value: unknown): NativeDocxPagePaintPrepareInputV1 {
 function hostDefaultFamilyReferences(input: NativeDocxPagePaintPrepareInputV1, eligibility: unknown, policy: unknown): HostFontReference[] {
   if (!validNativeDocxHostDefaultFamilyPolicyV1(policy)) return []
   if (!record(eligibility) || !Array.isArray(eligibility.absent_font_families) || eligibility.absent_font_families.length > 1000) return []
-  const layout = input.resolved_layout as { runs?: Array<{ run_id: string; properties?: { bold?: boolean; italic?: boolean } }>; paragraphs?: Array<{ paragraph_id: string; paragraph_mark_properties?: { bold?: boolean; italic?: boolean } }> } | undefined
+  const layout = input.resolved_layout as { runs?: Array<{ run_id: string; properties?: { bold?: boolean; italic?: boolean } }>; paragraphs?: Array<{ paragraph_id: string; paragraph_mark_properties?: { bold?: boolean; italic?: boolean }; numbering?: { marker_properties?: { bold?: boolean; italic?: boolean } } }> } | undefined
   const references: HostFontReference[] = []
   for (const fact of eligibility.absent_font_families) {
     if (!record(fact) || typeof fact.scope_id !== 'string') continue
-    const properties = fact.scope_kind === 'run' ? layout?.runs?.find((run) => run.run_id === fact.scope_id)?.properties : layout?.paragraphs?.find((paragraph) => paragraph.paragraph_id === fact.scope_id)?.paragraph_mark_properties
+    const paragraph = layout?.paragraphs?.find((entry) => entry.paragraph_id === fact.scope_id)
+    const properties = fact.scope_kind === 'run' ? layout?.runs?.find((run) => run.run_id === fact.scope_id)?.properties : fact.scope_kind === 'numbering-marker' ? paragraph?.numbering?.marker_properties : paragraph?.paragraph_mark_properties
     if (!properties) continue
     references.push({ family: DOCX_ABSENT_FONT_FAMILY_HOST_DEFAULT, weight: properties.bold === true ? 700 : 400, style: properties.italic === true ? 'italic' : 'normal' })
   }

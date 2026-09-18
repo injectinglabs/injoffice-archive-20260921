@@ -44,6 +44,24 @@ describe('native DOCX marker geometry', () => {
     expect(nativeDocxListSuffixTabTargetV1(21_000, 15_000, 4_000, 21_000)).toBeUndefined()
   })
 
+  it('places a collapsed label region on the first-line origin', () => {
+    // listWithLgl.docx: w:ind w:left="0" w:firstLine="0" at ilvl=0 and
+    // w:firstLine="720" at ilvl=1. Word's own PDF export puts the ilvl=0 marker
+    // origin at x=72.0 pt (the 1 inch left margin, i.e. offset 0) and the ilvl=1
+    // marker at x=108.0 pt (offset 720 twips = 36 pt).
+    const collapsed = (labelStart: number): NativeDocxResolvedNumberingV1 => ({ ...marker('left'), suffix: 'nothing', label_start_twips: labelStart, label_end_twips: labelStart, text_start_twips: labelStart })
+    expect(positionNativeDocxListMarkerV1(collapsed(0), 'ltr', 90_000)).toEqual({ label_start_millipoints: 0, label_end_millipoints: 0, body_text_start_millipoints: 0, marker_start_millipoints: 0 })
+    expect(positionNativeDocxListMarkerV1(collapsed(720), 'ltr', 90_000)?.marker_start_millipoints).toBe(36_000)
+    // A collapsed region still anchors a trailing marker at the origin, and
+    // still refuses one that would start left of the text margin.
+    expect(positionNativeDocxListMarkerV1({ ...collapsed(720), alignment: 'right' }, 'ltr', 36_000)?.marker_start_millipoints).toBe(0)
+    expect(positionNativeDocxListMarkerV1({ ...collapsed(720), alignment: 'right' }, 'ltr', 36_001)).toBeUndefined()
+    // A region that ends before it starts is still not a region, and a body text
+    // start that disagrees with the region end is still refused.
+    expect(positionNativeDocxListMarkerV1({ ...marker('left'), label_start_twips: 300, label_end_twips: 100, text_start_twips: 100 }, 'ltr', 2_000)).toBeUndefined()
+    expect(positionNativeDocxListMarkerV1({ ...marker('left'), label_start_twips: 300, label_end_twips: 300, text_start_twips: 400 }, 'ltr', 2_000)).toBeUndefined()
+  })
+
   it('pre-refuses every physical/logical alignment that would start left of the text origin', () => {
     for (const direction of ['ltr', 'rtl'] as const) {
       for (const [alignment, boundary] of [['right', 5_000], ['center', 10_000]] as const) {

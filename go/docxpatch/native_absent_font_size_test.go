@@ -297,3 +297,96 @@ func TestAbsentFontSizeNoStylesPart(t *testing.T) {
 		}
 	}
 }
+
+// A numbered paragraph's marker is a run of its own and needs its own size.
+// Its run layer is the paragraph style cascade, the numbering level's own
+// w:rPr and the paragraph's direct mark rPr; the first and third are the two
+// the paragraph-mark scope already proves size-free, so the level is what this
+// scope reads. listWithLgl.docx is the package it exists for: every paragraph
+// is numbered, so without it the package produced no size evidence at all.
+func TestAbsentFontSizeCoversTheListMarkerScope(t *testing.T) {
+	for _, tc := range []struct {
+		name, levelRPr string
+		want           []string
+	}{
+		{name: "absent", want: []string{"paragraph-mark", "numbering-marker", "run"}},
+		{name: "level states a size", levelRPr: `<w:rPr><w:sz w:val="28"/></w:rPr>`, want: []string{"paragraph-mark", "run"}},
+		// A complex-script size is a size this evidence does not model.
+		{name: "level states a complex-script size", levelRPr: `<w:rPr><w:szCs w:val="28"/></w:rPr>`, want: []string{"paragraph-mark", "run"}},
+		// The marker cascade never resolves a character style, so a level that
+		// names one may still be sized by it: the reference refuses rather than
+		// reporting an omission the style would fill.
+		{name: "level names a character style", levelRPr: `<w:rPr><w:rStyle w:val="Marker"/></w:rPr>`, want: []string{"paragraph-mark", "run"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>` + tc.levelRPr + `</w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
+			parts := resolvedNumberingTestParts(numbering)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Numbered</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			kinds := []string{}
+			for _, fact := range eligibility.AbsentFontSizes {
+				kinds = append(kinds, fact.ScopeKind)
+			}
+			if strings.Join(kinds, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("scopes=%v want %v: %#v", kinds, tc.want, eligibility.AbsentFontSizes)
+			}
+			// A package with no styles part carries no w:docDefaults record at
+			// all, which Microsoft Word 16.112 lays out at 12 pt.
+			if eligibility.AbsentFontSizeShape != NativeDocxAbsentDocumentDefaultsV1 {
+				t.Fatalf("shape=%q", eligibility.AbsentFontSizeShape)
+			}
+			layout, err := ResolveNativeDocumentLayoutV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			marker := layout.Paragraphs[0].Numbering
+			if marker == nil {
+				t.Fatal("the fixture must resolve a marker")
+			}
+			if (marker.Marker.FontSizeHalfPoint != nil) != (tc.name == "level states a size") {
+				t.Fatalf("strict marker size disagrees with the fixture: %#v", marker.Marker.FontSizeHalfPoint)
+			}
+		})
+	}
+}
+
+// A run that names no character style and inherits none has an empty chain that
+// is complete, not unresolved: resolution applies the package's declared default
+// character style to every run that states no w:rStyle, so a nil resolved style
+// is itself the proof that no default was declared and none was dropped. Before
+// that distinction existed, every run in a package that merely HAS a styles part
+// was refused, which is the second reason listWithLgl.docx painted nothing.
+func TestAbsentFontSizeRunWithoutCharacterStyle(t *testing.T) {
+	for _, tc := range []struct {
+		name, style, runRPr string
+		want                []string
+	}{
+		{name: "no default character style", want: []string{"paragraph-mark", "run"}},
+		// A named style that resolved to nothing is an unresolved reference and
+		// still refuses: its definition could have carried the size.
+		{name: "dangling style reference", runRPr: `<w:rPr><w:rStyle w:val="Missing"/></w:rPr>`, want: []string{"paragraph-mark"}},
+		{name: "default character style states a size", style: `<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:rPr><w:sz w:val="28"/></w:rPr></w:style>`, want: []string{"paragraph-mark"}},
+		{name: "default character style states no size", style: `<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"/>`, want: []string{"paragraph-mark", "run"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>` + tc.style + `</w:styles>`)
+			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"><w:body><w:p><w:r>` + tc.runRPr + `<w:t>Source</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			eligibility, err := ExtractNativeDocxApproximationEligibilityV1(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			kinds := []string{}
+			for _, fact := range eligibility.AbsentFontSizes {
+				kinds = append(kinds, fact.ScopeKind)
+			}
+			if strings.Join(kinds, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("scopes=%v want %v: %#v", kinds, tc.want, eligibility.AbsentFontSizes)
+			}
+		})
+	}
+}
