@@ -237,6 +237,23 @@ func nativeUnappliedTypographicRunFeature(node, owner *nativeXMLNode) (string, s
 			return "", "", false
 		}
 		return "TEXT_EFFECT_3D_UNAPPLIED", "The 3D text effect w14:props3d is preserved and NOT applied: the run's glyphs are painted flat, without the requested extrusion, bevel, contour or material ink. It selects no glyph and moves no advance, so the deviation is exactly the missing decoration - Word rasterises such a run into an image in its own PDF export", true
+	case "glow", "shadow", "reflection", "textOutline", "scene3d":
+		if !nativeWordML2010Subtree(node) {
+			return "", "", false
+		}
+		return "TEXT_DECORATION_UNAPPLIED", "The Word 2010 text decoration w14:" + node.Name.Local + " is preserved and NOT applied: the run's glyphs are painted with the face's own outline and the run's own fill, without the requested decoration ink. Like w14:props3d it decorates glyphs that are already selected and already placed - it names no OpenType feature and carries no advance - so it moves no glyph, no line and no page, and the deviation is exactly the missing decoration", true
+	case "cntxtAlts":
+		// The enabled form states shaping this tier already performs and is
+		// taken by nativeShaperDefaultContextualAlternates before this point.
+		// A disabled one asks for calt OFF, which the declared shaping defaults
+		// do apply and v1 has no input for, so the run IS painted with calt and
+		// its advances are measurably not Word's wherever the face has a calt
+		// rule for the text.
+		enabled, valid := nativeOnOffAttr(node, nativeWordML2010, "val", true)
+		if !nativeExactLeaf(node, value) || valid == false || enabled {
+			return "", "", false
+		}
+		return "CONTEXTUAL_ALTERNATES_UNAPPLIED", "Disabled contextual alternates w14:cntxtAlts are preserved and NOT applied: this tier declares default_feature_policy 'harfbuzz-14.3.0-shape-defaults', under which HarfBuzz applies calt to every horizontal run, and v1 has no input for turning a default feature off. The run is painted WITH contextual alternates, so wherever the face carries a calt rule for this text the painted glyphs and advances are measurably not Word's", true
 	}
 	return "", "", false
 }

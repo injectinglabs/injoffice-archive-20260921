@@ -157,14 +157,22 @@ describe('approximate omitted-content disclosure', () => {
     // The invariant PR #334 documented, applied to this slice: a code the
     // approximate tier lays out around must either leave the painted content
     // intact or be named here, or the drop is silent.
-    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED', 'NEGATIVE_LINE_SPACING_UNAPPLIED']) {
+    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED', 'TEXT_DECORATION_UNAPPLIED', 'CONTEXTUAL_ALTERNATES_UNAPPLIED', 'NEGATIVE_LINE_SPACING_UNAPPLIED']) {
       expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(true)
       expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(true)
+      expect(nativeDocxOmittedContentCategoryV1(code, undefined), code).toBe('text')
     }
     // Every other foreign run property, and every spacing shape this tier cannot
     // read at all, stays outside both sets and keeps refusing.
     for (const code of ['FOREIGN_RUN_PROPERTY', 'UNMODELED_RUN_PROPERTY', 'UNMODELED_PARAGRAPH_SPACING', 'INVALID_LINE_SPACING']) {
       expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(false)
+      expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(false)
+    }
+    // A decoration whose request states shaping this tier already performs is
+    // not omitted content: the painted run carries it, so naming it here would
+    // report a drop that never happened.
+    for (const code of ['CONTEXTUAL_ALTERNATES_MATCH_SHAPER', 'LIGATURE_MODE_MATCHES_SHAPER']) {
+      expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has(code), code).toBe(true)
       expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has(code), code).toBe(false)
     }
   })

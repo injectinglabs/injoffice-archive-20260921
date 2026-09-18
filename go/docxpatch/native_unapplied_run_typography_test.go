@@ -29,6 +29,15 @@ func TestNativeUnappliedTypographicRunFeatureQualification(t *testing.T) {
 		{"number spacing proportional", `<w14:numSpacing w14:val="proportional"/>`, "NUMBER_SPACING_UNAPPLIED"},
 		{"3d text effect", `<w14:props3d w14:extrusionH="63500"><w14:bevelT w14:w="38100"/><w14:contourClr><w14:srgbClr w14:val="92D050"/></w14:contourClr></w14:props3d>`, "TEXT_EFFECT_3D_UNAPPLIED"},
 		{"bare 3d text effect", `<w14:props3d/>`, "TEXT_EFFECT_3D_UNAPPLIED"},
+		{"glow", `<w14:glow w14:rad="63500"><w14:srgbClr w14:val="FFC000"/></w14:glow>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"zero-radius glow", `<w14:glow w14:rad="0"><w14:srgbClr w14:val="000000"/></w14:glow>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"shadow", `<w14:shadow w14:blurRad="50800"/>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"reflection", `<w14:reflection w14:blurRad="6350" w14:stA="52000" w14:algn="bl"/>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"text outline", `<w14:textOutline w14:w="9525"/>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"unfilled text outline", `<w14:textOutline w14:w="0" w14:cap="rnd" w14:cmpd="sng" w14:algn="ctr"><w14:noFill/><w14:prstDash w14:val="solid"/><w14:bevel/></w14:textOutline>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"3d scene", `<w14:scene3d><w14:camera w14:prst="orthographicFront"/><w14:lightRig w14:rig="threePt" w14:dir="t"><w14:rot w14:lat="0" w14:lon="0" w14:rev="0"/></w14:lightRig></w14:scene3d>`, "TEXT_DECORATION_UNAPPLIED"},
+		{"disabled contextual alternates", `<w14:cntxtAlts w14:val="0"/>`, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
+		{"disabled contextual alternates spelled false", `<w14:cntxtAlts w14:val="false"/>`, "CONTEXTUAL_ALTERNATES_UNAPPLIED"},
 
 		// The shaper-default values keep their own existing codes, which state
 		// shaping this tier performs rather than a deviation it paints through.
@@ -37,10 +46,7 @@ func TestNativeUnappliedTypographicRunFeatureQualification(t *testing.T) {
 
 		// Everything outside the closed set stays foreign markup and keeps
 		// refusing on both tiers.
-		{"disabled contextual alternates", `<w14:cntxtAlts w14:val="0"/>`, "FOREIGN_RUN_PROPERTY"},
-		{"text outline", `<w14:textOutline w14:w="9525"/>`, "FOREIGN_RUN_PROPERTY"},
 		{"text fill", `<w14:textFill><w14:solidFill><w14:srgbClr w14:val="FF0000"/></w14:solidFill></w14:textFill>`, "FOREIGN_RUN_PROPERTY"},
-		{"shadow", `<w14:shadow w14:blurRad="50800"/>`, "FOREIGN_RUN_PROPERTY"},
 		{"unknown ligature mode", `<w14:ligatures w14:val="ligaturesEverywhere"/>`, "FOREIGN_RUN_PROPERTY"},
 		{"ligature mode without a value", `<w14:ligatures/>`, "FOREIGN_RUN_PROPERTY"},
 		{"unknown number form", `<w14:numForm w14:val="roman"/>`, "FOREIGN_RUN_PROPERTY"},
@@ -59,6 +65,12 @@ func TestNativeUnappliedTypographicRunFeatureQualification(t *testing.T) {
 		// A WordprocessingML element nested inside the 3D effect would be
 		// content this tier must not silently discard with the effect.
 		{"3d text effect hiding word markup", `<w14:props3d><w:t>hidden</w:t></w14:props3d>`, "FOREIGN_RUN_PROPERTY"},
+		{"glow hiding word markup", `<w14:glow w14:rad="0"><w:t>hidden</w:t></w14:glow>`, "FOREIGN_RUN_PROPERTY"},
+		{"text outline hiding a drawing", `<w14:textOutline w14:w="0"><w:drawing/></w14:textOutline>`, "FOREIGN_RUN_PROPERTY"},
+		{"duplicate shadow", `<w14:shadow w14:blurRad="0"/><w14:shadow w14:blurRad="1"/>`, "FOREIGN_RUN_PROPERTY"},
+		{"enabled contextual alternates keeps the shaper code", `<w14:cntxtAlts w14:val="1"/>`, "CONTEXTUAL_ALTERNATES_MATCH_SHAPER"},
+		{"contextual alternates with an unknown value", `<w14:cntxtAlts w14:val="maybe"/>`, "FOREIGN_RUN_PROPERTY"},
+		{"contextual alternates with nested markup", `<w14:cntxtAlts w14:val="0"><w14:x/></w14:cntxtAlts>`, "FOREIGN_RUN_PROPERTY"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
