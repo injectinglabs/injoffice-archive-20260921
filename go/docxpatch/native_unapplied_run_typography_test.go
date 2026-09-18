@@ -49,7 +49,9 @@ func TestNativeUnappliedTypographicRunFeatureQualification(t *testing.T) {
 		{"number form with an extra attribute", `<w14:numForm w14:val="oldStyle" w14:extra="1"/>`, "FOREIGN_RUN_PROPERTY"},
 		{"number form with nested markup", `<w14:numForm w14:val="oldStyle"><w14:x/></w14:numForm>`, "FOREIGN_RUN_PROPERTY"},
 		{"duplicate number form", `<w14:numForm w14:val="lining"/><w14:numForm w14:val="oldStyle"/>`, "FOREIGN_RUN_PROPERTY"},
-		{"empty stylistic sets", `<w14:stylisticSets/>`, "FOREIGN_RUN_PROPERTY"},
+		// A stylisticSets naming no set is the absence of a stylistic-set
+		// request, so it carries the absence code rather than an unapplied one.
+		{"empty stylistic sets", `<w14:stylisticSets/>`, "STYLISTIC_SET_ABSENT_PRESERVED"},
 		{"stylistic set without an id", `<w14:stylisticSets><w14:styleSet/></w14:stylisticSets>`, "FOREIGN_RUN_PROPERTY"},
 		{"stylistic set with a nonnumeric id", `<w14:stylisticSets><w14:styleSet w14:id="ss02"/></w14:stylisticSets>`, "FOREIGN_RUN_PROPERTY"},
 		{"stylistic set with foreign children", `<w14:stylisticSets><w14:styleSet w14:id="2"/><w14:other/></w14:stylisticSets>`, "FOREIGN_RUN_PROPERTY"},

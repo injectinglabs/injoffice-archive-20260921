@@ -2156,6 +2156,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 				resolver.addDiagnostic("CONTEXTUAL_ALTERNATES_MATCH_SHAPER", scopeID, partName, child, "Contextual alternates are what this tier's HarfBuzz shaping defaults already apply, so this request states the shaping already performed")
 				continue
 			}
+			if nativeAbsentStylisticSetRequest(child, node) {
+				resolver.addDiagnostic("STYLISTIC_SET_ABSENT_PRESERVED", scopeID, partName, child, "A stylistic-set request that names no set is preserved and not applied; it asks for the face's default glyph forms, which is what this tier shapes, so it selects the same glyphs at the same advances and moves no line and no page")
+				continue
+			}
 			if code, detail, ok := nativeUnappliedTypographicRunFeature(child, node); ok {
 				resolver.addDiagnostic(code, scopeID, partName, child, detail)
 				continue
@@ -2410,6 +2414,10 @@ func (resolver *nativeLayoutResolver) parseRunProperties(partName string, node *
 		default:
 			if nativeTrackedMarkRevision(child, resolver.wordNS) {
 				resolver.addDiagnostic("TRACKED_MARK_REVISION_PRESERVED", scopeID, partName, child, "A tracked-revision annotation on this mark states no formatting; the revision display it belongs to is preserved and not applied")
+				continue
+			}
+			if nativeAbsentRunEffect(child, node, resolver.wordNS) {
+				resolver.addDiagnostic("RUN_EFFECT_ABSENT_PRESERVED", scopeID, partName, child, "A run property that states the absence of its own effect is preserved and not applied; it selects the same glyphs at the same advances and paints the same ink as the same run without it, so it moves no line and no page")
 				continue
 			}
 			resolver.addDiagnostic("UNMODELED_RUN_PROPERTY", scopeID, partName, child, "This run property is preserved and not guessed")
