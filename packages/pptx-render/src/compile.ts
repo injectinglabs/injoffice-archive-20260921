@@ -482,7 +482,7 @@ function normalizeResolution(value: unknown, state: CompileState, path: string, 
 
 function normalizeFontMetrics(value: unknown, path: string): FontResource['metrics'] {
   const metrics = providerRecord(value, path)
-  exactProviderKeys(metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness'], path)
+  exactProviderKeys(metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness', 'strikeoutPosition', 'strikeoutThickness'], path)
   const normalized: FontResource['metrics'] = {
     unitsPerEm: providerInteger(metrics.unitsPerEm, `${path}.unitsPerEm`, 1, 1_000_000),
     ascender: providerInteger(metrics.ascender, `${path}.ascender`, 0, 1_000_000_000),
@@ -493,6 +493,8 @@ function normalizeFontMetrics(value: unknown, path: string): FontResource['metri
   if (metrics.xHeight !== undefined) normalized.xHeight = providerInteger(metrics.xHeight, `${path}.xHeight`, 0, 1_000_000_000)
   if (metrics.underlinePosition !== undefined) normalized.underlinePosition = providerInteger(metrics.underlinePosition, `${path}.underlinePosition`, -1_000_000_000, 1_000_000_000)
   if (metrics.underlineThickness !== undefined) normalized.underlineThickness = providerInteger(metrics.underlineThickness, `${path}.underlineThickness`, 0, 1_000_000_000)
+  if (metrics.strikeoutPosition !== undefined) normalized.strikeoutPosition = providerInteger(metrics.strikeoutPosition, `${path}.strikeoutPosition`, -1_000_000_000, 1_000_000_000)
+  if (metrics.strikeoutThickness !== undefined) normalized.strikeoutThickness = providerInteger(metrics.strikeoutThickness, `${path}.strikeoutThickness`, 0, 1_000_000_000)
   return normalized
 }
 
@@ -509,7 +511,7 @@ function normalizeFontLoad(value: unknown, state: CompileState, path: string, te
 
 function normalizeLineMetrics(value: unknown, path: string): ScaledLineMetrics {
   const metrics = providerRecord(value, path)
-  exactProviderKeys(metrics, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints'], path)
+  exactProviderKeys(metrics, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints', 'strikeoutPositionMilliPoints', 'strikeoutThicknessMilliPoints'], path)
   const normalized: ScaledLineMetrics = {
     fontSizeMilliPoints: providerInteger(metrics.fontSizeMilliPoints, `${path}.fontSizeMilliPoints`, 1, 10_000_000),
     ascentMilliPoints: providerInteger(metrics.ascentMilliPoints, `${path}.ascentMilliPoints`),
@@ -517,7 +519,7 @@ function normalizeLineMetrics(value: unknown, path: string): ScaledLineMetrics {
     lineGapMilliPoints: providerInteger(metrics.lineGapMilliPoints, `${path}.lineGapMilliPoints`),
     lineHeightMilliPoints: providerInteger(metrics.lineHeightMilliPoints, `${path}.lineHeightMilliPoints`, 1),
   }
-  for (const key of ['capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints'] as const) {
+  for (const key of ['capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints', 'strikeoutPositionMilliPoints', 'strikeoutThicknessMilliPoints'] as const) {
     if (metrics[key] !== undefined) normalized[key] = providerInteger(metrics[key], `${path}.${key}`)
   }
   return normalized

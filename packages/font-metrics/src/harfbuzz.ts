@@ -154,7 +154,7 @@ interface SfntPreflight {
   numGlyphs: number
   tables: ReadonlyMap<string, TableRecord>
   requiredMetrics: Pick<FontDesignMetrics, 'unitsPerEm' | 'ascender' | 'descender' | 'lineGap'>
-  optionalMetrics: Pick<FontDesignMetrics, 'capHeight' | 'xHeight' | 'underlinePosition' | 'underlineThickness'>
+  optionalMetrics: Pick<FontDesignMetrics, 'capHeight' | 'xHeight' | 'underlinePosition' | 'underlineThickness' | 'strikeoutPosition' | 'strikeoutThickness'>
 }
 
 interface CachedFace {
@@ -232,7 +232,7 @@ function validResolvedFace(face: unknown): face is ResolvedFontFace {
 }
 
 function validDesignMetrics(metrics: unknown): metrics is FontDesignMetrics {
-  if (!isRecord(metrics) || !exactKeys(metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness'])) return false
+  if (!isRecord(metrics) || !exactKeys(metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness', 'strikeoutPosition', 'strikeoutThickness'])) return false
   return safeInteger(metrics.unitsPerEm, 16, 16_384)
     && safeInteger(metrics.ascender, 0, MAX_ABS_DESIGN_VALUE)
     && safeInteger(metrics.descender, -MAX_ABS_DESIGN_VALUE, 0)
@@ -240,6 +240,8 @@ function validDesignMetrics(metrics: unknown): metrics is FontDesignMetrics {
     && [metrics.capHeight, metrics.xHeight].every((value) => value === undefined || safeInteger(value, 0, MAX_ABS_DESIGN_VALUE))
     && (metrics.underlinePosition === undefined || safeInteger(metrics.underlinePosition, -MAX_ABS_DESIGN_VALUE, MAX_ABS_DESIGN_VALUE))
     && (metrics.underlineThickness === undefined || safeInteger(metrics.underlineThickness, 0, MAX_ABS_DESIGN_VALUE))
+    && (metrics.strikeoutPosition === undefined || safeInteger(metrics.strikeoutPosition, -MAX_ABS_DESIGN_VALUE, MAX_ABS_DESIGN_VALUE))
+    && (metrics.strikeoutThickness === undefined || safeInteger(metrics.strikeoutThickness, 0, MAX_ABS_DESIGN_VALUE))
 }
 
 function u16(bytes: Uint8Array, offset: number): number {
@@ -430,13 +432,15 @@ function preflightSfnt(bytes: Uint8Array, requestedCollectionIndex: number | und
     optionalMetrics: {
       ...(os2 && os2Version !== undefined && os2Version >= 2 && os2.length >= 90 ? { xHeight: i16(bytes, os2.offset + 86), capHeight: i16(bytes, os2.offset + 88) } : {}),
       ...(post && post.length >= 12 ? { underlinePosition: i16(bytes, post.offset + 8), underlineThickness: i16(bytes, post.offset + 10) } : {}),
+      // OS/2 yStrikeoutSize/yStrikeoutPosition exist from version 0 onwards.
+      ...(os2 && os2.length >= 30 && i16(bytes, os2.offset + 26) > 0 ? { strikeoutThickness: i16(bytes, os2.offset + 26), strikeoutPosition: i16(bytes, os2.offset + 28) } : {}),
     },
   }
 }
 
 function metricsMatchFont(metrics: FontDesignMetrics, preflight: SfntPreflight): boolean {
   if (metrics.unitsPerEm !== preflight.requiredMetrics.unitsPerEm || metrics.ascender !== preflight.requiredMetrics.ascender || metrics.descender !== preflight.requiredMetrics.descender || metrics.lineGap !== preflight.requiredMetrics.lineGap) return false
-  for (const key of ['capHeight', 'xHeight', 'underlinePosition', 'underlineThickness'] as const) {
+  for (const key of ['capHeight', 'xHeight', 'underlinePosition', 'underlineThickness', 'strikeoutPosition', 'strikeoutThickness'] as const) {
     if (metrics[key] !== preflight.optionalMetrics[key]) return false
   }
   return true
@@ -470,6 +474,8 @@ function snapshotMetrics(metrics: FontDesignMetrics): FontDesignMetrics {
     ...(metrics.xHeight !== undefined ? { xHeight: metrics.xHeight } : {}),
     ...(metrics.underlinePosition !== undefined ? { underlinePosition: metrics.underlinePosition } : {}),
     ...(metrics.underlineThickness !== undefined ? { underlineThickness: metrics.underlineThickness } : {}),
+    ...(metrics.strikeoutPosition !== undefined ? { strikeoutPosition: metrics.strikeoutPosition } : {}),
+    ...(metrics.strikeoutThickness !== undefined ? { strikeoutThickness: metrics.strikeoutThickness } : {}),
   })
 }
 
@@ -630,7 +636,7 @@ function scaleDesignValue(value: number, unitsPerEm: number, fontSizeMilliPoints
 function qualifiedLineMetrics(metrics: FontDesignMetrics, fontSizeMilliPoints: number): ReturnType<typeof scaleLineMetrics> {
   const scaled = scaleLineMetrics(metrics, fontSizeMilliPoints)
   const required = [scaled.ascentMilliPoints, scaled.descentMilliPoints, scaled.lineGapMilliPoints, scaled.lineHeightMilliPoints]
-  const optional = [scaled.capHeightMilliPoints, scaled.xHeightMilliPoints, scaled.underlinePositionMilliPoints, scaled.underlineThicknessMilliPoints]
+  const optional = [scaled.capHeightMilliPoints, scaled.xHeightMilliPoints, scaled.underlinePositionMilliPoints, scaled.underlineThicknessMilliPoints, scaled.strikeoutPositionMilliPoints, scaled.strikeoutThicknessMilliPoints]
   if (required.some((value) => Math.abs(value) > MAX_OUTPUT_MILLIPOINTS)
     || optional.some((value) => value !== undefined && Math.abs(value) > MAX_OUTPUT_MILLIPOINTS)) throw new RangeError('scaled line metrics exceed the page-paint provider bound')
   return scaled

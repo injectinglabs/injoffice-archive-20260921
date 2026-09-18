@@ -27,7 +27,7 @@ export const DOCX_SHAPED_LINES_V1_BINDING_FIELDS = {
   GlyphV1: ['glyph_id', 'advance_x_millipoints', 'advance_y_millipoints', 'offset_x_millipoints', 'offset_y_millipoints'],
   FragmentV1: ['id', 'source_kind', 'source_id', 'start_utf16', 'end_utf16', 'text', 'direction', 'bidi_level', 'logical_order', 'script', 'language', 'face_id', 'whitespace', 'advance_inline_millipoints', 'justification_expansion_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'underline_position_millipoints', 'underline_thickness_millipoints', 'glyphs', 'script_transform'],
   HardBreakV1: ['source_run_id', 'control'],
-  LineV1: ['id', 'ordinal', 'available_width_millipoints', 'inline_offset_millipoints', 'exclusion_start_millipoints', 'exclusion_end_millipoints', 'advance_inline_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'line_height_millipoints', 'justified', 'logical_to_visual', 'fragments', 'hard_break_after'],
+  LineV1: ['id', 'ordinal', 'available_width_millipoints', 'inline_offset_millipoints', 'exclusion_start_millipoints', 'exclusion_end_millipoints', 'advance_inline_millipoints', 'ascent_millipoints', 'descent_millipoints', 'line_gap_millipoints', 'line_height_millipoints', 'justified', 'logical_to_visual', 'mark_strikeout_position_millipoints', 'mark_strikeout_thickness_millipoints', 'fragments', 'hard_break_after'],
   NumberingSourceV1: ['relationships_part', 'relationships_sha256', 'relationship_id', 'relationship_type', 'relationship_target', 'part_name', 'content_type', 'part_sha256', 'model_sha256'],
   ListMarkerV1: ['marker_id', 'definition_sha256', 'numbering_part_sha256', 'model_sha256', 'num_id', 'abstract_num_id', 'level', 'counter_value', 'text', 'suffix', 'alignment', 'label_start_millipoints', 'label_end_millipoints', 'marker_start_millipoints', 'marker_advance_millipoints', 'text_start_millipoints'],
   ParagraphV1: ['paragraph_id', 'story_id', 'story_kind', 'direction', 'alignment', 'spacing_before_millipoints', 'spacing_after_millipoints', 'indent_start_millipoints', 'indent_end_millipoints', 'first_line_delta_millipoints', 'list_marker', 'block_advance_millipoints', 'lines'],
@@ -300,6 +300,11 @@ function validateLine(value: unknown, path: string, issues: NativeDocxValidation
   integer(entry.line_gap_millipoints, `${path}/line_gap_millipoints`, issues, 0, MAX_METRIC)
   const height = integer(entry.line_height_millipoints, `${path}/line_height_millipoints`, issues, 1, MAX_METRIC)
   if (typeof entry.justified !== 'boolean') add(issues, entry.justified === undefined ? 'REQUIRED' : 'INVALID_TYPE', `${path}/justified`, 'must be a boolean')
+  // A note separator's derived rule is seated by the paragraph mark's own
+  // strikeout metrics, so both are published together or not at all.
+  if (entry.mark_strikeout_position_millipoints !== undefined) integer(entry.mark_strikeout_position_millipoints, `${path}/mark_strikeout_position_millipoints`, issues, -MAX_METRIC, MAX_METRIC)
+  if (entry.mark_strikeout_thickness_millipoints !== undefined) integer(entry.mark_strikeout_thickness_millipoints, `${path}/mark_strikeout_thickness_millipoints`, issues, 1, MAX_METRIC)
+  if ((entry.mark_strikeout_position_millipoints === undefined) !== (entry.mark_strikeout_thickness_millipoints === undefined)) add(issues, 'INVALID_VALUE', `${path}/mark_strikeout_position_millipoints`, 'strikeout position and thickness must be published together')
   const fragments = array(entry.fragments, `${path}/fragments`, issues, DOCX_SHAPED_LINES_LIMITS.maxFragments)
   fragments.forEach((fragment, index) => validateFragment(fragment, `${path}/fragments/${index}`, issues, state, `fragment:${paragraphID ?? 'invalid'}:${expectedOrdinal}:${index}`))
   const mapping = array(entry.logical_to_visual, `${path}/logical_to_visual`, issues, DOCX_SHAPED_LINES_LIMITS.maxFragments)
