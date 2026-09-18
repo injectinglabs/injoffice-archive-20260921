@@ -2137,6 +2137,12 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 				// fact rather than being reported as unknown spacing structure.
 				unsafe = true
 				extractor.addUnsupported("AUTO_PARAGRAPH_SPACING_PRESERVED", "paragraph-properties", paragraphID, partName, child, "Automatic paragraph spacing is preserved; its value is determined by the resolved-layout projection and not guessed")
+			case nativeParagraphSpacingNegativeLine:
+				// The page is painted with the compression UNAPPLIED: the
+				// paragraph keeps the line spacing it inherits, so its lines sit
+				// further apart than Word's.
+				unsafe = true
+				extractor.addUnsupported("NEGATIVE_LINE_SPACING_UNAPPLIED", "paragraph-properties", paragraphID, partName, child, negativeLineSpacingDisclosure)
 			default:
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_SPACING", "paragraph-properties", paragraphID, partName, child, "Paragraph spacing is invalid, line-unit based, or has structure outside the exact resolved-layout subset")
@@ -2255,13 +2261,15 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 
 // nativeParagraphSpacingShape names how far a w:spacing element is from the
 // exact resolved-layout subset: an exact shape, an otherwise exact shape whose
-// before or after measurement is explicitly automatic, or anything else.
+// before or after measurement is explicitly automatic, an otherwise exact shape
+// whose only defect is a negative w:line, or anything else.
 type nativeParagraphSpacingShape int
 
 const (
 	nativeParagraphSpacingUnmodeled nativeParagraphSpacingShape = iota
 	nativeParagraphSpacingExact
 	nativeParagraphSpacingAutomatic
+	nativeParagraphSpacingNegativeLine
 )
 
 func nativeResolvedParagraphSpacingShape(node *nativeXMLNode, wordNS string) nativeParagraphSpacingShape {
@@ -2272,9 +2280,23 @@ func nativeResolvedParagraphSpacingShape(node *nativeXMLNode, wordNS string) nat
 		xml.Name{Space: wordNS, Local: "beforeLines"}, xml.Name{Space: wordNS, Local: "afterLines"}) {
 		return nativeParagraphSpacingUnmodeled
 	}
+	negativeLine := false
 	for _, name := range []string{"before", "after", "line"} {
 		if _, present := nativeAttr(node, wordNS, name); present {
 			if _, valid := nativeNonnegativeInt64Attr(node, wordNS, name); !valid {
+				// ST_SignedTwipsMeasure admits a negative w:line, and Word reads
+				// one: it applies |value| as an EXACT line height, compressing
+				// the lines and letting them overlap. The resolved-layout
+				// projection has no compressed line box, so it drops the
+				// measurement and the paragraph keeps the line spacing it
+				// inherits. That is a line-pitch deviation on painted text, not
+				// unknown spacing structure, so it gets its own shape and the
+				// approximate tier paints and discloses it. A negative w:before
+				// or w:after, and anything unparseable, stay unmodeled.
+				if name == "line" && nativeNegativeInt64Attr(node, wordNS, name) {
+					negativeLine = true
+					continue
+				}
 				return nativeParagraphSpacingUnmodeled
 			}
 		}
@@ -2301,10 +2323,24 @@ func nativeResolvedParagraphSpacingShape(node *nativeXMLNode, wordNS string) nat
 			return nativeParagraphSpacingUnmodeled
 		}
 	}
+	if negativeLine {
+		return nativeParagraphSpacingNegativeLine
+	}
 	if automatic {
 		return nativeParagraphSpacingAutomatic
 	}
 	return nativeParagraphSpacingExact
+}
+
+// A w:line measurement that parses as a negative ST_SignedTwipsMeasure, as
+// distinct from one that does not parse at all.
+func nativeNegativeInt64Attr(node *nativeXMLNode, namespace, local string) bool {
+	raw, ok := nativeAttr(node, namespace, local)
+	if !ok {
+		return false
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	return err == nil && value < 0 && value >= -9007199254740991
 }
 
 func nativeExactResolvedParagraphIndent(node *nativeXMLNode, wordNS string) bool {

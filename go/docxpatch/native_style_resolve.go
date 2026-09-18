@@ -2535,12 +2535,19 @@ func (resolver *nativeLayoutResolver) parseSpacing(node *nativeXMLNode, scopeID,
 			resolver.addDiagnostic("INVALID_PARAGRAPH_SPACING", scopeID, partName, node, "Invalid after spacing is preserved and ignored")
 		}
 	}
-	linePresent := false
+	linePresent, negativeLine := false, false
 	if _, present := nativeAttr(node, resolver.wordNS, "line"); present {
 		linePresent = true
 		if value, ok := nativeNonnegativeInt64Attr(node, resolver.wordNS, "line"); ok {
 			properties.line = nativeInt64(value)
 			properties.lineRule = nativeString("auto")
+		} else if nativeNegativeInt64Attr(node, resolver.wordNS, "line") {
+			negativeLine = true
+			// A negative w:line is a measurement Word reads, not a malformed
+			// one. It is dropped here, so this paragraph keeps the line spacing
+			// it inherits and its lines sit further apart than Word's; the
+			// approximate tier paints that and discloses it under its own code.
+			resolver.addDiagnostic("NEGATIVE_LINE_SPACING_UNAPPLIED", scopeID, partName, node, negativeLineSpacingDisclosure)
 		} else {
 			resolver.addDiagnostic("INVALID_LINE_SPACING", scopeID, partName, node, "Invalid line spacing is preserved and ignored")
 		}
@@ -2549,9 +2556,15 @@ func (resolver *nativeLayoutResolver) parseSpacing(node *nativeXMLNode, scopeID,
 		if value == "auto" || value == "exact" || value == "atLeast" {
 			if properties.line != nil {
 				properties.lineRule = nativeString(value)
-			} else {
+			} else if !negativeLine {
 				resolver.addDiagnostic("INCOMPLETE_LINE_SPACING", scopeID, partName, node, "A line rule without a line measurement is preserved and ignored")
 			}
+			// A rule beside a negative measurement is not a rule WITHOUT a
+			// measurement: the source states one and this tier dropped it. Word
+			// ignores the authored rule for a negative w:line anyway, and the
+			// negative-line disclosure already names the whole element, so a
+			// second diagnostic here would refuse the paragraph for the rule
+			// that the disclosed measurement made moot.
 		} else {
 			properties.line, properties.lineRule = nil, nil
 			resolver.addDiagnostic("INVALID_LINE_SPACING", scopeID, partName, node, "Invalid line-spacing rule makes the line measurement unsafe to resolve")
