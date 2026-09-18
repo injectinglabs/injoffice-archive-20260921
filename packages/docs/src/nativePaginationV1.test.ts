@@ -1699,6 +1699,35 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('paints a run whose Word 2010 typography extension this tier does not apply, and discloses the deviation', () => {
+    // THE PAGE IS PAINTED WITH THE EFFECT UNAPPLIED. w14:stylisticSets, a
+    // w14:ligatures mode outside the shaper defaults, w14:numForm, w14:numSpacing
+    // and w14:props3d select glyphs, advances or ink this tier has no input for,
+    // so the painted run is measurably not Word's - shaped with harfbuzzjs 1.6.0
+    // over 224 face/sample pairs, ss02 moves 20 of them (Arial +28,745 font
+    // units across the sample), ss04 6, numForm="oldStyle" 68 and
+    // numSpacing="proportional" 68. The approximate tier paints anyway and names
+    // each unapplied property in omitted_content; the STRICT tier keeps
+    // refusing, and so does every other foreign run property.
+    for (const code of ['STYLISTIC_SET_UNAPPLIED', 'LIGATURE_MODE_UNAPPLIED', 'NUMBER_FORM_UNAPPLIED', 'NUMBER_SPACING_UNAPPLIED', 'TEXT_EFFECT_3D_UNAPPLIED', 'FOREIGN_RUN_PROPERTY'] as const) {
+      const request = fixture({ lineCounts: [1, 1] })
+      const marked = request.document.body.blocks[0]!.paragraph!
+      request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'run-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: code })
+      request.pagination_settings.profile = 'unsupported'
+      delete request.pagination_settings.compatibility_mode
+      request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+      const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+      expect(paginateNativeDocxV1(request), code).toMatchObject({ ok: true, value: { status: 'refused' } })
+      const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+      if (code === 'FOREIGN_RUN_PROPERTY') {
+        expect(approximate.layout.status, code).toBe('refused')
+        continue
+      }
+      expect(approximate.layout.status, code).toBe('paginated')
+      expect(approximate.layout.pages.flatMap(page => page.lines.map(line => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+    }
+  })
+
   it('paints a run Word hides only in its Web Layout view', () => {
     // w:webHidden hides a run in Word's Web Layout view. Paginated layout draws
     // it like any other run, so the fact is recorded and the paragraph paints;

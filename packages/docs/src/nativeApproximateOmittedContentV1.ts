@@ -29,6 +29,18 @@ export const DOCX_APPROXIMATE_OMITTED_CONTENT_CODES = new Set([
   // tier does not, so it is a dropped visible mark rather than an approximated
   // property of painted content.
   'COLUMN_SEPARATOR_UNSUPPORTED',
+  // A Word 2010 run-typography extension the approximate tier paints without:
+  // the requested stylistic set, ligature mode, digit form or digit spacing
+  // selects glyphs and advances the painted run does not carry, and w14:props3d
+  // is extrusion, bevel and contour ink Word draws (it rasterises such a run
+  // into an image in its own PDF export) and this tier does not. Each is a
+  // visible mark absent from the painted page, not an approximated property of
+  // it, so it is named here and the preview reports content_status 'partial'.
+  'STYLISTIC_SET_UNAPPLIED',
+  'LIGATURE_MODE_UNAPPLIED',
+  'NUMBER_FORM_UNAPPLIED',
+  'NUMBER_SPACING_UNAPPLIED',
+  'TEXT_EFFECT_3D_UNAPPLIED',
 ])
 
 /** Shaping diagnostics approximate preview ignores; strict paint refuses them. */
@@ -98,6 +110,9 @@ export function nativeDocxOmittedContentCategoryV1(code: string, path: string | 
   if (code === 'reference-layout-unsupported') return 'reference'
   if (code === 'UNMODELED_BODY_BLOCK') return 'block'
   if (code === 'UNMODELED_RUN_CONTENT' || code === 'UNMODELED_PARAGRAPH_CONTENT' || code === DOCX_APPROXIMATE_UNSHAPED_PARAGRAPH_CODE || code.startsWith('unsupported-numbering-') || code.endsWith('-unresolved') || code.endsWith('-unsupported')) return 'text'
+  // A run-typography feature the painted run does not carry is a deviation in
+  // painted text, so it is disclosed under the text category next to it.
+  if (code === 'STYLISTIC_SET_UNAPPLIED' || code === 'LIGATURE_MODE_UNAPPLIED' || code === 'NUMBER_FORM_UNAPPLIED' || code === 'NUMBER_SPACING_UNAPPLIED' || code === 'TEXT_EFFECT_3D_UNAPPLIED') return 'text'
   return 'other'
 }
 

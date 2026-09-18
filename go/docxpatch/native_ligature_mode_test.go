@@ -15,17 +15,23 @@ func TestNativeLigatureModeDocDefaults(t *testing.T) {
 		name     string
 		markup   string
 		accepted bool
+		// A named ST_Ligatures value this tier does not apply is recorded as
+		// LIGATURE_MODE_UNAPPLIED, not as foreign markup, so the approximate
+		// tier can paint the run and disclose the unapplied mode. Only markup
+		// outside that closed reading stays FOREIGN_RUN_PROPERTY.
+		foreign bool
 	}{
-		{"standard contextual", `<w14:ligatures w14:val="standardContextual"/>`, true},
-		{"none", `<w14:ligatures w14:val="none"/>`, false},
-		{"all", `<w14:ligatures w14:val="all"/>`, false},
-		{"historical", `<w14:ligatures w14:val="historical"/>`, false},
-		{"discretional", `<w14:ligatures w14:val="standardDiscretional"/>`, false},
-		{"absent value", `<w14:ligatures/>`, false},
-		{"foreign value attribute", `<w14:ligatures w:val="standardContextual"/>`, false},
-		{"extra attribute", `<w14:ligatures w14:val="standardContextual" w14:extra="1"/>`, false},
-		{"nested markup", `<w14:ligatures w14:val="standardContextual"><w14:x/></w14:ligatures>`, false},
-		{"duplicate element", `<w14:ligatures w14:val="standardContextual"/><w14:ligatures w14:val="standardContextual"/>`, false},
+		{"standard contextual", `<w14:ligatures w14:val="standardContextual"/>`, true, false},
+		{"none", `<w14:ligatures w14:val="none"/>`, false, false},
+		{"all", `<w14:ligatures w14:val="all"/>`, false, false},
+		{"historical", `<w14:ligatures w14:val="historical"/>`, false, false},
+		{"discretional", `<w14:ligatures w14:val="standardDiscretional"/>`, false, false},
+		{"absent value", `<w14:ligatures/>`, false, true},
+		{"unknown value", `<w14:ligatures w14:val="ligaturesEverywhere"/>`, false, true},
+		{"foreign value attribute", `<w14:ligatures w:val="standardContextual"/>`, false, true},
+		{"extra attribute", `<w14:ligatures w14:val="standardContextual" w14:extra="1"/>`, false, true},
+		{"nested markup", `<w14:ligatures w14:val="standardContextual"><w14:x/></w14:ligatures>`, false, true},
+		{"duplicate element", `<w14:ligatures w14:val="standardContextual"/><w14:ligatures w14:val="standardContextual"/>`, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			styles := `<w:styles xmlns:w="` + wordMLTransitional + `"` + nativeLigatureTestNSDecl + `><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/>` + tc.markup + `</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`
@@ -36,8 +42,11 @@ func TestNativeLigatureModeDocDefaults(t *testing.T) {
 			if got := hasResolutionDiagnostic(resolved, "LIGATURE_MODE_MATCHES_SHAPER"); got != tc.accepted {
 				t.Fatalf("LIGATURE_MODE_MATCHES_SHAPER=%v, want %v: %#v", got, tc.accepted, resolved.Diagnostics)
 			}
-			if got := hasResolutionDiagnostic(resolved, "FOREIGN_RUN_PROPERTY"); got == tc.accepted {
-				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, !tc.accepted, resolved.Diagnostics)
+			if got := hasResolutionDiagnostic(resolved, "FOREIGN_RUN_PROPERTY"); got != tc.foreign {
+				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, tc.foreign, resolved.Diagnostics)
+			}
+			if got := hasResolutionDiagnostic(resolved, "LIGATURE_MODE_UNAPPLIED"); got != (!tc.accepted && !tc.foreign) {
+				t.Fatalf("LIGATURE_MODE_UNAPPLIED=%v, want %v: %#v", got, !tc.accepted && !tc.foreign, resolved.Diagnostics)
 			}
 			for _, diagnostic := range resolved.Diagnostics {
 				if diagnostic.Code != "LIGATURE_MODE_MATCHES_SHAPER" {
@@ -68,10 +77,16 @@ func TestNativeLigatureModeDirectRunProperties(t *testing.T) {
 			if got := hasUnsupportedCode(doc, "LIGATURE_MODE_MATCHES_SHAPER"); got != tc.accepted {
 				t.Fatalf("LIGATURE_MODE_MATCHES_SHAPER=%v, want %v: %#v", got, tc.accepted, doc.Unsupported)
 			}
-			for _, code := range []string{"FOREIGN_RUN_PROPERTY", "PARTIAL_RUN_PROPERTIES"} {
-				if got := hasUnsupportedCode(doc, code); got == tc.accepted {
-					t.Fatalf("%s=%v, want %v: %#v", code, got, !tc.accepted, doc.Unsupported)
-				}
+			// A named mode this tier does not apply is its own code now, so the
+			// run stays unsafe (PARTIAL_RUN_PROPERTIES) but is never foreign.
+			if hasUnsupportedCode(doc, "FOREIGN_RUN_PROPERTY") {
+				t.Fatalf("a named ST_Ligatures value must not be foreign markup: %#v", doc.Unsupported)
+			}
+			if got := hasUnsupportedCode(doc, "LIGATURE_MODE_UNAPPLIED"); got == tc.accepted {
+				t.Fatalf("LIGATURE_MODE_UNAPPLIED=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
+			}
+			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
+				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
 			}
 		})
 	}
