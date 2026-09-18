@@ -1074,16 +1074,27 @@ async function compileDecodedPagePaint(request: NativeDocxPagePaintRequestV1, ou
       selectedParagraphIDs.set(coveragePrefix + paragraph.paragraph_id, { paragraphID: paragraph.paragraph_id, prefix: coveragePrefix, ordinal: page.ordinal })
       if (paragraph.alignment === 'distribute') return { ok: true, value: refusal(provenance, 'unsupported-source', paragraph.paragraph_id, 'Distributed character expansion is outside page-paint v1') }
       const naturalHeight = line.ascent_millipoints - line.descent_millipoints + line.line_gap_millipoints
-      // Current-layout approximation accepts an expanded line box (see the
-      // seating rule below); it does not claim Word leading distribution or
-      // permit clipping/compressed-line semantics.
-      if (line.line_height_millipoints !== naturalHeight && !(approximateLegacySettings && line.line_height_millipoints >= naturalHeight)) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline; only explicit current-layout approximation supports expanded line boxes') }
       // A w:lineRule of "exact"/"atLeast" fixes the line box height: Word puts
       // the surplus leading above the text and seats the descent on the box
       // bottom, so the baseline is bottom-anchored, not top-anchored. Automatic
       // (multiple) line spacing keeps the top anchor. Approximate lane only.
       const lineRule = approximateLegacySettings ? resolvedParagraphs.get(paragraph.paragraph_id)?.properties?.line_rule : undefined
-      const bottomAnchored = (lineRule === 'exact' || lineRule === 'atLeast') && line.line_height_millipoints > naturalHeight
+      // Current-layout approximation accepts an expanded line box, and a box a
+      // FIXED w:lineRule compressed below the shaped line's natural height. A
+      // compressed box is Word's own result for an exact rule - it seats the
+      // descent on the box bottom and lets the ascent overflow upward into the
+      // line above, which is why Word's own export of tdf125469_singleSpacing.docx
+      // puts consecutive baselines 12.00 pt apart at a 36 pt font whose natural
+      // box is 43.95 pt, with the glyphs overlapping. The same seating rule below
+      // produces that, so the compression is applied rather than approximated.
+      // Only "exact" can compress: the shaper resolves "atLeast" to the greater
+      // of the authored measurement and the natural height, and an AUTOMATIC
+      // (multiple) rule below one line keeps refusing on both tiers, because
+      // its seating is top-anchored here and this tier has no reference for how
+      // Word distributes a sub-single multiple - painting one would be a guess.
+      const fixedRule = lineRule === 'exact' || lineRule === 'atLeast'
+      if (line.line_height_millipoints !== naturalHeight && !(approximateLegacySettings && (line.line_height_millipoints > naturalHeight || lineRule === 'exact'))) return { ok: true, value: refusal(provenance, 'unsupported-source', line.id, 'Page-paint v1 requires natural shaped line height for an exact baseline; only explicit current-layout approximation supports expanded line boxes, and a compressed one only under an exact line rule') }
+      const bottomAnchored = fixedRule && line.line_height_millipoints !== naturalHeight
       if (line.hard_break_after && !coveredLineIDs.has(coveragePrefix + line.id)) sourceHardBreakCounts.set(coveragePrefix + line.hard_break_after.source_run_id, (sourceHardBreakCounts.get(coveragePrefix + line.hard_break_after.source_run_id) ?? 0) + 1)
       coveredLineIDs.add(coveragePrefix + line.id)
       let fragmentX = placed.x_millipoints
