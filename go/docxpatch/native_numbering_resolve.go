@@ -518,13 +518,33 @@ func (resolver *nativeLayoutResolver) resolveNumberingGeometry(numbering *Native
 			start = properties.indentLeft
 		}
 	}
-	if start == nil || properties.hanging == nil || *properties.hanging <= 0 || *start < *properties.hanging {
-		resolver.addDiagnostic("UNSUPPORTED_NUMBERING_GEOMETRY", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "Exact list-marker layout requires a nonnegative start indent and positive hanging indent")
+	// A hanging indent reserves a bounded label region [start-hanging, start] and
+	// the body text begins at the text margin. Without one the region is not
+	// empty, it is unbounded: Word lays the marker on the first-line origin
+	// (start+firstLine, both zero when neither is stated) and the body text
+	// follows the shaped marker and its suffix, so the region collapses onto that
+	// origin and the text start is measured downstream instead of reserved here.
+	// A zero hanging indent is legal and simply means marker and text share an x.
+	// Word's own PDF export of listWithLgl.docx states the geometry exactly:
+	// MediaBox [0 0 612 792], and with w:ind w:left="0" w:firstLine="0" the ilvl=0
+	// marker origin is x = 72.0 pt, exactly the 1 inch left margin, while
+	// w:firstLine="720" puts the ilvl=1 marker at x = 108.0 pt, exactly 36 pt in.
+	hanging, firstLine := int64(0), int64(0)
+	if properties.hanging != nil {
+		hanging = *properties.hanging
+	} else if properties.firstLine != nil {
+		firstLine = *properties.firstLine
+	}
+	if start == nil || *start < hanging || *start-hanging+firstLine > nativeMaxTwipsForMilliPoints {
+		resolver.addDiagnostic("UNSUPPORTED_NUMBERING_GEOMETRY", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "Exact list-marker layout requires a start indent that is nonnegative, at least the hanging indent, and a bounded first-line origin")
 		return false
 	}
-	numbering.LabelStartTwips = *start - *properties.hanging
+	numbering.LabelStartTwips = *start - hanging + firstLine
 	numbering.LabelEndTwips = *start
 	numbering.TextStartTwips = *start
+	if hanging == 0 {
+		numbering.LabelEndTwips, numbering.TextStartTwips = numbering.LabelStartTwips, numbering.LabelStartTwips
+	}
 	numbering.DefinitionSHA256 = nativeResolvedNumberingDefinitionSHA256(numbering, resolver.numberingSource.PartSHA256)
 	if numbering.Format == "lowerLetter" || numbering.Format == "upperLetter" {
 		language := "und"

@@ -52,12 +52,14 @@ func nativeAbsentFontFamilies(data []byte) ([]NativeDocxAbsentFontFamilyV1, erro
 	add := func(kind, id string, anchor NativeSourceAnchorV1) {
 		facts = append(facts, NativeDocxAbsentFontFamilyV1{ScopeKind: kind, ScopeID: id, PartName: anchor.PartName, Path: anchor.Path, PackageSHA256: r.doc.Source.PackageSHA256})
 	}
-	// A numbered paragraph also needs a marker face this evidence does not cover,
-	// so it is skipped whole: leaving it unshaped keeps its disclosure honest
-	// rather than painting its text without its marker.
+	// A numbered paragraph also needs a marker face, and the whole-package gate
+	// above already proves the marker has none either: absentPackageFontSelection
+	// refuses any package whose resolved list marker carries a family. So the
+	// marker is the same omission as the paragraph mark beside it and gets its
+	// own scope, rather than the paragraph being skipped whole and left unshaped.
 	consider := func(p *NativeParagraphV1) {
 		resolved, ok := paragraphs[p.ID]
-		if !ok || resolved.Numbering != nil {
+		if !ok {
 			return
 		}
 		node := r.nodeForAnchor(p.Anchor)
@@ -65,6 +67,9 @@ func nativeAbsentFontFamilies(data []byte) ([]NativeDocxAbsentFontFamilyV1, erro
 			return
 		}
 		add("paragraph-mark", p.ID, p.Anchor)
+		if resolved.Numbering != nil {
+			add("numbering-marker", p.ID, p.Anchor)
+		}
 		for _, run := range p.Runs {
 			if _, ok := runs[run.ID]; !ok {
 				continue

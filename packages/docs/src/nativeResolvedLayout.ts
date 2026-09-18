@@ -399,11 +399,14 @@ function validateNumbering(value: unknown, path: string, issues: NativeDocxValid
   const resolvedScalars = resolvedText === null ? undefined : unicodeScalarLength(resolvedText)
   if (resolvedScalars !== undefined && resolvedScalars > 31) add(issues, 'LIMIT_EXCEEDED', `${path}/resolved_text`, 'must contain at most 31 Unicode scalar values')
   const labelStart = integer(entry.label_start_twips, `${path}/label_start_twips`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
-  const labelEnd = integer(entry.label_end_twips, `${path}/label_end_twips`, issues, 1, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
-  const textStart = integer(entry.text_start_twips, `${path}/text_start_twips`, issues, 1, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
+  // A label region without a hanging indent collapses onto the first-line
+  // origin, so label_end may equal label_start and both may be zero. A region
+  // that ends before it starts is still not a region.
+  const labelEnd = integer(entry.label_end_twips, `${path}/label_end_twips`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
+  const textStart = integer(entry.text_start_twips, `${path}/text_start_twips`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
   integer(entry.numbering_tab_twips, `${path}/numbering_tab_twips`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS)
-  if (labelStart !== undefined && labelEnd !== undefined && labelEnd <= labelStart) add(issues, 'INVALID_VALUE', `${path}/label_end_twips`, 'must follow label_start_twips')
-  if (labelEnd !== undefined && textStart !== undefined && textStart !== labelEnd) add(issues, 'INVALID_VALUE', `${path}/text_start_twips`, 'must equal the hanging-indent label end')
+  if (labelStart !== undefined && labelEnd !== undefined && labelEnd < labelStart) add(issues, 'INVALID_VALUE', `${path}/label_end_twips`, 'must not precede label_start_twips')
+  if (labelEnd !== undefined && textStart !== undefined && textStart !== labelEnd) add(issues, 'INVALID_VALUE', `${path}/text_start_twips`, 'must equal the label region end')
   validateRunProperties(entry.marker_properties, `${path}/marker_properties`, issues)
 }
 

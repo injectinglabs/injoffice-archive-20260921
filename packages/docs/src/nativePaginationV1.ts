@@ -903,6 +903,21 @@ function bodyScopeIDs(document: NativeDocxDocumentV1): Set<string> {
   return result
 }
 
+/** The one definition of "this section states no page geometry and Word's own
+ * default is what the extractor exposed". ECMA-376 17.6.13 and 17.6.11 make
+ * `w:pgSz` and `w:pgMar` optional children of `w:sectPr`, so a section that
+ * omits one states no override and Word lays it out on its default page box --
+ * but only an exposed geometry that is value-for-value that default proves the
+ * omission was read as an omission rather than derived from somewhere else.
+ * Every consumer that admits the absence reads it from here, so the tiers can
+ * never drift apart on which page box an empty `w:sectPr` means. */
+export function nativeDocxDefaultSectionGeometryV1(section: NativeDocxSectionV1, code: 'MISSING_PAGE_SIZE' | 'MISSING_PAGE_MARGINS'): boolean {
+  const page = section.page, margins = page.margins
+  return code === 'MISSING_PAGE_SIZE'
+    ? page.width_twips === 12_240 && page.height_twips === 15_840 && page.orientation === 'portrait'
+    : margins.top_twips === 1_440 && margins.right_twips === 1_440 && margins.bottom_twips === 1_440 && margins.left_twips === 1_440 && margins.header_twips === 720 && margins.footer_twips === 720 && margins.gutter_twips === 0
+}
+
 function refuseUnsupportedSource(context: PaginationContext): void {
   const { document, shaped_lines: shaped } = context.request
   const scopes = bodyScopeIDs(document)
@@ -975,11 +990,7 @@ function refuseUnsupportedSource(context: PaginationContext): void {
     // exemption can never let derived or partially authored geometry through.
     if ((entry.code === 'MISSING_PAGE_SIZE' || entry.code === 'MISSING_PAGE_MARGINS') && entry.capability === 'sections') {
       const section = document.sections.find((candidate) => candidate.id === entry.scope_id)
-      const page = section?.page
-      const margins = page?.margins
-      const defaultSize = page?.width_twips === 12_240 && page.height_twips === 15_840 && page.orientation === 'portrait'
-      const defaultMargins = margins?.top_twips === 1_440 && margins.right_twips === 1_440 && margins.bottom_twips === 1_440 && margins.left_twips === 1_440 && margins.header_twips === 720 && margins.footer_twips === 720 && margins.gutter_twips === 0
-      if (section && (entry.code === 'MISSING_PAGE_SIZE' ? defaultSize : defaultMargins)) {
+      if (section && nativeDocxDefaultSectionGeometryV1(section, entry.code)) {
         addDiagnostic(context, {
           code: 'source-diagnostic', severity: 'deferred', scope_id: entry.scope_id,
           source_code: entry.code, source_message: entry.message,

@@ -24,12 +24,20 @@ function twipsToMilliPoints(twips: number): number | undefined {
  * PDF export of `cjklist34/35/44.docx`, whose `w:ind w:left="480" w:hanging="480"`
  * gives a 24 pt label region that a three-glyph CJK marker (`壹拾壹.`, 39.029 pt)
  * overruns by 15 pt while Word still starts the marker at the anchor. Only a
- * marker that would start left of the text origin is still refused. */
+ * marker that would start left of the text origin is still refused.
+ *
+ * A list with no hanging indent collapses the region onto the first-line origin
+ * (`label_end === label_start === text_start`). That is not an empty region but
+ * an unbounded one, and the anchor rule is unchanged: Word draws the marker from
+ * the origin and the body text follows it. Word's PDF export of
+ * `listWithLgl.docx` pins it -- `w:ind w:left="0" w:firstLine="0"` puts the
+ * ilvl=0 marker at x = 72.0 pt, the 1 inch left margin, and `w:firstLine="720"`
+ * puts the ilvl=1 marker at x = 108.0 pt, exactly 36 pt further in. */
 export function positionNativeDocxListMarkerV1(numbering: NativeDocxResolvedNumberingV1, direction: 'ltr' | 'rtl', markerAdvanceMilliPoints: number): NativeDocxListMarkerGeometryV1 | undefined {
   const labelStart = twipsToMilliPoints(numbering.label_start_twips)
   const labelEnd = twipsToMilliPoints(numbering.label_end_twips)
   const bodyTextStart = twipsToMilliPoints(numbering.text_start_twips)
-  if (labelStart === undefined || labelEnd === undefined || bodyTextStart === undefined || !Number.isSafeInteger(markerAdvanceMilliPoints) || markerAdvanceMilliPoints <= 0 || labelStart < 0 || labelEnd <= labelStart || bodyTextStart !== labelEnd) return undefined
+  if (labelStart === undefined || labelEnd === undefined || bodyTextStart === undefined || !Number.isSafeInteger(markerAdvanceMilliPoints) || markerAdvanceMilliPoints <= 0 || labelStart < 0 || labelEnd < labelStart || bodyTextStart !== labelEnd) return undefined
   const leading = numbering.alignment === 'start' ? direction === 'ltr' : numbering.alignment === 'end' ? direction === 'rtl' : numbering.alignment === 'left'
   const trailing = numbering.alignment === 'end' ? direction === 'ltr' : numbering.alignment === 'start' ? direction === 'rtl' : numbering.alignment === 'right'
   const markerStart = leading ? labelStart : trailing ? labelStart - markerAdvanceMilliPoints : labelStart - Math.round(markerAdvanceMilliPoints / 2)
