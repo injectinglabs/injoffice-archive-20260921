@@ -17,6 +17,7 @@ import type { NativeDocxResolvedLayoutInputV1, NativeDocxResolvedTableV1 } from 
 import type { NativeDocxShapedLinesV1, NativeDocxShapedParagraphV1 } from './nativeShapingLines.js'
 import { nativeDocxCellWidthAgreesWithGridV1 } from './nativeContract.js'
 import { validNativeDocxAutomaticBorderEvidenceV1 } from './nativeAutomaticBorderEvidenceV1.js'
+import { nativeDocxUnresolvableTableStyleV1 } from './nativeRenderDiagnostics.js'
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
 import { fitNativeDocxApproximateTableGridV1, type NativeDocxApproximateTableGridPolicyV1 } from './nativeApproximateTableGridV1.js'
@@ -188,10 +189,18 @@ function diagnosticIdentity(code: string, scopeID: string, partName = '', path =
   return JSON.stringify([code, scopeID, partName, path])
 }
 
+/** A table style that blocks paint is one whose effects this tier cannot
+ * reproduce. `MISSING_TABLE_STYLE` is the opposite case: ECMA-376 17.7.2 binds
+ * a w:tblStyle to the w:style whose w:styleId it names, and a reference that
+ * names no such style therefore selects nothing. The resolver already treats it
+ * that way -- it records the absence and returns a resolved table with no
+ * borders, no cell shading and no geometry -- so there is no hidden formatting
+ * to lose, and blocking on it refused a table the source states in full. */
 function tableStyleBlocksPaint(resolved: NativeDocxResolvedLayoutInputV1, tableID: string, covered?: ReadonlySet<string>): boolean {
   return resolved.diagnostics.some((diagnostic) => {
     if (diagnostic.scope_id !== tableID) return false
-    if (diagnostic.code === 'CONDITIONAL_TABLE_STYLE_PRESERVED' || diagnostic.code === 'MISSING_TABLE_STYLE') return true
+    if (diagnostic.code === 'MISSING_TABLE_STYLE') return !nativeDocxUnresolvableTableStyleV1(diagnostic, resolved)
+    if (diagnostic.code === 'CONDITIONAL_TABLE_STYLE_PRESERVED') return true
     return diagnostic.code === 'TABLE_STYLE_EFFECTS_PRESERVED' && !covered?.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? ''))
   })
 }
