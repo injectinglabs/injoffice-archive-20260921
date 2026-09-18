@@ -175,13 +175,19 @@ func nativeDiagramLayoutThemeXML(drawingNS string) string {
 }
 
 type nativeDiagramLayoutFixtureOptions struct {
-	strict   bool
-	extraPts string
-	extraCxn string
-	layout   string
-	style    string
-	colors   string
-	dataXML  string
+	strict bool
+	// omitDrawingPart drops the diagram drawing relationship and the
+	// dsp:dataModelExt that names it, so the package stores no pre-laid-out
+	// drawing at all. That is what LibreOffice and most non-PowerPoint
+	// producers write, and what 7 of the 11 SmartArt decks in the hard-v2
+	// corpus look like.
+	omitDrawingPart bool
+	extraPts        string
+	extraCxn        string
+	layout          string
+	style           string
+	colors          string
+	dataXML         string
 }
 
 func nativeDiagramLayoutFixture(t *testing.T, options nativeDiagramLayoutFixtureOptions) []byte {
@@ -208,6 +214,14 @@ func nativeDiagramLayoutFixture(t *testing.T, options nativeDiagramLayoutFixture
 		colors = nativeDiagramLayoutColorsXML(diagramNS, drawingNS)
 	}
 	empty := `<dsp:drawing xmlns:dgm="` + diagramNS + `" xmlns:dsp="` + nsDiagramDrawing + `" xmlns:a="` + drawingNS + `"><dsp:spTree><dsp:nvGrpSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvGrpSpPr/></dsp:nvGrpSpPr><dsp:grpSpPr/></dsp:spTree></dsp:drawing>`
+	if options.omitDrawingPart {
+		data = strings.Replace(data, modelExt, "", 1)
+		return nativeDiagramFixture(t, nativeDiagramFixtureOptions{
+			strict: options.strict, omitDrawingRelationship: true, omitDataModelExt: true,
+			themeXML: nativeDiagramLayoutThemeXML(drawingNS),
+			dataXML:  data, layoutXML: layout, styleXML: style, colorsXML: colors,
+		})
+	}
 	return nativeDiagramFixture(t, nativeDiagramFixtureOptions{
 		strict: options.strict, drawingXML: empty, themeXML: nativeDiagramLayoutThemeXML(drawingNS),
 		dataXML: data, layoutXML: layout, styleXML: style, colorsXML: colors,
@@ -627,5 +641,52 @@ func TestExtractNativePPTXDiagramLayoutHangingLeafChildrenDeclareTheTLDeviation(
 	}
 	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
 		t.Fatalf("invalid deck: %#v", issues)
+	}
+}
+
+// A package that never stored a drawing fallback is in the same position as
+// one that stored an empty drawing: there is nothing source-backed to paint
+// verbatim. Before this routing existed the approximate tier refused the whole
+// frame in the first case and laid it out in the second, so a deck saved by
+// anything but PowerPoint painted a blank slide.
+func TestExtractNativePPTXDiagramLayoutRunsWithNoDrawingPart(t *testing.T) {
+	t.Parallel()
+	for _, strict := range []bool{false, true} {
+		strict := strict
+		t.Run(map[bool]string{false: "transitional", true: "strict"}[strict], func(t *testing.T) {
+			t.Parallel()
+			fixture := nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{strict: strict, omitDrawingPart: true})
+			deck, err := ExtractNativePPTX(fixture, nativeDiagramLayoutApproximateOptions())
+			if err != nil {
+				t.Fatalf("extract diagram without a drawing part: %v", err)
+			}
+			group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+			if group.Compatibility.Status != NativeCompatibilityStatusPreserveOnly || len(group.Children) != 8 {
+				t.Fatalf("diagram without a drawing part was not laid out: status=%v children=%d codes=%s",
+					group.Compatibility.Status, len(group.Children), nativeDiagramLayoutCodes(group))
+			}
+			if !strings.Contains(nativeDiagramLayoutCodes(group), nativeDiagramLayoutPreviewCode) {
+				t.Fatalf("laid-out diagram is not labeled as computed layout: %s", nativeDiagramLayoutCodes(group))
+			}
+
+			// The exact tier still refuses: nothing here is source-backed.
+			exact, err := ExtractNativePPTX(fixture, nativeTestExtractOptions())
+			if err != nil {
+				t.Fatalf("extract diagram without a drawing part on the exact tier: %v", err)
+			}
+			slide := exact.Slides[0]
+			if slide.Compatibility.Status != NativeCompatibilityStatusRefused {
+				t.Fatalf("exact tier did not refuse a diagram with no drawing part: %v", slide.Compatibility.Status)
+			}
+			refused := false
+			for _, diagnostic := range slide.Compatibility.Diagnostics {
+				if diagnostic.Code == "pptx.diagram-drawing-unavailable" {
+					refused = true
+				}
+			}
+			if !refused {
+				t.Fatalf("exact tier lost the pptx.diagram-drawing-unavailable refusal")
+			}
+		})
 	}
 }
