@@ -194,9 +194,19 @@ export interface NativeDocxLineFragmentV1 {
   glyphs: NativeDocxPositionedGlyphV1[]
 }
 
+/**
+ * A shaped hard break ends its line inside a paragraph. `line-break` is Word's
+ * `w:br` with no type and the literal U+000A/U+000D the extractor keeps in run
+ * text. A `page-break` or `column-break` that follows shaped content in the same
+ * paragraph is the same line boundary plus a flow control: the shaper can prove
+ * where the line ends, so it marks the break here instead of deferring it, and
+ * pagination moves what follows to the next page or column.
+ */
+export type NativeDocxHardBreakControlV1 = 'line-break' | 'page-break' | 'column-break'
+
 export interface NativeDocxHardBreakV1 {
   source_run_id: string
-  control: 'line-break'
+  control: NativeDocxHardBreakControlV1
 }
 
 export interface NativeDocxShapedLineV1 {
@@ -337,6 +347,7 @@ interface NativeShapingContext {
   activeParagraphFailed: boolean
   activeAvailableWidthMilliPoints?: number
   numberingFailed: boolean
+  shapedFlowBreakRunIDs: ReadonlySet<string>
 }
 
 interface NativeProviderSnapshot {
@@ -388,7 +399,7 @@ interface FragmentAtom {
   glyphs: NativeDocxPositionedGlyphV1[]
 }
 
-type ParagraphEvent = { kind: 'atom'; atom: FragmentAtom } | { kind: 'hard-break'; runID: string }
+type ParagraphEvent = { kind: 'atom'; atom: FragmentAtom } | { kind: 'hard-break'; runID: string; control: NativeDocxHardBreakControlV1 }
 
 function validationIssue(code: NativeDocxIssueCode, path: string, message: string): NativeDocxValidationIssue {
   return { code, path, message }
@@ -1478,6 +1489,33 @@ function splitHardBreaks(text: string): Array<{ text?: string; start: number; en
   return result
 }
 
+/**
+ * The `w:br` flow breaks the shaper itself can place. A page or column break
+ * that follows shaped content in its own top-level body paragraph ends the line
+ * that content is on, so the break's position is proven by the source and the
+ * line carries it as `hard_break_after`. Every other flow break stays deferred:
+ * a break that opens its paragraph is the whole-paragraph move
+ * `bodyFlowBreaks` already models in pagination, and a break inside a table
+ * cell, a header, a footer or a note has no modeled story-local flow.
+ */
+function shapedFlowBreakRunIDs(document: NativeDocxDocumentV1): ReadonlySet<string> {
+  const ids = new Set<string>()
+  for (const block of document.body.blocks) {
+    const runs = block.kind === 'paragraph' ? block.paragraph?.runs : undefined
+    if (!runs) continue
+    const flow = (control: string | undefined): boolean => control === 'page-break' || control === 'column-break'
+    // A paragraph opened by a flow break is `bodyFlowBreaks`' whole-paragraph
+    // move unless a second flow break makes that position ambiguous, and both
+    // models must never claim the same run.
+    const leadingModelled = flow(runs[0]?.control) && !runs.some((run, index) => index > 0 && flow(run.control))
+    for (const [index, run] of runs.entries()) {
+      if (!flow(run.control) || (index === 0 && leadingModelled)) continue
+      ids.add(run.id)
+    }
+  }
+  return ids
+}
+
 function reportBlockingDiagnostics(context: NativeShapingContext, diagnosticScopeID: string, outputScopeID: string, sourceID?: string): boolean {
   const diagnostics = context.blockingDiagnostics.get(diagnosticScopeID) ?? []
   for (const diagnostic of diagnostics) addDiagnostic(context, {
@@ -1543,7 +1581,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
     return events
   }
   if (run.kind === 'control') {
-    if (run.control === 'line-break') return [{ kind: 'hard-break', runID: run.id }]
+    if (run.control === 'line-break') return [{ kind: 'hard-break', runID: run.id, control: 'line-break' }]
     const level = plan.paragraph.levels[plan.runStarts.get(run.id) ?? -1] ?? plan.paragraph.baseLevel
     const direction = (level & 1) === 1 ? 'rtl' : 'ltr'
     if (run.control === 'tab') return reserveVirtualAtom(context, paragraphID, run.id) ? [{ kind: 'atom', atom: tabAtom(run.id, 'run', direction, level, resolved.properties.language ?? 'und') }] : []
@@ -1551,6 +1589,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
       addDiagnostic(context, { code: 'soft-hyphen-deferred', severity: 'deferred', scope_id: paragraphID, source_id: run.id, message: 'Conditional soft-hyphen glyph insertion is deferred; the source control remains a zero-width break opportunity' })
       return reserveVirtualAtom(context, paragraphID, run.id) ? [{ kind: 'atom', atom: zeroWidthBreakAtom(run.id, direction, level, resolved.properties.language ?? 'und') }] : []
     }
+    if ((run.control === 'page-break' || run.control === 'column-break') && context.shapedFlowBreakRunIDs.has(run.id)) return [{ kind: 'hard-break', runID: run.id, control: run.control }]
     addDiagnostic(context, { code: 'page-control-deferred', severity: 'deferred', scope_id: paragraphID, source_id: run.id, message: `${run.control} is a pagination control and does not participate in line shaping` })
     return []
   }
@@ -1559,7 +1598,7 @@ async function shapeAuthoredRun(context: NativeShapingContext, paragraphID: stri
   for (const chunk of splitHardBreaks(run.text)) {
     if (context.activeParagraphFailed || context.resourceExceeded) break
     if (chunk.hardBreak) {
-      events.push({ kind: 'hard-break', runID: run.id })
+      events.push({ kind: 'hard-break', runID: run.id, control: 'line-break' })
       continue
     }
     const paragraphOffset = (plan.runStarts.get(run.id) ?? 0) + chunk.start
@@ -1750,7 +1789,7 @@ function alignmentOffset(alignment: NativeDocxShapedParagraphV1['alignment'], di
   return direction === 'ltr' ? remaining : 0
 }
 
-function materializeLine(context: NativeShapingContext, paragraphID: string, ordinal: number, atoms: FragmentAtom[], available: number, startOffset: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreakRunID?: string, softWrapped = false): NativeDocxShapedLineV1 | null {
+function materializeLine(context: NativeShapingContext, paragraphID: string, ordinal: number, atoms: FragmentAtom[], available: number, startOffset: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreak?: NativeDocxHardBreakV1, softWrapped = false): NativeDocxShapedLineV1 | null {
   let naturalAdvance = 0
   if (context.fragmentCount + atoms.length > DOCX_SHAPED_LINES_LIMITS.maxFragments) {
     context.resourceExceeded = true
@@ -1839,7 +1878,7 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
     justified: shouldJustify,
     logical_to_visual: [...order.value.logicalToVisual],
     fragments,
-    ...(hardBreakRunID ? { hard_break_after: { source_run_id: hardBreakRunID, control: 'line-break' as const } } : {}),
+    ...(hardBreak ? { hard_break_after: { ...hardBreak } } : {}),
   }
 }
 
@@ -1857,7 +1896,7 @@ function applyLineExclusionEnd(context: NativeShapingContext, paragraphID: strin
   if (end !== undefined) line.exclusion_end_millipoints = end
 }
 
-function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atoms: FragmentAtom[], lines: NativeDocxShapedLineV1[], baseWidth: number, start: number, end: number, firstDelta: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreakRunID?: string, firstLineStart?: number): void {
+function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atoms: FragmentAtom[], lines: NativeDocxShapedLineV1[], baseWidth: number, start: number, end: number, firstDelta: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreak?: NativeDocxHardBreakV1, firstLineStart?: number): void {
   if (context.lineCount >= DOCX_SHAPED_LINES_LIMITS.maxLines || context.resourceExceeded) {
     context.resourceExceeded = true
     addDiagnostic(context, { code: 'resource-limit', severity: 'unsupported', scope_id: paragraphID, message: `Shaped lines exceed ${DOCX_SHAPED_LINES_LIMITS.maxLines}` })
@@ -1873,7 +1912,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
       addDiagnostic(context, { code: 'cluster-overflow', severity: 'unsupported', scope_id: paragraphID, message: 'Source exclusion and paragraph indents leave no positive inline width' })
       return
     }
-    const line = materializeLine(context, paragraphID, lines.length, [], Math.max(0, width), startOffset, alignment, direction, paragraphMarkMetrics, hardBreakRunID)
+    const line = materializeLine(context, paragraphID, lines.length, [], Math.max(0, width), startOffset, alignment, direction, paragraphMarkMetrics, hardBreak)
     if (line) applyLineExclusionEnd(context, paragraphID, lines.length, line)
     if (line && startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
     if (line) lines.push(line)
@@ -1895,7 +1934,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
     }
     const lineEnd = chooseLineEnd(atoms, offset, width, context.request.tab_interval_millipoints)
     const lineAtoms = atoms.slice(offset, lineEnd)
-    const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreakRunID : undefined, lineEnd < atoms.length)
+    const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreak : undefined, lineEnd < atoms.length)
     if (!line) return
     applyLineExclusionEnd(context, paragraphID, lines.length, line)
     if (startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
@@ -1987,10 +2026,18 @@ async function shapeParagraph(context: NativeShapingContext, story: NativeDocxSt
       group.push(event.atom)
       continue
     }
-    wrapEventGroup(context, paragraph.id, group, lines, context.activeAvailableWidthMilliPoints ?? context.request.available_width_millipoints, indents.start, indents.end, indents.firstDelta, alignment, direction, paragraphMarkMetrics, event.runID, marker.firstLineStart)
+    wrapEventGroup(context, paragraph.id, group, lines, context.activeAvailableWidthMilliPoints ?? context.request.available_width_millipoints, indents.start, indents.end, indents.firstDelta, alignment, direction, paragraphMarkMetrics, { source_run_id: event.runID, control: event.control }, marker.firstLineStart)
     group = []
   }
-  wrapEventGroup(context, paragraph.id, group, lines, context.activeAvailableWidthMilliPoints ?? context.request.available_width_millipoints, indents.start, indents.end, indents.firstDelta, alignment, direction, paragraphMarkMetrics, undefined, marker.firstLineStart)
+  // A trailing line break still opens the empty line Word shows after it, but a
+  // flow break moves the rest of the paragraph to the next page or column, and
+  // Word puts nothing else in this paragraph there: `columnbreak.docx` carries
+  // its own `w:lastRenderedPageBreak` immediately before the paragraph that
+  // follows a break-only paragraph, so Word painted that paragraph mark on the
+  // line the break ended and opened no line of its own after it.
+  const lastEvent = events.at(-1)
+  const trailingFlowBreak = group.length === 0 && lines.length > 0 && lastEvent?.kind === 'hard-break' && lastEvent.control !== 'line-break'
+  if (!trailingFlowBreak) wrapEventGroup(context, paragraph.id, group, lines, context.activeAvailableWidthMilliPoints ?? context.request.available_width_millipoints, indents.start, indents.end, indents.firstDelta, alignment, direction, paragraphMarkMetrics, undefined, marker.firstLineStart)
   finalizeLineHeights(context, paragraph.id, lines, resolved.properties)
   if (context.activeParagraphFailed || context.resourceExceeded) return refuse()
   const before = twipsToMilliPoints(resolved.properties.spacing_before_twips ?? 0)
@@ -2135,6 +2182,7 @@ async function shapeNativeDocxLinesCoreV1(value: unknown, providers: NativeDocxS
     providerFontResources: new Map(),
     activeParagraphFailed: false,
     numberingFailed: false,
+    shapedFlowBreakRunIDs: shapedFlowBreakRunIDs(request.document),
   }
   for (const noteIssue of qualifiedNotes.issues) addDiagnostic(context, { code: 'reference-layout-unsupported', severity: 'unsupported', scope_id: noteIssue.scope, ...(noteIssue.source ? { source_id: noteIssue.source } : {}), message: noteIssue.message })
   if (qualifiedNotes.issues.length > 0) context.documentBlocked = true

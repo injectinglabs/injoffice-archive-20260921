@@ -1516,6 +1516,47 @@ describe('shapeNativeDocxLinesV1', () => {
     }
   })
 
+  /**
+   * `columnbreak.docx` puts a `w:br w:type="column"` in the MIDDLE of a body
+   * paragraph. The shaper knows exactly which line that break ends, so it ends
+   * the line and marks it instead of deferring the control, and pagination can
+   * split there. Nothing follows the break inside a break-only paragraph, and
+   * Word's own `w:lastRenderedPageBreak` in that file sits before the NEXT
+   * paragraph, so a trailing flow break opens no further line -- unlike a
+   * trailing line break, which does.
+   */
+  it('ends a line at a mid-paragraph flow break and defers one that opens its paragraph', async () => {
+    for (const control of ['page-break', 'column-break'] as const) {
+      const document = nativeDocument()
+      document.body.blocks[0]!.paragraph!.runs[1]!.control = control
+      const result = await shapeNativeDocxLinesV1(request(document), fakeProviders([]))
+      expect(result.ok, control).toBe(true)
+      if (!result.ok) return
+      const paragraph = result.value.paragraphs[0]!
+      expect(paragraph.lines.map((line) => line.fragments.map((fragment) => fragment.text).join(''))).toEqual(['ab ', 'cd', 'ef'])
+      expect(paragraph.lines.map((line) => line.hard_break_after)).toEqual([undefined, { source_run_id: 'run:intro:break', control }, undefined])
+      expect(result.value.diagnostics.some((entry) => entry.code === 'page-control-deferred' && entry.source_id === 'run:intro:break')).toBe(false)
+
+      const trailing = nativeDocument()
+      const trailingParagraph = trailing.body.blocks[0]!.paragraph!
+      trailingParagraph.runs[1]!.control = control
+      trailingParagraph.runs = trailingParagraph.runs.slice(0, 2)
+      const trailingResult = await shapeNativeDocxLinesV1(request(trailing), fakeProviders([]))
+      expect(trailingResult.ok, control).toBe(true)
+      if (!trailingResult.ok) return
+      expect(trailingResult.value.paragraphs[0]!.lines.map((line) => line.hard_break_after?.control)).toEqual([undefined, control])
+
+      const leading = nativeDocument()
+      const leadingParagraph = leading.body.blocks[0]!.paragraph!
+      leadingParagraph.runs = [{ ...leadingParagraph.runs[1]!, control }, leadingParagraph.runs[2]!]
+      const leadingResult = await shapeNativeDocxLinesV1(request(leading), fakeProviders([]))
+      expect(leadingResult.ok, control).toBe(true)
+      if (!leadingResult.ok) return
+      expect(leadingResult.value.paragraphs[0]!.lines.map((line) => line.hard_break_after)).toEqual([undefined])
+      expect(leadingResult.value.diagnostics.some((entry) => entry.code === 'page-control-deferred' && entry.source_id === 'run:intro:break')).toBe(true)
+    }
+  })
+
   it('emits pagination-policy diagnostics without attempting pagination', async () => {
     const document = nativeDocument()
     makeTextOnly(document, 'policy')

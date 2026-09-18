@@ -127,6 +127,19 @@ function appendFlowBreak(request: any, blockIndex: number, control: 'page-break'
   request.resolved_layout.runs.push({ run_id: id, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
 }
 
+/**
+ * Appends a w:br of the given kind AND marks the shaped line it ends, which is
+ * what the shaper emits for a break that follows shaped content in the same
+ * paragraph. `appendFlowBreak` alone is the unmarked case pagination refuses.
+ */
+function shapedFlowBreak(request: any, blockIndex: number, lineIndex: number, control: 'page-break' | 'column-break'): void {
+  appendFlowBreak(request, blockIndex, control)
+  const paragraph = request.document.body.blocks[blockIndex].paragraph
+  const runID = paragraph.runs[paragraph.runs.length - 1].id
+  const shaped = request.shaped_lines.paragraphs.find((entry: any) => entry.paragraph_id === paragraph.id)
+  shaped.lines[lineIndex].hard_break_after = { source_run_id: runID, control }
+}
+
 interface FixtureOptions {
   lineCounts?: number[]
   lineHeight?: number
@@ -1597,15 +1610,96 @@ describe('native DOCX pagination v1', () => {
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'keep-chain-conflict' })]))
   })
 
-  it('refuses a leading flow break inside a balanced multi-column group', () => {
+  /**
+   * `office-hard-v2/pdf/columnbreak.pdf` is the oracle. Its whole body is one
+   * two-column section holding a page break and then a column break, and Word
+   * paints BOTH lines of the first fragment in column 1 of page 1, leaving
+   * column 2 of that page empty. Balancing that fragment would have put one
+   * line in each column, so a fragment an explicit break ends is filled. Only
+   * the fragment the section itself ends is balanced, which the same fixture
+   * without a break still shows.
+   */
+  it('fills a multi-column fragment an explicit break ends and balances only the terminal fragment', () => {
+    const balancedOnly = fixture({ lineCounts: [1, 1, 1, 1], bodyHeight: 40_000 })
+    setEqualColumns(balancedOnly, 2)
+    expect(paginated(balancedOnly).pages.map((page) => page.lines.map((line) => line.column_ordinal))).toEqual([[0, 0, 1, 1]])
+
+    const request = fixture({ lineCounts: [1, 1, 1, 1], bodyHeight: 40_000 })
+    setEqualColumns(request, 2)
+    leadFlowBreak(request.document.body.blocks[2]!.paragraph, 'page-break')
+    const output = paginated(request)
+    expect(output.pages).toHaveLength(2)
+    expect(output.pages.map((page) => page.lines.map((line) => [line.paragraph_id, line.column_ordinal]))).toEqual([
+      [['paragraph:1', 0], ['paragraph:2', 0]],
+      [['paragraph:3', 0], ['paragraph:4', 1]],
+    ])
+
+    const columnBreak = fixture({ lineCounts: [1, 1, 1, 1], bodyHeight: 40_000 })
+    setEqualColumns(columnBreak, 2)
+    leadFlowBreak(columnBreak.document.body.blocks[2]!.paragraph, 'column-break')
+    expect(paginated(columnBreak).pages.map((page) => page.lines.map((line) => [line.paragraph_id, line.column_ordinal]))).toEqual([
+      [['paragraph:1', 0], ['paragraph:2', 0], ['paragraph:3', 1], ['paragraph:4', 1]],
+    ])
+  })
+
+  it('refuses a flow break that opens the whole multi-column fragment', () => {
     const request = fixture({ lineCounts: [1, 1], bodyHeight: 40_000 })
     setEqualColumns(request, 2)
-    leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'page-break')
+    leadFlowBreak(request.document.body.blocks[0]!.paragraph, 'page-break')
     const result = paginateNativeDocxV1(request)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.status).toBe('refused')
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'column-balance-ambiguous' })]))
+  })
+
+  /**
+   * `columnbreak.docx` carries its column break in the MIDDLE of a paragraph:
+   * the shaper ends the line the break follows and marks it, and pagination
+   * moves the rest of that paragraph to the next column. Word paints the
+   * paragraph's second line at the top of column 2, which is a split no
+   * whole-paragraph model can express.
+   */
+  it('splits a paragraph at a shaped mid-paragraph flow break', () => {
+    const page = fixture({ lineCounts: [3] })
+    shapedFlowBreak(page, 0, 0, 'page-break')
+    expect(paginated(page).pages.map((output) => output.lines.map((line) => line.source_line_ordinal))).toEqual([[0], [1, 2]])
+
+    const column = fixture({ lineCounts: [3], bodyHeight: 40_000, sections: [
+      { start: 0, breakType: 'next-page' },
+    ] })
+    setEqualColumns(column, 2)
+    column.document.sections[0]!.page.columns = 2
+    shapedFlowBreak(column, 0, 0, 'column-break')
+    expect(paginated(column).pages[0]!.lines.map((line) => [line.source_line_ordinal, line.column_ordinal])).toEqual([[0, 0], [1, 1], [2, 1]])
+  })
+
+  it('refuses a shaped flow break that no top-level body paragraph owns', () => {
+    const request = fixture({ lineCounts: [1, 1] }) as any
+    const moved = request.document.body.blocks[1].paragraph
+    const cellPath = '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]'
+    moved.anchor = anchor(`${cellPath}/w:p[1]`, 930, 960)
+    moved.runs[0].anchor = anchor(`${cellPath}/w:p[1]/w:r[1]`, 940, 945)
+    request.document.body.blocks[1] = {
+      kind: 'table', id: 'table:cells', table: {
+        id: 'table:cells', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]', 900, 990),
+        edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'NATIVE_READ_ONLY', message: 'Table placement unavailable.', preservation: 'refuse-mutation' } },
+        rows: [{
+          id: 'row:1', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]', 910, 980), repeat_header: false,
+          cells: [{ id: 'cell:1', anchor: anchor('/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[1]', 920, 970), grid_span: 1, vertical_merge: 'none', paragraphs: [moved] }],
+        }],
+      },
+    }
+    request.resolved_layout.tables.push({ table_id: 'table:cells' })
+    const runID = `${moved.id}:break`
+    moved.runs.push({ kind: 'control', control: 'column-break', id: runID, anchor: anchor(`${cellPath}/w:p[1]/w:br[1]`, 946, 950) })
+    request.resolved_layout.runs.push({ run_id: runID, paragraph_id: moved.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+    request.shaped_lines.paragraphs.find((entry: any) => entry.paragraph_id === moved.id).lines[0].hard_break_after = { source_run_id: runID, control: 'column-break' }
+    const result = paginateNativeDocxV1(request)
+    expect(result.ok, JSON.stringify((result as any).issues)).toBe(true)
+    if (!result.ok) return
+    expect(result.value.status).toBe('refused')
+    expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'source-control-unsupported' })]))
   })
 
   it('omits an unshaped comment/drawing paragraph in approximate layout and keeps the sibling paragraph', () => {

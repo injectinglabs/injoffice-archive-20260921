@@ -364,7 +364,7 @@ function validateLine(value: unknown, path: string, issues: NativeDocxValidation
     const hardBreak = object(entry.hard_break_after, `${path}/hard_break_after`, DOCX_SHAPED_LINES_V1_BINDING_FIELDS.HardBreakV1, issues)
     if (hardBreak) {
       stringValue(hardBreak.source_run_id, `${path}/hard_break_after/source_run_id`, issues, { pattern: SHORT_ID, max: 256 })
-      enumValue(hardBreak.control, `${path}/hard_break_after/control`, ['line-break'], issues)
+      enumValue(hardBreak.control, `${path}/hard_break_after/control`, ['line-break', 'page-break', 'column-break'], issues)
     }
   }
   return height ?? null
