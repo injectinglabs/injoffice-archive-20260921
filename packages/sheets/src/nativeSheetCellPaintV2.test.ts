@@ -159,9 +159,11 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const second = compileNativeSheetCellPaintV2(model, geometry, FONT_BYTES)
     expect(JSON.stringify(first)).toBe(JSON.stringify(second))
     // Bound to the pinned shaper configuration revision, which this change bumps
-    // (implicit directional marks are now resolved rather than refused), so the
-    // plan digest moves with it exactly as the provenance design intends.
-    expect(first.paint_sha256).toBe('sha256:422ff239c6c4054e0281d038fe535e19c4f8a44fa7622dde43ca10c0821e5082')
+    // (DOCX character tracking is now placed at cluster trailing edges rather
+    // than refused), so the plan digest moves with it exactly as the provenance
+    // design intends. No painted cell geometry changes: no sheet run carries a
+    // letter-spacing measurement, so every glyph origin below is unchanged.
+    expect(first.paint_sha256).toBe('sha256:0fed0cec30b768c2c27c4b5b53faa7bc438f75ebbb157f1712765d8f170abf0d')
     expect(first.capabilities).toEqual([{ name: 'native-cell-glyphs', level: 'exact' }])
     expect(first.gutter_emu).toBe(19_050)
     expect(first.coordinate_space).toBe('viewport-local')
@@ -180,7 +182,7 @@ describe('native XLSX v2 cell glyph/display paint', () => {
     const commands = record(first)
     expect(commands[0]).toMatchObject({ kind: 'beginCellPaint', protocol: 'injoffice.xlsx.sheet-cell-paint', version: 1 })
     expect(commands.map((command) => command.kind)).toContain('fillGlyphPath')
-    expect(commandDigest(commands)).toBe('4478cd2c58e6bf00e22418b9a714c69bcbb46b7df13fbec73eb21f92ba1ee20a')
+    expect(commandDigest(commands)).toBe('f6dd9fddbdfb02798648a8ef1d87805c77a51056e5dc8b3a2c95ae141330418e')
     expect(commandDigest(commands)).toBe(commandDigest(record(second)))
     expect(Object.isFrozen(first)).toBe(true)
     expect(Object.isFrozen(first.glyphs[0]?.path)).toBe(true)

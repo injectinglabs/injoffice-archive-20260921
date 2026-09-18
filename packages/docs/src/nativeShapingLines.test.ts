@@ -192,6 +192,45 @@ describe('authored DOCX kerning threshold', () => {
   })
 })
 
+describe('authored DOCX character tracking', () => {
+  it('rejects a tracking the wire cannot carry, including an inert zero', () => {
+    for (const value of [0, 31_681, -31_681, 1.5, '15', null]) {
+      for (const target of ['run', 'mark']) {
+        const resolved = resolvedLayout(nativeDocument())
+        const props = target === 'run' ? resolved.runs[0]!.properties : resolved.paragraphs[0]!.paragraph_mark_properties
+        Object.assign(props, { letter_spacing_twips: value })
+        expect(decodeNativeDocxResolvedLayout(resolved).ok).toBe(false)
+      }
+    }
+    // ...and carries every signed whole-twip measurement inside the bound.
+    for (const value of [15, -15, 1, 31_680, -31_680]) {
+      for (const target of ['run', 'mark']) {
+        const resolved = resolvedLayout(nativeDocument())
+        const props = target === 'run' ? resolved.runs[0]!.properties : resolved.paragraphs[0]!.paragraph_mark_properties
+        Object.assign(props, { letter_spacing_twips: value })
+        expect(decodeNativeDocxResolvedLayout(resolved).ok).toBe(true)
+      }
+    }
+  })
+  it('sends w:spacing to the shaper as signed milli-points, and omits it entirely when absent', async () => {
+    // 1 twip = 50 milli-points, so Word's 15-twip Subtitle tracking is 750.
+    for (const [twips, expected] of [[undefined, undefined], [15, 750], [-10, -500], [31_680, 1_584_000]] as const) {
+      const document = nativeDocument()
+      makeTextOnly(document, 'AV')
+      const resolved = resolvedLayout(document)
+      if (twips !== undefined) resolved.runs[0]!.properties.letter_spacing_twips = twips
+      const providers = fakeProviders([])
+      const seen: (number | undefined)[] = []
+      const originalShape = providers.shaper.shape.bind(providers.shaper)
+      providers.shaper.shape = input => { if (input.run.text === 'AV') seen.push(input.run.letterSpacingMilliPoints); return originalShape(input) }
+      const result = await shapeNativeDocxLinesV1(request(document, resolved), providers)
+      expect(result.ok).toBe(true)
+      expect(seen.length).toBeGreaterThan(0)
+      expect(seen.every(value => value === expected)).toBe(true)
+    }
+  })
+})
+
 function appendParagraph(document: NativeDocxDocumentV1, id: string, runID: string, text: string): void {
   const source = document.body.blocks[0]!.paragraph!
   const paragraph = structuredClone(source)
