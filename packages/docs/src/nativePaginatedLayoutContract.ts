@@ -47,6 +47,12 @@ const SHA256 = /^sha256:[0-9a-f]{64}$/
 const PART_SEGMENT = /^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$/
 const ABSOLUTE_URI = /^[A-Za-z][A-Za-z0-9+.-]*:[^\u0000\r\n]{1,4090}$/
 const MAX_MESSAGE = 4_096
+// The note part's own w:type attribute is the only authority for which note id
+// is a separator: Word writes -1 and 0, LibreOffice writes 0 and 1, and both
+// are conformant CT_FtnEdn ids. These are the document contract's own note-id
+// patterns, so a placed note is held to exactly the shape its source story was.
+const NOTE_CONTENT_ID = /^[1-9][0-9]{0,18}$/
+const NOTE_SENTINEL_ID = /^(?:0|-?[1-9][0-9]{0,18})$/
 
 function add(issues: NativeDocxValidationIssue[], code: NativeDocxIssueCode, path: string, message: string): void {
   if (issues.length >= DOCX_NATIVE_LIMITS.maxIssues) return
@@ -431,7 +437,8 @@ function validatePage(
     if (storyKind !== undefined) noteGroupKind ??= storyKind
     const role = enumValue(note.note_role, `${notePath}/note_role`, ['content', 'separator', 'continuation-separator'], issues)
     if (noteIndex === 0) leadingNoteRole = role
-    if (typeof note.native_story_id !== 'string' || (role === 'separator' ? note.native_story_id !== '-1' : role === 'continuation-separator' ? note.native_story_id !== '0' : !/^[1-9][0-9]{0,18}$/.test(note.native_story_id))) add(issues, 'INVALID_VALUE', `${notePath}/native_story_id`, 'native note id must match its exact placed role')
+    const nativeNoteIDPattern = role === 'separator' || role === 'continuation-separator' ? NOTE_SENTINEL_ID : NOTE_CONTENT_ID
+    if (typeof note.native_story_id !== 'string' || !nativeNoteIDPattern.test(note.native_story_id)) add(issues, 'INVALID_VALUE', `${notePath}/native_story_id`, 'native note id must match its exact placed role')
     if ((noteIndex === 0 && role !== 'separator' && role !== 'continuation-separator') || (noteIndex > 0 && role !== 'content')) add(issues, 'INVALID_VALUE', `${notePath}/note_role`, 'each page note group must contain one leading ordinary or continuation separator followed by content stories')
     stringValue(note.relationship_id, `${notePath}/relationship_id`, issues)
     const noteOrdinal = integer(note.ordinal, `${notePath}/ordinal`, 0, DOCX_NATIVE_LIMITS.maxCollectionItems, issues)

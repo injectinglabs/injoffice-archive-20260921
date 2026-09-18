@@ -345,6 +345,15 @@ type NativeDocumentV1 struct {
 	Capabilities     []NativeCapabilityV1            `json:"capabilities"`
 	PassthroughParts []NativePassthroughPartV1       `json:"passthrough_parts"`
 	Unsupported      []NativeUnsupportedCapabilityV1 `json:"unsupported"`
+	// NoteNumbering is present only for a note kind whose sections state one
+	// exact modeled w:numFmt. Labels[i] is the label for counter value i+1.
+	NoteNumbering []NativeNoteNumberingV1 `json:"note_numbering,omitempty"`
+}
+
+type NativeNoteNumberingV1 struct {
+	Kind   string   `json:"kind"`
+	Format string   `json:"format"`
+	Labels []string `json:"labels"`
 }
 
 type NativeValidationIssue struct {
@@ -636,6 +645,23 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 	}
 	for i, limit := 0, v.collection(len(doc.Notes), "/notes", NativeDOCXMaxCollectionItems); i < limit; i++ {
 		v.story(&doc.Notes[i], fmt.Sprintf("/notes/%d", i), map[string]bool{"footnote": true, "endnote": true})
+	}
+	noteKinds := map[string]bool{}
+	for i, limit := 0, v.collection(len(doc.NoteNumbering), "/note_numbering", 2); i < limit; i++ {
+		path := fmt.Sprintf("/note_numbering/%d", i)
+		record := &doc.NoteNumbering[i]
+		v.oneOf(record.Kind, path+"/kind", "footnote", "endnote")
+		if noteKinds[record.Kind] {
+			v.add("DUPLICATE_ID", path+"/kind", "one note kind states at most one numbering record")
+		}
+		noteKinds[record.Kind] = true
+		v.required(record.Format, path+"/format")
+		if len(record.Labels) == 0 {
+			v.add("REQUIRED", path+"/labels", "a numbering record requires at least one label")
+		}
+		for j, limit := 0, v.collection(len(record.Labels), path+"/labels", nativeNoteNumberingMaxLabels); j < limit; j++ {
+			v.required(record.Labels[j], fmt.Sprintf("%s/labels/%d", path, j))
+		}
 	}
 	if doc.CommentStories == nil {
 		v.add("REQUIRED", "/comment_stories", "field is required")

@@ -9,6 +9,7 @@
 
 import {nativeDocxFontSubstitutionDiagnosticV1,qualifyNativeDocxFontSubstitutionsV1,type NativeDocxFontSubstitutionV1} from './nativeFontSubstitutionEvidenceV1.js'
 import {qualifyNativeDocxFontDescriptorPreviewV1} from './nativeFontDescriptorPreviewV1.js'
+import { nativeDocxNoteLabelsV1, nativeDocxNoteLabelV1 } from './nativeNoteNumberingV1.js'
 import {
   NATIVE_TEXT_LAYOUT_VERSION,
   MAX_TEXT_RUN_UTF16,
@@ -521,6 +522,7 @@ function qualifyNoteNumbers(document: NativeDocxDocumentV1): QualifiedNoteNumber
   const numbers = new Map<string, string>()
   const issues: QualifiedNoteNumbers['issues'] = []
   const contentNotes = new Map(document.notes.filter((story) => (story.note_role ?? 'content') === 'content').map((story) => [story.id, story]))
+  const labels = nativeDocxNoteLabelsV1(document)
   const references = new Map<string, string>()
   const counters = new Map<'footnote' | 'endnote', number>([['footnote', 0], ['endnote', 0]])
   const relationships = new Map<'footnote' | 'endnote', string>()
@@ -577,9 +579,14 @@ function qualifyNoteNumbers(document: NativeDocxDocumentV1): QualifiedNoteNumber
         issues.push({ scope: target.id, source: run.id, message: 'Note numbering exceeds the bounded decimal counter' })
         continue
       }
+      const marker = nativeDocxNoteLabelV1(labels, ref.kind, next)
+      if (marker === undefined) {
+        issues.push({ scope: target.id, source: run.id, message: 'Source note numbering format states no label for this counter value' })
+        continue
+      }
       counters.set(ref.kind, next)
       references.set(target.id, run.id)
-      numbers.set(target.id, String(next))
+      numbers.set(target.id, marker)
     }
   }
   for (const note of contentNotes.values()) if (!references.has(note.id)) issues.push({ scope: note.id, message: 'Unreferenced note content has ambiguous placement and numbering' })

@@ -51,7 +51,7 @@ import { nativeDocxSectionsShareExactPageV1, qualifyNativeDocxSectionColumnsV1, 
 import { planNativeDocxColumnParagraphFlowV1, type NativeDocxColumnParagraphFlowV1 } from './nativeColumnParagraphFlowV1.js'
 import {planNativeDocxFootnoteFlowV1, type NativeDocxFootnoteFlowV1} from './nativeFootnoteFlowV1.js'
 import { measureNativeDocxFootnoteReservationV1, type NativeDocxFootnoteReservationV1 } from './nativeFootnoteReservationV1.js'
-import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1 } from './nativeNotePaginationV1.js'
+import { placeNativeDocxNotesV1, measureNativeDocxFootnoteAreaForReservationV1, nativeDocxApproximateNoteOmissionsV1 } from './nativeNotePaginationV1.js'
 import { nativeDocxListSuffixTabTargetV1, positionNativeDocxListMarkerV1 } from './nativeNumberingV1.js'
 import { nativeDocxRowBreakPlanV1, nativeDocxRowCutV1, type NativeDocxRowBreakPlanV1 } from './nativeTableRowBreaksV1.js'
 
@@ -1889,7 +1889,8 @@ function planKeepChains(paragraphs: readonly NativeDocxParagraphV1[], resolved: 
  * carrying one of these messages is surfaced verbatim as an envelope reason. */
 export const DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING = 'Approximate read-only preview: footnote/endnote separator stories with unmodeled markup are omitted because the document has no footnote or endnote references; nothing is painted for them.' as const
 export const DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING = 'Approximate read-only preview: indented table-cell lines are placed inside the qualified cell content width instead of requiring an exact full-width line box.' as const
-const APPROXIMATE_PAGINATION_POLICY_WARNINGS: ReadonlySet<string> = new Set([DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING, DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING])
+export const DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING = 'Approximate read-only preview: footnote/endnote stories are placed although the source states run, paragraph or resolution properties this tier omits; the note text and its numbering are painted, those properties are not applied.' as const
+const APPROXIMATE_PAGINATION_POLICY_WARNINGS: ReadonlySet<string> = new Set([DOCX_APPROXIMATE_INERT_NOTE_SEPARATOR_WARNING, DOCX_APPROXIMATE_INDENTED_CELL_LINE_WARNING, DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING])
 
 /** Declared policy reasons for the approximations an approximate pagination applied. */
 export function nativeDocxApproximatePaginationPolicyReasonsV1(layout: NativeDocxPaginatedLayoutV1): string[] {
@@ -2430,9 +2431,20 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
       diagnostics: context.diagnostics,
       sections: context.sections,
       pages: context.pages,
-    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation, context.footnoteFlow ? request : undefined)
+    }, request.document, request.resolved_layout, request.shaped_lines, context.footnoteReservation, context.footnoteFlow ? request : undefined,
+      approximateLegacySettings ? DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED : undefined)
     if (noteFailure) refuse(context, noteFailure.code, noteFailure.scope_id, noteFailure.message)
-    else if (context.footnoteReservation) {
+    else if (approximateLegacySettings) {
+      // Every diagnostic the relaxed note gate admitted is restated here, so a
+      // placed note whose source states properties this tier did not apply is
+      // disclosed exactly like the same markup on a body paragraph.
+      for (const omission of nativeDocxApproximateNoteOmissionsV1(request.document, request.resolved_layout, request.shaped_lines, DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED)) addDiagnostic(context, {
+        code: 'source-diagnostic', severity: 'deferred', scope_id: omission.scope_id,
+        source_code: omission.code, source_message: omission.message,
+        message: DOCX_APPROXIMATE_OMITTED_NOTE_PROPERTY_WARNING,
+      })
+    }
+    if (!noteFailure && context.footnoteReservation) {
       const reservation = context.footnoteReservation
       const placedReferences: string[] = []
       for (const page of context.pages) {
