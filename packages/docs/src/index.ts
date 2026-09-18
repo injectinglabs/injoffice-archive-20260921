@@ -65,7 +65,10 @@ export {
   layoutNativeDocxHeadersFootersV1,
   DOCX_APPROXIMATE_HEADER_FOOTER_BAND_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING,
+  DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING,
   DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE,
+  DOCX_STYLE_REFERENCE_FIELD_MESSAGE,
+  nativeDocxApproximateOmittedHeaderFooterFieldV1,
   nativeDocxApproximateHeaderFooterPolicyReasonsV1,
   type NativeDocxHeaderFooterApproximationV1,
 } from './nativeHeaderFooterLayoutV1'

@@ -3619,6 +3619,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_NONBLOCKING_SOURCE: ReadonlySet<string>"
             },
             {
+              "name": "DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_FIELD_WARNING: 'Approximate read-only preview: a header/footer STYLEREF field result is omitted because it follows from the rendering application’s localized style table rather than the package; the paragraph is painted from its remaining literal runs and the omission stays disclosed as omitted content.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_HEADER_FOOTER_OMITTED_PARAGRAPH_WARNING: 'Approximate read-only preview: header/footer paragraphs without text that could not be shaped are omitted; their shaping diagnostics remain disclosed.'"
@@ -4009,6 +4014,11 @@
               "signature": "export declare const DOCX_SHAPING_REQUEST_VERSION: 1"
             },
             {
+              "name": "DOCX_STYLE_REFERENCE_FIELD_MESSAGE",
+              "kind": "const",
+              "signature": "export declare const DOCX_STYLE_REFERENCE_FIELD_MESSAGE: \"STYLEREF repeats the nearest paragraph of a named style after pagination and resolves that name against the authoring application's localized style table, so no result follows from the package alone\""
+            },
+            {
               "name": "DOCX_TABLE_PAGE_PAINT_LIMITS",
               "kind": "const",
               "signature": "export declare const DOCX_TABLE_PAGE_PAINT_LIMITS:"
@@ -4317,6 +4327,11 @@
               "name": "NativeDocxApproximateNestedTableV1",
               "kind": "type",
               "signature": "NativeDocxApproximateNestedTableV1"
+            },
+            {
+              "name": "nativeDocxApproximateOmittedHeaderFooterFieldV1",
+              "kind": "function",
+              "signature": "export declare function nativeDocxApproximateOmittedHeaderFooterFieldV1(entry: NativeDocxUnsupportedCapabilityV1): boolean"
             },
             {
               "name": "NativeDocxApproximatePagePreviewV1",
