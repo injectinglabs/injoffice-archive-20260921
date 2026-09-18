@@ -1852,6 +1852,34 @@ describe('native DOCX pagination v1', () => {
     }
   })
 
+  it('paints a rotated table cell horizontally in approximate layout and keeps refusing it in strict', () => {
+    // tblr-height.docx rotates two cells 90 and 270 degrees. This tier lays the
+    // cell out horizontally, so the rotation is a visual result it does not
+    // produce: the approximate tier paints the text and discloses the rotation,
+    // and the strict tier still has no page to give.
+    const code = 'CELL_TEXT_DIRECTION_UNSUPPORTED'
+    const request = fixture({ lineCounts: [1, 1] })
+    const marked = request.document.body.blocks[0]!.paragraph!
+    request.document.unsupported.push({ id: `unsupported:${code}`, code, capability: 'table-properties', scope_id: marked.id, preservation: 'refuse-mutation', message: 'Rotated or vertically stacked cell text direction btLr is recorded and not applied' })
+    request.pagination_settings.profile = 'unsupported'
+    delete request.pagination_settings.compatibility_mode
+    request.pagination_settings.diagnostics = [{ code: 'COMPATIBILITY_SETTING_UNSUPPORTED', severity: 'unsupported', part_name: SETTINGS_PART, path: '/w:settings[1]/w:compat[1]', preservation: 'preserve-verbatim', message: 'Legacy Word mode 14 requires different semantics' }]
+    const eligibility = { protocol: 'injoffice.docx.approximation-eligibility', version: 1, document_id: request.pagination_settings.document_id, revision: request.pagination_settings.revision, package_sha256: request.pagination_settings.package_sha256, settings_sha256: request.pagination_settings.settings_sha256, status: 'eligible' as const, legacy_compatibility_mode: 14 as const, reasons: ['Legacy mode 14 uses current layout'] }
+    const strict = paginateNativeDocxV1(structuredClone(request))
+    expect(strict).toMatchObject({ ok: true, value: { status: 'refused' } })
+    if (strict.ok) expect(strict.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'body-structure-unsupported', scope_id: marked.id })]))
+    const approximate = paginateNativeDocxApproximateLegacyV1(request, eligibility)
+    expect(approximate.layout.status).toBe('paginated')
+    expect(approximate.layout.pages.flatMap((page) => page.lines.map((line) => line.paragraph_id))).toEqual([marked.id, 'paragraph:2'])
+    // The rotation is content this tier did not render, so it has to reach the
+    // omitted-content disclosure rather than ride on a formatting-only note.
+    const omissions = collectNativeDocxApproximateOmissionsV1(
+      { document: request.document, resolved_layout: request.resolved_layout, shaped_lines: request.shaped_lines },
+      { status: 'painted', pages: [] })
+    expect(omissions.content_status).toBe('partial')
+    expect(omissions.omitted_content).toEqual([expect.objectContaining({ code, origin: 'source', scope_id: marked.id })])
+  })
+
   it('omits an unshaped empty-run sibling paragraph in approximate layout and keeps the sibling paragraph', () => {
     const request = fixture({ lineCounts: [1, 1] })
     const dropped = request.document.body.blocks[0]!.paragraph!

@@ -23,6 +23,22 @@ describe('approximate omitted-content disclosure', () => {
     expect(validNativeDocxApproximateOmissionsV1(result, { status: 'painted', pages: [page('page:1', 2)] })).toBe(true)
     expect(nativeDocxOmittedContentSummaryV1(result)).toBeNull()
   })
+  it('discloses a rotated table cell as table content the preview did not render', () => {
+    // w:tcPr/w:textDirection rotates the cell's text 90 or 270 degrees. The
+    // cell's glyphs are still painted, horizontally, so the code has to be in
+    // both sets: the paint tier omits it instead of refusing, and this
+    // disclosure reports it so the page can never claim to be complete.
+    expect(DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED.has('CELL_TEXT_DIRECTION_UNSUPPORTED')).toBe(true)
+    expect(DOCX_APPROXIMATE_OMITTED_CONTENT_CODES.has('CELL_TEXT_DIRECTION_UNSUPPORTED')).toBe(true)
+    const path = '/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:tc[2]/w:tcPr[1]/w:textDirection[1]'
+    const unsupported = [{ id: 'unsupported:1', code: 'CELL_TEXT_DIRECTION_UNSUPPORTED', capability: 'table-properties', scope_id: 'table:1', anchor: anchor(path), preservation: 'refuse-mutation', message: 'Rotated or vertically stacked cell text direction btLr is recorded and not applied; the cell\u2019s text is laid out and painted horizontally' }]
+    const result = collectNativeDocxApproximateOmissionsV1(source({ unsupported }), { status: 'painted', pages: [page('page:1', 2)] })
+    expect(result.content_status).toBe('partial')
+    expect(result.omitted_content).toEqual([expect.objectContaining({ code: 'CELL_TEXT_DIRECTION_UNSUPPORTED', origin: 'source', category: 'table', scope_id: 'table:1', path, count: 1 })])
+    expect(nativeDocxOmittedContentSummaryV1(result)).toBe('1 item not rendered: tables (1)')
+    expect(validNativeDocxApproximateOmissionsV1(result, { status: 'painted', pages: [page('page:1', 2)] })).toBe(true)
+  })
+
   it('discloses a drawing-only document as partial with one drawing entry and the blank page', () => {
     const drawing = { kind: 'drawing', id: 'run:d', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]'), drawing: { id: 'drawing:1' } }
     const unsupported = [{ id: 'unsupported:1', code: 'UNMODELED_DRAWING', capability: 'drawings', scope_id: 'run:d', anchor: anchor('/w:document[1]/w:body[1]/w:p[1]/w:r[1]/w:drawing[1]'), preservation: 'refuse-mutation', message: 'Drawing/object markup and related media are preserved verbatim' }]
