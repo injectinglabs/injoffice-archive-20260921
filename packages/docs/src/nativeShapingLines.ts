@@ -139,6 +139,7 @@ export type NativeDocxShapingDiagnosticCode =
   | 'reference-layout-unsupported'
   | 'page-control-deferred'
   | 'soft-hyphen-deferred'
+  | 'paragraph-mark-script-alignment-unapplied'
   | 'unsupported-numbering-text'
   | 'unsupported-numbering-format'
   | 'list-marker-alignment-deferred'
@@ -679,7 +680,7 @@ function addDiagnostic(context: NativeShapingContext, diagnostic: NativeDocxShap
   // painting the paragraph and discloses that deferral as omitted content;
   // strict shaping still fails the paragraph, so the exact tier refuses the
   // document exactly as it did when pagination rejected the control.
-  const skipParagraphFailure = context.nonblockingResolution !== undefined && (diagnostic.code === 'drawing-layout-unsupported' || diagnostic.code === 'reference-layout-unsupported' || diagnostic.code === 'soft-hyphen-deferred')
+  const skipParagraphFailure = context.nonblockingResolution !== undefined && (diagnostic.code === 'drawing-layout-unsupported' || diagnostic.code === 'reference-layout-unsupported' || diagnostic.code === 'soft-hyphen-deferred' || diagnostic.code === 'paragraph-mark-script-alignment-unapplied')
   if (context.activeParagraphID !== undefined && diagnostic.severity === 'unsupported' && !skipParagraphFailure) context.activeParagraphFailed = true
   const key = `${diagnostic.code}\u0000${diagnostic.scope_id}\u0000${diagnostic.source_id ?? ''}\u0000${diagnostic.message}`
   if (context.diagnosticKeys.has(key)) return
@@ -1373,9 +1374,24 @@ async function shapeSpan(context: NativeShapingContext, span: SourceSpan, proper
 
 async function resolveParagraphMarkMetrics(context: NativeShapingContext, paragraph: NativeDocxResolvedParagraphV1, direction: 'ltr' | 'rtl'): Promise<ScaledLineMetrics | null> {
   const properties = paragraph.paragraph_mark_properties
-  if (properties.vertical_alignment && properties.vertical_alignment !== 'baseline') {
-    addDiagnostic(context, { code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Script-sized paragraph marks require a separate blank-line metric policy' })
-    return null
+  const scriptAlignment = properties.vertical_alignment && properties.vertical_alignment !== 'baseline' ? properties.vertical_alignment : undefined
+  if (scriptAlignment) {
+    if (context.nonblockingResolution === undefined) {
+      addDiagnostic(context, { code: 'unresolved-layout-diagnostic', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Script-sized paragraph marks require a separate blank-line metric policy' })
+      return null
+    }
+    // The mark's metrics are measured at its baseline-aligned size, without the
+    // script reduction and raise a run of the same properties would get. Word's
+    // own export of the one corpus instance
+    // (floatingtbl_with_formula.docx, a centred caption whose w:rPr mark states
+    // w:vertAlign="superscript") shows that this is what Word's line box does:
+    // the caption's baseline sits exactly 106 PDF units below the preceding
+    // line, the same pitch as between the four plain empty paragraphs above it
+    // at the same font and size. A mark can only raise a line's ascent, and
+    // that line is no taller, so the raised mark added nothing to it. One
+    // document is not a policy, so the deviation is disclosed as omitted
+    // content rather than claimed inert, and the exact tier still refuses.
+    addDiagnostic(context, { code: 'paragraph-mark-script-alignment-unapplied', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: `Approximate preview measures a ${scriptAlignment} paragraph mark at its baseline-aligned size; the script reduction and raise are not applied to the blank-line metric` })
   }
   if (!properties.font_family) {
     addDiagnostic(context, { code: 'missing-run-font', severity: 'unsupported', scope_id: paragraph.paragraph_id, message: 'Resolved paragraph-mark font is absent; blank-line metrics were refused instead of guessing a Word default' })

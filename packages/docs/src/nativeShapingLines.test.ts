@@ -1496,6 +1496,53 @@ describe('shapeNativeDocxLinesV1', () => {
     expect(approximate.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'soft-hyphen-deferred', severity: 'unsupported', source_id: hyphen.id })]))
   })
 
+  /**
+   * A paragraph mark that states w:vertAlign refused every blank-line metric,
+   * so any paragraph needing one - an empty paragraph, or one holding a tab or
+   * a soft hyphen - dropped out of shaped lines entirely. Word's own export of
+   * the one corpus instance (floatingtbl_with_formula.docx) puts that caption's
+   * baseline exactly 106 PDF units below the preceding line, the same pitch as
+   * between the four plain empty paragraphs above it at the same font and size:
+   * a mark can only raise a line's ascent, and that line is no taller. The
+   * approximate tier therefore measures the mark at its baseline-aligned size
+   * and discloses that the script reduction and raise were not applied; the
+   * exact tier still refuses.
+   */
+  it('measures a script-sized paragraph mark at its baseline size in approximate and refuses it exactly', async () => {
+    for (const alignment of ['superscript', 'subscript'] as const) {
+      const plain = nativeDocument()
+      const paragraph = plain.body.blocks[0]!.paragraph!
+      const tab: NativeDocxRunV1 = { kind: 'control', id: 'run:intro:tab', anchor: structuredClone(paragraph.runs[1]!.anchor), control: 'tab' }
+      makeTextOnly(plain, 'ab')
+      paragraph.runs = [paragraph.runs[0]!, tab]
+      const plainResolved = resolvedLayout(plain)
+      const baseline = await shapeNativeDocxLinesWithParagraphWidthsV1(request(plain, plainResolved), fakeProviders([]), new Map(), undefined, new Set(['PARTIAL_RUN_PROPERTIES']))
+      expect(baseline.ok, alignment).toBe(true)
+      if (!baseline.ok) return
+
+      const document = structuredClone(plain)
+      const resolved = resolvedLayout(document)
+      resolved.paragraphs[0]!.paragraph_mark_properties = { ...resolved.paragraphs[0]!.paragraph_mark_properties, vertical_alignment: alignment }
+      const strict = await shapeNativeDocxLinesV1(request(document, resolved), fakeProviders([]))
+      expect(strict.ok, alignment).toBe(true)
+      if (!strict.ok) return
+      expect(strict.value.paragraphs, alignment).toEqual([])
+      expect(strict.value.diagnostics, alignment).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'unresolved-layout-diagnostic', message: 'Script-sized paragraph marks require a separate blank-line metric policy' })]))
+
+      const approximate = await shapeNativeDocxLinesWithParagraphWidthsV1(request(document, resolved), fakeProviders([]), new Map(), undefined, new Set(['PARTIAL_RUN_PROPERTIES']))
+      expect(approximate.ok, alignment).toBe(true)
+      if (!approximate.ok) return
+      expect(approximate.value.paragraphs.map((entry) => entry.paragraph_id), alignment).toEqual([paragraph.id])
+      // Measured at the baseline-aligned size: identical to the same document
+      // whose mark states no vertical alignment at all.
+      expect(approximate.value.paragraphs[0]!.lines.map((line) => line.line_height_millipoints), alignment)
+        .toEqual(baseline.value.paragraphs[0]!.lines.map((line) => line.line_height_millipoints))
+      expect(approximate.value.paragraphs[0]!.block_advance_millipoints, alignment).toBe(baseline.value.paragraphs[0]!.block_advance_millipoints)
+      // The deviation is reported, so the approximate preview discloses it.
+      expect(approximate.value.diagnostics, alignment).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'paragraph-mark-script-alignment-unapplied', severity: 'unsupported', scope_id: paragraph.id })]))
+    }
+  })
+
   it('allows exact latent style behavior metadata only at its bound document scope', async () => {
     for (const variant of ['qualified', 'old-code', 'run-scope', 'wrong-part', 'wrong-path', 'active-style'] as const) {
       const document = nativeDocument()
