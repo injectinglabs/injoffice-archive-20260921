@@ -411,6 +411,32 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
         else table = { ...authored, layout: 'fixed', width_twips: sum }
       }
     }
+    // A table that states an explicit fixed dxa width still states nothing
+    // about w:jc, w:tblInd or w:tblCellMar unless the source writes them, and
+    // ECMA-376 17.4 gives each of the three a cascade default: no w:jc is left
+    // alignment (17.4.29), no w:tblInd is a zero indent (17.4.51), and no
+    // w:tblCellMar anywhere in the style chain is Word's own default cell
+    // margin. Refusing over their absence is an over-refusal, not a missing
+    // measurement: the two approximate policies directly above already default
+    // exactly these three for an auto-width table, and #377's percentage policy
+    // does the same, so a stated width was the one shape whose silence still
+    // discarded the whole document body. The same three defaults are applied
+    // here, and they are visible in the hashed paint projection, which records
+    // the painted alignment, indent and cell margins per table.
+    //
+    // The v1 extractor models only w:jc="left", so a table that states a
+    // non-left alignment reaches this point indistinguishable from one that
+    // states none, and is painted left-aligned. That is a declared
+    // approximation of this read-only lane, on the same terms as the policies
+    // above; strict paint never takes this branch and keeps the refusal below.
+    if (approximate === true && table.layout === 'fixed' && table.width_twips !== undefined && table.width_twips > 0) {
+      table = {
+        ...table,
+        alignment: table.alignment ?? 'left' as const,
+        indent_twips: table.indent_twips ?? 0,
+        cell_margins: table.cell_margins ?? { top_twips: 0, right_twips: 115, bottom_twips: 0, left_twips: 115 },
+      }
+    }
     if (table.layout !== 'fixed' || table.alignment !== 'left' || table.indent_twips === undefined || table.width_twips === undefined || !table.cell_margins) return fail(table.id, 'Table requires explicit fixed dxa width, left alignment, indent, and all four cell margins')
     const grid = table.grid_widths_twips
     if (!grid || grid.length === 0 || grid.length > DOCX_TABLE_PAGE_PAINT_LIMITS.maxGridColumns || grid.some((width) => !Number.isSafeInteger(width) || width <= 0 || width > MAX_SAFE_TWIPS)) return fail(table.id, 'Table requires a bounded non-empty positive tblGrid')
