@@ -21,6 +21,8 @@ import { nativeDocxUnresolvableTableStyleV1 } from './nativeRenderDiagnostics.js
 import { qualifyNativeDocxSectionColumnsV1 } from './nativeSectionColumnsV1.js'
 import { resolveNativeDocxTableAutofitV1, type NativeDocxTableAutofitPolicyV1 } from './nativeTableAutofitV1.js'
 import { fitNativeDocxApproximateTableGridV1, type NativeDocxApproximateTableGridPolicyV1 } from './nativeApproximateTableGridV1.js'
+import { fitNativeDocxApproximatePercentTableV1, type NativeDocxApproximatePercentTablePolicyV1 } from './nativeApproximatePercentTableV1.js'
+import { projectNativeDocxApproximateUniformCellBordersV1, type NativeDocxApproximateUniformCellBorderPolicyV1 } from './nativeApproximateUniformCellBordersV1.js'
 
 export const DOCX_TABLE_PAGE_PAINT_LIMITS = {
   maxTables: 1_000,
@@ -50,7 +52,8 @@ export interface NativeDocxQualifiedTableRowV1 {
 export interface NativeDocxQualifiedTableV1 {
   origin_policy?: {name:'legacy-content-aligned-origin-v1';source:import('./nativeLegacyTableOriginV1.js').NativeDocxLegacyTableOriginV1;delta_millipoints:number}
   border_reservation_policy?: {name:'collapsed-horizontal-border-reservation-v1';above_content_millipoints:number}
-  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1 | NativeDocxApproximateTableGridPolicyV1
+  cell_border_policy?: NativeDocxApproximateUniformCellBorderPolicyV1
+  width_policy?: { name: 'fixed-grid-percent-exact-twips-v1'; section_id: string; container_width_twips: number; percent_fiftieths: number; source_grid_widths_twips: number[] } | NativeDocxTableAutofitPolicyV1 | NativeDocxApproximateTableGridPolicyV1 | NativeDocxApproximatePercentTablePolicyV1
   table: NativeDocxTableV1
   width_millipoints: number
   x_millipoints: number
@@ -125,6 +128,7 @@ function projection(tables: readonly NativeDocxQualifiedTableV1[]): unknown {
   return tables.map((entry) => ({
     ...(entry.origin_policy ? {origin_policy:entry.origin_policy} : {}),
     ...(entry.border_reservation_policy ? {border_reservation_policy:entry.border_reservation_policy} : {}),
+    ...(entry.cell_border_policy ? {cell_border_policy:entry.cell_border_policy} : {}),
     ...(entry.width_policy ? { width_policy: entry.width_policy } : {}),
     table_id: entry.table.id,
     width_twips: entry.table.width_twips,
@@ -331,6 +335,15 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     if ((sourceTable.table_style_id || resolvedTable.style_id) && !bordersValid(paintBorders)) return fail(sourceTable.id, 'Simple table style did not project exact table-level border commands')
     let table = paintBorders === sourceTable.borders ? sourceTable : { ...sourceTable, borders: paintBorders }
     let widthPolicy: NativeDocxQualifiedTableV1['width_policy']
+    // Strict paint refuses any w:tcBorders below. The approximate lane has a
+    // declared policy for the one shape that states no conflict to resolve:
+    // every cell states the same single border on all four edges and the table
+    // states none, so that value IS the unambiguous table-level border set.
+    let cellBorderPolicy: NativeDocxQualifiedTableV1['cell_border_policy']
+    if (approximate === true && !table.borders) {
+      const projected = projectNativeDocxApproximateUniformCellBordersV1(table)
+      if (projected) { table = projected.table; cellBorderPolicy = projected.policy }
+    }
     if (approximate && table.layout === 'autofit') {
       // Approximate preview only: consistent authored tcW/tblGrid preferences
       // that exceed the text column (Word's grid includes the cell margins) are
@@ -361,8 +374,14 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     if (table.width_percent_fiftieths !== undefined) {
       const container = tableContainers.get(table.id)
       const projected = container ? percentTable(table, container.width, container.sectionID) : undefined
-      if (!projected) return fail(table.id, 'Percentage table width requires one exact section column, matching source grid/cell preferences and integral proportional twip geometry (no content autofit)')
-      table = projected.table; widthPolicy = projected.policy
+      // Strict paint has only the exact policy above. The approximate lane has
+      // a second, declared one for exactly this shape: paint the authored
+      // w:tblGrid and record that the percentage was not resolved, which is
+      // what Word itself paints (measured in nativeApproximatePercentTableV1).
+      const authored = !projected && approximate === true && container ? fitNativeDocxApproximatePercentTableV1(table, container.width, container.sectionID) : undefined
+      if (!projected && !authored) return fail(table.id, 'Percentage table width requires one exact section column, matching source grid/cell preferences and integral proportional twip geometry (no content autofit)')
+      if (projected) { table = projected.table; widthPolicy = projected.policy }
+      else if (authored) { table = authored.table; widthPolicy = authored.policy }
     }
     // A table states no preferred width when w:tblW is absent or auto. Its
     // authored w:tblGrid is then the only width the source gives, whether
@@ -474,7 +493,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
       if (column !== grid.length || consumed.some((value) => !value)) return fail(row.id, 'Every row must consume the exact fixed grid without omitted cells')
       qualifiedRows.push({ row_id: row.id, row_ordinal: rowOrdinal, cells: qualifiedCells })
     }
-    tables.push({ ...(widthPolicy ? { width_policy: widthPolicy } : {}), table, width_millipoints: tableWidth, x_millipoints: tableX, grid_widths_millipoints: gridMP, rows: qualifiedRows })
+    tables.push({ ...(widthPolicy ? { width_policy: widthPolicy } : {}), ...(cellBorderPolicy ? { cell_border_policy: cellBorderPolicy } : {}), table, width_millipoints: tableWidth, x_millipoints: tableX, grid_widths_millipoints: gridMP, rows: qualifiedRows })
   }
   if (!approximate && resolved.diagnostics.some((diagnostic) => !coveredStyleDiagnostics.has(diagnosticIdentity(diagnostic.code, diagnostic.scope_id, diagnostic.part_name ?? '', diagnostic.path ?? '')) && sourceTables.some((table) => diagnostic.scope_id === table.id || table.rows.some((row) => row.cells.some((cell) => cell.id === diagnostic.scope_id || cell.paragraphs.some((paragraph) => paragraph.id === diagnostic.scope_id || paragraph.runs.some((run) => run.id === diagnostic.scope_id))))))) return fail(document.document_id, 'Resolved-layout diagnostics touch a table or descendant and exact table paint is unavailable')
   return { status: 'qualified', tables, paragraph_widths: paragraphWidths, sha256: nativeDocxTableProjectionSha256V1(tables) }

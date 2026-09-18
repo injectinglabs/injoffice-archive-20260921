@@ -7,7 +7,7 @@ import {projectNativeDocxAutomaticBordersV1} from './nativeAutomaticBorderPrevie
 import {DOCX_AUTO_BORDER_WARNING} from './nativeAutomaticBorderEvidenceV1.js'
 import {projectNativeDocxAbsentFontSizesV1,DOCX_ABSENT_FONT_SIZE_WARNING,type NativeDocxHostDefaultSizePolicyV1} from './nativeAbsentFontSizeV1.js'
 import {qualifyNativeDocxFontDescriptorPreviewV1,DOCX_FONT_DESCRIPTOR_PREVIEW_WARNING,type NativeDocxFontSubstitutionEligibilityV1} from './nativeFontDescriptorPreviewV1.js'
-import {DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING} from './nativeLegacyTableOriginV1.js'
+import {DOCX_LEGACY_TABLE_ORIGIN_WARNING,DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING} from './nativeLegacyTableOriginV1.js'
 
 export interface NativeDocxFontCompositionV1 {
  source_document:NativeDocxDocumentV1
@@ -35,7 +35,7 @@ export function qualifyNativeDocxFontCompositionV1(value:unknown){
  let document=d.value,resolved=r.value
  const reasons:string[]=[]
  if(v.font_descriptor_eligibility.facts.length)reasons.push(DOCX_FONT_DESCRIPTOR_PREVIEW_WARNING)
- if(legacy){reasons.push(...legacy.reasons,DOCX_APPROXIMATE_PREVIEW_WARNING,DOCX_APPROXIMATE_LINE_BOX_WARNING);if(legacy.legacy_table_origins?.length)reasons.push(DOCX_LEGACY_TABLE_ORIGIN_WARNING);if(document.body.blocks.some(b=>b.table))reasons.push(DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING)}
+ if(legacy){reasons.push(...legacy.reasons,DOCX_APPROXIMATE_PREVIEW_WARNING,DOCX_APPROXIMATE_LINE_BOX_WARNING);if(legacy.legacy_table_origins?.length)reasons.push(DOCX_LEGACY_TABLE_ORIGIN_WARNING);if(document.body.blocks.some(b=>b.table))reasons.push(DOCX_TABLE_BORDER_RESERVATION_WARNING,DOCX_TABLE_GRID_FIT_WARNING,DOCX_PERCENT_TABLE_AUTHORED_GRID_WARNING,DOCX_UNIFORM_CELL_BORDER_WARNING)}
  if(v.automatic_borders){const projection=projectNativeDocxAutomaticBordersV1(document,resolved);if(!projection.facts.length)throw new TypeError('Automatic-border composition requires actual qualified source facts');document=projection.document;resolved=projection.resolved;reasons.push(DOCX_AUTO_BORDER_WARNING)}
  if(v.font_size_policy!==undefined){if(!legacy)throw new TypeError('Absent-size font composition requires source-qualified approximation');const projected=projectNativeDocxAbsentFontSizesV1(document,resolved,legacy.absent_font_sizes??[],v.font_size_policy,legacy.absent_font_size_shape);if(!projected.applied.length)throw new TypeError('Absent-size composition has no source consumers');resolved=projected.resolved;reasons.push(DOCX_ABSENT_FONT_SIZE_WARNING)}
  return {value:v,document,resolved,settings:s.value,legacy,reasons,descriptors:{eligibility:v.font_descriptor_eligibility,inventoryJSON:v.source_font_inventory_json},sha256:canonicalWireSha256(v)}
