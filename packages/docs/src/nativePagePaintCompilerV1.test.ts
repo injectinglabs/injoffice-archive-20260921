@@ -2786,9 +2786,9 @@ describe('native DOCX page-paint compiler v1', () => {
     // second as "ii". A marker longer than one character shapes into more than
     // one visual cluster, so the painter has to hold each fragment to its own
     // slice of the marker and require the fragments to cover the whole label.
-    const fixture = noteFixture()
-    fixture.document.note_numbering = [{ kind: 'footnote', format: 'decimalZero', labels: ['01'] }]
-    const prepared = await prepareNativeDocxPagePaintV1(fixture)
+    const input = noteFixture()
+    ;(input.document as NativeDocxDocumentV1).note_numbering = [{ kind: 'footnote', format: 'decimalZero', labels: ['01'] }]
+    const prepared = await prepareNativeDocxPagePaintV1(input)
     const markerFragments = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs
       .flatMap((paragraph) => paragraph.lines).flatMap((line) => line.fragments)
       .filter((fragment) => fragment.source_id === 'run:1' || fragment.source_id === 'run:footnote-label-1')
