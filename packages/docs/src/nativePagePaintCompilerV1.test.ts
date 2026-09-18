@@ -2882,6 +2882,80 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output.diagnostics)).toBe('painted')
   })
 
+  // Word paints the note separator where the separator paragraph's own font
+  // would strike its text out. Measured off Word's own PDF exports (which
+  // quantise to 1/300 inch) of tdf123262_textFootnoteSeparators,
+  // tdf82173_footnoteStyle/endnoteStyle, footnote.docx and
+  // tdf118361_RTLfootnoteSeparator: the bar's top edge sits OS/2
+  // yStrikeoutPosition above the baseline Word writes for that same separator
+  // paragraph (3.120 pt measured vs 3.105 stated at Arial 12 pt, 6.240 vs 6.211
+  // at Arial 24 pt, 2.880 vs 2.750 at Calibri 11 pt) and the bar is
+  // yStrikeoutSize thick (0.48, 1.20 and 0.72 pt on those same three).
+  it('seats the note separator rule on the separator paragraph mark\'s own strikeout metrics', async () => {
+    const prepared = await prepareNativeDocxPagePaintV1(noteFixture())
+    const layout = prepared.page_paint_request.paginated_layout
+    expect(layout.status, JSON.stringify(layout)).toBe('paginated')
+    if (layout.status !== 'paginated') return
+    // DejaVu Sans states unitsPerEm 2048, ascender 1901, yStrikeoutPosition 530
+    // and yStrikeoutSize 102; the separator paragraph mark is DejaVu Sans 10 pt.
+    const size = 10_000
+    const ascent = Math.round((1_901 * size) / 2_048)
+    const position = Math.round((530 * size) / 2_048)
+    const thickness = Math.round((102 * size) / 2_048)
+    const separatorParagraph = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:footnote-separator')!
+    expect(separatorParagraph.lines[0]).toMatchObject({ ascent_millipoints: ascent, mark_strikeout_position_millipoints: position, mark_strikeout_thickness_millipoints: thickness })
+    const noteParagraph = prepared.page_paint_request.pagination_request.shaped_lines.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:footnote-1')!
+    expect(noteParagraph.lines[0]!.mark_strikeout_position_millipoints).toBeUndefined()
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to' as const, x: 0, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 1_000 }, { kind: 'close_path' as const }],
+    })) })
+    expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output)).toBe('painted')
+    if (completed.page_paint_output.status !== 'painted') return
+    const page = completed.page_paint_output.pages[0]!
+    const rule = page.commands.find((command) => command.kind === 'stroke_note_separator')!
+    const placed = page.lines.find((line) => line.paragraph_id === 'paragraph:footnote-separator')!
+    expect(rule.width_millipoints).toBe(thickness)
+    expect(rule.y1_millipoints).toBe(placed.y_millipoints + ascent - position + Math.round(thickness / 2))
+    expect(rule.y1_millipoints - Math.round(rule.width_millipoints / 2)).toBe(placed.y_millipoints + ascent - position)
+    // The earlier rule offset the bar by min(6 pt, height/2) into the line box
+    // and always stroked it 0.75 pt wide; neither survives.
+    expect(rule.y1_millipoints).not.toBe(placed.y_millipoints + Math.min(6_000, Math.floor(placed.height_millipoints / 2)))
+    expect(rule.width_millipoints).not.toBe(750)
+    // The bar still spans Word's 2 inches from the column's start edge.
+    expect(rule.x2_millipoints - rule.x1_millipoints).toBe(144_000)
+  })
+
+  it('publishes the separator strikeout metrics as a pair the replay decoder derives the same rule from', async () => {
+    const prepared = await prepareNativeDocxPagePaintV1(noteFixture())
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: prepared.outline_requests.map((outline) => ({
+      status: 'outlined' as const, face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048,
+      path: [{ kind: 'move_to' as const, x: 0, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 0 }, { kind: 'line_to' as const, x: 1_000, y: 1_000 }, { kind: 'close_path' as const }],
+    })) })
+    expect(completed.page_paint_output.status, JSON.stringify(completed.page_paint_output)).toBe('painted')
+    const request = completed.page_paint_request
+    const provider = request.outline_provider
+    expect(decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, request, provider).ok).toBe(true)
+    const separatorLine = (lines: typeof request.pagination_request.shaped_lines) => lines.paragraphs.find((paragraph) => paragraph.paragraph_id === 'paragraph:footnote-separator')!.lines[0]!
+    // Half a pair is not a contract-valid line: a rule cannot be seated from a
+    // position with no thickness, or a thickness with no position.
+    for (const key of ['mark_strikeout_position_millipoints', 'mark_strikeout_thickness_millipoints'] as const) {
+      const partial = structuredClone(request.pagination_request.shaped_lines)
+      delete separatorLine(partial)[key]
+      expect(decodeNativeDocxShapedLines(partial).ok, key).toBe(false)
+    }
+    // Dropping the pair is contract-valid and falls back to the line-box offset,
+    // so the replay decoder derives a different rule and refuses the painted one.
+    const dropped = structuredClone(request.pagination_request.shaped_lines)
+    delete separatorLine(dropped).mark_strikeout_position_millipoints
+    delete separatorLine(dropped).mark_strikeout_thickness_millipoints
+    expect(decodeNativeDocxShapedLines(dropped).ok).toBe(true)
+    const replayed = structuredClone(request)
+    replayed.pagination_request.shaped_lines = dropped
+    const refused = decodeNativeDocxPagePaintForRequestV1(completed.page_paint_output, replayed, provider)
+    expect(refused.ok).toBe(false)
+  })
+
   it('composes exact note shaping, bottom placement, paint, and paginated-layout attestation', async () => {
     const prepared = await prepareNativeDocxPagePaintV1(noteFixture())
     expect(prepared.page_paint_request.paginated_layout.status).toBe('paginated')

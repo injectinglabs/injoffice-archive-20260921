@@ -227,6 +227,16 @@ export interface NativeDocxShapedLineV1 {
   justified: boolean
   /** Index by logical cluster order; each value is its index in visual fragments. */
   logical_to_visual: number[]
+  /**
+   * Scaled OS/2 strikeout metrics of the paragraph mark, published only on a
+   * fragment-less line of a note separator story. Word seats the note separator
+   * rule exactly where it would strike out that paragraph's own text: the rule's
+   * top edge sits `yStrikeoutPosition` above the baseline and it is
+   * `yStrikeoutSize` thick, so the rule is stated in the separator paragraph's
+   * own font metrics instead of a page-relative constant.
+   */
+  mark_strikeout_position_millipoints?: number
+  mark_strikeout_thickness_millipoints?: number
   fragments: NativeDocxLineFragmentV1[]
   hard_break_after?: NativeDocxHardBreakV1
 }
@@ -347,6 +357,10 @@ interface NativeShapingContext {
   activeParagraphID?: string
   activeParagraphFailed: boolean
   activeAvailableWidthMilliPoints?: number
+  /** True while shaping the instruction paragraph of a footnote/endnote
+   * separator story, whose first line publishes the paragraph mark's strikeout
+   * metrics so the painter can seat the derived rule on them. */
+  activeNoteSeparatorLine?: boolean
   numberingFailed: boolean
   shapedFlowBreakRunIDs: ReadonlySet<string>
 }
@@ -868,7 +882,7 @@ function hasExactKeys(value: unknown, allowed: readonly string[]): value is Reco
 }
 
 function validMetrics(metrics: ScaledLineMetrics): boolean {
-  if (!hasExactKeys(metrics, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints'])) return false
+  if (!hasExactKeys(metrics, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints', 'strikeoutPositionMilliPoints', 'strikeoutThicknessMilliPoints'])) return false
   const values = [metrics.ascentMilliPoints, metrics.descentMilliPoints, metrics.lineGapMilliPoints, metrics.lineHeightMilliPoints]
   return finiteSafeInteger(metrics.fontSizeMilliPoints) && metrics.fontSizeMilliPoints > 0
     && finiteSafeInteger(metrics.ascentMilliPoints) && metrics.ascentMilliPoints >= 0
@@ -877,7 +891,7 @@ function validMetrics(metrics: ScaledLineMetrics): boolean {
     && finiteSafeInteger(metrics.lineHeightMilliPoints) && metrics.lineHeightMilliPoints > 0
     && metrics.lineHeightMilliPoints === metrics.ascentMilliPoints - metrics.descentMilliPoints + metrics.lineGapMilliPoints
     && values.every((value) => Math.abs(value) <= MAX_PROVIDER_METRIC_MILLIPOINTS)
-    && [metrics.capHeightMilliPoints, metrics.xHeightMilliPoints, metrics.underlinePositionMilliPoints, metrics.underlineThicknessMilliPoints].every((value) => value === undefined || (finiteSafeInteger(value) && Math.abs(value) <= MAX_PROVIDER_METRIC_MILLIPOINTS))
+    && [metrics.capHeightMilliPoints, metrics.xHeightMilliPoints, metrics.underlinePositionMilliPoints, metrics.underlineThicknessMilliPoints, metrics.strikeoutPositionMilliPoints, metrics.strikeoutThicknessMilliPoints].every((value) => value === undefined || (finiteSafeInteger(value) && Math.abs(value) <= MAX_PROVIDER_METRIC_MILLIPOINTS))
 }
 
 function validResolvedFaceShape(face: ResolvedFontFace): boolean {
@@ -966,7 +980,7 @@ function validResolvedFace(face: ResolvedFontFace, manifest: NativeFontManifest,
 }
 
 function validFontResource(resource: FontResource, expectedFace: ResolvedFontFace): boolean {
-  if (!hasExactKeys(resource, ['face', 'bytes', 'metrics']) || !hasExactKeys(resource.metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness'])) return false
+  if (!hasExactKeys(resource, ['face', 'bytes', 'metrics']) || !hasExactKeys(resource.metrics, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness', 'strikeoutPosition', 'strikeoutThickness'])) return false
   const metrics = resource.metrics
   if (!(resource.bytes instanceof Uint8Array) || resource.bytes.byteLength === 0 || resource.bytes.byteLength > DOCX_SHAPED_LINES_LIMITS.maxFontResourceBytes) return false
   const actualDigest = `sha256:${bytesToHex(sha256(resource.bytes))}`
@@ -1140,7 +1154,7 @@ function snapshotResolutionResult(value: unknown, textLength: number): NativeRes
 }
 
 function snapshotDesignMetrics(value: unknown): FontResource['metrics'] | null {
-  const captured = captureExactProviderRecord(value, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness'], ['unitsPerEm', 'ascender', 'descender', 'lineGap'])
+  const captured = captureExactProviderRecord(value, ['unitsPerEm', 'ascender', 'descender', 'lineGap', 'capHeight', 'xHeight', 'underlinePosition', 'underlineThickness', 'strikeoutPosition', 'strikeoutThickness'], ['unitsPerEm', 'ascender', 'descender', 'lineGap'])
   if (!captured) return null
   const metrics = Object.freeze({
     unitsPerEm: captured.unitsPerEm,
@@ -1151,6 +1165,8 @@ function snapshotDesignMetrics(value: unknown): FontResource['metrics'] | null {
     ...(captured.xHeight !== undefined ? { xHeight: captured.xHeight } : {}),
     ...(captured.underlinePosition !== undefined ? { underlinePosition: captured.underlinePosition } : {}),
     ...(captured.underlineThickness !== undefined ? { underlineThickness: captured.underlineThickness } : {}),
+    ...(captured.strikeoutPosition !== undefined ? { strikeoutPosition: captured.strikeoutPosition } : {}),
+    ...(captured.strikeoutThickness !== undefined ? { strikeoutThickness: captured.strikeoutThickness } : {}),
   }) as FontResource['metrics']
   return validDesignMetrics(metrics) ? metrics : null
 }
@@ -1178,7 +1194,7 @@ function snapshotLoadResult(value: unknown, textLength: number): NativeLoadSnaps
 }
 
 function snapshotScaledMetrics(value: unknown): ScaledLineMetrics | null {
-  const captured = captureExactProviderRecord(value, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints'], ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints'])
+  const captured = captureExactProviderRecord(value, ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints', 'capHeightMilliPoints', 'xHeightMilliPoints', 'underlinePositionMilliPoints', 'underlineThicknessMilliPoints', 'strikeoutPositionMilliPoints', 'strikeoutThicknessMilliPoints'], ['fontSizeMilliPoints', 'ascentMilliPoints', 'descentMilliPoints', 'lineGapMilliPoints', 'lineHeightMilliPoints'])
   if (!captured) return null
   const metrics = Object.freeze({
     fontSizeMilliPoints: captured.fontSizeMilliPoints,
@@ -1190,6 +1206,8 @@ function snapshotScaledMetrics(value: unknown): ScaledLineMetrics | null {
     ...(captured.xHeightMilliPoints !== undefined ? { xHeightMilliPoints: captured.xHeightMilliPoints } : {}),
     ...(captured.underlinePositionMilliPoints !== undefined ? { underlinePositionMilliPoints: captured.underlinePositionMilliPoints } : {}),
     ...(captured.underlineThicknessMilliPoints !== undefined ? { underlineThicknessMilliPoints: captured.underlineThicknessMilliPoints } : {}),
+    ...(captured.strikeoutPositionMilliPoints !== undefined ? { strikeoutPositionMilliPoints: captured.strikeoutPositionMilliPoints } : {}),
+    ...(captured.strikeoutThicknessMilliPoints !== undefined ? { strikeoutThicknessMilliPoints: captured.strikeoutThicknessMilliPoints } : {}),
   }) as ScaledLineMetrics
   return validMetrics(metrics) ? metrics : null
 }
@@ -1940,6 +1958,13 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
   })
   const advance = naturalAdvance + expansions.reduce((sum, value) => sum + value, 0)
   const metrics = naturalLineMetrics(atoms, paragraphMarkMetrics)
+  // Only the one line the painter derives the rule from carries the metrics:
+  // the first line of a separator story's first paragraph, and only when it
+  // holds no text of its own.
+  const separatorRule = context.activeNoteSeparatorLine && ordinal === 0 && atoms.length === 0
+    && paragraphMarkMetrics?.strikeoutPositionMilliPoints !== undefined && paragraphMarkMetrics.strikeoutThicknessMilliPoints !== undefined
+    && paragraphMarkMetrics.strikeoutThicknessMilliPoints > 0
+    ? { position: paragraphMarkMetrics.strikeoutPositionMilliPoints, thickness: paragraphMarkMetrics.strikeoutThicknessMilliPoints } : undefined
   context.lineCount += 1
   return {
     id: `line:${paragraphID}:${ordinal}`,
@@ -1953,6 +1978,7 @@ function materializeLine(context: NativeShapingContext, paragraphID: string, ord
     line_height_millipoints: metrics.height,
     justified: shouldJustify,
     logical_to_visual: [...order.value.logicalToVisual],
+    ...(separatorRule ? { mark_strikeout_position_millipoints: separatorRule.position, mark_strikeout_thickness_millipoints: separatorRule.thickness } : {}),
     fragments,
     ...(hardBreak ? { hard_break_after: { ...hardBreak } } : {}),
   }
@@ -2073,6 +2099,9 @@ function needsParagraphMarkMetrics(events: ParagraphEvent[]): boolean {
 }
 
 async function shapeParagraph(context: NativeShapingContext, story: NativeDocxStoryV1, paragraph: NativeDocxParagraphV1): Promise<NativeDocxShapedParagraphV1 | null> {
+  const separatorStory = story.note_role === 'separator' || story.note_role === 'continuation-separator'
+  const firstBlock = story.blocks[0]
+  context.activeNoteSeparatorLine = separatorStory && firstBlock?.kind === 'paragraph' && firstBlock.paragraph?.id === paragraph.id
   const resolved = context.paragraphs.get(paragraph.id)!
   const direction = resolved.properties.bidi ? 'rtl' : 'ltr'
   const alignment = resolved.properties.alignment ?? 'start'

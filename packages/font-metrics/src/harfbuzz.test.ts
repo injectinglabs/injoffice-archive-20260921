@@ -143,6 +143,8 @@ const font: FontResource = Object.freeze({
     lineGap: 0,
     underlinePosition: -130,
     underlineThickness: 90,
+    strikeoutPosition: 530,
+    strikeoutThickness: 102,
   }),
 })
 
@@ -231,6 +233,8 @@ describe('canonical HarfBuzz text shaper v1', () => {
       xHeightMilliPoints: undefined,
       underlinePositionMilliPoints: -762,
       underlineThicknessMilliPoints: 527,
+      strikeoutPositionMilliPoints: 3_105,
+      strikeoutThicknessMilliPoints: 598,
     })
   })
 
