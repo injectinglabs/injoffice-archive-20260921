@@ -102,6 +102,10 @@ export interface NativeMaximumDigitWidthAuthorityV2 {
   readonly provider_revision: string
   readonly measurement_dpi: 96
   readonly maximum_digit_width_pixels: number
+  /** The device the printed grid is laid out on: the page itself, 72 units per inch. */
+  readonly page_measurement_dpi: 72
+  /** The same maximum digit width rounded on the page's own lattice; this, not the 96-dpi value, is what the grid below is built from. */
+  readonly page_maximum_digit_width_points: number
 }
 
 export interface NativeSheetGeometryRectV2 {
@@ -251,7 +255,7 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
   // baseColWidth does have a declared default of 8 characters (§18.3.1.81), so
   // a column with no stored width is padded from it whether or not the element
   // that would have restated it is present.
-  const defaultColumnWidth = format?.default_column_width ?? paddedBaseColumnWidth(format?.base_column_width ?? 8, safeMetricAuthority.maximum_digit_width_pixels)
+  const defaultColumnWidth = format?.default_column_width ?? paddedBaseColumnWidth(format?.base_column_width ?? 8, safeMetricAuthority.page_maximum_digit_width_points)
   const rows: NativeSheetRowBandV2[] = []
   const columns: NativeSheetColumnBandV2[] = []
   let y = 0
@@ -277,8 +281,8 @@ function compileGeometry(workbook:NativeWorkbookRenderModelV2,sheetId:string,vie
     }
     const widthCharacters = override?.width ?? defaultColumnWidth
     const hidden = (override?.hidden ?? false) || widthCharacters === 0
-    const pixels = hidden || widthCharacters === 0 ? 0 : characterWidthToPixels(widthCharacters, safeMetricAuthority.maximum_digit_width_pixels)
-    const width = checkedInteger(pixels * EMU_PER_CSS_PIXEL, `$.columns[${columns.length}].width_emu`)
+    const points = hidden || widthCharacters === 0 ? 0 : characterWidthToPixels(widthCharacters, safeMetricAuthority.page_maximum_digit_width_points)
+    const width = checkedInteger(points * EMU_PER_POINT, `$.columns[${columns.length}].width_emu`)
     columns.push({ column, x_emu: x, width_emu: width, hidden, width_characters: widthCharacters, source: override ? 'column-override' : 'sheet-default' })
     x = checkedSum(x, width, `$.columns[${columns.length - 1}].x_emu`)
   }
@@ -493,14 +497,18 @@ function geometryCommands(geometry: NativeSheetGeometryV2): ReadonlyArray<Native
   ])
 }
 
-/** ISO/IEC 29500 stored character width to runtime grid pixels. */
+/**
+ * ISO/IEC 29500 stored character width to whole grid units on the device whose
+ * maximum digit width is supplied. The lattice is unchanged; what decides the
+ * absolute size is which device's rounded maximum digit width is handed in.
+ */
 export function characterWidthToPixels(width: number, maximumDigitWidthPixels: number): number {
   if (!Number.isFinite(width) || Object.is(width, -0) || width < 0 || width > 255) throw new NativeSheetGeometryV2Error('geometry.metricUnavailable', '$.width', 'column width must be finite, non-negative-zero, and within 0..255')
   validateMdw(maximumDigitWidthPixels, '$.maximumDigitWidthPixels')
   return width === 0 ? 0 : Math.floor(((256 * width + Math.floor(128 / maximumDigitWidthPixels)) / 256) * maximumDigitWidthPixels)
 }
 
-/** Default base character count plus Excel's five-pixel cell padding, snapped down to 1/256. */
+/** Default base character count plus Excel's five-unit cell padding, snapped down to 1/256, on the supplied device's own maximum digit width. */
 export function paddedBaseColumnWidth(baseColumnWidth: number, maximumDigitWidthPixels: number): number {
   if (!Number.isSafeInteger(baseColumnWidth) || Object.is(baseColumnWidth, -0) || baseColumnWidth < 0 || baseColumnWidth > 255) throw new NativeSheetGeometryV2Error('geometry.sheetFormatUnavailable', '$.sheet.sheet_format.base_column_width', 'base column width must be a non-negative-zero integer within 0..255')
   validateMdw(maximumDigitWidthPixels, '$.metric_authority.maximum_digit_width_pixels')
@@ -537,7 +545,7 @@ function snapshotViewport(input: unknown): NativeSheetViewportV2 {
 }
 
 function snapshotMetricAuthority(input: unknown): NativeMaximumDigitWidthAuthorityV2 {
-  const value = exactObject(snapshotGeometryInput(input, '$.metric_authority'), ['source_revision', 'source_package_sha256', 'normal_style_xf_id', 'normal_style_font_id', 'font_name', 'font_size_points', 'font_bold', 'font_italic', 'normal_font_record_sha256', 'font_sha256', 'provider_id', 'provider_revision', 'measurement_dpi', 'maximum_digit_width_pixels'], '$.metric_authority')
+  const value = exactObject(snapshotGeometryInput(input, '$.metric_authority'), ['source_revision', 'source_package_sha256', 'normal_style_xf_id', 'normal_style_font_id', 'font_name', 'font_size_points', 'font_bold', 'font_italic', 'normal_font_record_sha256', 'font_sha256', 'provider_id', 'provider_revision', 'measurement_dpi', 'maximum_digit_width_pixels', 'page_measurement_dpi', 'page_maximum_digit_width_points'], '$.metric_authority')
   const result: NativeMaximumDigitWidthAuthorityV2 = {
     source_revision: stringPattern(value.source_revision, '$.metric_authority.source_revision', /^rev:[0-9a-f]{64}$/),
     source_package_sha256: stringPattern(value.source_package_sha256, '$.metric_authority.source_package_sha256', /^sha256:[0-9a-f]{64}$/),
@@ -553,6 +561,8 @@ function snapshotMetricAuthority(input: unknown): NativeMaximumDigitWidthAuthori
     provider_revision: boundedString(value.provider_revision, '$.metric_authority.provider_revision', 256),
     measurement_dpi: boundedInteger(value.measurement_dpi, '$.metric_authority.measurement_dpi', 96, 96) as 96,
     maximum_digit_width_pixels: boundedInteger(value.maximum_digit_width_pixels, '$.metric_authority.maximum_digit_width_pixels', 1, 512),
+    page_measurement_dpi: boundedInteger(value.page_measurement_dpi, '$.metric_authority.page_measurement_dpi', 72, 72) as 72,
+    page_maximum_digit_width_points: boundedInteger(value.page_maximum_digit_width_points, '$.metric_authority.page_maximum_digit_width_points', 1, 512),
   }
   if (result.source_revision.slice(4) !== result.source_package_sha256.slice(7)) invalidGeometry('$.metric_authority.source_revision', 'metric source revision does not match package digest')
   return result
@@ -569,10 +579,11 @@ function validateMetricAuthority(workbook: NativeWorkbookRenderModelV2, authorit
   if (authority.normal_style_xf_id !== normal.style_xf_id || authority.normal_style_font_id !== normal.font_id || authority.font_name !== normal.font_name || authority.font_size_points !== normal.font_size_points || authority.font_bold !== normal.font_bold || authority.font_italic !== normal.font_italic || authority.normal_font_record_sha256 !== normal.font_record_sha256) {
     throw new NativeSheetGeometryV2Error('geometry.metricAuthority', '$.metric_authority', 'maximum digit width font identity disagrees with the projected Normal style')
   }
-  if (!/^sha256:[0-9a-f]{64}$/.test(authority.normal_font_record_sha256) || !/^sha256:[0-9a-f]{64}$/.test(authority.font_sha256) || !boundedIdentifier(authority.provider_id) || !boundedIdentifier(authority.provider_revision) || authority.measurement_dpi !== 96) {
+  if (!/^sha256:[0-9a-f]{64}$/.test(authority.normal_font_record_sha256) || !/^sha256:[0-9a-f]{64}$/.test(authority.font_sha256) || !boundedIdentifier(authority.provider_id) || !boundedIdentifier(authority.provider_revision) || authority.measurement_dpi !== 96 || authority.page_measurement_dpi !== 72) {
     throw new NativeSheetGeometryV2Error('geometry.metricAuthority', '$.metric_authority', 'font digest and provider provenance are required')
   }
   validateMdw(authority.maximum_digit_width_pixels, '$.metric_authority.maximum_digit_width_pixels')
+  validateMdw(authority.page_maximum_digit_width_points, '$.metric_authority.page_maximum_digit_width_points')
 }
 
 function validateMdw(value: number, path: string): void {
