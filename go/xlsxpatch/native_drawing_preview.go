@@ -340,3 +340,39 @@ func previewNativeDrawings(pkg *nativeWorkbookPackage, sheets []NativeWorkbookSh
 	}
 	return result, nil
 }
+
+// nativeDrawingPrintArea is the smallest rectangle covering every cell-anchored
+// drawing on the sheet, or nil when none states a closing marker. Excel's
+// printed used range includes its anchored objects, so a worksheet whose
+// picture, shape or chart sits past the last stored cell still prints the pages
+// that object reaches; the dimension-derived fallback covers cells alone.
+// Anchors without a closing marker state no extent in cells and are skipped
+// rather than guessed at.
+func nativeDrawingPrintArea(drawings []NativeDrawingObjectV1, sheetPart string) *NativePrintAreaRectV1 {
+	var result *NativePrintAreaRectV1
+	for _, drawing := range drawings {
+		if drawing.SheetPart != sheetPart || drawing.Anchor == nil || drawing.Anchor.To == nil {
+			continue
+		}
+		endRow, endColumn := drawing.Anchor.To.Row, drawing.Anchor.To.Column
+		// A closing marker at offset zero sits on the boundary, so the object
+		// stops at the previous row or column rather than occupying the next.
+		if drawing.Anchor.To.RowOffset == 0 && endRow > drawing.Anchor.From.Row {
+			endRow--
+		}
+		if drawing.Anchor.To.ColumnOffset == 0 && endColumn > drawing.Anchor.From.Column {
+			endColumn--
+		}
+		if result == nil {
+			result = &NativePrintAreaRectV1{Row: 0, Column: 0, EndRow: endRow, EndColumn: endColumn}
+			continue
+		}
+		if endRow > result.EndRow {
+			result.EndRow = endRow
+		}
+		if endColumn > result.EndColumn {
+			result.EndColumn = endColumn
+		}
+	}
+	return result
+}

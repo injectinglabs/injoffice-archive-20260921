@@ -112,3 +112,95 @@ func TestNativeDrawingPreviewRetainsUnsupportedObjects(t *testing.T) {
 		})
 	}
 }
+
+func drawingPrintAreaSet(t *testing.T, parts map[string]string) *NativeSheetPrintAreaSetV1 {
+	t.Helper()
+	objects, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range objects.PrintAreaSets {
+		if objects.PrintAreaSets[i].SheetPart == "Sheets/s1.xml" {
+			return &objects.PrintAreaSets[i]
+		}
+	}
+	t.Fatalf("no print area set for the drawing sheet: %+v", objects.PrintAreaSets)
+	return nil
+}
+
+// Excel's printed used range includes its anchored objects, so a worksheet
+// whose dimension stops before a picture or shape still prints the pages that
+// object reaches. Measured against Excel 16.112.4's own PDF export of the local
+// hard-v2 corpus: image_hyperlink.xlsx states dimension A1 and anchors its
+// picture in column M, and Excel prints two pages.
+func TestNativeDrawingPrintAreaCoversAnchoredDrawings(t *testing.T) {
+	parts, _ := drawingPreviewFixture(false)
+	parts["Sheets/s1.xml"] = strings.Replace(parts["Sheets/s1.xml"], `<dimension ref="A1:K2"/>`, `<dimension ref="A1"/>`, 1)
+	set := drawingPrintAreaSet(t, parts)
+	if set.Status != "available" || len(set.Areas) != 1 {
+		t.Fatalf("no dimension-derived print area: %+v", set)
+	}
+	// The anchor closes inside row 2 and column 2, so the printed range must
+	// reach them; a range stopping at the dimension prints one cell.
+	if set.Areas[0].Row != 0 || set.Areas[0].Column != 0 || set.Areas[0].EndRow != 2 || set.Areas[0].EndColumn != 2 {
+		t.Fatalf("print area does not cover the anchored drawing: %+v", set.Areas[0])
+	}
+	if !strings.Contains(set.Warnings[0], "drawing anchors") {
+		t.Fatalf("extended print area is not disclosed: %+v", set.Warnings)
+	}
+}
+
+// A closing marker at offset zero sits on the boundary: the object stops at the
+// previous row and column rather than occupying the next one.
+func TestNativeDrawingPrintAreaStopsAtBoundaryOffsets(t *testing.T) {
+	parts, drawing := drawingPreviewFixture(false)
+	parts["Sheets/s1.xml"] = strings.Replace(parts["Sheets/s1.xml"], `<dimension ref="A1:K2"/>`, `<dimension ref="A1"/>`, 1)
+	drawing = strings.Replace(drawing, `<xdr:col>2</xdr:col><xdr:colOff>300</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>400</xdr:rowOff>`, `<xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>0</xdr:rowOff>`, 1)
+	parts["Drawings/drawing.xml"] = drawing
+	set := drawingPrintAreaSet(t, parts)
+	if len(set.Areas) != 1 || set.Areas[0].EndRow != 1 || set.Areas[0].EndColumn != 1 {
+		t.Fatalf("boundary anchor printed a row and column it does not occupy: %+v", set.Areas)
+	}
+}
+
+// Inertness guard: an anchor with no closing marker states no extent in cells,
+// so it is skipped rather than guessed at, and a drawing inside the dimension
+// never widens it. This holds before and after the extension.
+func TestNativeDrawingPrintAreaIgnoresAnchorsWithoutClosingMarker(t *testing.T) {
+	parts, drawing := drawingPreviewFixture(false)
+	start := strings.Index(drawing, "<xdr:to>")
+	end := strings.Index(drawing, "</xdr:to>") + len("</xdr:to>")
+	if start < 0 || end <= start {
+		t.Fatal("fixture no longer states a closing marker")
+	}
+	parts["Drawings/drawing.xml"] = strings.ReplaceAll(drawing[:start]+`<xdr:ext cx="2000000" cy="1000000"/>`+drawing[end:], "twoCellAnchor", "oneCellAnchor")
+	objects, err := InspectNativeWorkbookObjectsV1(buildZip(t, parts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if area := nativeDrawingPrintArea(objects.DrawingObjects, "Sheets/s1.xml"); area != nil {
+		t.Fatalf("anchor without a closing marker extended the printed range: %+v", area)
+	}
+	set := drawingPrintAreaSet(t, parts)
+	if len(set.Areas) != 1 || set.Areas[0].EndRow != 1 || set.Areas[0].EndColumn != 10 {
+		t.Fatalf("dimension-derived range changed: %+v", set.Areas)
+	}
+	if strings.Contains(set.Warnings[0], "drawing anchors") {
+		t.Fatalf("unextended print area claims a drawing extension: %+v", set.Warnings)
+	}
+}
+
+// Inertness guard: a saved _xlnm.Print_Area is the workbook's own answer and is
+// never widened. Only the dimension-derived fallback, which covers cells alone,
+// is extended. This holds before and after the extension.
+func TestNativeDrawingPrintAreaLeavesSavedPrintAreaAlone(t *testing.T) {
+	parts, _ := drawingPreviewFixture(false)
+	parts["Book/Workbook.xml"] = strings.Replace(parts["Book/Workbook.xml"], `</sheets>`, `</sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'Data Set'!$A$1</definedName></definedNames>`, 1)
+	if !strings.Contains(parts["Book/Workbook.xml"], "_xlnm.Print_Area") {
+		t.Fatal("fixture no longer states a sheets element")
+	}
+	set := drawingPrintAreaSet(t, parts)
+	if set.Status != "available" || len(set.Areas) != 1 || set.Areas[0].EndRow != 0 || set.Areas[0].EndColumn != 0 {
+		t.Fatalf("saved print area was widened by a drawing anchor: %+v", set)
+	}
+}
