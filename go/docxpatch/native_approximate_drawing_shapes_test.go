@@ -259,6 +259,39 @@ func nativeApproximateGroupChild(offset, extent, geometry, extra string) string 
 
 const nativeApproximateRectGeometry = `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
 
+// TestApproximateDrawingGroupImpliedChildSpace pins the ECMA-376 §20.1.7.6
+// default: a group transform that states neither a:chOff nor a:chExt leaves its
+// children in the group's own coordinate space, so they map one to one onto the
+// group's a:ext and wp:extent only bounds the wrap region. Word's own PDF export
+// of dml-groupshape-childposition paints that group's 193680x9125640 EMU child
+// at exactly 15.2504x718.554 pt, with no rescale toward its larger wp:extent.
+func TestApproximateDrawingGroupImpliedChildSpace(t *testing.T) {
+	// wp:extent is 2998800 x 2829600; the group's own a:ext is 515 x 580 EMU
+	// smaller, exactly the kind of export rounding Word writes.
+	properties := `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998285" cy="2829020"/></a:xfrm>`
+	children := nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, nativeApproximateRectGeometry, ``)
+	drawing := nativeApproximateGroupDrawing(nativeApproximateGroupAnchor(), `</wp:anchor>`, properties, children)
+	out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out == nil || len(out.Items) != 1 {
+		t.Fatalf("expected one described child: %#v", out)
+	}
+	item := out.Items[0]
+	// Identity mapping: the child keeps its authored extent and its authored
+	// offset is added to the group's anchored position (914400, 457200).
+	if item.Status != "supported" || item.Preset != "rect" || item.WidthEMU != 500000 || item.HeightEMU != 300000 {
+		t.Fatalf("implied child space must map one to one: %#v", item)
+	}
+	if item.PageAnchor == nil || item.PageAnchor.XEMU != 1014400 || item.PageAnchor.YEMU != 657200 {
+		t.Fatalf("implied child space position: %#v", item.PageAnchor)
+	}
+	if !nativeApproximateHasNote(item, "group has no child coordinate space and is painted at its own a:ext; wp:extent differs and bounds only the wrap region") {
+		t.Fatalf("a wp:extent that disagrees with a:ext must be disclosed: %#v", item.Notes)
+	}
+}
+
 // TestApproximateDrawingGroupShapeChildren pins the offset-and-scale mapping a
 // group shape child goes through, and the strict lane it must never touch.
 func TestApproximateDrawingGroupShapeChildren(t *testing.T) {
@@ -366,7 +399,8 @@ func TestApproximateDrawingGroupShapeOmissions(t *testing.T) {
 	rect := nativeApproximateGroupChild(`100000" y="200000`, `500000" cy="300000`, nativeApproximateRectGeometry, ``)
 	t.Run("whole group", func(t *testing.T) {
 		for _, test := range []struct{ name, container, closeTag, properties, reason string }{
-			{"missing child coordinate space", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm>`, "missing-child-coordinate-space"},
+			{"child extent without child offset", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/><a:chExt cx="2998800" cy="2829600"/></a:xfrm>`, "missing-child-coordinate-space"},
+			{"child offset without child extent", nativeApproximateGroupAnchor(), `</wp:anchor>`, `<a:xfrm><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/><a:chOff x="0" y="0"/></a:xfrm>`, "missing-child-coordinate-space"},
 			{"missing group transform", nativeApproximateGroupAnchor(), `</wp:anchor>`, ``, "missing-child-coordinate-space"},
 			{"inline group", `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="2998800" cy="2829600"/><wp:docPr id="4" name="Group 4"/><wp:cNvGraphicFramePr/>`, `</wp:inline>`, nativeApproximateGroupTransform, "inline-group-unsupported"},
 			{"aligned group", nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>457200</wp:posOffset></wp:positionV>`), `</wp:anchor>`, nativeApproximateGroupTransform, "aligned-group-position-unsupported"},
