@@ -1017,3 +1017,59 @@ func TestNativeNumberingLetterAlphabetAttestation(t *testing.T) {
 		})
 	}
 }
+
+// ECMA-376 17.9.26 states w:start as the number the first paragraph at a level
+// uses, so a parent counter that no paragraph has reached yet is AT its start
+// rather than absent, and an lvlText that references it is not malformed.
+// Word prints exactly that. Its own PDF export of `mixednumberings.docx` numbers
+// that document's second Heading 2 run `1|1.1|1.2|1.3` where the `1.1` marker's
+// own numbering instance has never numbered a Heading 1: the parent counter
+// takes its w:start. Resolving the same three paragraphs previously refused
+// them with "lvlText references an uninitialized parent counter" and the
+// document produced no page.
+func TestNativeNumberingUninitializedParentCounterTakesLevelStart(t *testing.T) {
+	level := func(ilvl int, format, text, start string) string {
+		return `<w:lvl w:ilvl="` + fmt.Sprint(ilvl) + `"><w:start w:val="` + start + `"/><w:numFmt w:val="` + format + `"/><w:lvlText w:val="` + text + `"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>`
+	}
+	for _, tc := range []struct {
+		name       string
+		parent     string
+		start      string
+		paragraphs string
+		want       []string
+	}{
+		{"parent never numbered", "decimal", "1", numberedParagraph("2", 1, "child"), []string{"1.1"}},
+		{"parent never numbered with a later start", "decimal", "7", numberedParagraph("2", 1, "child"), []string{"7.1"}},
+		{"parent never numbered in its own format", "upperLetter", "3", numberedParagraph("2", 1, "child"), []string{"C.1"}},
+		{"parent numbered first is unchanged", "decimal", "1", numberedParagraph("2", 0, "parent") + numberedParagraph("2", 1, "child"), []string{"1", "1.1"}},
+		{"parent numbered twice is unchanged", "decimal", "1", numberedParagraph("2", 0, "a") + numberedParagraph("2", 0, "b") + numberedParagraph("2", 1, "child"), []string{"1", "2", "2.1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			numbering := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1">` +
+				level(0, tc.parent, "%1", tc.start) + level(1, "decimal", "%1.%2", "1") +
+				`</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+			resolved := resolveNumberingFixture(t, numbering, tc.paragraphs)
+			if hasResolutionDiagnostic(resolved, "MALFORMED_NUMBERING_TEXT") {
+				t.Fatalf("an uninitialized parent counter was reported malformed: %#v", resolved.Diagnostics)
+			}
+			got := []string{}
+			for _, paragraph := range resolved.Paragraphs {
+				if paragraph.Numbering == nil {
+					t.Fatalf("paragraph %s resolved no marker: %#v", paragraph.ParagraphID, resolved.Diagnostics)
+				}
+				got = append(got, paragraph.Numbering.ResolvedText)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("markers = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	// A placeholder naming a level the definition does not carry is still
+	// malformed: there is no w:start to fall back to and nothing to render.
+	missing := `<w:numbering xmlns:w="` + wordMLTransitional + `"><w:abstractNum w:abstractNumId="1">` + level(1, "decimal", "%1.%2", "1") + `</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`
+	resolved := resolveNumberingFixture(t, missing, numberedParagraph("2", 1, "child"))
+	if resolved.Paragraphs[0].Numbering != nil || !hasResolutionDiagnostic(resolved, "MALFORMED_NUMBERING_TEXT") {
+		t.Fatalf("a placeholder for a missing level was guessed: %#v", resolved)
+	}
+}
