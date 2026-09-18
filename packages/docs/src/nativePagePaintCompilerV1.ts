@@ -52,6 +52,7 @@ import { decodeNativeDocxResolvedLayout, type NativeDocxResolvedLayoutInputV1, t
 import { shapeNativeDocxLinesWithParagraphWidthsV1,shapeNativeDocxFontPreviewLinesV1 } from './nativeShapingLines.js'
 import type { NativeDocxLineIntervalPlanV1 } from './nativeShapingLines.js'
 import { hasNativeSquareWrapV1, deriveNativeSquareWrapPlanV1 } from './nativeSquareWrapV1.js'
+import { nativeDocxUnplaceableFloatingTableFrameV1 } from './nativeFloatingTableV1.js'
 import { qualifyNativeDocxTablesV1, nativeDocxTableProjectionSha256V1, nativeDocxTableGeometryV1 } from './nativeTablePagePaintV1.js'
 import {qualifyApproximateLegacyTables} from './nativeLegacyTableOriginV1.js'
 import { asciiLowerNative, compareNativeCodeUnits } from './nativeDeterminism.js'
@@ -985,7 +986,10 @@ async function prepareNativeDocxPagePaintInternalV1(input: NativeDocxPagePaintPr
   // refusal, while the approximate lane hands a table it cannot qualify to the
   // paginator, which records it against that table instead of the document.
   if (measuredTables && qualifiedTables.status !== 'qualified' && approximateEligibility === undefined) throw new TypeError('Content autofit refused unsupported source geometry or unsatisfied intrinsic widths')
-  if (document.value.body.blocks.some((block) => block.table !== undefined) && document.value.sections.some((section) => section.page.columns > 1)) {
+  // A floating table does not flow through the columns: its own w:tblpPr frame
+  // states where it goes, so multi-column flow decides nothing about it. Only a
+  // table that would have to be laid out inside a multi-column flow is refused.
+  if (document.value.body.blocks.some((block) => block.table !== undefined && !(block.table.floating_position !== undefined && nativeDocxUnplaceableFloatingTableFrameV1(block.table.floating_position) === undefined)) && document.value.sections.some((section) => section.page.columns > 1)) {
     throw new TypeError('native page-paint compiler refuses table content when any section uses multi-column flow')
   }
   const paragraphWidths = shapingParagraphWidths(document.value, qualifiedTables.paragraph_widths)

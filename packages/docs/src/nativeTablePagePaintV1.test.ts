@@ -20,6 +20,44 @@ function paragraph(id: string, ordinal: number): NativeDocxParagraphV1 {
   return { id, anchor: anchor(`/w:document[1]/w:body[1]/w:tbl[1]/w:tr[${ordinal + 1}]/w:tc[1]/w:p[1]`, 100 + ordinal * 40, 110 + ordinal * 40), edit_policy: { ...policy, allowed_operations: [] }, properties: {}, runs: [] }
 }
 
+/**
+ * A balanced two-column section holding four body paragraphs and, between the
+ * second and the third, a table that floats against the margin. This is the
+ * shape of `floating-table-section-columns.docx` in hard-v2, whose Word
+ * 16.112.4 export is the oracle for both halves of the behaviour: the float is
+ * anchored to the top it would have had inline in the balance, and the second
+ * line of BOTH columns is moved to the float's bottom edge.
+ */
+function balancedFloatFixture(tblpYTwips = -40): NativeDocxPaginationRequestV1 {
+  const request = fixture(40_000)
+  narrow(request, 360, 0)
+  const table = request.document.body.blocks[0]!.table!
+  table.rows = [table.rows[0]!]
+  table.floating_position = { horizontal_anchor: 'margin', vertical_anchor: 'text', y_twips: tblpYTwips, left_from_text_twips: 180, right_from_text_twips: 180, top_from_text_twips: 0, bottom_from_text_twips: 0 }
+  const body: NativeDocxParagraphV1[] = ['a1', 'a2', 'a3', 'a4'].map((name, index) => ({
+    id: `paragraph:${name}`, anchor: anchor(`/w:document[1]/w:body[1]/w:p[${index + 1}]`, index < 2 ? 10 + index * 20 : 130 + (index - 2) * 20, index < 2 ? 20 + index * 20 : 140 + (index - 2) * 20),
+    edit_policy: { ...policy, allowed_operations: [] }, properties: {}, runs: [],
+  }))
+  const cellShaped = request.shaped_lines.paragraphs[0]!
+  request.document.body.blocks = [
+    ...body.slice(0, 2).map((entry) => ({ kind: 'paragraph' as const, id: entry.id, paragraph: entry })),
+    { kind: 'table' as const, id: table.id, table },
+    ...body.slice(2).map((entry) => ({ kind: 'paragraph' as const, id: entry.id, paragraph: entry })),
+  ]
+  request.document.sections[0]!.starts_at_block_id = body[0]!.id
+  request.document.sections[0]!.page.columns = 2
+  request.document.sections[0]!.page.column_definitions = [{ id: 'section:1:column:0', ordinal: 0 }, { id: 'section:1:column:1', ordinal: 1 }]
+  request.resolved_layout.paragraphs = [
+    ...request.resolved_layout.paragraphs.slice(0, 1),
+    ...body.map((entry) => ({ paragraph_id: entry.id, applied_styles: [], properties: {}, paragraph_mark_properties: {} })),
+  ]
+  request.shaped_lines.paragraphs = [
+    cellShaped,
+    ...body.map((entry) => ({ ...structuredClone(cellShaped), paragraph_id: entry.id, lines: [{ ...structuredClone(cellShaped.lines[0]!), id: `line:${entry.id}:0`, available_width_millipoints: 7_500 }] })),
+  ]
+  return request
+}
+
 /** Re-states a fixture table at a narrower authored width and indent, so the
  * text column and the margin box are distinguishable anchor boxes. */
 function narrow(request: NativeDocxPaginationRequestV1, widthTwips: number, indentTwips: number): void {
@@ -518,6 +556,54 @@ describe('bounded native DOCX table page-paint geometry', () => {
     if (!centredResult.ok) throw new Error('invalid request')
     // Body box 20,000 wide from x 1,000; the 15,000-wide table centres on it.
     expect(centredResult.value.pages[0]!.table_rows![0]!.x_millipoints).toBe(3_500)
+  })
+
+  it('floats a table over a balanced two-column section and moves both columns below it', () => {
+    const request = balancedFloatFixture()
+    const result = paginateNativeDocxV1(request)
+    expect(result).toMatchObject({ ok: true, value: { status: 'paginated' } })
+    if (!result.ok) throw new Error('invalid request')
+    expect(decodeNativeDocxPaginatedLayoutForRequest(result.value, request)).toMatchObject({ ok: true })
+    const page = result.value.pages[0]!
+    expect(result.value.pages).toHaveLength(1)
+    // Body box 20,000 from x 1,000, two 7,500 columns with a 5,000 gap.
+    expect(page.columns.map((column) => [column.x_millipoints, column.width_millipoints])).toEqual([[1_000, 7_500], [13_500, 7_500]])
+
+    // The four paragraphs balance 2/2 as if the float were not there, so the
+    // float's own anchor is the bottom of the second one: 12,000 into column 0,
+    // lifted 2,000 by w:tblpY="-40".
+    const float = page.table_rows!
+    expect(float).toHaveLength(1)
+    expect([float[0]!.x_millipoints, float[0]!.y_millipoints]).toEqual([1_000, 11_000])
+    // The authored 18,000 width overhangs both 7,500 columns and is kept.
+    expect(float[0]!.width_millipoints).toBe(18_000)
+    const bottom = float[0]!.y_millipoints + float[0]!.height_millipoints
+
+    const placed = new Map(page.lines.filter((line) => !line.table_cell_id).map((line) => [line.paragraph_id, line]))
+    // The first line of each column is above the float and does not move.
+    expect([placed.get('paragraph:a1')!.x_millipoints, placed.get('paragraph:a1')!.y_millipoints]).toEqual([1_000, 1_000])
+    expect([placed.get('paragraph:a3')!.x_millipoints, placed.get('paragraph:a3')!.y_millipoints]).toEqual([13_500, 1_000])
+    // The second line of each column meets the float and resumes at its bottom,
+    // in the column the float is anchored in and in the one it only spans.
+    expect(placed.get('paragraph:a2')!.y_millipoints).toBe(bottom)
+    expect(placed.get('paragraph:a4')!.y_millipoints).toBe(bottom)
+
+    // A float that clears the text disturbs nothing.
+    const clear = paginateNativeDocxV1(balancedFloatFixture(240))
+    if (!clear.ok) throw new Error('invalid request')
+    const clearLines = new Map(clear.value.pages[0]!.lines.filter((line) => !line.table_cell_id).map((line) => [line.paragraph_id, line.y_millipoints]))
+    expect([...clearLines.values()]).toEqual([1_000, 7_000, 1_000, 7_000])
+  })
+
+  it('still refuses a table that has to flow through a multi-column section', () => {
+    const request = balancedFloatFixture()
+    delete request.document.body.blocks[2]!.table!.floating_position
+    expect(paginateNativeDocxV1(request)).toMatchObject({ ok: true, value: { status: 'refused', diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'body-table-unsupported' })]) } })
+
+    // So is a frame whose anchor this version cannot state.
+    const unplaceable = balancedFloatFixture()
+    unplaceable.document.body.blocks[2]!.table!.floating_position!.vertical_anchor = 'page'
+    expect(paginateNativeDocxV1(unplaceable)).toMatchObject({ ok: true, value: { status: 'refused' } })
   })
 
   it('discloses a w:tblpPr frame it cannot place and keeps the table inline', () => {
