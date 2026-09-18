@@ -95,6 +95,14 @@ describe('operator-owned DOCX fonts',()=>{
   await expect(loadHostFonts(input(),'relative.json')).rejects.toThrow(/absolute/)
   await expect(loadHostFonts(input(),config([{...entry,extra:true}]))).rejects.toThrow(/Invalid/)
  })
+ it('admits a 64-face operator manifest and still bounds it',async()=>{
+  // A face is only loaded when the document references it, so the filler
+  // entries stay unread: this measures the manifest bound alone.
+  const filler=(count:number)=>Array.from({length:count},(_,i)=>({...entry,family:`Unused ${i}`,path:`/nonexistent/unreferenced-${i}.ttf`}))
+  const fonts=await loadHostFonts(input(),config([entry,...filler(63)]))
+  expect(fonts.manifest.faces).toHaveLength(1)
+  await expect(loadHostFonts(input(),config([entry,...filler(64)]))).rejects.toThrow(/Invalid host font manifest/)
+ })
  it('keeps strict missing-face refusal and substitutes only loaded host faces on the approximate path',async()=>{
   const value=input(),inventory=JSON.parse(value.font_inventory_json)
   inventory.references=[{...inventory.references[0],family:'Candara'},{...inventory.references[0],family:'Trebuchet MS',scope_ids:['paragraph:2']}]
