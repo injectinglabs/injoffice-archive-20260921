@@ -127,7 +127,7 @@ describe('source-bound selected worksheet page geometry',()=>{
    expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('exceeds one page')
   }
  })
- it('keeps heading merges intact and refuses merges crossing heading/body partitions',()=>{
+ it('keeps heading merges intact, splits one across column pages and refuses merges crossing heading/body partitions',()=>{
   const merged=(ref:string,row:number,column:number,end_row:number,end_column:number)=>fixture(workbook=>{
    Object.assign(workbook.sheets[0]!,{cells:workbook.sheets[0]!.cells.filter(c=>c.ref==='F1'),merged_ranges:[{ref,row,column,end_row,end_column,editable:false}]})
    const location=['MERGED_CELLS','merges','sheet:7','Worksheets/Sheet1.xml','',''].join('\0')
@@ -141,7 +141,9 @@ describe('source-bound selected worksheet page geometry',()=>{
     const pages=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
     expect(pages.pages[0]!.regions!.find(r=>r.kind==='repeat-rows')!.columns).toEqual({start:0,end:2})
     Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5})
-    expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('page boundary')
+    const wide=compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})
+    expect(wide.pages.length).toBeGreaterThan(1)
+    expect(wide.warnings.join(' ')).toContain('Merged cells split by a page boundary: A1:B1 (1 of 1 painted merged ranges)')
     Object.assign(objects.page_settings![0]!.settings!,{fit_to_page:{width:3,height:3}})
     expect(compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true}).pages[0]!.scale).toBeLessThan(1)
    }
@@ -160,6 +162,38 @@ describe('source-bound selected worksheet page geometry',()=>{
   expect(pages.length).toBeLessThanOrEqual(100);expect(Math.max(...pages.map(p=>p.rows.end))).toBe(3999)
   Object.assign(objects.page_settings![0]!.settings!,{left_inches:4.249,right_inches:4.249,fit_to_page:{width:1,height:0}})
   expect(()=>compileNativeSheetPagePreviewV1(geometry,objects,undefined,{repeat_print_titles:true})).toThrow('cannot be met')
+ })
+ // Excel 16.112.4's own export of the local hard-v2 workbook
+ // cell-anchored-hidden-shapes prints four pages for a sheet whose 19 full-width
+ // A:H merges all straddle the column break: each merge is painted on both
+ // column bands, the second repeating its fill from that page's left edge and
+ // re-placing its text at the merge origin off that edge. So a split merge is
+ // pages plus a disclosure, not a refusal.
+ it('splits a merged cell across a page boundary, names it, and keeps one source rectangle',()=>{
+  const {model,font,objects}=fixture(workbook=>{
+   Object.assign(workbook.sheets[0]!,{cells:workbook.sheets[0]!.cells.filter(c=>c.ref==='F1'),merged_ranges:[{ref:'A1:C1',row:0,column:0,end_row:0,end_column:2,editable:false}]})
+   const location=['MERGED_CELLS','merges','sheet:7','Worksheets/Sheet1.xml','',''].join('\0')
+   Object.assign(workbook,{unsupported:[...workbook.unsupported,{id:`unsupported:${createHash('sha256').update(location).digest('hex')}`,code:'MERGED_CELLS',capability:'merges',scope_id:'sheet:7',part_name:'Worksheets/Sheet1.xml',preservation:'preserve-exact',message:'Merged source geometry'}]})
+  })
+  const geometry=compileNativeSheetGeometryV2(model,'7',{row:0,column:0,end_row:2,end_column:2},createNativeMaximumDigitWidthAuthorityV2(model,font))
+  const whole=compileNativeSheetPagePreviewV1(geometry,objects)
+  expect(whole.pages).toHaveLength(1)
+  expect(whole.warnings.some(w=>w.includes('split by a page boundary'))).toBe(false)
+  Object.assign(objects.page_settings![0]!.settings!,{left_inches:3.5,right_inches:3.5})
+  const before=JSON.stringify(objects),p=compileNativeSheetPagePreviewV1(geometry,objects)
+  const m=geometry.merged_ranges[0]!.rect
+  const overlaps=p.pages.filter(({source_clip:c})=>m.x_emu<c.x_emu+c.width_emu&&m.x_emu+m.width_emu>c.x_emu&&m.y_emu<c.y_emu+c.height_emu&&m.y_emu+m.height_emu>c.y_emu)
+  expect(overlaps.length).toBeGreaterThan(1)
+  expect(p.pages.some(({source_clip:c})=>m.x_emu>=c.x_emu&&m.x_emu+m.width_emu<=c.x_emu+c.width_emu)).toBe(false)
+  // One source rectangle, still exactly its bands: the merge is not moved,
+  // duplicated whole or resized to fit a page, the pages stay whole-band, and
+  // the policy is unchanged because band layout is unchanged.
+  expect(geometry.merged_ranges).toHaveLength(1)
+  expect(m.x_emu).toBe(geometry.columns[0]!.x_emu)
+  expect(m.width_emu).toBe(geometry.columns[2]!.x_emu+geometry.columns[2]!.width_emu-geometry.columns[0]!.x_emu)
+  expect(p.policy).toBe('whole-bands-down-then-over-v1')
+  expect(p.warnings.join(' ')).toContain('Merged cells split by a page boundary: A1:C1 (1 of 1 painted merged ranges)')
+  expect(JSON.stringify(objects)).toBe(before)
  })
  it('searches lower scales when a merged cell would cross an otherwise valid fit boundary',()=>{
   const {geometry,objects}=fixture(workbook=>{

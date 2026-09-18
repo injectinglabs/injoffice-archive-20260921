@@ -58,8 +58,12 @@ The following refuse with an explicit `reason` and empty `pages`:
 - Authored `fit_to_page`. This lane does not invent a fit scale and is not
   Excel fit-to-page qualification.
 - Missing, unsupported, or unjoined saved print areas.
-- Planner refusals such as merged cells crossing a page, a row/column larger
-  than one page, or the 100-page budget.
+- Planner refusals such as a row/column larger than one page, or the 100-page
+  budget. A merged cell that straddles a page break is not one of them: Excel
+  splits such a cell and paints the part of it that falls in each page's band,
+  so the preview keeps whole-band pages and one source rectangle, names every
+  merge it splits in `warnings`, and leaves the split to each page's
+  `source_clip`. A merge that no band run contains still refuses.
 
 Malformed caller input (uncompiled geometry, stale package hash, extra option
 keys, paint plans that do not join geometry) still throws. Those are not source
