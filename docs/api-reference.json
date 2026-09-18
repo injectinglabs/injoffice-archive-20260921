@@ -8130,7 +8130,7 @@
             {
               "name": "HARFBUZZ_SHAPER_CONFIG_REVISION",
               "kind": "const",
-              "signature": "export declare const HARFBUZZ_SHAPER_CONFIG_REVISION: 'injoffice.hb-horizontal-bidi-unicode13-tables.v3'"
+              "signature": "export declare const HARFBUZZ_SHAPER_CONFIG_REVISION: 'injoffice.hb-horizontal-bidi-implicit-marks-unicode13-tables.v4'"
             },
             {
               "name": "HARFBUZZ_SHAPER_LIMITS",
@@ -8236,7 +8236,7 @@
             {
               "name": "NATIVE_BIDI_CONFIGURATION_REVISION",
               "kind": "const",
-              "signature": "export declare const NATIVE_BIDI_CONFIGURATION_REVISION: 'injoffice.uax9-explicit-isolates-unicode13-bmp-only.v3'"
+              "signature": "export declare const NATIVE_BIDI_CONFIGURATION_REVISION: 'injoffice.uax9-explicit-isolates-implicit-marks-unicode13-bmp-only.v4'"
             },
             {
               "name": "NATIVE_BIDI_LIMITS",

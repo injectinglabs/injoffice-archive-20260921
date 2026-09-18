@@ -26,7 +26,7 @@ export const BIDI_JS_FACTORY_SHA256 = 'sha256:ce1928a26521e7eca2dde603a76f2332f7
 export const BIDI_JS_ENTRY_SHA256 = 'sha256:5b58433ed951be70376bee55cb9a98cdce788e00cd2fa5f881cbcb1dcad03102' as const
 export const BIDI_JS_MANIFEST_SHA256 = 'sha256:c2579f7705ab96dcc6192ab5a317d87760d2be7c67d72976d85edb4181bec5de' as const
 export const NATIVE_BIDI_PROVIDER_ID = 'injoffice.bidi-js' as const
-export const NATIVE_BIDI_CONFIGURATION_REVISION = 'injoffice.uax9-explicit-isolates-unicode13-bmp-only.v3' as const
+export const NATIVE_BIDI_CONFIGURATION_REVISION = 'injoffice.uax9-explicit-isolates-implicit-marks-unicode13-bmp-only.v4' as const
 export const UNICODE_13_DERIVED_AGE_SHA256 = 'sha256:e779a443d3aa2a3166a15becaa2b737c922480e32c0453d5956093633555078f' as const
 export const NATIVE_BIDI_LIMITS = Object.freeze({
   maxUtf16: MAX_TEXT_RUN_UTF16,
@@ -66,7 +66,24 @@ export type NativeBidiResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: 'invalid-input' | 'unsupported-control' | 'unsupported-scalar' | 'resource-limit' | 'runtime-mismatch' | 'resolution-failure'; message: string }
 
-const BIDI_CONTROL_RE = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u
+/**
+ * Embedding, override and isolate initiators and their terminators. These carry
+ * scope: they push and pop UAX #9 directional status, and this resolver injects
+ * its own isolates (U+2066/U+2067 ... U+2069) to express each DOCX w:rtl range
+ * as a higher-level protocol run. An authored initiator or terminator can nest
+ * across a synthesized boundary, so the combination is not qualified and is
+ * refused whole rather than resolved approximately.
+ */
+const BIDI_SCOPE_CONTROL_RE = /[\u202a-\u202e\u2066-\u2069]/u
+/**
+ * The implicit directional marks LRM, RLM and ALM. Unlike the controls above
+ * they have no scope, no terminator and no nesting: UAX #9 treats each as one
+ * implicit strong character (L, R and AL respectively), so passing them to the
+ * pinned resolver alongside the synthesized isolates is ordinary UAX #9 and
+ * cannot disturb the isolate structure this projection builds. They resolve
+ * levels like any other strong character and paint nothing.
+ */
+const BIDI_IMPLICIT_DIRECTIONAL_MARK_RE = /[\u061c\u200e\u200f]/u
 
 function digestText(value: string): `sha256:${string}` {
   return `sha256:${bytesToHex(sha256(new TextEncoder().encode(value)))}`
@@ -155,7 +172,7 @@ export function resolveNativeBidiParagraphV1(input: NativeBidiParagraphInputV1):
   if (!wellFormedUtf16(text)) return { ok: false, code: 'invalid-input', message: 'bidi text contains malformed UTF-16' }
   if (/[^\u0000-\uFFFF]/u.test(text)) return { ok: false, code: 'unsupported-scalar', message: 'bidi-js@1.0.3 is qualified only for BMP scalars; astral scalars are atomically refused before resolution' }
   if (!unicode13Repertoire(text)) return { ok: false, code: 'unsupported-scalar', message: 'bidi text contains a scalar outside the assigned Unicode 13.0.0 repertoire' }
-  if (BIDI_CONTROL_RE.test(text)) return { ok: false, code: 'unsupported-control', message: 'authored Unicode bidi controls are outside the DOCX higher-level-protocol slice' }
+  if (BIDI_SCOPE_CONTROL_RE.test(text)) return { ok: false, code: 'unsupported-control', message: 'authored Unicode bidi embedding, override and isolate controls are outside the DOCX higher-level-protocol slice' }
   let previousEnd = 0
   let synthetic = ''
   const originalIndices: number[] = []

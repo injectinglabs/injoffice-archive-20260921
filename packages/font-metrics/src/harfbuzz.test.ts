@@ -340,6 +340,50 @@ describe('canonical HarfBuzz text shaper v1', () => {
     if (!('status' in rtlOpen) && !('status' in ltrClose)) expect(rtlOpen.glyphs[0]!.glyphId).toBe(ltrClose.glyphs[0]!.glyphId)
   })
 
+  /**
+   * LRM, RLM and ALM are Default_Ignorable_Code_Point: the Unicode core
+   * specification requires a renderer to give them no visible glyph and no
+   * advance, and HarfBuzz implements that by substituting the face's space
+   * glyph and zeroing the advance. Word's own export agrees: in
+   * tdf118361_RTLfootnoteSeparator.docx the trailing paragraph-mark glyph sits
+   * the same 6.43 pt after the last authored content in the paragraph that
+   * carries LRM+RLM as it does in the note-separator paragraph that carries
+   * neither. Measure the advance rather than assume it.
+   */
+  it('shapes the implicit directional marks to a zero advance and keeps the scoped controls refused', () => {
+    const spaceRun = shape(' ')
+    expect('status' in spaceRun).toBe(false)
+    for (const [label, text, override] of [
+      ['LRM', '\u200e', {}],
+      ['RLM', '\u200f', { direction: 'rtl' as const }],
+      ['ALM', '\u061c', { direction: 'rtl' as const, script: 'Arab' }],
+      ['LRM+RLM', '\u200e\u200f', {}],
+    ] as const) {
+      const result = shape(text, override)
+      expect(refusalCode(result), label).toBeUndefined()
+      if ('status' in result) continue
+      expect(result.advanceInlineMilliPoints, label).toBe(0)
+      expect(result.clusters.map((cluster) => cluster.advanceInlineMilliPoints), label).toEqual(result.clusters.map(() => 0))
+      expect(result.glyphs.map((glyph) => glyph.advanceXMilliPoints), label).toEqual(result.glyphs.map(() => 0))
+      // It is the face's own space glyph, never the .notdef sentinel, and the
+      // cluster reports that it inks nothing so the painter accepts the empty
+      // outline that glyph has.
+      expect(result.glyphs.every((glyph) => glyph.glyphId !== 0), label).toBe(true)
+      expect(result.clusters.every((cluster) => cluster.whitespace === true), label).toBe(true)
+      if (!('status' in spaceRun)) expect(result.glyphs.every((glyph) => glyph.glyphId === spaceRun.glyphs[0]!.glyphId), label).toBe(true)
+      if (!('status' in spaceRun)) expect(spaceRun.advanceInlineMilliPoints, label).toBeGreaterThan(0)
+    }
+    // A mark beside real text still shapes, and the text keeps its own advance.
+    const marked = shape('ab\u200ecd')
+    const plain = shape('abcd')
+    expect('status' in marked || 'status' in plain).toBe(false)
+    if (!('status' in marked) && !('status' in plain)) expect(marked.advanceInlineMilliPoints).toBe(plain.advanceInlineMilliPoints)
+    // Every embedding, override and isolate control still refuses.
+    for (const control of ['\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069']) {
+      expect(refusalCode(shape(`abc${control}def`)), control).toBe('unsupported-direction')
+    }
+  })
+
   it('fails closed for controls, unsupported scripts, variations, spacing, and features', () => {
     expect(refusalCode(shape('abc', { direction: 'ttb' }))).toBe('unsupported-direction')
     expect(refusalCode(shape('abc אב'))).toBe('unsupported-script')
