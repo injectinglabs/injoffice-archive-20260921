@@ -1826,10 +1826,17 @@ func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagrap
 }
 
 func (resolver *nativeLayoutResolver) resolveNumbering(reference nativeNumberingProperties, levelStyleID *string, scopeID string, state *nativeNumberingState) (*NativeResolvedNumberingV1, nativeParagraphProperties, nativeRunProperties) {
+	// ECMA-376 17.9.19 binds a paragraph to a numbering definition instance
+	// through `w:numId`, and 17.9.3 `w:ilvl` only selects a level *within* the
+	// instance that reference names. A `w:numPr` whose merged style chain
+	// states no `w:numId` therefore names no instance: there is no abstract
+	// definition to look a level up in, so no marker text, no marker run
+	// properties and no numbering indents exist to drop. It resolves to the
+	// same nothing as an empty `w:numPr` and as an explicit
+	// `w:numId w:val="0"`, both of which this function already returns
+	// silently, so a stated `w:ilvl` is not on its own a numbering reference
+	// this tier failed to reproduce.
 	if !reference.present || reference.numID == nil {
-		if reference.present && reference.level != nil {
-			resolver.addDiagnostic("INCOMPLETE_NUMBERING_REFERENCE", scopeID, resolver.partsValue(resolver.parts.NumberingPart), nil, "A numbering level without an inherited numId was preserved and ignored")
-		}
 		return nil, nativeParagraphProperties{}, nativeRunProperties{}
 	}
 	numID, ok := nativeCanonicalDecimalID(*reference.numID)
