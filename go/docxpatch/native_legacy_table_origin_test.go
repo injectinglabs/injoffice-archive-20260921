@@ -134,7 +134,11 @@ func TestLegacyTableOriginModeGate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if (len(result.LegacyTableOrigins) == 1) != (mode == "12") {
+		// Word measures w:tblInd to the leading cell's content edge in every
+		// legacy mode and to the table's own leading edge in 15, so 12 and 14
+		// both collect the evidence and 15 does not. "oops" is not a mode this
+		// tier reads at all, so its attestation stays ineligible.
+		if (len(result.LegacyTableOrigins) == 1) != (mode == "12" || mode == "14") {
 			t.Fatalf("mode%s: %#v", mode, result)
 		}
 	}

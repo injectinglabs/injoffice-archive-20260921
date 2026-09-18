@@ -9,6 +9,24 @@ export const DOCX_UNIFORM_CELL_BORDER_WARNING='Approximate read-only preview: wh
 export const DOCX_TABLE_BORDER_RESERVATION_WARNING='Approximate read-only preview: eligible legacy tables reserve one authored horizontal border width above each row’s content; this is a declared collapsed-border layout policy, not Word-validated layout.'
 export interface NativeDocxLegacyTableOriginV1 {table_id:string;package_sha256:string;indent_twips:number;left_margin_twips:number;source_indent:{part_name:string;path:string;sha256:string};source_margin:{part_name:string;path:string;sha256:string}}
 const keys=(v:object,names:string)=>Object.keys(v).sort().join(',')===names
+
+/**
+ * Whether a legacy compatibility mode measures `w:tblInd` to the leading cell's
+ * content edge rather than to the table's own leading edge.
+ *
+ * Microsoft Word 16.112.4's own PDF exports place the leading cell's first line
+ * at the text margin plus `w:tblInd` for compatibilityMode 12 and 14 (and for a
+ * package attesting no mode, which this tier reads as 12), which puts the
+ * table's leading edge one left cell margin further left. A mode 15 package
+ * puts the table's leading edge at the text margin plus `w:tblInd` instead, so
+ * it keeps the strict qualifier's origin. Both halves were read off controlled
+ * pairs that differ only in the attested mode: `tdf118812_tableStyles-
+ * comprehensive` (no attestation) against `tdf118947_tableStyle` (15), and
+ * `Table_cell_auto_width_fdo69656` (14) against `fdo80800b_tableStyle` (15).
+ */
+export function nativeDocxLegacyContentAlignedOriginV1(mode:number|null|undefined):boolean{
+ return mode===12||mode===14
+}
 export function validLegacyTableOrigins(value:unknown,hash:string):value is NativeDocxLegacyTableOriginV1[]{
  if(!Array.isArray(value)||value.length>1000)return false
  const ids=new Set<string>()
@@ -38,14 +56,21 @@ export function qualifyApproximateLegacyTables(document:NativeDocxDocumentV1,res
  // Approximate table relaxations apply only with declared approximate eligibility; strict
  // request verification passes none and must reproduce the strict compiler's projection.
  const result=qualifyNativeDocxTablesV1(document,resolvedForQualify,shaped,eligibility!==undefined),facts=eligibility?.legacy_table_origins??[]
- if(result.status!=='qualified'||eligibility?.legacy_compatibility_mode!==12&&!facts.length)return result
- if(eligibility?.legacy_compatibility_mode!==12||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
+ const mode=eligibility?.legacy_compatibility_mode
+ // Every legacy mode aligns a table's leading cell content to w:tblInd; only
+ // compatibilityMode 15 puts the table's leading edge there, which is what the
+ // strict qualifier already computes. See nativeDocxLegacyContentAlignedOriginV1.
+ if(result.status!=='qualified'||mode!==12&&!facts.length)return result
+ if(!nativeDocxLegacyContentAlignedOriginV1(mode)||!validLegacyTableOrigins(facts,document.source.package_sha256))throw new TypeError('Invalid legacy table origin eligibility')
  const tables=structuredClone(result.tables),sections=new Map(document.sections.map(s=>[s.starts_at_block_id,s]))
  const shapedParagraphs=new Map(shaped?.paragraphs.map(paragraph=>[paragraph.paragraph_id,paragraph]))
  let section:NativeDocxDocumentV1['sections'][number]|undefined
  const owners=new Map<string,NativeDocxDocumentV1['sections'][number]>()
  for(const block of document.body.blocks){section=sections.get(block.id)??section;if(block.table&&section)owners.set(block.table.id,section)}
- for(const entry of tables){
+ // The horizontal border reservation keeps the scope it was measured in: mode
+ // 12. It is a vertical policy and nothing measured here says what mode 14
+ // reserves, so widening the origin must not silently widen it too.
+ for(const entry of mode===12?tables:[]){
   const owner=owners.get(entry.table.id)
   if(!owner||owner.page.columns!==1||owner.page.margins.gutter_twips!==0)continue
   const borders=entry.table.borders,top=borders?.top,inside=borders?.inside_horizontal,bottom=borders?.bottom
