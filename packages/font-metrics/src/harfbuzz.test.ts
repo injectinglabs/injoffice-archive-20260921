@@ -409,6 +409,45 @@ describe('canonical HarfBuzz text shaper v1', () => {
     expect(refusalCode(shape('abc', {}, { ...font, face: { ...face, sourceKind: 'system' } }))).toBe('unsupported-font-format')
   })
 
+  // A Private Use scalar has no Unicode script at all: `Scripts.txt` lists no
+  // block for it, so it reaches the classifier as `'Other'` for a different
+  // reason than a script this build does not qualify. Word's symbol-font
+  // encoding depends on exactly that: a legacy symbol face's byte 0xB7 is
+  // authored as U+F0B7, and the resolved font slot, not Unicode, decides the
+  // glyph. Word paints `tdf118812_tableStyles-comprehensive.docx`'s bullet from
+  // SymbolMT in its own PDF export.
+  it('shapes a Private Use scalar from the face that maps it instead of calling it an unknown script', () => {
+    // U+F001 and U+F002 are in this fixture's own cmap (format 12 group F000..F003).
+    const mapped = shape('\uf001\uf002', { script: 'Zyyy' })
+    expect(refusalCode(mapped)).toBeUndefined()
+    expect('status' in mapped).toBe(false)
+    if (!('status' in mapped)) {
+      expect(mapped.glyphs).toHaveLength(2)
+      expect(mapped.glyphs.every((glyph) => glyph.glyphId !== 0)).toBe(true)
+      expect(mapped.advanceInlineMilliPoints).toBeGreaterThan(0)
+    }
+    // Mixed with other Common scalars in one run, which is how a Word list
+    // marker and its separator arrive from the itemizer.
+    expect(refusalCode(shape('\uf001 \uf002', { script: 'Zyyy' }))).toBeUndefined()
+    // A Private Use scalar this face does not map refuses for the honest reason
+    // - no glyph - rather than for a script that does not exist.
+    expect(refusalCode(shape('\ue500', { script: 'Zyyy' }))).toBe('missing-glyph')
+    // Both supplementary Private Use planes are the same fact.
+    expect(refusalCode(shape('\u{f0000}', { script: 'Zyyy' }))).toBe('missing-glyph')
+    expect(refusalCode(shape('\u{100000}', { script: 'Zyyy' }))).toBe('missing-glyph')
+  })
+
+  // Inertness guard: every case here already refused before Private Use was
+  // admitted and must keep refusing, so it cannot fail before the change.
+  it('keeps refusing a real but unqualified script carried in a Common run', () => {
+    for (const text of ['\u0e01', '\u0f40', '\u0905', '\u{10c80}']) {
+      expect(refusalCode(shape(text, { script: 'Zyyy' })), text).toBe('unsupported-script')
+    }
+    // Private Use is admitted in the Common run only: a run that declares a
+    // real script still rejects a scalar that does not belong to it.
+    expect(refusalCode(shape('a\uf001', { script: 'Latn' }))).toBe('unsupported-script')
+  })
+
   // Character tracking: DOCX w:spacing on w:rPr (ECMA-376 17.3.2.35).
   //
   // Word 16's own export of StyleRef-DE.docx settles where the delta goes. The

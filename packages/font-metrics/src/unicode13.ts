@@ -140,3 +140,18 @@ export function isUnicode13BreakableWhiteSpace(text: string): boolean {
   }
   return true
 }
+
+/**
+ * The three Private Use Area blocks, which Unicode fixes normatively (D.49,
+ * unchanged in every version) rather than deriving from the pinned tables:
+ * `Scripts.txt` lists no script for them at all, so `unicode13Script` answers
+ * `'Other'` here for the same reason it does for a script this build does not
+ * classify. The two are not the same fact — a Private Use scalar has no script
+ * to disagree with, and its identity is defined only by the face that maps it.
+ */
+export function isUnicode13PrivateUse(codePoint: number): boolean {
+  if (!validScalar(codePoint)) return false
+  return (codePoint >= 0xe000 && codePoint <= 0xf8ff)
+    || (codePoint >= 0xf0000 && codePoint <= 0xffffd)
+    || (codePoint >= 0x100000 && codePoint <= 0x10fffd)
+}

@@ -35,6 +35,7 @@ import {
   UNICODE_13_VERSION,
   isUnicode13Control,
   isUnicode13DefaultIgnorable,
+  isUnicode13PrivateUse,
   isUnicode13WhiteSpace,
   unicode13Script,
 } from './unicode13.js'
@@ -600,7 +601,18 @@ function validateQualifiedScalars(text: string, script: string): string | undefi
       }
       return `a scalar does not match the declared ${script} script run`
     }
-    if (script === 'Zyyy' && actualScript !== 'Zyyy') return 'a scalar classified upstream as Common has an unqualified or unknown script'
+    // Private Use is the one range Unicode declines to classify at all, so it
+    // reaches `unicode13Script` as `'Other'` for a completely different reason
+    // than a script this build does not qualify: there is no script to shape
+    // it as, and no script-specific reordering, joining or mark attachment can
+    // apply to it. Its identity comes only from the face the resolved font
+    // slot chose, which is precisely what Word's symbol-font encoding relies
+    // on - `tdf118812_tableStyles-comprehensive.docx` authors its bullet as
+    // U+F0B7 with `w:rFonts w:ascii="Symbol"`, and Word paints it from that
+    // ascii slot (SymbolMT in its own PDF export). Refusing it read "Common
+    // and unclassified" as "unqualified script" and lost every such bullet.
+    // A scalar of a script outside the qualified set still refuses here.
+    if (script === 'Zyyy' && actualScript !== 'Zyyy' && !isUnicode13PrivateUse(codePoint)) return 'a scalar classified upstream as Common has an unqualified or unknown script'
   }
   return undefined
 }
