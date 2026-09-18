@@ -1901,6 +1901,31 @@ function applyLineExclusionEnd(context: NativeShapingContext, paragraphID: strin
   if (end !== undefined) line.exclusion_end_millipoints = end
 }
 
+/** ECMA-376 17.18.44 ST_Jc: start, and its legacy alias for the paragraph's own
+ * direction, place a line against its leading edge. */
+function leadingAlignment(alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl'): boolean {
+  return alignment === 'start' || (direction === 'ltr' ? alignment === 'left' : alignment === 'right')
+}
+
+/** Places each line of a paragraph, with the numbered first line offered an
+ * interval that begins at the marker anchor rather than at the text margin.
+ *
+ * Word resolves a list marker, its suffix tab and the body text against the
+ * paragraph's own indents, and then places that whole assembled first line by
+ * the paragraph's alignment inside the region that starts at the first-line
+ * origin. A leading-aligned line therefore stays exactly where the atoms
+ * already put it; a centred, trailing or justified one carries marker, suffix
+ * and text together, so the marker is no longer on the indent. Word's own PDF
+ * export of `tdf118812_tableStyles-comprehensive.docx` pins it: every paragraph
+ * in that document's table is centred by the table style's `w:jc w:val="center"`
+ * and lays out in the cell content box [90.0 pt, 381.2 pt]. The `1.` row takes
+ * `w:ind` from its level (left 720, hanging 360, no right indent), so its region
+ * starts at the 18.0 pt first-line origin and offers 273.2 pt for a 75.2502 pt
+ * line; Word puts the marker origin at 206.9749 pt, the suffix at 213.0491 pt
+ * and the text origin at 224.9748 pt, which is 90.0 + 18.0 + (273.2 - 75.2502)/2
+ * to the milli-point. The `A.` row, whose style adds `w:ind w:right="1440"`,
+ * lands the same way at 112.7834 / 128.3381 / 130.7834 pt. Centring from the
+ * text margin instead would move both by the hanging indent. */
 function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atoms: FragmentAtom[], lines: NativeDocxShapedLineV1[], baseWidth: number, start: number, end: number, firstDelta: number, alignment: NativeDocxShapedParagraphV1['alignment'], direction: 'ltr' | 'rtl', paragraphMarkMetrics?: ScaledLineMetrics, hardBreak?: NativeDocxHardBreakV1, firstLineStart?: number): void {
   if (context.lineCount >= DOCX_SHAPED_LINES_LIMITS.maxLines || context.resourceExceeded) {
     context.resourceExceeded = true
@@ -1939,7 +1964,7 @@ function wrapEventGroup(context: NativeShapingContext, paragraphID: string, atom
     }
     const lineEnd = chooseLineEnd(atoms, offset, width, context.request.tab_interval_millipoints)
     const lineAtoms = atoms.slice(offset, lineEnd)
-    const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreak : undefined, lineEnd < atoms.length)
+    const line = materializeLine(context, paragraphID, lines.length, lineAtoms, width, startOffset, first && firstLineStart !== undefined && leadingAlignment(alignment, direction) ? 'left' : alignment, direction, paragraphMarkMetrics, lineEnd === atoms.length ? hardBreak : undefined, lineEnd < atoms.length)
     if (!line) return
     applyLineExclusionEnd(context, paragraphID, lines.length, line)
     if (startOffset !== ordinaryStart && firstLineStart === undefined) line.exclusion_start_millipoints = startOffset
@@ -2000,10 +2025,6 @@ async function shapeParagraph(context: NativeShapingContext, story: NativeDocxSt
   if (context.documentBlocked || sourceBlocked) return refuse()
   const bidiPlan = paragraphBidiPlan(context, paragraph, direction)
   if (!bidiPlan || context.activeParagraphFailed) return refuse()
-  if (resolved.numbering && alignment !== 'start' && (direction === 'ltr' ? alignment !== 'left' : alignment !== 'right')) {
-    addDiagnostic(context, { code: 'list-marker-alignment-deferred', severity: 'unsupported', scope_id: paragraph.id, message: 'Exact list-marker anchoring with non-leading paragraph alignment is unsupported' })
-    return refuse()
-  }
   const marker = await markerEvents(context, resolved, direction)
   const events = marker.events
   if (context.activeParagraphFailed || context.resourceExceeded) return refuse()
