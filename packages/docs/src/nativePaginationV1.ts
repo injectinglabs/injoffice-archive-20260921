@@ -1280,7 +1280,15 @@ function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSec
   // `office-hard-v2/pdf/alphabeticalIndex_MultipleColumns.pdf` the four-column
   // index band's second and third columns start on the same baseline as its
   // first, one line below the single-column paragraph above it.
-  const banded = columns.map((column) => ({ ...column, y_millipoints: bandTop, height_millipoints: column.y_millipoints + column.height_millipoints - bandTop }))
+  // The band's foot is the page's body box, not the new section's: a
+  // `continuous` break does not open a page, so the sheet keeps the top and
+  // bottom margins of the section that opened it and only the horizontal
+  // geometry above is the continuing section's own. Where the two sections
+  // state the same top and bottom margins — every band before this one — the
+  // two feet are the same number.
+  const pageBottom = context.currentPage === undefined ? undefined : context.currentPage.body_box.y_millipoints + context.currentPage.body_box.height_millipoints
+  const foot = pageBottom ?? (qualified.value.body_y_millipoints + qualified.value.body_height_millipoints)
+  const banded = columns.map((column) => ({ ...column, y_millipoints: bandTop, height_millipoints: foot - bandTop }))
   if (banded.some((column) => column.height_millipoints <= 0)) return undefined
   return banded
 }
@@ -1289,6 +1297,12 @@ function qualifiedPageColumns(context: PaginationContext, section: NativeDocxSec
 function bodySides(section: NativeDocxSectionV1): string | undefined {
   const qualified = qualifyNativeDocxSectionColumnsV1(section, { allowUnequalWidths: true })
   return qualified.ok ? `${qualified.value.body_x_millipoints}:${qualified.value.body_width_millipoints}` : undefined
+}
+
+/** The top and bottom edges of a section's body box, or undefined when its geometry does not qualify. */
+function bodyVertical(section: NativeDocxSectionV1): string | undefined {
+  const qualified = qualifyNativeDocxSectionColumnsV1(section, { allowUnequalWidths: true })
+  return qualified.ok ? `${qualified.value.body_y_millipoints}:${qualified.value.body_height_millipoints}` : undefined
 }
 
 function ensurePageSectionColumns(context: PaginationContext, section: NativeDocxSectionV1, bandTop?: number): boolean {
@@ -1419,8 +1433,13 @@ function startSection(context: PaginationContext, section: NativeDocxSectionV1, 
     // foot of the body box, which is what Word paints in
     // `office-hard-v2/pdf/endingSectionProps.pdf`.
     const differentBodySides = previousSection !== undefined && bodySides(previousSection) !== bodySides(section)
-    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && (previousSection.page.columns > 1 || section.page.columns > 1 || differentBodySides)
-    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition, allow_different_body_sides: bandTransition })) {
+    // A top/bottom margin change opens a band for the same reason a left/right
+    // one does: the column the cursor sits in is not the column the next line
+    // belongs to. The band's own foot stays the page's, because the sheet was
+    // opened under the previous section's vertical frame.
+    const differentBodyVertical = previousSection !== undefined && bodyVertical(previousSection) !== bodyVertical(section)
+    const bandTransition = section.break_type === 'continuous' && previousSection !== undefined && (previousSection.page.columns > 1 || section.page.columns > 1 || differentBodySides || differentBodyVertical)
+    if (!previousSection || !context.currentPage || !nativeDocxSectionsShareExactPageV1(previousSection, section, { allow_different_columns: bandTransition, allow_different_body_sides: bandTransition, allow_different_body_vertical: bandTransition })) {
       refuse(context, 'section-geometry-invalid', section.id, `${section.break_type} requires identical page, column, margin, and header/footer geometry across the shared physical page`)
       return
     }
