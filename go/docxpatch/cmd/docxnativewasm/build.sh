@@ -37,14 +37,24 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # A further 32 KiB covers table-style border projection, the tblLook inert
 # waiver and multi-column band geometry (#353-#360), which together left only
 # 584 bytes of CI headroom and forced one PR to be rewritten to fit.
+# A further 32 KiB covers the run-typography and spacing wave: the Word 2010
+# typography extensions this tier records and does not apply (#369, measured
+# +17,485 bytes locally), the lowerRoman note numFmt, the continuous margin band
+# and the raised font-manifest face cap (#367, #368, #370). Together those left
+# main at 7,005,596 bytes locally and 7,010,988 in CI - 1,364 bytes of headroom,
+# so the next docxpatch change of any size failed the gate no matter what it
+# contained. Measured: a 2,693-byte local addition came back as 7,014,013 in CI,
+# 1,661 bytes over.
 #
 # The CI toolchain builds this module larger than a local darwin/arm64 build,
 # so the local number is not the one this gate sees. Measured CI-local on one
-# commit: +5,401 bytes. An earlier note in this file put that gap at ~28 KiB;
+# commit: +5,401 bytes; measured twice more on 2026-09-17, +5,392 bytes (main,
+# local 7,005,596 / CI 7,010,988) and +5,724 bytes (local 7,008,289 / CI
+# 7,014,013). An earlier note in this file put that gap at ~28 KiB;
 # that figure was never reproduced and is wrong. Measure, do not assume.
-max_size=$((13 * 1024 * 1024 / 2 + 192 * 1024))
+max_size=$((13 * 1024 * 1024 / 2 + 224 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 192 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 224 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2
