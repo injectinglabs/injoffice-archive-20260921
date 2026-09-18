@@ -140,11 +140,26 @@ function sameRefs(left: readonly NativeDocxHeaderFooterReferenceV1[], right: rea
  * `allow_different_columns` drops only the column-division comparison. A
  * continuous break is Word's way of changing the column division part-way down
  * a page — it is how an index is set in columns and then returned to one — so
- * the division is exactly what such a break is allowed to change. The physical
- * page, the body box and the header/footer references still have to agree,
- * because those are what the shared page itself states.
+ * the division is exactly what such a break is allowed to change.
+ *
+ * `allow_different_body_sides` additionally drops the left/right comparison —
+ * the body box's origin and width — because a continuous break is equally
+ * Word's way of indenting the remainder of a page. Only the sides move: the
+ * page, the top of the body box and its height are still compared, because
+ * those are what fixes the shared physical sheet.
+ * `office-hard-v2/pdf/endingSectionProps.pdf` paints exactly that — the
+ * continuing section's single line runs 128.7 pt to 466.6 pt, its own
+ * 2574-twip margins, on the same page as a section whose margins are 1134.
+ *
+ * Header/footer references and the title-page policy belong to the section
+ * that opened the shared page. A continuing section that declares no
+ * references of its own inherits them (ECMA-376 17.10.1), so it cannot
+ * contradict that page and is not compared against it; one that declares its
+ * own must state the same page. In the same PDF the shared page carries
+ * section 1's first-page footer although the continuing section sets no
+ * `titlePg` and names no stories.
  */
-export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean }): boolean {
+export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean }): boolean {
   const left = qualifyNativeDocxSectionColumnsV1(previous)
   const right = qualifyNativeDocxSectionColumnsV1(next)
   if (!left.ok || !right.ok) return false
@@ -154,9 +169,12 @@ export function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1
     const other = b.columns[index]
     return other !== undefined && column.x_millipoints === other.x_millipoints && column.y_millipoints === other.y_millipoints && column.width_millipoints === other.width_millipoints && column.height_millipoints === other.height_millipoints
   })
+  const sameSides = a.body_x_millipoints === b.body_x_millipoints && a.body_width_millipoints === b.body_width_millipoints
+  const inheritsStories = next.header_refs.length === 0 && next.footer_refs.length === 0
+  const sameStories = inheritsStories || (previous.title_page === next.title_page && sameRefs(previous.header_refs, next.header_refs) && sameRefs(previous.footer_refs, next.footer_refs))
   return a.page_width_millipoints === b.page_width_millipoints && a.page_height_millipoints === b.page_height_millipoints &&
-    a.body_x_millipoints === b.body_x_millipoints && a.body_y_millipoints === b.body_y_millipoints &&
-    a.body_width_millipoints === b.body_width_millipoints && a.body_height_millipoints === b.body_height_millipoints &&
-    previous.title_page === next.title_page && previous.page.margins.header_twips === next.page.margins.header_twips && previous.page.margins.footer_twips === next.page.margins.footer_twips &&
-    (sameColumns || options?.allow_different_columns === true) && sameRefs(previous.header_refs, next.header_refs) && sameRefs(previous.footer_refs, next.footer_refs)
+    a.body_y_millipoints === b.body_y_millipoints && a.body_height_millipoints === b.body_height_millipoints &&
+    (sameSides || options?.allow_different_body_sides === true) &&
+    previous.page.margins.header_twips === next.page.margins.header_twips && previous.page.margins.footer_twips === next.page.margins.footer_twips &&
+    (sameColumns || options?.allow_different_columns === true) && sameStories
 }
