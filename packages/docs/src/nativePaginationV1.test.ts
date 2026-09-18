@@ -115,6 +115,16 @@ function leadFlowBreak(paragraph: any, control: 'page-break' | 'column-break'): 
   run.control = control
 }
 
+/** Gives a paragraph a leading w:br and keeps a text run after it, so the break is not the paragraph's only content. */
+function leadFlowBreakWithTail(request: any, blockIndex: number, control: 'page-break' | 'column-break'): void {
+  const paragraph = request.document.body.blocks[blockIndex].paragraph
+  const original = paragraph.runs[0]
+  const tail = { ...structuredClone(original), id: `${original.id}:tail` }
+  leadFlowBreak(paragraph, control)
+  paragraph.runs.push(tail)
+  request.resolved_layout.runs.push({ run_id: tail.id, paragraph_id: paragraph.id, applied_paragraph_styles: [], applied_character_styles: [], properties: { font_family: 'Test', font_size_half_points: 20 } })
+}
+
 /** Appends a w:br of the given kind after every existing run of a body paragraph. */
 function appendFlowBreak(request: any, blockIndex: number, control: 'page-break' | 'column-break'): void {
   const paragraph = request.document.body.blocks[blockIndex].paragraph
@@ -1575,14 +1585,30 @@ describe('native DOCX pagination v1', () => {
     expect(result.value.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code })]))
   })
 
-  it('breaks the page at a w:br page break that opens its own body paragraph', () => {
-    const flowing = paginated(fixture({ lineCounts: [1, 1] }))
+  /**
+   * A paragraph whose only content is the break keeps its own line where it
+   * already is; only what FOLLOWS moves. Word records that itself: the
+   * `w:lastRenderedPageBreak` in `columnbreak.docx` opens the paragraph AFTER
+   * the break-only paragraph, and Word's PDF paints that paragraph at the very
+   * top of the new page. A break with content still after it in the same
+   * paragraph keeps moving the whole paragraph, which nothing here contradicts.
+   */
+  it('breaks the page after a w:br page break that is its own body paragraph', () => {
+    const flowing = paginated(fixture({ lineCounts: [1, 1, 1] }))
     expect(flowing.pages).toHaveLength(1)
-    const request = fixture({ lineCounts: [1, 1] })
+    const request = fixture({ lineCounts: [1, 1, 1] })
     leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'page-break')
     const broken = paginated(request)
     expect(broken.pages).toHaveLength(2)
-    expect(broken.pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([['paragraph:1'], ['paragraph:2']])
+    expect(broken.pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([['paragraph:1', 'paragraph:2'], ['paragraph:3']])
+
+    const tail = fixture({ lineCounts: [1, 1, 1] })
+    leadFlowBreakWithTail(tail as any, 1, 'page-break')
+    expect(paginated(tail).pages.map((page) => page.paragraph_slices.map((slice) => slice.paragraph_id))).toEqual([['paragraph:1'], ['paragraph:2', 'paragraph:3']])
+
+    const trailing = fixture({ lineCounts: [1, 1] })
+    leadFlowBreak(trailing.document.body.blocks[1]!.paragraph, 'page-break')
+    expect(paginated(trailing).pages).toHaveLength(1)
   })
 
   it('breaks the column at a w:br column break that opens its own body paragraph', () => {
@@ -1597,7 +1623,7 @@ describe('native DOCX pagination v1', () => {
     setEqualColumns(request, 2)
     leadFlowBreak(request.document.body.blocks[1]!.paragraph, 'column-break')
     const broken = paginated(request)
-    expect(broken.pages[0]!.lines.map((line) => [line.paragraph_id, line.column_ordinal])).toEqual([['paragraph:1', 0], ['paragraph:2', 1]])
+    expect(broken.pages[0]!.lines.map((line) => [line.paragraph_id, line.column_ordinal])).toEqual([['paragraph:1', 0], ['paragraph:2', 0], ['paragraph:3', 1]])
   })
 
   it('keeps a leading page break from crossing an incoming keep_next chain', () => {
@@ -1630,22 +1656,22 @@ describe('native DOCX pagination v1', () => {
     const output = paginated(request)
     expect(output.pages).toHaveLength(2)
     expect(output.pages.map((page) => page.lines.map((line) => [line.paragraph_id, line.column_ordinal]))).toEqual([
-      [['paragraph:1', 0], ['paragraph:2', 0]],
-      [['paragraph:3', 0], ['paragraph:4', 1]],
+      [['paragraph:1', 0], ['paragraph:2', 0], ['paragraph:3', 0]],
+      [['paragraph:4', 0]],
     ])
 
     const columnBreak = fixture({ lineCounts: [1, 1, 1, 1], bodyHeight: 40_000 })
     setEqualColumns(columnBreak, 2)
     leadFlowBreak(columnBreak.document.body.blocks[2]!.paragraph, 'column-break')
     expect(paginated(columnBreak).pages.map((page) => page.lines.map((line) => [line.paragraph_id, line.column_ordinal]))).toEqual([
-      [['paragraph:1', 0], ['paragraph:2', 0], ['paragraph:3', 1], ['paragraph:4', 1]],
+      [['paragraph:1', 0], ['paragraph:2', 0], ['paragraph:3', 0], ['paragraph:4', 1]],
     ])
   })
 
   it('refuses a flow break that opens the whole multi-column fragment', () => {
     const request = fixture({ lineCounts: [1, 1], bodyHeight: 40_000 })
     setEqualColumns(request, 2)
-    leadFlowBreak(request.document.body.blocks[0]!.paragraph, 'page-break')
+    leadFlowBreakWithTail(request as any, 0, 'page-break')
     const result = paginateNativeDocxV1(request)
     expect(result.ok).toBe(true)
     if (!result.ok) return

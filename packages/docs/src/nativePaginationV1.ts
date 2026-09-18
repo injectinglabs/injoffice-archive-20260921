@@ -331,6 +331,8 @@ interface PaginationContext {
   approximateLegacySettings?: NativeDocxApproximationEligibilityV1 | false
   flowBreaks: Map<string, NativeDocxFlowBreakControlV1>
   shapedFlowBreaks: Map<string, NativeDocxFlowBreakControlV1>
+  breakOnlyFlowParagraphs: Set<string>
+  pendingFlowBreak?: NativeDocxFlowBreakControlV1
   request: NativeDocxPaginationRequestV1
   provenance: NativeDocxPaginationProvenanceV1
   diagnostics: NativeDocxPaginationDiagnosticV1[]
@@ -875,6 +877,28 @@ function bodyFlowBreaks(document: NativeDocxDocumentV1): Map<string, NativeDocxF
     breaks.set(paragraph.id, leading as NativeDocxFlowBreakControlV1)
   }
   return breaks
+}
+
+/**
+ * The body paragraphs whose ONLY content is a flow break. Word leaves such a
+ * paragraph's line where it already is and moves what FOLLOWS to the next page
+ * or column: `columnbreak.docx` writes its own `w:lastRenderedPageBreak` at the
+ * start of the paragraph after the break-only paragraph, not inside it, and
+ * Word's PDF puts that following paragraph at the very top of the new page --
+ * 25.44 pt above where moving the whole break-only paragraph would put it.
+ * `footer-body-distance.pdf` shows the same 25.44 pt on its second page.
+ *
+ * A paragraph that still carries content after its leading break keeps the
+ * whole-paragraph move, because nothing here proves where Word would cut it.
+ */
+function breakOnlyFlowParagraphs(document: NativeDocxDocumentV1, breaks: ReadonlyMap<string, NativeDocxFlowBreakControlV1>): Set<string> {
+  const only = new Set<string>()
+  for (const block of document.body.blocks) {
+    const paragraph = block.kind === 'paragraph' ? block.paragraph : undefined
+    if (!paragraph || !breaks.has(paragraph.id)) continue
+    if (paragraph.runs.length === 1) only.add(paragraph.id)
+  }
+  return only
 }
 
 /**
@@ -1608,8 +1632,11 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
   if (resolved.properties.page_break_before && pageHasContent(context)) startNextContentPage(context)
   if (!context.currentPage || context.refused) return
   const flowBreak = context.flowBreaks.get(paragraph.paragraph_id)
-  if (flowBreak === 'page-break' && pageHasContent(context)) startNextContentPage(context)
-  else if (flowBreak === 'column-break' && columnHasContent(context)) startNextFlowColumn(context)
+  const breakOnly = context.breakOnlyFlowParagraphs.has(paragraph.paragraph_id)
+  if (!breakOnly) {
+    if (flowBreak === 'page-break' && pageHasContent(context)) startNextContentPage(context)
+    else if (flowBreak === 'column-break' && columnHasContent(context)) startNextFlowColumn(context)
+  }
   if (!context.currentPage || context.refused) return
   const totalHeight = sumLineHeights(paragraph.lines)
   if (totalHeight === undefined) {
@@ -1696,6 +1723,10 @@ function paginateParagraph(context: PaginationContext, paragraph: NativeDocxShap
     else if (placedBreak === 'column-break') startNextFlowColumn(context)
     else if (start < paragraph.lines.length) startNextFlowColumn(context)
   }
+  // A break-only paragraph's break falls after its own line. Holding it until
+  // the next block reaches the paginator is what keeps a trailing one from
+  // opening a page nothing would ever be placed on.
+  if (breakOnly && flowBreak !== undefined) context.pendingFlowBreak = flowBreak
   context.previousAfter = paragraph.spacing_after_millipoints
 }
 
@@ -2203,7 +2234,8 @@ function paginateExactlyBalancedGroup(
   const breaks: (NativeDocxFlowBreakControlV1 | undefined)[] = []
   for (const [entryIndex, entry] of entries.entries()) {
     const leading = context.flowBreaks.get(entry.native.id)
-    if (leading !== undefined) {
+    const breakOnly = leading !== undefined && context.breakOnlyFlowParagraphs.has(entry.native.id)
+    if (leading !== undefined && !breakOnly) {
       if (units.length === 0) {
         refuse(context, 'column-balance-ambiguous', entry.native.id, 'A flow break that opens the multi-column fragment ends no fragment of it')
         return
@@ -2217,6 +2249,7 @@ function paginateExactlyBalancedGroup(
       })
       breaks[units.length - 1] = lineFlowBreak(line) ?? breaks[units.length - 1]
     }
+    if (breakOnly && leading !== undefined) breaks[units.length - 1] = leading
   }
   const columns = group.section.page.columns
   let index = 0
@@ -2285,9 +2318,19 @@ function paginateExactlyBalancedGroup(
     }
     fragmentStart = fragmentEnd
     if (context.refused) return
+    if (fragmentStart >= units.length) break
     if (terminator === 'page-break') startNextContentPage(context)
     else if (terminator === 'column-break') startNextFlowColumn(context)
   }
+}
+
+/** Opens the page or column a held break-only flow break names, once the next block proves something follows it. */
+function applyPendingFlowBreak(context: PaginationContext): void {
+  const pending = context.pendingFlowBreak
+  if (pending === undefined || context.refused) return
+  context.pendingFlowBreak = undefined
+  if (pending === 'page-break' && pageHasContent(context)) startNextContentPage(context)
+  else if (pending === 'column-break' && columnHasContent(context)) startNextFlowColumn(context)
 }
 
 function paginateGroups(context: PaginationContext, groups: readonly SectionGroup[], resolved: Map<string, NativeDocxResolvedParagraphV1>, shaped: Map<string, NativeDocxShapedParagraphV1>): void {
@@ -2391,6 +2434,8 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
     for (let blockIndex = 0; blockIndex < group.blocks.length && !context.refused;) {
       const block = group.blocks[blockIndex]!
       if (block.table) {
+        applyPendingFlowBreak(context)
+        if (context.refused) return
         const table = context.qualifiedTables?.get(block.table.id)
         if (!table) { refuse(context, 'body-table-unsupported', block.table.id, 'Table was not present in the qualified table inventory'); return }
         paginateTable(context, table, shaped)
@@ -2413,6 +2458,8 @@ function paginateGroups(context: PaginationContext, groups: readonly SectionGrou
           refuse(context, 'shaped-paragraph-missing', nativeParagraph.id, 'Native body paragraph has no shaped-lines paragraph', unshapedParagraphCause(context, nativeParagraph.id))
           return
         }
+        applyPendingFlowBreak(context)
+        if (context.refused || !context.currentPage) return
         const chainEnd = keepPlan.ends[index]!
         if (chainEnd > index) {
           if (!keepPlan.atomic[index]) {
@@ -2486,6 +2533,7 @@ function paginateDecodedNativeDocxV1(request: NativeDocxPaginationRequestV1, app
     approximateLegacySettings,
     flowBreaks: bodyFlowBreaks(request.document),
     shapedFlowBreaks: shapedFlowBreakRuns(request.shaped_lines),
+    breakOnlyFlowParagraphs: breakOnlyFlowParagraphs(request.document, bodyFlowBreaks(request.document)),
     ...(request.column_shaped_lines ? { columnFlow: planNativeDocxColumnParagraphFlowV1(request.document, request.resolved_layout, request.pagination_settings, request.column_shaped_lines) } : {}),
     request,
     provenance: provenance(request),
@@ -2617,6 +2665,7 @@ function validatePaginatedLayoutSource(output: NativeDocxPaginatedLayoutV1, requ
     approximateLegacySettings,
     flowBreaks: bodyFlowBreaks(request.document),
     shapedFlowBreaks: shapedFlowBreakRuns(request.shaped_lines),
+    breakOnlyFlowParagraphs: breakOnlyFlowParagraphs(request.document, bodyFlowBreaks(request.document)),
     request, provenance: provenance(request), diagnostics: [], diagnosticKeys: new Set(), refused: false,
     pages: [], sections: [], cursorY: 0, previousAfter: 0, sectionPageOrdinal: 0, currentColumnOrdinal: 0,
     sliceCount: 0, linePlacementCount: 0, sliceCountForParagraph: new Map(), lastSliceLocation: new Map(),
