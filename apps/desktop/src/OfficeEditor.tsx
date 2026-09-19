@@ -6,7 +6,8 @@ import DocumentPreview from './DocumentPreview'
 import {loadDocumentImages,type DocumentImageCache} from './document-media'
 import { replaceParagraphLines, insertDocumentImage, deleteDocumentImage, replaceDocumentImage, replaceEditableDocumentText, mergeWithPreviousParagraph, insertDocumentTable, changeDocumentTable, changeDocumentTableGrid, type TableGridOperation } from './document-authoring'
 import {runAppearance} from './document-style'
-import type {DocumentTextRange} from './document-range'
+import {paragraphTextOffset, type DocumentTextRange} from './document-range'
+import {createHiddenApplyScheduler} from './hidden-apply'
 import HyperlinkControl from './HyperlinkControl'
 import PageLayoutControl,{type PagePatch} from './PageLayoutControl'
 import InsertTableControl from './InsertTableControl'
@@ -56,6 +57,23 @@ interface LocalEngine {
 
 function operationId() { return `desktop-${crypto.randomUUID()}` }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error) }
+function captureDraftCaret(text: string) {
+  const fallback = paragraphTextOffset([text.length], 0, text.length) ?? 0
+  const selection = typeof window === 'undefined' ? undefined : window.getSelection?.()
+  if (!selection?.rangeCount) return fallback
+  const range = selection.getRangeAt(0)
+  const start = range.startContainer as { closest?: (selector: string) => Element | null; parentElement?: { closest?: (selector: string) => Element | null } | null }
+  const run = (typeof start.closest === 'function' ? start : start.parentElement)?.closest?.('[data-docx-run]')
+  if (!run || typeof range.cloneRange !== 'function') return fallback
+  try {
+    const prefix = range.cloneRange()
+    prefix.selectNodeContents(run)
+    prefix.setEnd(range.startContainer, range.startOffset)
+    return paragraphTextOffset([text.length], 0, prefix.toString().length) ?? fallback
+  } catch {
+    return fallback
+  }
+}
 
 function createEngine(extension: string): LocalEngine {
   if (extension !== 'docx') throw new Error('Choose a DOCX document.')
@@ -160,6 +178,14 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const [undo, setUndo] = useState<Snapshot[]>([])
   const [redo, setRedo] = useState<Snapshot[]>([])
   const [composing, setComposing] = useState(false)
+  const composingRef = useRef(false)
+  const applyHiddenRef = useRef<() => Promise<void>>(async () => {})
+  const hiddenApplyRef = useRef<ReturnType<typeof createHiddenApplyScheduler> | undefined>(undefined)
+  if (!hiddenApplyRef.current) hiddenApplyRef.current = createHiddenApplyScheduler({
+    delayMs: 80,
+    composing: () => composingRef.current,
+    apply: () => applyHiddenRef.current(),
+  })
   const exportRequest=useRef<string|undefined>(undefined)
   const [exportStage,setExportStage]=useState<string|undefined>(undefined)
   const [exportNotice,setExportNotice]=useState('')
@@ -199,11 +225,12 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
         .catch(reason => { if (!cancelled) setError(errorMessage(reason)) })
         .finally(() => { if (!cancelled) setBusy(false) })
     } catch (reason) { setError(errorMessage(reason)); setBusy(false) }
-    return () => { cancelled = true; mounted.current = false; local?.terminate(); callbacks.current.onBusyChange?.(false) }
+    return () => { cancelled = true; mounted.current = false; hiddenApplyRef.current?.cancel(); local?.terminate(); callbacks.current.onBusyChange?.(false) }
     // A new open session must mount a fresh editor; save paths do not reinitialize it.
   }, [])
 
   async function choose(key: string,range?:TextRange) {
+    hiddenApplyRef.current?.cancel()
     if (busy || composing || !snapshot) return
     let source = snapshot
     if (draftPending.current) {
@@ -225,9 +252,13 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     callbacks.current.onRecoveryDraftChange?.(draftPending.current ? { version: 1, format: 'docx', target: selected, text: value } : null)
     callbacks.current.onBusyChange?.(busy||composing)
     callbacks.current.onDraftChange?.(draftPending.current)
+    if (draftPending.current) hiddenApplyRef.current?.schedule()
+    else hiddenApplyRef.current?.cancel()
   }
   function cancelDraft() {
     if (busy) return
+    hiddenApplyRef.current?.cancel()
+    composingRef.current = false
     draftPending.current = false
     callbacks.current.onRecoveryDraftChange?.(null)
     setDraft(target?.value ?? ''); setTextRange(undefined); setSelected(''); setError(''); setComposing(false)
@@ -243,17 +274,25 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     setDraft(next.targets.find(candidate => candidate.key === selected)?.value ?? '')
     callbacks.current.onChange(next.bytes)
   }
-  async function apply() {
-    if (!snapshot || !engine.current || !target || !hasDraft || busy || composing) return
+  async function apply(restoreCaret = false) {
+    hiddenApplyRef.current?.cancel()
+    if (!snapshot || !engine.current || !target || !hasDraft || busy || composingRef.current) return
+    const caret = captureDraftCaret(draft)
     setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
     try {
       const next = await engine.current.edit(snapshot, selected, draft)
-      if (mounted.current) { accept(next); if (snapshot.preview.kind === 'docx') setSelected('') }
+      if (mounted.current) {
+        accept(next)
+        if (restoreCaret) setCaretOffset(caret)
+        else if (snapshot.preview.kind === 'docx') setSelected('')
+      }
     } catch (reason) { if (mounted.current) setError(errorMessage(reason)) }
     finally { if (mounted.current) setBusy(false) }
   }
+  applyHiddenRef.current = () => apply(true)
   async function changeFormatting(patch: FormattingPatch) {
     if (!snapshot || !engine.current?.format || !target || busy || composing) return
+    hiddenApplyRef.current?.cancel()
     setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
     try {
       const source = draftPending.current ? await engine.current.edit(snapshot, selected, draft) : snapshot
@@ -397,7 +436,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   }
   const commitLatest = useRef<() => Promise<boolean>>(async () => false)
   commitLatest.current = async () => {
-    if (busy || composing) return false
+    if (busy || composingRef.current) return false
     if (!draftPending.current) return true
     await apply()
     if (draftPending.current) return false
@@ -480,7 +519,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </div>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{setComposing(value);callbacks.current.onBusyChange?.(busy||value)}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
     </>}
