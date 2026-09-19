@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/injectinglabs/injoffice/go/docxpatch"
 	"net/http"
 	"net/http/httptest"
@@ -109,6 +110,32 @@ func TestDOCXFontSubstitutionEvidenceJoins(t *testing.T) {
 	original, _ := json.Marshal(base)
 	if err := validateDOCXFontSubstitutionPreview(original, input, path); err != nil {
 		t.Fatal(err)
+	}
+	// The worker admits MAX_OPERATOR_FONT_FACES faces before reading a font
+	// byte; this helper re-reads the same operator file, so a manifest the
+	// worker loaded must not be refused here and one past the cap must be.
+	// The counts below are literals on purpose: deriving them from the constant
+	// would make this test pass at any cap and hide a divergence from the worker.
+	if maxDOCXOperatorFontFaces != 64 {
+		t.Fatalf("operator font face cap is %d, expected 64 to mirror MAX_OPERATOR_FONT_FACES in apps/docx-page-paint-worker/src/hostFonts.ts", maxDOCXOperatorFontFaces)
+	}
+	for _, tc := range []struct {
+		faces  int
+		accept bool
+	}{{64, true}, {65, false}} {
+		faces := []any{map[string]any{"family": "Selected", "weight": 400, "style": "normal", "sha256": digest}}
+		for i := len(faces); i < tc.faces; i++ {
+			faces = append(faces, map[string]any{"family": fmt.Sprintf("Filler %d", i), "weight": 400, "style": "normal", "sha256": digest})
+		}
+		capped := map[string]any{"version": config["version"], "substitutions": config["substitutions"], "faces": faces}
+		cappedPath := filepath.Join(t.TempDir(), "operator.json")
+		cappedRaw, _ := json.Marshal(capped)
+		if err := os.WriteFile(cappedPath, cappedRaw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateDOCXFontSubstitutionPreview(original, input, cappedPath); (err == nil) != tc.accept {
+			t.Fatalf("%d faces: accepted %v, expected %v (%v)", tc.faces, err == nil, tc.accept, err)
+		}
 	}
 	// The HTTP boundary joins the complete worker echo to independently
 	// extracted request composition, including fields unknown to paint itself.

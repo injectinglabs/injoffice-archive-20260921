@@ -127,7 +127,7 @@ of substituting a system font. A face inside a TrueType/OpenType collection
 collection file is still pinned by one `sha256`, and the pinned preflight
 refuses an index that names no face in the collection as well as a
 `collectionIndex` on a standalone sfnt. The current host provider accepts
-standalone TTF/OTF files and TTC/OTC collections, at most 32 configured faces,
+standalone TTF/OTF files and TTC/OTC collections, at most 64 configured faces,
 16 MiB per standalone file, 64 MiB per collection file and 64 MiB total
 including embedded resources; faces declared from the same collection file
 count its bytes once. Operators must have permission to use the fonts;
