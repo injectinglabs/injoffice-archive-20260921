@@ -1032,7 +1032,7 @@ func parseNativeDiagramConstraint(node *nativeXMLNode, diagramNS string) (native
 // refuse so a layout relying on them is never laid out differently.
 func nativeDiagramConstraintTypeModeled(typ string) bool {
 	switch typ {
-	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "alignOff", "bendDist", "begPad", "endPad", "primFontSz", "lMarg", "rMarg", "tMarg", "bMarg":
+	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "alignOff", "bendDist", "connDist", "begPad", "endPad", "primFontSz", "lMarg", "rMarg", "tMarg", "bMarg":
 		return true
 	case "secFontSz":
 		// The secondary font size is not read by any algorithm here. It is
@@ -1333,7 +1333,7 @@ func nativeDiagramConstraintIsPointTyped(typ string) bool {
 
 func nativeDiagramConstraintIsLengthTyped(typ string) bool {
 	switch typ {
-	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "bendDist", "begPad", "endPad":
+	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "bendDist", "connDist", "begPad", "endPad":
 		return true
 	}
 	return false

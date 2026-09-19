@@ -1334,3 +1334,73 @@ func TestExtractNativePPTXDiagramLayoutElasticCompositeClosesOnItsContent(t *tes
 		t.Fatalf("the closed composite was not centred in the frame: y=%d content=%d of %d", *title.Y, content, frameH)
 	}
 }
+
+// nativeDiagramLinConnLayoutXML is the process3 shape: a linear row whose
+// sibling transitions are conn nodes instead of spacers. The row gives each
+// transition a width of its own, so the gap the connector is drawn in is part
+// of the packed row.
+func nativeDiagramLinConnLayoutXML(diagramNS string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/linconn"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="process" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="linRoot"><dgm:alg type="lin"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/>` +
+		`<dgm:constr type="w" for="ch" ptType="sibTrans" refType="w" refFor="ch" refForName="linText" fact="0.3"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="linLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="linText" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="equ" fact="0.4"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:forEach name="linConnLoop" axis="followSib" ptType="sibTrans" cnt="1">` +
+		`<dgm:layoutNode name="linConn" styleLbl="parChTrans1D2"><dgm:alg type="conn">` +
+		`<dgm:param type="begPts" val="midR"/><dgm:param type="endPts" val="midL"/>` +
+		`<dgm:param type="srcNode" val="linText"/><dgm:param type="dstNode" val="linText"/></dgm:alg>` +
+		`<dgm:shape type="conn"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" fact="0.5"/><dgm:constr type="connDist"/>` +
+		`<dgm:constr type="begPad" refType="connDist" fact="0.25"/><dgm:constr type="endPad" refType="connDist" fact="0.22"/></dgm:constrLst><dgm:ruleLst/>` +
+		`</dgm:layoutNode></dgm:forEach></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// A conn node inside a linear node joins the sibling before it to the sibling
+// after it, and the width the row gives that sibTrans is the gap it is drawn
+// in. nativeDiagramConnectorEnds used to model hierRoot/hierChild only, so a
+// process layout whose transitions are connectors refused outright.
+func TestExtractNativePPTXDiagramLayoutLinearConnectorsJoinTheirNeighbours(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinConnLayoutXML(nativeDiagramURITransitional),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear diagram with connectors: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 3 {
+		t.Fatalf("expected two boxes and the connector between them: %d children", len(group.Children))
+	}
+	var boxes []NativeElement
+	var connector *NativeElement
+	for index, child := range group.Children {
+		if child.Kind == NativeElementKindConnector {
+			connector = &group.Children[index]
+			continue
+		}
+		boxes = append(boxes, child)
+	}
+	if connector == nil || len(boxes) != 2 {
+		t.Fatalf("the linear connector was not emitted: %d boxes", len(boxes))
+	}
+	first, second := boxes[0].Transform, boxes[1].Transform
+	// The transition asked for 0.3 of a box, so the row is 2.3 boxes wide and
+	// the gap between the two boxes is 0.3 of the shrunk box width.
+	gap := *second.X - (*first.X + *first.Cx)
+	if want := int64(float64(*first.Cx) * 0.3); gap < want-2 || gap > want+2 {
+		t.Fatalf("the connector gap is %d, want %d", gap, want)
+	}
+	// It is routed from the right edge of the box before it to the left edge
+	// of the box after it, so it lives inside that gap.
+	line := connector.Transform
+	if *line.X < *first.X+*first.Cx-2 || *line.X+*line.Cx > *second.X+2 {
+		t.Fatalf("connector at %d..%d is not inside the gap %d..%d", *line.X, *line.X+*line.Cx, *first.X+*first.Cx, *second.X)
+	}
+	if *second.X+*second.Cx != *group.Transform.Cx {
+		t.Fatalf("the row with connectors does not fill the frame width: %d", *second.X+*second.Cx)
+	}
+}
