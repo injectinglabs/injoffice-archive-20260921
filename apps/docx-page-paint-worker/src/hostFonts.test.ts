@@ -3,7 +3,7 @@ import {readFileSync,statSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs'
 import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
-import {loadHostFonts,MAX_OPERATOR_FONT_FACES} from './hostFonts.js'
+import {discloseApproximateHostFontSubstitutions,loadHostFonts,MAX_OPERATOR_FONT_FACES} from './hostFonts.js'
 import {nativeDocxPagePaintWorkerErrorV1} from './protocol.js'
 import {encodeNativeDOCXFontInventoryV1,nativeDOCXCanonicalWireSHA256V1} from '../../../packages/docs/src/nativeFontInventoryV1.js'
 import type {NativeDocxPagePaintPrepareInputV1} from '@injoffice/docs/native-page-paint-compiler'
@@ -160,6 +160,47 @@ describe('operator-owned DOCX fonts',()=>{
   italicInventory.inventory_sha256='';italicInventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(italicInventory)
   italic.font_inventory_json=encodeNativeDOCXFontInventoryV1(italicInventory)
   await expect(loadHostFonts(italic,p,'approximate')).rejects.toThrow(/Candara \/ 400 \/ italic/)
+ })
+ it('keeps one authored family on one substitute family across weights',async()=>{
+  // The corpus shape that produced the defect: the theme family (Calibri) is an exact
+  // reference and owns the 400 slot, and the first configured 700 face belongs to a
+  // different family, so bold Segoe UI used to switch typeface mid-paragraph.
+  const bold=resolve(root,'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf')
+  const boldSha=`sha256:${createHash('sha256').update(readFileSync(bold)).digest('hex')}`
+  const serif=resolve(root,'node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif-Bold.ttf')
+  const serifSha=`sha256:${createHash('sha256').update(readFileSync(serif)).digest('hex')}`
+  const value=input(),inventory=JSON.parse(value.font_inventory_json)
+  inventory.references=[
+   {...inventory.references[0],family:'Calibri'},
+   {...inventory.references[0],family:'Segoe UI',scope_ids:['run:2']},
+   {...inventory.references[0],family:'Segoe UI',weight:700,scope_ids:['run:3']},
+  ]
+  inventory.inventory_sha256='';inventory.inventory_sha256=nativeDOCXCanonicalWireSHA256V1(inventory)
+  value.font_inventory_json=encodeNativeDOCXFontInventoryV1(inventory)
+  const aptos={family:'Aptos',weight:700,style:'normal',path:serif,sha256:serifSha}
+  const calibri={family:'Calibri',weight:400,style:'normal',path,sha256}
+  const calibriBold={family:'Calibri',weight:700,style:'normal',path:bold,sha256:boldSha}
+  const fonts=await loadHostFonts(value,config([aptos,calibri,calibriBold]),'approximate')
+  expect(fonts.approximateSubstitutions).toEqual([
+   expect.objectContaining({source_family:'Segoe UI',weight:400,selected_family:'Calibri'}),
+   expect.objectContaining({source_family:'Segoe UI',weight:700,selected_family:'Calibri'}),
+  ])
+  expect(fonts.approximateSubstitutions?.some(record=>record.family_fallback_from!==undefined)).toBe(false)
+  for(const weight of [400,700] as const){
+   const selected=await fonts.resolver.resolve({manifest:fonts.manifest,run:{version:1 as const,text:'Body',fontSizeMilliPoints:10000,font:{families:['Segoe UI'],weight,style:'normal' as const,stretch:100},script:'Latn',language:'en',direction:'ltr' as const}})
+   if(!('face' in selected))throw new Error('Expected loaded host substitute')
+   expect(selected.face).toMatchObject({matchedFamily:'Segoe UI',family:'Calibri',weight})
+  }
+  // With no Calibri 700 anywhere in the operator manifest the split is unavoidable,
+  // so it is disclosed instead of happening silently.
+  const split=await loadHostFonts(value,config([aptos,calibri]),'approximate')
+  expect(split.approximateSubstitutions).toEqual([
+   expect.objectContaining({source_family:'Segoe UI',weight:400,selected_family:'Calibri'}),
+   expect.objectContaining({source_family:'Segoe UI',weight:700,selected_family:'Aptos',family_fallback_from:'Calibri'}),
+  ])
+  expect(split.approximateSubstitutions?.[0]).not.toHaveProperty('family_fallback_from')
+  const reasons=discloseApproximateHostFontSubstitutions({reasons:[]},split) as {reasons:string[]}
+  expect(reasons.reasons.join('\n')).toContain('Segoe UI / 700 / normal -> Aptos [family-inconsistent: Calibri has no 700/normal face]')
  })
  it('admits equation sidecar faces without changing the body substitute or counting them as references',async()=>{
   const value=input(),inventory=JSON.parse(value.font_inventory_json)

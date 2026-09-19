@@ -128,11 +128,31 @@ export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path
    if(!missing().some(r=>r.weight===f.weight&&r.style===f.style)||loadedHost(f.weight,f.style))continue
    total=admitConfiguredFace(index,f,faces,resources,occupied,total,loaded)
   }
-  const loadedIds=new Set(resources.keys())
+  // One authored family resolves to one target family. The loop above admits at most
+  // one host face per missing weight/style, so a family needing 400 and 700 used to
+  // take whichever family happened to own each slot and switched typeface mid-paragraph.
+  // The first substitution for a source family fixes the target family; every later
+  // weight/style of that family joins it, admitting that family's own configured face
+  // when the slot is held by another family.
+  const chosenFamily=new Map<string,string>()
+  const loadedFamilyFace=(family:string,weight:number,style:string)=>faces.some(face=>face.source.kind==='host'&&resources.has(face.faceId)&&fold(face.family)===fold(family)&&face.weight===weight&&face.style===style&&face.stretch===100)
   for(const reference of missing()){
-   const substitute=selectLoadedHostManifestSubstituteV1(faces,loadedIds,reference)
+   const preferred=chosenFamily.get(fold(reference.family))
+   if(preferred!==undefined&&!loadedFamilyFace(preferred,reference.weight,reference.style)){
+    const index=configured.findIndex(f=>!!f&&fold(f.family)===fold(preferred)&&f.weight===reference.weight&&f.style===reference.style&&!occupied.has(key(f.family,f.weight,f.style)))
+    // A face admitted only to keep one typeface is a nicety, not a requirement: an
+    // operator entry that is oversized, mis-digested or unqualified must not turn a
+    // working preview into a refusal. It falls back below and the disclosure says so.
+    if(index>=0)try{total=admitConfiguredFace(index,configured[index]!,faces,resources,occupied,total,loaded)}catch{/* keep the fallback path */}
+   }
+   const substitute=selectLoadedHostManifestSubstituteV1(faces,new Set(resources.keys()),reference,preferred)
    if(!substitute||reference.style!=='normal'&&reference.style!=='italic')continue
-   const record=nativeDocxHostFontApproximateSubstitutionV1({family:reference.family,weight:reference.weight,style:reference.style},substitute)
+   // The chosen family has no face at this weight/style anywhere in the operator
+   // manifest, so this one reference cannot join it. Widening the search is disclosed
+   // rather than silently splitting the typeface.
+   const fallbackFrom=preferred!==undefined&&fold(preferred)!==fold(substitute.family)?preferred:undefined
+   const record=nativeDocxHostFontApproximateSubstitutionV1({family:reference.family,weight:reference.weight,style:reference.style},substitute,fallbackFrom===undefined?undefined:{familyFallbackFrom:fallbackFrom})
+   if(preferred===undefined)chosenFamily.set(fold(reference.family),substitute.family)
    const aliases=[...(substitute.aliases??[])]
    if(!aliases.some(alias=>fold(alias)===fold(reference.family)))aliases.push(reference.family)
    faces[faces.indexOf(substitute)]={...substitute,aliases}
