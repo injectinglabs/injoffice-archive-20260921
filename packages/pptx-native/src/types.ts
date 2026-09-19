@@ -148,10 +148,10 @@ export interface NativeTextBodyLayout {
   /**
    * Modeled `a:prstTxWarp/@prst`. Present only on read-only approximate
    * elements that also carry `pptx.text-warp-approximate`; the
-   * approximate preview lane warps glyphs along an InjOffice arch envelope.
+   * approximate preview lane warps glyphs along an InjOffice warp envelope.
    * Unmodeled presets stay omitted and flattened. Not PowerPoint-equivalent.
    */
-  presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate'
+  presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate' | 'textInflateTop'
   /** Authored `a:gd name="adj"` in thousandths of a percent. Only with presetTextWarp. */
   presetTextWarpAdj?: number
   writingMode?: 'vertical-clockwise'
