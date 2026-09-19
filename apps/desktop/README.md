@@ -42,6 +42,7 @@ PDF command apply/inspect, byte-snapshot history, and page-range parse live in p
 OfficeEditor hosts that preview with the ribbon, find/replace, and Apply for pending run text.
 Local spreadsheet calculation projects source values into a worker host and writes a revision-checked cache.
 PresentationEditor is the PPTX canvas, inspector, and Present control that launches PresentationPlayer.
+PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
