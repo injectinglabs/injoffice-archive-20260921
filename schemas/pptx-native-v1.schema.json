@@ -263,12 +263,20 @@
         "byteLength": { "type": "integer", "minimum": 0, "maximum": 536870912 },
         "dataBase64": { "type": "string", "maxLength": 89478488, "contentEncoding": "base64" },
         "source": { "$ref": "#/$defs/sourceAnchor" },
+        "sourceTransform": { "$ref": "#/$defs/assetSourceTransform" },
+        "sourceByteLength": { "type": "integer", "minimum": 0, "maximum": 536870912 },
         "passthrough": {
           "type": "array",
           "maxItems": 10000,
           "items": { "$ref": "#/$defs/passthroughRef" }
         }
       }
+    },
+    "assetSourceTransform": {
+      "x-binding-name": "AssetSourceTransform",
+      "description": "Names the deterministic, in-process derivation from the source package part to this asset's bytes. Absent means the asset is that part, byte for byte, and sourceByteLength is absent with it.",
+      "type": "string",
+      "enum": ["wmfRasterV1"]
     },
     "textRun": {
       "x-binding-name": "NativeTextRun",
