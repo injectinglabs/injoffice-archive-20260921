@@ -53,3 +53,24 @@ test('hidden apply waits for the debounce, skips IME composition, and flushes pe
   await scheduler.flush();
   assert.deepEqual(calls, ['apply', 'apply', 'apply']);
 });
+
+test('hidden apply flush waits for an in-flight async apply', async t => {
+  const { createHiddenApplyScheduler } = await loadScheduler();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = [];
+  let finish;
+  const scheduler = createHiddenApplyScheduler({
+    composing: () => false,
+    apply: () => new Promise(resolve => { calls.push('start'); finish = resolve; }),
+  });
+  scheduler.schedule();
+  const flushed = scheduler.flush();
+  let done = false;
+  flushed.then(() => { done = true; });
+  await Promise.resolve();
+  assert.deepEqual(calls, ['start']);
+  assert.equal(done, false);
+  finish();
+  await flushed;
+  assert.equal(done, true);
+});

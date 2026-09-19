@@ -11,16 +11,19 @@ export function createHiddenApplyScheduler({
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
   let pending = false;
+  let inFlight: Promise<void> | undefined;
 
   const fire = () => {
     timer = undefined;
-    if (running || composing()) return;
+    if (running || composing()) return inFlight;
     pending = false;
     running = true;
-    Promise.resolve(apply()).finally(() => {
+    inFlight = Promise.resolve(apply()).finally(() => {
       running = false;
+      inFlight = undefined;
       if (pending) queue();
     });
+    return inFlight;
   };
 
   const queue = () => {
@@ -34,7 +37,8 @@ export function createHiddenApplyScheduler({
     async flush() {
       if (timer) { clearTimeout(timer); timer = undefined; }
       if (composing()) return;
-      if (!running && pending) fire();
+      if (running) return inFlight;
+      if (pending) return fire();
     },
     cancel() {
       pending = false;
