@@ -21,6 +21,7 @@ import (
 //     in the group diagnostic;
 //   - lin packs its children end to end along linDir and shrinks the row
 //     uniformly when it overruns the node's own extent;
+//   - snake wraps those children into a grid of whole lines;
 //   - hierChild lays out its child subtrees along linDir separated by sibSp,
 //     packing horizontal siblings against each other's painted contours
 //     rather than their whole envelopes, or in two hanging columns around a
@@ -31,7 +32,7 @@ import (
 //   - tx fits the primary font size between primFontSz and its rule minimum
 //     using an average-advance glyph model.
 //
-// Nothing outside this subset is laid out: cycle, pyra and snake refuse.
+// Nothing outside this subset is laid out: cycle and pyra refuse.
 const (
 	nativeDiagramLayoutAlgorithmCode = "pptx.diagram-layout-algorithm-unavailable"
 	nativeDiagramLayoutGeometryCode  = "pptx.diagram-layout-geometry-unavailable"
@@ -99,10 +100,12 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 		return node.layoutHierChild(width, height)
 	case "lin":
 		return node.layoutLin(width, height)
+	case "snake":
+		return node.layoutSnake(width, height)
 	case "conn":
 		return nil
 	}
-	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, hierRoot, hierChild, sp, tx and conn are approximated")
+	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, snake, hierRoot, hierChild, sp, tx and conn are approximated")
 }
 
 // layoutComposite positions children by explicit constraints (§21.4.7.1
@@ -699,12 +702,12 @@ func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 		// not. The share is proportional, so equally constrained children
 		// end up with equal shares.
 		factor := available / total
-		key := "w"
+		keys := nativeDiagramHorizontalConstraints
 		if !horizontal {
-			key = "h"
+			keys = nativeDiagramVerticalConstraints
 		}
 		for _, item := range items {
-			if err := item.relaxAlong(key, along(item)*factor, width, height); err != nil {
+			if err := item.relaxAlong(keys, along(item)*factor, factor, width, height); err != nil {
 				return err
 			}
 		}
@@ -758,22 +761,49 @@ func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 	return nil
 }
 
-// relaxAlong re-solves one child of a linear node against a relaxed extent:
-// the child's own constraint list is evaluated again so everything derived
-// from that extent follows it, the allocation is then restored (the
-// algorithm's share wins over the node's own preferred value), and the
-// subtree is laid out afresh. Equalization directives are cleared first so
-// the second pass does not record the same group twice.
-func (node *nativeDiagramPresNode) relaxAlong(key string, value, parentW, parentH float64) error {
+// nativeDiagramHorizontalConstraints and nativeDiagramVerticalConstraints
+// name the modeled constraint types measured along one axis. A linear
+// algorithm relaxes the extent it packs along, and every extent and offset a
+// layout derived from it -- including the ones an ancestor assigned to a
+// descendant -- is measured in the same relaxed units. The other axis is
+// untouched.
+var (
+	nativeDiagramHorizontalConstraints = []string{"w", "l", "r", "ctrX"}
+	nativeDiagramVerticalConstraints   = []string{"h", "t", "b", "ctrY"}
+)
+
+// relaxAlong re-solves one child of a linear node against a relaxed extent.
+// ECMA-376 §21.4.2.24 lets the algorithm shrink a child to make the row fit,
+// and PowerPoint re-solves the constraint system in the relaxed units. Here:
+// every value in the subtree measured along the packing axis is scaled, the
+// subtree's own constraint lists are evaluated again so relations inside it
+// re-derive, and the allocation is restored -- the algorithm's share wins
+// over the node's own preferred value. Equalization directives are cleared
+// first so the second pass does not record the same group twice; rules aimed
+// at the subtree from above it are kept, because only the subtree's own
+// lists are re-evaluated.
+func (node *nativeDiagramPresNode) relaxAlong(keys []string, extent, factor, parentW, parentH float64) error {
+	node.scaleConstraints(keys, factor)
 	node.clearEqualization()
-	node.vals[key] = value
+	node.vals[keys[0]] = extent
 	if node.evaluator != nil {
 		if err := node.evaluator.evaluateConstraints(node); err != nil {
 			return err
 		}
 	}
-	node.vals[key] = value
+	node.vals[keys[0]] = extent
 	return node.layoutSubtree(parentW, parentH)
+}
+
+func (node *nativeDiagramPresNode) scaleConstraints(keys []string, factor float64) {
+	for _, key := range keys {
+		if value, ok := node.vals[key]; ok {
+			node.vals[key] = value * factor
+		}
+	}
+	for _, child := range node.children {
+		child.scaleConstraints(keys, factor)
+	}
 }
 
 func (node *nativeDiagramPresNode) clearEqualization() {
@@ -781,4 +811,145 @@ func (node *nativeDiagramPresNode) clearEqualization() {
 	for _, child := range node.children {
 		child.clearEqualization()
 	}
+}
+
+// layoutSnake wraps the children into a grid of whole lines (§21.4.7.1
+// snake, §21.4.7.35 grDir, §21.4.7.33 flowDir, §21.4.7.23 contDir). ECMA
+// names the parameters and leaves the line breaking to the implementation.
+// DEVIATION, declared in the group diagnostic: the break point is chosen by
+// fit rather than by ST_BreakpointType, because the list layouts give every
+// item the WHOLE diagram extent and rely on the algorithm to divide it. The
+// line count that leaves the packed grid closest in aspect ratio to the node
+// it fills is the one used, which is the grid PowerPoint draws for the block
+// lists in the corpus (four equal items in a 3:2 frame become two rows of
+// two, not four rows of one).
+func (node *nativeDiagramPresNode) layoutSnake(width, height float64) error {
+	items := []*nativeDiagramPresNode{}
+	for _, child := range node.children {
+		if child.isConnector() {
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside snake nodes are not modeled")
+		}
+		if err := child.layoutSubtree(width, height); err != nil {
+			return err
+		}
+		items = append(items, child)
+	}
+	node.rect = nativeDiagramRect{0, 0, width, height}
+	node.blockW, node.blockH, node.anchorX = width, height, width/2
+	node.rootLeft, node.rootRight = 0, width
+	if len(items) == 0 {
+		return nil
+	}
+	growth := node.param("grDir", "tL")
+	flow := node.param("flowDir", "row")
+	continuation := node.param("contDir", "sameDir")
+	if growth != "tL" && growth != "tR" && growth != "bL" && growth != "bR" {
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram snake growth direction "+growth+" is not modeled")
+	}
+	if flow != "row" && flow != "col" {
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram snake flow direction "+flow+" is not modeled")
+	}
+	if continuation != "sameDir" && continuation != "revDir" {
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram snake continuation "+continuation+" is not modeled")
+	}
+	// Spacers separate items inside a line; the sp constraint separates the
+	// lines themselves.
+	cells, gap := []*nativeDiagramPresNode{}, 0.0
+	for _, item := range items {
+		if item.alg == "sp" {
+			gap = math.Max(gap, item.blockW)
+			continue
+		}
+		cells = append(cells, item)
+	}
+	if len(cells) == 0 {
+		return nil
+	}
+	lineGap := node.value("sp", gap)
+	cellW, cellH := 0.0, 0.0
+	for _, cell := range cells {
+		cellW, cellH = math.Max(cellW, cell.blockW), math.Max(cellH, cell.blockH)
+	}
+	if cellW <= 0 || cellH <= 0 {
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutGeometryCode, "diagram snake children have no extent to wrap")
+	}
+	across := nativeDiagramSnakeLineLength(len(cells), cellW, cellH, gap, lineGap, width, height, flow == "col")
+	columns, rows := across, (len(cells)+across-1)/across
+	if flow == "col" {
+		rows, columns = across, (len(cells)+across-1)/across
+	}
+	factor := 1.0
+	if packed := float64(columns)*cellW + float64(columns-1)*gap; packed > width && width > 0 {
+		factor = width / packed
+	}
+	if packed := float64(rows)*cellH + float64(rows-1)*lineGap; packed*factor > height && height > 0 {
+		factor = math.Min(factor, height/packed)
+	}
+	if factor != 1 {
+		for index, cell := range cells {
+			if err := cell.relaxAlong(nativeDiagramHorizontalConstraints, cell.blockW*factor, factor, width, height); err != nil {
+				return err
+			}
+			if err := cell.relaxAlong(nativeDiagramVerticalConstraints, cell.blockH*factor, factor, width, height); err != nil {
+				return err
+			}
+			cells[index] = cell
+		}
+		cellW, cellH, gap, lineGap = cellW*factor, cellH*factor, gap*factor, lineGap*factor
+	}
+	for index, cell := range cells {
+		line, offset := index/across, index%across
+		if continuation == "revDir" && line%2 == 1 {
+			offset = across - 1 - offset
+			if last := len(cells) - line*across; line == (len(cells)-1)/across && last < across {
+				offset -= across - last
+			}
+		}
+		column, row := offset, line
+		if flow == "col" {
+			column, row = line, offset
+		}
+		if growth == "tR" || growth == "bR" {
+			column = columns - 1 - column
+		}
+		if growth == "bL" || growth == "bR" {
+			row = rows - 1 - row
+		}
+		// Lines are centered across the node, which is what off="ctr" asks
+		// for and what a full line produces anyway.
+		cell.translate(float64(column)*(cellW+gap)+(cellW-cell.blockW)/2, float64(row)*(cellH+lineGap)+(cellH-cell.blockH)/2)
+	}
+	node.blockW = float64(columns)*cellW + float64(columns-1)*gap
+	node.blockH = float64(rows)*cellH + float64(rows-1)*lineGap
+	node.rect = nativeDiagramRect{0, 0, node.blockW, node.blockH}
+	node.anchorX = node.blockW / 2
+	node.rootLeft, node.rootRight = 0, node.blockW
+	return nil
+}
+
+// nativeDiagramSnakeLineLength picks how many cells share a line: the count
+// whose packed grid comes closest in aspect ratio to the extent it has to
+// fill. Ties go to the shorter line, so a single cell never starts a grid.
+func nativeDiagramSnakeLineLength(count int, cellW, cellH, gap, lineGap, width, height float64, byColumn bool) int {
+	if count <= 1 || width <= 0 || height <= 0 {
+		return 1
+	}
+	target := width / height
+	best, bestErr := 1, math.Inf(1)
+	for across := 1; across <= count; across++ {
+		down := (count + across - 1) / across
+		columns, rows := across, down
+		if byColumn {
+			columns, rows = down, across
+		}
+		packedW := float64(columns)*cellW + float64(columns-1)*gap
+		packedH := float64(rows)*cellH + float64(rows-1)*lineGap
+		if packedW <= 0 || packedH <= 0 {
+			continue
+		}
+		if distance := math.Abs(math.Log(packedW/packedH) - math.Log(target)); distance < bestErr-1e-9 {
+			best, bestErr = across, distance
+		}
+	}
+	return best
 }

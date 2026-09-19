@@ -221,3 +221,27 @@ func decodeNativePresetCatalog(compressed []byte) ([]byte, error) {
 	}
 	return decoded, nil
 }
+
+// nativePresetAdjustmentNames lists a catalog preset's adjustment guides in
+// document order, which is the order DrawingML diagram adjust indexes
+// (dgm:adj@idx, 1-based) address them in.
+func nativePresetAdjustmentNames(name string) ([]string, error) {
+	catalog, err := loadNativePresetCatalog()
+	if err != nil {
+		return nil, err
+	}
+	preset, ok := catalog[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown DrawingML preset %q", name)
+	}
+	list := nativeChild(preset, nativePresetDrawingNS, "avLst")
+	if list == nil {
+		return nil, nil
+	}
+	names := make([]string, 0, len(list.Children))
+	for _, guide := range list.Children {
+		key, _ := exactNativeAttr(guide, "", "name")
+		names = append(names, key)
+	}
+	return names, nil
+}
