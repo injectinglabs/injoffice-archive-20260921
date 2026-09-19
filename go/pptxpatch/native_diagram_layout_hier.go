@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// Layout algorithms (ECMA-376 Part 1 §21.4.7.1) for the hierarchy subset:
-// composite, hierRoot, hierChild, sp, tx and conn. The spec names the
+// Layout algorithms (ECMA-376 Part 1 §21.4.7.1) for the modeled subset:
+// composite, lin, hierRoot, hierChild, sp, tx and conn. The spec names the
 // algorithms and their parameters (§21.4.7.49) but leaves the arithmetic to
 // the implementation, so every rule below is a declared approximation:
 //
@@ -19,6 +19,8 @@ import (
 //     hang leaf children below their parent, so tL/tR are laid out BELOW the
 //     root, left/right edge offset by alignOff x root width. This is declared
 //     in the group diagnostic;
+//   - lin packs its children end to end along linDir and shrinks the row
+//     uniformly when it overruns the node's own extent;
 //   - hierChild lays out its child subtrees along linDir separated by sibSp,
 //     packing horizontal siblings against each other's painted contours
 //     rather than their whole envelopes, or in two hanging columns around a
@@ -29,7 +31,7 @@ import (
 //   - tx fits the primary font size between primFontSz and its rule minimum
 //     using an average-advance glyph model.
 //
-// Nothing outside this subset is laid out: cycle, lin, pyra and snake refuse.
+// Nothing outside this subset is laid out: cycle, pyra and snake refuse.
 const (
 	nativeDiagramLayoutAlgorithmCode = "pptx.diagram-layout-algorithm-unavailable"
 	nativeDiagramLayoutGeometryCode  = "pptx.diagram-layout-geometry-unavailable"
@@ -72,7 +74,11 @@ func (node *nativeDiagramPresNode) isConnector() bool { return node.alg == "conn
 func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error {
 	width := node.value("w", parentW)
 	height := node.value("h", parentH)
-	if width < 0 || height < 0 {
+	// A pure spacer may be constrained to a negative extent: that is how the
+	// linear layouts overlap consecutive shapes (chevron1's space node asks
+	// for w = -0.1 x the shape width). Spacers never paint, so the negative
+	// extent only moves the packing cursor. Everything else refuses.
+	if (width < 0 || height < 0) && node.alg != "sp" {
 		return nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram layout node has a negative size")
 	}
 	node.laidOut = true
@@ -91,10 +97,12 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 		return node.layoutHierRoot(width, height)
 	case "hierChild":
 		return node.layoutHierChild(width, height)
+	case "lin":
+		return node.layoutLin(width, height)
 	case "conn":
 		return nil
 	}
-	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, hierRoot, hierChild, sp, tx and conn are approximated")
+	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, hierRoot, hierChild, sp, tx and conn are approximated")
 }
 
 // layoutComposite positions children by explicit constraints (§21.4.7.1
@@ -620,4 +628,133 @@ func nativeDiagramFitFontSize(paragraphs [][]string, maximum, minimum, width, he
 		}
 	}
 	return best
+}
+
+// scaleUniform multiplies a laid-out subtree by factor about the subtree
+// origin. lin uses it for shrink-to-fit: ECMA-376 §21.4.2.24 lets the
+// algorithm relax a child's w/h constraint down to its ruleLst minimum, which
+// re-solves every constraint derived from that extent. Every derived
+// constraint these layouts use is linear in it (a chevron's h = 0.4 x w, a
+// text box's l/t/w/h inside its composite), so scaling the finished subtree
+// reproduces the re-solve exactly, and is declared in the group diagnostic.
+func (node *nativeDiagramPresNode) scaleUniform(factor float64) {
+	node.rect.x *= factor
+	node.rect.y *= factor
+	node.rect.w *= factor
+	node.rect.h *= factor
+	node.blockW *= factor
+	node.blockH *= factor
+	node.anchorX *= factor
+	node.rootLeft *= factor
+	node.rootRight *= factor
+	for _, child := range node.children {
+		child.scaleUniform(factor)
+	}
+}
+
+// layoutLin packs children end to end along linDir, aligned across that axis
+// by nodeVertAlign/nodeHorzAlign (§21.4.7.1 lin, §21.4.7.42, §21.4.7.45,
+// §21.4.7.46). Spacer nodes contribute their extent along the packing axis
+// only; a negative spacer overlaps its neighbors. When the packed row or
+// column overruns the node's own extent every child is scaled by the one
+// factor that makes it fit.
+func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
+	items := []*nativeDiagramPresNode{}
+	for _, child := range node.children {
+		if child.isConnector() {
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside linear nodes are not modeled")
+		}
+		if err := child.layoutSubtree(width, height); err != nil {
+			return err
+		}
+		items = append(items, child)
+	}
+	node.rect = nativeDiagramRect{0, 0, width, height}
+	node.blockW, node.blockH, node.anchorX = width, height, width/2
+	node.rootLeft, node.rootRight = 0, width
+	if len(items) == 0 {
+		return nil
+	}
+	linDir := node.param("linDir", "fromL")
+	horizontal := linDir == "fromL" || linDir == "fromR"
+	if !horizontal && linDir != "fromT" && linDir != "fromB" {
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram linear direction "+linDir+" is not modeled")
+	}
+	align := node.param("nodeVertAlign", "ctr")
+	if !horizontal {
+		align = node.param("nodeHorzAlign", "ctr")
+	}
+	switch {
+	case horizontal && (align == "t" || align == "ctr" || align == "b"):
+	case !horizontal && (align == "l" || align == "ctr" || align == "r"):
+	default:
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram linear node alignment "+align+" is not modeled")
+	}
+	along := func(item *nativeDiagramPresNode) float64 {
+		if horizontal {
+			return item.blockW
+		}
+		return item.blockH
+	}
+	cross := func(item *nativeDiagramPresNode) float64 {
+		if horizontal {
+			return item.blockH
+		}
+		return item.blockW
+	}
+	total, extent := 0.0, 0.0
+	for _, item := range items {
+		total += along(item)
+		// A spacer's cross extent is the inherited parent size, not a
+		// measurement of anything it paints, so it never widens the row.
+		if item.alg != "sp" && cross(item) > extent {
+			extent = cross(item)
+		}
+	}
+	available := width
+	if !horizontal {
+		available = height
+	}
+	if total > available && available > 0 && total > 0 {
+		factor := available / total
+		for _, item := range items {
+			item.scaleUniform(factor)
+		}
+		total, extent = total*factor, extent*factor
+	}
+	ordered := items
+	if linDir == "fromR" || linDir == "fromB" {
+		ordered = make([]*nativeDiagramPresNode, 0, len(items))
+		for index := len(items) - 1; index >= 0; index-- {
+			ordered = append(ordered, items[index])
+		}
+	}
+	cursor := 0.0
+	for _, item := range ordered {
+		offset := 0.0
+		switch align {
+		case "ctr":
+			offset = (extent - cross(item)) / 2
+		case "b", "r":
+			offset = extent - cross(item)
+		}
+		if item.alg == "sp" {
+			offset = 0
+		}
+		if horizontal {
+			item.translate(cursor, offset)
+		} else {
+			item.translate(offset, cursor)
+		}
+		cursor += along(item)
+	}
+	if horizontal {
+		node.blockW, node.blockH = math.Max(total, 0), extent
+	} else {
+		node.blockW, node.blockH = extent, math.Max(total, 0)
+	}
+	node.rect = nativeDiagramRect{0, 0, node.blockW, node.blockH}
+	node.anchorX = node.blockW / 2
+	node.rootLeft, node.rootRight = 0, node.blockW
+	return nil
 }

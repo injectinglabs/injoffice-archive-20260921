@@ -316,12 +316,16 @@ func nativeDiagramPointTypeMatches(ptType string, point *nativeDiagramPoint) boo
 // point of the context node, and it is disclosed in the group diagnostic.
 func nativeDiagramSiblingSequence(parent *nativeDiagramPoint) []*nativeDiagramPoint {
 	sequence := make([]*nativeDiagramPoint, 0, len(parent.children)*3)
-	for _, child := range parent.children {
+	for index, child := range parent.children {
 		if child.parTrans != nil {
 			sequence = append(sequence, child.parTrans)
 		}
 		sequence = append(sequence, child)
-		if child.sibTrans != nil {
+		// A sibling transition sits BETWEEN two siblings, so the last child's
+		// sibTrans is not on the axis even though the data model still
+		// records the point. PowerPoint's own cached presentation tree for
+		// chevron1 confirms it: three nodes produce two spacers, not three.
+		if child.sibTrans != nil && index+1 < len(parent.children) {
 			sequence = append(sequence, child.sibTrans)
 		}
 	}

@@ -736,3 +736,100 @@ func TestExtractNativePPTXDiagramLayoutPairsSelectionListsWithAxes(t *testing.T)
 		t.Fatalf("cnt=\"1 0\" did not trim the first axis step: %d children, want fewer than %d", trimmed, all)
 	}
 }
+
+// nativeDiagramLinLayoutXML mirrors the chevron1 shape of the lin algorithm:
+// one chevron per top-level node, each asking for the whole frame width and
+// 0.4 of it in height, separated by a spacer that asks for a NEGATIVE tenth of
+// that width so consecutive chevrons interlock.
+func nativeDiagramLinLayoutXML(diagramNS, linDir, align string) string {
+	params := ""
+	if linDir != "" {
+		params += `<dgm:param type="linDir" val="` + linDir + `"/>`
+	}
+	if align != "" {
+		params += `<dgm:param type="nodeVertAlign" val="` + align + `"/>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/lin"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="process" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="linRoot"><dgm:alg type="lin">` + params + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/><dgm:constr type="h" for="ch" forName="linText" refType="w" fact="0.4"/>` +
+		`<dgm:constr type="w" for="ch" forName="linSpace" refType="w" refFor="ch" refForName="linText" fact="-0.1"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="linLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="linText" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="chevron"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst><dgm:constr type="lMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="rMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="tMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="bMarg" refType="primFontSz" fact="0.05"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:forEach name="linSpaceLoop" axis="followSib" ptType="sibTrans" cnt="1">` +
+		`<dgm:layoutNode name="linSpace"><dgm:alg type="sp"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// The frame is 6096000 x 4064000 EMU and the data model has two top-level
+// nodes, so the row asks for 6096000 - 609600 + 6096000 = 11582400 EMU and is
+// shrunk by 6096000/11582400 to fit. Only ONE spacer is instantiated: the last
+// sibling has no following sibling, so its sibTrans is not on the axis.
+func TestExtractNativePPTXDiagramLayoutLinPacksAndShrinksARow(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinLayoutXML(nativeDiagramURITransitional, "fromL", "t"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 2 {
+		t.Fatalf("lin row is not two chevrons (the spacer must not paint): %d children", len(group.Children))
+	}
+	want := []NativeTransform{
+		{X: int64Pointer(0), Y: int64Pointer(1390316), Cx: int64Pointer(3208421), Cy: int64Pointer(1283368)},
+		{X: int64Pointer(2887579), Y: int64Pointer(1390316), Cx: int64Pointer(3208421), Cy: int64Pointer(1283368)},
+	}
+	for index, child := range group.Children {
+		if child.Kind != NativeElementKindShape || child.Geometry == nil {
+			t.Fatalf("child %d is not a painted shape: %#v", index, child)
+		}
+		got := child.Transform
+		if *got.X != *want[index].X || *got.Y != *want[index].Y || *got.Cx != *want[index].Cx || *got.Cy != *want[index].Cy {
+			t.Fatalf("chevron %d is at %d,%d %dx%d, want %d,%d %dx%d", index,
+				*got.X, *got.Y, *got.Cx, *got.Cy, *want[index].X, *want[index].Y, *want[index].Cx, *want[index].Cy)
+		}
+	}
+	// The negative spacer makes the second chevron start before the first
+	// one ends, and the shrunk row ends exactly on the frame's right edge.
+	first, second := group.Children[0].Transform, group.Children[1].Transform
+	if *second.X >= *first.X+*first.Cx {
+		t.Fatalf("the negative spacer did not overlap the chevrons: %d vs %d", *second.X, *first.X+*first.Cx)
+	}
+	if *second.X+*second.Cx != *group.Transform.Cx {
+		t.Fatalf("shrunk row does not fill the frame width: %d vs %d", *second.X+*second.Cx, *group.Transform.Cx)
+	}
+}
+
+func TestExtractNativePPTXDiagramLayoutLinRefusesOutsideTheSubset(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct{ name, linDir, align, want string }{
+		{"direction", "fromCenter", "", "diagram linear direction fromCenter is not modeled"},
+		{"alignment", "fromL", "mid", "diagram linear node alignment mid is not modeled"},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+				omitDrawingPart: true, layout: nativeDiagramLinLayoutXML(nativeDiagramURITransitional, testCase.linDir, testCase.align),
+			}), nativeDiagramLayoutApproximateOptions())
+			if err != nil {
+				t.Fatalf("extract: %v", err)
+			}
+			slide := deck.Slides[0]
+			messages := []string{}
+			for _, diagnostic := range slide.Compatibility.Diagnostics {
+				if diagnostic.Code != nativeDiagramLayoutAlgorithmCode {
+					continue
+				}
+				messages = append(messages, diagnostic.Message)
+			}
+			if slide.Compatibility.Status != NativeCompatibilityStatusRefused || !strings.Contains(strings.Join(messages, "\n"), testCase.want) {
+				t.Fatalf("expected a refusal saying %q, got %v", testCase.want, slide.Compatibility.Diagnostics)
+			}
+		})
+	}
+}
