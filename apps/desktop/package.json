@@ -1,0 +1,16 @@
+{
+  "name": "@injoffice/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local InjOffice desktop editor",
+  "homepage": "https://github.com/injectinglabs/injoffice",
+  "author": "Injecting Inc.",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/host-files.test.cjs tests/host-security.test.cjs tests/host-recents.test.cjs tests/host-recovery.test.cjs"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

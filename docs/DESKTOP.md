@@ -6,14 +6,16 @@ backend. The renderer stays offline except the optional GitHub updater in
 **signed public** builds.
 
 The private workspace is `apps/desktop` (`@injoffice/desktop`, not published).
-The workspace, root `desktop:*` scripts, and packaging workflows land in
-follow-up changes; this document is the support contract they must match.
+Host adapters (file store, recents, recovery, renderer URL policy) live there
+and are tested in the `core` CI shard. They do not depend on Electron. The
+Electron shell, editors, root `desktop:*` scripts, and packaging workflows
+land in follow-up changes.
 
 This is not Microsoft Office parity. Do not advertise it as such.
 
 ## Run from source
 
-Once `apps/desktop` is on the branch, from the repository root:
+Once the Electron shell is on the branch, from the repository root:
 
 ```bash
 npm ci
