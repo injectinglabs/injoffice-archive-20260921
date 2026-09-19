@@ -106,6 +106,14 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 	case "cycle":
 		return node.layoutCycle(width, height)
 	case "conn":
+		// A connector occupies the extent its constraints give it so the
+		// sequence it sits in packs around it, but it paints a routed
+		// polyline between its neighbours rather than that box, and its
+		// own subtree (the connector's text node) is not laid out -- the
+		// same treatment hierChild members already give their connectors.
+		node.rect = nativeDiagramRect{0, 0, width, height}
+		node.blockW, node.blockH, node.anchorX = width, height, width/2
+		node.rootLeft, node.rootRight = 0, width
 		return nil
 	}
 	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, snake, cycle, hierRoot, hierChild, sp, tx and conn are approximated")
@@ -816,9 +824,6 @@ func nativeDiagramFitFontSize(paragraphs [][]string, maximum, minimum, width, he
 func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 	items := []*nativeDiagramPresNode{}
 	for _, child := range node.children {
-		if child.isConnector() {
-			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside linear nodes are not modeled")
-		}
 		if err := child.layoutSubtree(width, height); err != nil {
 			return err
 		}
@@ -894,7 +899,8 @@ func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 	for _, item := range items {
 		// A spacer's cross extent is the inherited parent size, not a
 		// measurement of anything it paints, so it never widens the row.
-		if item.alg != "sp" && cross(item) > extent {
+		// A connector's is the box it routes inside, not paint either.
+		if item.alg != "sp" && !item.isConnector() && cross(item) > extent {
 			extent = cross(item)
 		}
 	}
