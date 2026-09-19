@@ -1,0 +1,120 @@
+name: Desktop release draft
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    environment: desktop-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One invocation merges both Mac architectures into latest-mac.yml.
+          - os: macos-latest
+            platform: mac
+            args: --mac --arm64 --x64
+          - os: windows-latest
+            platform: windows
+            args: --win --x64
+          - os: ubuntu-latest
+            platform: linux
+            args: --linux --x64
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate tag and signing credentials
+        run: node apps/desktop/scripts/release-validation.mjs preflight ${{ matrix.platform }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/xlsxpatch/go.mod
+          cache: false
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm ci
+      - run: node --test apps/desktop/tests/release-validation.test.mjs
+      - run: npm run desktop:build
+      - run: npm run test -w @injoffice/desktop
+      - run: npm run test:native -w @injoffice/desktop
+      - run: npm run typecheck -w @injoffice/desktop
+      - run: npm run test:packaged -w @injoffice/desktop
+      - name: Package signed release installers and update metadata
+        working-directory: apps/desktop
+        run: npx electron-builder --config electron-builder.release.cjs ${{ matrix.args }} --publish never
+      - name: Verify notarized Mac applications
+        if: runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict apps/desktop/release/mac-arm64/InjOffice.app
+          codesign --verify --deep --strict apps/desktop/release/mac/InjOffice.app
+          xcrun stapler validate apps/desktop/release/mac-arm64/InjOffice.app
+          xcrun stapler validate apps/desktop/release/mac/InjOffice.app
+      - name: Verify updater dependencies inside packaged applications
+        run: node apps/desktop/scripts/check-packaged-updater.cjs apps/desktop/release --release
+      - name: Verify Windows installer signature
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem apps/desktop/release/*.exe
+          if (!$installers) { throw 'No Windows installers produced.' }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne 'Valid') { throw "Invalid installer signature: $($installer.Name)" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-${{ matrix.platform }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+            apps/desktop/release/latest*.yml
+            apps/desktop/release/*.blockmap
+          if-no-files-found: error
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-release-*
+          path: release-assets
+      - run: npm ci --ignore-scripts
+      - name: Validate complete asset set and generate checksums
+        run: node apps/desktop/scripts/release-validation.mjs collect release-assets
+      - name: Create draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # Refuse to replace existing releases or mutate a live update feed on reruns.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Release already exists. Review it manually; this workflow will not overwrite it.' >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "InjOffice ${GITHUB_REF_NAME#desktop-v}" --generate-notes
+          find release-assets -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME"
