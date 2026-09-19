@@ -8,10 +8,10 @@ backend. The renderer stays offline except the optional GitHub updater in
 The private workspace is `apps/desktop` (`@injoffice/desktop`, not published).
 Host adapters, the mock-tested Electron main process, the start page, workspace
 shell, OpenError, hidden-apply scheduler, and format helpers live there and
-are tested in the `core` CI shard. **Electron is not an npm dependency yet**
-(`check-office-architecture` allows the desktop host to list it; the lockfile
-may contain it only when pulled by `apps/desktop`. Renderer `/src/` still
-forbids `electron` imports).
+are tested in the `core` CI shard. **Electron is a desktop host dependency**;
+renderer `/src/` stays offline (`check-office-architecture` allows the desktop
+host to list it; the lockfile may contain it only when pulled by
+`apps/desktop`. Renderer `/src/` still forbids `electron` imports).
 Office/sheet/slide/PDF editors, root `desktop:*` scripts, and packaging
 workflows land in follow-up changes.
 

@@ -6,7 +6,8 @@ This directory currently holds the Node host adapters: opaque file ids, atomic
 save, recent-file history, recovery journal, renderer URL policy, blank
 DOCX/XLSX/PPTX/PDF seeds, the in-app update state machine, and the DOCX PDF
 export host and PDF text-replace host (worker-backed; painters land later). They do not import
-Electron. `electron/main.cjs` is tested with a mock Electron. The start page
+Electron. Electron is a desktop host dependency; renderer /src stays offline.
+`electron/main.cjs` is tested with a mock Electron. The start page
 is a React view with recents and create actions. The updates dialog talks to
 the host update state machine over `window.injDesktop`. Preferences persist
 fail-closed on this device; the command palette searches workspace actions.
@@ -44,8 +45,7 @@ Local spreadsheet calculation projects source values into a worker host and writ
 PresentationEditor is the PPTX canvas, inspector, and Present control that launches PresentationPlayer.
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
 SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
-The rest of the renderer,
-the real Electron dependency, GitHub provider, and packaging workflows land
+The rest of the renderer, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
 Support, unsigned vs signed builds, and engine lockstep: [docs/DESKTOP.md](../../docs/DESKTOP.md).
