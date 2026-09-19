@@ -43,8 +43,10 @@ The preview is available only when all of the following already exist:
   explicit Letter or A4 paper, orientation, the six authored `pageMargins`
   values, and a percentage scale from 10 through 400. All six are measured from
   the paper edge (ECMA-376 Part 1 §18.3.1.62), so the body is reserved between
-  `max(top, header)` and `max(bottom, footer)` as Excel reserves it; header and
-  footer text itself is still not painted.
+  `max(top, header)` and `max(bottom, footer)` as Excel reserves it. An
+  authored odd-page header and footer is carried through and placed in those
+  reserved bands when the worksheet's `headerFooter` element is the one shape
+  every printed page carries and its format codes resolve; see below.
 - A saved print area or print-area set `status: 'available'` joined to the same
   part. Used-range and A1 fallbacks are refused.
 - Compiled geometry whose viewport matches that saved area (and saved titles
@@ -54,7 +56,7 @@ The following refuse with an explicit `reason` and empty `pages`:
 
 - Missing `page_settings`.
 - Producer `unavailable` settings, including printer relationships, device DPI,
-  custom paper, headers/footers, print options, and manual breaks.
+  custom paper, print options, and manual breaks.
 - Authored `fit_to_page`. This lane does not invent a fit scale and is not
   Excel fit-to-page qualification.
 - Missing, unsupported, or unjoined saved print areas.
@@ -95,7 +97,35 @@ the available Letter/A4 percentage path and the refusal reasons.
 - Not a host paper/margin/scale chooser. Use the existing selected-range page
   preview when an explicit host policy is required.
 
-Paint, wrapping, rotation, headers/footers, and drawing rasterization remain
+## Header and footer bands
+
+`page_settings[].header_footer` carries the authored `oddHeader` and
+`oddFooter` strings verbatim, and only when the `headerFooter` element is the
+one shape whose text every printed page carries: a different first page,
+different odd and even pages, a header that does not scale or align with the
+document, foreign markup or unbounded text all keep reporting that header and
+footer text is not painted.
+
+Each raster page then carries an optional `header` and `footer` band in
+page-local CSS pixels. The header line starts at the header margin and the
+footer line **ends** at the footer margin measured up from the bottom edge, so
+both sit outside the body rectangle; a band whose margin would fall inside the
+body is dropped rather than overprinting the body.
+
+The ECMA-376 §18.3.1.46 format codes resolve against facts the caller states
+through `header_footer_facts` (the worksheet name and the workbook Normal font
+size): `&L`/`&C`/`&R`, `&"face,style"`, `&<size>`, `&B`, `&I`, `&A`, `&P`,
+`&N` and `&&`. A code whose printed result this tier does not hold — a date, a
+time, a file path, a picture, a colour — refuses the **whole** string, because
+a header that quietly loses part of itself is worse than one that is honestly
+not painted. Without `header_footer_facts` every band stays unpainted.
+
+Line placement uses typical Latin ascent and descent fractions of the em, not
+the authored face's own metrics, and is approximate: it is not Excel printer
+calibration, and Excel's own clamp of a zero header margin to its printer's
+minimum margin is a printer fact this tier does not resolve.
+
+Paint, wrapping, rotation, and drawing rasterization remain
 the host’s responsibility. When already-compiled cell-paint plans are supplied,
 they stay in viewport-local EMU; each page carries the clip and 96 DPI map
 needed for isolated capture. This module does not run HarfBuzz or emit glyph

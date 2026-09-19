@@ -23,6 +23,13 @@ export interface NativeSheetPageMarginsV1 {
  /** Edge-measured header and footer margins; see NativeSheetPageConfigV1. */
  header_inches?:number;footer_inches?:number;
 }
+/**
+ * Authored odd-page header and footer format-code strings (ECMA-376 §18.3.1.46),
+ * carried verbatim: `&A` is the worksheet name and `&P`/`&N` are page numbers,
+ * which page settings alone do not know. Present only when every printed page
+ * carries this one pair, so its absence never means the worksheet has no header.
+ */
+export interface NativeSheetPageHeaderFooterV1 {odd_header:string;odd_footer:string}
 /** ECMA-376 CT_PageSetup attributes whose schema default a source may omit. */
 export type NativeSheetPageDefaultedFactV1='paper'|'orientation'|'scale'
 export interface NativeSheetPageSettingsV1 {
@@ -37,6 +44,8 @@ export interface NativeSheetPageSettingsV1 {
   * consumer can label the geometry a host default rather than an authored one.
   */
  defaulted?:NativeSheetPageDefaultedFactV1[];
+ /** Authored odd-page header and footer text; see NativeSheetPageHeaderFooterV1. */
+ header_footer?:NativeSheetPageHeaderFooterV1;
  warnings:string[];
 }
 /** A standalone bounded copy; package identity is joined by its enclosing object response. */
@@ -54,7 +63,8 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
  return value.map(v=>{
   const status=(v as Record<string,unknown>)?.status
   const hasDefaulted=!!v&&typeof v==='object'&&Object.hasOwn(v,'defaulted')
-  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[]),...(status==='margins-only'?['margins']:[]),...(hasDefaulted?['defaulted']:[])])
+  const hasHeaderFooter=!!v&&typeof v==='object'&&Object.hasOwn(v,'header_footer')
+  const o=exact(v,['sheet_id','sheet_part','status','warnings',...(status==='available'?['settings']:[]),...(status==='margins-only'?['margins']:[]),...(hasDefaulted?['defaulted']:[]),...(hasHeaderFooter?['header_footer']:[])])
   if(typeof o.sheet_id!=='string'||!/^[1-9][0-9]{0,9}$/.test(o.sheet_id)||Number(o.sheet_id)>0xffffffff||ids.has(o.sheet_id)||!isNativePreviewPartPathV1(o.sheet_part)||parts.has(o.sheet_part)||(status!=='available'&&status!=='margins-only'&&status!=='unavailable'))return fail()
   ids.add(o.sheet_id);parts.add(o.sheet_part)
   if(!Array.isArray(o.warnings)||o.warnings.length<1||o.warnings.length>8||o.warnings.some(w=>typeof w!=='string'||w.length>4096))return fail()
@@ -88,6 +98,15 @@ export function decodeNativeSheetPageSettingsV1(input:unknown):NativeSheetPageSe
    if(list.some(fact=>fact!=='paper'&&fact!=='orientation'&&fact!=='scale'))return fail()
    defaulted=list as NativeSheetPageDefaultedFactV1[]
   }
-  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{}),...(margins?{margins}:{}),...(defaulted?{defaulted}:{})}
+  let header_footer:NativeSheetPageHeaderFooterV1|undefined
+  if(hasHeaderFooter){
+   // Two bounded strings and nothing else: an unbounded one would be painted at
+   // an unbounded width, and a pair with neither string says nothing at all.
+   const hf=exact(o.header_footer,['odd_header','odd_footer'])
+   if(['odd_header','odd_footer'].some(k=>typeof hf[k]!=='string'||(hf[k] as string).length>1024))return fail()
+   if(!hf.odd_header&&!hf.odd_footer)return fail()
+   header_footer=hf as unknown as NativeSheetPageHeaderFooterV1
+  }
+  return {sheet_id:o.sheet_id,sheet_part:o.sheet_part,status,warnings:o.warnings as string[],...(settings?{settings}:{}),...(margins?{margins}:{}),...(defaulted?{defaulted}:{}),...(header_footer?{header_footer}:{})}
  })
 }

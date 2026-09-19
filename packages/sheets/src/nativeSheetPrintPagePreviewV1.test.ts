@@ -153,6 +153,48 @@ describe('host-default paper for a worksheet that authors margins and no pageSet
   expect(preview.pages[0]!.content_clip.y_emu).toBe(Math.round(1.5*914400))
   expect(preview.pages[0]!.content_clip.height_emu).toBe(10058400-Math.round(1.5*914400)-914400)
  })
+ it('places the authored odd header and footer on every page it paginates',()=>{
+  // Two pages so `&P` differs and `&N` is the sheet's own total, not the page's.
+  const {objects,geometry,part}=fixture()
+  const settings={paper:'Letter' as const,orientation:'portrait' as const,scale:100,left_inches:1,right_inches:1,top_inches:10.25,bottom_inches:0.5,header_inches:0.3,footer_inches:0.25}
+  objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'available',warnings:['Source settings'],settings,header_footer:{odd_header:'&C&A',odd_footer:'&CPage &P of &N'}}]
+  const preview=compileNativeSheetPrintPagePreviewV1([geometry],objects,{header_footer_facts:{sheet_name:'Summary',default_font_size_points:10}})
+  expect(preview.status).toBe('available')
+  if(preview.status!=='available')return
+  expect(preview.pages.length).toBeGreaterThan(1)
+  const first=preview.pages[0]!,last=preview.pages[preview.pages.length-1]!
+  expect(first.header?.kind).toBe('header')
+  expect(first.header?.y_css_px).toBe(0.3*96)
+  expect(first.header?.x_css_px).toBe(96)
+  expect(first.header?.width_css_px).toBe(816-192)
+  expect(first.header?.sections).toEqual([{align:'center',runs:[{text:'Summary',font_size_points:10,bold:false,italic:false}]}])
+  // The footer line ENDS at its margin measured up from the bottom edge.
+  expect(first.footer?.y_css_px).toBe(1056-0.25*96)
+  expect(first.footer?.sections[0]!.runs[0]!.text).toBe(`Page 1 of ${preview.pages.length}`)
+  expect(last.footer?.sections[0]!.runs[0]!.text).toBe(`Page ${preview.pages.length} of ${preview.pages.length}`)
+ })
+ it('paints no band without the facts its codes stand for, or for a code it cannot resolve',()=>{
+  const {objects,geometry,part}=fixture()
+  const settings={paper:'Letter' as const,orientation:'portrait' as const,scale:100,left_inches:1,right_inches:1,top_inches:1,bottom_inches:1,header_inches:0.3,footer_inches:0.3}
+  const withHeader=(odd_header:string)=>{
+   objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'available',warnings:['Source settings'],settings,header_footer:{odd_header,odd_footer:''}}]
+   return compileNativeSheetPrintPagePreviewV1([geometry],objects,{header_footer_facts:{sheet_name:'Summary',default_font_size_points:10}})
+  }
+  // The printed date is a fact no preview holds, so the whole header refuses.
+  const unresolved=withHeader('&C&A &D')
+  expect(unresolved.status==='available'&&unresolved.pages[0]!.header).toBeUndefined()
+  // Without the worksheet name and default size there is nothing to resolve `&A` against.
+  objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'available',warnings:['Source settings'],settings,header_footer:{odd_header:'&C&A',odd_footer:''}}]
+  const noFacts=compileNativeSheetPrintPagePreviewV1([geometry],objects)
+  expect(noFacts.status==='available'&&noFacts.pages[0]!.header).toBeUndefined()
+  // A worksheet that authors no header pair at all keeps its pages bandless.
+  const {objects:plain,geometry:plainGeometry}=fixture()
+  const bare=compileNativeSheetPrintPagePreviewV1([plainGeometry],plain,{header_footer_facts:{sheet_name:'Summary',default_font_size_points:10}})
+  expect(bare.status==='available'&&(bare.pages[0]!.header||bare.pages[0]!.footer)).toBeFalsy()
+  // Facts that are not explicit bounded plain data are a caller error, not a band.
+  expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects,{header_footer_facts:{sheet_name:'',default_font_size_points:10}})).toThrow('explicit worksheet name')
+  expect(()=>compileNativeSheetPrintPagePreviewV1([geometry],objects,{header_footer_facts:{sheet_name:'S',default_font_size_points:0}})).toThrow('explicit worksheet name')
+ })
  it('keeps refusing an authored pageSetup this tier cannot support, and margins-only with no margins',()=>{
   const {objects,geometry,part}=fixture()
   objects.page_settings=[{sheet_id:'7',sheet_part:part,status:'unavailable',warnings:['Unsupported page settings']}]

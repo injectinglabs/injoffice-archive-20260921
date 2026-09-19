@@ -15891,6 +15891,26 @@
               "signature": "NativeSheetGeometryV2"
             },
             {
+              "name": "NativeSheetHeaderFooterAlignV1",
+              "kind": "type",
+              "signature": "NativeSheetHeaderFooterAlignV1"
+            },
+            {
+              "name": "NativeSheetHeaderFooterFactsV1",
+              "kind": "type",
+              "signature": "NativeSheetHeaderFooterFactsV1"
+            },
+            {
+              "name": "NativeSheetHeaderFooterRunV1",
+              "kind": "type",
+              "signature": "NativeSheetHeaderFooterRunV1"
+            },
+            {
+              "name": "NativeSheetHeaderFooterSectionV1",
+              "kind": "type",
+              "signature": "NativeSheetHeaderFooterSectionV1"
+            },
+            {
               "name": "NativeSheetHostPagePolicyV1",
               "kind": "type",
               "signature": "NativeSheetHostPagePolicyV1"
@@ -15929,6 +15949,11 @@
               "name": "NativeSheetPrintAreaV1",
               "kind": "type",
               "signature": "export type NativeSheetPrintAreaV1 ="
+            },
+            {
+              "name": "NativeSheetPrintPageBandV1",
+              "kind": "type",
+              "signature": "NativeSheetPrintPageBandV1"
             },
             {
               "name": "NativeSheetPrintPageCssRectV1",
@@ -16079,6 +16104,11 @@
               "name": "NativeWorkbookV2ValidationError",
               "kind": "class",
               "signature": "export declare class NativeWorkbookV2ValidationError extends Error"
+            },
+            {
+              "name": "parseNativeSheetHeaderFooterV1",
+              "kind": "function",
+              "signature": "export declare function parseNativeSheetHeaderFooterV1(code: string, facts: NativeSheetHeaderFooterFactsV1): readonly NativeSheetHeaderFooterSectionV1[] | undefined"
             },
             {
               "name": "projectNativeWorkbookV2",
