@@ -21,6 +21,15 @@ export function previewStroke(stroke:RenderStroke):PreviewStroke {
  if(ratio!==undefined&&(!Number.isFinite(ratio)||ratio<1))throw new Error('DrawingML miter limit is outside SVG replay range')
  return {stroke:previewColor(stroke.color),strokeWidth:stroke.widthEmu,strokeLinecap:stroke.cap==='flat'?'butt':stroke.cap,strokeLinejoin:stroke.join,strokeMiterlimit:ratio}
 }
+// The operator font manifest's face cap. The Go helper re-encodes this same
+// number in validatePPTXFontSubstitutions (pptx_font_substitutions.go); raising
+// one without the other makes the worker accept a manifest the helper then
+// refuses. 64 faces still sit far inside the surviving budgets: the manifest
+// file is capped at 64 KiB (~230 faces at the ~280 bytes a face costs), the
+// 64 MiB cumulative font-byte budget is unchanged, and the preview contract
+// bounds font_digests — one per loaded face — at 256.
+export const MAX_OPERATOR_FONT_FACES=64
+
 function fontProviders(path:string,allowSubstitution=false){
  if(!isAbsolute(path)||statSync(path).size>65536)throw new Error('Operator font manifest must be an absolute bounded local file')
  const config=object(JSON.parse(readFileSync(path,'utf8')))
@@ -29,7 +38,7 @@ function fontProviders(path:string,allowSubstitution=false){
  // and the slide only ever shows the 422 body. Name the limit that failed.
  if(config.version!==1)throw new Error(`Invalid operator font manifest: version must be 1, got ${JSON.stringify(config.version)}`)
  if(!Array.isArray(config.faces))throw new Error('Invalid operator font manifest: faces must be an array')
- if(config.faces.length>32)throw new Error(`Invalid operator font manifest: ${config.faces.length} faces exceeds the 32-face limit`)
+ if(config.faces.length>MAX_OPERATOR_FONT_FACES)throw new Error(`Invalid operator font manifest: ${config.faces.length} faces exceeds the ${MAX_OPERATOR_FONT_FACES}-face limit`)
  const policy=config.substitutions===undefined?undefined:decodeExplicitFontPolicyV1(config.substitutions)
  const resources=new Map<string,FontResource>(),outlines=new Map<string,ReturnType<typeof createHarfBuzzOutlineProviderV1>>()
  const faces:NativeFontManifest['faces'][number][]=[]
