@@ -13,6 +13,10 @@ import {
 } from './nativeSheetPrintAreaSetPreviewV1.js'
 import type {NativeSheetHostPagePolicyV1,NativeSheetPreviewRegionV1} from './nativeSheetPagePreviewV1.js'
 import type {NativeSheetCellPaintPlanV2} from './nativeSheetCellPaintV2.js'
+import {
+  parseNativeSheetHeaderFooterV1,
+  type NativeSheetHeaderFooterSectionV1,
+} from './nativeSheetHeaderFooterV1.js'
 
 export const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL='injoffice.xlsx.print-page-preview' as const
 export const NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI=96 as const
@@ -77,10 +81,41 @@ export interface NativeSheetPrintPageRasterPageV1 {
  readonly columns:{readonly start:number;readonly end:number}
  readonly regions?:readonly NativeSheetPrintPageRegionV1[]
  readonly paint?:NativeSheetPrintPagePaintV1
+ /** Authored header and footer text for THIS page; absent when none is painted. */
+ readonly header?:NativeSheetPrintPageBandV1
+ readonly footer?:NativeSheetPrintPageBandV1
+}
+/**
+ * One printed header or footer line, in page-local CSS pixels.
+ *
+ * ECMA-376 §18.3.1.62 measures the header and footer margins from the paper
+ * edge, so the header line starts at the header margin and the footer line ENDS
+ * at the footer margin measured up from the bottom; neither is an inset of the
+ * body rectangle, which the preview already shortens to max(top, header) and
+ * max(bottom, footer). The line spans the body's own width, which is what
+ * alignWithMargins="true" (the only shape carried here) means.
+ *
+ * A single line per band: Excel grows the reservation for a multi-line header
+ * and this tier does not reproduce that, so a `\n` in the authored text keeps
+ * the band refused upstream rather than overprinting the body.
+ */
+export interface NativeSheetPrintPageBandV1 {
+ readonly kind:'header'|'footer'
+ readonly x_css_px:number;readonly width_css_px:number
+ /** Top of the line box for a header; for a footer this is its bottom. */
+ readonly y_css_px:number
+ readonly sections:readonly NativeSheetHeaderFooterSectionV1[]
 }
 export interface NativeSheetPrintPagePreviewOptionsV1 {
  readonly repeat_print_titles?:true
  readonly paint_plans?:readonly NativeSheetCellPaintPlanV2[]
+ /**
+  * The facts the authored header and footer codes stand for. `&A` is the
+  * worksheet name and an uncoded run is the workbook's Normal font at this
+  * size, neither of which page geometry knows, so omitting this leaves every
+  * band unpainted rather than inventing a name or a size.
+  */
+ readonly header_footer_facts?:{readonly sheet_name:string;readonly default_font_size_points:number}
 }
 type NativeSheetPrintPagePreviewBaseV1={
  readonly protocol:typeof NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL
@@ -129,17 +164,32 @@ function ownedGeometries(geometries:readonly NativeSheetGeometryV2[]):NativeShee
   'Print-page preview requires a plain array of compiled source-qualified sheet geometries',
  )
 }
-function readOptions(options:NativeSheetPrintPagePreviewOptionsV1|undefined,geometryCount:number):{repeat?:true;paint_plans?:NativeSheetCellPaintPlanV2[]}{
+type HeaderFooterFactsV1={sheet_name:string;default_font_size_points:number}
+function readOptions(options:NativeSheetPrintPagePreviewOptionsV1|undefined,geometryCount:number):{repeat?:true;paint_plans?:NativeSheetCellPaintPlanV2[];facts?:HeaderFooterFactsV1}{
  if(options===undefined)return {}
  const descriptors=Object.getOwnPropertyDescriptors(options)
  const keys=Object.keys(descriptors)
- if(!keys.length||keys.some(key=>key!=='repeat_print_titles'&&key!=='paint_plans')||Object.values(descriptors).some(d=>!('value'in d))){
+ if(!keys.length||keys.some(key=>key!=='repeat_print_titles'&&key!=='paint_plans'&&key!=='header_footer_facts')||Object.values(descriptors).some(d=>!('value'in d))){
   throw new TypeError('Print-page preview options must be explicit plain data')
+ }
+ let facts:HeaderFooterFactsV1|undefined
+ if(Object.hasOwn(descriptors,'header_footer_facts')){
+  const value=descriptors.header_footer_facts!.value as Record<string,unknown>
+  const own=value&&typeof value==='object'&&!Array.isArray(value)?Object.getOwnPropertyDescriptors(value):undefined
+  if(!own||Object.keys(own).length!==2||!Object.hasOwn(own,'sheet_name')||!Object.hasOwn(own,'default_font_size_points')||Object.values(own).some(d=>!('value'in d))){
+   throw new TypeError('Print-page preview header and footer facts must be an explicit worksheet name and default font size')
+  }
+  const name=own.sheet_name!.value,points=own.default_font_size_points!.value
+  if(typeof name!=='string'||!name||name.length>256||typeof points!=='number'||!Number.isFinite(points)||points<1||points>409){
+   throw new TypeError('Print-page preview header and footer facts must be an explicit worksheet name and default font size')
+  }
+  facts={sheet_name:name,default_font_size_points:points}
  }
  if(Object.hasOwn(descriptors,'repeat_print_titles')&&descriptors.repeat_print_titles!.value!==true){
   throw new TypeError('Repeated print titles require the explicit repeat_print_titles: true option')
  }
  return {
+  ...(facts?{facts}:{}),
   ...(Object.hasOwn(descriptors,'repeat_print_titles')?{repeat:true as const}:{}),
   ...(Object.hasOwn(descriptors,'paint_plans')?{
    paint_plans:ownedArray(
@@ -208,6 +258,7 @@ function printAreaReason(source:NativeWorkbookObjectsV1,sheetId:string,part:stri
 function rasterPage(
  page:{number:number;width_emu:number;height_emu:number;content_clip:NativeSheetGeometryRectV2;source_clip:NativeSheetGeometryRectV2;scale:number;translate_x_emu:number;translate_y_emu:number;rows:{start:number;end:number};columns:{start:number;end:number};regions?:NativeSheetPreviewRegionV1[]},
  sequence:number,areaIndex:number,paint?:NativeSheetCellPaintPlanV2,
+ bands?:{header?:NativeSheetPrintPageBandV1;footer?:NativeSheetPrintPageBandV1},
 ):NativeSheetPrintPageRasterPageV1{
  const regions=page.regions?.map(region=>Object.freeze({
   kind:region.kind,source_clip:region.source_clip,source_clip_css_px:cssRect(region.source_clip),
@@ -225,11 +276,51 @@ function rasterPage(
   translate_x_css_px:cssPx(page.translate_x_emu),translate_y_css_px:cssPx(page.translate_y_emu),
   rows:page.rows,columns:page.columns,
   ...(regions?{regions:Object.freeze(regions)}:{}),
+  ...(bands?.header?{header:bands.header}:{}),
+  ...(bands?.footer?{footer:bands.footer}:{}),
   ...(paint?{paint:Object.freeze({
    geometry_sha256:paint.geometry_sha256,coordinate_space:'viewport-local' as const,clip:page.source_clip,
    scale:page.scale,translate_x_emu:page.translate_x_emu,translate_y_emu:page.translate_y_emu,plan:paint,
   })}:{}),
  })
+}
+
+const CSS_PX_PER_INCH=NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_DPI
+/**
+ * The printed header and footer lines for one page, or nothing.
+ *
+ * Nothing is the answer whenever any input the printed result depends on is
+ * missing or unsupported: no authored pair, no worksheet name and default size
+ * to resolve `&A` and an uncoded run against, no authored header or footer
+ * margin to place the line at, or a code this tier does not resolve. A band is
+ * also dropped when its own margin would put it inside the body rectangle,
+ * which is the overlong-header case the preview already declines to reproduce.
+ */
+function headerFooterBands(
+ authored:{odd_header:string;odd_footer:string}|undefined,
+ margins:{header_inches?:number;footer_inches?:number}|undefined,
+ facts:HeaderFooterFactsV1|undefined,
+ page:{width_emu:number;height_emu:number;number:number;content_clip:NativeSheetGeometryRectV2},
+ sequence:number,total:number,
+):{header?:NativeSheetPrintPageBandV1;footer?:NativeSheetPrintPageBandV1}|undefined{
+ if(!authored||!facts||!margins)return undefined
+ const x=cssPx(page.content_clip.x_emu),width=cssPx(page.content_clip.width_emu)
+ const bodyTop=cssPx(page.content_clip.y_emu),bodyBottom=bodyTop+cssPx(page.content_clip.height_emu)
+ const height=cssPx(page.height_emu)
+ const band=(kind:'header'|'footer',code:string,inches:number|undefined):NativeSheetPrintPageBandV1|undefined=>{
+  if(!code||inches===undefined)return undefined
+  const y=kind==='header'?inches*CSS_PX_PER_INCH:height-inches*CSS_PX_PER_INCH
+  if(kind==='header'?y>=bodyTop:y<=bodyBottom)return undefined
+  const sections=parseNativeSheetHeaderFooterV1(code,{
+   sheet_name:facts.sheet_name,page_number:sequence,page_count:total,
+   default_font_size_points:facts.default_font_size_points,
+  })
+  if(!sections||sections.some(section=>section.runs.some(run=>/[\r\n]/.test(run.text))))return undefined
+  return Object.freeze({kind,x_css_px:x,width_css_px:width,y_css_px:y,sections})
+ }
+ const header=band('header',authored.odd_header,margins.header_inches)
+ const footer=band('footer',authored.odd_footer,margins.footer_inches)
+ return header||footer?{...(header?{header}:{}),...(footer?{footer}:{})}:undefined
 }
 
 /** Source-only print-page rectangles at 96 CSS px/in. Missing or printer-dependent
@@ -272,9 +363,17 @@ export function compileNativeSheetPrintPagePreviewV1(
   throw error
  }
  const pages:NativeSheetPrintPageRasterPageV1[]=[]
+ // `&P` and `&N` count across everything this sheet prints, so the total is
+ // known before the first page is built, not after it.
+ const total=source_plan.areas.reduce((sum,area)=>sum+area.plan.pages.length,0)
+ const entry=source.page_settings!.find(s=>s.sheet_id===first.sheet_id)!
+ const bandMargins=hostPolicy??entry.settings
  for(const area of source_plan.areas){
   const paint=parsed.paint_plans?.[area.area_index]
-  for(const page of area.plan.pages)pages.push(rasterPage(page,pages.length+1,area.area_index,paint))
+  for(const page of area.plan.pages){
+   const sequence=pages.length+1
+   pages.push(rasterPage(page,sequence,area.area_index,paint,headerFooterBands(entry.header_footer,bandMargins,parsed.facts,page,sequence,total)))
+  }
  }
  return Object.freeze({
   protocol:NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL,version:1,fidelity:'approximate' as const,read_only:true as const,

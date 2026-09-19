@@ -56,6 +56,7 @@ export {
   NATIVE_SHEET_PRINT_PAGE_PREVIEW_V1_PROTOCOL,
 } from './nativeSheetPrintPagePreviewV1.js'
 export type {
+  NativeSheetPrintPageBandV1,
   NativeSheetPrintPageCssRectV1,
   NativeSheetPrintPagePaintV1,
   NativeSheetPrintPagePreviewOptionsV1,
@@ -63,6 +64,13 @@ export type {
   NativeSheetPrintPageRasterPageV1,
   NativeSheetPrintPageRegionV1,
 } from './nativeSheetPrintPagePreviewV1.js'
+export {parseNativeSheetHeaderFooterV1} from './nativeSheetHeaderFooterV1.js'
+export type {
+  NativeSheetHeaderFooterAlignV1,
+  NativeSheetHeaderFooterFactsV1,
+  NativeSheetHeaderFooterRunV1,
+  NativeSheetHeaderFooterSectionV1,
+} from './nativeSheetHeaderFooterV1.js'
 export { nativeTableFillPreview, nativeTableHeaderTextPreview } from './nativeTableFillPreview.js'
 export { nativeTableTotalsTextPreview } from './nativeTableTotalsTextPreview.js'
 export { nativeStoredRowPreviewV1 } from './nativeStoredRowsPreviewV1.js'

@@ -30,6 +30,22 @@ describe('selected-range page presentation', () => {
     props.workbook.styles[0]!.effective.horizontal_alignment = 'center'
     expect(render(props)).toMatch(/<text[^>]*x="50"[^>]*text-anchor="middle"[^>]*>123<\/text>/)
   })
+  it('draws the print tier\u2019s header above the body and its footer below, and nothing without one', () => {
+    const props = fixture()
+    const page = { area_index: 0, number: 1, sequence: 1,
+      header: { kind: 'header', x_css_px: 48, width_css_px: 720, y_css_px: 28.8, sections: [{ align: 'center', runs: [{ text: 'Budget', font_size_points: 12, bold: false, italic: false }] }] },
+      footer: { kind: 'footer', x_css_px: 48, width_css_px: 720, y_css_px: 1032, sections: [{ align: 'right', runs: [{ text: 'Page 1', font_name: 'Times New Roman', font_size_points: 10, bold: true, italic: false }] }] } }
+    const printPage = { status: 'available', pages: [page] } as never
+    const html = renderToStaticMarkup(createElement(NativeSheetPageImages, { ...props, printPage }))
+    // The header line starts at its own margin and the footer line ends at its
+    // own, so the two sit outside the body rectangle rather than inside it.
+    expect(html).toMatch(/data-page-band="header"[\s\S]*?<text x="408" y="42.88" text-anchor="middle"[^>]*>[\s\S]*?Budget/)
+    expect(html).toMatch(/data-page-band="footer"[\s\S]*?<text x="768" y="1029.2" text-anchor="end"/)
+    expect(html).toContain('font-family="uploaded-exact-font"')
+    expect(html).toContain('font-family="Times New Roman"')
+    // A selected-range preview has no paper edge to measure a header from.
+    expect(render(props)).not.toContain('data-page-band')
+  })
   it('shows visible cache and compact-number disclosures without changing strict default output', () => {
     const props = fixture()
     props.workbook.styles[0]!.effective.number_format = 'General'
@@ -124,7 +140,7 @@ describe('selected-range page presentation', () => {
     expect(html).toContain('value="a1" selected=""')
     expect(html).toContain('Use saved print area')
     expect(html).toContain('disabled=""')
-    expect(html).toContain('not drawn here')
+    expect(html).toContain('draws an authored odd-page header and footer')
     expect(html).not.toContain('<svg')
     // The demo's own responsiveness bound, not a library one. What it bounds is
     // one browser layout pass, so the cell budget is the real limit and stays at
