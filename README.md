@@ -33,6 +33,7 @@ live in the separate [documentation app](apps/docs/README.md). Run
 `npm run docs:dev` for documentation on port 3200; `npm run dev` still starts
 the interactive demo on port 3100. The documentation site does not bundle the
 demo or execute document engines. See its [quickstart](apps/docs/getting-started/quickstart.md).
+Desktop packaging, updates, and support limits are in [docs/DESKTOP.md](docs/DESKTOP.md).
 
 ## Packages
 
