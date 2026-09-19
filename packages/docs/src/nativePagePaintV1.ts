@@ -203,6 +203,25 @@ export interface NativeDocxFillTableCellCommandV1 {
   fill_rgb: string
 }
 
+/** One closed outline in absolute page coordinates, filled and/or stroked. The
+ * approximate drawing-shape preview emits it for a prstGeom preset that is not
+ * an axis-aligned rectangle, whose edges a cell fill and the axis-aligned
+ * border primitive cannot express. The path is carried inline rather than
+ * through the shared glyph-outline table: a shape outline is never repeated
+ * across a page and carries no face identity to join. `fill_rgb` and
+ * `stroke_rgb` are null when that half of the paint is absent; at least one is
+ * present, and a stroke carries its own width. */
+export interface NativeDocxPaintShapePathCommandV1 {
+  kind: 'paint_shape_path'
+  id: string
+  shape_id: string
+  path: NativeDocxPaintPathCommandV1[]
+  fill_rule: 'nonzero'
+  fill_rgb: string | null
+  stroke_rgb: string | null
+  stroke_width_millipoints: number | null
+}
+
 export interface NativeDocxStrokeTableBorderCommandV1 {
   kind: 'stroke_table_border'
   id: string
@@ -281,7 +300,7 @@ export interface NativeDocxStrokeTextUnderlineCommandV1 {
   stroke_rgb: string
 }
 
-export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1
+export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxPaintShapePathCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1
 
 export interface NativeDocxPaintLineV1 {
   placed_line_id: string

@@ -187,7 +187,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
       // Resolving every glyph against its page's shared outline table here, inside the
       // reporting boundary, both measures the painted geometry and proves each reference:
       // a page that could not resolve one says so instead of silently painting fewer glyphs.
-      if (next.status === 'painted' && next.pages.some((page) => page.commands.length > 20_000 || page.commands.reduce((count, command) => count + (command.kind === 'fill_glyph_path' ? nativeDocxPlacedGlyphOutlineV1(page, command).length : 0), 0) > 200_000)) throw new Error('Native page geometry exceeds the interactive viewer budget.')
+      if (next.status === 'painted' && next.pages.some((page) => page.commands.length > 20_000 || page.commands.reduce((count, command) => count + (command.kind === 'fill_glyph_path' ? nativeDocxPlacedGlyphOutlineV1(page, command).length : command.kind === 'paint_shape_path' ? command.path.length : 0), 0) > 200_000)) throw new Error('Native page geometry exceeds the interactive viewer budget.')
       await decodeNativeDocxImages(next.resources, controller.signal)
       if (token !== generation.current) return
       setPaint(next); setPageIndex(0)
@@ -225,6 +225,7 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
             case 'fill_glyph_path': return <path key={command.id} d={nativeDocxSVGPath(nativeDocxPlacedGlyphOutlineV1(page, command))} fill={`#${command.fill_rgb}`} fillRule="nonzero" />
             case 'fill_text_highlight': return <rect key={command.id} data-native-highlight="true" x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'fill_table_cell': return <rect key={command.id} x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
+            case 'paint_shape_path': return <path key={command.id} data-native-shape-path="true" d={nativeDocxSVGPath(command.path)} fill={command.fill_rgb === null ? 'none' : `#${command.fill_rgb}`} fillRule="nonzero" stroke={command.stroke_rgb === null ? undefined : `#${command.stroke_rgb}`} strokeWidth={command.stroke_width_millipoints ?? undefined} strokeLinejoin="miter" />
             case 'stroke_table_border': {
               const box = nativeDocxTableBorderRect(command)
               return <rect key={command.id} data-native-table-border="true" x={box.x} y={box.y} width={box.width} height={box.height} fill={`#${command.stroke_rgb}`} shapeRendering="crispEdges" />
