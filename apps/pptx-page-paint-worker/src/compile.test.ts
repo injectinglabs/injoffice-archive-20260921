@@ -3,7 +3,7 @@ import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs'
 import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
-import {compilePptxPreview,previewStroke} from './compile.js'
+import {compilePptxPreview,previewStroke,MAX_OPERATOR_FONT_FACES} from './compile.js'
 import {decodePptxPreview,type PreviewNode} from './contract.js'
 import {prepareNativeRasterResourceV1} from '@injoffice/docs/native-raster'
 const root=resolve(import.meta.dirname,'../../..'),scratch=mkdtempSync(resolve(tmpdir(),'pptx-preview-worker-'))
@@ -218,11 +218,36 @@ describe('actual source-font native PPTX worker',()=>{
  })
  it('names the manifest limit that failed', async () => {
   const many = resolve(scratch, 'many.json')
-  writeFileSync(many, JSON.stringify({version:1, faces: Array.from({length:33},(_ ,i)=>({family:`F${i}`,weight:400,style:'normal',path:font,sha256:digest}))}))
-  await expect(compilePptxPreview({...input(), font_manifest_path:many})).rejects.toThrow('33 faces exceeds the 32-face limit')
+  writeFileSync(many, JSON.stringify({version:1, faces: Array.from({length:MAX_OPERATOR_FONT_FACES+1},(_ ,i)=>({family:`F${i}`,weight:400,style:'normal',path:font,sha256:digest}))}))
+  await expect(compilePptxPreview({...input(), font_manifest_path:many})).rejects.toThrow(`${MAX_OPERATOR_FONT_FACES+1} faces exceeds the ${MAX_OPERATOR_FONT_FACES}-face limit`)
   const wrongVersion = resolve(scratch, 'v2.json')
   writeFileSync(wrongVersion, JSON.stringify({version:2, faces:[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest}]}))
   await expect(compilePptxPreview({...input(), font_manifest_path:wrongVersion})).rejects.toThrow('version must be 1, got 2')
+ })
+ // Pins the cap itself, not just its message. The benchmark had to run PPTX on a
+ // reduced 32-face manifest while DOCX/XLSX used a larger one, so PPTX was scored
+ // with fewer fonts than the other formats; a manifest just over the old cap must
+ // now paint, and every face in it must still be loaded and digested.
+ it('admits a manifest at the raised face cap and still refuses one face beyond it', async () => {
+  expect(MAX_OPERATOR_FONT_FACES).toBe(64)
+  const filler=resolve(root,'node_modules/dejavu-fonts-ttf/ttf/DejaVuSans-ExtraLight.ttf')
+  const fillerDigest=`sha256:${createHash('sha256').update(readFileSync(filler)).digest('hex')}`
+  const faces=[{family:'DejaVu Sans',weight:400,style:'normal',path:font,sha256:digest},
+   ...Array.from({length:MAX_OPERATOR_FONT_FACES-1},(_,i)=>({family:`Filler ${i}`,weight:400,style:'normal',path:filler,sha256:fillerDigest}))]
+  expect(faces).toHaveLength(MAX_OPERATOR_FONT_FACES)
+  const full=resolve(scratch,'cap.json')
+  writeFileSync(full,JSON.stringify({version:1,faces}))
+  // The manifest file itself is capped at 64 KiB; a full 64-face manifest must fit.
+  expect(readFileSync(full).byteLength).toBeLessThanOrEqual(65536)
+  const painted=await compilePptxPreview({...input(), font_manifest_path:full})
+  expect(JSON.stringify(painted.nodes)).toContain('contentRun')
+  // font_digests carries one entry per loaded face and the contract bounds it at 256.
+  expect(painted.font_digests).toHaveLength(MAX_OPERATOR_FONT_FACES)
+  expect(painted.font_digests[0]).toBe(digest)
+  expect(decodePptxPreview(painted).font_digests).toHaveLength(MAX_OPERATOR_FONT_FACES)
+  const over=resolve(scratch,'cap-plus-one.json')
+  writeFileSync(over,JSON.stringify({version:1,faces:[...faces,{family:'One Too Many',weight:400,style:'normal',path:filler,sha256:fillerDigest}]}))
+  await expect(compilePptxPreview({...input(), font_manifest_path:over})).rejects.toThrow('65 faces exceeds the 64-face limit')
  })
  it('rejects hostile or unbounded vector paths before mounting',async()=>{const result=await compilePptxPreview(input());for(const d of ['M1e999 0','M0','<script>','M0 0LInfinity 1'])expect(()=>decodePptxPreview({...result,nodes:[{kind:'path',d,fill:'000000'}]})).toThrow()})
 })
