@@ -9,32 +9,32 @@ export function createHiddenApplyScheduler({
   apply(): Promise<void> | void;
 }) {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let running: Promise<void> | undefined;
+  let running = false;
   let pending = false;
 
-  const run = () => {
+  const fire = () => {
     timer = undefined;
-    if (composing()) { pending = true; return; }
+    if (running || composing()) return;
     pending = false;
-    running = Promise.resolve(apply()).finally(() => {
-      running = undefined;
-      if (pending && !composing()) queue();
+    running = true;
+    Promise.resolve(apply()).finally(() => {
+      running = false;
+      if (pending) queue();
     });
-    return running;
   };
 
   const queue = () => {
     pending = true;
     if (running || timer || composing()) return;
-    timer = setTimeout(run, delayMs);
+    timer = setTimeout(fire, delayMs);
   };
 
   return {
     schedule: queue,
     async flush() {
       if (timer) { clearTimeout(timer); timer = undefined; }
-      if (running) await running;
-      if (pending && !composing()) await run();
+      if (composing()) return;
+      if (!running && pending) fire();
     },
     cancel() {
       pending = false;

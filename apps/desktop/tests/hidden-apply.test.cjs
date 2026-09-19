@@ -35,6 +35,7 @@ test('hidden apply waits for the debounce, skips IME composition, and flushes pe
   assert.deepEqual(calls, []);
   t.mock.timers.tick(1);
   assert.deepEqual(calls, ['apply']);
+  await Promise.resolve();
   composing = true;
   scheduler.schedule();
   t.mock.timers.tick(80);
@@ -43,6 +44,7 @@ test('hidden apply waits for the debounce, skips IME composition, and flushes pe
   scheduler.schedule();
   t.mock.timers.tick(80);
   assert.deepEqual(calls, ['apply', 'apply']);
+  await Promise.resolve();
   scheduler.schedule();
   scheduler.cancel();
   t.mock.timers.tick(80);
