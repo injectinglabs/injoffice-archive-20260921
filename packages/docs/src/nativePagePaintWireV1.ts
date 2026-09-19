@@ -20,6 +20,7 @@ export const DOCX_PAGE_PAINT_LIMITS = Object.freeze({
   maxUniqueGlyphOutlines: 100_000,
   maxProviderCalls: 100_000,
   maxPathCommandsPerGlyph: 65_536,
+  maxGradientStops: 16,
   maxPathCommands: 4_000_000,
   maxOutputNodes: 5_000_000,
   maxDesignCoordinate: 1_000_000_000,
@@ -47,7 +48,9 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   HighlightCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   UnderlineCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'stroke_index', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   CellFillCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
-  ShapePathCommandV1: ['kind', 'id', 'shape_id', 'path', 'fill_rule', 'fill_rgb', 'stroke_rgb', 'stroke_width_millipoints'],
+  ShapePathCommandV1: ['kind', 'id', 'shape_id', 'path', 'fill_rule'],
+  LinearGradientV1: ['x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'stops'],
+  GradientStopV1: ['position_pct', 'rgb'],
   BorderCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'edge', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   NoteSeparatorCommandV1: ['kind', 'id', 'line_id', 'story_id', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   ImageCropV1: ['left', 'top', 'right', 'bottom', 'unit'],
@@ -72,6 +75,13 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   ProvenanceV1: ['document_id', 'revision', 'package_sha256', 'main_part', 'body_story_id', 'numbering_source', 'body_field_source_sha256', 'pagination_settings', 'shaped_lines', 'paginated_layout', 'header_footer_layout', 'table_projection', 'font_manifest', 'media_assets', 'providers'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'message'],
   OutputV1: ['protocol', 'version', 'status', 'provenance', 'diagnostics', 'resources', 'pages'],
+} as const
+
+/** Fields a command may carry but need not. The wire preflight rejects JSON
+ * null anywhere in the envelope, so an absent half of a shape path's paint is
+ * an absent key, not a null one. */
+export const DOCX_PAGE_PAINT_V1_OPTIONAL_BINDING_FIELDS = {
+  ShapePathCommandV1: ['fill_rgb', 'fill_gradient', 'stroke_rgb', 'stroke_width_millipoints'],
 } as const
 
 export type JsonObject = Record<string, unknown>
@@ -122,12 +132,12 @@ export function pointer(value: string): string {
   return value.replace(/~/g, '~0').replace(/\//g, '~1')
 }
 
-export function exactObject(value: unknown, path: string, fields: readonly string[], issues: NativeDocxValidationIssue[]): JsonObject | undefined {
+export function exactObject(value: unknown, path: string, fields: readonly string[], issues: NativeDocxValidationIssue[], optional: readonly string[] = []): JsonObject | undefined {
   if (!isObject(value)) {
     add(issues, value === undefined ? 'REQUIRED' : 'INVALID_TYPE', path, 'must be an object')
     return undefined
   }
-  const allowed = new Set(fields)
+  const allowed = new Set([...fields, ...optional])
   for (const key of Object.keys(value).sort()) if (!allowed.has(key)) add(issues, 'UNKNOWN_FIELD', `${path}/${pointer(key)}`, `unknown field ${JSON.stringify(key)}`)
   for (const key of fields) if (!(key in value)) add(issues, 'REQUIRED', `${path}/${pointer(key)}`, 'field is required')
   return value
@@ -284,6 +294,32 @@ export function validateFace(value: unknown, path: string, issues: NativeDocxVal
   let collection: number | undefined
   if (entry.collection_index !== undefined) collection = integer(entry.collection_index, `${path}/collection_index`, issues, 0, 65_535)
   return faceID && digest ? { face_id: faceID, content_digest: digest, ...(collection !== undefined ? { collection_index: collection } : {}) } : undefined
+}
+
+/** A linear gradient paint server: an axis in the same absolute page
+ * coordinates as the path it fills, and 2..16 opaque stops at strictly
+ * increasing positions in 1/1000 of a percent. A degenerate axis would leave
+ * the paint renderer-defined, so both endpoints must not coincide. */
+export function validateLinearGradient(value: unknown, path: string, issues: NativeDocxValidationIssue[]): void {
+  const gradient = exactObject(value, path, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.LinearGradientV1, issues)
+  if (!gradient) return
+  const axis = (['x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints'] as const).map(key => integer(gradient[key], `${path}/${key}`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints))
+  if (axis.every(value => value !== undefined) && axis[0] === axis[2] && axis[1] === axis[3]) add(issues, 'INVALID_VALUE', path, 'gradient axis must have two distinct endpoints')
+  const stops = gradient.stops
+  if (!Array.isArray(stops) || stops.length < 2 || stops.length > DOCX_PAGE_PAINT_LIMITS.maxGradientStops) {
+    add(issues, Array.isArray(stops) ? 'LIMIT_EXCEEDED' : stops === undefined ? 'REQUIRED' : 'INVALID_TYPE', `${path}/stops`, `must be an array of 2 through ${DOCX_PAGE_PAINT_LIMITS.maxGradientStops} stops`)
+    return
+  }
+  let previous = -1
+  stops.forEach((stopValue, index) => {
+    const stopPath = `${path}/stops/${index}`
+    const stop = exactObject(stopValue, stopPath, DOCX_PAGE_PAINT_V1_BINDING_FIELDS.GradientStopV1, issues)
+    if (!stop) return
+    const position = integer(stop.position_pct, `${stopPath}/position_pct`, issues, 0, 100_000)
+    if (position !== undefined && position <= previous) add(issues, 'INVALID_VALUE', `${stopPath}/position_pct`, 'gradient stop positions must strictly increase')
+    if (position !== undefined) previous = position
+    stringValue(stop.rgb, `${stopPath}/rgb`, issues, RGB, 6)
+  })
 }
 
 /** Validates one shared glyph outline and returns its origin-relative bounds, which the
@@ -545,7 +581,8 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
             : kind === 'stroke_table_border' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BorderCommandV1
               : kind === 'stroke_note_separator' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.NoteSeparatorCommandV1 : undefined
       if (!fields) { add(issues, 'INVALID_VALUE', `${commandPath}/kind`, 'must be fill_glyph_path, paint_inline_image, fill_table_cell, paint_shape_path, stroke_table_border, or stroke_note_separator'); return }
-      const command = exactObject(commandValue, commandPath, fields, issues)
+      const optionalFields = kind === 'paint_shape_path' ? DOCX_PAGE_PAINT_V1_OPTIONAL_BINDING_FIELDS.ShapePathCommandV1 : []
+      const command = exactObject(commandValue, commandPath, fields, issues, optionalFields)
       if (!command) return
       const commandID = stringValue(command.id, `${commandPath}/id`, issues, ID, 1024)
       if (commandID && commandIDs.has(commandID)) add(issues, 'DUPLICATE_ID', `${commandPath}/id`, 'paint command id is duplicated')
@@ -553,11 +590,13 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
       if (command.kind === 'paint_shape_path') {
         stringValue(command.shape_id, `${commandPath}/shape_id`, issues, ID, 1024)
         if (command.fill_rule !== 'nonzero') add(issues, 'INVALID_VALUE', `${commandPath}/fill_rule`, 'must equal nonzero')
-        if (command.fill_rgb !== null) stringValue(command.fill_rgb, `${commandPath}/fill_rgb`, issues, RGB, 6)
-        if (command.stroke_rgb !== null) stringValue(command.stroke_rgb, `${commandPath}/stroke_rgb`, issues, RGB, 6)
-        if (command.stroke_width_millipoints !== null) integer(command.stroke_width_millipoints, `${commandPath}/stroke_width_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
-        if ((command.stroke_rgb === null) !== (command.stroke_width_millipoints === null)) add(issues, 'INVALID_UNION', commandPath, 'a shape path stroke must carry both its colour and its width')
-        if (command.fill_rgb === null && command.stroke_rgb === null) add(issues, 'INVALID_UNION', commandPath, 'a shape path must fill, stroke, or both')
+        if (command.fill_rgb !== undefined) stringValue(command.fill_rgb, `${commandPath}/fill_rgb`, issues, RGB, 6)
+        if (command.stroke_rgb !== undefined) stringValue(command.stroke_rgb, `${commandPath}/stroke_rgb`, issues, RGB, 6)
+        if (command.stroke_width_millipoints !== undefined) integer(command.stroke_width_millipoints, `${commandPath}/stroke_width_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        if (command.fill_gradient !== undefined) validateLinearGradient(command.fill_gradient, `${commandPath}/fill_gradient`, issues)
+        if ((command.stroke_rgb === undefined) !== (command.stroke_width_millipoints === undefined)) add(issues, 'INVALID_UNION', commandPath, 'a shape path stroke must carry both its colour and its width')
+        if (command.fill_rgb !== undefined && command.fill_gradient !== undefined) add(issues, 'INVALID_UNION', commandPath, 'a shape path fills with a colour or a gradient, not both')
+        if (command.fill_rgb === undefined && command.fill_gradient === undefined && command.stroke_rgb === undefined) add(issues, 'INVALID_UNION', commandPath, 'a shape path must fill, stroke, or both')
         // A shape outline is one closed two-dimensional contour in page
         // coordinates; it spends the same path budget a glyph outline does.
         const bounds = validatePaintPath(command.path, `${commandPath}/path`, 'path', issues)

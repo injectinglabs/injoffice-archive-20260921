@@ -15,6 +15,7 @@ import (
 // UNMODELED_DRAWING and the picture refusals). This inspection joins those very
 // diagnostics back to their source nodes and describes the bounded subset the
 // approximate preview can paint: prstGeom rect or line with no adjust values,
+// straight-edge polygon presets at their documented default adjust values,
 // solid or theme-referenced fills, solid outlines and wp:inline / wp:anchor
 // placement. Everything else stays omitted with a declared reason. It never
 // changes source bytes, native extraction, editing authority or pagination.
@@ -43,6 +44,24 @@ type NativeApproximateShapeLineV1 struct {
 	Dash     string `json:"dash"`
 }
 
+// nativeApproximateGradientStopLimit bounds an a:gsLst the preview projects.
+const nativeApproximateGradientStopLimit = 16
+
+// NativeApproximateShapeGradientStopV1 is one a:gs. Position is 1/1000 of a
+// percent along the gradient axis, as a:gs/@pos states it.
+type NativeApproximateShapeGradientStopV1 struct {
+	PositionPct int64  `json:"position_pct"`
+	RGB         string `json:"rgb"`
+}
+
+// NativeApproximateShapeGradientV1 is an a:gradFill whose direction is an
+// a:lin. Angle is 1/60000 of a degree, clockwise from the positive x axis, and
+// stops are ordered by strictly increasing position.
+type NativeApproximateShapeGradientV1 struct {
+	Angle int64                                  `json:"angle_60000ths"`
+	Stops []NativeApproximateShapeGradientStopV1 `json:"stops"`
+}
+
 type NativeApproximateTextboxV1 struct {
 	LinkID             string                      `json:"link_id,omitempty"`
 	LinkSeq            int64                       `json:"link_seq"`
@@ -57,26 +76,27 @@ type NativeApproximateTextboxV1 struct {
 }
 
 type NativeApproximateDrawingShapeV1 struct {
-	ID              string                        `json:"id"`
-	ParagraphID     string                        `json:"paragraph_id"`
-	DiagnosticIDs   []string                      `json:"diagnostic_ids"`
-	Anchor          NativeSourceAnchorV1          `json:"anchor"`
-	RunAnchor       NativeSourceAnchorV1          `json:"run_anchor"`
-	Status          string                        `json:"status"`
-	Reason          string                        `json:"reason,omitempty"`
-	Placement       string                        `json:"placement,omitempty"`
-	Preset          string                        `json:"preset,omitempty"`
-	WidthEMU        int64                         `json:"width_emu"`
-	HeightEMU       int64                         `json:"height_emu"`
-	RotationDegrees int64                         `json:"rotation_degrees"`
-	FlipHorizontal  bool                          `json:"flip_horizontal"`
-	FlipVertical    bool                          `json:"flip_vertical"`
-	FillRGB         *string                       `json:"fill_rgb,omitempty"`
-	Line            *NativeApproximateShapeLineV1 `json:"line,omitempty"`
-	PageAnchor      *NativeTextboxPageAnchorV1    `json:"page_anchor,omitempty"`
-	Wrap            string                        `json:"wrap,omitempty"`
-	Textbox         *NativeApproximateTextboxV1   `json:"textbox,omitempty"`
-	Notes           []string                      `json:"notes,omitempty"`
+	ID              string                            `json:"id"`
+	ParagraphID     string                            `json:"paragraph_id"`
+	DiagnosticIDs   []string                          `json:"diagnostic_ids"`
+	Anchor          NativeSourceAnchorV1              `json:"anchor"`
+	RunAnchor       NativeSourceAnchorV1              `json:"run_anchor"`
+	Status          string                            `json:"status"`
+	Reason          string                            `json:"reason,omitempty"`
+	Placement       string                            `json:"placement,omitempty"`
+	Preset          string                            `json:"preset,omitempty"`
+	WidthEMU        int64                             `json:"width_emu"`
+	HeightEMU       int64                             `json:"height_emu"`
+	RotationDegrees int64                             `json:"rotation_degrees"`
+	FlipHorizontal  bool                              `json:"flip_horizontal"`
+	FlipVertical    bool                              `json:"flip_vertical"`
+	FillRGB         *string                           `json:"fill_rgb,omitempty"`
+	FillGradient    *NativeApproximateShapeGradientV1 `json:"fill_gradient,omitempty"`
+	Line            *NativeApproximateShapeLineV1     `json:"line,omitempty"`
+	PageAnchor      *NativeTextboxPageAnchorV1        `json:"page_anchor,omitempty"`
+	Wrap            string                            `json:"wrap,omitempty"`
+	Textbox         *NativeApproximateTextboxV1       `json:"textbox,omitempty"`
+	Notes           []string                          `json:"notes,omitempty"`
 }
 
 type NativeApproximateDrawingShapesV1 struct {
@@ -372,7 +392,7 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 
 // nativeApproximatePolygonPresets are the straight-edge prstGeom presets whose
 // ECMA-376 preset geometry default adjust values resolve to one exact closed polygon
-// in the shape's own extent. They are admitted only with an empty a:avLst (the
+// in the shape's own extent. They are admitted only at those defaults (the
 // adjust-values refusal below still rejects any authored adjustment), so the
 // preview never interpolates a guide it has not implemented. The painter
 // derives each outline from the same default guides; anything else keeps its
@@ -382,6 +402,51 @@ var nativeApproximatePolygonPresets = map[string]bool{
 	"upArrow":    true,
 	"leftArrow":  true,
 	"rightArrow": true,
+	"star5":      true,
+}
+
+// nativeApproximatePresetDefaultAdjustments are the a:avLst values ECMA-376
+// preset geometry already declares for each admitted preset. Word writes the
+// preset defaults out in full on a shape nobody has adjusted, so an a:avLst
+// that only restates them describes exactly the outline the painter derives
+// from those same defaults and is admitted; a value that differs by any amount
+// is a real adjustment this tier does not implement and still refuses. A preset
+// absent from this map (rect, line) admits no a:gd at all.
+var nativeApproximatePresetDefaultAdjustments = map[string]map[string]int64{
+	"downArrow":  {"adj1": 50000, "adj2": 50000},
+	"upArrow":    {"adj1": 50000, "adj2": 50000},
+	"leftArrow":  {"adj1": 50000, "adj2": 50000},
+	"rightArrow": {"adj1": 50000, "adj2": 50000},
+	"star5":      {"adj": 19098, "hf": 105146, "vf": 110557},
+}
+
+// nativeApproximateDefaultAdjustments reports whether every child of an a:avLst
+// is an a:gd naming an adjustment of this preset and restating its documented
+// default exactly, as `fmla="val N"`.
+func nativeApproximateDefaultAdjustments(avLst *nativeXMLNode, a, preset string) bool {
+	defaults := nativeApproximatePresetDefaultAdjustments[preset]
+	for _, gd := range avLst.Children {
+		if gd.Name != (xml.Name{Space: a, Local: "gd"}) {
+			return false
+		}
+		name, ok := nativeUnqualifiedAttr(gd, "name")
+		if !ok {
+			return false
+		}
+		expected, known := defaults[name]
+		if !known {
+			return false
+		}
+		formula, ok := nativeUnqualifiedAttr(gd, "fmla")
+		if !ok || !strings.HasPrefix(formula, "val ") {
+			return false
+		}
+		value, err := strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(formula, "val ")), 10, 64)
+		if err != nil || value != expected {
+			return false
+		}
+	}
+	return true
 }
 
 // describeShape reads one wps:wsp into an item whose WidthEMU/HeightEMU are
@@ -405,7 +470,7 @@ func (context *nativeApproximateShapeContext) describeShape(item *NativeApproxim
 		return "unsupported-preset:" + preset
 	}
 	for _, c := range geometry.Children {
-		if c.Name == (xml.Name{Space: a, Local: "avLst"}) && len(c.Children) > 0 {
+		if c.Name == (xml.Name{Space: a, Local: "avLst"}) && len(c.Children) > 0 && !nativeApproximateDefaultAdjustments(c, a, preset) {
 			return "adjust-values"
 		}
 	}
@@ -446,7 +511,7 @@ func (context *nativeApproximateShapeContext) describeShape(item *NativeApproxim
 	if !fillOK {
 		return "unsupported-fill"
 	}
-	item.FillRGB = fill
+	item.FillRGB, item.FillGradient = fill.RGB, fill.Gradient
 	item.Notes = append(item.Notes, fillNotes...)
 	line, lineNotes, lineOK := context.shapeLine(spPr, style)
 	if !lineOK {
@@ -762,10 +827,19 @@ func nativeApproximatePosition(node *nativeXMLNode, wp string, aligns map[string
 	return 0, "", "", false
 }
 
-// shapeFill returns nil for no fill. Gradient, pattern and picture fills are
-// not approximated; they omit the fill and record the omission.
-func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNode) (*string, []string, bool) {
+// nativeApproximateFill is one resolved shape fill: at most one of RGB and
+// Gradient is set, and both nil means the fill is absent or omitted.
+type nativeApproximateFill struct {
+	RGB      *string
+	Gradient *NativeApproximateShapeGradientV1
+}
+
+// shapeFill returns an empty fill for no fill. A linear a:gradFill is projected
+// as its stop list; pattern and picture fills are not approximated, and they
+// omit the fill and record the omission.
+func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNode) (nativeApproximateFill, []string, bool) {
 	a := context.a
+	none := nativeApproximateFill{}
 	notes := []string{}
 	for _, child := range spPr.Children {
 		if child.Name.Space != a {
@@ -773,45 +847,137 @@ func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNo
 		}
 		switch child.Name.Local {
 		case "noFill":
-			return nil, notes, true
+			return none, notes, true
 		case "solidFill":
 			rgb, colorNotes, ok := context.solidColor(child, "")
 			if !ok {
-				return nil, nil, false
+				return none, nil, false
 			}
-			return nativeString(rgb), append(notes, colorNotes...), true
-		case "gradFill", "pattFill", "blipFill", "grpFill":
-			return nil, append(notes, child.Name.Local+" is not approximated; fill omitted"), true
+			return nativeApproximateFill{RGB: nativeString(rgb)}, append(notes, colorNotes...), true
+		case "gradFill":
+			gradient, gradientNotes, reason := context.linearGradientFill(child, "")
+			notes = append(notes, gradientNotes...)
+			if gradient == nil {
+				return none, append(notes, "gradFill "+reason+"; fill omitted"), true
+			}
+			return nativeApproximateFill{Gradient: gradient}, notes, true
+		case "pattFill", "blipFill", "grpFill":
+			return none, append(notes, child.Name.Local+" is not approximated; fill omitted"), true
 		}
 	}
 	if style == nil {
-		return nil, notes, true
+		return none, notes, true
 	}
 	reference := firstDirectNativeChild(style, a, "fillRef")
 	if reference == nil {
-		return nil, notes, true
+		return none, notes, true
 	}
 	index, _ := nativeNonnegativeInt64Attr(reference, "", "idx")
 	if index == 0 {
-		return nil, notes, true
+		return none, notes, true
 	}
 	phClr, colorNotes, ok := context.referenceColor(reference)
 	if !ok {
-		return nil, nil, false
+		return none, nil, false
 	}
 	notes = append(notes, colorNotes...)
 	fillStyle := context.theme.styleAt(context.theme.fills, index)
 	if fillStyle == nil {
-		return nil, append(notes, "theme fill style unavailable; fill omitted"), true
+		return none, append(notes, "theme fill style unavailable; fill omitted"), true
+	}
+	if fillStyle.Name == (xml.Name{Space: context.theme.ns, Local: "gradFill"}) {
+		gradient, gradientNotes, reason := context.linearGradientFill(fillStyle, phClr)
+		notes = append(notes, gradientNotes...)
+		if gradient == nil {
+			return none, append(notes, "theme gradFill "+reason+"; fill omitted"), true
+		}
+		return nativeApproximateFill{Gradient: gradient}, append(notes, "fill resolved from theme fill style"), true
 	}
 	if fillStyle.Name != (xml.Name{Space: context.theme.ns, Local: "solidFill"}) {
-		return nil, append(notes, "theme "+fillStyle.Name.Local+" is not approximated; fill omitted"), true
+		return none, append(notes, "theme "+fillStyle.Name.Local+" is not approximated; fill omitted"), true
 	}
 	rgb, themeNotes, ok := context.solidColor(fillStyle, phClr)
 	if !ok {
-		return nil, nil, false
+		return none, nil, false
 	}
-	return nativeString(rgb), append(append(notes, "fill resolved from theme fill style"), themeNotes...), true
+	return nativeApproximateFill{RGB: nativeString(rgb)}, append(append(notes, "fill resolved from theme fill style"), themeNotes...), true
+}
+
+// linearGradientFill projects an a:gradFill whose direction is an a:lin.
+//
+// ECMA-376 Part 1 defines a:gradFill (§20.1.8.33), the a:gsLst stop list
+// (§20.1.8.36) and the a:lin linear direction (§20.1.8.41), whose @ang is
+// 1/60000 of a degree clockwise from the positive x axis. Only that linear
+// form is projected: a:path shades along a rectangle or the shape outline and
+// a:tileRect and @flip change the mapping, so each one omits the fill instead
+// of painting a straight interpolation that is not the authored one.
+//
+// @scaled selects whether the angle is measured in the shape's own scaled
+// space or unscaled. Those two readings coincide only where the axis is
+// parallel to a box edge, so a scaled gradient is projected only at a multiple
+// of 90 degrees and otherwise omits the fill rather than guessing the
+// shape-dependent skew. Stop alpha is dropped, as everywhere else in this
+// tier: Word paints these stops opaque.
+//
+// It returns (nil, notes, reason) when the fill is outside that subset.
+func (context *nativeApproximateShapeContext) linearGradientFill(node *nativeXMLNode, phClr string) (*NativeApproximateShapeGradientV1, []string, string) {
+	a := context.a
+	if _, flipped := nativeUnqualifiedAttr(node, "flip"); flipped {
+		return nil, nil, "declares a tile flip"
+	}
+	direction := firstDirectNativeChild(node, a, "lin")
+	if direction == nil {
+		return nil, nil, "has no a:lin linear direction"
+	}
+	for _, child := range node.Children {
+		if child.Name.Space != a || (child.Name.Local != "gsLst" && child.Name.Local != "lin") {
+			return nil, nil, "carries an unmodeled " + child.Name.Local
+		}
+	}
+	angle, ok := nativeNonnegativeInt64Attr(direction, "", "ang")
+	if !ok || angle >= 21600000 {
+		return nil, nil, "declares no usable a:lin angle"
+	}
+	if scaled, _ := nativeUnqualifiedAttr(direction, "scaled"); (scaled == "1" || scaled == "true") && angle%5400000 != 0 {
+		return nil, nil, "is scaled to a non-axis-aligned angle"
+	}
+	stopList := firstDirectNativeChild(node, a, "gsLst")
+	if stopList == nil {
+		return nil, nil, "has no a:gsLst stop list"
+	}
+	if len(stopList.Children) < 2 || len(stopList.Children) > nativeApproximateGradientStopLimit {
+		return nil, nil, fmt.Sprintf("must hold 2..%d stops", nativeApproximateGradientStopLimit)
+	}
+	notes := []string{}
+	stops := make([]NativeApproximateShapeGradientStopV1, 0, len(stopList.Children))
+	previous := int64(-1)
+	for _, stop := range stopList.Children {
+		if stop.Name != (xml.Name{Space: a, Local: "gs"}) {
+			return nil, nil, "stop list carries unmodeled markup"
+		}
+		position, ok := nativeNonnegativeInt64Attr(stop, "", "pos")
+		if !ok || position > 100000 || position <= previous {
+			return nil, nil, "stop positions must increase through 0..100000"
+		}
+		previous = position
+		color := (*nativeXMLNode)(nil)
+		for _, child := range stop.Children {
+			if child.Name.Space == a {
+				color = child
+				break
+			}
+		}
+		if color == nil {
+			return nil, nil, "stop carries no colour"
+		}
+		rgb, colorNotes, ok := context.color(color, phClr)
+		if !ok {
+			return nil, nil, "stop colour is outside the approximated subset"
+		}
+		notes = append(notes, colorNotes...)
+		stops = append(stops, NativeApproximateShapeGradientStopV1{PositionPct: position, RGB: rgb})
+	}
+	return &NativeApproximateShapeGradientV1{Angle: angle, Stops: stops}, notes, ""
 }
 
 func (context *nativeApproximateShapeContext) shapeLine(spPr, style *nativeXMLNode) (*NativeApproximateShapeLineV1, []string, bool) {
@@ -992,11 +1158,14 @@ func (context *nativeApproximateShapeContext) color(node *nativeXMLNode, phClr s
 			rgb = nativeApproximateScaleRGB(rgb, float64(value)/100000, 1)
 			notes = append(notes, "tint transform approximated in sRGB")
 		case "lumMod":
-			rgb = nativeApproximateLuminance(rgb, float64(value)/100000, 0)
+			rgb = nativeApproximateHSL(rgb, float64(value)/100000, 0, 1)
 			notes = append(notes, "luminance transform approximated in sRGB")
 		case "lumOff":
-			rgb = nativeApproximateLuminance(rgb, 1, float64(value)/100000)
+			rgb = nativeApproximateHSL(rgb, 1, float64(value)/100000, 1)
 			notes = append(notes, "luminance transform approximated in sRGB")
+		case "satMod":
+			rgb = nativeApproximateHSL(rgb, 1, 0, float64(value)/100000)
+			notes = append(notes, "saturation transform approximated in sRGB")
 		case "alpha":
 			notes = append(notes, "alpha transform ignored; painted opaque")
 		}
@@ -1036,7 +1205,11 @@ func nativeApproximateScaleRGB(rgb string, factor float64, toward float64) strin
 	return nativeApproximateRGBString(components)
 }
 
-func nativeApproximateLuminance(rgb string, mod, off float64) string {
+// nativeApproximateHSL applies the DrawingML luminance and saturation
+// modulations in the same sRGB-derived HSL space. DrawingML does not specify
+// the colour space for lumMod/lumOff/satMod, so the result is approximate and
+// every caller discloses it.
+func nativeApproximateHSL(rgb string, mod, off, satMod float64) string {
 	c := nativeApproximateRGBComponents(rgb)
 	maxC := math.Max(c[0], math.Max(c[1], c[2]))
 	minC := math.Min(c[0], math.Min(c[1], c[2]))
@@ -1068,6 +1241,10 @@ func nativeApproximateLuminance(rgb string, mod, off float64) string {
 	}
 	if l > 1 {
 		l = 1
+	}
+	s *= satMod
+	if s > 1 {
+		s = 1
 	}
 	if s == 0 {
 		return nativeApproximateRGBString([3]float64{l, l, l})
