@@ -10,7 +10,8 @@ Electron. `electron/main.cjs` is tested with a mock Electron. The start page
 is a React view with recents and create actions. The updates dialog talks to
 the host update state machine over `window.injDesktop`. Preferences persist
 fail-closed on this device; the command palette searches workspace actions.
-The rest of the renderer,
+`App.tsx` is the session shell (tabs, recents, recovery, close/update freeze);
+editors are still mocked in tests. The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
