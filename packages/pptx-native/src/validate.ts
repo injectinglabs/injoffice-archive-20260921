@@ -6,6 +6,7 @@ import {validNativeLiteralConnected} from './literalConnectedValidation'
 import {validNativeLiteralBar} from './literalBarValidation'
 import { validateEvaluatedGeometry } from './geometryValidation'
 import { PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE, PPTX_TABLE_NONVISUAL_PRESERVED_CODE } from './tableBuiltinStyle'
+import { PPTX_GROUP_LOCKS_PRESERVED_CODE } from './groupLocks'
 import { PPTX_NATIVE_RESOURCE_LIMITS, PPTX_NATIVE_SCHEMA } from './schema.generated'
 import type {
   NativeCompatibility,
@@ -293,6 +294,7 @@ function validateElement(
     if((diagnostic.code==='pptx.autofit-authored-scale-approximate'||diagnostic.code==='pptx.text-columns-approximate')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.autofitApproximation','authored autofit approximation requires parsed source and explicit read-only warning')
     if((diagnostic.code==='pptx.text-warp-flattened-approximate'||diagnostic.code==='pptx.text-warp-approximate'||diagnostic.code==='pptx.text-nonvisual-preview')&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.textPreviewApproximation','flattened text warps and preserved nonvisual metadata require parsed source and explicit read-only warning')
     if(diagnostic.code==='pptx.paragraph-spacing-approximate'&&!readOnlyPreview)add(issues,`${path}.compatibility`,'native.paragraphSpacingApproximation','authored paragraph spacing approximation requires parsed source and explicit read-only warning')
+    if(diagnostic.code===PPTX_GROUP_LOCKS_PRESERVED_CODE&&(element.kind!=='group'||!readOnlyPreview))add(issues,`${path}.compatibility`,'native.groupLocksPreserved','preserved group lock metadata requires a parsed source group with read-only status and explicit warning')
     if(diagnostic.code===PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE&&(element.kind!=='table'||!readOnlyPreview))add(issues,`${path}.compatibility`,'native.tableStylePreview','built-in table style preview requires a parsed source table with read-only status and explicit warning')
     if(diagnostic.code===PPTX_TABLE_NONVISUAL_PRESERVED_CODE&&(element.kind!=='table'||!readOnlyPreview))add(issues,`${path}.compatibility`,'native.tableNonVisualPreserved','preserved table lock or modId metadata requires a parsed source table with read-only status and explicit warning')
   }
