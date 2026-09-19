@@ -86,6 +86,8 @@ export {
   type NativeDocxFillGlyphPathCommandV1,
   type NativeDocxFillTableCellCommandV1,
   type NativeDocxPaintShapePathCommandV1,
+  type NativeDocxPaintLinearGradientV1,
+  type NativeDocxPaintGradientStopV1,
   type NativeDocxStrokeTableBorderCommandV1,
   type NativeDocxStrokeNoteSeparatorCommandV1,
   type NativeDocxPaintInlineImageCommandV1,

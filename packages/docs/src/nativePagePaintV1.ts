@@ -203,23 +203,45 @@ export interface NativeDocxFillTableCellCommandV1 {
   fill_rgb: string
 }
 
+/** A linear gradient paint server for one shape path. The axis is in the same
+ * absolute page coordinates as the path, already projected from the source
+ * a:lin angle onto the shape's placed box, so a renderer needs no DrawingML
+ * knowledge: it maps straight onto an SVG `userSpaceOnUse` linearGradient.
+ * Stops are opaque and strictly increase through 0..100000 (1/1000 %). */
+export interface NativeDocxPaintGradientStopV1 {
+  position_pct: number
+  rgb: string
+}
+export interface NativeDocxPaintLinearGradientV1 {
+  x1_millipoints: number
+  y1_millipoints: number
+  x2_millipoints: number
+  y2_millipoints: number
+  stops: NativeDocxPaintGradientStopV1[]
+}
+
 /** One closed outline in absolute page coordinates, filled and/or stroked. The
  * approximate drawing-shape preview emits it for a prstGeom preset that is not
  * an axis-aligned rectangle, whose edges a cell fill and the axis-aligned
  * border primitive cannot express. The path is carried inline rather than
  * through the shared glyph-outline table: a shape outline is never repeated
- * across a page and carries no face identity to join. `fill_rgb` and
- * `stroke_rgb` are null when that half of the paint is absent; at least one is
- * present, and a stroke carries its own width. */
+ * across a page and carries no face identity to join.
+ *
+ * The optional halves of the paint are OMITTED when absent, never carried as
+ * JSON null: the wire preflight rejects null anywhere in the envelope, exactly
+ * as `collection_index` is omitted rather than nulled. At most one of
+ * `fill_rgb` and `fill_gradient` is present, at least one of the fill and the
+ * stroke is, and a stroke carries both its colour and its width. */
 export interface NativeDocxPaintShapePathCommandV1 {
   kind: 'paint_shape_path'
   id: string
   shape_id: string
   path: NativeDocxPaintPathCommandV1[]
   fill_rule: 'nonzero'
-  fill_rgb: string | null
-  stroke_rgb: string | null
-  stroke_width_millipoints: number | null
+  fill_rgb?: string
+  fill_gradient?: NativeDocxPaintLinearGradientV1
+  stroke_rgb?: string
+  stroke_width_millipoints?: number
 }
 
 export interface NativeDocxStrokeTableBorderCommandV1 {

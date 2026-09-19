@@ -19,7 +19,7 @@ import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.
 import type { NativeDocxShapedLinesV1, NativeDocxLineFragmentV1 } from './nativeShapingLines.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
 import { ID, RGB, preflightWire, paintCommandID, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
-import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPaintPathCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPaintPathCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintLinearGradientV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { textboxAnchorLine, type TextboxAnchorContext } from './nativeTextboxAnchorLineV2.js'
@@ -35,7 +35,7 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines, default-adjust arrow polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines, default-adjust arrow and five-point-star polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
@@ -43,8 +43,9 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_
 /** prstGeom presets the sidecar admits. `rect` and `line` are axis-aligned or
  * two-point; the rest are the straight-edge polygons whose ECMA-376 preset-geometry
  * default adjust values resolve without an unimplemented guide, admitted only
- * with an empty a:avLst and no rotation or flip. */
-export const DOCX_APPROXIMATE_SHAPE_PRESETS = ['rect', 'line', 'downArrow', 'upArrow', 'leftArrow', 'rightArrow'] as const
+ * at those defaults (an a:avLst that merely restates them counts) and with no
+ * rotation or flip. */
+export const DOCX_APPROXIMATE_SHAPE_PRESETS = ['rect', 'line', 'downArrow', 'upArrow', 'leftArrow', 'rightArrow', 'star5'] as const
 export type NativeDocxApproximateShapePresetV1 = (typeof DOCX_APPROXIMATE_SHAPE_PRESETS)[number]
 
 const MAX_SHAPES = 64
@@ -55,6 +56,12 @@ const MAX_REASONS = 24
 const EMU_PER_MILLIPOINT = 12.7
 
 export interface NativeDocxApproximateShapeLineV1 { rgb: string; width_emu: number; dash: string }
+/** One a:gs. `position_pct` is 1/1000 of a percent along the gradient axis. */
+export interface NativeDocxApproximateShapeGradientStopV1 { position_pct: number; rgb: string }
+/** An a:gradFill with an a:lin direction: `angle_60000ths` is 1/60000 of a
+ * degree clockwise from the positive x axis, stops strictly increase. */
+export interface NativeDocxApproximateShapeGradientV1 { angle_60000ths: number; stops: NativeDocxApproximateShapeGradientStopV1[] }
+const MAX_GRADIENT_STOPS = 16
 export interface NativeDocxApproximateTextboxV1 {
   link_id?: string
   link_seq: number
@@ -83,6 +90,7 @@ export interface NativeDocxApproximateDrawingShapeV1 {
   flip_horizontal: boolean
   flip_vertical: boolean
   fill_rgb?: string
+  fill_gradient?: NativeDocxApproximateShapeGradientV1
   line?: NativeDocxApproximateShapeLineV1
   page_anchor?: NativeTextboxRelativeAnchorV2
   wrap?: string
@@ -123,7 +131,7 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
   const ids = new Set<string>()
   const main = document.source.main_part
   for (const item of input.items) {
-    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'paragraph_id', 'diagnostic_ids', 'anchor', 'run_anchor', 'status', 'width_emu', 'height_emu', 'rotation_degrees', 'flip_horizontal', 'flip_vertical'], ['reason', 'placement', 'preset', 'fill_rgb', 'line', 'page_anchor', 'wrap', 'textbox', 'notes'])) throw new TypeError('Approximate drawing shape has unknown or missing fields')
+    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'paragraph_id', 'diagnostic_ids', 'anchor', 'run_anchor', 'status', 'width_emu', 'height_emu', 'rotation_degrees', 'flip_horizontal', 'flip_vertical'], ['reason', 'placement', 'preset', 'fill_rgb', 'fill_gradient', 'line', 'page_anchor', 'wrap', 'textbox', 'notes'])) throw new TypeError('Approximate drawing shape has unknown or missing fields')
     if (typeof item.id !== 'string' || !ID.test(item.id) || ids.has(item.id)) throw new TypeError('Approximate drawing shape id is invalid or duplicated')
     ids.add(item.id)
     const paragraph = paragraphs.get(item.paragraph_id)
@@ -139,6 +147,15 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
     if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing shape overlaps modeled text')
     if (item.width_emu <= 0 || item.height_emu <= 0 || (item.placement !== 'inline' && item.placement !== 'anchored') || !DOCX_APPROXIMATE_SHAPE_PRESETS.includes(item.preset as NativeDocxApproximateShapePresetV1)) throw new TypeError('Supported approximate drawing shape requires positive extent, placement and preset')
     if (item.fill_rgb !== undefined && (typeof item.fill_rgb !== 'string' || !RGB.test(item.fill_rgb))) throw new TypeError('Approximate drawing shape fill is not an explicit RGB value')
+    if (item.fill_gradient !== undefined) {
+      const gradient = item.fill_gradient as unknown
+      if (item.fill_rgb !== undefined || !record(gradient) || !exactKeys(gradient, ['angle_60000ths', 'stops']) || !safeNonnegative(gradient.angle_60000ths, 21_599_999) || !Array.isArray(gradient.stops) || gradient.stops.length < 2 || gradient.stops.length > MAX_GRADIENT_STOPS) throw new TypeError('Approximate drawing shape gradient fill is invalid')
+      let previous = -1
+      for (const stop of gradient.stops as unknown[]) {
+        if (!record(stop) || !exactKeys(stop, ['position_pct', 'rgb']) || !safeNonnegative(stop.position_pct, 100_000) || (stop.position_pct as number) <= previous || typeof stop.rgb !== 'string' || !RGB.test(stop.rgb)) throw new TypeError('Approximate drawing shape gradient stops are invalid')
+        previous = stop.position_pct as number
+      }
+    }
     if (item.line !== undefined && (!record(item.line) || !exactKeys(item.line as unknown as Record<string, unknown>, ['rgb', 'width_emu', 'dash']) || typeof item.line.rgb !== 'string' || !RGB.test(item.line.rgb) || !safeNonnegative(item.line.width_emu, 12_700_000) || item.line.width_emu <= 0 || typeof item.line.dash !== 'string' || item.line.dash.length > 32)) throw new TypeError('Approximate drawing shape outline is invalid')
     if (item.placement === 'anchored') {
       const anchor = item.page_anchor as unknown
@@ -408,21 +425,64 @@ function presetPolygonPoints(preset: NativeDocxApproximateShapePresetV1, width: 
       const y1 = vc - shaft, y2 = vc + shaft, x1 = head
       return [[0, vc], [x1, 0], [x1, y1], [width, y1], [width, y2], [x1, y2], [x1, height]]
     }
+    // star5 shares the pentagon's outer guides (hf=105146, vf=110557) and puts
+    // its five inner vertices at adj=19098 of them. Same algebra as the PPTX
+    // renderer's `star5Guides` (packages/pptx-render/src/geometry.ts); the
+    // radical forms are cos/sin of 18°, 54°, 342°.
+    case 'star5': {
+      const halfX = width / 2, scaledX = halfX * 105146 / 100000, scaledY = height / 2 * 110557 / 100000
+      const root5 = Math.sqrt(5)
+      const outerDX1 = scaledX * Math.sqrt(10 + 2 * root5) / 4, outerDX2 = scaledX * Math.sqrt(10 - 2 * root5) / 4
+      const outerY1 = scaledY * (1 - (root5 - 1) / 4), outerY2 = scaledY * (1 + (root5 + 1) / 4)
+      const innerX = halfX * 105146 / 100000 * 19098 / 50000, innerY = scaledY * 19098 / 50000
+      const dx1 = innerX * Math.sqrt(10 + 2 * root5) / 4, dx2 = innerX * Math.sqrt(10 - 2 * root5) / 4
+      const y1 = scaledY - innerY * (root5 + 1) / 4, y2 = scaledY + innerY * (root5 - 1) / 4, y3 = scaledY + innerY
+      return [
+        [halfX - outerDX1, outerY1], [halfX - dx2, y1], [halfX, 0], [halfX + dx2, y1], [halfX + outerDX1, outerY1],
+        [halfX + dx1, y2], [halfX + outerDX2, outerY2], [halfX, y3], [halfX - outerDX2, outerY2], [halfX - dx1, y2],
+      ]
+    }
     default: return undefined
   }
+}
+
+/** Project an a:lin gradient onto a shape's placed box, in absolute page
+ * millipoints. DrawingML measures @ang clockwise from the positive x axis and
+ * SVG user space also grows downward, so the direction vector is (cos, sin) of
+ * that same angle. The axis runs through the box centre and is extended to the
+ * box's projection onto it, so the first and last stops land on the box edges
+ * -- what Word paints. Endpoints are clamped to the page like every other
+ * coordinate here; a clamp that collapses the axis drops the gradient rather
+ * than painting a renderer-defined degenerate one. */
+function gradientPaintServer(gradient: NativeDocxApproximateShapeGradientV1, x: number, y: number, width: number, height: number, maxX: number, maxY: number): NativeDocxPaintLinearGradientV1 | undefined {
+  const radians = gradient.angle_60000ths / 60_000 * Math.PI / 180
+  const dx = Math.cos(radians), dy = Math.sin(radians)
+  const half = (Math.abs(dx) * width + Math.abs(dy) * height) / 2
+  const centreX = x + width / 2, centreY = y + height / 2
+  const axis = {
+    x1_millipoints: clampCoordinate(centreX - dx * half, maxX),
+    y1_millipoints: clampCoordinate(centreY - dy * half, maxY),
+    x2_millipoints: clampCoordinate(centreX + dx * half, maxX),
+    y2_millipoints: clampCoordinate(centreY + dy * half, maxY),
+  }
+  if (axis.x1_millipoints === axis.x2_millipoints && axis.y1_millipoints === axis.y2_millipoints) return undefined
+  return { ...axis, stops: gradient.stops.map(stop => ({ position_pct: stop.position_pct, rgb: stop.rgb })) }
 }
 
 /** One closed polygon primitive for a preset whose edges a cell fill and the
  * axis-aligned border primitive cannot express. Vertices are placed absolutely
  * and clamped to the page, exactly as the rectangle branch clamps its edges, so
- * a shape that hangs off the page keeps a bounded on-page contour. */
+ * a shape that hangs off the page keeps a bounded on-page contour. The optional
+ * halves of the paint are omitted rather than nulled: the wire preflight
+ * rejects JSON null anywhere in the envelope. */
 function polygonCommands(entry: PlacedShape, points: Array<[number, number]>): NativeDocxPagePaintCommandV1[] {
   const { shape, page } = entry
   const maxX = page.width_millipoints, maxY = page.height_millipoints
   const placed = points.map(([px, py]) => [clampCoordinate(entry.x + px, maxX), clampCoordinate(entry.y + py, maxY)] as const)
   const xs = placed.map(([px]) => px), ys = placed.map(([, py]) => py)
   if (Math.max(...xs) <= Math.min(...xs) || Math.max(...ys) <= Math.min(...ys)) return []
-  if (shape.fill_rgb === undefined && !shape.line) return []
+  const gradient = shape.fill_gradient === undefined ? undefined : gradientPaintServer(shape.fill_gradient, entry.x, entry.y, entry.width, entry.height, maxX, maxY)
+  if (shape.fill_rgb === undefined && gradient === undefined && !shape.line) return []
   const path: NativeDocxPaintPathCommandV1[] = [
     { kind: 'move_to', x_millipoints: placed[0]![0], y_millipoints: placed[0]![1] },
     ...placed.slice(1).map(([px, py]) => ({ kind: 'line_to' as const, x_millipoints: px, y_millipoints: py })),
@@ -430,15 +490,17 @@ function polygonCommands(entry: PlacedShape, points: Array<[number, number]>): N
   ]
   return [{
     kind: 'paint_shape_path', id: `${shape.id}:path`, shape_id: shape.id, path, fill_rule: 'nonzero',
-    fill_rgb: shape.fill_rgb ?? null,
-    stroke_rgb: shape.line ? shape.line.rgb : null,
-    stroke_width_millipoints: shape.line ? Math.max(1, toMillipoints(shape.line.width_emu)) : null,
+    ...(shape.fill_rgb !== undefined ? { fill_rgb: shape.fill_rgb } : {}),
+    ...(gradient !== undefined ? { fill_gradient: gradient } : {}),
+    ...(shape.line ? { stroke_rgb: shape.line.rgb, stroke_width_millipoints: Math.max(1, toMillipoints(shape.line.width_emu)) } : {}),
   }]
 }
 
 /** Fill and stroke primitives clipped to the page. Quarter-turn rectangles
  * swap their extent; line presets follow flips and rotation about the center;
- * polygon presets paint one closed default-adjust contour. */
+ * polygon presets paint one closed default-adjust contour. A gradient fill
+ * always paints through the path primitive, which is the only one that carries
+ * a paint server. */
 function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
   const { shape, page } = entry
   const maxX = page.width_millipoints, maxY = page.height_millipoints
@@ -450,6 +512,12 @@ function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
   }
   const polygon = shape.preset === undefined ? undefined : presetPolygonPoints(shape.preset, width, height)
   if (polygon) return polygonCommands({ ...entry, x, y, width, height }, polygon)
+  // A gradient-filled rectangle goes through the path primitive too: the cell
+  // fill carries one solid colour, so routing it there would drop the gradient
+  // silently now that the sidecar can project one.
+  if (shape.preset === 'rect' && shape.fill_gradient !== undefined) {
+    return polygonCommands({ ...entry, x, y, width, height }, [[0, 0], [width, 0], [width, height], [0, height]])
+  }
   const commands: NativeDocxPagePaintCommandV1[] = []
   const strokeWidth = shape.line ? Math.max(1, toMillipoints(shape.line.width_emu)) : 0
   if (shape.preset === 'rect') {
