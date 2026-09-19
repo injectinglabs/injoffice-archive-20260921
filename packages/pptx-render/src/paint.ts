@@ -1,6 +1,7 @@
 import {renderTransformMatrix} from './sourceRenderTransform.js'
 import {SourceAffineBudget} from './sourceAffine.js'
 import {geometryPathFill} from './geometryFillPolicy.js'
+import {compoundStrokeBands, offsetRectanglePath} from './compoundStroke.js'
 import {textBodyWarp, warpGlyphRun} from './textWarp.js'
 import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderLinearGradient, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
@@ -101,6 +102,32 @@ function paintTextBody(textBody: RenderTextBodyNode, surface: PaintSurface): voi
   if (textBody.orientationTransform) surface.push({kind:'restore'})
 }
 
+/**
+ * A shape outline, painted as the one centered stroke it usually is, or — for a
+ * DrawingML compound outline — as the concentric bands PowerPoint paints inside
+ * that same authored width, each its own ordinary stroke on the offset outline.
+ * Expanding here keeps the compound outline out of the paint command stream and
+ * out of the preview transport: every consumer still sees plain filled and
+ * stroked paths.
+ */
+function paintShapePath(sourceElementId: string, path: readonly RenderPathCommand[], fill: string | undefined, stroke: RenderStroke | undefined, surface: PaintSurface): void {
+  const bands = stroke ? compoundStrokeBands(stroke) : undefined
+  if (!stroke || !bands) {
+    surface.push({ kind: 'path', sourceElementId, path, fill, stroke })
+    return
+  }
+  const offsets = bands.map((band) => ({ band, path: offsetRectanglePath(path, band.offsetEmu) }))
+  // The extractor only admits a compound outline on a rectangle, so a path that
+  // cannot be offset is not reachable from a package. Paint the authored width
+  // as one stroke rather than drop the outline if it ever becomes reachable.
+  if (offsets.some((offset) => offset.path === undefined)) {
+    surface.push({ kind: 'path', sourceElementId, path, fill, stroke })
+    return
+  }
+  surface.push({ kind: 'path', sourceElementId, path, fill, stroke: undefined })
+  for (const offset of offsets) surface.push({ kind: 'path', sourceElementId, path: offset.path!, stroke: { ...stroke, widthEmu: offset.band.widthEmu, compound: undefined } })
+}
+
 function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRect, depth=1): void {
   surface.push({ kind: 'save' })
   surface.push({ kind: 'transform', transform: node.transform })
@@ -108,7 +135,7 @@ function paintNode(node: RenderNode, surface: PaintSurface, slideClip: RenderRec
   switch (node.kind) {
     case 'shape':
       if(node.geometryPaths) for(const part of node.geometryPaths) surface.push({kind:'path',sourceElementId:node.sourceElementId,path:part.path,fill:geometryPathFill(node.fill?.color,part.fillMode),stroke:part.stroke?node.stroke:undefined})
-      else surface.push({ kind: 'path', sourceElementId: node.sourceElementId, path: node.path, fill: node.fill?.color, stroke: node.stroke })
+      else paintShapePath(node.sourceElementId, node.path, node.fill?.color, node.stroke, surface)
       if (node.textBody) {
         // Evaluated callouts can extend beyond their source frame. Preserve the
         // historical paragraph-only clipping policy for text, not path paint.

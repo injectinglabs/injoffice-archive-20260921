@@ -502,6 +502,10 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 			return NativeTransform{}, nil, nil, nil, nil, err
 		}
 	}
+	if nativeCompoundStrokeUnavailable(stroke, preset != nil && *preset == NativeShapePresetRect && geometry == nil) {
+		gaps.add("pptx.autoshape-line-unavailable", "a compound outline is approximated only on a rectangular shape", true)
+		stroke = nil
+	}
 	for _, name := range []string{"effectLst", "effectDag", "scene3d", "sp3d", "extLst"} {
 		child, _ := nativeSingleton(node, dialect.drawing, name, false)
 		if child == nil || nativeDeclaresNoEffect(child) {
@@ -753,8 +757,29 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	default:
 		capNative = false
 	}
-	if !capNative || compound != "sng" || alignment != "ctr" {
-		gaps.add("pptx.autoshape-line-unavailable", "only explicit single centered outlines with a native cap are representable", true)
+	// ST_CompoundLine (ECMA-376 Part 1 §20.1.10.14). Absent carries the schema
+	// default "sng". A compound outline paints several concentric lines inside
+	// the one authored width; whether this shape's outline can be offset into
+	// those bands is decided by the caller, which is the only place the
+	// resolved geometry is known.
+	var strokeCompound *NativeStrokeCompound
+	switch compound {
+	case "sng":
+		// The single line every existing stroke already describes; left unstated.
+	case "dbl":
+		strokeCompound = nativeStrokeCompoundPointer(NativeStrokeCompoundDouble)
+	case "thickThin":
+		strokeCompound = nativeStrokeCompoundPointer(NativeStrokeCompoundThickThin)
+	case "thinThick":
+		strokeCompound = nativeStrokeCompoundPointer(NativeStrokeCompoundThinThick)
+	case "tri":
+		strokeCompound = nativeStrokeCompoundPointer(NativeStrokeCompoundTriple)
+	default:
+		gaps.add("pptx.autoshape-line-unavailable", "only a documented compound outline is representable", true)
+		return nil, nil
+	}
+	if !capNative || alignment != "ctr" {
+		gaps.add("pptx.autoshape-line-unavailable", "only explicit centered outlines with a native cap are representable", true)
 		return nil, nil
 	}
 	noFill, _ := nativeSingleton(line, dialect.drawing, "noFill", false)
@@ -831,7 +856,20 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 		return nil, nil
 	}
 	dash := NativeStrokeDashSolid
-	return &NativeStroke{Color: color, WidthEMU: int64Pointer(width), Cap: &cap, Join: &join, Dash: &dash, MiterLimit: miterLimit}, nil
+	return &NativeStroke{Color: color, WidthEMU: int64Pointer(width), Cap: &cap, Join: &join, Dash: &dash, Compound: strokeCompound, MiterLimit: miterLimit}, nil
+}
+
+func nativeStrokeCompoundPointer(value NativeStrokeCompound) *NativeStrokeCompound {
+	return &value
+}
+
+// nativeCompoundStrokeUnavailable reports a compound outline the renderer
+// cannot lay out. A compound outline is painted as concentric bands offset from
+// the shape outline, and only an axis-aligned rectangle can be offset by moving
+// every side the same distance; an arbitrary preset or evaluated path moves its
+// corners along their miters instead, which this tier does not model.
+func nativeCompoundStrokeUnavailable(stroke *NativeStroke, rectangular bool) bool {
+	return stroke != nil && stroke.Compound != nil && *stroke.Compound != NativeStrokeCompoundSingle && !rectangular
 }
 
 // nativeUnarrowedAutoShapeLine reports whether an outline draws no line ends.

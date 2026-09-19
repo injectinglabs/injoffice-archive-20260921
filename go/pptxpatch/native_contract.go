@@ -178,7 +178,9 @@ type NativeStroke struct {
 	Cap        *NativeStrokeCap  `json:"cap,omitempty"`
 	Join       *NativeStrokeJoin `json:"join,omitempty"`
 	Dash       *NativeStrokeDash `json:"dash,omitempty"`
-	MiterLimit *int64            `json:"miterLimit,omitempty"`
+	// Absent is the ST_CompoundLine default "sng": one line of the full width.
+	Compound   *NativeStrokeCompound `json:"compound,omitempty"`
+	MiterLimit *int64                `json:"miterLimit,omitempty"`
 }
 
 type NativeAnimation struct {
