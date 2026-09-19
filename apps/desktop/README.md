@@ -12,7 +12,8 @@ the host update state machine over `window.injDesktop`. Preferences persist
 fail-closed on this device; the command palette searches workspace actions.
 `App.tsx` is the session shell (tabs, recents, recovery, close/update freeze);
 editors are still mocked in tests. Formatting, hyperlink, table, paragraph,
-and page-layout chrome land here without WASM. The rest of the renderer,
+and page-layout chrome land here without WASM. Selection offsets for caret
+restore are in `document-range.ts`. The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
