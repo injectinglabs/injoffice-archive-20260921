@@ -48,7 +48,8 @@ PdfEditor is the PDF page and annotation workspace; it applies through pdf-comma
 SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
 SpreadsheetEditor is the worksheet grid, formula bar, and native XLSX apply path; it does not import OfficeEditor.
 Vite builds the renderer from index.html and src/main.tsx into renderer/.
-The rest of the GitHub provider and packaging workflows land
+Packaging icons live in `build/icons/` as nearest-neighbor conversions of
+repository-root `logo.png`. The rest of the electron-builder config lands
 in follow-up changes. Preview builds never load an updater.
 
 Support, unsigned vs signed builds, and engine lockstep: [docs/DESKTOP.md](../../docs/DESKTOP.md).
