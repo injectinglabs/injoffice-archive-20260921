@@ -63,3 +63,21 @@ func TestNativeDiagramLayoutRefusalNamesTheShapeAndTheConstruct(t *testing.T) {
 		})
 	}
 }
+
+// The preview transport caps a single diagnostic string at 2048 characters
+// (apps/pptx-page-paint-worker/src/contract.ts) and prefixes the message with
+// its code. A message that overruns that cap does not degrade: the whole
+// slide preview fails bounded validation with HTTP 422, so EVERY diagram this
+// tier lays out paints nothing. Growing the disclosure has to stay inside the
+// budget, and 2048 is a hard wall, not a style rule.
+func TestNativeDiagramLayoutDisclosureFitsTheTransportCap(t *testing.T) {
+	const transportCap = 2048
+	for _, message := range []struct{ code, text string }{
+		{nativeDiagramLayoutPreviewCode, nativeDiagramLayoutGroupMessage},
+		{nativeDiagramLayoutPreviewCode, nativeDiagramLayoutChildMessage},
+	} {
+		if size := len(message.code) + len(": ") + len(message.text); size > transportCap {
+			t.Fatalf("%s diagnostic is %d characters, over the %d the preview transport accepts", message.code, size, transportCap)
+		}
+	}
+}
