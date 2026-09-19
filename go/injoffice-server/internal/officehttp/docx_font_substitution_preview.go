@@ -12,6 +12,12 @@ import (
 	"github.com/injectinglabs/injoffice/go/docxpatch"
 )
 
+// maxDOCXOperatorFontFaces mirrors MAX_OPERATOR_FONT_FACES in
+// apps/docx-page-paint-worker/src/hostFonts.ts. The worker loads the manifest
+// and this helper re-validates the same file, so a manifest the worker admits
+// must not be refused here.
+const maxDOCXOperatorFontFaces = 64
+
 type docxOperatorFontPolicy struct {
 	Version  int `json:"version"`
 	Mappings []struct {
@@ -128,7 +134,7 @@ func validateDOCXFontSubstitutionPreview(data json.RawMessage, input map[string]
 			Digest string `json:"sha256"`
 		} `json:"faces"`
 	}
-	if json.Unmarshal(raw, &config) != nil || config.Version != 1 || config.Policy.Version != 1 || len(config.Policy.Mappings) > 32 || len(config.Faces) > 32 || fontPreviewJSONDigest(config.Policy) != response.PolicyDigest || fontPreviewJSONDigest(response.OperatorPolicy) != response.PolicyDigest {
+	if json.Unmarshal(raw, &config) != nil || config.Version != 1 || config.Policy.Version != 1 || len(config.Policy.Mappings) > 32 || len(config.Faces) > maxDOCXOperatorFontFaces || fontPreviewJSONDigest(config.Policy) != response.PolicyDigest || fontPreviewJSONDigest(response.OperatorPolicy) != response.PolicyDigest {
 		return fail()
 	}
 	props := map[string]docxpatch.NativeResolvedRunPropertiesV1{}
