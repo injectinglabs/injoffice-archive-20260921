@@ -220,12 +220,23 @@ export function NativeDocxPages({ bytes, packageDigest, apiBase, contentPreview 
     {paint?.status === 'painted' && paint.pages.slice(pageIndex, pageIndex + 1).map((page) => <figure key={page.id}>
       <svg role="img" aria-label={`${paint.approximate ? 'Approximate' : 'Native'} document page ${page.ordinal + 1}`} viewBox={`0 0 ${page.width_millipoints} ${page.height_millipoints}`} style={{ overflow: 'hidden', display: 'block', width: '100%', maxWidth: `${page.width_millipoints / 750}px`, background: '#fff', border: '1px solid var(--ds-border, #d5d9df)' }}>
         {textboxLayer(paint.textboxes,true).map(textbox=><NativeDocxTextboxOnPage key={textbox.paint.diagnostic_id} textbox={textbox} pageID={page.id}/>)}
-        {page.commands.map((command) => {
+        {page.commands.map((command, commandIndex) => {
           switch (command.kind) {
             case 'fill_glyph_path': return <path key={command.id} d={nativeDocxSVGPath(nativeDocxPlacedGlyphOutlineV1(page, command))} fill={`#${command.fill_rgb}`} fillRule="nonzero" />
             case 'fill_text_highlight': return <rect key={command.id} data-native-highlight="true" x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
             case 'fill_table_cell': return <rect key={command.id} x={command.x_millipoints} y={command.y_millipoints} width={command.width_millipoints} height={command.height_millipoints} fill={`#${command.fill_rgb}`} />
-            case 'paint_shape_path': return <path key={command.id} data-native-shape-path="true" d={nativeDocxSVGPath(command.path)} fill={command.fill_rgb === null ? 'none' : `#${command.fill_rgb}`} fillRule="nonzero" stroke={command.stroke_rgb === null ? undefined : `#${command.stroke_rgb}`} strokeWidth={command.stroke_width_millipoints ?? undefined} strokeLinejoin="miter" />
+            case 'paint_shape_path': {
+              // The gradient axis already arrives in this page's coordinates, so it
+              // is a userSpaceOnUse paint server with no further transform.
+              // A plain CSS-safe id: command ids carry ':' and '/', which url(#id) would not parse.
+              const gradient = command.fill_gradient, gradientID = `docx-shape-gradient-${page.ordinal}-${commandIndex}`
+              return <g key={command.id}>
+                {gradient && <defs><linearGradient id={gradientID} gradientUnits="userSpaceOnUse" x1={gradient.x1_millipoints} y1={gradient.y1_millipoints} x2={gradient.x2_millipoints} y2={gradient.y2_millipoints}>
+                  {gradient.stops.map((stop, index) => <stop key={index} offset={stop.position_pct / 100_000} stopColor={`#${stop.rgb}`} />)}
+                </linearGradient></defs>}
+                <path data-native-shape-path="true" d={nativeDocxSVGPath(command.path)} fill={gradient ? `url(#${gradientID})` : command.fill_rgb === undefined ? 'none' : `#${command.fill_rgb}`} fillRule="nonzero" stroke={command.stroke_rgb === undefined ? undefined : `#${command.stroke_rgb}`} strokeWidth={command.stroke_width_millipoints ?? undefined} strokeLinejoin="miter" />
+              </g>
+            }
             case 'stroke_table_border': {
               const box = nativeDocxTableBorderRect(command)
               return <rect key={command.id} data-native-table-border="true" x={box.x} y={box.y} width={box.width} height={box.height} fill={`#${command.stroke_rgb}`} shapeRendering="crispEdges" />

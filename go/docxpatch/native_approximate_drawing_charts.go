@@ -563,7 +563,7 @@ func (context *nativeApproximateChartContext) chartModel(root *nativeXMLNode) (*
 		if !ok {
 			return nil, nil, "unsupported-plot-outline"
 		}
-		model.PlotFillRGB, model.PlotLine = fill, line
+		model.PlotFillRGB, model.PlotLine = fill.RGB, line
 		notes = append(append(notes, fillNotes...), lineNotes...)
 	}
 	if title := firstDirectNativeChild(chart, c, "title"); title != nil && !nativeApproximateChartBool(chart, c, "autoTitleDeleted") {
@@ -596,7 +596,7 @@ func (context *nativeApproximateChartContext) chartModel(root *nativeXMLNode) (*
 		if !ok {
 			return nil, nil, "unsupported-area-outline"
 		}
-		model.AreaFillRGB, model.AreaLine = fill, line
+		model.AreaFillRGB, model.AreaLine = fill.RGB, line
 		notes = append(append(notes, fillNotes...), lineNotes...)
 	}
 	if nativeApproximateChartBool(root, c, "roundedCorners") {
@@ -723,8 +723,8 @@ func (context *nativeApproximateChartContext) series(ser *nativeXMLNode, ordinal
 			return nil, nil, nil, "unsupported-series-fill"
 		}
 		notes = append(notes, fillNotes...)
-		fill = resolved
-		if resolved == nil {
+		fill = resolved.RGB
+		if fill == nil {
 			// An explicit noFill paints nothing, and gradient/pattern/picture fills
 			// are not approximated: keep the bar white so outlines still show
 			// rather than inventing an accent colour.

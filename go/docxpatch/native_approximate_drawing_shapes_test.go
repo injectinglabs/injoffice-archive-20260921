@@ -21,6 +21,14 @@ func nativeApproximateAnchor(positionH, positionV string) string {
 	return `<wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>` + positionH + positionV + `<wp:extent cx="2998800" cy="2829600"/><wp:effectExtent l="0" t="0" r="11430" b="27940"/><wp:wrapNone/><wp:docPr id="2" name="Rectangle 2"/><wp:cNvGraphicFramePr/>`
 }
 
+// nativeApproximateOfficeTheme attaches the stock Office theme so scheme
+// colours resolve.
+func nativeApproximateOfficeTheme(parts map[string]string) {
+	parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>`, 1)
+	parts["word/_rels/document.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="theme" Type="` + relBaseTransitional + `theme" Target="theme/theme1.xml"/></Relationships>`
+	parts["word/theme/theme1.xml"] = `<a:theme xmlns:a="` + drawingMLTransitional + `" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Cambria"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:gradFill/><a:gradFill/></a:fillStyleLst><a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln><a:ln w="25400"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln></a:lnStyleLst><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>`
+}
+
 func nativeApproximateShapeSource(t *testing.T, body string, parts func(map[string]string)) []byte {
 	entries := nativeMutationParts(nativeMutationMain(body))
 	if parts != nil {
@@ -143,7 +151,7 @@ func TestApproximateDrawingShapesAdmitsDefaultAdjustPolygonPresets(t *testing.T)
 	base := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
 		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`) +
 		`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm rot="0"><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="112233"/></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`
-	for _, preset := range []string{"downArrow", "upArrow", "leftArrow", "rightArrow"} {
+	for _, preset := range []string{"downArrow", "upArrow", "leftArrow", "rightArrow", "star5"} {
 		t.Run(preset, func(t *testing.T) {
 			drawing := strings.Replace(base, `prst="rect"`, `prst="`+preset+`"`, 1)
 			out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
@@ -161,6 +169,30 @@ func TestApproximateDrawingShapesAdmitsDefaultAdjustPolygonPresets(t *testing.T)
 	}
 }
 
+// Word writes a preset's documented default adjust values out in full on a
+// shape nobody adjusted; that a:avLst describes the default outline and is
+// admitted, while any value that differs keeps the adjust-values refusal.
+func TestApproximateDrawingShapesAdmitsDefaultsOnlyAdjustList(t *testing.T) {
+	base := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
+		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`) +
+		`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm rot="0"><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="star5"><a:avLst><a:gd name="adj" fmla="val 19098"/><a:gd name="hf" fmla="val 105146"/><a:gd name="vf" fmla="val 110557"/></a:avLst></a:prstGeom><a:solidFill><a:srgbClr val="112233"/></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`
+	out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+base+`</w:r></w:p>`, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].Preset != "star5" {
+		t.Fatalf("a defaults-only a:avLst must be admitted: %#v", out)
+	}
+	off := strings.Replace(base, `val 110557`, `val 110558`, 1)
+	out, err = InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+off+`</w:r></w:p>`, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out == nil || len(out.Items) != 1 || out.Items[0].Status != "omitted" || out.Items[0].Reason != "adjust-values" {
+		t.Fatalf("an adjusted a:avLst must keep refusing: %#v", out)
+	}
+}
+
 func TestApproximateDrawingShapesOmissions(t *testing.T) {
 	base := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
 		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`) +
@@ -174,7 +206,11 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 		{"rotated polygon preset", `<a:xfrm rot="0">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect">`, `<a:xfrm rot="2700000">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="downArrow">`, "rotation-unsupported"},
 		{"flipped polygon preset", `<a:xfrm rot="0">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect">`, `<a:xfrm rot="0" flipH="1">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="downArrow">`, "flip-unsupported"},
 		{"adjusted polygon preset", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, `<a:prstGeom prst="downArrow"><a:avLst><a:gd name="adj1" fmla="val 30000"/></a:avLst></a:prstGeom>`, "adjust-values"},
-		{"star preset stays refused", `prst="rect"`, `prst="star5"`, "unsupported-preset:star5"},
+		{"adjusted star preset", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, `<a:prstGeom prst="star5"><a:avLst><a:gd name="adj" fmla="val 30000"/></a:avLst></a:prstGeom>`, "adjust-values"},
+		// A default that belongs to a different preset, a guide this tier does
+		// not implement and a non-literal formula are all real adjustments.
+		{"star preset with a foreign default", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, `<a:prstGeom prst="star5"><a:avLst><a:gd name="adj1" fmla="val 50000"/></a:avLst></a:prstGeom>`, "adjust-values"},
+		{"polygon preset with a computed guide", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, `<a:prstGeom prst="downArrow"><a:avLst><a:gd name="adj1" fmla="*/ 50000 1 2"/></a:avLst></a:prstGeom>`, "adjust-values"},
 		// A group uri whose graphicData does not actually hold a wpg:wgp stays omitted.
 		{"group uri without a group shape", `uri="` + nativeTextboxWPS + `"`, `uri="` + nativeApproximateWPG + `"`, "unsupported-graphic:group-or-multiple"},
 		{"simple position", `simplePos="0"`, `simplePos="1"`, "simple-position-unsupported"},
@@ -196,14 +232,71 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 			}
 		})
 	}
-	t.Run("gradient fill omits only the fill", func(t *testing.T) {
-		drawing := strings.Replace(base, `<a:solidFill><a:srgbClr val="112233"/></a:solidFill>`, `<a:gradFill><a:gsLst/></a:gradFill><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, 1)
+	// A gradient outside the projected linear subset still omits only the fill.
+	for _, test := range []struct{ name, fill string }{
+		{"empty stop list", `<a:gradFill><a:gsLst/><a:lin ang="5400000"/></a:gradFill>`},
+		{"no linear direction", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill>`},
+		{"unordered stops", `<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="0"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`},
+		{"scaled oblique angle", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="2700000" scaled="1"/></a:gradFill>`},
+	} {
+		t.Run("unprojectable gradient omits only the fill: "+test.name, func(t *testing.T) {
+			drawing := strings.Replace(base, `<a:solidFill><a:srgbClr val="112233"/></a:solidFill>`, test.fill+`<a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, 1)
+			out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			item := out.Items[0]
+			if out == nil || len(out.Items) != 1 || item.Status != "supported" || item.FillRGB != nil || item.FillGradient != nil || item.Line == nil || !strings.Contains(strings.Join(item.Notes, "|"), "gradFill") {
+				t.Fatalf("gradient fill handling: %#v", out)
+			}
+		})
+	}
+	t.Run("linear gradient projects its stops", func(t *testing.T) {
+		gradient := `<a:gradFill><a:gsLst>` +
+			`<a:gs pos="0"><a:srgbClr val="FFFF00"/></a:gs>` +
+			`<a:gs pos="50000"><a:srgbClr val="FFFF33"><a:alpha val="20000"/></a:srgbClr></a:gs>` +
+			`<a:gs pos="100000"><a:srgbClr val="FF0000"/></a:gs>` +
+			`</a:gsLst><a:lin ang="5400000"/></a:gradFill>`
+		drawing := strings.Replace(base, `<a:solidFill><a:srgbClr val="112233"/></a:solidFill>`, gradient, 1)
 		out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].FillRGB != nil || out.Items[0].Line == nil || !strings.Contains(strings.Join(out.Items[0].Notes, "|"), "gradFill") {
-			t.Fatalf("gradient fill handling: %#v", out)
+		item := out.Items[0]
+		if item.Status != "supported" || item.FillRGB != nil || item.FillGradient == nil {
+			t.Fatalf("linear gradient must be projected: %#v", item)
+		}
+		if item.FillGradient.Angle != 5400000 || len(item.FillGradient.Stops) != 3 {
+			t.Fatalf("unexpected gradient: %#v", item.FillGradient)
+		}
+		// Stop alpha is dropped: Word paints these stops opaque.
+		want := []NativeApproximateShapeGradientStopV1{{PositionPct: 0, RGB: "FFFF00"}, {PositionPct: 50000, RGB: "FFFF33"}, {PositionPct: 100000, RGB: "FF0000"}}
+		for i, stop := range item.FillGradient.Stops {
+			if stop != want[i] {
+				t.Fatalf("stop %d: got %#v want %#v", i, stop, want[i])
+			}
+		}
+	})
+	t.Run("gradient stop resolves scheme colour transforms", func(t *testing.T) {
+		gradient := `<a:gradFill><a:gsLst>` +
+			`<a:gs pos="0"><a:schemeClr val="accent5"/></a:gs>` +
+			`<a:gs pos="100000"><a:schemeClr val="accent1"><a:tint val="44500"/><a:satMod val="160000"/></a:schemeClr></a:gs>` +
+			`</a:gsLst><a:lin ang="5400000"/></a:gradFill>`
+		drawing := strings.Replace(base, `<a:solidFill><a:srgbClr val="112233"/></a:solidFill>`, gradient, 1)
+		source := nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nativeApproximateOfficeTheme)
+		out, err := InspectNativeApproximateDrawingShapesV1(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item := out.Items[0]
+		if item.FillGradient == nil || len(item.FillGradient.Stops) != 2 {
+			t.Fatalf("scheme-coloured gradient must be projected: %#v", item)
+		}
+		if item.FillGradient.Stops[0].RGB != "4BACC6" {
+			t.Fatalf("accent5 must resolve from the theme: %#v", item.FillGradient.Stops[0])
+		}
+		if !strings.Contains(strings.Join(item.Notes, "|"), "saturation transform approximated in sRGB") {
+			t.Fatalf("satMod must disclose its approximation: %#v", item.Notes)
 		}
 	})
 	t.Run("line preset keeps flips", func(t *testing.T) {
