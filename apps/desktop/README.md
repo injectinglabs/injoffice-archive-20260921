@@ -30,7 +30,8 @@ literal values or formula source; native import is a follow-up. Chart
 preview geometry finite-normalizes values and caps series/categories. Slide
 shape presets map to SVG ellipse/polygon/rect without a canvas. Slide
 duplicate/delete/reorder and grouped preview coordinates live in
-presentationCommands.ts.
+presentationCommands.ts. Align/distribute uses unrotated boxes and keeps
+rotation; spacing keeps the outer objects fixed.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
