@@ -285,6 +285,11 @@ type NativePageGeometryV1 struct {
 	// ECMA-376 17.6.19 rtlGutter: the binding edge moves to the right of the
 	// page. Recorded only when active so documents without it keep their wire.
 	RTLGutter *bool `json:"rtl_gutter,omitempty"`
+	// ECMA-376 17.6.4 w:cols/@w:sep: a vertical rule is drawn in every
+	// inter-column gap. It divides no box and moves no column, so it is
+	// recorded only when the attribute is present, lexically valid and on;
+	// documents without it keep their wire.
+	ColumnSeparator *bool `json:"column_separator,omitempty"`
 }
 
 type NativeColumnV1 struct {

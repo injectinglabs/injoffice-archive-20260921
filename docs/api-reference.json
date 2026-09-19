@@ -3504,6 +3504,21 @@
               "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
             },
             {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID = \"approximate:column-separator\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING = \"Approximate read-only preview: a w:cols w:sep rule is painted as a 0.96 pt bar centred in each inter-column gap, from the top of the column box to the bottom of the content it holds (approximate-column-separator-v1).\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS = 960"
+            },
+            {
               "name": "DOCX_APPROXIMATE_DRAWING_CHART_CODE",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_CODE: 'docx.approximate-drawing-chart-preview'"
@@ -5574,6 +5589,11 @@
               "signature": "PaginationOptions"
             },
             {
+              "name": "paintNativeDocxApproximateColumnSeparatorsV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateColumnSeparatorsV1(pages: readonly NativeDocxPaintPageV1[], sections: readonly NativeDocxSectionV1[], shaped: NativeDocxShapedLinesV1): NativeDocxApproximateColumnSeparatorResultV1"
+            },
+            {
               "name": "paintNativeDocxApproximateDrawingChartsV1",
               "kind": "function",
               "signature": "export declare function paintNativeDocxApproximateDrawingChartsV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, charts: NativeDocxApproximateDrawingChartsV1, projection: NativeDocxApproximateInlineChartProjectionV1, runtime: NativeDocxApproximateChartPaintRuntimeV1): Promise<NativeDocxApproximateChartPaintResultV1>"
@@ -6546,6 +6566,21 @@
               "signature": "export declare const DOCX_APPROXIMATE_CHART_FONT_CODE: 'docx.approximate-chart-substituted-font'"
             },
             {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID = \"approximate:column-separator\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING = \"Approximate read-only preview: a w:cols w:sep rule is painted as a 0.96 pt bar centred in each inter-column gap, from the top of the column box to the bottom of the content it holds (approximate-column-separator-v1).\""
+            },
+            {
+              "name": "DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS = 960"
+            },
+            {
               "name": "DOCX_APPROXIMATE_DRAWING_CHART_CODE",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_CODE: 'docx.approximate-drawing-chart-preview'"
@@ -7144,6 +7179,11 @@
               "name": "nearestNativeDocxMilliPointEmuV1",
               "kind": "function",
               "signature": "export declare function nearestNativeDocxMilliPointEmuV1(value: number): number | undefined"
+            },
+            {
+              "name": "paintNativeDocxApproximateColumnSeparatorsV1",
+              "kind": "function",
+              "signature": "export declare function paintNativeDocxApproximateColumnSeparatorsV1(pages: readonly NativeDocxPaintPageV1[], sections: readonly NativeDocxSectionV1[], shaped: NativeDocxShapedLinesV1): NativeDocxApproximateColumnSeparatorResultV1"
             },
             {
               "name": "paintNativeDocxApproximateDrawingChartsV1",

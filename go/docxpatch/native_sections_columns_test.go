@@ -188,3 +188,40 @@ func TestExtractNativeSectionsRefuseImplicitOrPartialPageGeometry(t *testing.T) 
 		})
 	}
 }
+
+// A w:sep the model could read exactly is recorded so a painting tier can draw
+// the rule; a lexically invalid one records nothing and keeps only its refusal.
+func TestExtractNativeColumnsRecordsOnlyValidColumnSeparator(t *testing.T) {
+	cases := []struct {
+		name string
+		cols string
+		want bool
+	}{
+		{"on", `<w:cols w:num="2" w:space="720" w:sep="1"/>`, true},
+		{"on true", `<w:cols w:num="2" w:space="720" w:sep="true"/>`, true},
+		{"off", `<w:cols w:num="2" w:space="720" w:sep="0"/>`, false},
+		{"off false", `<w:cols w:num="2" w:space="720" w:sep="false"/>`, false},
+		{"absent", `<w:cols w:num="2" w:space="720"/>`, false},
+		{"lexically invalid", `<w:cols w:num="2" w:space="720" w:sep="TRUE"/>`, false},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			body := `<w:p><w:r><w:t>separator</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>` + test.cols + `</w:sectPr>`
+			doc, err := ExtractNativeDocumentV1(sectionsColumnsDOCX(t, body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := doc.Sections[0].Page.ColumnSeparator
+			if test.want {
+				if got == nil || !*got {
+					t.Fatalf("column_separator = %v, want true", got)
+				}
+			} else if got != nil {
+				t.Fatalf("column_separator = %v, want absent", *got)
+			}
+			if _, err := EncodeNativeDocumentV1(doc); err != nil {
+				t.Fatalf("recorded separator must stay a valid native contract: %v", err)
+			}
+		})
+	}
+}
