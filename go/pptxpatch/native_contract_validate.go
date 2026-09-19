@@ -677,7 +677,7 @@ func (v *nativeValidator) textBody(body NativeTextBodyLayout, transform NativeTr
 		v.add(p+".columnSpacingEmu", "native.textColumns", "the authored column count and spacing must be supplied together")
 	}
 	if body.PresetTextWarp != nil && !nativeModeledPresetTextWarp(*body.PresetTextWarp) {
-		v.add(p+".presetTextWarp", "schema.enum", "must be a modeled arch or deflate preset")
+		v.add(p+".presetTextWarp", "schema.enum", "must be a modeled arch, deflate or inflate-top preset")
 	}
 	if body.PresetTextWarpAdj != nil && (*body.PresetTextWarpAdj < 0 || *body.PresetTextWarpAdj > 100000) {
 		v.add(p+".presetTextWarpAdj", "schema.range", "must be a 0-100000 authored warp adjustment")

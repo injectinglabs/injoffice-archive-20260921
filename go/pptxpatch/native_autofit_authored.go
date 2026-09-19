@@ -31,8 +31,9 @@ type nativeAuthoredAutoFit struct {
 	// warpFlattened records an unmodeled a:prstTxWarp the approximate tier
 	// paints as unwarped text in the saved frame instead of refusing the body.
 	warpFlattened bool
-	// warpPreset is a modeled a:prstTxWarp/@prst (textArchUp/Down or
-	// textDeflate). The renderer warps along an InjOffice arch envelope.
+	// warpPreset is a modeled a:prstTxWarp/@prst (textArchUp/Down,
+	// textDeflate or textInflateTop). The renderer warps along an InjOffice
+	// warp envelope.
 	warpPreset string
 	warpAdj    *int64
 }
@@ -42,7 +43,7 @@ func (fit *nativeAuthoredAutoFit) approximate() bool {
 }
 
 func nativeModeledPresetTextWarp(preset string) bool {
-	return preset == "textArchUp" || preset == "textArchDown" || preset == "textDeflate"
+	return preset == "textArchUp" || preset == "textArchDown" || preset == "textDeflate" || preset == "textInflateTop"
 }
 
 // parseNativeAuthoredNormAutofit validates a:normAutofit as a bounded exact
@@ -226,9 +227,9 @@ func nativeMarkAuthoredAutoFit(element *NativeElement, fit *nativeAuthoredAutoFi
 			element.TextBody.PresetTextWarp = stringPointer(fit.warpPreset)
 			element.TextBody.PresetTextWarpAdj = fit.warpAdj
 		}
-		message := "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " text along an InjOffice arch envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
+		message := "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " text along an InjOffice warp envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
 		if fit.warpAdj != nil {
-			message = "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " adj=" + strconv.FormatInt(*fit.warpAdj, 10) + " text along an InjOffice arch envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
+			message = "Read-only approximate preview warps the authored a:prstTxWarp prst=" + fit.warpPreset + " adj=" + strconv.FormatInt(*fit.warpAdj, 10) + " text along an InjOffice warp envelope in its saved frame; the warp geometry is not PowerPoint-equivalent, and wrapping and overflow may differ."
 		}
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
 			Severity: NativeDiagnosticSeverityWarning,

@@ -42,6 +42,32 @@ describe('preset text warp', () => {
     expect(shifted).toMatchObject({ aPpm: 1_000_000, bPpm: 0, cPpm: 0, dPpm: 1_000_000, txEmu: 0, tyEmu: 20 })
   })
 
+  it('inflates the top edge into a Bezier arch over a straight bottom', () => {
+    // cy=800 with adj=50000 puts y1 at 400; the quadratic Bezier reaches half
+    // of its control offset, so the centre of the top edge sits at 200.
+    const inflate = spec('textInflateTop', 50_000)
+    const topLeft = warpPoint(inflate, bounds.x, bounds.y)
+    const topCenter = warpPoint(inflate, bounds.x + bounds.cx / 2, bounds.y)
+    const topRight = warpPoint(inflate, bounds.x + bounds.cx, bounds.y)
+    expect(topLeft.y).toBe(bounds.y + 400)
+    expect(topRight.y).toBe(bounds.y + 400)
+    expect(topCenter.y).toBe(bounds.y + 200)
+    // The bottom edge is the straight line at b, everywhere.
+    for (const x of [bounds.x, bounds.x + bounds.cx / 4, bounds.x + bounds.cx / 2, bounds.x + bounds.cx]) {
+      expect(warpPoint(inflate, x, bounds.y + bounds.cy).y).toBe(bounds.y + bounds.cy)
+    }
+    // Interior rows interpolate between the curved top and that straight bottom.
+    expect(topCenter.y).toBeLessThan(warpPoint(inflate, bounds.x + bounds.cx / 2, bounds.y + 400).y)
+    expect(topCenter.theta).toBe(0)
+    // Screen y grows downward, so the left half of the arch rises: dy/dx < 0.
+    expect(topLeft.theta).toBeLessThan(0)
+    expect(topRight.theta).toBeGreaterThan(0)
+    // adj=0 leaves the body flat; the default adjustment does not.
+    expect(warpPoint(spec('textInflateTop', 0), bounds.x, bounds.y + 400).y).toBe(bounds.y + 400)
+    expect(warpPoint(spec('textInflateTop'), bounds.x, bounds.y).y).toBe(bounds.y + 260)
+    expect(textBodyWarp({ bounds, presetTextWarp: 'textInflateTop', presetTextWarpAdj: 50_000 })).toEqual(spec('textInflateTop', 50_000))
+  })
+
   it('wraps each glyph of a modeled run and leaves refused runs flat', () => {
     const run: RenderTextRunNode = {
       kind: 'textRun', sourceElementId: 'el', paragraphIndex: 0, runIndex: 0, startUtf16: 0, endUtf16: 2,

@@ -12149,7 +12149,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49\""
             },
             {
               "name": "PPTX_TABLE_BUILTIN_STYLE_POLICY",

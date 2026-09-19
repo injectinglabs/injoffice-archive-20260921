@@ -155,7 +155,7 @@ type NativeTextBodyLayout struct {
 	ColumnCount      *int64 `json:"columnCount,omitempty"`
 	ColumnSpacingEMU *int64 `json:"columnSpacingEmu,omitempty"`
 	// PresetTextWarp carries a modeled a:prstTxWarp/@prst the approximate
-	// preview lane warps along an InjOffice arch envelope. Unmodeled presets
+	// preview lane warps along an InjOffice warp envelope. Unmodeled presets
 	// stay omitted and flattened. Present only on read-only approximate
 	// elements that also carry pptx.text-warp-approximate.
 	PresetTextWarp    *string `json:"presetTextWarp,omitempty"`

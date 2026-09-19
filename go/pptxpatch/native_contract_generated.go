@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409"
+const NativePPTXSchemaSHA256 = "1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
