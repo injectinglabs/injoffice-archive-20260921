@@ -42,8 +42,13 @@ for (const path of files) {
 
   const pptxAuthority = name.startsWith('packages/pptx-render/src/') || name.startsWith('packages/pptx-native/src/') || /^go\/pptxpatch\/native[^/]*\.go$/.test(name)
   if (pptxAuthority) {
+    // Prose is not code. A comment ending a sentence on "window." or naming a
+    // "document" is not a DOM reference, and matching it fails the gate on a
+    // file that never touches the DOM. Strip line and block comments first so
+    // the tokens below are judged against the code they are meant to police.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
     for (const token of [/@(?:types\/)?react(?:-dom)?(?:\/|['"])/, /\bkonva\b/i, /\bDOMParser\b/, /\b(?:document|window)\s*\./, /\b(?:innerHTML|outerHTML|HTMLElement)\b/, /\bDeckView\b/]) {
-      if (token.test(source)) failures.push(`${name}: native PPTX/render authority contains forbidden DOM or view token ${token}`)
+      if (token.test(code)) failures.push(`${name}: native PPTX/render authority contains forbidden DOM or view token ${token}`)
     }
     if (imports.some((specifier) => specifier === '@injoffice/slides' || specifier.startsWith('@injoffice/slides/'))) failures.push(`${name}: native PPTX/render authority imports the legacy slides package`)
   }
