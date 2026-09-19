@@ -416,8 +416,11 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const inventory = decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
     const resolver = runtime?.fonts?.resolver ?? createNativeDocxEmbeddedFontResolverV1(inventory, input.font_assets)
     const shaper = runtime?.createShaper?.(input.source_revision) ?? createHarfBuzzTextShaperV1({ sourceRevision: input.source_revision })
-    const painted = await paintNativeDocxApproximateDrawingShapesV1(result, shapes, shapeProjection, { request: prepared.page_paint_request, document: shapeProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider })
+    const painted = await paintNativeDocxApproximateDrawingShapesV1(result, shapes, shapeProjection, { request: prepared.page_paint_request, document: shapeProjection.document, settings: settings.value, manifest: prepared.page_paint_request.font_manifest, resolver, shaper, outlineProvider, mediaAssets: input.media_assets })
     for (const reason of painted.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
+    // A shape picture fill the exact picture qualifier accepted at a lattice
+    // extent discloses that rounding beside the pictures' own extent facts.
+    appliedImageExtents = [...appliedImageExtents, ...painted.imageExtents]
     // Shape paint changes which pages carry commands; re-derive the omitted-content
     // disclosure from the same inputs so content_status stays consistent. Shapes the
     // painter dropped get their source refusals back first so they are disclosed as

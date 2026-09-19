@@ -3842,6 +3842,99 @@ describe('approximate DrawingML shapes', () => {
     expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
   }, 20000)
 
+  /** The picture part a shape's a:blipFill names, preserved in the document and supplied by the host. */
+  function pictureFillInput(shape: Record<string, unknown>) {
+    const built = shapeInput({ placement: 'anchored', preset: 'rect', page_anchor: pageAnchor(), wrap: 'none', ...shape })
+    const document = built.input.document as NativeDocxDocumentV1
+    document.passthrough_parts.push({ part_name: 'word/media/image.png', content_type: 'image/png', byte_length: PNG_BYTES.byteLength, sha256: PNG_DIGEST, policy: 'preserve-verbatim' })
+    built.input.media_assets = [{ part_name: 'word/media/image.png', content_type: 'image/png', content_digest: PNG_DIGEST, bytes: PNG_BYTES }]
+    return built
+  }
+  const blipFill = (overrides: Record<string, unknown> = {}) => ({ relationship_id: 'rFill', media_part: 'word/media/image.png', content_type: 'image/png', ...overrides })
+
+  it('paints a rectangle picture fill through the unmodified picture qualifier, transports its media part and keeps the strict request untouched', async () => {
+    const { input, eligibility, shapes } = pictureFillInput({ blip_fill: blipFill({ source_crop: { left: 0, top: 50387, right: 0, bottom: 6012 } }) })
+    const before = structuredClone(input)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    expect(input).toEqual(before)
+    const commands = paint.pages[0]!.commands
+    const picture = commands.find(c => c.kind === 'paint_floating_image')
+    expect(picture).toMatchObject({ kind: 'paint_floating_image', layer: 'front', stacking_order: 7, drawing_id: 'approximate-drawing-shape:test:1:blip', x_millipoints: 72_000, y_millipoints: 144_000, width_millipoints: 72_000, height_millipoints: 36_000, source_crop: { left: 0, top: 50387, right: 0, bottom: 6012, unit: 'one-hundred-thousandth' }, transform: { rotation_degrees: 0, flip_horizontal: false, flip_vertical: false } })
+    // A front float brackets the page content, and its anchor line owns it.
+    expect(commands.at(-1)).toBe(picture)
+    expect(paint.pages[0]!.lines.some(line => line.command_ids.includes(picture!.id))).toBe(true)
+    expect(paint.resources).toMatchObject([{ id: picture!.kind === 'paint_floating_image' ? picture!.asset_id : '', part_name: 'word/media/image.png', content_type: 'image/png', content_digest: PNG_DIGEST, byte_length: PNG_BYTES.byteLength, width_px: 1, height_px: 1 }])
+    expect(commands.some(c => c.kind === 'fill_table_cell' || c.kind === 'paint_inline_image')).toBe(false)
+    expect(paint.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-preview:') && r.includes('painted 1 of 1') && r.includes('picture-fill'))).toBe(true)
+    expect(paint.approximated_image_extents).toBeUndefined()
+    expect(paint.reasons).not.toContain(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+    // The same shape with a text box, or behind the document, paints its picture in the behind layer.
+    for (const variant of [{ textbox: { link_seq: 0, insets_emu: [0, 0, 0, 0], vertical_anchor: 't', wrap: 'square', paragraphs: [], resolved_paragraphs: [], resolved_runs: [], omitted_runs: 0, omitted_blocks: 0 } }, { page_anchor: pageAnchor({ stacking: { behind_doc: true, relative_height: 3 } }) }]) {
+      const behind = pictureFillInput({ blip_fill: blipFill(), ...variant })
+      const painted = await renderNativeDocxApproximatePagePreviewV1(behind.input, behind.eligibility, outlineProvider(behind.input), { drawingShapes: behind.shapes })
+      expect(painted.status).toBe('painted')
+      expect(painted.pages[0]!.commands[0]).toMatchObject({ kind: 'paint_floating_image', layer: 'behind' })
+      expect(decodeNativeDocxApproximatePagePreviewV1(painted).ok).toBe(true)
+    }
+  }, 40000)
+
+  it('proposes the nearest lattice extent for an off-lattice picture fill and discloses it while the exact qualifier still refuses the authored extent', async () => {
+    const { input, eligibility, shapes, item } = pictureFillInput({ width_emu: 914_500, blip_fill: blipFill() })
+    const document = input.document as NativeDocxDocumentV1
+    const authored = { id: 'drawing:probe', anchor: item.anchor, relationship_id: 'rFill', media_part: 'word/media/image.png', content_type: 'image/png', placement: 'inline' as const, width_emu: 914_500, height_emu: 457_200, edit_policy: { mode: 'read-only' as const, allowed_operations: [], refusal: { code: 'EXTRACT_ONLY', message: 'probe', preservation: 'refuse-mutation' as const } } }
+    const refused = qualifyNativeDocxInlineImageV1(document, 'run:probe', authored)
+    expect(refused.ok).toBe(false)
+    expect(!refused.ok && refused.message).toMatch(/milli-points/)
+    expect(qualifyNativeDocxInlineImageV1(document, 'run:probe', { ...authored, width_emu: 914_527 }).ok).toBe(true)
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const picture = paint.pages[0]!.commands.find(c => c.kind === 'paint_floating_image')
+    // 914527 EMU is exactly 72010 milli-points; the authored 914500 is not a whole number of them.
+    expect(picture).toMatchObject({ x_millipoints: 72_000, width_millipoints: 72_010, height_millipoints: 36_000 })
+    expect(paint.approximated_image_extents).toEqual([{ run_id: 'approximate-drawing-shape:test:1:blip-run', drawing_id: 'approximate-drawing-shape:test:1:blip', part_name: 'word/document.xml', path: item.anchor.path, field: 'width_emu', source_emu: 914_500, painted_emu: 914_527 }])
+    expect(paint.reasons).toContain(DOCX_APPROXIMATE_IMAGE_EXTENT_WARNING)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('clips a picture fill that hangs off the page by cropping it, so the floating command still fits its page', async () => {
+    // 612000 milli-points wide page; the shape starts 36000 before the right edge and is 72000 wide.
+    const { input, eligibility, shapes } = pictureFillInput({ blip_fill: blipFill({ source_crop: { left: 10000, top: 0, right: 10000, bottom: 0 } }), page_anchor: pageAnchor({ x_emu: (612_000 - 36_000) * 127 / 10 }) })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const picture = paint.pages[0]!.commands.find(c => c.kind === 'paint_floating_image')
+    // Half the box is off the page: the visible half of the 80000-unit span is 40000 more crop on the right.
+    expect(picture).toMatchObject({ x_millipoints: 576_000, width_millipoints: 36_000, source_crop: { left: 10000, top: 0, right: 50000, bottom: 0, unit: 'one-hundred-thousandth' } })
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
+  it('leaves a picture fill unpainted, with the qualifier refusal disclosed, when its media part is not preserved or its bytes are not the qualified ones', async () => {
+    const missing = pictureFillInput({ line: { rgb: '243F60', width_emu: 25400, dash: 'solid' }, blip_fill: blipFill({ media_part: 'word/media/missing.png' }) })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(missing.input, missing.eligibility, outlineProvider(missing.input), { drawingShapes: missing.shapes })
+    expect(paint.status).toBe('painted')
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'paint_floating_image')).toBe(false)
+    expect(paint.pages[0]!.commands.filter(c => c.kind === 'stroke_table_border')).toHaveLength(4)
+    expect(paint.resources).toEqual([])
+    expect(paint.reasons.some(r => r.includes('blipFill not painted: Inline picture does not exact-join one preserved content-addressed raster part'))).toBe(true)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+    const drifted = pictureFillInput({ blip_fill: blipFill() })
+    drifted.input.media_assets = [{ ...drifted.input.media_assets[0]!, bytes: Uint8Array.from([...PNG_BYTES.slice(0, -1), PNG_BYTES.at(-1)! ^ 1]) }]
+    const unpainted = await renderNativeDocxApproximatePagePreviewV1(drifted.input, drifted.eligibility, outlineProvider(drifted.input), { drawingShapes: drifted.shapes })
+    expect(unpainted.status).toBe('painted')
+    expect(unpainted.pages[0]!.commands.some(c => c.kind === 'paint_floating_image')).toBe(false)
+    expect(unpainted.resources).toEqual([])
+    // A shape with nothing else to paint is omitted, and the omission names the picture failure rather than a page position.
+    expect(unpainted.reasons.some(r => r.startsWith('docx.approximate-drawing-shape-omitted:') && r.includes('picture-fill-unpainted:'))).toBe(true)
+    expect(unpainted.reasons.some(r => r.includes('outside-page'))).toBe(false)
+    // The sidecar decoder refuses a picture fill on anything but an unrotated, unflipped rectangle, and a malformed crop.
+    const document = missing.input.document as NativeDocxDocumentV1
+    for (const bad of [{ preset: 'downArrow' }, { rotation_degrees: 90 }, { flip_horizontal: true }, { blip_fill: blipFill({ source_crop: { left: 60000, top: 0, right: 40000, bottom: 0 } }) }, { blip_fill: blipFill({ extra: true }) }]) {
+      const { shapes: rejected } = pictureFillInput({ blip_fill: blipFill(), ...bad })
+      expect(() => decodeNativeDocxApproximateDrawingShapesV1(rejected, document)).toThrow()
+    }
+  }, 40000)
+
   it('paints a group shape as its flattened children at their mapped offsets and leaves the strict lane byte-identical', async () => {
     // The sidecar flattens a wpg:wgp into one anchored item per child, each
     // already mapped out of the group's child coordinate space, so both children
