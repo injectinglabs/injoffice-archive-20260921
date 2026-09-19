@@ -206,6 +206,8 @@ import type { NativeDocxUnsupportedCapabilityV1 as NativeDocxRestoredRefusalV1 }
 export { decodeNativeDocxApproximateDrawingChartsV1, projectNativeDocxApproximateInlineChartsV1, paintNativeDocxApproximateDrawingChartsV1, DOCX_APPROXIMATE_DRAWING_CHART_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_CHARTS_PROTOCOL, DOCX_APPROXIMATE_DRAWING_CHART_POLICY, DOCX_APPROXIMATE_DRAWING_CHART_CODE, DOCX_APPROXIMATE_DRAWING_CHART_OMITTED_CODE, DOCX_APPROXIMATE_CHART_FONT_CODE, DOCX_APPROXIMATE_DRAWING_CHART_WARNING, DOCX_APPROXIMATE_DRAWING_CHART_TABLE_ID } from './nativeApproximateDrawingChartsV1.js'
 export type { NativeDocxApproximateDrawingChartsV1, NativeDocxApproximateDrawingChartV1, NativeDocxApproximateChartModelV1, NativeDocxApproximateChartSeriesV1, NativeDocxApproximateChartAxisV1, NativeDocxApproximateChartTitleV1, NativeDocxApproximateChartLegendV1, NativeDocxApproximateChartFontV1, NativeDocxApproximateInlineChartProjectionV1, NativeDocxApproximateChartPaintResultV1, NativeDocxApproximateChartPaintRuntimeV1, NativeDocxApproximateChartFontSubstitutionV1 } from './nativeApproximateDrawingChartsV1.js'
 import { collectNativeDocxApproximateOmissionsV1, DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING } from './nativeApproximateOmittedContentV1.js'
+import { paintNativeDocxApproximateColumnSeparatorsV1, DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING, DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID, DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS } from './nativeApproximateColumnSeparatorsV1.js'
+export { paintNativeDocxApproximateColumnSeparatorsV1, DOCX_APPROXIMATE_COLUMN_SEPARATOR_WARNING, DOCX_APPROXIMATE_COLUMN_SEPARATOR_TABLE_ID, DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS } from './nativeApproximateColumnSeparatorsV1.js'
 export { decodeNativeDocxApproximateDrawingShapesV1, projectNativeDocxApproximateInlineShapesV1, paintNativeDocxApproximateDrawingShapesV1, DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED, DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL, DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY, DOCX_APPROXIMATE_DRAWING_SHAPE_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE, DOCX_APPROXIMATE_TEXTBOX_FONT_CODE, DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING, DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID } from './nativeApproximateDrawingShapesV1.js'
 export type { NativeDocxApproximateDrawingShapesV1, NativeDocxApproximateDrawingShapeV1, NativeDocxApproximateTextboxV1, NativeDocxApproximateShapeLineV1, NativeDocxApproximateInlineShapeProjectionV1, NativeDocxApproximateShapePaintResultV1, NativeDocxApproximateShapePaintRuntimeV1, NativeDocxApproximateTextboxFontSubstitutionV1 } from './nativeApproximateDrawingShapesV1.js'
 import { prepareNativeDocxApproximateEquationStageV1, completeNativeDocxApproximateEquationStageV1, type NativeDocxApproximateEquationStageV1 } from './nativeApproximateEquationLayoutV1.js'
@@ -450,6 +452,25 @@ export async function renderNativeDocxApproximatePagePreviewV1(input: NativeDocx
     const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
     result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
     if (disclose) result.reasons.push(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+  }
+  // ECMA-376 17.6.4 w:cols/@w:sep. Painted after every other painter has
+  // settled the page's commands, because the rule's vertical extent is read
+  // off the body lines those painters may have added or dropped. A section
+  // whose rule is painted no longer omits it, so its refusal is withdrawn from
+  // the omitted-content disclosure and the record is recollected.
+  if (result.status === 'painted') {
+    const pagination = prepared.page_paint_request.pagination_request
+    const separators = paintNativeDocxApproximateColumnSeparatorsV1(result.pages, pagination.document.sections, pagination.shaped_lines)
+    if (separators.painted.length > 0) {
+      for (const reason of separators.reasons) if (!result.reasons.includes(reason) && result.reasons.length < 260) result.reasons.push(reason)
+      const paintedSections = new Set(separators.painted)
+      const kept = [...pagination.document.unsupported, ...restoredDiagnostics].filter(entry => !(entry.code === 'COLUMN_SEPARATOR_UNSUPPORTED' && paintedSections.has(entry.scope_id)))
+      const omissions = collectNativeDocxApproximateOmissionsV1({ ...pagination, document: { ...pagination.document, unsupported: kept } }, result)
+      Object.assign(result, omissions)
+      const disclose = omissions.omitted_content.length > 0 || omissions.unpainted_pages.length > 0
+      result.reasons = result.reasons.filter(reason => reason !== DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+      if (disclose) result.reasons.push(DOCX_APPROXIMATE_OMITTED_CONTENT_WARNING)
+    }
   }
   if (applied.length > 0) {
     result.approximated_font_sizes = applied

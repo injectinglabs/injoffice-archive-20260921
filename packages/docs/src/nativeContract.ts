@@ -339,6 +339,8 @@ export interface NativeDocxPageGeometryV1 {
   column_definitions: NativeDocxColumnV1[]
   /** ECMA-376 17.6.19 rtlGutter: present only when the binding gutter is on the right edge. */
   rtl_gutter?: boolean
+  /** ECMA-376 17.6.4 w:cols/@w:sep: present only when a vertical rule is drawn in every inter-column gap. */
+  column_separator?: boolean
 }
 
 export interface NativeDocxSectionV1 {
@@ -470,7 +472,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   HeaderFooterReferenceV1: ['kind', 'story_id', 'relationship_id'],
   PageMarginsV1: ['top_twips', 'right_twips', 'bottom_twips', 'left_twips', 'header_twips', 'footer_twips', 'gutter_twips'],
   ColumnV1: ['id', 'ordinal', 'width_twips', 'space_after_twips'],
-  PageGeometryV1: ['width_twips', 'height_twips', 'orientation', 'margins', 'columns', 'column_spacing_twips', 'column_layout', 'column_definitions', 'rtl_gutter'],
+  PageGeometryV1: ['width_twips', 'height_twips', 'orientation', 'margins', 'columns', 'column_spacing_twips', 'column_layout', 'column_definitions', 'rtl_gutter', 'column_separator'],
   SectionV1: ['id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
   CommentV1: ['id', 'native_comment_id', 'author', 'initials', 'created_at', 'anchor', 'body_story_id'],
   UnsupportedCapabilityV1: ['id', 'code', 'capability', 'scope_id', 'anchor', 'preservation', 'message'],
@@ -1017,6 +1019,7 @@ function validateSection(value: unknown, path: string, issues: NativeDocxValidat
     const columnLayout = enumValue(page.column_layout, `${path}/page/column_layout`, ['equal-width', 'explicit'], issues)
     // Absent means the Word default (left gutter); only an active right gutter is recorded.
     if (page.rtl_gutter !== undefined && page.rtl_gutter !== true) add(issues, 'INVALID_VALUE', `${path}/page/rtl_gutter`, 'a right binding gutter is recorded only when active')
+    if (page.column_separator !== undefined && page.column_separator !== true) add(issues, 'INVALID_VALUE', `${path}/page/column_separator`, 'a column separator rule is recorded only when active')
     const columns = array(page.column_definitions, `${path}/page/column_definitions`, issues, 45)
     if (columnCount !== undefined && columns.length !== columnCount) add(issues, 'INVALID_VALUE', `${path}/page/column_definitions`, 'must contain exactly one identity per declared column')
     columns.forEach((value, index) => {

@@ -4550,6 +4550,13 @@ func (extractor *nativeExtractor) extractSection(node *nativeXMLNode, startsAtBl
 				if !valid || separator {
 					extractor.addUnsupported("COLUMN_SEPARATOR_UNSUPPORTED", "sections", id, extractor.mainPart, child, "Column separators require paint geometry that v1 does not model")
 				}
+				// The rule is recorded only when the attribute is lexically
+				// valid and on. An invalid value states nothing exactly, so it
+				// keeps the refusal and records no rule: a tier that paints the
+				// rule must never paint one this model could not read.
+				if valid && separator {
+					section.Page.ColumnSeparator = nativeBool(true)
+				}
 			}
 			children := directNativeChildren(child, extractor.wordNS, "col")
 			if len(children) != len(child.Children) {
