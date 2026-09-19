@@ -7,7 +7,8 @@ save, recent-file history, recovery journal, renderer URL policy, blank
 DOCX/XLSX/PPTX/PDF seeds, the in-app update state machine, and the DOCX PDF
 export host and PDF text-replace host (worker-backed; painters land later). They do not import
 Electron. `electron/main.cjs` is tested with a mock Electron. The start page
-is a React view with recents and create actions; the rest of the renderer,
+is a React view with recents and create actions. The updates dialog talks to
+the host update state machine over `window.injDesktop`. The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
