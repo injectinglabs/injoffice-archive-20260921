@@ -174,24 +174,7 @@ func nativePlaceholderMetadata(node *nativeXMLNode, dialect nativeExtractDialect
 	if err != nil {
 		return nil, err
 	}
-	ph, err := nativeSingleton(properties, dialect.presentation, "ph", false)
-	if err != nil || ph == nil {
-		return nil, err
-	}
-	identity := &nativePlaceholderIdentity{}
-	identity.kind, _ = exactNativeAttr(ph, "", "type")
-	if value, ok := exactNativeAttr(ph, "", "idx"); ok {
-		identity.index, err = parseCanonicalNativeInt(value, 0, 4294967295)
-		if err != nil {
-			return identity, err
-		}
-	}
-	// ST_PlaceholderSize/orient/hasCustomPrompt identify the slot; they do not
-	// widen title/body inheritance. Unknown leftover markup stays unqualified.
-	if requireOnlyNativeAttrs(properties) != nil || requireOnlyNativeChildren(properties, xml.Name{Space: dialect.presentation, Local: "ph"}) != nil || requireOnlyNativeAttrs(ph, xml.Name{Local: "type"}, xml.Name{Local: "idx"}, xml.Name{Local: "sz"}, xml.Name{Local: "orient"}, xml.Name{Local: "hasCustomPrompt"}) != nil || requireOnlyNativeChildren(ph) != nil {
-		return identity, unsupportedNativePlaceholder("placeholder metadata is outside the exact subset")
-	}
-	return identity, nil
+	return nativePlaceholderIdentityFromProperties(properties, dialect)
 }
 
 func nativeMatchingPlaceholder(root *nativeXMLNode, wanted nativePlaceholderIdentity, matchIndex bool, dialect nativeExtractDialect) (*nativeXMLNode, *nativePlaceholderIdentity, error) {
