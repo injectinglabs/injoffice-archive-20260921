@@ -3819,6 +3819,29 @@ describe('approximate DrawingML shapes', () => {
     }
   }, 20000)
 
+  it('paints a default-adjust arrow preset as one closed polygon at its ECMA-376 preset guides', async () => {
+    // 914400 x 457200 EMU is 72000 x 36000 millipoints, so ss is the height:
+    // the shaft half-width is ss/4 = 9000 and the head depth ss/2 = 18000.
+    const { input, eligibility, shapes } = shapeInput({ placement: 'anchored', preset: 'downArrow', fill_rgb: 'D9D9D9', line: { rgb: '243F60', width_emu: 25400, dash: 'solid' }, page_anchor: pageAnchor(), wrap: 'none' })
+    const paint = await renderNativeDocxApproximatePagePreviewV1(input, eligibility, outlineProvider(input), { drawingShapes: shapes })
+    expect(paint.status).toBe('painted')
+    const polygon = paint.pages[0]!.commands.find(c => c.kind === 'paint_shape_path')
+    expect(polygon).toMatchObject({ shape_id: 'approximate-drawing-shape:test:1', fill_rgb: 'D9D9D9', fill_rule: 'nonzero', stroke_rgb: '243F60', stroke_width_millipoints: 2000 })
+    // Placed at x 72000, y 144000; hc = 108000, so x1 = 99000, x2 = 117000 and y1 = 144000 + 18000.
+    expect(polygon!.kind === 'paint_shape_path' && polygon!.path).toEqual([
+      { kind: 'move_to', x_millipoints: 99_000, y_millipoints: 144_000 },
+      { kind: 'line_to', x_millipoints: 117_000, y_millipoints: 144_000 },
+      { kind: 'line_to', x_millipoints: 117_000, y_millipoints: 162_000 },
+      { kind: 'line_to', x_millipoints: 144_000, y_millipoints: 162_000 },
+      { kind: 'line_to', x_millipoints: 108_000, y_millipoints: 180_000 },
+      { kind: 'line_to', x_millipoints: 72_000, y_millipoints: 162_000 },
+      { kind: 'line_to', x_millipoints: 99_000, y_millipoints: 162_000 },
+      { kind: 'close_path' },
+    ])
+    expect(paint.pages[0]!.commands.some(c => c.kind === 'fill_table_cell' && c.row_id === 'approximate-drawing-shape:test:1')).toBe(false)
+    expect(decodeNativeDocxApproximatePagePreviewV1(paint).ok).toBe(true)
+  }, 20000)
+
   it('paints a group shape as its flattened children at their mapped offsets and leaves the strict lane byte-identical', async () => {
     // The sidecar flattens a wpg:wgp into one anchored item per child, each
     // already mapped out of the group's child coordinate space, so both children

@@ -370,6 +370,20 @@ func (context *nativeApproximateShapeContext) describe(paragraphID string, diagn
 	return []NativeApproximateDrawingShapeV1{item}
 }
 
+// nativeApproximatePolygonPresets are the straight-edge prstGeom presets whose
+// ECMA-376 preset geometry default adjust values resolve to one exact closed polygon
+// in the shape's own extent. They are admitted only with an empty a:avLst (the
+// adjust-values refusal below still rejects any authored adjustment), so the
+// preview never interpolates a guide it has not implemented. The painter
+// derives each outline from the same default guides; anything else keeps its
+// unsupported-preset refusal.
+var nativeApproximatePolygonPresets = map[string]bool{
+	"downArrow":  true,
+	"upArrow":    true,
+	"leftArrow":  true,
+	"rightArrow": true,
+}
+
 // describeShape reads one wps:wsp into an item whose WidthEMU/HeightEMU are
 // already its placed extent, and returns the omission reason or "".
 func (context *nativeApproximateShapeContext) describeShape(item *NativeApproximateDrawingShapeV1, shape *nativeXMLNode) string {
@@ -387,7 +401,7 @@ func (context *nativeApproximateShapeContext) describeShape(item *NativeApproxim
 		return "missing-geometry"
 	}
 	preset, _ := nativeUnqualifiedAttr(geometry, "prst")
-	if preset != "rect" && preset != "line" {
+	if preset != "rect" && preset != "line" && !nativeApproximatePolygonPresets[preset] {
 		return "unsupported-preset:" + preset
 	}
 	for _, c := range geometry.Children {
@@ -416,6 +430,17 @@ func (context *nativeApproximateShapeContext) describeShape(item *NativeApproxim
 	}
 	if preset == "rect" && (item.RotationDegrees == 90 || item.RotationDegrees == 270) {
 		item.Notes = append(item.Notes, "quarter-turn rectangle painted as its rotated bounding box")
+	}
+	// A polygon preset is admitted only at its authored extent: this preview
+	// paints the default-adjust outline itself, so a rotation or a flip it would
+	// have to apply to every vertex stays omitted instead of being guessed.
+	if nativeApproximatePolygonPresets[preset] {
+		if item.RotationDegrees != 0 {
+			return "rotation-unsupported"
+		}
+		if item.FlipHorizontal || item.FlipVertical {
+			return "flip-unsupported"
+		}
 	}
 	fill, fillNotes, fillOK := context.shapeFill(spPr, style)
 	if !fillOK {
