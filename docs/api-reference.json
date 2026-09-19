@@ -14015,6 +14015,11 @@
               "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
             },
             {
+              "name": "decodeNativeConditionalScaleFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalScaleFillPreviewsV1(input: unknown): NativeConditionalScaleFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeRichTextPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
@@ -14393,6 +14398,26 @@
               "name": "NativeConditionalOperatorV1",
               "kind": "type",
               "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
+            },
+            {
+              "name": "NativeConditionalScaleFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalScaleFillCellV1"
+            },
+            {
+              "name": "nativeConditionalScaleFillPreview",
+              "kind": "function",
+              "signature": "export declare function nativeConditionalScaleFillPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number): string | undefined"
+            },
+            {
+              "name": "NativeConditionalScaleFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalScaleFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalScaleFillRangeV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalScaleFillRangeV1"
             },
             {
               "name": "NativeDrawingAnchorV1",
@@ -15686,6 +15711,11 @@
               "signature": "export declare function decodeNativeConditionalFillPreviewsV1(input: unknown): NativeConditionalFillPreviewV1[]"
             },
             {
+              "name": "decodeNativeConditionalScaleFillPreviewsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeConditionalScaleFillPreviewsV1(input: unknown): NativeConditionalScaleFillPreviewV1[]"
+            },
+            {
               "name": "decodeNativeRichTextPreviewV1",
               "kind": "function",
               "signature": "export declare function decodeNativeRichTextPreviewV1(input: unknown): NativeRichTextPreviewV1"
@@ -15814,6 +15844,26 @@
               "name": "NativeConditionalOperatorV1",
               "kind": "type",
               "signature": "export type NativeConditionalOperatorV1 = 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'"
+            },
+            {
+              "name": "NativeConditionalScaleFillCellV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalScaleFillCellV1"
+            },
+            {
+              "name": "nativeConditionalScaleFillPreview",
+              "kind": "function",
+              "signature": "export declare function nativeConditionalScaleFillPreview(objects: NativeWorkbookObjectsV1, revision: string, sheetPart: string, row: number, column: number): string | undefined"
+            },
+            {
+              "name": "NativeConditionalScaleFillPreviewV1",
+              "kind": "type",
+              "signature": "export type NativeConditionalScaleFillPreviewV1 ="
+            },
+            {
+              "name": "NativeConditionalScaleFillRangeV1",
+              "kind": "type",
+              "signature": "export interface NativeConditionalScaleFillRangeV1"
             },
             {
               "name": "NativeDrawingAnchorV1",
