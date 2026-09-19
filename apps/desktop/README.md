@@ -21,7 +21,8 @@ replaces the start page when open/create fails closed. `.docm` is openable
 zip OOXML (VBA is not executed); blank create stays `.docx`. Hidden apply
 is an 80ms debounce that skips IME composition; OfficeEditor wiring follows.
 CSV/TSV parse and encode keep fields as literal UTF-8 text. Word/character
-counts are per paragraph so a keystroke does not recount the document.
+counts are per paragraph so a keystroke does not recount the document. PDF
+find-in-document is sequential with page and hit caps.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
