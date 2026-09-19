@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "521b28d4abd34e68b898536d4a79057ef418a603dcd9853b1c8bdecd131060d6" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -292,6 +292,28 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "passthrough",
       "provenance",
       "transform"
+    ]
+  },
+  "NativeLinearGradient": {
+    "schemaName": "linearGradient",
+    "properties": [
+      "angle",
+      "stops"
+    ],
+    "required": [
+      "angle",
+      "stops"
+    ]
+  },
+  "NativeLinearGradientStop": {
+    "schemaName": "linearGradientStop",
+    "properties": [
+      "color",
+      "positionPct"
+    ],
+    "required": [
+      "color",
+      "positionPct"
     ]
   },
   "NativeLiteralArea": {
@@ -765,6 +787,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "schemaName": "slide",
     "properties": [
       "background",
+      "backgroundGradient",
       "compatibility",
       "elements",
       "id",
@@ -1741,6 +1764,51 @@ export const PPTX_NATIVE_SCHEMA = {
           "type": "integer",
           "minimum": 0,
           "maximum": 1000000
+        }
+      }
+    },
+    "linearGradientStop": {
+      "x-binding-name": "NativeLinearGradientStop",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "positionPct",
+        "color"
+      ],
+      "description": "One a:gs stop. positionPct is the DrawingML ST_PositiveFixedPercentage in 1/1000 of a percent.",
+      "properties": {
+        "positionPct": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "linearGradient": {
+      "x-binding-name": "NativeLinearGradient",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "angle",
+        "stops"
+      ],
+      "description": "A DrawingML a:gradFill with an a:lin direction. angle is ST_PositiveFixedAngle in 1/60000 of a degree, clockwise from the positive x axis. Stops are ordered by strictly increasing position.",
+      "properties": {
+        "angle": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 21599999
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/linearGradientStop"
+          }
         }
       }
     },
@@ -3756,6 +3824,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "background": {
           "$ref": "#/$defs/color"
+        },
+        "backgroundGradient": {
+          "$ref": "#/$defs/linearGradient"
         },
         "transition": {
           "$ref": "#/$defs/transition"

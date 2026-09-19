@@ -398,10 +398,28 @@ export type NativeElement =
   | NativeChartElement
   | NativeGroupElement
 
+/** One a:gs stop; `positionPct` is 1/1000 of a percent along the gradient axis. */
+export interface NativeLinearGradientStop {
+  positionPct: number
+  color: string
+}
+
+/**
+ * A DrawingML a:gradFill with an a:lin direction. `angle` is 1/60000 of a
+ * degree, clockwise from the positive x axis; stops are ordered by strictly
+ * increasing position.
+ */
+export interface NativeLinearGradient {
+  angle: number
+  stops: NativeLinearGradientStop[]
+}
+
 export interface NativeSlide {
   id: string
   provenance: NativeProvenance
   background?: string
+  /** Set instead of `background` when the slide background is a modeled linear gradient. */
+  backgroundGradient?: NativeLinearGradient
   transition?: NativeTransition
   elements: NativeElement[]
   source?: NativeSourceAnchor

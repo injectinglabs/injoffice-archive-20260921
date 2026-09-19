@@ -119,8 +119,9 @@ func TestResolveNativeInheritedBackground(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			graph := nativeSlideDependencyGraph{layoutRoot: tc.layout, masterRoot: tc.master}
-			if got := resolveNativeInheritedBackground(graph, tc.slide, d, tc.theme); got != tc.want {
-				t.Fatalf("background = %q, want %q", got, tc.want)
+			got := resolveNativeInheritedBackground(graph, tc.slide, d, tc.theme)
+			if got.gradient != nil || got.color != tc.want {
+				t.Fatalf("background = %+v, want %q", got, tc.want)
 			}
 		})
 	}

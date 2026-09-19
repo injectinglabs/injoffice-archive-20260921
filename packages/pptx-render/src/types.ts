@@ -76,6 +76,14 @@ export type RenderPathCommand =
   | { readonly kind: 'close' }
 
 export interface RenderPaint { readonly color: string }
+/** One a:gs stop; `positionPct` is 1/1000 of a percent along the gradient axis. */
+export interface RenderGradientStop { readonly positionPct: number; readonly color: string }
+/**
+ * A DrawingML a:gradFill with an a:lin direction. `angle` is 1/60000 of a
+ * degree, clockwise from the positive x axis, and stops are ordered by
+ * strictly increasing position.
+ */
+export interface RenderLinearGradient { readonly angle: number; readonly stops: readonly RenderGradientStop[] }
 export interface RenderStroke extends RenderPaint {
   readonly widthEmu: number
   /** Required on native shape/connector strokes; legacy table borders omit these fields. */
@@ -327,6 +335,8 @@ export interface SlideRenderTree {
   readonly slideIndex: number
   readonly size: { readonly cx: number; readonly cy: number }
   readonly background: RenderPaint
+  /** Set instead of a flat `background` when the slide's background is a modeled linear gradient. */
+  readonly backgroundGradient?: RenderLinearGradient
   readonly clip: RenderClip
   readonly nodes: readonly RenderNode[]
   readonly assets: readonly RenderAsset[]

@@ -80,11 +80,11 @@ func TestExtractNativePPTXThemeFontAndColorGapsRemainObjectRefusals(t *testing.T
 			},
 		},
 		{
-			name: "unmodeled-hue-mod",
+			name: "unmodeled-saturation-offset",
 			mutate: func(parts map[string]string) {
 				parts["relocated/themes/theme.xml"] = nativeExactThemeXML(nsDrawingTransitional)
 				parts["relocated/masters/master.xml"] = nativeExactMasterWithColorMapXML(nsPresentationTransitional)
-				parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<a:srgbClr val="112233"/>`, `<a:schemeClr val="accent1"><a:hueMod val="50000"/></a:schemeClr>`, 1)
+				parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `<a:srgbClr val="112233"/>`, `<a:schemeClr val="accent1"><a:satOff val="20000"/></a:schemeClr>`, 1)
 			},
 		},
 		{
