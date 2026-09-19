@@ -9,5 +9,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test tests/host-files.test.cjs tests/host-security.test.cjs tests/host-recents.test.cjs tests/host-recovery.test.cjs"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
   }
 }
