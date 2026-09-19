@@ -27,7 +27,8 @@ are data, never commands; unknown fields fail closed. Worksheet add/delete
 reasons are predicted before a destructive native mutation. Presentation
 mode owns its own slide index; Escape exits. CSV/TSV sheet export uses
 literal values or formula source; native import is a follow-up. Chart
-preview geometry finite-normalizes values and caps series/categories.
+preview geometry finite-normalizes values and caps series/categories. Slide
+shape presets map to SVG ellipse/polygon/rect without a canvas.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
