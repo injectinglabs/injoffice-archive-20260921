@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "9c16b6909d2c5636c61cdcdb0ab612178aba93ceb089091617215a03d679afb0"
+const NativePPTXSchemaSHA256 = "ea819aa05cf0ef3b9f693b195c42473d5dc35ce5f20edf273500a87464d50e57"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -47,7 +47,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"type"},
 	},
 	"NativeAsset": {
-		Properties: []string{"byteLength", "contentType", "dataBase64", "id", "passthrough", "provenance", "sha256", "source"},
+		Properties: []string{"byteLength", "contentType", "dataBase64", "id", "passthrough", "provenance", "sha256", "source", "sourceByteLength", "sourceTransform"},
 		Required:   []string{"byteLength", "contentType", "id", "passthrough", "provenance", "sha256"},
 	},
 	"NativeChartAxisLabels": {
@@ -362,3 +362,7 @@ const NativeDirectionLeft NativeDirection = "left"
 const NativeDirectionRight NativeDirection = "right"
 const NativeDirectionUp NativeDirection = "up"
 const NativeDirectionDown NativeDirection = "down"
+
+type NativeAssetSourceTransform string
+
+const NativeAssetSourceTransformWmfRasterV1 NativeAssetSourceTransform = "wmfRasterV1"

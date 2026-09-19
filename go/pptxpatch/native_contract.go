@@ -83,15 +83,26 @@ type NativeCompatibility struct {
 // Parsed source-only assets omit DataBase64 and require an asset passthrough
 // capability; Source.PartName is an integrity anchor, not authorization for a
 // gateway to read or serve that package part.
+//
+// SourceTransform names a deterministic, in-process derivation the host must
+// apply to the source part before serving the asset, for a format the preview
+// contract cannot carry. When it is absent the asset is its part byte for byte
+// and SHA256 equals Source.FingerprintSHA256. When it is present the two
+// differ on purpose: Source.FingerprintSHA256 with SourceByteLength pin the
+// part the host reads, and SHA256 with ByteLength pin the bytes the derivation
+// must produce from it. Both ends are still fixed by digest, so the host never
+// serves bytes this deck did not state.
 type NativeAsset struct {
-	ID          string                 `json:"id"`
-	Provenance  NativeProvenance       `json:"provenance"`
-	ContentType string                 `json:"contentType"`
-	SHA256      string                 `json:"sha256"`
-	ByteLength  *int64                 `json:"byteLength"`
-	DataBase64  *string                `json:"dataBase64,omitempty"`
-	Source      *NativeSourceAnchor    `json:"source,omitempty"`
-	Passthrough []NativePassthroughRef `json:"passthrough"`
+	ID               string                      `json:"id"`
+	Provenance       NativeProvenance            `json:"provenance"`
+	ContentType      string                      `json:"contentType"`
+	SHA256           string                      `json:"sha256"`
+	ByteLength       *int64                      `json:"byteLength"`
+	DataBase64       *string                     `json:"dataBase64,omitempty"`
+	Source           *NativeSourceAnchor         `json:"source,omitempty"`
+	SourceTransform  *NativeAssetSourceTransform `json:"sourceTransform,omitempty"`
+	SourceByteLength *int64                      `json:"sourceByteLength,omitempty"`
+	Passthrough      []NativePassthroughRef      `json:"passthrough"`
 }
 
 type NativeTextRun struct {
@@ -173,11 +184,11 @@ type NativeArrowEnd struct {
 }
 
 type NativeStroke struct {
-	Color      string            `json:"color"`
-	WidthEMU   *int64            `json:"widthEmu"`
-	Cap        *NativeStrokeCap  `json:"cap,omitempty"`
-	Join       *NativeStrokeJoin `json:"join,omitempty"`
-	Dash       *NativeStrokeDash `json:"dash,omitempty"`
+	Color    string            `json:"color"`
+	WidthEMU *int64            `json:"widthEmu"`
+	Cap      *NativeStrokeCap  `json:"cap,omitempty"`
+	Join     *NativeStrokeJoin `json:"join,omitempty"`
+	Dash     *NativeStrokeDash `json:"dash,omitempty"`
 	// Absent is the ST_CompoundLine default "sng": one line of the full width.
 	Compound   *NativeStrokeCompound `json:"compound,omitempty"`
 	MiterLimit *int64                `json:"miterLimit,omitempty"`

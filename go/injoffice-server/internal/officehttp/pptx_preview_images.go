@@ -67,14 +67,31 @@ func attachPPTXPreviewImages(ctx context.Context, data []byte, deck *pptxpatch.N
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if asset.Source == nil || asset.Source.FingerprintSHA256 != asset.SHA256 || asset.ByteLength == nil || *asset.ByteLength < 1 || *asset.ByteLength > 8*1024*1024 {
+		// A derived asset states two digests on purpose: the part the host
+		// reads, and the bytes a named in-process derivation must produce from
+		// it. Everything else states one part and serves it unchanged.
+		derived := asset.SourceTransform != nil
+		sourceLength := asset.ByteLength
+		if derived {
+			sourceLength = asset.SourceByteLength
+		}
+		if asset.Source == nil || asset.ByteLength == nil || *asset.ByteLength < 1 || *asset.ByteLength > 8*1024*1024 {
 			return errors.New("preview image source identity or byte budget is invalid")
+		}
+		if sourceLength == nil || *sourceLength < 1 || *sourceLength > 8*1024*1024 {
+			return errors.New("preview image source identity or byte budget is invalid")
+		}
+		if !derived && asset.Source.FingerprintSHA256 != asset.SHA256 {
+			return errors.New("preview image source identity or byte budget is invalid")
+		}
+		if derived && *asset.SourceTransform != pptxpatch.NativeAssetSourceTransformWmfRasterV1 {
+			return errors.New("preview image states an unknown source transform")
 		}
 		if asset.ContentType != "image/png" && asset.ContentType != "image/jpeg" {
 			return errors.New("native slide preview supports bounded PNG/JFIF images only")
 		}
 		part := parts[asset.Source.PartName]
-		if part == nil || part.UncompressedSize64 != uint64(*asset.ByteLength) {
+		if part == nil || part.UncompressedSize64 != uint64(*sourceLength) {
 			return errors.New("preview image does not match its source part")
 		}
 		reader, err := part.Open()
@@ -85,6 +102,20 @@ func attachPPTXPreviewImages(ctx context.Context, data []byte, deck *pptxpatch.N
 		reader.Close()
 		if readErr != nil {
 			return readErr
+		}
+		if int64(len(content)) != *sourceLength || fmt.Sprintf("%x", sha256.Sum256(content)) != asset.Source.FingerprintSHA256 {
+			return errors.New("preview image digest or cumulative byte budget failed")
+		}
+		if derived {
+			// The derivation runs here, on bytes this package just verified,
+			// and its result must be the bytes the deck already stated. A
+			// mismatch means the deck and this build disagree about what the
+			// part decodes to, which is a refusal, never a silent substitution.
+			rastered, rasterErr := pptxpatch.RasterizeNativeMetafilePNG(content)
+			if rasterErr != nil {
+				return errors.New("preview image source transform refused its source part")
+			}
+			content = rastered
 		}
 		total += len(content)
 		if total > 8*1024*1024 || int64(len(content)) != *asset.ByteLength || fmt.Sprintf("%x", sha256.Sum256(content)) != asset.SHA256 {
