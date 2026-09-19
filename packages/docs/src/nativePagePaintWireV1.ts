@@ -47,6 +47,7 @@ export const DOCX_PAGE_PAINT_V1_BINDING_FIELDS = {
   HighlightCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
   UnderlineCommandV1: ['kind', 'id', 'line_id', 'fragment_id', 'source_id', 'stroke_index', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   CellFillCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'x_millipoints', 'y_millipoints', 'width_millipoints', 'height_millipoints', 'fill_rgb'],
+  ShapePathCommandV1: ['kind', 'id', 'shape_id', 'path', 'fill_rule', 'fill_rgb', 'stroke_rgb', 'stroke_width_millipoints'],
   BorderCommandV1: ['kind', 'id', 'table_id', 'row_id', 'cell_id', 'edge', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   NoteSeparatorCommandV1: ['kind', 'id', 'line_id', 'story_id', 'x1_millipoints', 'y1_millipoints', 'x2_millipoints', 'y2_millipoints', 'width_millipoints', 'stroke_rgb'],
   ImageCropV1: ['left', 'top', 'right', 'bottom', 'unit'],
@@ -540,14 +541,31 @@ export function decodeNativeDocxPagePaintV1(value: unknown): DecodeNativeDocxPag
         : kind === 'paint_inline_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ImageCommandV1
         : kind === 'paint_floating_image' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.FloatingImageCommandV1
           : kind === 'fill_table_cell' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.CellFillCommandV1
+            : kind === 'paint_shape_path' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.ShapePathCommandV1
             : kind === 'stroke_table_border' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.BorderCommandV1
               : kind === 'stroke_note_separator' ? DOCX_PAGE_PAINT_V1_BINDING_FIELDS.NoteSeparatorCommandV1 : undefined
-      if (!fields) { add(issues, 'INVALID_VALUE', `${commandPath}/kind`, 'must be fill_glyph_path, paint_inline_image, fill_table_cell, stroke_table_border, or stroke_note_separator'); return }
+      if (!fields) { add(issues, 'INVALID_VALUE', `${commandPath}/kind`, 'must be fill_glyph_path, paint_inline_image, fill_table_cell, paint_shape_path, stroke_table_border, or stroke_note_separator'); return }
       const command = exactObject(commandValue, commandPath, fields, issues)
       if (!command) return
       const commandID = stringValue(command.id, `${commandPath}/id`, issues, ID, 1024)
       if (commandID && commandIDs.has(commandID)) add(issues, 'DUPLICATE_ID', `${commandPath}/id`, 'paint command id is duplicated')
       if (commandID) commandIDs.add(commandID)
+      if (command.kind === 'paint_shape_path') {
+        stringValue(command.shape_id, `${commandPath}/shape_id`, issues, ID, 1024)
+        if (command.fill_rule !== 'nonzero') add(issues, 'INVALID_VALUE', `${commandPath}/fill_rule`, 'must equal nonzero')
+        if (command.fill_rgb !== null) stringValue(command.fill_rgb, `${commandPath}/fill_rgb`, issues, RGB, 6)
+        if (command.stroke_rgb !== null) stringValue(command.stroke_rgb, `${commandPath}/stroke_rgb`, issues, RGB, 6)
+        if (command.stroke_width_millipoints !== null) integer(command.stroke_width_millipoints, `${commandPath}/stroke_width_millipoints`, issues, 1, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)
+        if ((command.stroke_rgb === null) !== (command.stroke_width_millipoints === null)) add(issues, 'INVALID_UNION', commandPath, 'a shape path stroke must carry both its colour and its width')
+        if (command.fill_rgb === null && command.stroke_rgb === null) add(issues, 'INVALID_UNION', commandPath, 'a shape path must fill, stroke, or both')
+        // A shape outline is one closed two-dimensional contour in page
+        // coordinates; it spends the same path budget a glyph outline does.
+        const bounds = validatePaintPath(command.path, `${commandPath}/path`, 'path', issues)
+        state.pathCommands += Array.isArray(command.path) ? command.path.length : 0
+        if (state.pathCommands > DOCX_PAGE_PAINT_LIMITS.maxPathCommands) add(issues, 'LIMIT_EXCEEDED', `${commandPath}/path`, `paint paths exceed ${DOCX_PAGE_PAINT_LIMITS.maxPathCommands} commands`)
+        if (bounds && (bounds.minX < 0 || bounds.minY < 0)) add(issues, 'OUT_OF_RANGE', `${commandPath}/path`, 'shape path must stay inside its page')
+        return
+      }
       if (command.kind === 'fill_table_cell') {
         for (const key of ['table_id', 'row_id', 'cell_id'] as const) stringValue(command[key], `${commandPath}/${key}`, issues)
         for (const key of ['x_millipoints', 'y_millipoints'] as const) integer(command[key], `${commandPath}/${key}`, issues, 0, DOCX_PAGE_PAINT_LIMITS.maxPaintCoordinateMilliPoints)

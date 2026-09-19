@@ -19,7 +19,7 @@ import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.
 import type { NativeDocxShapedLinesV1, NativeDocxLineFragmentV1 } from './nativeShapingLines.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
 import { ID, RGB, preflightWire, paintCommandID, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
-import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPaintPathCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { textboxAnchorLine, type TextboxAnchorContext } from './nativeTextboxAnchorLineV2.js'
@@ -35,10 +35,17 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines, default-adjust arrow polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
+
+/** prstGeom presets the sidecar admits. `rect` and `line` are axis-aligned or
+ * two-point; the rest are the straight-edge polygons whose ECMA-376 preset-geometry
+ * default adjust values resolve without an unimplemented guide, admitted only
+ * with an empty a:avLst and no rotation or flip. */
+export const DOCX_APPROXIMATE_SHAPE_PRESETS = ['rect', 'line', 'downArrow', 'upArrow', 'leftArrow', 'rightArrow'] as const
+export type NativeDocxApproximateShapePresetV1 = (typeof DOCX_APPROXIMATE_SHAPE_PRESETS)[number]
 
 const MAX_SHAPES = 64
 const MAX_TEXTBOX_GLYPHS = 100_000
@@ -69,7 +76,7 @@ export interface NativeDocxApproximateDrawingShapeV1 {
   status: 'supported' | 'omitted'
   reason?: string
   placement?: 'inline' | 'anchored'
-  preset?: 'rect' | 'line'
+  preset?: NativeDocxApproximateShapePresetV1
   width_emu: number
   height_emu: number
   rotation_degrees: number
@@ -130,7 +137,7 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
     // A painted shape must own its run: a w:r that also carries modeled text is
     // omitted by the sidecar (shared-run); a supported item claiming one is forged.
     if (paragraph.runs.some(run => within(run.anchor, item.run_anchor) || within(item.run_anchor, run.anchor))) throw new TypeError('Approximate drawing shape overlaps modeled text')
-    if (item.width_emu <= 0 || item.height_emu <= 0 || (item.placement !== 'inline' && item.placement !== 'anchored') || (item.preset !== 'rect' && item.preset !== 'line')) throw new TypeError('Supported approximate drawing shape requires positive extent, placement and preset')
+    if (item.width_emu <= 0 || item.height_emu <= 0 || (item.placement !== 'inline' && item.placement !== 'anchored') || !DOCX_APPROXIMATE_SHAPE_PRESETS.includes(item.preset as NativeDocxApproximateShapePresetV1)) throw new TypeError('Supported approximate drawing shape requires positive extent, placement and preset')
     if (item.fill_rgb !== undefined && (typeof item.fill_rgb !== 'string' || !RGB.test(item.fill_rgb))) throw new TypeError('Approximate drawing shape fill is not an explicit RGB value')
     if (item.line !== undefined && (!record(item.line) || !exactKeys(item.line as unknown as Record<string, unknown>, ['rgb', 'width_emu', 'dash']) || typeof item.line.rgb !== 'string' || !RGB.test(item.line.rgb) || !safeNonnegative(item.line.width_emu, 12_700_000) || item.line.width_emu <= 0 || typeof item.line.dash !== 'string' || item.line.dash.length > 32)) throw new TypeError('Approximate drawing shape outline is invalid')
     if (item.placement === 'anchored') {
@@ -377,8 +384,61 @@ function firstBodyLine(pages: NativeDocxPaintPageV1[], paragraphID: string): { p
   return undefined
 }
 
+/** ECMA-376 preset-geometry default-adjust outlines, in the shape's own extent.
+ * `ss` is the shorter side, as the preset guides define it, and adj1 = adj2 =
+ * 50000 throughout, so the shaft half-width reduces to ss/4 and the head depth
+ * to ss/2. Vertices stay fractional here and round once, at the page boundary. */
+function presetPolygonPoints(preset: NativeDocxApproximateShapePresetV1, width: number, height: number): Array<[number, number]> | undefined {
+  const ss = Math.min(width, height)
+  const hc = width / 2, vc = height / 2, shaft = ss / 4, head = ss / 2
+  switch (preset) {
+    case 'downArrow': {
+      const x1 = hc - shaft, x2 = hc + shaft, y1 = height - head
+      return [[x1, 0], [x2, 0], [x2, y1], [width, y1], [hc, height], [0, y1], [x1, y1]]
+    }
+    case 'upArrow': {
+      const x1 = hc - shaft, x2 = hc + shaft, y1 = head
+      return [[0, y1], [hc, 0], [width, y1], [x2, y1], [x2, height], [x1, height], [x1, y1]]
+    }
+    case 'rightArrow': {
+      const y1 = vc - shaft, y2 = vc + shaft, x1 = width - head
+      return [[0, y1], [x1, y1], [x1, 0], [width, vc], [x1, height], [x1, y2], [0, y2]]
+    }
+    case 'leftArrow': {
+      const y1 = vc - shaft, y2 = vc + shaft, x1 = head
+      return [[0, vc], [x1, 0], [x1, y1], [width, y1], [width, y2], [x1, y2], [x1, height]]
+    }
+    default: return undefined
+  }
+}
+
+/** One closed polygon primitive for a preset whose edges a cell fill and the
+ * axis-aligned border primitive cannot express. Vertices are placed absolutely
+ * and clamped to the page, exactly as the rectangle branch clamps its edges, so
+ * a shape that hangs off the page keeps a bounded on-page contour. */
+function polygonCommands(entry: PlacedShape, points: Array<[number, number]>): NativeDocxPagePaintCommandV1[] {
+  const { shape, page } = entry
+  const maxX = page.width_millipoints, maxY = page.height_millipoints
+  const placed = points.map(([px, py]) => [clampCoordinate(entry.x + px, maxX), clampCoordinate(entry.y + py, maxY)] as const)
+  const xs = placed.map(([px]) => px), ys = placed.map(([, py]) => py)
+  if (Math.max(...xs) <= Math.min(...xs) || Math.max(...ys) <= Math.min(...ys)) return []
+  if (shape.fill_rgb === undefined && !shape.line) return []
+  const path: NativeDocxPaintPathCommandV1[] = [
+    { kind: 'move_to', x_millipoints: placed[0]![0], y_millipoints: placed[0]![1] },
+    ...placed.slice(1).map(([px, py]) => ({ kind: 'line_to' as const, x_millipoints: px, y_millipoints: py })),
+    { kind: 'close_path' },
+  ]
+  return [{
+    kind: 'paint_shape_path', id: `${shape.id}:path`, shape_id: shape.id, path, fill_rule: 'nonzero',
+    fill_rgb: shape.fill_rgb ?? null,
+    stroke_rgb: shape.line ? shape.line.rgb : null,
+    stroke_width_millipoints: shape.line ? Math.max(1, toMillipoints(shape.line.width_emu)) : null,
+  }]
+}
+
 /** Fill and stroke primitives clipped to the page. Quarter-turn rectangles
- * swap their extent; line presets follow flips and rotation about the center. */
+ * swap their extent; line presets follow flips and rotation about the center;
+ * polygon presets paint one closed default-adjust contour. */
 function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
   const { shape, page } = entry
   const maxX = page.width_millipoints, maxY = page.height_millipoints
@@ -388,6 +448,8 @@ function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
     ;[width, height] = [height, width]
     x = centerX - width / 2; y = centerY - height / 2
   }
+  const polygon = shape.preset === undefined ? undefined : presetPolygonPoints(shape.preset, width, height)
+  if (polygon) return polygonCommands({ ...entry, x, y, width, height }, polygon)
   const commands: NativeDocxPagePaintCommandV1[] = []
   const strokeWidth = shape.line ? Math.max(1, toMillipoints(shape.line.width_emu)) : 0
   if (shape.preset === 'rect') {
@@ -433,7 +495,7 @@ function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePain
   for (const command of page.commands) {
     if (removed.has(command.id)) continue
     if (command.kind === 'paint_floating_image') (command.layer === 'behind' ? behindFloats : frontFloats).push(command)
-    else if (command.kind === 'fill_table_cell') fills.push(command)
+    else if (command.kind === 'fill_table_cell' || command.kind === 'paint_shape_path') fills.push(command)
     else if (command.kind === 'stroke_table_border') borders.push(command)
     else byID.set(command.id, command)
   }

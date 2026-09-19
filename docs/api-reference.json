@@ -3581,7 +3581,7 @@
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING",
               "kind": "const",
-              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.\""
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines, default-adjust arrow polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.\""
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL",
@@ -4771,7 +4771,7 @@
             {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxPaintShapePathCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintCompletedV1",
@@ -4947,6 +4947,11 @@
               "name": "NativeDocxPaintPathCommandV1",
               "kind": "type",
               "signature": "export type NativeDocxPaintPathCommandV1 ="
+            },
+            {
+              "name": "NativeDocxPaintShapePathCommandV1",
+              "kind": "type",
+              "signature": "export interface NativeDocxPaintShapePathCommandV1"
             },
             {
               "name": "NativeDocxParagraphPropertiesV1",
@@ -6643,7 +6648,7 @@
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING",
               "kind": "const",
-              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.\""
+              "signature": "export declare const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING: \"docx.approximate-drawing-shape-preview: DrawingML rectangles, lines, default-adjust arrow polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.\""
             },
             {
               "name": "DOCX_APPROXIMATE_DRAWING_SHAPES_PROTOCOL",
@@ -7469,7 +7474,7 @@
             {
               "name": "NativeDocxPagePaintCommandV1",
               "kind": "type",
-              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1"
+              "signature": "export type NativeDocxPagePaintCommandV1 = NativeDocxFillGlyphPathCommandV1 | NativeDocxFillTextHighlightCommandV1 | NativeDocxStrokeTextUnderlineCommandV1 | NativeDocxFillTableCellCommandV1 | NativeDocxPaintShapePathCommandV1 | NativeDocxStrokeTableBorderCommandV1 | NativeDocxStrokeNoteSeparatorCommandV1 | NativeDocxPaintInlineImageCommandV1 | NativeDocxPaintFloatingImageCommandV1"
             },
             {
               "name": "NativeDocxPagePaintV1",
