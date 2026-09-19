@@ -1,0 +1,21 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+const {createHash}=require('node:crypto');
+const {exportDocxPdf,cancelDocxPdf}=require('../electron/docx-pdf-service.cjs');
+test('document export service validates revisions, serializes, cancels and recovers after timeout or bad output',async t=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'injoffice-docx-pdf-service-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+ const workerPath=path.join(directory,'worker.cjs');
+ await fs.writeFile(workerPath,`const {parentPort,workerData}=require('node:worker_threads');const mode=Buffer.from(workerData.bytes).toString();parentPort.postMessage({progress:'layout'});if(mode==='hang')setInterval(()=>{},1000);else parentPort.postMessage({bytes:Buffer.from(mode==='bad'?'bad':'%PDF-test')});`);
+ const input=(mode,id=mode)=>{const bytes=Buffer.from(mode);return{requestId:id,bytes,revision:'sha256:'+createHash('sha256').update(bytes).digest('hex')}};
+ await assert.rejects(exportDocxPdf({...input('okay'),revision:'sha256:bad'},{workerPath}),/revision/);
+ const pending=exportDocxPdf(input('hang'),{workerPath});
+ await assert.rejects(exportDocxPdf(input('okay'),{workerPath}),/Another/);
+ assert.equal(cancelDocxPdf('different'),false);assert.equal(cancelDocxPdf('hang'),true);await assert.rejects(pending,/canceled/);
+ await assert.rejects(exportDocxPdf(input('hang'),{workerPath,timeoutMs:25}),/exceeded/);
+ await assert.rejects(exportDocxPdf(input('bad'),{workerPath}),/invalid output/);
+ const stages=[];const bytes=await exportDocxPdf(input('okay'),{workerPath,onProgress:stage=>stages.push(stage)});
+ assert.equal(Buffer.from(bytes).toString(),'%PDF-test');assert.deepEqual(stages,['layout']);assert.equal(cancelDocxPdf('okay'),false);
+});
