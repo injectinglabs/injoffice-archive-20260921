@@ -107,7 +107,11 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 		return NativeElement{}, err
 	}
 
-	objectID, name, err := validateNativeAutoShapeNonVisual(nonVisual, dialect, &gaps)
+	var inherited *nativeInheritedShapeFrame
+	if gaps.approximate {
+		inherited = extractor.inheritedAutoShapeFrame(node, dialect)
+	}
+	objectID, name, err := validateNativeAutoShapeNonVisual(nonVisual, dialect, inherited, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -120,7 +124,7 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			paintProperties = resolved
 		}
 	}
-	transform, preset, geometry, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, &gaps)
+	transform, preset, geometry, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, inherited, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -342,7 +346,7 @@ func isNativeDuplicateSingleton(err error, target *nativeDuplicateSingletonError
 	return false
 }
 
-func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativeShapeGapSet) (string, string, error) {
+func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtractDialect, inherited *nativeInheritedShapeFrame, gaps *nativeShapeGapSet) (string, string, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.autoshape-nonvisual-unavailable", "shape nonvisual metadata is not fully modeled in native PPTX v1", false)
 	}
@@ -388,12 +392,19 @@ func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtract
 		}
 	}
 	if err := requireEmptyNativeElement(nvPr); err != nil {
-		gaps.add("pptx.autoshape-inheritance-unavailable", "shape placeholder or inherited nonvisual properties are not resolved by native PPTX v1", true)
+		// The placeholder binding itself paints nothing. Once the layout/master
+		// chain behind it has resolved, refusing over the binding would blank a
+		// shape whose paint is fully in hand, so it is disclosed instead.
+		if inherited != nil {
+			gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
+		} else {
+			gaps.add("pptx.autoshape-inheritance-unavailable", "shape placeholder or inherited nonvisual properties are not resolved by native PPTX v1", true)
+		}
 	}
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
+func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, inherited *nativeInheritedShapeFrame, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
 	// p:spPr/@bwMode (ECMA-376 Part 1 §19.3.1.44, ST_BlackWhiteMode) selects how
 	// the shape is rendered when the application is displaying black and white.
 	// "auto" and "clr" both keep the shape's own colors, which is what PowerPoint
@@ -417,9 +428,16 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 			return NativeTransform{}, nil, nil, nil, nil, err
 		}
 	}
-	xfrm, err := nativeSingleton(node, dialect.drawing, "xfrm", true)
+	xfrm, err := nativeSingleton(node, dialect.drawing, "xfrm", false)
 	if err != nil {
 		return NativeTransform{}, nil, nil, nil, nil, err
+	}
+	if xfrm == nil && inherited != nil && inherited.transform != nil {
+		xfrm = inherited.transform
+		gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
+	}
+	if xfrm == nil {
+		return NativeTransform{}, nil, nil, nil, nil, fmt.Errorf("pptxpatch: native extract: missing {%s}xfrm", dialect.drawing)
 	}
 	transform, err := validateNativeAutoShapeTransform(xfrm, dialect, gaps)
 	if err != nil {
@@ -428,7 +446,14 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 	var preset *NativeShapePreset
 	var geometry *NativeEvaluatedGeometry
 	custom := nativeChild(node, dialect.drawing, "custGeom")
-	if custom != nil && nativeChild(node, dialect.drawing, "prstGeom") == nil {
+	if custom == nil && nativeChild(node, dialect.drawing, "prstGeom") == nil && inherited != nil {
+		// resolveNativePlaceholderPreview has already qualified the chain's
+		// geometry: a text placeholder inherits the unadjusted rectangle it
+		// validates, so the frame is the rectangle PowerPoint paints.
+		rect := NativeShapePresetRect
+		preset = &rect
+		gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
+	} else if custom != nil && nativeChild(node, dialect.drawing, "prstGeom") == nil {
 		geometry, err = evaluateNativeCustomGeometry(custom, dialect.drawing, *transform.Cx, *transform.Cy)
 		if err != nil {
 			gaps.add("pptx.autoshape-geometry-unavailable", "custom geometry is outside the evaluated profile: "+err.Error(), true)
@@ -452,7 +477,13 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 			}
 		}
 	}
-	fill := validateNativeAutoShapeFill(node, dialect, theme, gaps)
+	var fill *string
+	if inherited != nil && !nativeShapeDeclaresFill(node, dialect) {
+		fill = inherited.fill
+		gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
+	} else {
+		fill = validateNativeAutoShapeFill(node, dialect, theme, gaps)
+	}
 	if geometry != nil && fill != nil {
 		for _, path := range geometry.Paths {
 			if path.FillMode != "norm" && path.FillMode != "none" {
@@ -461,9 +492,15 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 			}
 		}
 	}
-	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, false, gaps)
-	if err != nil {
-		return NativeTransform{}, nil, nil, nil, nil, err
+	var stroke *NativeStroke
+	if inherited != nil && nativeChild(node, dialect.drawing, "ln") == nil {
+		stroke = inherited.stroke
+		gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
+	} else {
+		stroke, err = validateNativeAutoShapeLine(node, dialect, theme, false, gaps)
+		if err != nil {
+			return NativeTransform{}, nil, nil, nil, nil, err
+		}
 	}
 	for _, name := range []string{"effectLst", "effectDag", "scene3d", "sp3d", "extLst"} {
 		child, _ := nativeSingleton(node, dialect.drawing, name, false)
