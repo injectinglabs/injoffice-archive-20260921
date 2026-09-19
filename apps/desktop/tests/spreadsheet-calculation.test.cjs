@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -127,4 +128,29 @@ test('createSpreadsheetCalculator surfaces worker errors and cancel', async t =>
   const pending = cancelled.calculate(input);
   cancelled.terminate();
   await assert.rejects(pending, /cancelled/);
+});
+
+test('calculation worker parses without the missing engine and reports unavailability', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/spreadsheetCalculation.worker.ts'), 'utf8');
+  assert.doesNotMatch(source, /localWorkbookCalculation/);
+  const messages = [];
+  const self = { postMessage(data) { messages.push(data); } };
+  new Function('self', source)(self);
+  self.onmessage({ data: { revision: 'rev-1', sheets: [] } });
+  assert.deepEqual(messages, [{ error: 'Local workbook calculation engine is not available.' }]);
+});
+
+test('createSpreadsheetCalculator timeout terminates the worker and rejects', async t => {
+  const { createSpreadsheetCalculator } = await loadCalc();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const workers = installWorker(t, () => {});
+  const calculator = createSpreadsheetCalculator({ timeoutMs: 25 });
+  t.after(() => calculator.terminate());
+  const pending = calculator.calculate({ revision: 'rev-1', sheets: [{ id: '1', name: 'Sheet1', cells: [] }] });
+  assert.equal(workers[0].terminated, false);
+  t.mock.timers.tick(24);
+  assert.equal(workers[0].terminated, false);
+  t.mock.timers.tick(1);
+  await assert.rejects(pending, /exceeded 30 seconds/);
+  assert.equal(workers[0].terminated, true);
 });

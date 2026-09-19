@@ -24,7 +24,7 @@ export function calculationCache(workbook: NativeWorkbookV2, result: LocalCalcul
   if (result.sourceRevision !== workbook.revision) throw new Error('Calculation belongs to an older workbook revision.');
   return { engine: result.engine, cells: result.cells.map(cell => ({ sheet_id: cell.sheetId, cell: { row: cell.row, column: cell.column }, expected_formula: cell.formula, value: cell.status === 'calculated' || cell.status === 'error' ? cell.value ?? null : null })) };
 }
-export function createSpreadsheetCalculator() {
+export function createSpreadsheetCalculator({ timeoutMs = 30000 }: { timeoutMs?: number } = {}) {
   let worker: Worker | null = null;
   let pending: { reject(reason: Error): void; timer: ReturnType<typeof setTimeout> } | null = null;
   function terminate() { worker?.terminate(); worker = null; if (pending) { clearTimeout(pending.timer); pending.reject(new Error('Local calculation cancelled.')); pending = null; } }
@@ -34,9 +34,23 @@ export function createSpreadsheetCalculator() {
       worker ??= new Worker(new URL('./spreadsheetCalculation.worker.ts', import.meta.url), { type: 'module' });
       return new Promise((resolve, reject) => {
         const finish = () => { if (pending) clearTimeout(pending.timer); pending = null; };
-        pending = { reject, timer: setTimeout(() => { finish(); worker?.terminate(); worker = null; reject(new Error('Local calculation exceeded 30 seconds. Stored results remain unverified.')); }, 30000) };
-        worker!.onmessage = event => { finish(); if (event.data.error) reject(new Error(event.data.error)); else resolve(event.data.result); };
-        worker!.onerror = event => { finish(); worker?.terminate(); worker = null; reject(new Error(event.message || 'Local calculation worker failed.')); };
+        pending = { reject, timer: setTimeout(() => { finish(); worker?.terminate(); worker = null; reject(new Error('Local calculation exceeded 30 seconds. Stored results remain unverified.')); }, timeoutMs) };
+        worker!.onmessage = event => {
+          let error: unknown, result: unknown;
+          try { const data = event.data; error = data && typeof data === 'object' ? data.error : undefined; result = data && typeof data === 'object' ? data.result : undefined; }
+          catch (reason) { finish(); reject(reason instanceof Error ? reason : new Error(String(reason))); return; }
+          finish();
+          if (error) reject(new Error(String(error)));
+          else if (result) resolve(result);
+          else reject(new Error('Local calculation worker returned no result.'));
+        };
+        worker!.onerror = event => {
+          const message = event.message || 'Local calculation worker failed.';
+          finish();
+          worker?.terminate();
+          worker = null;
+          reject(new Error(message));
+        };
         worker!.postMessage(input);
       });
     }, terminate,
