@@ -43,7 +43,16 @@ function document() {
 
 test('DocumentPreview paints editable text, reports IME composition, and Escape cancels', async () => {
   const DocumentPreview = await loadPreview();
-  global.window = { ...(global.window || {}), getSelection: () => null, document: { createTextNode: () => ({}) } };
+  global.window = {
+    getSelection: () => null,
+    document: {
+      createTextNode: () => ({}),
+      createRange: () => ({}),
+      caretRangeFromPoint: () => null,
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
   const composing = [];
   const cancelled = [];
   let view;
