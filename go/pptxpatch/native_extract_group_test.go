@@ -887,3 +887,101 @@ func (transaction *nativeAtomicTestTokenTransaction) RollbackNativePassthroughTo
 	transaction.rolledBack = true
 	transaction.staged = nil
 }
+
+// CT_GroupLocking (ECMA-376 §20.1.2.2.21) holds only editing locks, and
+// PowerPoint writes <a:grpSpLocks/> into p:cNvGrpSpPr whenever shapes are
+// grouped -- often with no attributes at all. Requiring p:cNvGrpSpPr to be
+// empty threw away the whole group for metadata that cannot move a pixel.
+func TestExtractNativePPTXKeepsGroupShapeLocksReadOnly(t *testing.T) {
+	t.Parallel()
+	build := func(locks string) string {
+		return fmt.Sprintf(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Locked Group"/><p:cNvGrpSpPr>%s</p:cNvGrpSpPr><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/><a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/></a:xfrm></p:grpSpPr>%s</p:grpSp>`, locks, nativeGroupRectXML(4, "Leaf", 0, 0, 10, 10))
+	}
+	fixture := func(t *testing.T, group string) []byte {
+		t.Helper()
+		return nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, group+`</p:spTree>`, 1)
+		}})
+	}
+	for name, locks := range map[string]string{
+		"empty":     `<a:grpSpLocks/>`,
+		"noGrp":     `<a:grpSpLocks noGrp="1"/>`,
+		"several":   `<a:grpSpLocks noUngrp="1" noChangeAspect="1" noMove="0"/>`,
+		"everyLock": `<a:grpSpLocks noGrp="1" noUngrp="1" noSelect="1" noRot="1" noChangeAspect="1" noMove="1" noResize="1"/>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			deck, err := ExtractNativePPTX(fixture(t, build(locks)), nativeAtomicTestExtractOptions())
+			if err != nil {
+				t.Fatalf("group locks refused the deck: %v", err)
+			}
+			var group *NativeElement
+			for index := range deck.Slides[0].Elements {
+				if deck.Slides[0].Elements[index].Kind == NativeElementKindGroup {
+					group = &deck.Slides[0].Elements[index]
+				}
+			}
+			if group == nil {
+				t.Fatalf("group locks lost the projection: %#v", deck.Slides[0].Elements)
+			}
+			if len(group.Children) != 1 {
+				t.Fatalf("group projection lost its leaf: %#v", group.Children)
+			}
+			// The locks never travel on the wire, so the group may not be editable.
+			if group.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+				t.Fatalf("a locked group stayed editable: %s", group.Compatibility.Status)
+			}
+			if !nativeDiagnosticsContain(group.Compatibility.Diagnostics, nativeGroupLocksPreservedCode) {
+				t.Fatalf("preserved group locks were not disclosed: %#v", group.Compatibility)
+			}
+			if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+				t.Fatalf("invalid deck: %#v", issues)
+			}
+			// The read-only status is enforced, not merely conventional.
+			for index := range deck.Slides[0].Elements {
+				if deck.Slides[0].Elements[index].Kind == NativeElementKindGroup {
+					deck.Slides[0].Elements[index].Compatibility.Status = NativeCompatibilityStatusEditable
+				}
+			}
+			found := false
+			for _, issue := range ValidateNativePPTX(deck) {
+				if issue.Code == "native.groupLocksPreserved" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("an editable locked group validated")
+			}
+		})
+	}
+	// The grammar stays bounded: a non-boolean lock value, an unknown lock
+	// attribute, a lock with children and any other p:cNvGrpSpPr content still
+	// preserve the whole group instead of projecting it.
+	for name, locks := range map[string]string{
+		"invalid value":   `<a:grpSpLocks noGrp="yes"/>`,
+		"unknown attr":    `<a:grpSpLocks noEditPoints="1"/>`,
+		"lock children":   `<a:grpSpLocks><a:extLst/></a:grpSpLocks>`,
+		"other child":     `<a:extLst/>`,
+		"attr on wrapper": `<a:grpSpLocks/>`,
+	} {
+		t.Run("refuses "+name, func(t *testing.T) {
+			t.Parallel()
+			group := build(locks)
+			if name == "attr on wrapper" {
+				group = strings.Replace(group, `<p:cNvGrpSpPr>`, `<p:cNvGrpSpPr noGrp="1">`, 1)
+			}
+			deck, err := ExtractNativePPTX(fixture(t, group), nativeAtomicTestExtractOptions())
+			if err != nil {
+				t.Fatalf("unexpected extract error: %v", err)
+			}
+			for _, element := range deck.Slides[0].Elements {
+				if element.Kind == NativeElementKindGroup {
+					t.Fatalf("unmodeled group lock metadata leaked a projection: %#v", element)
+				}
+			}
+			if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-locks-unavailable") && !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.group-nonvisual-unavailable") {
+				t.Fatalf("the refusal was not disclosed: %#v", deck.Slides[0].Compatibility)
+			}
+		})
+	}
+}

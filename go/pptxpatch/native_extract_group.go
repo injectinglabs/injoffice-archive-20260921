@@ -20,6 +20,11 @@ func (refusal nativeGroupProjectionRefusal) Error() string {
 	return "pptxpatch: native extract: " + refusal.message
 }
 
+// nativeGroupLocksPreservedCode discloses a group kept although its
+// p:cNvGrpSpPr carried the a:grpSpLocks PowerPoint writes whenever shapes are
+// grouped. The locks do not travel on the wire, so the target stays read-only.
+const nativeGroupLocksPreservedCode = "pptx.group-locks-preserved"
+
 func refuseNativeGroup(code, message string) error {
 	return nativeGroupProjectionRefusal{code: code, message: message}
 }
@@ -168,7 +173,7 @@ func (extractor *nativeExtractor) extractNativeGroup(
 	if len(node.Children) < 3 || node.Children[0] != nonVisual || node.Children[1] != properties {
 		return nativeGroupExtractResult{}, fmt.Errorf("pptxpatch: native extract: malformed group child order")
 	}
-	objectID, name, err := validateNativeGroupNonVisual(nonVisual, dialect)
+	objectID, name, lockPreserved, err := validateNativeGroupNonVisual(nonVisual, dialect)
 	if err != nil {
 		var refusal nativeGroupProjectionRefusal
 		if errors.As(err, &refusal) {
@@ -336,6 +341,13 @@ func (extractor *nativeExtractor) extractNativeGroup(
 		}
 		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: "pptx.source-affine-preview", Message: "DrawingML group orientation and rational scaling use bounded affine preview; transformed targets remain read-only"})
 	}
+	if lockPreserved {
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		if len(element.Compatibility.Diagnostics) >= nativeMaxDiagnosticsPerScope {
+			return nativeGroupExtractResult{}, refuseNativeGroup("pptx.group-diagnostic-budget-unavailable", "group lock diagnostics exceed the bounded native contract")
+		}
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{Severity: NativeDiagnosticSeverityWarning, Code: nativeGroupLocksPreservedCode, Message: "group a:grpSpLocks editing locks are source-preserved but not modeled in native PPTX v1; the group paints and the target remains read-only"})
+	}
 	if name != "" {
 		element.Name = stringPointer(name)
 	}
@@ -377,52 +389,85 @@ func nativeGroupChildHidden(node *nativeXMLNode, dialect nativeExtractDialect) (
 	return hidden, nil
 }
 
-func validateNativeGroupNonVisual(node *nativeXMLNode, dialect nativeExtractDialect) (string, string, error) {
+// nativeGroupLockAttrs is ECMA-376 Part 1 s20.1.2.2.21 CT_GroupLocking: every
+// attribute is an editing lock the authoring UI enforces, and none of them can
+// move a pixel.
+var nativeGroupLockAttrs = []xml.Name{
+	{Local: "noGrp"}, {Local: "noUngrp"}, {Local: "noSelect"}, {Local: "noRot"},
+	{Local: "noChangeAspect"}, {Local: "noMove"}, {Local: "noResize"},
+}
+
+// validateNativeGroupNonVisual reports the group's object id and name, and
+// whether it carried an a:grpSpLocks the projection preserves without modeling.
+func validateNativeGroupNonVisual(node *nativeXMLNode, dialect nativeExtractDialect) (string, string, bool, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
-		return "", "", refuseNativeGroup("pptx.group-nonvisual-unavailable", "group nonvisual properties contain unmodeled attributes")
+		return "", "", false, refuseNativeGroup("pptx.group-nonvisual-unavailable", "group nonvisual properties contain unmodeled attributes")
 	}
 	if err := requireOnlyNativeChildren(node,
 		xml.Name{Space: dialect.presentation, Local: "cNvPr"},
 		xml.Name{Space: dialect.presentation, Local: "cNvGrpSpPr"},
 		xml.Name{Space: dialect.presentation, Local: "nvPr"}); err != nil {
-		return "", "", refuseNativeGroup("pptx.group-nonvisual-unavailable", "group nonvisual properties are outside the exact native subset")
+		return "", "", false, refuseNativeGroup("pptx.group-nonvisual-unavailable", "group nonvisual properties are outside the exact native subset")
 	}
 	cNvPr, err := nativeSingleton(node, dialect.presentation, "cNvPr", true)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	cNvGrpSpPr, err := nativeSingleton(node, dialect.presentation, "cNvGrpSpPr", true)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	nvPr, err := nativeSingleton(node, dialect.presentation, "nvPr", true)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	if len(node.Children) != 3 || node.Children[0] != cNvPr || node.Children[1] != cNvGrpSpPr || node.Children[2] != nvPr {
-		return "", "", fmt.Errorf("pptxpatch: native extract: malformed group nonvisual child order")
+		return "", "", false, fmt.Errorf("pptxpatch: native extract: malformed group nonvisual child order")
 	}
 	// a:extLst is authoring metadata (see validateNativeRootGroupScaffold): the
 	// a16:creationId PowerPoint writes on every group carries no geometry.
 	if err := requireOnlyNativeAttrs(cNvPr, xml.Name{Local: "id"}, xml.Name{Local: "name"}); err != nil ||
 		requireOnlyNativeChildren(cNvPr, xml.Name{Space: dialect.drawing, Local: "extLst"}) != nil {
-		return "", "", refuseNativeGroup("pptx.group-nonvisual-unavailable", "group identity metadata is outside the exact native subset")
+		return "", "", false, refuseNativeGroup("pptx.group-nonvisual-unavailable", "group identity metadata is outside the exact native subset")
 	}
-	if err := requireEmptyNativeElement(cNvGrpSpPr); err != nil {
-		return "", "", refuseNativeGroup("pptx.group-locks-unavailable", "group locks are preserved but not projected")
+	// PowerPoint writes <a:grpSpLocks/> whenever shapes are grouped. Every
+	// attribute it can carry is an editing lock, so the group is kept and the
+	// lock is preserved without being modeled. Anything else still refuses.
+	lockPreserved := false
+	if requireEmptyNativeElement(cNvGrpSpPr) != nil {
+		if requireOnlyNativeAttrs(cNvGrpSpPr) != nil || !onlyNativeXMLSpace(cNvGrpSpPr.Text) ||
+			requireOnlyNativeChildren(cNvGrpSpPr, xml.Name{Space: dialect.drawing, Local: "grpSpLocks"}) != nil {
+			return "", "", false, refuseNativeGroup("pptx.group-locks-unavailable", "group locks are preserved but not projected")
+		}
+		locks, lockErr := nativeSingleton(cNvGrpSpPr, dialect.drawing, "grpSpLocks", false)
+		if lockErr != nil {
+			return "", "", false, lockErr
+		}
+		if locks == nil {
+			return "", "", false, refuseNativeGroup("pptx.group-locks-unavailable", "group locks are preserved but not projected")
+		}
+		if requireOnlyNativeAttrs(locks, nativeGroupLockAttrs...) != nil || requireOnlyNativeChildren(locks) != nil || !onlyNativeXMLSpace(locks.Text) || duplicateNativeAttrs(locks.Attrs) {
+			return "", "", false, refuseNativeGroup("pptx.group-locks-unavailable", "group locks are preserved but not projected")
+		}
+		for _, attr := range locks.Attrs {
+			if _, err := nativeBool(attr.Value); err != nil {
+				return "", "", false, refuseNativeGroup("pptx.group-locks-unavailable", "group locks are preserved but not projected")
+			}
+		}
+		lockPreserved = true
 	}
 	if err := requireEmptyNativeElement(nvPr); err != nil {
-		return "", "", refuseNativeGroup("pptx.group-inheritance-unavailable", "group placeholder or inheritance metadata is not resolved")
+		return "", "", false, refuseNativeGroup("pptx.group-inheritance-unavailable", "group placeholder or inheritance metadata is not resolved")
 	}
 	id, err := canonicalNativeUnsignedID(cNvPr, "", "id", 1)
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	name, _ := exactNativeAttr(cNvPr, "", "name")
 	if utf16CodeUnitLengthBounded(name, 1025) > 1024 {
-		return "", "", refuseNativeGroup("pptx.group-name-unavailable", "group name exceeds the native contract bound")
+		return "", "", false, refuseNativeGroup("pptx.group-name-unavailable", "group name exceeds the native contract bound")
 	}
-	return "cNvPr-" + id, name, nil
+	return "cNvPr-" + id, name, lockPreserved, nil
 }
 
 func validateNativeGroupTransform(node *nativeXMLNode, dialect nativeExtractDialect) (nativeGroupTransform, error) {

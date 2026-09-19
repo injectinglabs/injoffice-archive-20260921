@@ -314,6 +314,11 @@ func (v *nativeValidator) element(origin NativeOrigin, element NativeElement, p 
 		if (diagnostic.Code == nativeInheritedTextPreviewCode || diagnostic.Code == nativeInheritedTextOmissionsCode || diagnostic.Code == nativePlaceholderPreviewCode) && (element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.inheritedTextApproximation", "inherited text approximation requires parsed source and explicit read-only warning")
 		}
+		// a:grpSpLocks does not travel on the wire, so a group that kept it may
+		// never claim to be editable.
+		if diagnostic.Code == nativeGroupLocksPreservedCode && (element.Kind != NativeElementKindGroup || element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
+			v.add(p+".compatibility", "native.groupLocksPreserved", "preserved group lock metadata requires a parsed source group with read-only status and explicit warning")
+		}
 		if diagnostic.Code == nativeBuiltinTableStylePreviewCode && (element.Kind != NativeElementKindTable || element.Provenance != NativeProvenanceParsed || element.Source == nil || element.Compatibility.Status == NativeCompatibilityStatusEditable || diagnostic.Severity != NativeDiagnosticSeverityWarning) {
 			v.add(p+".compatibility", "native.tableStylePreview", "built-in table style preview requires a parsed source table with read-only status and explicit warning")
 		}
