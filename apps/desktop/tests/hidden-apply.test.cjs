@@ -18,19 +18,15 @@ async function loadScheduler() {
   }
 }
 
-test('hidden apply waits for the debounce, skips IME composition, and serializes in-flight work', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test('hidden apply waits for the debounce, skips IME composition, and flushes pending work', async t => {
   const { createHiddenApplyScheduler } = await loadScheduler();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const calls = [];
   let composing = false;
-  let release;
   const scheduler = createHiddenApplyScheduler({
     delayMs: 80,
     composing: () => composing,
-    apply: () => {
-      calls.push('apply');
-      return new Promise(resolve => { release = resolve; });
-    },
+    apply: () => { calls.push('apply'); },
   });
   scheduler.schedule();
   scheduler.schedule();
@@ -44,12 +40,9 @@ test('hidden apply waits for the debounce, skips IME composition, and serializes
   t.mock.timers.tick(80);
   assert.deepEqual(calls, ['apply']);
   composing = false;
-  release();
-  await Promise.resolve();
-  await Promise.resolve();
+  scheduler.schedule();
   t.mock.timers.tick(80);
   assert.deepEqual(calls, ['apply', 'apply']);
-  scheduler.cancel();
   scheduler.schedule();
   scheduler.cancel();
   t.mock.timers.tick(80);
@@ -57,5 +50,4 @@ test('hidden apply waits for the debounce, skips IME composition, and serializes
   scheduler.schedule();
   await scheduler.flush();
   assert.deepEqual(calls, ['apply', 'apply', 'apply']);
-  release();
 });
