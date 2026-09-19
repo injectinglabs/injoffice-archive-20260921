@@ -446,7 +446,7 @@ func TestNativeShapeStyleZeroIndexAndUnpaintedOutlineAreExact(t *testing.T) {
 			t.Fatal(err)
 		}
 		gaps := nativeShapeGapSet{}
-		stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, &gaps)
+		stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, false, &gaps)
 		if err != nil || stroke != nil || len(gaps.values) != 0 {
 			t.Fatalf("no-fill outline must be exact without a width: %s %v %+v", line, err, gaps.values)
 		}
@@ -457,7 +457,7 @@ func TestNativeShapeStyleZeroIndexAndUnpaintedOutlineAreExact(t *testing.T) {
 			t.Fatal(err)
 		}
 		gaps := nativeShapeGapSet{}
-		if stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, &gaps); err == nil && stroke == nil && len(gaps.values) == 0 {
+		if stroke, err := validateNativeAutoShapeLine(node, d, nativeResolvedTheme{}, false, false, &gaps); err == nil && stroke == nil && len(gaps.values) == 0 {
 			t.Fatalf("malformed or painted outline accepted as unpainted: %s", line)
 		}
 	}
@@ -557,7 +557,7 @@ func TestNativeShapeStyleZeroIndexResolvesToNoPaint(t *testing.T) {
 		if fill := validateNativeAutoShapeFill(resolved, d, nativeResolvedTheme{}, &gaps); len(gaps.values) != 0 {
 			t.Fatalf("resolved fill is not exact: %+v %v", gaps.values, fill)
 		}
-		if _, err := validateNativeAutoShapeLine(resolved, d, nativeResolvedTheme{}, false, &gaps); err != nil || len(gaps.values) != 0 {
+		if _, err := validateNativeAutoShapeLine(resolved, d, nativeResolvedTheme{}, false, false, &gaps); err != nil || len(gaps.values) != 0 {
 			t.Fatalf("resolved line is not exact: %v %+v", err, gaps.values)
 		}
 		if len(properties.Children) != sourceChildren {
