@@ -43,13 +43,13 @@
       "protocol": "injoffice.docx.native",
       "version": 1,
       "schemaPath": "packages/docs/schema/native-docx-v1.schema.json",
-      "schemaSha256": "c5ab16f02d6162f15e7381a13b341722ef2f3b949531ecd21b293b4daa34fce4"
+      "schemaSha256": "8cb05cb8d09cf9ec023b6045c746fe3d73102126c0458d6216bdae2169e48920"
     },
     "pptx": {
       "protocol": "pptx-native/v1",
       "version": 1,
       "schemaPath": "schemas/pptx-native-v1.schema.json",
-      "schemaSha256": "1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49"
+      "schemaSha256": "9c16b6909d2c5636c61cdcdb0ab612178aba93ceb089091617215a03d679afb0"
     },
     "xlsx": {
       "protocol": "injoffice.xlsx.native",
