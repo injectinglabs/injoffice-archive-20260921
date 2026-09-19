@@ -29,6 +29,16 @@ function file(path:string,max:number):Uint8Array {
  * budget is unchanged and each distinct file still counts exactly once. */
 const STANDALONE_FONT_BYTES=16*1024*1024
 const COLLECTION_FONT_BYTES=HARFBUZZ_SHAPER_LIMITS.maxFontBytes
+/** The operator font manifest's face cap. `validateDOCXFontSubstitutionPreview`
+ * (`go/injoffice-server/internal/officehttp/docx_font_substitution_preview.go`)
+ * re-reads the same operator file on the substitution-preview path and encodes
+ * this same number, so raising one without the other lets this worker load a
+ * manifest that helper then refuses. 64 leaves every budget the cap protected
+ * intact: the manifest file is still read under 64 KiB, each standalone face
+ * under 16 MiB, a collection file under `COLLECTION_FONT_BYTES`, the cumulative
+ * budget is still 64 MiB, and a face is still only read when the document
+ * references it — the cap bounds the JSON, not the work. */
+export const MAX_OPERATOR_FONT_FACES=64
 
 export type HostFontLoadMode=boolean|'approximate'
 /** Additional exact face identity a same-bytes sidecar asks the host to load (never a substitution). */
@@ -71,7 +81,9 @@ function admitConfiguredFace(index:number,f:HostFontConfiguredFace,faces:NativeF
 export async function loadHostFonts(input:NativeDocxPagePaintPrepareInputV1,path:string,allowSubstitution:HostFontLoadMode=false,extraReferences:readonly HostFontReference[]=[]):Promise<NativeDocxLoadedHostFontsV1> {
  const inventory=decodeNativeDOCXFontInventoryV1(input.font_inventory_json)
  const config=JSON.parse(Buffer.from(file(path,65536)).toString('utf8'))
- if(!config||Object.keys(config).filter(k=>k!=='substitutions').sort().join(',')!=='faces,version'||config.version!==1||!Array.isArray(config.faces)||config.faces.length>64)throw new Error('Invalid host font manifest')
+ if(!config||Object.keys(config).filter(k=>k!=='substitutions').sort().join(',')!=='faces,version'||config.version!==1||!Array.isArray(config.faces))throw new Error('Invalid host font manifest')
+ // The operator only ever sees the 422 body, so name the limit and the count.
+ if(config.faces.length>MAX_OPERATOR_FONT_FACES)throw new Error(`Invalid host font manifest: ${config.faces.length} faces exceeds the ${MAX_OPERATOR_FONT_FACES}-face limit`)
  const configuredPolicy=config.substitutions===undefined?undefined:decodeExplicitFontPolicyV1(config.substitutions)
  const explicit=allowSubstitution===true,approximate=allowSubstitution==='approximate'
  const policy=explicit?configuredPolicy:undefined

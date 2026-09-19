@@ -3,7 +3,7 @@ import {readFileSync,statSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs'
 import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
-import {loadHostFonts} from './hostFonts.js'
+import {loadHostFonts,MAX_OPERATOR_FONT_FACES} from './hostFonts.js'
 import {nativeDocxPagePaintWorkerErrorV1} from './protocol.js'
 import {encodeNativeDOCXFontInventoryV1,nativeDOCXCanonicalWireSHA256V1} from '../../../packages/docs/src/nativeFontInventoryV1.js'
 import type {NativeDocxPagePaintPrepareInputV1} from '@injoffice/docs/native-page-paint-compiler'
@@ -118,13 +118,19 @@ describe('operator-owned DOCX fonts',()=>{
   await expect(loadHostFonts(input(),'relative.json')).rejects.toThrow(/absolute/)
   await expect(loadHostFonts(input(),config([{...entry,extra:true}]))).rejects.toThrow(/Invalid/)
  })
- it('admits a 64-face operator manifest and still bounds it',async()=>{
+ it('admits a manifest at the face cap, names the limit past it, and keeps the budgets it protects',async()=>{
+  // Pins the cap itself, not only its message: the Go substitution-preview
+  // helper re-validates the same operator file against this same number.
+  expect(MAX_OPERATOR_FONT_FACES).toBe(64)
   // A face is only loaded when the document references it, so the filler
   // entries stay unread: this measures the manifest bound alone.
   const filler=(count:number)=>Array.from({length:count},(_,i)=>({...entry,family:`Unused ${i}`,path:`/nonexistent/unreferenced-${i}.ttf`}))
-  const fonts=await loadHostFonts(input(),config([entry,...filler(63)]))
+  const full=config([entry,...filler(MAX_OPERATOR_FONT_FACES-1)])
+  // The manifest file is read under a 64 KiB bound; a full manifest must fit.
+  expect(bytesOf(full)).toBeLessThanOrEqual(65536)
+  const fonts=await loadHostFonts(input(),full)
   expect(fonts.manifest.faces).toHaveLength(1)
-  await expect(loadHostFonts(input(),config([entry,...filler(64)]))).rejects.toThrow(/Invalid host font manifest/)
+  await expect(loadHostFonts(input(),config([entry,...filler(MAX_OPERATOR_FONT_FACES)]))).rejects.toThrow(`Invalid host font manifest: ${MAX_OPERATOR_FONT_FACES+1} faces exceeds the ${MAX_OPERATOR_FONT_FACES}-face limit`)
  })
  it('keeps strict missing-face refusal and substitutes only loaded host faces on the approximate path',async()=>{
   const value=input(),inventory=JSON.parse(value.font_inventory_json)
