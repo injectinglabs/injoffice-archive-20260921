@@ -37,13 +37,11 @@ function isDesktopHostManifest(relativePath) {
   return relativePath === desktopHostManifest
 }
 
-function isDesktopHostLockEntry(lockPath, entry = {}) {
-  const path = posixLockPath(lockPath)
-  return desktopHostLockPaths.has(path) || entry.name === '@injoffice/desktop'
+function isDesktopHostLockEntry(lockPath) {
+  return desktopHostLockPaths.has(posixLockPath(lockPath))
 }
 
-function installedPackageName(lockPath, entry = {}) {
-  if (typeof entry.name === 'string' && entry.name.length > 0) return entry.name
+function pathDerivedPackageName(lockPath) {
   const path = posixLockPath(lockPath)
   const marker = 'node_modules/'
   const offset = path.lastIndexOf(marker)
@@ -51,6 +49,14 @@ function installedPackageName(lockPath, entry = {}) {
   const suffix = path.slice(offset + marker.length)
   const parts = suffix.split('/')
   return parts[0]?.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? '')
+}
+
+function lockIdentityNames(lockPath, entry = {}) {
+  const names = new Set()
+  const fromPath = pathDerivedPackageName(lockPath)
+  if (fromPath) names.add(fromPath)
+  if (typeof entry.name === 'string' && entry.name.length > 0) names.add(entry.name)
+  return names
 }
 
 function electronInstallAllowed(lockPath) {
@@ -139,9 +145,9 @@ let desktopPullsElectron = false
 const electronInstalls = []
 for (const [lockPath, entry] of Object.entries(lock.packages ?? {})) {
   const path = posixLockPath(lockPath)
-  const installed = installedPackageName(path, entry)
-  if (installed === 'mammoth') failures.push(`package-lock.json: forbidden Mammoth package at ${path || 'root'}`)
-  if (installed === 'electron') {
+  const identities = lockIdentityNames(path, entry)
+  if (identities.has('mammoth')) failures.push(`package-lock.json: forbidden Mammoth package at ${path || 'root'}`)
+  if (identities.has('electron')) {
     electronInstalls.push(path || 'root')
     if (!electronInstallAllowed(path)) failures.push(`package-lock.json: Electron at ${path || 'root'} is not owned by @injoffice/desktop`)
   }
@@ -150,7 +156,7 @@ for (const [lockPath, entry] of Object.entries(lock.packages ?? {})) {
       const target = forbiddenTarget(dependency, requested)
       if (target === 'mammoth') failures.push(`package-lock.json: ${path || 'root'} forbidden ${group} entry ${dependency}@${requested}`)
       else if (target === 'electron') {
-        if (isDesktopHostLockEntry(path, entry)) desktopPullsElectron = true
+        if (isDesktopHostLockEntry(path)) desktopPullsElectron = true
         else failures.push(`package-lock.json: ${path || 'root'} forbidden ${group} entry ${dependency}@${requested}`)
       }
     }
