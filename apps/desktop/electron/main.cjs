@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session } = re
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
-const { FileStore, validateFormat, normalizeSaveDestination, validateBytes, atomicWrite } = require('./file-store.cjs');
+const { FileStore, validateFormat, validateOpenFormat, normalizeSaveDestination, validateBytes, atomicWrite } = require('./file-store.cjs');
 const {exportDocxPdf,cancelDocxPdf}=require('./docx-pdf-service.cjs');
 const { replacePdfText } = require('./pdf-text-service.cjs');
 const { createBlankDocument } = require('./new-document.cjs');
@@ -29,7 +29,7 @@ let cancelUpdateInstall = () => {};
 const checkpointErrors = new Map();
 const pendingPaths = [];
 function queueExternalPaths(filenames) {
-  for (const filename of filenames) if (typeof filename === 'string' && path.isAbsolute(filename) && /\.(docx|xlsx|pptx|pdf)$/i.test(filename) && !pendingPaths.includes(filename) && pendingPaths.length < 32) pendingPaths.push(filename);
+  for (const filename of filenames) if (typeof filename === 'string' && path.isAbsolute(filename) && /\.(docx|docm|xlsx|pptx|pdf)$/i.test(filename) && !pendingPaths.includes(filename) && pendingPaths.length < 32) pendingPaths.push(filename);
   if (pendingPaths.length) menuAction('externalOpen');
 }
 const primaryInstance = app.requestSingleInstanceLock ? app.requestSingleInstanceLock() : true;
@@ -40,7 +40,7 @@ app.on('second-instance', (_event, argv) => {
   if (window && !window.isDestroyed()) { if (window.isMinimized()) window.restore(); window.focus(); }
 });
 if (primaryInstance) queueExternalPaths(process.argv.slice(app.isPackaged ? 1 : 2));
-const filters = [{ name: 'Office documents', extensions: ['xlsx', 'docx', 'pptx', 'pdf'] }];
+const filters = [{ name: 'Office documents', extensions: ['xlsx', 'docx', 'docm', 'pptx', 'pdf'] }];
 const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'";
 
 function trusted(event) {
@@ -310,7 +310,7 @@ app.whenReady().then(async () => {
     trusted(event);
     return withDialog(async () => {
       if (!input || typeof input.name !== 'string' || input.name !== path.basename(input.name)) throw new Error('Drop a supported document file.');
-      const format = validateFormat(path.extname(input.name).slice(1).toLowerCase());
+      const format = validateOpenFormat(path.extname(input.name).slice(1).toLowerCase());
       const created = store.create(format, input.bytes);
       store.get(created.id).name = input.name; created.name = input.name;
       return created;
