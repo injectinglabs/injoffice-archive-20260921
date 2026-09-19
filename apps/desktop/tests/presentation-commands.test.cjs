@@ -26,7 +26,7 @@ function deck(slides) {
 
 test('presentation commands key elements, refuse deleting the last slide, and project grouped coordinates', async () => {
   const { elementKey, structureCommand, positionElements } = await loadCommands();
-  assert.equal(elementKey({ id: 'local', source: { partName: 'ppt/slides/slide1.xml', objectId: '3' } }), 'ppt/slides/slide1.xml\03');
+  assert.equal(elementKey({ id: 'local', source: { partName: 'ppt/slides/slide1.xml', objectId: '3' } }), ['ppt/slides/slide1.xml', '3'].join('\0'));
   const two = deck([{ id: 's1' }, { id: 's2' }]);
   assert.equal(structureCommand(two, 0, 'duplicate', 'op').operations[0].kind, 'slide.duplicate');
   assert.deepEqual(structureCommand(two, 0, 'next', 'op').operations[0].slideIds, ['s2', 's1']);
